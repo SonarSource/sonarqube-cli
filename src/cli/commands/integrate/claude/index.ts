@@ -43,7 +43,6 @@ import type { IntegrateAgentOptions } from '../_common/types';
 import { supportedIntegrations } from '../index.js';
 import { CLAUDE_INTEGRATION_ID, type ClaudeIntegrationOptions } from './declaration';
 import { detectGlobalSecretsHook } from './hooks';
-import { updateStateAfterConfiguration } from './state';
 
 export interface ConfigurationData {
   serverURL: string;
@@ -127,9 +126,6 @@ export async function integrateClaude(
     installError = error instanceof Error ? error : new Error(String(error));
   }
   await removeObsoleteHookArtifacts(ctx.project.rootDir, OBSOLETE_A3S_MARKER);
-  await updateStateAfterConfiguration(config, ctx.project.rootDir, ctx.isGlobal, sqaaEnabled, {
-    skipSecretsHooks,
-  });
   if (installError) {
     throw installError;
   }

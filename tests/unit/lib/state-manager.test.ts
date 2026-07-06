@@ -39,7 +39,6 @@ import { getDefaultState } from '../../../src/lib/state.js';
 import {
   addInstalledHook,
   addOrUpdateConnection,
-  findExtensionsByProject,
   generateConnectionId,
   markAgentConfigured,
   removeConnection,
@@ -395,79 +394,6 @@ describe('stateFileExists', () => {
     writeFileSync(testStateFile, JSON.stringify(getDefaultState('1.0.0')), 'utf-8');
 
     expect(stateFileExists()).toBe(true);
-  });
-});
-
-// =============================================================================
-// findExtensionsByProject
-// =============================================================================
-
-describe('findExtensionsByProject', () => {
-  it('returns extensions matching agentId and projectRoot', () => {
-    const state = getDefaultState('1.0.0');
-    const ext: HookExtension = {
-      id: 'ext-1',
-      agentId: 'claude-code',
-      projectRoot: '/my/project',
-      global: false,
-      kind: 'hook',
-      name: 'sonar-secrets',
-      hookType: 'PreToolUse',
-      updatedByCliVersion: '1.0.0',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    };
-    upsertAgentExtension(state, ext);
-
-    const result = findExtensionsByProject(state, 'claude-code', '/my/project');
-
-    expect(result).toHaveLength(1);
-    expect(result[0].id).toBe('ext-1');
-  });
-
-  it('returns empty array when no extensions match', () => {
-    const state = getDefaultState('1.0.0');
-
-    const result = findExtensionsByProject(state, 'claude-code', '/my/project');
-
-    expect(result).toHaveLength(0);
-  });
-
-  it('does not return extensions for a different agentId', () => {
-    const state = getDefaultState('1.0.0');
-    upsertAgentExtension(state, {
-      id: 'ext-1',
-      agentId: 'cursor',
-      projectRoot: '/my/project',
-      global: false,
-      kind: 'hook',
-      name: 'sonar-secrets',
-      hookType: 'PreToolUse',
-      updatedByCliVersion: '1.0.0',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    });
-
-    const result = findExtensionsByProject(state, 'claude-code', '/my/project');
-
-    expect(result).toHaveLength(0);
-  });
-
-  it('does not return extensions for a different projectRoot', () => {
-    const state = getDefaultState('1.0.0');
-    upsertAgentExtension(state, {
-      id: 'ext-1',
-      agentId: 'claude-code',
-      projectRoot: '/other/project',
-      global: false,
-      kind: 'hook',
-      name: 'sonar-secrets',
-      hookType: 'PreToolUse',
-      updatedByCliVersion: '1.0.0',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    });
-
-    const result = findExtensionsByProject(state, 'claude-code', '/my/project');
-
-    expect(result).toHaveLength(0);
   });
 });
 

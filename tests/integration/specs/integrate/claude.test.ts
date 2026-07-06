@@ -639,7 +639,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
   );
 
   it(
-    'records sonar-sqaa in agents.claude-code.hooks.installed after fresh SQAA install',
+    'records the project key on the declarative sonar-sqaa-hook feature after a fresh SQAA install',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -660,15 +660,9 @@ describe('integrate claude — SQAA entitlement guard', () => {
 
       expect(result.exitCode).toBe(0);
 
-      const state = harness.stateJsonFile.asJson();
-      const installedHooks = (state.agents?.['claude-code']?.hooks?.installed ?? []) as Array<{
-        name: string;
-        type: string;
-      }>;
-
-      expect(installedHooks.some((h) => h.name === 'sonar-sqaa' && h.type === 'PostToolUse')).toBe(
-        true,
-      );
+      const sqaaFeature = findClaudeFeature(harness, 'sonar-sqaa-hook', 'project');
+      expect(sqaaFeature).toBeDefined();
+      expect(sqaaFeature?.attrs?.projectKey).toBe('my-project');
     },
     { timeout: 30000 },
   );
@@ -742,19 +736,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
       expect(result.exitCode).toBe(0);
       expect(`${result.stdout}\n${result.stderr}`).toContain('not supported with --global');
 
-      const state = harness.stateJsonFile.asJson();
-      const sqaaExt = (state.agentExtensions as Array<{ name: string; global: boolean }>).find(
-        (e) => e.name === 'sonar-sqaa',
-      );
-      expect(sqaaExt).toBeUndefined();
-
-      const claudeIntegration = state.integrations.installed.find(
-        (integration: { integrationId: string }) => integration.integrationId === 'claude-code',
-      );
-      const sqaaFeature = claudeIntegration?.features.find(
-        (feature: { featureId: string }) => feature.featureId === 'sonar-sqaa-hook',
-      );
-      expect(sqaaFeature).toBeUndefined();
+      expect(findClaudeFeature(harness, 'sonar-sqaa-hook')).toBeUndefined();
     },
     { timeout: 30000 },
   );
@@ -1284,104 +1266,42 @@ describe('integrate claude — file placement (local vs global)', () => {
     );
 
     it(
-      'keeps existing project-level agentExtensions and adds global ones when -g is passed (CLI-148)',
+      'keeps an existing project-scoped install and adds a global one when -g is passed (CLI-148)',
       async () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('tok')
           .withProject('proj')
           .start();
+        harness.withAuth(server.baseUrl(), 'tok');
         harness.cwd.writeFile(
           'sonar-project.properties',
           [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
         );
 
-        // Simulate state from a previous project-level integration: agentExtensions with global: false
+        // Simulate a previous project-level integration recorded in declarative state.
         const projectRoot = realpathSync(harness.cwd.path);
-        harness.state().withRawState(
-          JSON.stringify({
-            version: 1,
-            config: { cliVersion: CURRENT_VERSION },
-            auth: {
-              isAuthenticated: true,
-              connections: [
-                {
-                  id: 'conn-1',
-                  type: 'on-premise',
-                  serverUrl: server.baseUrl(),
-                  authenticatedAt: new Date().toISOString(),
-                },
-              ],
-              activeConnectionId: 'conn-1',
-            },
-            agents: {
-              'claude-code': {
-                configured: true,
-                configuredByCliVersion: CURRENT_VERSION,
-                hooks: {
-                  installed: [
-                    { name: 'sonar-secrets', type: 'PreToolUse' },
-                    { name: 'sonar-secrets', type: 'UserPromptSubmit' },
-                  ],
-                },
-              },
-            },
-            tools: { installed: [] },
-            telemetry: { enabled: false },
-            agentExtensions: [
-              {
-                id: randomUUID(),
-                agentId: 'claude-code',
-                projectRoot,
-                global: false,
-                serverUrl: server.baseUrl(),
-                updatedByCliVersion: CURRENT_VERSION,
-                updatedAt: new Date().toISOString(),
-                kind: 'hook',
-                name: 'sonar-secrets',
-                hookType: 'PreToolUse',
-              },
-              {
-                id: randomUUID(),
-                agentId: 'claude-code',
-                projectRoot,
-                global: false,
-                serverUrl: server.baseUrl(),
-                updatedByCliVersion: CURRENT_VERSION,
-                updatedAt: new Date().toISOString(),
-                kind: 'hook',
-                name: 'sonar-secrets',
-                hookType: 'UserPromptSubmit',
-              },
-            ],
-          }),
-        );
-        harness.state().withKeychainToken(server.baseUrl(), 'tok');
+        harness
+          .state()
+          .withInstalledIntegrationFeature(
+            claudeIntegration,
+            'sonar-secrets-hooks',
+            'project',
+            projectRoot,
+          );
 
         const result = await harness.run('integrate claude -g --non-interactive');
 
         expect(result.exitCode).toBe(0);
 
-        const state = harness.stateJsonFile.asJson();
-        const extensions = state.agentExtensions as Array<{
-          name: string;
-          hookType: string;
-          global: boolean;
-        }>;
+        // The pre-existing project-scoped feature must survive a -g run
+        expect(findClaudeFeature(harness, 'sonar-secrets-hooks', 'project')).toBeDefined();
 
-        // Project-level sonar-secrets hooks must still be present (not overwritten by -g run)
-        const projectSecretsHooks = extensions.filter(
-          (e) => e.name === 'sonar-secrets' && !e.global,
-        );
-        expect(projectSecretsHooks.length).toBe(2);
-
-        // Global sonar-secrets hooks must also be added
-        const globalSecretsHooks = extensions.filter((e) => e.name === 'sonar-secrets' && e.global);
-        expect(globalSecretsHooks.length).toBeGreaterThan(0);
+        // The global secrets-hooks feature is also recorded.
+        expect(findClaudeFeature(harness, 'sonar-secrets-hooks', 'global')).toBeDefined();
 
         // sonar-sqaa is never installed on a -g install (it is project-scoped only)
-        const sqaaHooks = extensions.filter((e) => e.name === 'sonar-sqaa');
-        expect(sqaaHooks).toHaveLength(0);
+        expect(findClaudeFeature(harness, 'sonar-sqaa-hook')).toBeUndefined();
       },
       { timeout: 30000 },
     );
@@ -1941,12 +1861,12 @@ describe('integrate claude — hook migration scenarios', () => {
       expect(settings.hooks?.PreToolUse).toHaveLength(1);
       expect(settings.hooks?.UserPromptSubmit).toHaveLength(1);
 
-      // agentExtensions must not accumulate duplicates across re-runs
-      const state = harness.stateJsonFile.asJson() as {
-        agentExtensions: Array<{ name: string; hookType: string }>;
-      };
-      const secretsExts = state.agentExtensions.filter((e) => e.name === 'sonar-secrets');
-      expect(secretsExts).toHaveLength(2); // PreToolUse + UserPromptSubmit only
+      // Declarative state must not accumulate duplicate feature entries across re-runs.
+      const secretsFeatures =
+        getInstalledIntegration(harness, 'claude-code')?.features.filter(
+          (feature) => feature.featureId === 'sonar-secrets-hooks',
+        ) ?? [];
+      expect(secretsFeatures).toHaveLength(1);
     },
     { timeout: 30000 },
   );

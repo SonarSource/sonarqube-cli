@@ -26,10 +26,10 @@ import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
 import { spawnProcess } from '../../../lib/process';
 import { loadState } from '../../../lib/repository/state-repository';
-import type { HookExtension } from '../../../lib/state';
-import { findExtensionsByProject } from '../../../lib/state-manager';
+import { canonicalProjectRoot } from '../../../lib/state-manager';
 import { blank, confirmPrompt, text, warn } from '../../../ui';
 import { CommandFailedError } from '../_common/error.js';
+import { CLAUDE_INTEGRATION_ID } from '../integrate/claude/declaration';
 
 const LARGE_CHANGESET_HINT =
   'For faster feedback, try targeting your changes:\n' +
@@ -106,34 +106,42 @@ export function resolveCloudAuth(
 }
 
 /**
- * Look up the project key for the current project from the agentExtensions registry.
+ * Look up the project key for the current project from the declarative
+ * integration state (`integrations.installed`).
  *
- * The registry keys extensions by project root (the directory passed to
- * `sonar integrate claude`), so when the user runs SQAA from a subdirectory we
- * have to resolve the git repository top-level first — otherwise `process.cwd()`
- * is a non-match against the registered root and we incorrectly skip with
- * "no project configured".
+ * The SQAA hook feature is recorded per install target root (the directory
+ * passed to `sonar integrate claude`), so when the user runs SQAA from a
+ * subdirectory we resolve the git repository top-level first — otherwise
+ * `process.cwd()` is a non-match against the recorded root and we incorrectly
+ * skip with "no project configured".
  *
  * Falls back to `process.cwd()` when not inside a git repository so the
  * single-file path still works outside git.
  */
 export async function resolveSqaaProjectKey(projectRoot?: string): Promise<string | null> {
   try {
-    const root = projectRoot ?? (await tryResolveRepoRoot(process.cwd()));
+    const root = canonicalProjectRoot(projectRoot ?? (await tryResolveRepoRoot(process.cwd())));
     const state = loadState();
-    const extensions = findExtensionsByProject(state, 'claude-code', root);
-    const sqaaExt = extensions.find(
-      (e): e is HookExtension => e.kind === 'hook' && e.name === 'sonar-sqaa',
+
+    const claude = state.integrations.installed.find(
+      (integration) => integration.integrationId === CLAUDE_INTEGRATION_ID,
+    );
+    const sqaaFeature = claude?.features.find(
+      (feature) =>
+        feature.featureId === 'sonar-sqaa-hook' &&
+        feature.scope === 'project' &&
+        canonicalProjectRoot(feature.targetRoot) === root,
     );
 
-    if (!sqaaExt?.projectKey) {
-      logger.debug('Vortex agentic analysis skipped: no project key found in extensions registry');
+    const projectKey = sqaaFeature?.attrs?.projectKey;
+    if (typeof projectKey !== 'string' || projectKey.length === 0) {
+      logger.debug('SonarQube Agentic Analysis skipped: no project key found in integration state');
       return null;
     }
 
-    return sqaaExt.projectKey;
+    return projectKey;
   } catch {
-    logger.debug('Vortex agentic analysis skipped: failed to resolve extensions');
+    logger.debug('SonarQube Agentic Analysis skipped: failed to resolve integration state');
     return null;
   }
 }

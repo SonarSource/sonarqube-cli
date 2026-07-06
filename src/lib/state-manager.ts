@@ -54,7 +54,7 @@ export function getActiveConnection(state: CliState): AuthConnection | undefined
   return state.auth.connections.find((c) => c.id === state.auth.activeConnectionId);
 }
 
-function canonicalProjectRoot(projectRoot: string): string {
+export function canonicalProjectRoot(projectRoot: string): string {
   let canonical: string;
   try {
     canonical = realpathSync.native(projectRoot);
@@ -62,20 +62,6 @@ function canonicalProjectRoot(projectRoot: string): string {
     canonical = resolve(projectRoot);
   }
   return process.platform === 'win32' ? canonical.toLowerCase() : canonical;
-}
-
-/**
- * Find all extensions registered for a specific agent + project root combination.
- */
-export function findExtensionsByProject(
-  state: CliState,
-  agentId: string,
-  projectRoot: string,
-): AgentExtension[] {
-  const target = canonicalProjectRoot(projectRoot);
-  return state.agentExtensions.filter(
-    (e) => e.agentId === agentId && canonicalProjectRoot(e.projectRoot) === target,
-  );
 }
 
 /**
