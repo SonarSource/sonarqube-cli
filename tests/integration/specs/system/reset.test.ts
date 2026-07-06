@@ -478,7 +478,7 @@ describe('system reset --force', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), 'tok', 'org-key')
-        .withSqaaExtension(harness.cwd.path, 'my-project');
+        .withSqaaFeature(harness.cwd.path, 'my-project');
 
       const result = await harness.run('system reset --force');
 

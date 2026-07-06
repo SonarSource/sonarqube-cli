@@ -51,6 +51,7 @@ import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../src/lib/signatures.
 import { buildDownloadUrl } from '../../../src/lib/sonarsource-releases.js';
 import type {
   CliState,
+  InstalledIntegration,
   InstalledIntegrationDependency,
   InstalledTool,
   IntegrationScope,
@@ -65,7 +66,7 @@ function resolveBinaryFixturePath(fixture: BinarySpec): string {
   return join(DEPENDENCY_ARTIFACTS_DIR, filename);
 }
 
-interface SqaaExtensionConfig {
+interface SqaaFeatureConfig {
   projectRoot: string;
   projectKey: string;
   orgKey?: string;
@@ -80,16 +81,7 @@ interface ContextAugmentationSkillConfig {
   scaEnabled?: boolean;
 }
 
-function recordContextAugmentationFeature(
-  state: CliState,
-  args: {
-    projectRoot: string;
-    projectKey: string;
-    orgKey?: string;
-    serverUrl?: string;
-    scaEnabled: boolean;
-  },
-): void {
+function getOrCreateClaudeIntegration(state: CliState): InstalledIntegration {
   const timestamp = new Date().toISOString();
   let integration = state.integrations.installed.find(
     (entry) => entry.integrationId === CLAUDE_INTEGRATION_ID,
@@ -106,6 +98,21 @@ function recordContextAugmentationFeature(
     };
     state.integrations.installed.push(integration);
   }
+  return integration;
+}
+
+function recordContextAugmentationFeature(
+  state: CliState,
+  args: {
+    projectRoot: string;
+    projectKey: string;
+    orgKey?: string;
+    serverUrl?: string;
+    scaEnabled: boolean;
+  },
+): void {
+  const integration = getOrCreateClaudeIntegration(state);
+  const timestamp = integration.installedAt;
 
   integration.features.push({
     featureId: CONTEXT_AUGMENTATION_FEATURE_ID,
@@ -122,6 +129,37 @@ function recordContextAugmentationFeature(
       orgKey: args.orgKey ?? null,
       projectKey: args.projectKey,
       scaEnabled: args.scaEnabled,
+      serverUrl: args.serverUrl ?? null,
+    },
+  });
+}
+
+function recordSqaaHookFeature(
+  state: CliState,
+  args: {
+    projectRoot: string;
+    projectKey: string;
+    orgKey?: string;
+    serverUrl?: string;
+  },
+): void {
+  const integration = getOrCreateClaudeIntegration(state);
+  const timestamp = integration.installedAt;
+
+  integration.features.push({
+    featureId: 'sonar-sqaa-hook',
+    scope: 'project',
+    targetRoot: args.projectRoot,
+    installedByCliVersion: 'integration-test',
+    installedAt: timestamp,
+    updatedByCliVersion: 'integration-test',
+    updatedAt: timestamp,
+    dependencies: [],
+    resources: [],
+    operations: [],
+    attrs: {
+      orgKey: args.orgKey ?? null,
+      projectKey: args.projectKey,
       serverUrl: args.serverUrl ?? null,
     },
   });
@@ -148,7 +186,7 @@ export class EnvironmentBuilder {
   private _dockerMockRunning?: boolean;
   private _dockerMockBinDir?: string;
   private readonly keychainTokens: Array<{ serverURL: string; token: string; org?: string }> = [];
-  private readonly sqaaExtensions: SqaaExtensionConfig[] = [];
+  private readonly sqaaFeatures: SqaaFeatureConfig[] = [];
   private readonly contextAugmentationSkills: ContextAugmentationSkillConfig[] = [];
   private readonly installedFeatureSeeds: Array<(state: CliState) => void> = [];
 
@@ -327,16 +365,16 @@ export class EnvironmentBuilder {
   }
 
   /**
-   * Registers a sonar-sqaa PostToolUse extension for a project.
+   * Registers a declaratively tracked SQAA hook feature for a project.
    * Required for `analyze agentic` and `analyze` (full pipeline) to run Agentic Analysis.
    */
-  withSqaaExtension(
+  withSqaaFeature(
     projectRoot: string,
     projectKey: string,
     orgKey?: string,
     serverUrl?: string,
   ): this {
-    this.sqaaExtensions.push({ projectRoot, projectKey, orgKey, serverUrl });
+    this.sqaaFeatures.push({ projectRoot, projectKey, orgKey, serverUrl });
     return this;
   }
 
@@ -472,28 +510,20 @@ export class EnvironmentBuilder {
       state.dependencies = { installed: installedDependencies };
     }
 
-    for (const ext of this.sqaaExtensions) {
+    for (const feature of this.sqaaFeatures) {
       // Resolve symlinks so the stored path matches process.cwd() in the CLI subprocess
       // (e.g. /var/folders/... → /private/var/folders/... on macOS)
       let resolvedRoot: string;
       try {
-        resolvedRoot = realpathSync(ext.projectRoot);
+        resolvedRoot = realpathSync(feature.projectRoot);
       } catch {
-        resolvedRoot = ext.projectRoot;
+        resolvedRoot = feature.projectRoot;
       }
-      state.agentExtensions.push({
-        id: randomUUID(),
-        agentId: 'claude-code',
+      recordSqaaHookFeature(state, {
         projectRoot: resolvedRoot,
-        global: false,
-        projectKey: ext.projectKey,
-        orgKey: ext.orgKey ?? this.activeConnectionOrgKey,
-        serverUrl: ext.serverUrl ?? this.activeConnectionUrl,
-        updatedByCliVersion: 'integration-test',
-        updatedAt: new Date().toISOString(),
-        kind: 'hook',
-        name: 'sonar-sqaa',
-        hookType: 'PostToolUse',
+        projectKey: feature.projectKey,
+        orgKey: feature.orgKey ?? this.activeConnectionOrgKey,
+        serverUrl: feature.serverUrl ?? this.activeConnectionUrl,
       });
     }
 

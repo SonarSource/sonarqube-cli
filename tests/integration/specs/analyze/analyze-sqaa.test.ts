@@ -89,7 +89,7 @@ describe('analyze (no subcommand)', () => {
         .state()
         .withSecretsBinaryInstalled()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       harness.cwd.writeFile('new.ts', 'const x = 1;');
@@ -121,7 +121,7 @@ describe('analyze (no subcommand)', () => {
         .state()
         .withSecretsBinaryInstalled()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       harness.cwd.writeFile('new.ts', 'const x = 1;');
@@ -156,7 +156,7 @@ describe('analyze (no subcommand)', () => {
         .state()
         .withSecretsBinaryInstalled()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       harness.cwd.writeFile('leaked.ts', `const token = "${GITHUB_TEST_TOKEN}";`);
@@ -189,7 +189,7 @@ describe('analyze (no subcommand)', () => {
         .state()
         .withSecretsBinaryInstalled()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('target.ts', 'const x = 1;');
 
@@ -222,7 +222,7 @@ describe('analyze (no subcommand)', () => {
         .state()
         .withSecretsBinaryInstalled()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       harness.cwd.writeFile('leaked.ts', `const token = "${GITHUB_TEST_TOKEN}";`);
@@ -254,7 +254,7 @@ describe('analyze (no subcommand)', () => {
         .state()
         .withSecretsBinaryInstalled()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('target.ts', 'const x = 1;');
 
@@ -392,7 +392,7 @@ describe('analyze (no subcommand)', () => {
         .state()
         .withSecretsBinaryInstalled()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       const result = await harness.run('analyze', {
         extraEnv: { SONAR_SECRETS_ALLOW_UNSECURE_HTTP: 'true' },
@@ -413,7 +413,7 @@ describe('analyze (no subcommand)', () => {
         .state()
         .withSecretsBinaryInstalled()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       const result = await harness.run('analyze --format json', {
         extraEnv: { SONAR_SECRETS_ALLOW_UNSECURE_HTTP: 'true' },
@@ -440,7 +440,7 @@ describe('analyze (no subcommand)', () => {
         .state()
         .withSecretsBinaryInstalled()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       // Binary file only — NUL byte triggers binary detection, excluded from change set.
@@ -475,7 +475,7 @@ describe('analyze (no subcommand)', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       harness.cwd.writeFile('new.ts', 'const x = 1;');
@@ -591,7 +591,7 @@ describe('analyze agentic', () => {
         .withSqaaResponse({ issues: [] })
         .start();
 
-      // Connection exists but no withSqaaExtension() → no projectKey in registry → error
+      // Connection exists but no withSqaaFeature() → no projectKey in state → error
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
@@ -674,7 +674,7 @@ describe('analyze agentic', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
@@ -704,7 +704,7 @@ describe('analyze agentic', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('a.ts', 'const a = 1;');
       harness.cwd.writeFile('b.ts', 'const b = 2;');
@@ -738,7 +738,7 @@ describe('analyze agentic', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       initGitRepo(harness.cwd.path);
       commitFile(harness.cwd.path, 'README.md', 'hello');
@@ -771,7 +771,7 @@ describe('analyze agentic', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('a.ts', 'const a = 1;');
       harness.cwd.writeFile('b.ts', 'const b = 2;');
@@ -803,7 +803,7 @@ describe('analyze agentic', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
@@ -834,7 +834,7 @@ describe('analyze agentic', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
@@ -857,7 +857,7 @@ describe('analyze agentic', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       const result = await harness.run(`analyze agentic --project ${TEST_PROJECT} --depth QUICK`);
 
@@ -884,7 +884,7 @@ describe('analyze agentic', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('main.py', 'def foo():\n  pass\n');
 
@@ -915,7 +915,7 @@ describe('analyze agentic', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
@@ -973,7 +973,7 @@ describe('analyze agentic — analysis telemetry', () => {
         .state()
         .withTelemetryEnabled()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
@@ -1015,7 +1015,7 @@ describe('analyze agentic — analysis telemetry', () => {
         .state()
         .withTelemetryEnabled()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;\nconst y = 2;\n');
 
@@ -1089,7 +1089,7 @@ describe('sonar analyze — analysis telemetry', () => {
         .withTelemetryEnabled()
         .withSecretsBinaryInstalled()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
@@ -1123,7 +1123,7 @@ describe('sonar analyze — analysis telemetry', () => {
         .withTelemetryEnabled()
         .withSecretsBinaryInstalled()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
@@ -1168,7 +1168,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       // Empty repo: first commit with no changes after it.
       commitFile(harness.cwd.path, 'README.md', 'hello');
@@ -1197,7 +1197,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'app.ts', 'const a = 1;');
       // Modify without staging — should appear in `git diff HEAD`
@@ -1227,7 +1227,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       // New untracked file — not in any commit, not ignored
@@ -1257,7 +1257,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       // Append dist/ to the existing .gitignore (already committed in beforeEach)
       commitFile(harness.cwd.path, '.gitignore', '.claude/\ndist/\n');
@@ -1301,7 +1301,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       for (let i = 1; i <= 51; i++) {
@@ -1333,7 +1333,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       for (let i = 1; i <= 51; i++) {
@@ -1365,7 +1365,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       const largeContent = 'x'.repeat(4 * 1024 * 1024);
@@ -1401,7 +1401,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       stageFile(harness.cwd.path, 'staged.ts', 'const s = 1;');
@@ -1432,7 +1432,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
 
@@ -1460,7 +1460,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       // Establish a base commit on master
       commitFile(harness.cwd.path, 'base.ts', 'const base = 1;');
@@ -1494,7 +1494,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       harness.cwd.writeFile('dirty.ts', 'const x = 1;');
@@ -1598,7 +1598,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       // Write a file with a NUL byte — detected as binary and excluded
@@ -1629,7 +1629,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       // Write a file slightly over 10 MB
@@ -1663,7 +1663,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       stageFile(harness.cwd.path, 'staged.ts', 'const s = 1;');
@@ -1690,7 +1690,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       bareHarness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(bareHarness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(bareHarness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       bareHarness.cwd.writeFile('app.ts', 'const a = 1;');
 
@@ -1731,7 +1731,7 @@ describe('verify — change-set mode (no --file)', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       harness.cwd.writeFile('new.ts', 'const x = 1;');
@@ -1762,7 +1762,7 @@ describe('verify — change-set mode (no --file)', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       stageFile(harness.cwd.path, 'staged.ts', 'const s = 1;');
@@ -1792,7 +1792,7 @@ describe('verify — change-set mode (no --file)', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       for (let i = 1; i <= 51; i++) {
@@ -1824,7 +1824,7 @@ describe('verify — change-set mode (no --file)', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       for (let i = 1; i <= 51; i++) {
@@ -1868,7 +1868,7 @@ describe('analyze agentic — API error codes', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
@@ -1893,7 +1893,7 @@ describe('analyze agentic — API error codes', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
@@ -1925,7 +1925,7 @@ describe('analyze agentic — API error codes', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       initGitRepo(harness.cwd.path);
       commitFile(harness.cwd.path, '.gitignore', '.claude/\n');
@@ -1958,7 +1958,7 @@ describe('analyze agentic — API error codes', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('src/index.ts', '// TODO: fix\nconst x = 1;');
 
@@ -1999,7 +1999,7 @@ describe('analyze agentic — --format json', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
@@ -2037,7 +2037,7 @@ describe('analyze agentic — --format json', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('src/index.ts', '// TODO: fix\nconst x = 1;');
 
@@ -2067,7 +2067,7 @@ describe('analyze agentic — --format json', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
@@ -2105,7 +2105,7 @@ describe('analyze agentic — --format json', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       for (let i = 1; i <= 51; i++) {
@@ -2143,7 +2143,7 @@ describe('analyze agentic — --format json', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
@@ -2177,7 +2177,7 @@ describe('analyze agentic — --format json', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('large.ts', 'x'.repeat(256));
 
@@ -2222,7 +2222,7 @@ describe('analyze agentic — running from a subdirectory', () => {
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
         // Extension is registered against the repo root, just like `sonar integrate claude` does.
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       // One change above and one below the subdirectory, so we cover both
@@ -2265,7 +2265,7 @@ describe('analyze agentic — running from a subdirectory', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       // Filename with a space — would be corrupted by the previous `.trim()`-based parser.
