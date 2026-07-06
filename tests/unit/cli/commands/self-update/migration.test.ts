@@ -257,7 +257,7 @@ describe('runMigrations — migration execution', () => {
       (e): e is HookExtension =>
         e.kind === 'hook' && e.name === 'sonar-secrets' && e.hookType === 'PreToolUse',
     );
-    expect(secretsExts.length).toBe(1);
+    expect(secretsExts).toHaveLength(1);
     expect(secretsExts[0].projectRoot).toBe('/some/project');
   });
 
@@ -299,7 +299,7 @@ describe('runMigrations — migration execution', () => {
         e.projectRoot === '/some/project',
     );
 
-    expect(projectExts.length).toBe(1);
+    expect(projectExts).toHaveLength(1);
   });
 });
 
@@ -560,7 +560,7 @@ describe('runMigrations — already-migrated extensions not duplicated', () => {
       (e): e is import('../../../../../src/lib/state.js').HookExtension =>
         e.kind === 'hook' && e.name === 'sonar-sqaa' && e.hookType === 'PostToolUse',
     );
-    expect(sqaaExts.length).toBe(1);
+    expect(sqaaExts).toHaveLength(1);
   });
 });
 
