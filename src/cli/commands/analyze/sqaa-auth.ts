@@ -135,13 +135,13 @@ export async function resolveSqaaProjectKey(projectRoot?: string): Promise<strin
 
     const projectKey = sqaaFeature?.attrs?.projectKey;
     if (typeof projectKey !== 'string' || projectKey.length === 0) {
-      logger.debug('SonarQube Agentic Analysis skipped: no project key found in integration state');
+      logger.debug('Vortex agentic analysis skipped: no project key found in integration state');
       return null;
     }
 
     return projectKey;
   } catch {
-    logger.debug('SonarQube Agentic Analysis skipped: failed to resolve integration state');
+    logger.debug('Vortex agentic analysis skipped: failed to resolve integration state');
     return null;
   }
 }
