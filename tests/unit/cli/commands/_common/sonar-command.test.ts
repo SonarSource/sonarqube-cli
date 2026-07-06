@@ -188,6 +188,45 @@ describe('SonarCommand', () => {
     });
   });
 
+  // ─── rejectUnknownSubcommands() ───────────────────────────────────────────
+
+  describe('rejectUnknownSubcommands()', () => {
+    let parent: SonarCommand;
+    let parentAction: ReturnType<typeof mock>;
+    let subAction: ReturnType<typeof mock>;
+
+    beforeEach(() => {
+      parentAction = mock(() => {});
+      subAction = mock(() => {});
+      parent = new SonarCommand('parent');
+      parent.exitOverride().configureOutput({ writeErr: () => {} });
+      parent.rejectUnknownSubcommands().anonymousAction(parentAction);
+      parent.command('build').anonymousAction(subAction);
+    });
+
+    it('reports an unknown subcommand with a "Did you mean?" suggestion', async () => {
+      let caught: { code?: string; message?: string } | undefined;
+      try {
+        await parent.parseAsync(['buil'], { from: 'user' });
+      } catch (err) {
+        caught = err as { code?: string; message?: string };
+      }
+      expect(caught?.code).toBe('commander.unknownCommand');
+      expect(caught?.message).toContain("unknown command 'buil'");
+      expect(caught?.message).toContain('(Did you mean build?)');
+    });
+
+    it('still runs the parent action when no excess args are given', async () => {
+      await parent.parseAsync([], { from: 'user' });
+      expect(parentAction).toHaveBeenCalledTimes(1);
+    });
+
+    it('still dispatches to a known subcommand', async () => {
+      await parent.parseAsync(['build'], { from: 'user' });
+      expect(subAction).toHaveBeenCalledTimes(1);
+    });
+  });
+
   // ─── anonymousAction() ────────────────────────────────────────────────────
 
   describe('anonymousAction()', () => {
