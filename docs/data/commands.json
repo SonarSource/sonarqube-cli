@@ -1,5 +1,5 @@
 {
-  "version": "1.2.0",
+  "version": "1.3.0",
   "commands": [
     {
       "id": "sonar",
@@ -370,11 +370,28 @@
       "description": "Setup SonarQube integration for AI coding agents, git and others.",
       "isGroup": true,
       "isRoot": false,
-      "requiresAuth": false,
+      "requiresAuth": true,
       "depth": 1,
       "parentId": "sonar",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "flags": "-p, --project <project>",
+          "long": "--project",
+          "short": "-p",
+          "description": "Project key. Mutually exclusive with --global.",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "-g, --global",
+          "long": "--global",
+          "short": "-g",
+          "description": "Install integrations globally.",
+          "type": "boolean",
+          "required": false
+        }
+      ],
       "examples": [
         {
           "command": "sonar integrate claude -s https://sonarcloud.io -p my-project",
@@ -474,7 +491,7 @@
       "id": "sonar-integrate-claude",
       "name": "claude",
       "fullName": "sonar integrate claude",
-      "description": "Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.",
+      "description": "Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure Vortex agentic analysis and MCP Server.",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
@@ -520,7 +537,7 @@
       "id": "sonar-integrate-copilot",
       "name": "copilot",
       "fullName": "sonar integrate copilot",
-      "description": "Setup SonarQube integration for Copilot. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.",
+      "description": "Setup SonarQube integration for Copilot. This will install secrets scanning hooks, configure Vortex agentic analysis and MCP Server.",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
@@ -612,7 +629,7 @@
       "id": "sonar-integrate-antigravity",
       "name": "antigravity",
       "fullName": "sonar integrate antigravity",
-      "description": "Setup SonarQube integration for Antigravity. Installs secrets scanning hooks, prompt-secrets instructions, and Context Augmentation.",
+      "description": "Setup SonarQube integration for Antigravity. Installs secrets scanning hooks, prompt-secrets instructions, and Vortex context augmentation.",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
@@ -658,7 +675,7 @@
       "id": "sonar-integrate-cursor",
       "name": "cursor",
       "fullName": "sonar integrate cursor",
-      "description": "Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure SonarQube Agentic Analysis.",
+      "description": "Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure Vortex agentic analysis.",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
@@ -906,7 +923,7 @@
       "id": "sonar-analyze-agentic",
       "name": "agentic",
       "fullName": "sonar analyze agentic",
-      "description": "Run server-side Agentic Analysis (SonarQube Cloud only). Limitations apply.",
+      "description": "Run server-side agentic analysis (SonarQube Cloud only). Limitations apply.",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
