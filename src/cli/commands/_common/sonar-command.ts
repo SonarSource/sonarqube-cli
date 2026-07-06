@@ -137,6 +137,26 @@ export class SonarCommand extends Command {
     );
   }
 
+  /**
+   * For a parent command that has both an action and subcommands, make unknown
+   * subcommands report a proper "unknown command 'X'" error (with Commander's
+   * "Did you mean?" suggestion) instead of "too many arguments".
+   *
+   * Commander v15 (allowExcessArguments defaults to false) errors early with
+   * "too many arguments" for unknown subcommands. This enables allowExcessArguments
+   * so Commander doesn't error early, then a preAction hook re-raises excess args
+   * on the parent as unknownCommand().
+   */
+  rejectUnknownSubcommands(): this {
+    this.allowExcessArguments(true).hook('preAction', (thisCommand, actionCommand) => {
+      if (actionCommand.name() === thisCommand.name() && thisCommand.args.length > 0) {
+        // unknownCommand() is public in Commander 15 but absent from its typings.
+        (thisCommand as Command & { unknownCommand(): void }).unknownCommand();
+      }
+    });
+    return this;
+  }
+
   /** True when this command was registered with authenticatedAction(). */
   get requiresAuth(): boolean {
     return this._requiresAuth;
