@@ -91,7 +91,7 @@ describe('sonar remediate', () => {
   );
 
   it(
-    'exits with code 1 and shows not-available message when org is not eligible for AI remediation',
+    'exits with code 0 and shows buy-it message when org is not eligible for AI remediation',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -105,18 +105,17 @@ describe('sonar remediate', () => {
 
       const result = await harness.run(`remediate --project ${TEST_PROJECT}`);
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('Remediation Agent unavailable.');
-      expect(output).toContain('check eligibility');
-      expect(output).toContain('docs.sonarsource.com');
+      expect(output).toContain('Remediation Agent is not available for your organisation');
+      expect(output).toContain('sonarsource.com/products/agent-essentials');
       expect(output).not.toContain('Which issues');
     },
     { timeout: 15000 },
   );
 
   it(
-    'exits with code 1 and shows not-enabled message when delegate issues is disabled',
+    'exits with code 0 and shows contact-admin message when delegate issues is disabled',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -130,18 +129,17 @@ describe('sonar remediate', () => {
 
       const result = await harness.run(`remediate --project ${TEST_PROJECT}`);
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('Remediation Agent unavailable.');
-      expect(output).toContain('enable the feature');
-      expect(output).toContain('docs.sonarsource.com');
+      expect(output).toContain('Remediation Agent is not enabled for your organisation');
+      expect(output).toContain('Contact your admin to enable it');
       expect(output).not.toContain('Which issues');
     },
     { timeout: 15000 },
   );
 
   it(
-    'exits with code 1 and shows not-available message when the org lookup returns an empty array',
+    'exits with code 0 and shows buy-it message when the org lookup returns an empty array',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -155,11 +153,10 @@ describe('sonar remediate', () => {
 
       const result = await harness.run(`remediate --project ${TEST_PROJECT}`);
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('Remediation Agent unavailable.');
-      expect(output).toContain('check eligibility');
-      expect(output).toContain('docs.sonarsource.com');
+      expect(output).toContain('Remediation Agent is not available for your organisation');
+      expect(output).toContain('sonarsource.com/products/agent-essentials');
       expect(output).not.toContain('Which issues');
     },
     { timeout: 15000 },
@@ -753,7 +750,7 @@ describe('sonar remediate', () => {
     );
 
     it(
-      'short-circuits on entitlement failure before submitting any keys',
+      'short-circuits gracefully before submitting any keys when feature is not enabled by admin',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -765,9 +762,10 @@ describe('sonar remediate', () => {
 
         const result = await harness.run(`remediate --project ${TEST_PROJECT} --issues k1`);
 
-        expect(result.exitCode).toBe(1);
-        expect(result.stdout + result.stderr).toContain('Remediation Agent unavailable.');
-        expect(result.stdout + result.stderr).toContain('enable the feature');
+        expect(result.exitCode).toBe(0);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('Remediation Agent is not enabled for your organisation');
+        expect(output).toContain('Contact your admin to enable it');
 
         const agentJobCalls = server
           .getRecordedRequests()

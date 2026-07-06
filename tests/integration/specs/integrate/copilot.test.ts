@@ -681,7 +681,7 @@ describe('integrate copilot', () => {
 
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;
-        expect(output).toContain('Install SonarQube Agentic Analysis instructions?');
+        expect(output).toContain('Install Vortex agentic analysis instructions?');
         const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
         expect(body).toContain('# SonarQube Agentic Analysis protocol');
         expect(findCopilotFeature(harness, 'sqaa-instructions')?.scope).toBe('project');
@@ -855,11 +855,8 @@ describe('integrate copilot', () => {
         expect(output).toContain('Install pre-tool-use hook?');
         expect(output).toContain('Install prompt-secrets instructions?');
         expect(output).toContain('Install MCP server?');
-        // SQAA is skipped with the shared promotion message + docs link.
-        expect(output).toContain('SonarQube Agentic Analysis is available on SonarQube Cloud');
-        expect(output).toContain(
-          'docs.sonarsource.com/agent-centric-development-cycle/features/agentic-analysis',
-        );
+        // SQAA is skipped with the promotion message.
+        expect(output).toContain('Vortex agentic analysis is available on SonarQube Cloud');
         // Accepted features are installed on disk.
         expect(harness.cwd.file(...PROJECT_HOOK_SCRIPT_PATH).exists()).toBe(true);
         expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(true);

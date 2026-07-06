@@ -27,12 +27,12 @@ import { info, warn } from '../../../../ui';
  * Analysis is skipped because the integration is global.
  */
 export const SQAA_GLOBAL_SKIP_MESSAGE =
-  'Skipping SonarQube Agentic Analysis: not supported with --global. Re-run without --global from a project directory to install it there.';
+  'Skipping Vortex agentic analysis: not supported with --global. Re-run without --global from a project directory to install it there.';
 
 /**
  * Shown when SonarQube Agentic Analysis is not available for the current connection.
  */
-export const SQAA_PROMOTION_MESSAGE = `SonarQube Agentic Analysis is available on SonarQube Cloud. Learn more: ${AGENTIC_ANALYSIS_DOCS_URL}`;
+export const SQAA_PROMOTION_MESSAGE = `Vortex agentic analysis is available on SonarQube Cloud. Learn more: ${AGENTIC_ANALYSIS_DOCS_URL}`;
 
 export interface ResolveSqaaSetupParams {
   serverURL: string;
@@ -55,7 +55,7 @@ export async function resolveSqaaSetup(params: ResolveSqaaSetupParams): Promise<
   }
 
   if (status === 'check_failed') {
-    warn('Could not determine SonarQube Agentic Analysis entitlement — skipping.');
+    warn('Could not determine Vortex agentic analysis entitlement — skipping.');
     return false;
   }
   if (status === 'not_enabled') {

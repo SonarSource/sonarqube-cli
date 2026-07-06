@@ -97,7 +97,7 @@ describe('sonar integrate <agent> — CAG pre-flight skip paths (real CLI, fake 
 
     expect(result.exitCode, result.stderr).toBe(0);
     expect(result.stdout).toContain(
-      'Skipping Context Augmentation: not available on SonarQube Server.',
+      'Skipping Vortex context augmentation: not available on SonarQube Server.',
     );
     expect(existsSync(cagBinaryPath), 'no CAG download on SonarQube Server').toBe(false);
     expect(findRecordedCagFeature(harness.stateJsonFile.asJson() as CliState)).toBeUndefined();
@@ -132,7 +132,7 @@ describe('sonar integrate <agent> — CAG pre-flight skip paths (real CLI, fake 
 
     expect(result.exitCode, result.stderr).toBe(0);
     expect(result.stderr).toContain(
-      'Skipping Context Augmentation: not available for your organization. Access requires an eligible SonarQube Cloud plan.',
+      'Skipping Vortex context augmentation: not available for your organization. Access requires an eligible SonarQube Cloud plan.',
     );
     expect(existsSync(cagBinaryPath), 'no CAG download when access is denied').toBe(false);
     expect(findRecordedCagFeature(harness.stateJsonFile.asJson() as CliState)).toBeUndefined();
@@ -157,7 +157,7 @@ describe('sonar integrate <agent> — CAG pre-flight skip paths (real CLI, fake 
 
     expect(result.exitCode, result.stderr).toBe(0);
     expect(result.stdout).toContain(
-      'Skipping Context Augmentation: not available on SonarQube Server.',
+      'Skipping Vortex context augmentation: not available on SonarQube Server.',
     );
     expect(existsSync(cagBinaryPath), 'no CAG download on SonarQube Server').toBe(false);
     expect(findRecordedCagFeature(harness.stateJsonFile.asJson() as CliState)).toBeUndefined();

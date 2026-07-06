@@ -176,7 +176,7 @@ describe('integrate antigravity', () => {
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout + result.stderr).toContain(
-          'Skipping Context Augmentation (--skip-context)',
+          'Skipping Vortex context augmentation (--skip-context)',
         );
       },
       { timeout: 30000 },

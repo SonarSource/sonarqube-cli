@@ -21,7 +21,9 @@
 // PostToolUse callback handler for Codex — runs git change-set SQAA after apply_patch.
 
 import { resolveAuth } from '../../../lib/auth-resolver';
+import { AGENTIC_PACK_URL } from '../../../lib/config-constants';
 import logger from '../../../lib/logger';
+import { SqaaForbiddenError } from '../../../sonarqube/errors';
 import {
   emitSqaaHookFailureTelemetry,
   SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
@@ -56,9 +58,15 @@ export async function codexPostToolUse(options: CodexPostToolUseOptions): Promis
     report = await buildSqaaJsonReport(
       { project: projectKey, force: true, format: 'json', forcedDepth: 'STANDARD' },
       auth,
-      CODEX_HOOK_TELEMETRY_OPTIONS,
+      { ...CODEX_HOOK_TELEMETRY_OPTIONS, propagateForbiddenError: true },
     );
   } catch (err) {
+    if (err instanceof SqaaForbiddenError) {
+      writePostToolUseHookOutput(
+        `Run \`sonar integrate\` to uninstall unavailable hooks. See ${AGENTIC_PACK_URL}`,
+      );
+      return;
+    }
     await emitSqaaHookFailureTelemetry(
       SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
       auth,

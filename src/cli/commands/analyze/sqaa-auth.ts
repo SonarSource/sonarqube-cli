@@ -90,14 +90,14 @@ export function resolveCloudAuth(
   if (auth.connectionType != 'cloud' || auth.orgKey == null) {
     if (explicitProject) {
       throw new CommandFailedError(
-        'SonarQube Agentic Analysis requires a SonarQube Cloud connection.',
+        'Vortex agentic analysis requires a SonarQube Cloud connection.',
         {
           remediationHint: "Run 'sonar auth login' and connect to SonarQube Cloud, then retry.",
         },
       );
     }
     warn(
-      'SonarQube Agentic Analysis skipped: a SonarQube Cloud connection is required. Run: sonar auth login (ensure you connect to SonarQube Cloud)',
+      'Vortex agentic analysis skipped: a SonarQube Cloud connection is required. Run: sonar auth login (ensure you connect to SonarQube Cloud)',
     );
     return null;
   }
@@ -127,15 +127,13 @@ export async function resolveSqaaProjectKey(projectRoot?: string): Promise<strin
     );
 
     if (!sqaaExt?.projectKey) {
-      logger.debug(
-        'SonarQube Agentic Analysis skipped: no project key found in extensions registry',
-      );
+      logger.debug('Vortex agentic analysis skipped: no project key found in extensions registry');
       return null;
     }
 
     return sqaaExt.projectKey;
   } catch {
-    logger.debug('SonarQube Agentic Analysis skipped: failed to resolve extensions');
+    logger.debug('Vortex agentic analysis skipped: failed to resolve extensions');
     return null;
   }
 }

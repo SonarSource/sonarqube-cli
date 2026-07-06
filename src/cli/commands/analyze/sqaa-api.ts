@@ -26,7 +26,11 @@ import { getSqaaRetry503BaseDelayMs } from '../../../lib/config-constants';
 import { toRelativePosixPath as toRelativePosixPathOrNull } from '../../../lib/fs-utils';
 import type { SqaaAnalysisFile, SqaaIssue } from '../../../sonarqube/client';
 import { SonarQubeClient } from '../../../sonarqube/client';
-import { RequestPayloadTooLargeError, ServiceUnavailableError } from '../../../sonarqube/errors.js';
+import {
+  RequestPayloadTooLargeError,
+  ServiceUnavailableError,
+  SqaaForbiddenError,
+} from '../../../sonarqube/errors.js';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 import type { CloudAuth } from './sqaa-auth';
 import { type PackChunksLimits, packFilesIntoChunks, type SqaaChunkFile } from './sqaa-chunking';
@@ -134,6 +138,10 @@ async function postSqaaAnalysis(
     });
     return { response, rejected };
   } catch (err) {
+    // Propagate typed errors so hook handlers can distinguish them.
+    if (err instanceof SqaaForbiddenError) {
+      throw err;
+    }
     if (isRetryableSqaaError(err, options.includePayloadTooLarge ?? false)) {
       throw err;
     }

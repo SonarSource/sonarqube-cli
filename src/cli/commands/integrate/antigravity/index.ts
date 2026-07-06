@@ -41,7 +41,7 @@ export async function integrateAntigravity(
   const ctx = await displayAgentIntegratePrelude('Antigravity', 'antigravity', options, auth);
 
   if (options.skipContext) {
-    info('Skipping Context Augmentation (--skip-context).');
+    info('Skipping Vortex context augmentation (--skip-context).');
   }
 
   const sqaaEligible = await resolveSqaaSetup({

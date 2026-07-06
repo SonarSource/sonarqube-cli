@@ -22,6 +22,7 @@
 // PR 1 (CLI-619): covers MCP server setup, scope semantics, idempotency, and
 // state recording. Hook and CAG tests are added in subsequent PRs.
 
+import { readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -530,7 +531,7 @@ describe('integrate cursor', () => {
 
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;
-        expect(output).toContain('Install SonarQube Agentic Analysis instructions?');
+        expect(output).toContain('Install Vortex agentic analysis instructions?');
         const body = harness.cwd.file(...SQAA_RULE_DIRS).asText();
         expect(body).toContain('# SonarQube Agentic Analysis protocol');
         expect(
@@ -585,7 +586,7 @@ describe('integrate cursor', () => {
 
         expect(result.exitCode).toBe(0);
         expect(`${result.stdout}\n${result.stderr}`).toContain(
-          'SonarQube Agentic Analysis is available on SonarQube Cloud',
+          'Vortex agentic analysis is available on SonarQube Cloud',
         );
         expect(harness.cwd.file(...SQAA_RULE_DIRS).exists()).toBe(false);
         expect(findInstalledFeature(harness, 'cursor', 'sqaa-instructions')).toBeUndefined();
@@ -610,6 +611,30 @@ describe('integrate cursor', () => {
 
         expect(result.exitCode).toBe(0);
         expect(harness.cwd.file(...SQAA_RULE_DIRS).asText()).toBe(firstBody);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'system reset removes the SQAA rule file',
+      async () => {
+        const { extraEnv } = await setupCloudWithEntitlement();
+
+        const integrateResult = await harness.run(
+          `integrate cursor --project ${TEST_PROJECT} --non-interactive`,
+          { extraEnv },
+        );
+        expect(integrateResult.exitCode).toBe(0);
+        expect(harness.cwd.exists(...SQAA_RULE_DIRS)).toBe(true);
+
+        // Preserve the post-integrate state so reset sees the installed features.
+        const stateAfterIntegrate = readFileSync(harness.stateJsonFile.path, 'utf-8');
+        harness.state().withRawState(stateAfterIntegrate);
+
+        const result = await harness.run('system reset --force');
+
+        expect(result.exitCode).toBe(0);
+        expect(harness.cwd.exists(...SQAA_RULE_DIRS)).toBe(false);
       },
       { timeout: 30000 },
     );

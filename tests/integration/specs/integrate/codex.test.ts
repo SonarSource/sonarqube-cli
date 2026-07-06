@@ -571,7 +571,7 @@ describe('integrate codex', () => {
         expect(body).toContain(SECRETS_HEADING);
         expect(body).not.toContain(SQAA_HEADING);
         const output = `${result.stdout}\n${result.stderr}`;
-        expect(output).toContain('SonarQube Agentic Analysis is available on SonarQube Cloud');
+        expect(output).toContain('Vortex agentic analysis is available on SonarQube Cloud');
       },
       { timeout: 30000 },
     );
@@ -605,7 +605,7 @@ describe('integrate codex', () => {
         expect(globalBody).not.toContain(SQAA_HEADING);
 
         const output = `${result.stdout}\n${result.stderr}`;
-        expect(output).toContain('Skipping SonarQube Agentic Analysis');
+        expect(output).toContain('Skipping Vortex agentic analysis');
         expect(output).toContain('not supported with --global');
       },
       { timeout: 30000 },
@@ -632,8 +632,8 @@ describe('integrate codex', () => {
         expect(output).toContain('Install MCP server?');
         // SQAA is not eligible, so it is skipped without a prompt but the shared
         // promotion message is surfaced.
-        expect(output).not.toContain('Install SonarQube Agentic Analysis hook?');
-        expect(output).toContain('SonarQube Agentic Analysis is available on SonarQube Cloud');
+        expect(output).not.toContain('Install Vortex agentic analysis hook?');
+        expect(output).toContain('Vortex agentic analysis is available on SonarQube Cloud');
         // Accepted features are installed on disk.
         expect(
           harness.cwd.file(...PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')).exists(),
@@ -728,7 +728,7 @@ describe('integrate codex', () => {
 
         expect(result.exitCode).toBe(0);
         const output = `${result.stdout}\n${result.stderr}`;
-        expect(output).toContain('Install SonarQube Agentic Analysis hook?');
+        expect(output).toContain('Install Vortex agentic analysis hook?');
         expect(
           harness.cwd.file(...SQAA_SCRIPT_DIRS, hookScriptName('posttool-sqaa')).exists(),
         ).toBe(true);

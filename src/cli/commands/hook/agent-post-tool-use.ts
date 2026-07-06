@@ -24,9 +24,11 @@
 import { existsSync, readFileSync } from 'node:fs';
 
 import { resolveAuth } from '../../../lib/auth-resolver';
+import { AGENTIC_PACK_URL } from '../../../lib/config-constants';
 import { canonicalizePath, toRelativePosixPath } from '../../../lib/fs-utils';
 import logger from '../../../lib/logger';
 import { timed } from '../../../lib/timed.js';
+import { SqaaForbiddenError } from '../../../sonarqube/errors';
 import {
   emitSqaaHookFailureTelemetry,
   SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
@@ -116,6 +118,12 @@ export async function agentPostToolUse(options: AgentPostToolUseOptions): Promis
   }
 
   if (fetchResult.error) {
+    if (fetchResult.error instanceof SqaaForbiddenError) {
+      writePostToolUseHookOutput(
+        `Run \`sonar integrate\` to uninstall unavailable hooks. See ${AGENTIC_PACK_URL}`,
+      );
+      return;
+    }
     logger.debug(`PostToolUse SQAA analysis failed: ${fetchResult.error.message}`);
     return;
   }

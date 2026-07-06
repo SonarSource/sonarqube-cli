@@ -22,6 +22,7 @@
 
 import { getSqaaRetry503BaseDelayMs } from '../../../lib/config-constants';
 import type { SqaaAnalysisDepth, SqaaIssue } from '../../../sonarqube/client';
+import { SqaaForbiddenError } from '../../../sonarqube/errors.js';
 import type { SqaaProgress } from '../../../ui/components/sqaa-progress.js';
 import {
   fetchChunkWith413Split,
@@ -55,6 +56,7 @@ export interface RunContext {
   progress: SqaaProgress;
   analysisDepth?: SqaaDeepWireDepth;
   displayAnalysisDepth: SqaaAnalysisDepth;
+  propagateForbiddenError?: boolean;
 }
 
 export interface RunTally {
@@ -255,6 +257,9 @@ async function processChunk(
     ctx.progress.updateChunk(chunkIndex, 'done');
     return shouldContinueAfterChunk(parts, groupErrors);
   } catch (err) {
+    if (err instanceof SqaaForbiddenError && ctx.propagateForbiddenError) {
+      throw err;
+    }
     recordChunkFailure(ctx.progress, tally, chunkIndex, fileIndices, chunkPaths, err as Error);
     return false;
   }
