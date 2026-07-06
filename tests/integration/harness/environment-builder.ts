@@ -43,6 +43,7 @@ import { SECRETS_SPEC } from '../../../src/cli/commands/_common/install/secrets'
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../src/cli/commands/integrate/_common/features/context-augmentation-feature';
 import { recordInstalledFeature } from '../../../src/cli/commands/integrate/_common/registry/installation-recorder';
 import type { IntegrationDeclaration } from '../../../src/cli/commands/integrate/_common/registry/types';
+import { SQAA_HOOK_FEATURE_ID } from '../../../src/cli/commands/integrate/_common/sqaa-entitlement';
 import { CLAUDE_INTEGRATION_ID } from '../../../src/cli/commands/integrate/claude/declaration';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types.js';
 import { generateKeychainAccount } from '../../../src/lib/keychain';
@@ -147,7 +148,7 @@ function recordSqaaHookFeature(
   const timestamp = integration.installedAt;
 
   integration.features.push({
-    featureId: 'sonar-sqaa-hook',
+    featureId: SQAA_HOOK_FEATURE_ID,
     scope: 'project',
     targetRoot: args.projectRoot,
     installedByCliVersion: 'integration-test',

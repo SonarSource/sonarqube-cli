@@ -49,6 +49,7 @@ import {
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
 import { askUser, jsonPatch, skip, textSnippet, wholeFile } from '../_common/registry';
+import { SQAA_HOOK_FEATURE_ID } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import {
   getSecretPreToolTemplateUnix,
@@ -124,7 +125,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       ],
     }),
     {
-      id: 'sonar-sqaa-hook',
+      id: SQAA_HOOK_FEATURE_ID,
       displayName: 'Vortex agentic analysis hook',
       benefitDescription: AGENTIC_ANALYSIS_FEATURE_BENEFIT,
       previewDescription: AGENTIC_ANALYSIS_FEATURE_PREVIEW,

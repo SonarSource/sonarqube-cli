@@ -20,6 +20,7 @@
 
 // Integration tests for `sonar system reset`
 
+import { randomUUID } from 'node:crypto';
 import {
   chmodSync,
   existsSync,
@@ -144,6 +145,21 @@ function buildRawState(overrides: {
     agentExtensions: overrides.agentExtensions ?? [],
     integrations: { installed: overrides.integrations ?? [] },
   });
+}
+
+function legacySqaaHookExtension(projectRoot: string, projectKey: string): unknown {
+  return {
+    id: randomUUID(),
+    agentId: 'claude-code',
+    projectRoot,
+    global: false,
+    projectKey,
+    updatedByCliVersion: 'integration-test',
+    updatedAt: new Date().toISOString(),
+    kind: 'hook',
+    name: 'sonar-sqaa',
+    hookType: 'PostToolUse',
+  };
 }
 
 function gitEnv(userHome: string): NodeJS.ProcessEnv {
@@ -453,7 +469,6 @@ describe('system reset --force', () => {
   it(
     'clears agentExtensions registry entries without legacy disk cleanup',
     async () => {
-      const server = await harness.newFakeServer().start();
       const settingsPath = join(harness.cwd.path, '.claude', 'settings.json');
       mkdirSync(join(harness.cwd.path, '.claude'), { recursive: true });
       writeFileSync(
@@ -475,10 +490,11 @@ describe('system reset --force', () => {
         'utf-8',
       );
 
-      harness
-        .state()
-        .withAuth(server.baseUrl(), 'tok', 'org-key')
-        .withSqaaFeature(harness.cwd.path, 'my-project');
+      harness.state().withRawState(
+        buildRawState({
+          agentExtensions: [legacySqaaHookExtension(harness.cwd.path, 'my-project')],
+        }),
+      );
 
       const result = await harness.run('system reset --force');
 

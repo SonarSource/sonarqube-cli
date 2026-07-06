@@ -31,6 +31,8 @@ import {
 } from '../../../../../src/cli/commands/_common/error.js';
 import { analyzeSqaa, buildSqaaJsonReport } from '../../../../../src/cli/commands/analyze/sqaa';
 import * as changesetModule from '../../../../../src/cli/commands/analyze/sqaa-changeset';
+import { SQAA_HOOK_FEATURE_ID } from '../../../../../src/cli/commands/integrate/_common/sqaa-entitlement';
+import { CLAUDE_INTEGRATION_ID } from '../../../../../src/cli/commands/integrate/claude/declaration';
 import * as processLib from '../../../../../src/lib/process.js';
 import * as stateRepository from '../../../../../src/lib/repository/state-repository.js';
 import { CliState, getDefaultState } from '../../../../../src/lib/state.js';
@@ -68,14 +70,14 @@ function seedClaudeSqaaFeature(state: CliState, projectKey: string | undefined) 
   const now = new Date().toISOString();
   state.integrations.installed.push({
     id: randomUUID(),
-    integrationId: 'claude-code',
+    integrationId: CLAUDE_INTEGRATION_ID,
     installedByCliVersion: '1.0.0',
     installedAt: now,
     updatedByCliVersion: '1.0.0',
     updatedAt: now,
     features: [
       {
-        featureId: 'sonar-sqaa-hook',
+        featureId: SQAA_HOOK_FEATURE_ID,
         scope: 'project',
         targetRoot: process.cwd(),
         installedByCliVersion: '1.0.0',

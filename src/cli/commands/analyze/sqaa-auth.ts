@@ -29,6 +29,7 @@ import { loadState } from '../../../lib/repository/state-repository';
 import { canonicalProjectRoot } from '../../../lib/state-manager';
 import { blank, confirmPrompt, text, warn } from '../../../ui';
 import { CommandFailedError } from '../_common/error.js';
+import { SQAA_HOOK_FEATURE_ID } from '../integrate/_common/sqaa-entitlement';
 import { CLAUDE_INTEGRATION_ID } from '../integrate/claude/declaration';
 
 const LARGE_CHANGESET_HINT =
@@ -128,7 +129,7 @@ export async function resolveSqaaProjectKey(projectRoot?: string): Promise<strin
     );
     const sqaaFeature = claude?.features.find(
       (feature) =>
-        feature.featureId === 'sonar-sqaa-hook' &&
+        feature.featureId === SQAA_HOOK_FEATURE_ID &&
         feature.scope === 'project' &&
         canonicalProjectRoot(feature.targetRoot) === root,
     );
