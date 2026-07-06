@@ -312,4 +312,17 @@ describe('analyze secrets', () => {
     },
     { timeout: 30000 },
   );
+
+  it(
+    'reports an unknown subcommand with a "Did you mean?" suggestion',
+    async () => {
+      const result = await harness.run('analyze secret');
+
+      expect(result.exitCode).toBe(1);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain("error: unknown command 'secret'");
+      expect(output).toContain('(Did you mean secrets?)');
+    },
+    { timeout: 15000 },
+  );
 });
