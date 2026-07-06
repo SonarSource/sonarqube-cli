@@ -2,7 +2,7 @@
 
 > Code quality and security in your terminal. Scan, integrate, and fix issues — locally or with AI.
 
-- Version: 1.2.0
+- Version: 1.3.0
 - Install (Linux/macOS): curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash
 - Install (Windows): irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
 - Machine-readable schema: https://sonarsource.com/sonarqube/cli/data/commands.json
@@ -101,7 +101,7 @@ Examples:
   sonar api get "/api/system/status" --verbose
   sonar api post "/api/user_tokens/revoke" --data '{"name":"my-token"}'
 
-### sonar integrate
+### sonar integrate *
 Setup SonarQube integration for AI coding agents, git and others.
 
 Examples:
@@ -127,7 +127,7 @@ Examples:
   sonar integrate git --hook pre-push --global --non-interactive
 
 ### sonar integrate claude *
-Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.
+Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure Vortex agentic analysis and MCP Server.
 Usage: sonar integrate claude [-p <value>] [--non-interactive] [--global] [--skip-context]
 
 Options:
@@ -137,7 +137,7 @@ Options:
   --skip-context   Skip the sonar-context-augmentation install/init/skill step
 
 ### sonar integrate copilot *
-Setup SonarQube integration for Copilot. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.
+Setup SonarQube integration for Copilot. This will install secrets scanning hooks, configure Vortex agentic analysis and MCP Server.
 Usage: sonar integrate copilot [--global] [-p <value>] [--non-interactive] [--skip-context]
 
 Options:
@@ -157,7 +157,7 @@ Options:
   --skip-context   Skip the sonar-context-augmentation install/init/skill step
 
 ### sonar integrate antigravity *
-Setup SonarQube integration for Antigravity. Installs secrets scanning hooks, prompt-secrets instructions, and Context Augmentation.
+Setup SonarQube integration for Antigravity. Installs secrets scanning hooks, prompt-secrets instructions, and Vortex context augmentation.
 Usage: sonar integrate antigravity [-p <value>] [--non-interactive] [--global] [--skip-context]
 
 Options:
@@ -167,7 +167,7 @@ Options:
   --skip-context   Skip the sonar-context-augmentation install/init/skill step
 
 ### sonar integrate cursor *
-Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure SonarQube Agentic Analysis.
+Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure Vortex agentic analysis.
 Usage: sonar integrate cursor [-p <value>] [--non-interactive] [--global] [--skip-context]
 
 Options:
@@ -220,7 +220,7 @@ Examples:
   --min-severity  <string>   Minimum severity level to include. Allowed values: BLOCKER, HIGH, MEDIUM, LOW, INFO (default: all severities)
 
 ### sonar analyze agentic *
-Run server-side Agentic Analysis (SonarQube Cloud only). Limitations apply.
+Run server-side agentic analysis (SonarQube Cloud only). Limitations apply.
 Usage: sonar analyze agentic [--file <value>] [--staged] [--base <value>] [-p <value>] [--force] [--depth <value>] [--format <value>] [--branch <value>]
 
 Options:
