@@ -35,6 +35,7 @@ import { Dir } from './dir';
 import { EnvironmentBuilder } from './environment-builder.js';
 import { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
 import { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from './fake-sonarqube-server.js';
+import { FakeTelemetryServer } from './fake-telemetry-server.js';
 import { FakeUpdateScriptServer } from './fake-update-script-server.js';
 import { File } from './file';
 import { buildHomeEnv, IS_WINDOWS } from './platform';
@@ -54,6 +55,7 @@ export class TestHarness {
   private readonly servers: FakeSonarQubeServer[] = [];
   private readonly binariesServers: FakeBinariesServer[] = [];
   private readonly updateScriptServers: FakeUpdateScriptServer[] = [];
+  private readonly telemetryServers: FakeTelemetryServer[] = [];
   private _envBuilder?: EnvironmentBuilder;
   private systemEnvVars: Record<string, string> = {};
 
@@ -191,6 +193,18 @@ export class TestHarness {
   }
 
   /**
+   * Creates a fake telemetry ingest server and points TELEMETRY_ENDPOINT at it via
+   * SONARQUBE_CLI_TELEMETRY_ENDPOINT, so storeEvent()'s detached flush worker posts
+   * here instead of the real backend. Does not enable telemetry itself — pair with
+   * harness.state().withTelemetryEnabled().
+   */
+  newFakeTelemetryServer(): FakeTelemetryServer {
+    const server = FakeTelemetryServer.start();
+    this.telemetryServers.push(server);
+    return server;
+  }
+
+  /**
    * Runs the CLI binary with the given command string.
    *
    * Before spawning, applies the configured environment (writes state.json + seeds tokens).
@@ -236,12 +250,18 @@ export class TestHarness {
       ? { SONARQUBE_CLI_UPDATE_SCRIPT_BASE_URL: activeUpdateServer.baseUrl() }
       : {};
 
+    const activeTelemetryServer = this.telemetryServers.at(-1);
+    const fakeTelemetryEnv: Record<string, string> = activeTelemetryServer
+      ? { SONARQUBE_CLI_TELEMETRY_ENDPOINT: activeTelemetryServer.baseUrl() }
+      : {};
+
     const composed: Record<string, string> = {
       ...this.systemEnvVars,
       ...builderExtraEnv,
       ...fakeBinariesEnv,
       ...fakeSonarcloudApiEnv,
       ...fakeUpdateScriptEnv,
+      ...fakeTelemetryEnv,
       SONARQUBE_CLI_KEYCHAIN_FILE: this.keychainJsonFile,
       CI: 'true',
       [ENV_SQAA_RETRY_BASE_DELAY_MS]: '0',
@@ -278,6 +298,7 @@ export class TestHarness {
       ),
     );
     await Promise.all(this.updateScriptServers.map((s) => s.stop().catch(() => {})));
+    await Promise.all(this.telemetryServers.map((s) => s.stop().catch(() => {})));
 
     await rm(this.tempDir.path, {
       recursive: true,

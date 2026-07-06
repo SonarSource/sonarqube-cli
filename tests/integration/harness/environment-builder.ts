@@ -309,6 +309,9 @@ export class EnvironmentBuilder {
    * Use when a test needs to assert telemetry side effects such as findings.ndjson.
    * Pair with extraEnv `__SQ_CLI_TELEMETRY_FLUSH__=1` so the sink is written but the
    * detached flush worker never spawns, and nothing is POSTed to the telemetry endpoint.
+   * To assert on the actual POSTed CliCommandExecuted payload instead, use
+   * harness.newFakeTelemetryServer() and skip the flush-mode env var, so the
+   * detached flush worker really posts — to the fake server instead of production.
    */
   withTelemetryEnabled(): this {
     this._telemetryEnabled = true;

@@ -58,7 +58,12 @@ import {
 } from './commands/analyze/sqaa';
 import { SQAA_DEPTH_CHOICES } from './commands/analyze/sqaa-depth';
 import { collectSqaaFileOption } from './commands/analyze/sqaa-file-arg';
-import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './commands/api/api';
+import {
+  apiCommand,
+  type ApiCommandOptions,
+  apiExtraHelpText,
+  deriveApiSubcommand,
+} from './commands/api/api';
 import { authLogin, type AuthLoginOptions } from './commands/auth/login';
 import { authLogout } from './commands/auth/logout';
 import { authStatus } from './commands/auth/status';
@@ -245,6 +250,10 @@ COMMAND_TREE.command('api')
   .option('-v, --verbose', 'Print request and response details for debugging.')
   .description('Make authenticated API requests to SonarQube')
   .addHelpText('after', apiExtraHelpText())
+  .hook('preAction', (_thisCommand, actionCommand) => {
+    const [method, endpoint] = actionCommand.args;
+    setPassthroughSubcommand(actionCommand, deriveApiSubcommand(method, endpoint));
+  })
   .authenticatedAction((auth, method: string, endpoint: string, options: ApiCommandOptions) =>
     apiCommand(auth, method, endpoint, options),
   );

@@ -189,3 +189,50 @@ describe('api', () => {
     { timeout: 15000 },
   );
 });
+
+describe('api — telemetry', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'records "<method> <path>" as subcommand, stripping the query string',
+    async () => {
+      const apiServer = await harness.newFakeServer().withAuthToken('valid-token').start();
+      const telemetryServer = harness.newFakeTelemetryServer();
+      harness.withAuth(apiServer.baseUrl(), 'valid-token');
+      harness.state().withTelemetryEnabled();
+
+      await harness.run('api get "/api/rules/search?organization=demo"');
+
+      const events = await telemetryServer.waitForEvents(1);
+      expect(events).toHaveLength(1);
+      expect(events[0].event_payload.command).toBe('api');
+      expect(events[0].event_payload.subcommand).toBe('get /api/rules/search');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'never records the --data body',
+    async () => {
+      const apiServer = await harness.newFakeServer().withAuthToken('valid-token').start();
+      const telemetryServer = harness.newFakeTelemetryServer();
+      harness.withAuth(apiServer.baseUrl(), 'valid-token');
+      harness.state().withTelemetryEnabled();
+
+      await harness.run(`api post /api/issues/do_transition --data '{"comment":"secret"}'`);
+
+      const events = await telemetryServer.waitForEvents(1);
+      expect(JSON.stringify(events[0])).not.toContain('secret');
+      expect(events[0].event_payload.subcommand).toBe('post /api/issues/do_transition');
+    },
+    { timeout: 15000 },
+  );
+});

@@ -64,6 +64,16 @@ API Usage Documentation:
 `;
 }
 
+/**
+ * Derive the telemetry subcommand for a `sonar api` invocation: "<method> <path>",
+ * lowercased method, endpoint with the query string stripped. Query params and
+ * --data are never captured since they may contain sensitive data.
+ */
+export function deriveApiSubcommand(method: string, endpoint: string): string {
+  const path = endpoint.split('?')[0];
+  return `${method.toLowerCase()} ${path}`;
+}
+
 export async function apiCommand(
   auth: ResolvedAuth,
   method: string,
