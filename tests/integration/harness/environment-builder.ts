@@ -21,14 +21,7 @@
 // Declarative builder for the isolated test environment: state.json + binary setup
 
 import { randomUUID } from 'node:crypto';
-import {
-  chmodSync,
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  realpathSync,
-  writeFileSync,
-} from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
@@ -45,6 +38,7 @@ import { recordInstalledFeature } from '../../../src/cli/commands/integrate/_com
 import type { IntegrationDeclaration } from '../../../src/cli/commands/integrate/_common/registry/types';
 import { SQAA_HOOK_FEATURE_ID } from '../../../src/cli/commands/integrate/_common/sqaa-entitlement';
 import { CLAUDE_INTEGRATION_ID } from '../../../src/cli/commands/integrate/claude/declaration';
+import { canonicalizePath } from '../../../src/lib/fs-utils';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types.js';
 import { generateKeychainAccount } from '../../../src/lib/keychain';
 import { detectPlatform } from '../../../src/lib/platform-detector.js';
@@ -72,6 +66,8 @@ interface SqaaFeatureConfig {
   projectKey: string;
   orgKey?: string;
   serverUrl?: string;
+  targetRoot?: string;
+  repoRoot?: string;
 }
 
 interface ContextAugmentationSkillConfig {
@@ -142,6 +138,8 @@ function recordSqaaHookFeature(
     projectKey: string;
     orgKey?: string;
     serverUrl?: string;
+    targetRoot?: string;
+    repoRoot?: string;
   },
 ): void {
   const integration = getOrCreateClaudeIntegration(state);
@@ -150,7 +148,7 @@ function recordSqaaHookFeature(
   integration.features.push({
     featureId: SQAA_HOOK_FEATURE_ID,
     scope: 'project',
-    targetRoot: args.projectRoot,
+    targetRoot: args.targetRoot ?? args.projectRoot,
     installedByCliVersion: 'integration-test',
     installedAt: timestamp,
     updatedByCliVersion: 'integration-test',
@@ -162,6 +160,7 @@ function recordSqaaHookFeature(
       orgKey: args.orgKey ?? null,
       projectKey: args.projectKey,
       serverUrl: args.serverUrl ?? null,
+      ...(args.repoRoot ? { repoRoot: args.repoRoot } : {}),
     },
   });
 }
@@ -374,8 +373,16 @@ export class EnvironmentBuilder {
     projectKey: string,
     orgKey?: string,
     serverUrl?: string,
+    options?: { targetRoot?: string; repoRoot?: string },
   ): this {
-    this.sqaaFeatures.push({ projectRoot, projectKey, orgKey, serverUrl });
+    this.sqaaFeatures.push({
+      projectRoot,
+      projectKey,
+      orgKey,
+      serverUrl,
+      targetRoot: options?.targetRoot,
+      repoRoot: options?.repoRoot,
+    });
     return this;
   }
 
@@ -514,27 +521,19 @@ export class EnvironmentBuilder {
     for (const feature of this.sqaaFeatures) {
       // Resolve symlinks so the stored path matches process.cwd() in the CLI subprocess
       // (e.g. /var/folders/... → /private/var/folders/... on macOS)
-      let resolvedRoot: string;
-      try {
-        resolvedRoot = realpathSync(feature.projectRoot);
-      } catch {
-        resolvedRoot = feature.projectRoot;
-      }
+      const resolvedRoot = canonicalizePath(feature.projectRoot);
       recordSqaaHookFeature(state, {
         projectRoot: resolvedRoot,
         projectKey: feature.projectKey,
         orgKey: feature.orgKey ?? this.activeConnectionOrgKey,
         serverUrl: feature.serverUrl ?? this.activeConnectionUrl,
+        targetRoot: feature.targetRoot,
+        repoRoot: feature.repoRoot,
       });
     }
 
     for (const skill of this.contextAugmentationSkills) {
-      let resolvedRoot: string;
-      try {
-        resolvedRoot = realpathSync(skill.projectRoot);
-      } catch {
-        resolvedRoot = skill.projectRoot;
-      }
+      const resolvedRoot = canonicalizePath(skill.projectRoot);
       recordContextAugmentationFeature(state, {
         projectRoot: resolvedRoot,
         projectKey: skill.projectKey,

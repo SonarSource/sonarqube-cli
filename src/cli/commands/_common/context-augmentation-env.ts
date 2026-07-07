@@ -26,13 +26,21 @@ export interface ContextAugmentationEnvContext {
   projectKey?: string;
   serverUrl?: string;
   token?: string;
+  /**
+   * Workspace root passed to CAG for its per-workspace daemon folder: the git
+   * working-tree root containing the invocation (climbing up from subdirs), or
+   * the physical integrate target when not in a git repo. Set only when a
+   * recorded integration matched.
+   */
+  workspaceDir?: string;
 }
 
 type ContextAugmentationEnvKey =
   | 'SONAR_CONTEXT_ORGANIZATION'
   | 'SONAR_CONTEXT_PROJECT'
   | 'SONAR_CONTEXT_TOKEN'
-  | 'SONAR_CONTEXT_URL';
+  | 'SONAR_CONTEXT_URL'
+  | 'SONAR_CONTEXT_WORKSPACE_ROOT';
 
 /**
  * Build the env passed to sonar-context-augmentation subprocesses.
@@ -59,6 +67,7 @@ export function buildContextAugmentationEnv(
   setContextEnvValue(env, 'SONAR_CONTEXT_PROJECT', context.projectKey);
   setContextEnvValue(env, 'SONAR_CONTEXT_TOKEN', context.token);
   setContextEnvValue(env, 'SONAR_CONTEXT_URL', context.serverUrl);
+  setContextEnvValue(env, 'SONAR_CONTEXT_WORKSPACE_ROOT', context.workspaceDir);
 
   return env;
 }
@@ -86,6 +95,9 @@ function setContextEnvValue(
       return;
     case 'SONAR_CONTEXT_URL':
       delete env.SONAR_CONTEXT_URL;
+      return;
+    case 'SONAR_CONTEXT_WORKSPACE_ROOT':
+      delete env.SONAR_CONTEXT_WORKSPACE_ROOT;
       return;
   }
 }

@@ -19,14 +19,17 @@
  */
 
 import { spawn } from 'node:child_process';
-import { realpathSync } from 'node:fs';
-import { isAbsolute, relative, resolve } from 'node:path';
+import { isAbsolute, relative } from 'node:path';
 
 import { resolveAuth, type ResolvedAuth } from '../../../lib/auth-resolver';
 import { SONAR_CONTEXT_INVOCATION } from '../../../lib/config-constants';
+import { canonicalizePath, pathCompareKey } from '../../../lib/fs-utils';
 import { getToken } from '../../../lib/keychain';
 import logger from '../../../lib/logger';
-import { resolveWorktreeEquivalentPaths } from '../../../lib/project-workspace/git-worktree';
+import {
+  resolveContextWorkspaceRoot,
+  resolveWorktreeEquivalentPaths,
+} from '../../../lib/project-workspace/git-worktree';
 import type { InstalledIntegrationFeature, IntegrationStateAttribute } from '../../../lib/state';
 import { loadState } from '../../../lib/state-manager';
 import { buildContextAugmentationEnv } from '../_common/context-augmentation-env';
@@ -80,20 +83,17 @@ interface RecordedContextAugmentationConfig {
   organization?: string;
   projectKey?: string;
   serverUrl?: string;
+  /** Git working tree root containing the current invocation; set only when a recorded integration matched. */
+  workspaceDir?: string;
 }
 
-function canonicalPath(path: string): string {
-  let canonical: string;
-  try {
-    canonical = realpathSync.native(path);
-  } catch {
-    canonical = resolve(path);
-  }
-  return process.platform === 'win32' ? canonical.toLowerCase() : canonical;
+/** Case-insensitive path key for matching recorded integration roots on Windows. */
+function comparePath(path: string): string {
+  return pathCompareKey(path);
 }
 
 function isPathInside(parent: string, child: string): boolean {
-  if (child === parent) {
+  if (pathCompareKey(child) === pathCompareKey(parent)) {
     return true;
   }
   const rel = relative(parent, child);
@@ -120,14 +120,14 @@ async function resolveRecordedContextAugmentationConfig(
   try {
     // Consult cwd, then its equivalent in the main working tree, so a linked
     // worktree still matches state recorded in the main checkout.
-    const candidates = (await resolveWorktreeEquivalentPaths(cwd)).map(canonicalPath);
+    const candidates = (await resolveWorktreeEquivalentPaths(cwd)).map(comparePath);
     const matches = loadState()
       .integrations.installed.flatMap((integration) =>
         integration.features.filter(isProjectContextAugmentationFeature).map((feature) => ({
           feature,
           // Prefer the stable main-working-tree key recorded at integrate time;
           // fall back to targetRoot for state written by older CLI versions.
-          projectRoot: canonicalPath(
+          projectRoot: comparePath(
             getOptionalStringAttr(feature.attrs, 'repoRoot') ?? feature.targetRoot,
           ),
         })),
@@ -146,6 +146,10 @@ async function resolveRecordedContextAugmentationConfig(
       organization: getOptionalStringAttr(match.attrs, 'orgKey'),
       projectKey: getOptionalStringAttr(match.attrs, 'projectKey'),
       serverUrl: getOptionalStringAttr(match.attrs, 'serverUrl'),
+      // CAG daemon folder: git working-tree root (climbs up from subdirs), or the
+      // physical integrate targetRoot outside a git repo. Project metadata above
+      // comes from recorded state matched via repoRoot / targetRoot.
+      workspaceDir: canonicalizePath(await resolveContextWorkspaceRoot(cwd, match.targetRoot)),
     };
   } catch (err) {
     logger.debug(
@@ -209,6 +213,7 @@ export async function runContextPassthrough(
       projectKey: recordedConfig.projectKey,
       serverUrl,
       token: await resolveContextToken(auth, serverUrl, organization),
+      workspaceDir: recordedConfig.workspaceDir,
     });
   }
 

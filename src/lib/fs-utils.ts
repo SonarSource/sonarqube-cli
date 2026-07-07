@@ -24,6 +24,57 @@ import { isAbsolute, relative, resolve } from 'node:path';
 export const normalizePath = (p: string): string => p.replaceAll('\\', '/');
 
 /**
+ * Strip the Win32 `\\?\` extended-length path prefix so paths from different
+ * realpath implementations (native vs libuv) compare equal.
+ */
+function stripWin32ExtendedPathPrefix(p: string): string {
+  if (process.platform !== 'win32') {
+    return p;
+  }
+  if (p.startsWith('\\\\?\\UNC\\')) {
+    return `\\\\${p.slice('\\\\?\\UNC\\'.length)}`;
+  }
+  if (p.startsWith('\\\\?\\')) {
+    return p.slice(4);
+  }
+  return p;
+}
+
+/**
+ * Returns the canonical, fully-resolved path for a directory.
+ *
+ * Uses `realpathSync.native` (the OS realpath) rather than the JS implementation
+ * because on Windows only the native call expands 8.3 short components
+ * (e.g. "RUNNER~1" → "runneradmin") and normalizes casing to the
+ * filesystem-authoritative long form. That long form is what `git` reports
+ * (`rev-parse --show-toplevel`, `worktree list`), so recorded project roots and
+ * git-derived lookup roots canonicalize to the same key. The JS `realpathSync`
+ * leaves short names untouched, which silently breaks state matching on runners
+ * whose temp dir contains an 8.3 component. Falls back to path.resolve() if the
+ * path doesn't exist yet.
+ *
+ * The Win32 extended-length prefix that the native call emits is stripped on
+ * both branches so the canonical key is prefix-free (and so a legacy recorded
+ * root that already carries a `\\?\` prefix normalizes identically whether or
+ * not realpathSync resolves it).
+ */
+export function canonicalizePath(p: string): string {
+  try {
+    return stripWin32ExtendedPathPrefix(realpathSync.native(p));
+  } catch {
+    return stripWin32ExtendedPathPrefix(resolve(p));
+  }
+}
+
+/**
+ * Canonical path normalized for stable comparisons (case-insensitive on Windows).
+ */
+export function pathCompareKey(p: string): string {
+  const canonical = canonicalizePath(p);
+  return process.platform === 'win32' ? canonical.toLowerCase() : canonical;
+}
+
+/**
  * POSIX-style path of `file` relative to `base` (defaults to cwd).
  * Canonicalizes both legs so in-`base` symlinks resolving outside are rejected.
  * Returns null on traversal or absolute paths.
@@ -34,19 +85,4 @@ export function toRelativePosixPath(file: string, base: string = process.cwd()):
   const rel = normalizePath(relative(canonicalBase, canonicalFile));
   if (isAbsolute(rel) || rel.split('/').includes('..')) return null;
   return rel;
-}
-
-/**
- * Returns the canonical, fully-resolved path for a directory.
- * On Windows, realpathSync resolves the filesystem-authoritative casing
- * (e.g. "c:\Users\..." → "C:\Users\..."), preventing duplicate keys when
- * the same directory is represented with different cases or separators.
- * Falls back to path.resolve() if the path doesn't exist yet.
- */
-export function canonicalizePath(p: string): string {
-  try {
-    return realpathSync(p);
-  } catch {
-    return resolve(p);
-  }
 }

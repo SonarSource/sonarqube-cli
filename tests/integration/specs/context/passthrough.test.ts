@@ -21,6 +21,7 @@
 // Integration tests for `sonar context <action>` — the passthrough wrapper to
 // the locally-installed sonar-context-augmentation binary.
 
+import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
@@ -28,6 +29,7 @@ import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from '
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/cli/commands/integrate/_common/features/context-augmentation-feature';
 import { CLAUDE_INTEGRATION_ID } from '../../../../src/cli/commands/integrate/claude/declaration';
 import { COPILOT_INTEGRATION_ID } from '../../../../src/cli/commands/integrate/copilot/declaration';
+import { canonicalizePath } from '../../../../src/lib/fs-utils';
 import type { CliState, InstalledIntegrationFeature } from '../../../../src/lib/state.js';
 import { TestHarness } from '../../harness';
 import {
@@ -201,6 +203,61 @@ describe('sonar context passthrough', () => {
       expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe(ORG_KEY);
       expect(invocation.env.SONAR_CONTEXT_URL).toBe(serverUrl);
       expect(invocation.env.SONAR_CONTEXT_TOKEN).toBe('project-token');
+      // Workspace dir is the invocation worktree, not the main checkout where state is keyed.
+      expect(invocation.env.SONAR_CONTEXT_WORKSPACE_ROOT).toBe(canonicalizePath(worktreePath));
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'sets SONAR_CONTEXT_WORKSPACE_ROOT to the integrated folder from a subdirectory of a non-git project',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'project-token', ORG_KEY);
+      // Integrated at the project root; no git repo is initialised here.
+      harness
+        .state()
+        .withContextAugmentationBinaryInstalled()
+        .withContextAugmentationSkill(harness.cwd.path, PROJECT_KEY, ORG_KEY, serverUrl);
+
+      const subdir = join(harness.cwd.path, 'packages', 'app');
+      mkdirSync(subdir, { recursive: true });
+
+      const result = await harness.run('context status', { cwd: subdir });
+
+      expect(result.exitCode).toBe(0);
+      const invocation = findInvocation(readInvocations(harness), ['status']);
+      expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe(PROJECT_KEY);
+      expect(invocation.env.SONAR_CONTEXT_WORKSPACE_ROOT).toBe(canonicalizePath(harness.cwd.path));
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'sets SONAR_CONTEXT_WORKSPACE_ROOT to the worktree root from a subdirectory of a linked git worktree',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'project-token', ORG_KEY);
+      harness
+        .state()
+        .withContextAugmentationBinaryInstalled()
+        .withContextAugmentationSkill(harness.cwd.path, PROJECT_KEY, ORG_KEY, serverUrl);
+
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'README.md', '# test\n');
+      const worktreePath = join(dirname(harness.cwd.path), 'linked-worktree');
+      git(['worktree', 'add', worktreePath, '-b', 'feature/subdir'], harness.cwd.path);
+      const subdir = join(worktreePath, 'packages', 'app');
+      mkdirSync(subdir, { recursive: true });
+
+      const result = await harness.run('context status', { cwd: subdir });
+
+      expect(result.exitCode).toBe(0);
+      const invocation = findInvocation(readInvocations(harness), ['status']);
+      expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe(PROJECT_KEY);
+      expect(invocation.env.SONAR_CONTEXT_WORKSPACE_ROOT).toBe(canonicalizePath(worktreePath));
     },
     { timeout: 30000 },
   );
@@ -338,6 +395,7 @@ describe('sonar context passthrough', () => {
           SONAR_CONTEXT_PROJECT: 'caller-project',
           SONAR_CONTEXT_TOKEN: 'caller-token',
           SONAR_CONTEXT_URL: 'https://caller.example',
+          SONAR_CONTEXT_WORKSPACE_ROOT: '/caller/workspace',
         },
       });
 
@@ -347,6 +405,9 @@ describe('sonar context passthrough', () => {
       expect(invocation.env.SONAR_CONTEXT_URL).toBe(serverUrl);
       expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe('auth-org');
       expect(invocation.env.SONAR_CONTEXT_PROJECT).toBeUndefined();
+      // No recorded integration matched → workspace dir is not set, and a stray
+      // caller-provided value is not inherited.
+      expect(invocation.env.SONAR_CONTEXT_WORKSPACE_ROOT).toBeUndefined();
       expect(invocation.env.SONAR_CONTEXT_INVOCATION_ID).toMatch(UUID_V4_RE);
     },
     { timeout: 30000 },

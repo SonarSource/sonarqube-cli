@@ -20,18 +20,32 @@
 
 // Auth and project-key resolution for SQAA commands.
 
-import { resolve } from 'node:path';
-
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
-import { spawnProcess } from '../../../lib/process';
-import { resolveWorktreeEquivalentPaths } from '../../../lib/project-workspace/git-worktree';
+import { resolveWorktreeRootCandidates } from '../../../lib/project-workspace/git-worktree';
 import { loadState } from '../../../lib/repository/state-repository';
+import type { InstalledIntegrationFeature, IntegrationStateAttribute } from '../../../lib/state';
 import { canonicalProjectRoot } from '../../../lib/state-manager';
 import { blank, confirmPrompt, text, warn } from '../../../ui';
 import { CommandFailedError } from '../_common/error.js';
 import { SQAA_HOOK_FEATURE_ID } from '../integrate/_common/sqaa-entitlement';
 import { CLAUDE_INTEGRATION_ID } from '../integrate/claude/declaration';
+
+function getOptionalStringAttr(
+  attrs: Record<string, IntegrationStateAttribute> | undefined,
+  key: string,
+): string | undefined {
+  const value = attrs?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function sqaaFeatureMatchesRoot(feature: InstalledIntegrationFeature, root: string): boolean {
+  if (canonicalProjectRoot(feature.targetRoot) === root) {
+    return true;
+  }
+  const repoRoot = getOptionalStringAttr(feature.attrs, 'repoRoot');
+  return repoRoot !== undefined && canonicalProjectRoot(repoRoot) === root;
+}
 
 const LARGE_CHANGESET_HINT =
   'For faster feedback, try targeting your changes:\n' +
@@ -111,36 +125,36 @@ export function resolveCloudAuth(
  * Look up the project key for the current project from the declarative
  * integration state (`integrations.installed`).
  *
- * The SQAA hook feature is recorded per install target root (the directory
- * passed to `sonar integrate claude`), so when the user runs SQAA from a
- * subdirectory we resolve the git repository top-level first — otherwise
- * `process.cwd()` is a non-match against the recorded root and we incorrectly
- * skip with "no project configured". We also try the root's equivalent in the
- * repository's main working tree, so a linked worktree still resolves state
- * recorded in the main checkout.
- *
- * Falls back to `process.cwd()` when not inside a git repository so the
- * single-file path still works outside git.
+ * The SQAA hook feature is recorded per install target root, so
+ * `resolveWorktreeRootCandidates` maps the current directory to its working-tree
+ * root(s) — the current tree, then the main tree — via a single `git worktree
+ * list` call. Features are matched on `attrs.repoRoot` (recorded at integrate
+ * time as the main working tree) with a `targetRoot` fallback for older state.
+ * Candidate order prefers the current worktree before the main tree. Falls back
+ * to `process.cwd()` when not inside a git repository so the single-file path
+ * still works outside git.
  */
 export async function resolveSqaaProjectKey(projectRoot?: string): Promise<string | null> {
   try {
-    const root = projectRoot ?? (await tryResolveRepoRoot(process.cwd()));
     const state = loadState();
-
     const claude = state.integrations.installed.find(
       (integration) => integration.integrationId === CLAUDE_INTEGRATION_ID,
     );
-    // Try the repo root, then its equivalent in the main working tree, so a
-    // linked worktree still resolves state recorded in the main checkout.
-    const candidates = new Set(
-      (await resolveWorktreeEquivalentPaths(root)).map(canonicalProjectRoot),
+    const lookupRoots = (await resolveWorktreeRootCandidates(projectRoot ?? process.cwd())).map(
+      canonicalProjectRoot,
     );
-    const sqaaFeature = claude?.features.find(
-      (feature) =>
-        feature.featureId === SQAA_HOOK_FEATURE_ID &&
-        feature.scope === 'project' &&
-        candidates.has(canonicalProjectRoot(feature.targetRoot)),
-    );
+    let sqaaFeature;
+    for (const root of lookupRoots) {
+      sqaaFeature = claude?.features.find(
+        (feature) =>
+          feature.featureId === SQAA_HOOK_FEATURE_ID &&
+          feature.scope === 'project' &&
+          sqaaFeatureMatchesRoot(feature, root),
+      );
+      if (sqaaFeature) {
+        break;
+      }
+    }
 
     const projectKey = sqaaFeature?.attrs?.projectKey;
     if (typeof projectKey !== 'string' || projectKey.length === 0) {
@@ -153,22 +167,6 @@ export async function resolveSqaaProjectKey(projectRoot?: string): Promise<strin
     logger.debug('Vortex agentic analysis skipped: failed to resolve integration state');
     return null;
   }
-}
-
-/**
- * Resolve the git repository top-level for `cwd`, falling back to `cwd` itself
- * when not inside a git repository (so non-git workflows still work).
- */
-async function tryResolveRepoRoot(cwd: string): Promise<string> {
-  try {
-    const result = await spawnProcess('git', ['rev-parse', '--show-toplevel'], { cwd });
-    if (result.exitCode === 0) {
-      return resolve(result.stdout.trim());
-    }
-  } catch {
-    // git not installed or otherwise unavailable — fall through to cwd.
-  }
-  return cwd;
 }
 
 /**

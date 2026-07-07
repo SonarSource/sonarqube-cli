@@ -19,6 +19,7 @@
  */
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
+import { resolveRecordedRepoRoot } from '../../../../lib/project-workspace/git-worktree';
 import type { IntegrationStateAttribute } from '../../../../lib/state';
 import { info } from '../../../../ui';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude';
@@ -75,8 +76,10 @@ export async function integrateAntigravity(
     installContextAugmentation: contextAugmentation !== null,
   };
 
+  const repoRoot = await resolveRecordedRepoRoot(ctx.project.rootDir);
   const attrs = {
     ...buildIntegrationAttrs(ctx),
+    repoRoot,
     ...(contextAugmentation
       ? await buildContextAugmentationAttrs(
           ctx.serverUrl,

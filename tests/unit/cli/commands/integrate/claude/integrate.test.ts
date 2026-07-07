@@ -31,6 +31,7 @@ import * as hooks from '../../../../../../src/cli/commands/integrate/claude/hook
 import type { ResolvedAuth } from '../../../../../../src/lib/auth-resolver';
 import type { DiscoveredProject } from '../../../../../../src/lib/project-workspace';
 import * as discovery from '../../../../../../src/lib/project-workspace';
+import * as gitWorktree from '../../../../../../src/lib/project-workspace/git-worktree';
 import * as stateRepository from '../../../../../../src/lib/repository/state-repository';
 import { getDefaultState } from '../../../../../../src/lib/state';
 import { SonarQubeClient } from '../../../../../../src/sonarqube/client';
@@ -88,6 +89,9 @@ describe('integrateCommand', () => {
       (...args: any[]) => any
     >
   >;
+  let resolveRecordedRepoRootSpy: Mock<
+    Extract<(typeof gitWorktree)['resolveRecordedRepoRoot'], (...args: any[]) => any>
+  >;
 
   beforeEach(() => {
     setMockUi(true);
@@ -100,6 +104,9 @@ describe('integrateCommand', () => {
       contextAugmentation,
       'resolveContextAugmentationSetup',
     ).mockResolvedValue(null);
+    resolveRecordedRepoRootSpy = spyOn(gitWorktree, 'resolveRecordedRepoRoot').mockImplementation(
+      (projectRoot: string) => Promise.resolve(projectRoot),
+    );
 
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
@@ -132,6 +139,7 @@ describe('integrateCommand', () => {
     installIntegrationSpy.mockRestore();
     detectGlobalSecretsHookSpy.mockRestore();
     resolveContextAugmentationSetupSpy.mockRestore();
+    resolveRecordedRepoRootSpy.mockRestore();
   });
 
   it('shows intro message', async () => {
@@ -297,12 +305,11 @@ describe('integrateCommand', () => {
         scope: 'project',
         targetRoot: '/project/root',
         attrs: {
-          orgKey: 'cloud-org',
           projectKey: 'a-project',
+          repoRoot: '/project/root',
+          orgKey: 'cloud-org',
           scaEnabled: true,
           serverUrl: 'https://sonarcloud.io',
-          // Not a git worktree in this unit test, so repoRoot falls back to the project root.
-          repoRoot: '/project/root',
         },
       }),
     );
@@ -549,6 +556,7 @@ describe('integrateCommand', () => {
   }): void {
     const attrs = {
       projectKey: projectKey ?? null,
+      repoRoot: projectRoot,
     };
 
     expect(installIntegrationSpy).toHaveBeenCalledTimes(1);

@@ -23,24 +23,10 @@
 // recorded by `sonar integrate` in the main checkout can still be found after a
 // worktree is created (e.g. for SQAA project-key and CAG context lookups).
 
-import { realpathSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 
+import { canonicalizePath, pathCompareKey } from '../fs-utils';
 import { spawnProcess } from '../process';
-
-/**
- * Resolve a path to its real on-disk form. On Windows this normalizes 8.3 short
- * names (e.g. `RUNNER~1`) and drive-letter casing to the canonical long form, so
- * paths coming from different sources (git output vs `process.cwd()`) compare
- * equal. Falls back to `resolve()` when the path does not exist on disk.
- */
-function canonicalize(path: string): string {
-  try {
-    return realpathSync.native(path);
-  } catch {
-    return resolve(path);
-  }
-}
 
 interface WorktreeMapping {
   /** git top-level of the input path (the linked worktree root when inside one). */
@@ -62,37 +48,67 @@ async function runGitStdout(args: string[], cwd: string): Promise<string | null>
 }
 
 /**
- * Resolve the absolute path of the repository's main working tree for the given
- * directory. `git worktree list` always reports the main working tree as its
- * first entry, which is the stable checkout where `sonar integrate` should key
- * per-project state (it outlives any linked worktree). Returns null when git is
- * unavailable or the directory is not inside a repository.
+ * Resolve the git top-level for `dir` via `rev-parse --show-toplevel`. This is
+ * more reliable than inferring the current tree from `git worktree list` alone,
+ * especially on Windows where path forms from git output and `process.cwd()` can
+ * disagree (short vs long paths, slash direction, extended `\\?\` prefixes).
  */
-export async function resolveMainWorktreeRoot(dir: string): Promise<string | null> {
-  const listing = await runGitStdout(['worktree', 'list', '--porcelain'], dir);
-  const firstEntry = listing
-    ?.split('\n')
-    .find((line) => line.startsWith('worktree '))
-    ?.slice('worktree '.length)
-    .trim();
-  return firstEntry ? resolve(firstEntry) : null;
-}
-
-/**
- * Resolve the current git top-level and the repository's main working tree root
- * for the given directory. Both roots are canonicalized to their real on-disk
- * form so all downstream comparisons (the currentRoot/mainRoot equality guard,
- * `relative`, and the mapped path) operate on consistent forms. Returns null
- * when git is unavailable or the directory is not inside a repository; when not
- * inside a linked worktree, currentRoot equals mainRoot.
- */
-async function resolveWorktreeMapping(dir: string): Promise<WorktreeMapping | null> {
+async function resolveGitTopLevel(dir: string): Promise<string | null> {
   const topLevel = await runGitStdout(['rev-parse', '--show-toplevel'], dir);
   if (topLevel === null) {
     return null;
   }
-  const currentRoot = canonicalize(topLevel.trim());
-  const mainRoot = canonicalize((await resolveMainWorktreeRoot(dir)) ?? currentRoot);
+  const trimmed = topLevel.trim();
+  return trimmed.length > 0 ? canonicalizePath(resolve(trimmed)) : null;
+}
+
+/**
+ * List every working-tree root of the repository containing `dir`, in git's
+ * order (the main working tree is always first). A single `git worktree list
+ * --porcelain` yields both the main tree and every linked worktree, so all
+ * worktree resolution below needs just this one git invocation. Returns null
+ * when git is unavailable or `dir` is not inside a repository.
+ */
+async function listWorktreeRoots(dir: string): Promise<string[] | null> {
+  const listing = await runGitStdout(['worktree', 'list', '--porcelain'], dir);
+  if (listing === null) {
+    return null;
+  }
+  const roots = listing
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('worktree '))
+    .map((line) => canonicalizePath(resolve(line.slice('worktree '.length).trim())))
+    .filter((path) => path.length > 0);
+  return roots.length > 0 ? roots : null;
+}
+
+/**
+ * Resolve the absolute path of the repository's main working tree for the given
+ * directory — the first `git worktree list` entry, which is the stable checkout
+ * where `sonar integrate` should key per-project state (it outlives any linked
+ * worktree). Returns null when git is unavailable or the directory is not inside
+ * a repository.
+ */
+export async function resolveMainWorktreeRoot(dir: string): Promise<string | null> {
+  const roots = await listWorktreeRoots(dir);
+  return roots?.[0] ?? null;
+}
+
+/**
+ * Resolve the current git top-level and the repository's main working tree root
+ * for the given directory. The current root comes from `git rev-parse
+ * --show-toplevel` (climbs up from subdirectories automatically). The main root
+ * is the first `git worktree list` entry when available, otherwise the current
+ * root. Returns null when git is unavailable or `dir` is not inside a repository;
+ * when not inside a linked worktree, currentRoot equals mainRoot.
+ */
+async function resolveWorktreeMapping(dir: string): Promise<WorktreeMapping | null> {
+  const currentRoot = await resolveGitTopLevel(dir);
+  if (!currentRoot) {
+    return null;
+  }
+  const roots = await listWorktreeRoots(dir);
+  const mainRoot = roots?.[0] ?? currentRoot;
   return { currentRoot, mainRoot };
 }
 
@@ -102,24 +118,68 @@ async function resolveWorktreeMapping(dir: string): Promise<WorktreeMapping | nu
  * itself, plus its equivalent inside the repository's main working tree when
  * `path` is inside a linked worktree. Order is [current, main].
  *
+ * Preserves the in-worktree offset (a subdirectory maps to the same subdirectory
+ * under the main tree), so callers that match by prefix keep subfolder precision.
  * Falls back to `[path]` when git is unavailable, `path` is not inside a linked
  * worktree, or `path` is outside the current worktree root.
  */
 export async function resolveWorktreeEquivalentPaths(path: string): Promise<string[]> {
   const mapping = await resolveWorktreeMapping(path);
+  const canonicalPath = canonicalizePath(path);
   if (!mapping || mapping.currentRoot === mapping.mainRoot) {
-    return [path];
+    return [canonicalPath];
   }
 
-  // `currentRoot` is already canonical; canonicalize `path` too (it usually comes
-  // from `process.cwd()`) so the in-worktree offset is computed between comparable
-  // forms — on Windows the two can otherwise differ (8.3 short vs long path),
-  // making a raw `relative` spuriously start with `..`.
-  const rel = relative(mapping.currentRoot, canonicalize(path));
+  const rel = relative(mapping.currentRoot, canonicalPath);
   if (rel.startsWith('..') || isAbsolute(rel)) {
-    return [path];
+    return [canonicalPath];
   }
 
-  const mapped = rel === '' ? mapping.mainRoot : join(mapping.mainRoot, rel);
-  return mapped === path ? [path] : [path, mapped];
+  const mapped = rel === '' ? mapping.mainRoot : canonicalizePath(join(mapping.mainRoot, rel));
+  return pathCompareKey(mapped) === pathCompareKey(canonicalPath)
+    ? [canonicalPath]
+    : [canonicalPath, mapped];
+}
+
+/**
+ * Return the working-tree root candidates to consult for state keyed on a
+ * repository root (not a subdirectory): the current working tree's root, then the
+ * main working tree's root when they differ. Resolving `dir` to its tree root
+ * means a call from a subdirectory still matches root-keyed state, and a call
+ * from a linked worktree still matches state recorded against the main checkout —
+ * all from the single `git worktree list` call. Falls back to `[dir]` when git is
+ * unavailable or `dir` is not inside a repository.
+ */
+export async function resolveWorktreeRootCandidates(dir: string): Promise<string[]> {
+  const mapping = await resolveWorktreeMapping(dir);
+  if (!mapping) {
+    return [canonicalizePath(dir)];
+  }
+  return mapping.currentRoot === mapping.mainRoot
+    ? [mapping.currentRoot]
+    : [mapping.currentRoot, mapping.mainRoot];
+}
+
+/**
+ * Stable repository identity key for per-project integration state: the main
+ * working tree when inside a git repo, otherwise `projectRoot` itself.
+ */
+export async function resolveRecordedRepoRoot(projectRoot: string): Promise<string> {
+  return (await resolveMainWorktreeRoot(projectRoot)) ?? projectRoot;
+}
+
+/**
+ * Workspace root for CAG: the git working-tree root containing `cwd` when inside a
+ * repository (climbs up from subdirectories), otherwise the physical integrate
+ * `targetRoot` supplied by the caller.
+ */
+export async function resolveContextWorkspaceRoot(
+  cwd: string,
+  integratedTargetRoot: string,
+): Promise<string> {
+  const mapping = await resolveWorktreeMapping(cwd);
+  if (mapping) {
+    return mapping.currentRoot;
+  }
+  return integratedTargetRoot;
 }

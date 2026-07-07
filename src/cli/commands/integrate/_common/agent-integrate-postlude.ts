@@ -24,6 +24,7 @@
 // integration options and recorded attrs, and run the install.
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
+import { resolveRecordedRepoRoot } from '../../../../lib/project-workspace/git-worktree';
 import type { IntegrationStateAttribute } from '../../../../lib/state';
 import { supportedIntegrations } from '../index.js';
 import {
@@ -71,8 +72,10 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
     context.isGlobal,
     context.project.rootDir,
   );
+  const repoRoot = await resolveRecordedRepoRoot(context.project.rootDir);
   const attrs: Record<string, IntegrationStateAttribute> = {
     projectKey: context.projectKey ?? null,
+    repoRoot,
     ...(contextAugmentation
       ? await buildContextAugmentationAttrs(
           context.serverUrl,

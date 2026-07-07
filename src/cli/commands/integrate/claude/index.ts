@@ -24,6 +24,7 @@ import { homedir } from 'node:os';
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { OBSOLETE_A3S_MARKER, removeObsoleteHookArtifacts } from '../../../../lib/migration';
+import { resolveRecordedRepoRoot } from '../../../../lib/project-workspace/git-worktree';
 import type { IntegrationStateAttribute } from '../../../../lib/state';
 import {
   displayAgentIntegratePrelude,
@@ -78,8 +79,10 @@ export async function integrateClaude(
         projectKey: ctx.projectKey,
         isGlobal: ctx.isGlobal,
       });
+  const repoRoot = await resolveRecordedRepoRoot(ctx.project.rootDir);
   const featureAttrs = {
     ...buildIntegrationAttrs(config),
+    repoRoot,
     ...(contextAugmentation
       ? await buildContextAugmentationAttrs(
           config.serverURL,

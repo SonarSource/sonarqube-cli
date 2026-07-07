@@ -24,7 +24,7 @@ import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { isSonarQubeCloud } from '../../../../lib/auth-resolver';
 import { SONAR_CONTEXT_INVOCATION } from '../../../../lib/config-constants';
 import logger from '../../../../lib/logger';
-import { resolveMainWorktreeRoot } from '../../../../lib/project-workspace/git-worktree';
+import { resolveRecordedRepoRoot } from '../../../../lib/project-workspace/git-worktree';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../lib/signatures';
 import type { IntegrationStateAttribute } from '../../../../lib/state';
 import { SonarQubeClient } from '../../../../sonarqube/client';
@@ -65,7 +65,7 @@ export async function buildContextAugmentationAttrs(
     orgKey: orgKey ?? null,
     scaEnabled,
     serverUrl,
-    repoRoot: (await resolveMainWorktreeRoot(projectRoot)) ?? projectRoot,
+    repoRoot: await resolveRecordedRepoRoot(projectRoot),
   };
 }
 
