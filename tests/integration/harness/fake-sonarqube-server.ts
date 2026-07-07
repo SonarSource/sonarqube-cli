@@ -133,6 +133,8 @@ export class FakeSonarQubeServerBuilder {
     { uuid: string; eligible: boolean; enabled: boolean }
   > = new Map();
   private readonly cagEntitlementOrgs: Map<string, { uuid: string; allowed: boolean }> = new Map();
+  /** Keyed by org UUID (`resourceId`), for `GET /billing/entitlements`. */
+  private readonly privateProjectsEntitlements: Map<string, boolean> = new Map();
   private validToken?: string;
   private systemStatusCode = 200;
   private systemVersion = '9.9.0.00001';
@@ -154,7 +156,10 @@ export class FakeSonarQubeServerBuilder {
   private remediationAgentEntitlement = { eligible: true, delegateIssuesEnabled: true };
   private orgsLookupReturnsEmpty = false;
   private orgsLookupErrorCode?: number;
+  private organizationsSearchErrorCode?: number;
   private serverMode: 'MQR' | 'STANDARD' = 'STANDARD';
+  private provisionProjectsStatusCode?: number;
+  private provisionProjectsStatusBody?: string;
 
   withMode(mode: 'MQR' | 'STANDARD'): this {
     this.serverMode = mode;
@@ -244,6 +249,16 @@ export class FakeSonarQubeServerBuilder {
   }
 
   /**
+   * Make `/api/organizations/search` fail with the given HTTP status code, simulating a
+   * network/service error while resolving a single org by key (the `sonar import --org`
+   * fast path) or while listing member orgs (the interactive path).
+   */
+  withOrganizationsSearchError(statusCode: number): this {
+    this.organizationsSearchErrorCode = statusCode;
+    return this;
+  }
+
+  /**
    * Force POST /a3s-analysis/analyses to return a specific HTTP status code.
    * Takes precedence over withSqaaResponse. Useful for testing 429, 503, etc.
    */
@@ -294,6 +309,26 @@ export class FakeSonarQubeServerBuilder {
   }
 
   /**
+   * Configure GET /billing/entitlements?resourceId=<uuid>&resourceType=organization for an
+   * org's `uuidV4` (defaults to `<orgKey>-uuid-v4`, matching `/organizations/organizations`'
+   * default when no CAG/SQAA entitlement overrides it).
+   */
+  withPrivateProjectsEntitlement(orgKey: string, allowed: boolean, uuid?: string): this {
+    this.privateProjectsEntitlements.set(uuid ?? `${orgKey}-uuid-v4`, allowed);
+    return this;
+  }
+
+  /**
+   * Force POST /api/alm_integration/provision_projects to fail with the given HTTP status
+   * code, simulating a provisioning error (e.g. repo already imported, permission denied).
+   */
+  withProvisionProjectsError(statusCode: number, body?: string): this {
+    this.provisionProjectsStatusCode = statusCode;
+    this.provisionProjectsStatusBody = body;
+    return this;
+  }
+
+  /**
    * Configure the response of the SCA availability endpoints
    * (`/sca/feature-enabled` for cloud, `/api/v2/sca/feature-enabled` for on-premise).
    * When unset (default), both endpoints return 404 to simulate a server
@@ -332,6 +367,7 @@ export class FakeSonarQubeServerBuilder {
       sqaaPayloadLimit,
       sqaaEntitlementOrgs,
       cagEntitlementOrgs,
+      privateProjectsEntitlements,
       scaEnabled,
       cagEntitlementStatusCode,
       cagEntitlementStatusBody,
@@ -342,6 +378,9 @@ export class FakeSonarQubeServerBuilder {
       remediationAgentEntitlement,
       orgsLookupReturnsEmpty,
       orgsLookupErrorCode,
+      organizationsSearchErrorCode,
+      provisionProjectsStatusCode,
+      provisionProjectsStatusBody,
     } = this;
     const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
@@ -548,6 +587,15 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/api/organizations/search') {
+          if (organizationsSearchErrorCode !== undefined) {
+            return new Response(
+              JSON.stringify({ errors: [{ msg: 'Organizations search failed' }] }),
+              {
+                status: organizationsSearchErrorCode,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
+          }
           // member=true → list orgs the user belongs to
           if (query.member === 'true') {
             return new Response(
@@ -662,6 +710,51 @@ export class FakeSonarQubeServerBuilder {
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );
+        }
+
+        if (path === '/dop-translation/organization-bindings') {
+          // `organizationId` here is the org's legacy id, which `/organizations/organizations`
+          // defaults to the org key itself in this fake server (see above), so matching on
+          // `key` mirrors real lookup-by-legacy-id behavior for these tests.
+          const org = memberOrganizations.find((o) => o.key === query.organizationId);
+          const organizationBindings = org?.alm ? [{ devOpsPlatform: org.alm.key }] : [];
+          return new Response(
+            JSON.stringify({
+              organizationBindings,
+              page: { pageIndex: 1, pageSize: 50, total: organizationBindings.length },
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path === '/billing/entitlements' && req.method === 'GET') {
+          const allowed = privateProjectsEntitlements.get(query.resourceId ?? '') ?? false;
+          return new Response(
+            JSON.stringify({
+              entitlements: allowed ? [{ allowedFeatures: ['privateProjects'] }] : [],
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path === '/api/alm_integration/provision_projects' && req.method === 'POST') {
+          if (provisionProjectsStatusCode !== undefined) {
+            return new Response(
+              provisionProjectsStatusBody ??
+                JSON.stringify({ errors: [{ msg: 'Provisioning failed' }] }),
+              {
+                status: provisionProjectsStatusCode,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
+          }
+          const params = new URLSearchParams(body ?? '');
+          const organization = params.get('organization') ?? '';
+          const installationKeys = params.get('installationKeys') ?? '';
+          const projectKey = `${organization}_${installationKeys}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+          return new Response(JSON.stringify({ projects: [{ projectKey }] }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
 
         if (path === '/api/settings/values' && req.method === 'GET') {

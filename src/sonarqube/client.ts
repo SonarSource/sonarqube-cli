@@ -66,6 +66,7 @@ export interface Organization {
   name: string;
   alm?: { key: string };
   actions?: { admin: boolean };
+  onlyPrivateProjects?: { enabled: boolean };
 }
 
 export interface DopRepository {
@@ -76,6 +77,10 @@ export interface DopRepository {
   archived: boolean;
   boundProjectIds: string[];
   importedInCurrentOrg: boolean;
+}
+
+export interface ProvisionedProject {
+  projectKey: string;
 }
 
 export class SonarQubeClient {
@@ -296,6 +301,29 @@ export class SonarQubeClient {
   }
 
   /**
+   * Like `postForm`, but parses and returns the JSON response body instead of
+   * discarding it. Used for legacy endpoints that are
+   * form-encoded on the request side but return a JSON body.
+   */
+  private async postFormJson<T>(endpoint: string, params: Record<string, string>): Promise<T> {
+    const url = `${this.serverURL}${endpoint}`;
+    const response = await fetchGuarded(
+      url,
+      buildFetchInit(
+        'POST',
+        this.commonHeaders('form'),
+        POST_REQUEST_TIMEOUT_MS,
+        new URLSearchParams(params).toString(),
+        buildFetchNetworkOptions(url),
+      ),
+    );
+
+    await this.raiseForStatus(response, 'POST');
+
+    return (await response.json()) as T;
+  }
+
+  /**
    * Revoke a user token on the server by its name.
    *
    * The wire field is `name` (matches the `/api/user_tokens/revoke?name=`
@@ -485,6 +513,31 @@ export class SonarQubeClient {
     return this.checkCagEntitlement(uuid);
   }
 
+  /**
+   * Check whether an organization is entitled to a specific billing feature via
+   * `GET /billing/entitlements` (SonarQube Cloud only, region-specific API host).
+   */
+  async checkBillingEntitlement(organizationUuid: string, entitlement: string): Promise<boolean> {
+    try {
+      const endpoint = '/billing/entitlements';
+      const result = await this.get<{ entitlements: Array<{ allowedFeatures: string[] }> }>(
+        endpoint,
+        { resourceId: organizationUuid, resourceType: 'organization' },
+        resolveFromEndpoint(this.serverURL, endpoint),
+      );
+      return result.entitlements.some((e) => e.allowedFeatures.includes(entitlement));
+    } catch (err) {
+      logger.debug(`Failed to check '${entitlement}' billing entitlement`, err);
+      return false;
+    }
+  }
+
+  async hasPrivateProjectsEntitlement(organizationKey: string): Promise<boolean> {
+    const uuid = await this.getOrganizationId(organizationKey);
+    if (!uuid) return false;
+    return this.checkBillingEntitlement(uuid, 'privateProjects');
+  }
+
   async checkAiRemediationEntitlement(
     orgKey: string,
   ): Promise<{ status: 'not_eligible' | 'not_enabled' | 'ok' | 'unknown' }> {
@@ -572,6 +625,46 @@ export class SonarQubeClient {
       resolveFromEndpoint(this.serverURL, endpoint),
     );
     return { repositories: result.repositories, total: result.page.total };
+  }
+
+  /**
+   * Create (provision) a SonarQube project bound to a single DevOps platform repository via the
+   * legacy `POST /api/alm_integration/provision_projects` endpoint (SonarQube Cloud only). This
+   * has not migrated to the newer `dop-translation` family yet.
+   *
+   * `installationKey` must already be in the ALM-specific format the server expects (e.g.
+   * `<slug>|<id>` for GitHub, plain `id` for other platforms).
+   */
+  async provisionProject(
+    organization: string,
+    installationKey: string,
+  ): Promise<{ projects: ProvisionedProject[] }> {
+    return await this.postFormJson<{ projects: ProvisionedProject[] }>(
+      '/api/alm_integration/provision_projects',
+      { organization, installationKeys: installationKey },
+    );
+  }
+
+  /**
+   * ALM-type lookup via `GET /dop-translation/organization-bindings` (SonarQube Cloud only,
+   * region-specific API host), keyed by the org's **legacy** id (not `uuidV4`). Used to format
+   * `provision_projects`' `installationKeys` param correctly for the org's connected DevOps
+   * platform.
+   */
+  async getOrganizationAlmKey(organizationKey: string): Promise<string | undefined> {
+    const organizationId = await this.getOrganizationLegacyId(organizationKey);
+    if (!organizationId) return undefined;
+
+    try {
+      const endpoint = '/dop-translation/organization-bindings';
+      const result = await this.get<{
+        organizationBindings: Array<{ devOpsPlatform: string }>;
+      }>(endpoint, { organizationId }, resolveFromEndpoint(this.serverURL, endpoint));
+      return result.organizationBindings[0]?.devOpsPlatform;
+    } catch (err) {
+      logger.debug('Failed to fetch organization-bindings for ALM key lookup', err);
+      return undefined;
+    }
   }
 
   /**
@@ -709,6 +802,24 @@ export class SonarQubeClient {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Fetch a single organization's full record by key via `/api/organizations/search`'s
+   * `organizations` filter param, without listing every org the user is a member of.
+   * Used by the `sonar import --org` fast path to resolve `alm.key` and
+   * `onlyPrivateProjects.enabled` up front instead of leaving them unresolved.
+   *
+   * Unlike most lookups in this class, network/API failures are NOT swallowed here: callers
+   * rely on `onlyPrivateProjects.enabled` for visibility enforcement, and silently returning
+   * `undefined` on a transient failure would silently disable that enforcement instead of
+   * surfacing the problem. A `undefined` return only ever means "no org with this key".
+   */
+  async fetchOrganizationByKey(organizationKey: string): Promise<Organization | undefined> {
+    const result = await this.get<{ organizations: Organization[] }>('/api/organizations/search', {
+      organizations: organizationKey,
+    });
+    return result.organizations.find((org) => org.key === organizationKey);
   }
 
   /**
