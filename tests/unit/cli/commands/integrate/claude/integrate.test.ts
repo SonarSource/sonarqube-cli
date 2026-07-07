@@ -29,7 +29,6 @@ import * as registry from '../../../../../../src/cli/commands/integrate/_common/
 import { integrateClaude } from '../../../../../../src/cli/commands/integrate/claude';
 import * as hooks from '../../../../../../src/cli/commands/integrate/claude/hooks';
 import type { ResolvedAuth } from '../../../../../../src/lib/auth-resolver';
-import * as migration from '../../../../../../src/lib/migration';
 import type { DiscoveredProject } from '../../../../../../src/lib/project-workspace';
 import * as discovery from '../../../../../../src/lib/project-workspace';
 import * as stateRepository from '../../../../../../src/lib/repository/state-repository';
@@ -83,7 +82,6 @@ describe('integrateCommand', () => {
   let detectGlobalSecretsHookSpy: Mock<
     Extract<(typeof hooks)['detectGlobalSecretsHook'], (...args: any[]) => any>
   >;
-  let runMigrationsSpy: Mock<Extract<(typeof migration)['runMigrations'], (...args: any[]) => any>>;
   let resolveContextAugmentationSetupSpy: Mock<
     Extract<
       (typeof contextAugmentation)['resolveContextAugmentationSetup'],
@@ -116,7 +114,6 @@ describe('integrateCommand', () => {
     detectGlobalSecretsHookSpy = spyOn(hooks, 'detectGlobalSecretsHook').mockResolvedValue(
       undefined,
     );
-    runMigrationsSpy = spyOn(migration, 'runMigrations');
 
     mockDiscoveredProject({});
   });
@@ -134,7 +131,6 @@ describe('integrateCommand', () => {
     discoverProjectSpy.mockRestore();
     installIntegrationSpy.mockRestore();
     detectGlobalSecretsHookSpy.mockRestore();
-    runMigrationsSpy.mockRestore();
     resolveContextAugmentationSetupSpy.mockRestore();
   });
 
@@ -405,13 +401,6 @@ describe('integrateCommand', () => {
         installSqaaHook: false,
         installSqaaInstructions: false,
       });
-      expect(runMigrationsSpy).toHaveBeenCalledWith(
-        '/project/root',
-        undefined,
-        false,
-        'a-project',
-        { skipSecretsHooks: true },
-      );
     });
 
     it('still installs the project-scoped sonar-sqaa hook when SQAA is entitled', async () => {
@@ -479,7 +468,7 @@ describe('integrateCommand', () => {
 
       await integrateClaude({ global: true }, CLOUD_AUTH);
 
-      // SQAA is never installed on a global run, and the install/migration/state
+      // SQAA is never installed on a global run, and the install/state
       // paths all see sqaaEnabled = false.
       expectClaudeInstallCall({
         targetRoot: homedir(),
@@ -491,15 +480,6 @@ describe('integrateCommand', () => {
         installSqaaHook: false,
         installSqaaInstructions: false,
       });
-      expect(runMigrationsSpy).toHaveBeenLastCalledWith(
-        '/project/root',
-        homedir(),
-        false,
-        'a-project',
-        {
-          skipSecretsHooks: false,
-        },
-      );
 
       const warnNotice = getMockUiCalls().find(
         (c) => c.method === 'warn' && String(c.args[0]).includes('not supported with --global'),
@@ -532,16 +512,6 @@ describe('integrateCommand', () => {
     auth: ResolvedAuth = CLOUD_AUTH,
     skipSecretsHooks = false,
   ): void {
-    const expectedOptions = { skipSecretsHooks: false };
-    expect(runMigrationsSpy).toHaveBeenCalledTimes(1);
-    expect(runMigrationsSpy).toHaveBeenCalledWith(
-      projectRootDir,
-      globalDir,
-      sqaaEnabled,
-      projectKey,
-      expectedOptions,
-    );
-
     const mainTargetRoot = globalDir ?? projectRootDir;
     const mainScope = isGlobal ? 'global' : 'project';
     expectClaudeInstallCall({

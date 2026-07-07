@@ -23,11 +23,7 @@
 import { homedir } from 'node:os';
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
-import {
-  OBSOLETE_A3S_MARKER,
-  removeObsoleteHookArtifacts,
-  runMigrations,
-} from '../../../../lib/migration';
+import { OBSOLETE_A3S_MARKER, removeObsoleteHookArtifacts } from '../../../../lib/migration';
 import type { IntegrationStateAttribute } from '../../../../lib/state';
 import {
   displayAgentIntegratePrelude,
@@ -67,17 +63,12 @@ export async function integrateClaude(
     ? undefined
     : await detectGlobalSecretsHook(homedir());
   const skipSecretsHooks = !!existingGlobalHookPath;
-  const globalDir = ctx.isGlobal ? homedir() : undefined;
 
   const sqaaEnabled = await resolveSqaaSetup({
     serverURL: config.serverURL,
     token: config.token,
     organization: config.organization,
     isGlobal: ctx.isGlobal,
-  });
-
-  await runMigrations(ctx.project.rootDir, globalDir, sqaaEnabled, config.projectKey, {
-    skipSecretsHooks,
   });
 
   const contextAugmentation = options.skipContext
