@@ -20,13 +20,11 @@
 
 // Integration tests for `sonar integrate claude`
 
-import { randomUUID } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { version as CURRENT_VERSION } from '../../../../package.json';
 import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets.js';
 import { claudeIntegration } from '../../../../src/cli/commands/integrate/claude/declaration.js';
 import { detectPlatform } from '../../../../src/lib/platform-detector.js';
@@ -808,100 +806,6 @@ describe('integrate claude — SQAA entitlement guard', () => {
     },
     { timeout: 30000 },
   );
-
-  it(
-    'removes sonar-a3s entries from state.json when SQAA hooks are installed via migration',
-    async () => {
-      const server = await harness
-        .newFakeServer()
-        .withAuthToken('cloud-token')
-        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-        .withSqaaEntitlement('my-org', 'test-uuid-1234')
-        .withProject('my-project')
-        .start();
-      const serverUrl = server.baseUrl();
-
-      // Simulate an old install: sonar-a3s is the PostToolUse hook, no sonar-sqaa yet
-      const staleState = {
-        version: '1.0',
-        lastUpdated: new Date().toISOString(),
-        auth: {
-          isAuthenticated: true,
-          connections: [
-            {
-              id: 'test-conn',
-              type: 'cloud',
-              serverUrl,
-              orgKey: 'my-org',
-              authenticatedAt: new Date().toISOString(),
-            },
-          ],
-          activeConnectionId: 'test-conn',
-        },
-        agents: {
-          'claude-code': {
-            configured: true,
-            configuredByCliVersion: '0.5.0',
-            hooks: {
-              installed: [
-                { name: 'sonar-a3s', type: 'PostToolUse', installedAt: new Date().toISOString() },
-                {
-                  name: 'sonar-secrets',
-                  type: 'PreToolUse',
-                  installedAt: new Date().toISOString(),
-                },
-              ],
-            },
-            skills: { installed: [] },
-          },
-        },
-        config: { cliVersion: CURRENT_VERSION },
-        telemetry: { enabled: false, firstUseDate: new Date().toISOString(), events: [] },
-        agentExtensions: [
-          {
-            id: randomUUID(),
-            agentId: 'claude-code',
-            projectRoot: harness.cwd.path,
-            global: false,
-            kind: 'hook',
-            name: 'sonar-a3s',
-            hookType: 'PostToolUse',
-            updatedByCliVersion: '0.5.0',
-            updatedAt: new Date().toISOString(),
-          },
-        ],
-      };
-
-      harness
-        .state()
-        .withRawState(JSON.stringify(staleState))
-        .withKeychainToken(serverUrl, 'cloud-token', 'my-org');
-      harness.cwd.writeFile(
-        'sonar-project.properties',
-        [`sonar.host.url=${serverUrl}`, 'sonar.projectKey=my-project'].join('\n'),
-      );
-
-      const result = await harness.run(`integrate claude --project my-project --non-interactive`, {
-        extraEnv: {
-          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
-          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
-        },
-      });
-
-      expect(result.exitCode).toBe(0);
-
-      const state = harness.stateJsonFile.asJson();
-      const extensions = state.agentExtensions as Array<{ name: string }>;
-      const hooks = (state.agents?.['claude-code']?.hooks?.installed ?? []) as Array<{
-        name: string;
-      }>;
-
-      expect(extensions.some((e) => e.name === 'sonar-a3s')).toBe(false);
-      expect(hooks.some((h) => h.name === 'sonar-a3s')).toBe(false);
-      expect(extensions.some((e) => e.name === 'sonar-sqaa')).toBe(true);
-    },
-    { timeout: 30000 },
-  );
 });
 
 // ─── Local vs Global file placement ──────────────────────────────────────────
@@ -1325,7 +1229,7 @@ describe.skipIf(IS_WINDOWS)('integrate claude — legacy state without agentExte
   });
 
   it(
-    'migrates old hook scripts and populates agentExtensions when upgrading from pre-registry state',
+    'migrates old hook scripts and normalizes settings.json when upgrading from pre-registry state',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -1437,121 +1341,9 @@ describe.skipIf(IS_WINDOWS)('integrate claude — legacy state without agentExte
   );
 });
 
-// ─── CLI-137: global install over old project-level state ─────────────────────
-
-describe.skipIf(IS_WINDOWS)(
-  'integrate claude — global install over pre-registry project-level state (CLI-137)',
-  () => {
-    let harness: TestHarness;
-
-    beforeEach(async () => {
-      harness = await TestHarness.create();
-      harness.state().withSecretsBinaryInstalled();
-    });
-
-    afterEach(async () => {
-      await harness.dispose();
-    });
-
-    it(
-      'populates agentExtensions with global entries when upgrading from old project-level install with -g',
-      async () => {
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('test-token')
-          .withProject('my-project')
-          .start();
-
-        const serverUrl = server.baseUrl();
-
-        // Old state: project-level install at v0.4.0, hooks in hooks.installed, no agentExtensions
-        harness.state().withRawState(
-          JSON.stringify({
-            version: 1,
-            config: { cliVersion: '0.4.0' },
-            auth: {
-              isAuthenticated: true,
-              connections: [
-                {
-                  id: 'conn-1',
-                  type: 'on-premise',
-                  serverUrl,
-                  authenticatedAt: new Date().toISOString(),
-                },
-              ],
-              activeConnectionId: 'conn-1',
-            },
-            agents: {
-              'claude-code': {
-                configured: true,
-                configuredByCliVersion: '0.4.0',
-                hooks: {
-                  installed: [
-                    {
-                      name: 'sonar-secrets',
-                      type: 'PreToolUse',
-                      installedAt: new Date().toISOString(),
-                    },
-                    {
-                      name: 'sonar-secrets',
-                      type: 'UserPromptSubmit',
-                      installedAt: new Date().toISOString(),
-                    },
-                  ],
-                },
-                skills: { installed: [] },
-              },
-            },
-            tools: { installed: [] },
-            telemetry: { enabled: false, firstUseDate: new Date().toISOString(), events: [] },
-          }),
-        );
-        harness.state().withKeychainToken(serverUrl, 'test-token');
-
-        // Old hook scripts at project level (pre-registry location)
-        const oldScript = `#!/bin/bash\noutput=$(sonar analyze --file "$file_path" 2>/dev/null)\n`;
-        harness.cwd.writeFile(
-          '.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh',
-          oldScript,
-        );
-        harness.cwd.writeFile(
-          '.claude/hooks/sonar-secrets/build-scripts/prompt-secrets.sh',
-          oldScript,
-        );
-
-        harness.cwd.writeFile(
-          'sonar-project.properties',
-          [`sonar.host.url=${serverUrl}`, 'sonar.projectKey=my-project'].join('\n'),
-        );
-
-        const result = await harness.run('integrate claude -g --non-interactive');
-
-        expect(result.exitCode).toBe(0);
-
-        const state = harness.stateJsonFile.asJson();
-        const extensions = state.agentExtensions as Array<{
-          name: string;
-          hookType: string;
-          global: boolean;
-          projectRoot: string;
-        }>;
-
-        // Global sonar-secrets hooks MUST be in agentExtensions
-        const globalSecretsHooks = extensions.filter(
-          (e) => e.name === 'sonar-secrets' && e.global === true,
-        );
-        expect(globalSecretsHooks.length).toBeGreaterThan(0);
-        expect(globalSecretsHooks.some((h) => h.hookType === 'PreToolUse')).toBe(true);
-        expect(globalSecretsHooks.some((h) => h.hookType === 'UserPromptSubmit')).toBe(true);
-      },
-      { timeout: 30000 },
-    );
-  },
-);
-
 // ─── Post-update migration ─────────────────────────────────────────────────────
 
-describe.skipIf(IS_WINDOWS)('post-update migration — hook script rewrite on CLI upgrade', () => {
+describe.skipIf(IS_WINDOWS)('post-update migration on CLI upgrade', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -1645,6 +1437,85 @@ describe.skipIf(IS_WINDOWS)('post-update migration — hook script rewrite on CL
         command: harness.userHome.file(promptScriptRel).path,
         timeout: 60,
       });
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'purges obsolete sonar-a3s entries from state.json on first run after CLI upgrade',
+    async () => {
+      const now = new Date().toISOString();
+      // Old state: configured by v0.4.0 with sonar-a3s recorded in both the legacy
+      // hooks.installed list and the agentExtensions registry, alongside unrelated
+      // sonar-secrets entries that must survive the cleanup.
+      harness.state().withRawState(
+        JSON.stringify(
+          {
+            version: 1,
+            config: { cliVersion: '0.4.0' },
+            auth: { isAuthenticated: false, connections: [], activeConnectionId: null },
+            agents: {
+              'claude-code': {
+                configured: true,
+                configuredByCliVersion: '0.4.0',
+                hooks: {
+                  installed: [
+                    { name: 'sonar-a3s', type: 'PostToolUse', installedAt: now },
+                    { name: 'sonar-secrets', type: 'PreToolUse', installedAt: now },
+                  ],
+                },
+                skills: { installed: [] },
+              },
+            },
+            agentExtensions: [
+              {
+                id: 'a3s-ext',
+                agentId: 'claude-code',
+                projectRoot: harness.cwd.path,
+                global: false,
+                kind: 'hook',
+                name: 'sonar-a3s',
+                hookType: 'PostToolUse',
+                updatedByCliVersion: '0.4.0',
+                updatedAt: now,
+              },
+              {
+                id: 'secrets-ext',
+                agentId: 'claude-code',
+                projectRoot: harness.cwd.path,
+                global: false,
+                kind: 'hook',
+                name: 'sonar-secrets',
+                hookType: 'PreToolUse',
+                updatedByCliVersion: '0.4.0',
+                updatedAt: now,
+              },
+            ],
+            tools: { installed: [] },
+            telemetry: { enabled: false },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Run any CLI command — post-update fires automatically when cliVersion < current
+      const result = await harness.run('--version');
+
+      expect(result.exitCode).toBe(0);
+
+      const state = harness.stateJsonFile.asJson();
+      const extensions = (state.agentExtensions ?? []) as Array<{ name: string }>;
+      const hooks = (state.agents?.['claude-code']?.hooks?.installed ?? []) as Array<{
+        name: string;
+      }>;
+
+      // sonar-a3s is purged from both the legacy list and the registry...
+      expect(hooks.some((h) => h.name === 'sonar-a3s')).toBe(false);
+      expect(extensions.some((e) => e.name === 'sonar-a3s')).toBe(false);
+      // ...while unrelated entries survive.
+      expect(hooks.some((h) => h.name === 'sonar-secrets')).toBe(true);
+      expect(extensions.some((e) => e.name === 'sonar-secrets')).toBe(true);
     },
     { timeout: 30000 },
   );
@@ -1848,7 +1719,7 @@ describe('integrate claude — hook migration scenarios', () => {
   );
 
   it(
-    'scenario C: running integrate twice is idempotent — no duplicate hook entries or agentExtensions',
+    'scenario C: running integrate twice is idempotent — no duplicate hook entries or declarative features',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('tok').withProject('p').start();
 
