@@ -28,7 +28,10 @@ import {
   ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
   SONARQUBE_MCP_DOCKER_IMAGE_NAME,
 } from '../config-constants';
+import { getNetworkConfig } from '../connectivity/network-config';
+import type { ProxyGroup, ResolvedNetworkConfig } from '../connectivity/types';
 import { normalizePath } from '../fs-utils';
+import type { RedactedUrl } from '../redacted-url';
 import type { ContainerRuntime, ContainerRuntimeDetection } from '../tool-detector';
 
 export interface McpServerConfig {
@@ -86,12 +89,55 @@ export function getMcpConfig(
 export const MCP_DEFAULT_TOOLSETS =
   'analysis,issues,projects,quality-gates,rules,duplications,measures,security-hotspots,dependency-risks,coverage';
 
+function toJavaNonProxyHosts(noProxy: string): string {
+  return noProxy
+    .split(/[,\s]+/)
+    .filter((entry) => entry.length > 0)
+    .map((entry) => (entry.startsWith('.') ? `*${entry}` : entry))
+    .join('|');
+}
+
+function proxyJavaProps(proxyUrl: RedactedUrl, scheme: 'http' | 'https'): string[] {
+  const url = new URL(proxyUrl.getUrlWithCredentials());
+  const parts = [`-D${scheme}.proxyHost=${url.hostname}`];
+  if (url.port) {
+    parts.push(`-D${scheme}.proxyPort=${url.port}`);
+  }
+  if (url.username) {
+    parts.push(`-D${scheme}.proxyUser=${decodeURIComponent(url.username)}`);
+  }
+  if (url.password) {
+    parts.push(`-D${scheme}.proxyPassword=${decodeURIComponent(url.password)}`);
+  }
+  return parts;
+}
+
+function buildProxyJavaToolOptions(proxy: ProxyGroup): string {
+  const parts: string[] = [];
+
+  if (proxy.proxyHttps) {
+    parts.push(...proxyJavaProps(proxy.proxyHttps, 'https'));
+  }
+
+  if (proxy.proxyHttp) {
+    parts.push(...proxyJavaProps(proxy.proxyHttp, 'http'));
+  }
+
+  if (proxy.noProxy) {
+    // Java uses it for both HTTP and HTTPS.
+    parts.push(`-Dhttp.nonProxyHosts=${toJavaNonProxyHosts(proxy.noProxy)}`);
+  }
+
+  return parts.join(' ');
+}
+
 function buildDockerRunArgsAndEnv(
   auth: ResolvedAuth,
   context: McpServerContext,
-  options: McpServerOptions,
+  options: McpServerOptions = {},
   mountSource: string | undefined,
-): { args: string[]; env: Record<string, string> } {
+  network: ResolvedNetworkConfig = getNetworkConfig(),
+): McpContainerCommand {
   const { token, orgKey: org, serverUrl } = auth;
 
   const args = [
@@ -134,6 +180,12 @@ function buildDockerRunArgsAndEnv(
   const toolsets = options.toolsets ?? MCP_DEFAULT_TOOLSETS;
   args.push('-e', 'SONARQUBE_TOOLSETS');
   env.SONARQUBE_TOOLSETS = toolsets;
+
+  if (network.proxy) {
+    const javaOpts = buildProxyJavaToolOptions(network.proxy);
+    args.push('-e', 'JAVA_OPTS');
+    env.JAVA_OPTS = javaOpts;
+  }
 
   args.push(SONARQUBE_MCP_DOCKER_IMAGE_NAME);
 
