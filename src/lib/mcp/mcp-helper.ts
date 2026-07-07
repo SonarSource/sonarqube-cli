@@ -84,6 +84,9 @@ export function getMcpConfig(
   return { command: cliPath, args };
 }
 
+// Path where update-ca-certificates picks up custom CA certs inside the MCP container (Debian/Alpine convention).
+export const MCP_CONTAINER_CA_CERT_PATH = '/usr/local/share/ca-certificates/sonar-ca.crt';
+
 // All MCP toolsets supported by the server, excluding 'cag' which is available directly via the CLI.
 // Passed explicitly to avoid relying on MCP-side defaults.
 export const MCP_DEFAULT_TOOLSETS =
@@ -137,7 +140,7 @@ function buildDockerRunArgsAndEnv(
   options: McpServerOptions = {},
   mountSource: string | undefined,
   network: ResolvedNetworkConfig = getNetworkConfig(),
-): McpContainerCommand {
+): { args: string[]; env: Record<string, string> } {
   const { token, orgKey: org, serverUrl } = auth;
 
   const args = [
@@ -187,6 +190,11 @@ function buildDockerRunArgsAndEnv(
     env.JAVA_OPTS = javaOpts;
   }
 
+  if (network.caCert) {
+    const hostPath = normalizePath(network.caCert.path);
+    args.push('-v', `${hostPath}:${MCP_CONTAINER_CA_CERT_PATH}:ro`);
+  }
+
   args.push(SONARQUBE_MCP_DOCKER_IMAGE_NAME);
 
   return { args, env };
@@ -197,9 +205,10 @@ export function getMcpContainerCommand(
   runtime: ContainerRuntime,
   context: McpServerContext,
   options: McpServerOptions = {},
+  network: ResolvedNetworkConfig = getNetworkConfig(),
 ): McpContainerCommand {
   const mountSource = context.withFsMount ? normalizePath(context.projectRoot) : undefined;
-  const { args, env } = buildDockerRunArgsAndEnv(auth, context, options, mountSource);
+  const { args, env } = buildDockerRunArgsAndEnv(auth, context, options, mountSource, network);
   return { command: runtime, args, env };
 }
 
@@ -210,9 +219,10 @@ function getMcpWslContainerCommand(
   runtime: ContainerRuntime,
   context: McpServerContext,
   options: McpServerOptions = {},
+  network: ResolvedNetworkConfig = getNetworkConfig(),
 ): McpContainerCommand {
   const mountSource = context.withFsMount ? `"$${WSL_HOST_PATH_ENV_VAR}"` : undefined;
-  const { args, env } = buildDockerRunArgsAndEnv(auth, context, options, mountSource);
+  const { args, env } = buildDockerRunArgsAndEnv(auth, context, options, mountSource, network);
 
   const wslenv = Object.keys(env).map((name) => `${name}/u`);
 
@@ -231,13 +241,14 @@ export function resolveMcpContainerCommand(
   detection: ContainerRuntimeDetection,
   context: McpServerContext,
   options: McpServerOptions = {},
+  network: ResolvedNetworkConfig = getNetworkConfig(),
 ): McpContainerCommand {
   if (!detection.runtime) {
     throw new Error('resolveMcpContainerCommand requires a detected container runtime');
   }
   return detection.viaWsl
-    ? getMcpWslContainerCommand(auth, detection.runtime, context, options)
-    : getMcpContainerCommand(auth, detection.runtime, context, options);
+    ? getMcpWslContainerCommand(auth, detection.runtime, context, options, network)
+    : getMcpContainerCommand(auth, detection.runtime, context, options, network);
 }
 
 export async function writeMcpServerEntry(filePath: string, serverConfig: object): Promise<void> {

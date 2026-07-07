@@ -34,7 +34,10 @@ import type {
   ProxyGroup,
   ResolvedNetworkConfig,
 } from '../../../../../src/lib/connectivity/types.js';
-import { getMcpContainerCommand } from '../../../../../src/lib/mcp/mcp-helper.js';
+import {
+  getMcpContainerCommand,
+  MCP_CONTAINER_CA_CERT_PATH,
+} from '../../../../../src/lib/mcp/mcp-helper.js';
 import * as projectInfo from '../../../../../src/lib/project-workspace/project-info.js';
 import { createRedactedUrl } from '../../../../../src/lib/redacted-url.js';
 import * as toolDetector from '../../../../../src/lib/tool-detector.js';
@@ -49,6 +52,10 @@ const NO_NETWORK: ResolvedNetworkConfig = { proxy: null, caCert: null, clientCer
 
 function makeProxyNetwork(proxy: ProxyGroup): ResolvedNetworkConfig {
   return { proxy, caCert: null, clientCert: null };
+}
+
+function makeCaCertNetwork(path: string): ResolvedNetworkConfig {
+  return { proxy: null, caCert: { source: 'sonar-env', explicit: true, path }, clientCert: null };
 }
 
 function makeProxy(overrides: Partial<ProxyGroup> = {}): ProxyGroup {
@@ -98,7 +105,7 @@ describe('runMcp', () => {
       viaWsl: false,
     });
 
-    expect(runMcp(FAKE_AUTH)).rejects.toBeInstanceOf(CommandFailedError);
+    expect(runMcp(FAKE_AUTH, {}, NO_NETWORK)).rejects.toBeInstanceOf(CommandFailedError);
   });
 
   it.each(['docker', 'podman', 'nerdctl'] as const)(
@@ -129,7 +136,7 @@ describe('runMcp', () => {
     });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
-    await runMcp(FAKE_AUTH);
+    await runMcp(FAKE_AUTH, {}, NO_NETWORK);
 
     expect(spawnSpy).toHaveBeenCalledWith(
       'podman',
@@ -145,7 +152,7 @@ describe('runMcp', () => {
     });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
-    await runMcp(FAKE_AUTH, { debug: true });
+    await runMcp(FAKE_AUTH, { debug: true }, NO_NETWORK);
 
     const spawnEnv = spawnSpy.mock.calls[0][2].env as Record<string, string>;
     expect(spawnEnv.SONARQUBE_DEBUG_ENABLED).toBe('true');
@@ -160,7 +167,7 @@ describe('runMcp', () => {
     });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
-    await runMcp(FAKE_AUTH, { readOnly: true });
+    await runMcp(FAKE_AUTH, { readOnly: true }, NO_NETWORK);
 
     const spawnEnv = spawnSpy.mock.calls[0][2].env as Record<string, string>;
     expect(spawnEnv.SONARQUBE_READ_ONLY).toBe('true');
@@ -174,7 +181,7 @@ describe('runMcp', () => {
     });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
-    await runMcp(FAKE_AUTH, { toolsets: 'issues,rules' });
+    await runMcp(FAKE_AUTH, { toolsets: 'issues,rules' }, NO_NETWORK);
 
     const spawnEnv = spawnSpy.mock.calls[0][2].env as Record<string, string>;
     expect(spawnEnv.SONARQUBE_TOOLSETS).toBe('issues,rules');
@@ -188,7 +195,7 @@ describe('runMcp', () => {
     });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
-    await runMcp(FAKE_AUTH, { project: 'my-project' });
+    await runMcp(FAKE_AUTH, { project: 'my-project' }, NO_NETWORK);
 
     const spawnEnv = spawnSpy.mock.calls[0][2].env as Record<string, string>;
     expect(spawnEnv.SONARQUBE_PROJECT_KEY).toBe('my-project');
@@ -209,7 +216,7 @@ describe('runMcp', () => {
     });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
-    await runMcp(FAKE_AUTH, { project: 'my-project' });
+    await runMcp(FAKE_AUTH, { project: 'my-project' }, NO_NETWORK);
 
     expect(spawnSpy.mock.calls[0][1]).toContain('SONARQUBE_PROJECT_KEY');
     expect(spawnSpy.mock.calls[0][1]).toContain('-v');
@@ -225,7 +232,7 @@ describe('runMcp', () => {
     });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
-    await runMcp(FAKE_AUTH, { project: 'my-project' });
+    await runMcp(FAKE_AUTH, { project: 'my-project' }, NO_NETWORK);
 
     expect(discoverProjectSpy).not.toHaveBeenCalled();
     expect(spawnSpy.mock.calls[0][1]).toContain('SONARQUBE_PROJECT_KEY');
@@ -316,5 +323,28 @@ describe('getMcpContainerCommand — proxy → JAVA_OPTS', () => {
     const result = getMcpContainerCommand(FAKE_AUTH, 'docker', context, {}, network);
 
     expect(result.env.JAVA_OPTS).not.toContain('proxyPort');
+  });
+});
+
+describe('getMcpContainerCommand — CA cert → volume mount', () => {
+  const context = { withFsMount: false } as const;
+
+  it('does not add a CA cert volume mount when no CA cert is configured', () => {
+    const result = getMcpContainerCommand(FAKE_AUTH, 'docker', context, {}, NO_NETWORK);
+
+    expect(result.args).not.toContain('-v');
+  });
+
+  it('mounts the CA cert to the container system CA directory', () => {
+    const result = getMcpContainerCommand(
+      FAKE_AUTH,
+      'docker',
+      context,
+      {},
+      makeCaCertNetwork('/etc/ssl/corp-ca.pem'),
+    );
+
+    expect(result.args).toContain('-v');
+    expect(result.args).toContain(`/etc/ssl/corp-ca.pem:${MCP_CONTAINER_CA_CERT_PATH}:ro`);
   });
 });
