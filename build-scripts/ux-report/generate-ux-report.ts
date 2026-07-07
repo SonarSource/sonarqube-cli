@@ -443,7 +443,7 @@ uxDescribe('SonarQube Cloud — Happy Path', () => {
     harness
       .state()
       .withAuth(cloudUrl, TOKEN, ORG)
-      .withSqaaExtension(harness.cwd.path, PROJECT, ORG, cloudUrl);
+      .withSqaaFeature(harness.cwd.path, PROJECT, ORG, cloudUrl);
   });
   afterEach(async () => {
     await harness.dispose();
@@ -665,7 +665,7 @@ uxDescribe('SonarQube Cloud — Error Paths', () => {
         .start();
       h.state()
         .withAuth(server.baseUrl(), TOKEN, ORG)
-        .withSqaaExtension(h.cwd.path, PROJECT, ORG, server.baseUrl());
+        .withSqaaFeature(h.cwd.path, PROJECT, ORG, server.baseUrl());
       h.cwd.writeFile('src/index.ts', 'const x = 1;');
       return h.run('analyze agentic --file src/index.ts');
     }),
@@ -680,7 +680,7 @@ uxDescribe('SonarQube Cloud — Error Paths', () => {
         .start();
       h.state()
         .withAuth(server.baseUrl(), TOKEN, ORG)
-        .withSqaaExtension(h.cwd.path, PROJECT, ORG, server.baseUrl());
+        .withSqaaFeature(h.cwd.path, PROJECT, ORG, server.baseUrl());
       h.cwd.writeFile('src/index.ts', 'const x = 1;');
       return h.run('analyze agentic --file src/index.ts');
     }),

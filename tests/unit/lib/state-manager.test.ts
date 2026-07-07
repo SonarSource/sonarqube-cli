@@ -34,16 +34,11 @@ import {
   saveState,
   stateFileExists,
 } from '../../../src/lib/repository/state-repository.js';
-import type { HookExtension, SkillExtension } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 import {
-  addInstalledHook,
   addOrUpdateConnection,
-  findExtensionsByProject,
   generateConnectionId,
-  markAgentConfigured,
   removeConnection,
-  upsertAgentExtension,
 } from '../../../src/lib/state-manager.js';
 
 const testSonarUserHome = join(tmpdir(), `sonar-cli-state-test-${Date.now()}`);
@@ -164,94 +159,6 @@ describe('State Manager', () => {
       expect(state.auth.connections[0].orgKey).toBe('sonarsource');
       expect(state.auth.activeConnectionId).toBe(conn3.id);
       expect(state.auth.isAuthenticated).toBe(true);
-    });
-  });
-
-  describe('upsertAgentExtension: id preservation', () => {
-    it('preserves original id when caller passes a different id on second upsert', () => {
-      const state = getDefaultState('test');
-
-      const firstEntry: HookExtension = {
-        id: 'original-uuid-111',
-        agentId: 'claude-code',
-        projectRoot: '/project',
-        global: false,
-        updatedByCliVersion: '1.0.0',
-        updatedAt: new Date().toISOString(),
-        kind: 'hook',
-        name: 'sonar-secrets',
-        hookType: 'PreToolUse',
-      };
-
-      upsertAgentExtension(state, firstEntry);
-
-      // Simulate what callers do: pass a new randomUUID() on every upsert
-      const secondEntry: HookExtension = {
-        ...firstEntry,
-        id: 'replacement-uuid-222',
-        updatedByCliVersion: '1.1.0',
-      };
-
-      upsertAgentExtension(state, secondEntry);
-
-      expect(state.agentExtensions).toHaveLength(1);
-      expect(state.agentExtensions[0].id).toBe('original-uuid-111');
-    });
-  });
-
-  describe('upsertAgentExtension: non-hook (skill) extension', () => {
-    it('matches non-hook extension by agentId + projectRoot + kind + name', () => {
-      const state = getDefaultState('test');
-
-      const ext: SkillExtension = {
-        id: 'ext-1',
-        agentId: 'claude-code',
-        projectRoot: '/project',
-        global: false,
-        updatedByCliVersion: '1.0.0',
-        updatedAt: new Date().toISOString(),
-        kind: 'skill',
-        name: 'sonarqube-cli-redeploy',
-      };
-
-      upsertAgentExtension(state, ext);
-      expect(state.agentExtensions).toHaveLength(1);
-
-      // Upserting the same non-hook extension should replace, not append
-      const updated: SkillExtension = { ...ext, updatedAt: new Date().toISOString() };
-      upsertAgentExtension(state, updated);
-      expect(state.agentExtensions).toHaveLength(1);
-      expect(state.agentExtensions[0].id).toBe('ext-1');
-    });
-
-    it('adds a second skill extension when name differs', () => {
-      const state = getDefaultState('test');
-
-      const ext1: SkillExtension = {
-        id: 'ext-1',
-        agentId: 'claude-code',
-        projectRoot: '/project',
-        global: false,
-        updatedByCliVersion: '1.0.0',
-        updatedAt: new Date().toISOString(),
-        kind: 'skill',
-        name: 'skill-a',
-      };
-
-      const ext2: SkillExtension = {
-        id: 'ext-2',
-        agentId: 'claude-code',
-        projectRoot: '/project',
-        global: false,
-        updatedByCliVersion: '1.0.0',
-        updatedAt: new Date().toISOString(),
-        kind: 'skill',
-        name: 'skill-b',
-      };
-
-      upsertAgentExtension(state, ext1);
-      upsertAgentExtension(state, ext2);
-      expect(state.agentExtensions).toHaveLength(2);
     });
   });
 });
@@ -399,79 +306,6 @@ describe('stateFileExists', () => {
 });
 
 // =============================================================================
-// findExtensionsByProject
-// =============================================================================
-
-describe('findExtensionsByProject', () => {
-  it('returns extensions matching agentId and projectRoot', () => {
-    const state = getDefaultState('1.0.0');
-    const ext: HookExtension = {
-      id: 'ext-1',
-      agentId: 'claude-code',
-      projectRoot: '/my/project',
-      global: false,
-      kind: 'hook',
-      name: 'sonar-secrets',
-      hookType: 'PreToolUse',
-      updatedByCliVersion: '1.0.0',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    };
-    upsertAgentExtension(state, ext);
-
-    const result = findExtensionsByProject(state, 'claude-code', '/my/project');
-
-    expect(result).toHaveLength(1);
-    expect(result[0].id).toBe('ext-1');
-  });
-
-  it('returns empty array when no extensions match', () => {
-    const state = getDefaultState('1.0.0');
-
-    const result = findExtensionsByProject(state, 'claude-code', '/my/project');
-
-    expect(result).toHaveLength(0);
-  });
-
-  it('does not return extensions for a different agentId', () => {
-    const state = getDefaultState('1.0.0');
-    upsertAgentExtension(state, {
-      id: 'ext-1',
-      agentId: 'cursor',
-      projectRoot: '/my/project',
-      global: false,
-      kind: 'hook',
-      name: 'sonar-secrets',
-      hookType: 'PreToolUse',
-      updatedByCliVersion: '1.0.0',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    });
-
-    const result = findExtensionsByProject(state, 'claude-code', '/my/project');
-
-    expect(result).toHaveLength(0);
-  });
-
-  it('does not return extensions for a different projectRoot', () => {
-    const state = getDefaultState('1.0.0');
-    upsertAgentExtension(state, {
-      id: 'ext-1',
-      agentId: 'claude-code',
-      projectRoot: '/other/project',
-      global: false,
-      kind: 'hook',
-      name: 'sonar-secrets',
-      hookType: 'PreToolUse',
-      updatedByCliVersion: '1.0.0',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    });
-
-    const result = findExtensionsByProject(state, 'claude-code', '/my/project');
-
-    expect(result).toHaveLength(0);
-  });
-});
-
-// =============================================================================
 // saveState — filesystem I/O
 // =============================================================================
 
@@ -524,34 +358,5 @@ describe('removeConnection', () => {
     expect(state.auth.connections).toHaveLength(1);
     expect(state.auth.activeConnectionId).toBe(conn.id);
     expect(state.auth.isAuthenticated).toBe(true);
-  });
-});
-
-// =============================================================================
-// markAgentConfigured / addInstalledHook — new-agent initialisation branch
-// =============================================================================
-
-describe('markAgentConfigured', () => {
-  it('initialises missing agent entry before marking as configured', () => {
-    const state = getDefaultState('1.0.0');
-
-    markAgentConfigured(state, 'new-agent', '1.0.0');
-
-    expect(state.agents['new-agent'].configured).toBe(true);
-    expect(state.agents['new-agent'].configuredByCliVersion).toBe('1.0.0');
-    expect(state.agents['new-agent'].hooks.installed).toEqual([]);
-    expect(state.agents['new-agent'].skills.installed).toEqual([]);
-  });
-});
-
-describe('addInstalledHook', () => {
-  it('initialises missing agent entry before adding hook', () => {
-    const state = getDefaultState('1.0.0');
-
-    addInstalledHook(state, 'new-agent', 'sonar-secrets', 'PreToolUse');
-
-    expect(state.agents['new-agent'].hooks.installed).toHaveLength(1);
-    expect(state.agents['new-agent'].hooks.installed[0].name).toBe('sonar-secrets');
-    expect(state.agents['new-agent'].hooks.installed[0].type).toBe('PreToolUse');
   });
 });

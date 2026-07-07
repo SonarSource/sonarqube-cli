@@ -20,7 +20,7 @@
 
 /**
  * Filesystem I/O for state.json — reading, writing, and in-place migration.
- * Business logic (addOrUpdateConnection, upsertAgentExtension, etc.) lives in state-manager.ts.
+ * Business logic (addOrUpdateConnection, removeConnection, etc.) lives in state-manager.ts.
  */
 
 import { randomUUID } from 'node:crypto';

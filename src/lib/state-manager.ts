@@ -34,15 +34,7 @@ import { loadState, saveState } from './repository/state-repository.js';
 
 export { loadState, saveState };
 
-import {
-  type AgentExtension,
-  agentExtensionEquals,
-  type AuthConnection,
-  type CliState,
-  type CloudRegion,
-  type HookType,
-  type SkillExtension,
-} from './state.js';
+import { type AuthConnection, type CliState, type CloudRegion } from './state.js';
 
 /**
  * Get the currently active authentication connection, or undefined if none.
@@ -54,7 +46,7 @@ export function getActiveConnection(state: CliState): AuthConnection | undefined
   return state.auth.connections.find((c) => c.id === state.auth.activeConnectionId);
 }
 
-function canonicalProjectRoot(projectRoot: string): string {
+export function canonicalProjectRoot(projectRoot: string): string {
   let canonical: string;
   try {
     canonical = realpathSync.native(projectRoot);
@@ -62,20 +54,6 @@ function canonicalProjectRoot(projectRoot: string): string {
     canonical = resolve(projectRoot);
   }
   return process.platform === 'win32' ? canonical.toLowerCase() : canonical;
-}
-
-/**
- * Find all extensions registered for a specific agent + project root combination.
- */
-export function findExtensionsByProject(
-  state: CliState,
-  agentId: string,
-  projectRoot: string,
-): AgentExtension[] {
-  const target = canonicalProjectRoot(projectRoot);
-  return state.agentExtensions.filter(
-    (e) => e.agentId === agentId && canonicalProjectRoot(e.projectRoot) === target,
-  );
 }
 
 /**
@@ -146,68 +124,6 @@ export function removeConnection(state: CliState, connectionId: string): void {
 }
 
 /**
- * Mark agent as configured
- */
-export function markAgentConfigured(state: CliState, agentName: string, cliVersion: string): void {
-  if (!Object.hasOwn(state.agents, agentName)) {
-    state.agents[agentName] = {
-      configured: false,
-      hooks: { installed: [] },
-      skills: { installed: [] },
-    };
-  }
-
-  state.agents[agentName].configured = true;
-  state.agents[agentName].configuredAt = new Date().toISOString();
-  state.agents[agentName].configuredByCliVersion = cliVersion;
-}
-
-/**
- * Add installed hook for agent (legacy — kept for migration compatibility)
- */
-export function addInstalledHook(
-  state: CliState,
-  agentName: string,
-  hookName: string,
-  hookType: HookType,
-): void {
-  if (!Object.hasOwn(state.agents, agentName)) {
-    state.agents[agentName] = {
-      configured: false,
-      hooks: { installed: [] },
-      skills: { installed: [] },
-    };
-  }
-
-  // Remove duplicate if exists (match by both name and type)
-  state.agents[agentName].hooks.installed = state.agents[agentName].hooks.installed.filter(
-    (h) => !(h.name === hookName && h.type === hookType),
-  );
-
-  state.agents[agentName].hooks.installed.push({
-    name: hookName,
-    type: hookType,
-    installedAt: new Date().toISOString(),
-  });
-}
-
-/**
- * Upsert an agent extension in the registry.
- * Matches by agentId + projectRoot + kind + name + (hookType for hooks).
- * For global installs, projectRoot is set to homedir() so it naturally differs from project-level.
- */
-export function upsertAgentExtension(state: CliState, extension: AgentExtension): void {
-  const idx = state.agentExtensions.findIndex((e) => agentExtensionEquals(e, extension));
-
-  if (idx >= 0) {
-    // Preserve the original id — callers pass randomUUID() on every call
-    state.agentExtensions[idx] = { ...extension, id: state.agentExtensions[idx].id };
-  } else {
-    state.agentExtensions.push(extension);
-  }
-}
-
-/**
  * Record an installed binary in state.json under `tools.installed[]`. Failures
  * are logged but do not propagate — state writes must not fail an install.
  */
@@ -227,30 +143,5 @@ export function recordInstallationInState(name: string, version: string, path: s
   } catch (err) {
     warn(`Failed to update state: ${(err as Error).message}`);
     logger.warn(`Failed to update state: ${(err as Error).message}`);
-  }
-}
-
-type SkillExtensionStateInput = Omit<SkillExtension, 'id' | 'kind' | 'updatedAt'> & {
-  updatedAt?: string;
-};
-
-/**
- * Persist a skill extension entry in the registry. Failures are logged but do
- * not propagate because extension state writes must not fail integration setup.
- */
-export function recordSkillExtensionInState(extension: SkillExtensionStateInput): void {
-  try {
-    const { updatedAt = new Date().toISOString(), ...rest } = extension;
-    const state = loadState();
-    upsertAgentExtension(state, {
-      id: crypto.randomUUID(),
-      kind: 'skill',
-      updatedAt,
-      ...rest,
-    });
-    saveState(state);
-  } catch (err) {
-    warn(`Failed to record ${extension.name} skill in state: ${(err as Error).message}`);
-    logger.warn(`Failed to record ${extension.name} skill in state: ${(err as Error).message}`);
   }
 }

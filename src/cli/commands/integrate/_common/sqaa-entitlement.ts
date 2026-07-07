@@ -22,6 +22,8 @@ import { AGENTIC_ANALYSIS_DOCS_URL } from '../../../../lib/config-constants';
 import { SonarQubeClient, type SqaaEntitlementStatus } from '../../../../sonarqube/client';
 import { info, warn } from '../../../../ui';
 
+export const SQAA_HOOK_FEATURE_ID = 'sonar-sqaa-hook';
+
 /**
  * Consistent notice shown across all agent integrations when SonarQube Agentic
  * Analysis is skipped because the integration is global.

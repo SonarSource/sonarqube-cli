@@ -28,9 +28,7 @@ import * as contextAugmentation from '../../../../../../src/cli/commands/integra
 import * as registry from '../../../../../../src/cli/commands/integrate/_common/registry';
 import { integrateClaude } from '../../../../../../src/cli/commands/integrate/claude';
 import * as hooks from '../../../../../../src/cli/commands/integrate/claude/hooks';
-import * as state from '../../../../../../src/cli/commands/integrate/claude/state';
 import type { ResolvedAuth } from '../../../../../../src/lib/auth-resolver';
-import * as migration from '../../../../../../src/lib/migration';
 import type { DiscoveredProject } from '../../../../../../src/lib/project-workspace';
 import * as discovery from '../../../../../../src/lib/project-workspace';
 import * as stateRepository from '../../../../../../src/lib/repository/state-repository';
@@ -84,10 +82,6 @@ describe('integrateCommand', () => {
   let detectGlobalSecretsHookSpy: Mock<
     Extract<(typeof hooks)['detectGlobalSecretsHook'], (...args: any[]) => any>
   >;
-  let runMigrationsSpy: Mock<Extract<(typeof migration)['runMigrations'], (...args: any[]) => any>>;
-  let updateStateAfterConfigurationSpy: Mock<
-    Extract<(typeof state)['updateStateAfterConfiguration'], (...args: any[]) => any>
-  >;
   let resolveContextAugmentationSetupSpy: Mock<
     Extract<
       (typeof contextAugmentation)['resolveContextAugmentationSetup'],
@@ -120,8 +114,6 @@ describe('integrateCommand', () => {
     detectGlobalSecretsHookSpy = spyOn(hooks, 'detectGlobalSecretsHook').mockResolvedValue(
       undefined,
     );
-    runMigrationsSpy = spyOn(migration, 'runMigrations');
-    updateStateAfterConfigurationSpy = spyOn(state, 'updateStateAfterConfiguration');
 
     mockDiscoveredProject({});
   });
@@ -139,8 +131,6 @@ describe('integrateCommand', () => {
     discoverProjectSpy.mockRestore();
     installIntegrationSpy.mockRestore();
     detectGlobalSecretsHookSpy.mockRestore();
-    runMigrationsSpy.mockRestore();
-    updateStateAfterConfigurationSpy.mockRestore();
     resolveContextAugmentationSetupSpy.mockRestore();
   });
 
@@ -316,7 +306,7 @@ describe('integrateCommand', () => {
     );
   });
 
-  it('rethrows CAG installation failures after updating Claude state', async () => {
+  it('rethrows CAG installation failures', async () => {
     mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
     resolveContextAugmentationSetupSpy.mockResolvedValue({ scaEnabled: false });
     installIntegrationSpy.mockRejectedValueOnce(new Error('print failed'));
@@ -334,25 +324,18 @@ describe('integrateCommand', () => {
     expect(thrown.message).toBe('print failed');
 
     expect(installIntegrationSpy).toHaveBeenCalledTimes(1);
-    expect(updateStateAfterConfigurationSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('runs migration, installs hooks and updates state when setup summary succeeds', async () => {
+  it('runs migration and installs hooks when setup summary succeeds', async () => {
     mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
     mockSqaaEntitlement(true);
 
     await integrateClaude({}, CLOUD_AUTH);
 
-    assertMigrationHookInstallationAndStateUpdateRan(
-      'a-project',
-      '/project/root',
-      undefined,
-      false,
-      true,
-    );
+    assertMigrationAndHookInstallationRan('a-project', '/project/root', undefined, false, true);
   });
 
-  it('runs migration, installs hooks and updates state when global option is set', async () => {
+  it('runs migration and installs hooks when global option is set', async () => {
     mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
     mockSqaaEntitlement(true);
 
@@ -360,13 +343,7 @@ describe('integrateCommand', () => {
 
     // SQAA is project-scoped, so a global install never enables it even when the
     // org is entitled — sqaaEnabled flows through as false.
-    assertMigrationHookInstallationAndStateUpdateRan(
-      'a-project',
-      '/project/root',
-      homedir(),
-      true,
-      false,
-    );
+    assertMigrationAndHookInstallationRan('a-project', '/project/root', homedir(), true, false);
   });
 
   it('still installs when organization access check fails in the summary', async () => {
@@ -376,28 +353,16 @@ describe('integrateCommand', () => {
 
     await integrateClaude({}, CLOUD_AUTH);
 
-    assertMigrationHookInstallationAndStateUpdateRan(
-      'a-project',
-      '/project/root',
-      undefined,
-      false,
-      true,
-    );
+    assertMigrationAndHookInstallationRan('a-project', '/project/root', undefined, false, true);
   });
 
-  it('runs migration, installs hooks and updates state when project key is missing', async () => {
+  it('runs migration and installs hooks when project key is missing', async () => {
     mockDiscoveredProject({ rootDir: '/projectB/root' });
     mockSqaaEntitlement(false);
 
     await integrateClaude({}, CLOUD_AUTH);
 
-    assertMigrationHookInstallationAndStateUpdateRan(
-      undefined,
-      '/projectB/root',
-      undefined,
-      false,
-      false,
-    );
+    assertMigrationAndHookInstallationRan(undefined, '/projectB/root', undefined, false, false);
   });
 
   it('aborts integration when sonar-secrets installation fails', async () => {
@@ -436,20 +401,6 @@ describe('integrateCommand', () => {
         installSqaaHook: false,
         installSqaaInstructions: false,
       });
-      expect(runMigrationsSpy).toHaveBeenCalledWith(
-        '/project/root',
-        undefined,
-        false,
-        'a-project',
-        { skipSecretsHooks: true },
-      );
-      expect(updateStateAfterConfigurationSpy).toHaveBeenCalledWith(
-        expect.anything(),
-        '/project/root',
-        false,
-        false,
-        { skipSecretsHooks: true },
-      );
     });
 
     it('still installs the project-scoped sonar-sqaa hook when SQAA is entitled', async () => {
@@ -517,7 +468,7 @@ describe('integrateCommand', () => {
 
       await integrateClaude({ global: true }, CLOUD_AUTH);
 
-      // SQAA is never installed on a global run, and the install/migration/state
+      // SQAA is never installed on a global run, and the install/state
       // paths all see sqaaEnabled = false.
       expectClaudeInstallCall({
         targetRoot: homedir(),
@@ -529,22 +480,6 @@ describe('integrateCommand', () => {
         installSqaaHook: false,
         installSqaaInstructions: false,
       });
-      expect(runMigrationsSpy).toHaveBeenLastCalledWith(
-        '/project/root',
-        homedir(),
-        false,
-        'a-project',
-        {
-          skipSecretsHooks: false,
-        },
-      );
-      expect(updateStateAfterConfigurationSpy).toHaveBeenLastCalledWith(
-        expect.anything(),
-        '/project/root',
-        true,
-        false,
-        { skipSecretsHooks: false },
-      );
 
       const warnNotice = getMockUiCalls().find(
         (c) => c.method === 'warn' && String(c.args[0]).includes('not supported with --global'),
@@ -568,7 +503,7 @@ describe('integrateCommand', () => {
     hasSqaaEntitlementSpy.mockResolvedValue(hasEntitlement ? 'enabled' : 'not_enabled');
   }
 
-  function assertMigrationHookInstallationAndStateUpdateRan(
+  function assertMigrationAndHookInstallationRan(
     projectKey: string | undefined,
     projectRootDir: string,
     globalDir: string | undefined,
@@ -577,16 +512,6 @@ describe('integrateCommand', () => {
     auth: ResolvedAuth = CLOUD_AUTH,
     skipSecretsHooks = false,
   ): void {
-    const expectedOptions = { skipSecretsHooks: false };
-    expect(runMigrationsSpy).toHaveBeenCalledTimes(1);
-    expect(runMigrationsSpy).toHaveBeenCalledWith(
-      projectRootDir,
-      globalDir,
-      sqaaEnabled,
-      projectKey,
-      expectedOptions,
-    );
-
     const mainTargetRoot = globalDir ?? projectRootDir;
     const mainScope = isGlobal ? 'global' : 'project';
     expectClaudeInstallCall({
@@ -599,15 +524,6 @@ describe('integrateCommand', () => {
       installSqaaHook: sqaaEnabled && projectKey !== undefined,
       installSqaaInstructions: sqaaEnabled && projectKey !== undefined,
     });
-
-    expect(updateStateAfterConfigurationSpy).toHaveBeenCalledTimes(1);
-    expect(updateStateAfterConfigurationSpy).toHaveBeenCalledWith(
-      expect.anything(),
-      projectRootDir,
-      isGlobal,
-      sqaaEnabled,
-      expectedOptions,
-    );
   }
 
   function expectClaudeInstallCall({

@@ -20,6 +20,7 @@
 
 // Unit tests for analyzeSqaa command
 
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
@@ -30,9 +31,11 @@ import {
 } from '../../../../../src/cli/commands/_common/error.js';
 import { analyzeSqaa, buildSqaaJsonReport } from '../../../../../src/cli/commands/analyze/sqaa';
 import * as changesetModule from '../../../../../src/cli/commands/analyze/sqaa-changeset';
+import { SQAA_HOOK_FEATURE_ID } from '../../../../../src/cli/commands/integrate/_common/sqaa-entitlement';
+import { CLAUDE_INTEGRATION_ID } from '../../../../../src/cli/commands/integrate/claude/declaration';
 import * as processLib from '../../../../../src/lib/process.js';
 import * as stateRepository from '../../../../../src/lib/repository/state-repository.js';
-import { getDefaultState } from '../../../../../src/lib/state.js';
+import { CliState, getDefaultState } from '../../../../../src/lib/state.js';
 import * as stateManager from '../../../../../src/lib/state-manager.js';
 import { SonarQubeClient } from '../../../../../src/sonarqube/client.js';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
@@ -59,26 +62,44 @@ let readFileSpy: ReturnType<typeof spyOn>;
 let createAnalysisSpy: ReturnType<typeof spyOn>;
 let spawnProcessSpy: ReturnType<typeof spyOn>;
 
-/** Cloud state WITH a sonar-sqaa extension entry for the current project root */
+/**
+ * Seed a declarative Claude Code integration whose project-scoped
+ * `sonar-sqaa-hook` feature carries the given `projectKey` attr (or none).
+ */
+function seedClaudeSqaaFeature(state: CliState, projectKey: string | undefined) {
+  const now = new Date().toISOString();
+  state.integrations.installed.push({
+    id: randomUUID(),
+    integrationId: CLAUDE_INTEGRATION_ID,
+    installedByCliVersion: '1.0.0',
+    installedAt: now,
+    updatedByCliVersion: '1.0.0',
+    updatedAt: now,
+    features: [
+      {
+        featureId: SQAA_HOOK_FEATURE_ID,
+        scope: 'project',
+        targetRoot: process.cwd(),
+        installedByCliVersion: '1.0.0',
+        installedAt: now,
+        updatedByCliVersion: '1.0.0',
+        updatedAt: now,
+        dependencies: [],
+        resources: [],
+        operations: [],
+        attrs: projectKey === undefined ? {} : { projectKey },
+      },
+    ],
+  });
+}
+
+/** Cloud state WITH a sonar-sqaa hook feature for the current project root */
 function makeCloudState() {
   const state = getDefaultState('test');
   stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', {
     orgKey: TEST_ORG,
   });
-  stateManager.upsertAgentExtension(state, {
-    id: 'test-ext',
-    agentId: 'claude-code',
-    projectRoot: process.cwd(),
-    global: false,
-    projectKey: TEST_PROJECT,
-    orgKey: TEST_ORG,
-    serverUrl: SONARCLOUD_URL,
-    updatedByCliVersion: '1.0.0',
-    updatedAt: new Date().toISOString(),
-    kind: 'hook',
-    name: 'sonar-sqaa',
-    hookType: 'PostToolUse',
-  });
+  seedClaudeSqaaFeature(state, TEST_PROJECT);
   return state;
 }
 
@@ -135,31 +156,19 @@ describe('analyzeSqaa: input validation', () => {
   });
 });
 
-function stateWithExtensionMissingProjectKey() {
+function stateWithSqaaFeatureMissingProjectKey() {
   const state = getDefaultState('test');
   stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', {
     orgKey: TEST_ORG,
   });
-  // Extension exists but projectKey is undefined
-  stateManager.upsertAgentExtension(state, {
-    id: 'ext-no-key',
-    agentId: 'claude-code',
-    projectRoot: process.cwd(),
-    global: false,
-    orgKey: TEST_ORG,
-    serverUrl: SONARCLOUD_URL,
-    updatedByCliVersion: '1.0.0',
-    updatedAt: new Date().toISOString(),
-    kind: 'hook',
-    name: 'sonar-sqaa',
-    hookType: 'PostToolUse',
-  });
+  // Feature exists but projectKey attr is absent
+  seedClaudeSqaaFeature(state, undefined);
   return state;
 }
 
 describe('analyzeSqaa: auth resolution', () => {
-  it('throws CommandFailedError when extension has no projectKey (explicit agentic)', async () => {
-    loadStateSpy.mockReturnValue(stateWithExtensionMissingProjectKey());
+  it('throws CommandFailedError when the SQAA feature has no projectKey (explicit agentic)', async () => {
+    loadStateSpy.mockReturnValue(stateWithSqaaFeatureMissingProjectKey());
 
     let thrown: unknown;
     await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTH).catch((err: unknown) => {
@@ -173,8 +182,8 @@ describe('analyzeSqaa: auth resolution', () => {
     expect(createAnalysisSpy).not.toHaveBeenCalled();
   });
 
-  it('skips SQAA and warns when extension has no projectKey and requireProject is false (bare analyze)', async () => {
-    loadStateSpy.mockReturnValue(stateWithExtensionMissingProjectKey());
+  it('skips SQAA and warns when the SQAA feature has no projectKey and requireProject is false (bare analyze)', async () => {
+    loadStateSpy.mockReturnValue(stateWithSqaaFeatureMissingProjectKey());
 
     await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTH, { requireProject: false });
 

@@ -53,6 +53,7 @@ import {
   tomlPatch,
   wholeFile,
 } from '../_common/registry';
+import { SQAA_HOOK_FEATURE_ID } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import {
   getSecretPromptTemplateUnix,
@@ -110,7 +111,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
       ],
     }),
     {
-      id: 'sonar-sqaa-hook',
+      id: SQAA_HOOK_FEATURE_ID,
       displayName: 'Vortex agentic analysis hook',
       benefitDescription: AGENTIC_ANALYSIS_FEATURE_BENEFIT,
       previewDescription: AGENTIC_ANALYSIS_FEATURE_PREVIEW,
