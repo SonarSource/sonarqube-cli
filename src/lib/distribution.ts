@@ -18,10 +18,22 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-export const DISTRIBUTIONS = ['standalone', 'homebrew'] as const;
+export const DISTRIBUTIONS = ['standalone'] as const;
 const DEFAULT_DISTRIBUTION = 'standalone';
 
 export type Distribution = (typeof DISTRIBUTIONS)[number];
+
+export interface DistributionConfig {
+  id: Distribution;
+  enableSelfUpdate: boolean;
+}
+
+const DISTRIBUTION_CONFIGS: Record<Distribution, DistributionConfig> = {
+  standalone: {
+    id: 'standalone',
+    enableSelfUpdate: true,
+  },
+};
 
 function invalidDistributionError(rawDistribution: string): Error {
   return new Error(
@@ -44,11 +56,12 @@ export function resolveDistribution(rawDistribution: string | undefined): Distri
   return rawDistribution;
 }
 
-const rawDistribution = process.env.SONARQUBE_CLI_DISTRIBUTION;
-if (rawDistribution !== undefined) {
-  assertDistribution(rawDistribution);
+export function resolveDistributionConfig(rawDistribution: string | undefined): DistributionConfig {
+  return DISTRIBUTION_CONFIGS[resolveDistribution(rawDistribution)];
 }
 
 // Channel builds inject this env access at compile time via Bun's `define`.
-export const DISTRIBUTION: Distribution = rawDistribution ?? DEFAULT_DISTRIBUTION;
-export const IS_STANDALONE_DISTRIBUTION = DISTRIBUTION === 'standalone';
+export const CURRENT_DISTRIBUTION = resolveDistributionConfig(
+  process.env.SONARQUBE_CLI_DISTRIBUTION,
+);
+export const DISTRIBUTION = CURRENT_DISTRIBUTION.id;

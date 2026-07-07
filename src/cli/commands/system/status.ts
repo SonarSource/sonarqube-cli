@@ -36,7 +36,7 @@ import type {
   ProxyGroup,
   ResolvedNetworkConfig,
 } from '../../../lib/connectivity/types';
-import { IS_STANDALONE_DISTRIBUTION } from '../../../lib/distribution';
+import { CURRENT_DISTRIBUTION } from '../../../lib/distribution';
 import {
   CONTEXT_AUGMENTATION_BINARY_NAME,
   SCA_SCANNER_BINARY_NAME,
@@ -362,7 +362,7 @@ function integrationConfigStatusLine(status: IntegrationConfigStatus): string {
 }
 
 async function getCliUpdateInfo(): Promise<CliUpdateInfo | null> {
-  if (!IS_STANDALONE_DISTRIBUTION) {
+  if (!CURRENT_DISTRIBUTION.enableSelfUpdate) {
     return null;
   }
 

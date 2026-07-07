@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { resolveDistribution } from '../../../src/lib/distribution';
+import { resolveDistribution, resolveDistributionConfig } from '../../../src/lib/distribution';
 
 describe('distribution', () => {
   it('defaults to standalone when no distribution is provided', () => {
@@ -28,12 +28,19 @@ describe('distribution', () => {
   });
 
   it('returns the configured distribution for known values', () => {
-    expect(resolveDistribution('homebrew')).toBe('homebrew');
+    expect(resolveDistribution('standalone')).toBe('standalone');
+  });
+
+  it('resolves centralized feature flags for the distribution', () => {
+    expect(resolveDistributionConfig(undefined)).toEqual({
+      id: 'standalone',
+      enableSelfUpdate: true,
+    });
   });
 
   it('throws for unknown values', () => {
     expect(() => resolveDistribution('custom-channel')).toThrow(
-      "Unknown distribution 'custom-channel'. Expected one of: standalone, homebrew.",
+      "Unknown distribution 'custom-channel'. Expected one of: standalone.",
     );
   });
 });
