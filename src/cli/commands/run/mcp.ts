@@ -24,6 +24,8 @@ import { spawn } from 'node:child_process';
 import { homedir } from 'node:os';
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver.js';
+import { getNetworkConfig } from '../../../lib/connectivity/network-config.js';
+import type { ResolvedNetworkConfig } from '../../../lib/connectivity/types.js';
 import { canonicalizePath } from '../../../lib/fs-utils.js';
 import logger from '../../../lib/logger';
 import { type McpServerContext, resolveMcpContainerCommand } from '../../../lib/mcp/mcp-helper.js';
@@ -44,7 +46,11 @@ function debugLog(message: string): void {
   process.stderr.write(`[sonarqube-cli] DEBUG ${message}\n`);
 }
 
-export async function runMcp(auth: ResolvedAuth, options: McpRunOptions = {}): Promise<void> {
+export async function runMcp(
+  auth: ResolvedAuth,
+  options: McpRunOptions = {},
+  network: ResolvedNetworkConfig = getNetworkConfig(),
+): Promise<void> {
   const detection = await detectContainerRuntime();
   if (!detection.runtime) {
     throw new CommandFailedError('A container runtime (Docker/Podman/Nerdctl) is required.', {
@@ -69,7 +75,7 @@ export async function runMcp(auth: ResolvedAuth, options: McpRunOptions = {}): P
     ? { withFsMount: true, projectRoot, projectKey }
     : { withFsMount: false, projectKey };
 
-  const config = resolveMcpContainerCommand(auth, detection, context, options);
+  const config = resolveMcpContainerCommand(auth, detection, context, options, network);
 
   if (options.debug) {
     debugLog(`runtime: ${detection.runtime}${detection.viaWsl ? ' (via WSL)' : ''}`);
