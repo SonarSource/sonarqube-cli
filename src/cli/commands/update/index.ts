@@ -22,12 +22,12 @@ import { blank, info, success, text, warn } from '../../../ui';
 import { CommandFailedError } from '../_common/error';
 import { checkForUpdate } from './update-check';
 
-export interface SelfUpdateOptions {
+export interface UpdateVersionOptions {
   status?: boolean;
   force?: boolean;
 }
 
-async function selfUpdateStatus(): Promise<void> {
+async function updateVersionStatus(): Promise<void> {
   info('Checking for updates...');
 
   const { currentVersion, latest, upToDate } = await checkForUpdate();
@@ -40,13 +40,13 @@ async function selfUpdateStatus(): Promise<void> {
     success('Already up to date');
   } else {
     warn(`Update available: v${latest.version.noBuild.text}`);
-    text('  Run: sonar self-update');
+    text('  Run: sonar update');
   }
 }
 
-export async function selfUpdate(options: SelfUpdateOptions = {}): Promise<void> {
+export async function updateVersion(options: UpdateVersionOptions = {}): Promise<void> {
   if (options.status) {
-    await selfUpdateStatus();
+    await updateVersionStatus();
     return;
   }
 
@@ -78,7 +78,7 @@ export async function selfUpdate(options: SelfUpdateOptions = {}): Promise<void>
         : `Update script exited with code ${String(installResult.scriptExitStatus ?? 'unknown')}`;
       throw new CommandFailedError(message, {
         remediationHint:
-          "Rerun 'sonar self-update --force' or update manually using the installer script.",
+          "Rerun 'sonar update --force' or update manually using the installer script.",
       });
     }
     case 'installed':

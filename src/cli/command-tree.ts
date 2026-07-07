@@ -102,9 +102,9 @@ import {
 import { listProjects, type ListProjectsOptions } from './commands/list/projects';
 import { remediate, type RemediateOptions } from './commands/remediate';
 import { runMcp } from './commands/run/mcp.js';
-import { selfUpdate, type SelfUpdateOptions } from './commands/self-update';
 import { systemReset, type SystemResetOptions } from './commands/system/reset';
 import { systemStatus, type SystemStatusOptions } from './commands/system/status';
+import { updateVersion, type UpdateVersionOptions } from './commands/update';
 import { getBanner, getCustomRootHelp } from './root-help.js';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
@@ -575,14 +575,28 @@ system
 
 // Update the CLI to the latest version
 if (IS_STANDALONE_DISTRIBUTION) {
-  COMMAND_TREE.command('self-update')
+  COMMAND_TREE.command('update')
     .description('Update SonarQube CLI to the latest version')
     .rootHelp({
       category: 'cli-management',
     })
     .option('--status', 'Check for a newer version without installing')
     .option('--force', 'Install the latest version even if already up to date')
-    .anonymousAction((options: SelfUpdateOptions) => selfUpdate(options));
+    .anonymousAction((options: UpdateVersionOptions) => updateVersion(options));
+
+  // `self-update` is deprecated in favour of `sonar update`.
+  const selfUpdateCmd = COMMAND_TREE.command('self-update', { hidden: true })
+    .description(
+      "Update SonarQube CLI to the latest version (deprecated — use 'sonar update' instead)",
+    )
+    .option('--status', 'Check for a newer version without installing')
+    .option('--force', 'Install the latest version even if already up to date')
+    .anonymousAction((options: UpdateVersionOptions) => updateVersion(options));
+  selfUpdateCmd.hook('preAction', () => {
+    warn(
+      "sonar self-update is deprecated and will be removed in one of the upcoming versions. Use 'sonar update' instead.",
+    );
+  });
 }
 
 const runCommand = COMMAND_TREE.command('run', { hidden: true }).description(

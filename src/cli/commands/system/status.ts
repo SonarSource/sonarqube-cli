@@ -57,7 +57,7 @@ import { checkTokenStatus } from '../_common/token';
 import { supportedIntegrations } from '../integrate';
 import { checkAntigravitySecretsHookFile } from '../integrate/antigravity/health';
 import { resolveAntigravityHooksJsonPathForScope } from '../integrate/antigravity/hooks';
-import { checkForUpdate, type UpdateCheckResult } from '../self-update/update-check';
+import { checkForUpdate, type UpdateCheckResult } from '../update/update-check';
 
 const SCA_SCANNER_CACHE_DIR = join(CLI_DIR, 'sca-scanner-cache');
 
@@ -495,7 +495,7 @@ function buildRecommendations(
     recommendations.push(`Fix client certificate configuration: ${network.error}`);
   if (updateResult && !updateResult.upToDate) {
     recommendations.push(
-      `Run 'sonar self-update' to update to v${updateResult.latest.version.noBuild.text}`,
+      `Run 'sonar update' to update to v${updateResult.latest.version.noBuild.text}`,
     );
   }
 

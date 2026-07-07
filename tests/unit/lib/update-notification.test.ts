@@ -189,7 +189,7 @@ describe('maybeNotifyUpdateAvailable', () => {
     expect(output).toContain(
       `A new version of SonarQube CLI is available: ${major}.${minor}.${patch} → 99.0.0`,
     );
-    expect(output).toContain('Run `sonar self-update` to upgrade.');
+    expect(output).toContain('Run `sonar update` to update to v99.0.0');
   });
 
   it('persists fetch metadata in state', async () => {
@@ -219,7 +219,7 @@ describe('maybeNotifyUpdateAvailable', () => {
 
     const output = notificationOutput();
     expect(output).toContain('A new version of SonarQube CLI is available');
-    expect(output).toContain('Run `sonar self-update` to upgrade.');
+    expect(output).toContain('Run `sonar update` to update to v99.0.0');
   });
 
   it('does not re-fetch within 24h after a failed check', async () => {

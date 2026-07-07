@@ -72,8 +72,8 @@ void mock.module('../../../../../src/lib/version', () => ({
 }));
 
 const { checkForUpdate, fetchLatestVersion } =
-  await import('../../../../../src/cli/commands/self-update/update-check');
-const { selfUpdate } = await import('../../../../../src/cli/commands/self-update');
+  await import('../../../../../src/cli/commands/update/update-check');
+const { updateVersion } = await import('../../../../../src/cli/commands/update');
 
 function stableVersionResponse(version: string) {
   return {
@@ -193,7 +193,7 @@ describe('checkForUpdate', () => {
   });
 });
 
-describe('selfUpdate --status', () => {
+describe('updateVersion --status', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
@@ -210,7 +210,7 @@ describe('selfUpdate --status', () => {
   it('reports an available update without installing', async () => {
     fetchSpy.mockResolvedValue(stableVersionResponse('99.0.0.241'));
 
-    await selfUpdate({ status: true });
+    await updateVersion({ status: true });
 
     const messages = getMockUiCalls().map((c) => c.args.join(' '));
     // Build number must be stripped from displayed versions
@@ -221,14 +221,41 @@ describe('selfUpdate --status', () => {
   it('reports already up to date', async () => {
     fetchSpy.mockResolvedValue(stableVersionResponse('0.0.1'));
 
-    await selfUpdate({ status: true });
+    await updateVersion({ status: true });
 
     const messages = getMockUiCalls().map((c) => c.args.join(' '));
     expect(messages.some((m) => /up to date/i.test(m))).toBe(true);
   });
 });
 
-describe('selfUpdate --force', () => {
+describe('updateVersion (no options)', () => {
+  let fetchSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    setMockUi(true);
+    clearMockUiCalls();
+    fetchSpy = spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+    setMockUi(false);
+  });
+
+  it('reports already up to date and does not attempt to install', async () => {
+    const [major, minor, patch] = (await import('../../../../../package.json')).version.split('.');
+    fetchSpy.mockResolvedValue(stableVersionResponse(`${major}.${minor}.${patch}.999`));
+
+    await updateVersion();
+
+    const messages = getMockUiCalls().map((c) => c.args.join(' '));
+    expect(messages.some((m) => /already up to date/i.test(m))).toBe(true);
+    // Only the stable.version check should run; the install script must not be fetched.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('updateVersion --force', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
@@ -262,7 +289,7 @@ describe('selfUpdate --force', () => {
       }
       return Promise.reject(new Error(`Unexpected fetch: ${url}`));
     });
-    await selfUpdate({ force: true });
+    await updateVersion({ force: true });
   }
 
   it('installs even when already up to date', async () => {
@@ -295,7 +322,7 @@ describe('selfUpdate --force', () => {
 
     try {
       await runForce('2.0.0');
-      throw new Error('Expected selfUpdate to fail');
+      throw new Error('Expected updateVersion to fail');
     } catch (error) {
       expect((error as Error).message).toContain('Update script exited with code 12');
     }
@@ -309,7 +336,7 @@ describe('selfUpdate --force', () => {
 
     try {
       await runForce('2.0.0');
-      throw new Error('Expected selfUpdate to fail');
+      throw new Error('Expected updateVersion to fail');
     } catch (error) {
       expect((error as Error).message).toContain(
         'Failed to start update script: spawnSync /bin/bash ENOENT',
@@ -340,7 +367,7 @@ describe('selfUpdate --force', () => {
 
     try {
       await runForce('2.0.0', 'Write-Host hi\n');
-      throw new Error('Expected selfUpdate to fail');
+      throw new Error('Expected updateVersion to fail');
     } catch (error) {
       expect((error as Error).message).toContain(
         'Failed to start update script: spawn cmd.exe ENOENT',
