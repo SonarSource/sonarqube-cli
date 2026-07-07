@@ -579,7 +579,7 @@ describe('system status', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('RECOMMENDATIONS');
-      expect(result.stdout).toContain('sonar self-update');
+      expect(result.stdout).toContain('sonar update');
       expect(result.stdout).toContain(newerVersion);
     },
     { timeout: 15000 },
@@ -752,7 +752,7 @@ describe('system status', () => {
 
       expect(result.exitCode).toBe(0);
       // No update recommendation when the update check fails
-      expect(result.stdout).not.toContain('sonar self-update');
+      expect(result.stdout).not.toContain('sonar update');
     },
     { timeout: 15000 },
   );

@@ -61,7 +61,7 @@ function getExpectedRootHelp(): string {
     '    auth <login|logout|status>                               Manage authentication tokens and credentials',
     '    config <telemetry>                                       Configure CLI settings',
     '    system <status|reset>                                    System diagnostics and maintenance commands for the SonarQube CLI installation.',
-    '    self-update                                              Update SonarQube CLI to the latest version',
+    '    update                                                   Update SonarQube CLI to the latest version',
     '',
     '  OPTIONS',
     '    -h, --help     Display help for a specific command',

@@ -29,7 +29,7 @@ import { Version } from '../cli/commands/_common/version.js';
 import {
   BACKGROUND_UPDATE_CHECK_TIMEOUT_MS,
   fetchLatestVersion,
-} from '../cli/commands/self-update/update-check.js';
+} from '../cli/commands/update/update-check.js';
 import { TELEMETRY_FLUSH_MODE_ENV } from '../telemetry/index.js';
 import { cyan } from '../ui/colors.js';
 import { isFormattedOutputMode, text } from '../ui/index.js';
@@ -141,7 +141,7 @@ function renderUpdateNotification(currentNoBuild: string, latestNoBuild: string)
     undefined,
     'stderr',
   );
-  text('   → Run `sonar self-update` to upgrade.', undefined, 'stderr');
+  text(`   → Run \`sonar update\` to update to v${latestNoBuild}`, undefined, 'stderr');
 }
 
 /**
