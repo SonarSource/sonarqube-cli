@@ -98,23 +98,47 @@
       <div class="hero-install-tabs">
         <span class="hero-install-label">Install:</span>
         <div class="tab-group">
-          <button class="tab-btn active" data-hero-tab="linux">Linux / macOS</button>
-          <button class="tab-btn" data-hero-tab="windows">Windows</button>
+          <button class="tab-btn active" data-tab-target-group="hero-install-channel" data-tab-name="homebrew">Homebrew</button>
+          <button class="tab-btn" data-tab-target-group="hero-install-channel" data-tab-name="mise">Mise</button>
+          <button class="tab-btn" data-tab-target-group="hero-install-channel" data-tab-name="script">Install script</button>
         </div>
       </div>
       <a href="https://github.com/SonarSource/sonarqube-cli?tab=readme-ov-file#sonarqube-cli" class="hero-install-link" target="_blank" rel="noopener">View installation instructions ↗</a>
     </div>
-    <div id="hero-tab-linux" class="tab-panel active">
+    <div class="tab-panel active" data-tab-panel-group="hero-install-channel" data-tab-name="homebrew">
+      <p class="install-channel-meta">macOS and Linux</p>
       <div class="code-block">
-        <pre><code>curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash</code></pre>
+        <pre><code>brew install sonarqube-cli</code></pre>
         <button class="copy-btn" data-copy-install>Copy</button>
       </div>
     </div>
-    <div id="hero-tab-windows" class="tab-panel">
+    <div class="tab-panel" data-tab-panel-group="hero-install-channel" data-tab-name="mise">
+      <p class="install-channel-meta">macOS, Linux, and Windows</p>
       <div class="code-block">
-        <pre><code>irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex</code></pre>
+        <pre><code>mise use -g sonarqube-cli@latest</code></pre>
         <button class="copy-btn" data-copy-install>Copy</button>
       </div>
+    </div>
+    <div class="tab-panel" data-tab-panel-group="hero-install-channel" data-tab-name="script">
+      <div class="install-script-tabs">
+        <div class="tab-group">
+          <button class="tab-btn active" data-tab-target-group="hero-install-script-os" data-tab-name="posix">macOS / Linux</button>
+          <button class="tab-btn" data-tab-target-group="hero-install-script-os" data-tab-name="windows">Windows</button>
+        </div>
+      </div>
+      <div class="tab-panel active" data-tab-panel-group="hero-install-script-os" data-tab-name="posix">
+        <div class="code-block">
+          <pre><code>curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash</code></pre>
+          <button class="copy-btn" data-copy-install>Copy</button>
+        </div>
+      </div>
+      <div class="tab-panel" data-tab-panel-group="hero-install-script-os" data-tab-name="windows">
+        <div class="code-block">
+          <pre><code>irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex</code></pre>
+          <button class="copy-btn" data-copy-install>Copy</button>
+        </div>
+      </div>
+      <p class="install-channel-note">Use the install script when you want the standalone installer.</p>
     </div>
   </div>
 
@@ -144,24 +168,50 @@
 <!-- ─── Install ───────────────────────────────────────────────── -->
 <section class="section" id="install" style="display:none">
   <h2 class="section-title">Installation</h2>
-  <p class="section-sub">One-line install for all platforms.</p>
+  <p class="section-sub">Choose Homebrew, Mise, or the official install script.</p>
 
   <div class="tab-group">
-    <button class="tab-btn active" data-install-tab="linux">Linux / macOS</button>
-    <button class="tab-btn" data-install-tab="windows">Windows</button>
+    <button class="tab-btn active" data-tab-target-group="install-channel" data-tab-name="homebrew">Homebrew</button>
+    <button class="tab-btn" data-tab-target-group="install-channel" data-tab-name="mise">Mise</button>
+    <button class="tab-btn" data-tab-target-group="install-channel" data-tab-name="script">Install script</button>
   </div>
 
-  <div id="tab-linux" class="tab-panel active">
+  <div class="tab-panel active" data-tab-panel-group="install-channel" data-tab-name="homebrew">
+    <p class="install-channel-meta">macOS and Linux</p>
     <div class="code-block">
-      <pre><code>curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash</code></pre>
+      <pre><code>brew install sonarqube-cli</code></pre>
       <button class="copy-btn" data-copy-install>Copy</button>
     </div>
+    <p class="install-channel-note">Homebrew manages the binary location and PATH automatically.</p>
   </div>
-  <div id="tab-windows" class="tab-panel">
+  <div class="tab-panel" data-tab-panel-group="install-channel" data-tab-name="mise">
+    <p class="install-channel-meta">macOS, Linux, and Windows</p>
     <div class="code-block">
-      <pre><code>irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex</code></pre>
+      <pre><code>mise use -g sonarqube-cli@latest</code></pre>
       <button class="copy-btn" data-copy-install>Copy</button>
     </div>
+    <p class="install-channel-note">This adds the CLI to your global Mise config and installs the latest release.</p>
+  </div>
+  <div class="tab-panel" data-tab-panel-group="install-channel" data-tab-name="script">
+    <div class="install-script-tabs">
+      <div class="tab-group">
+        <button class="tab-btn active" data-tab-target-group="install-script-os" data-tab-name="posix">macOS / Linux</button>
+        <button class="tab-btn" data-tab-target-group="install-script-os" data-tab-name="windows">Windows</button>
+      </div>
+    </div>
+    <div class="tab-panel active" data-tab-panel-group="install-script-os" data-tab-name="posix">
+      <div class="code-block">
+        <pre><code>curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash</code></pre>
+        <button class="copy-btn" data-copy-install>Copy</button>
+      </div>
+    </div>
+    <div class="tab-panel" data-tab-panel-group="install-script-os" data-tab-name="windows">
+      <div class="code-block">
+        <pre><code>irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex</code></pre>
+        <button class="copy-btn" data-copy-install>Copy</button>
+      </div>
+    </div>
+    <p class="install-channel-note">The install scripts add the CLI bin directory to your PATH. Restart your terminal after running them.</p>
   </div>
 </section>
 
@@ -235,7 +285,7 @@
     </div>
     <div class="feature-card">
       <h3>Multi-platform</h3>
-      <p>Native binaries for Linux, macOS (Apple Silicon), and Windows. One install script, zero dependencies.</p>
+      <p>Native binaries for Linux, macOS (Apple Silicon), and Windows with install script, Homebrew, and Mise channels.</p>
     </div>
     <div class="feature-card">
       <h3>Code Quality Analysis</h3>
@@ -514,18 +564,10 @@
   })();
   // ────────────────────────────────────────────────────────────────
 
-  function showHeroTab(name, btn) {
-    document.querySelectorAll('#hero-tab-linux, #hero-tab-windows').forEach(p => p.classList.remove('active'));
+  function showNamedTab(group, name, btn) {
+    document.querySelectorAll(`[data-tab-panel-group="${group}"]`).forEach(p => p.classList.remove('active'));
     btn.closest('.tab-group').querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById('hero-tab-' + name).classList.add('active');
-    btn.classList.add('active');
-  }
-
-  function showTab(name, btn) {
-    const section = document.getElementById('install');
-    section.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    section.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById('tab-' + name).classList.add('active');
+    document.querySelectorAll(`[data-tab-panel-group="${group}"][data-tab-name="${name}"]`).forEach(p => p.classList.add('active'));
     btn.classList.add('active');
   }
 
@@ -687,12 +729,8 @@
     });
   }
 
-  document.querySelectorAll('[data-hero-tab]').forEach((btn) => {
-    btn.addEventListener('click', () => showHeroTab(btn.dataset.heroTab, btn));
-  });
-
-  document.querySelectorAll('[data-install-tab]').forEach((btn) => {
-    btn.addEventListener('click', () => showTab(btn.dataset.installTab, btn));
+  document.querySelectorAll('[data-tab-target-group]').forEach((btn) => {
+    btn.addEventListener('click', () => showNamedTab(btn.dataset.tabTargetGroup, btn.dataset.tabName, btn));
   });
 
   document.querySelectorAll('[data-copy-install]').forEach((btn) => {

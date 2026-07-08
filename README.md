@@ -94,13 +94,27 @@ Before installing, you need:
 
 ### Step 1: Install
 
-**Linux/macOS:**
+Choose the install channel that fits your setup:
+
+**Homebrew (macOS/Linux):**
+
+```bash
+brew install sonarqube-cli
+```
+
+**Mise (macOS, Linux, or Windows):**
+
+```bash
+mise use -g sonarqube-cli@latest
+```
+
+**Install script (Linux/macOS):**
 
 ```bash
 curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash
 ```
 
-**Windows (from PowerShell):**
+**Install script (Windows, from PowerShell):**
 
 ```powershell
 irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
@@ -113,7 +127,7 @@ sonar --version
 # Example output: 1.0.0
 ```
 
-**Note:** You may need to restart your terminal for the `sonar` command to be available.
+**Note:** Restart your terminal after using the install scripts so your updated `PATH` is reloaded. Homebrew manages `PATH` automatically, and Mise assumes its shell activation is already configured.
 
 ### Step 2: Authenticate
 
@@ -493,31 +507,37 @@ For SonarQube Cloud, ensure you're using the correct region:
 
 ### "Command not found: sonar" after installation
 
-**Symptom:** After running the installer, terminal doesn't recognize `sonar`
+**Symptom:** After installing, terminal doesn't recognize `sonar`
 
 **Solution:**
 
-1. **Restart your terminal** (required to reload PATH)
+1. **Restart your terminal** if you used the install script, or if you just changed your shell setup.
 
-2. If still not working, manually add to PATH:
+2. If you installed with **Homebrew**, make sure Homebrew itself is already on your `PATH`, then retry `brew install sonarqube-cli`.
+
+3. If you installed with **Mise**, make sure your shell is already configured for Mise and reopen your terminal.
+
+4. If you used the **install script** and it still doesn't work, manually add it to `PATH`:
 
    **Linux/macOS** — Add to `~/.bashrc` or `~/.zshrc`:
+
    ```bash
    export PATH="$HOME/.local/share/sonarqube-cli/bin:$PATH"
    ```
+
    Then reload: `source ~/.bashrc` (or `~/.zshrc`)
 
    **Windows** — The installer should have updated PATH automatically. Try:
+   - Open a new PowerShell window
+   - Restart your computer if the issue persists
 
-- Opening a new PowerShell window
-- Restarting your computer if the issue persists
+5. Verify the binary exists:
 
-3. Verify the binary exists:
    ```bash
-   # Linux/macOS:
+   # Install script on Linux/macOS:
    ls -la ~/.local/share/sonarqube-cli/bin/sonar
 
-   # Windows (PowerShell):
+   # Install script on Windows (PowerShell):
    ls $env:LOCALAPPDATA\sonarqube-cli\bin\sonar.exe
    ```
 
@@ -569,12 +589,25 @@ See [State Management](./docs/state-management.md) for more information.
 
 ## Uninstalling
 
-### Linux/Mac OS
+### Homebrew
+
+```bash
+brew uninstall sonarqube-cli
+```
+
+### Mise
+
+```bash
+mise use -g --remove sonarqube-cli
+mise uninstall --all sonarqube-cli
+```
+
+### Install script (Linux/macOS)
 
 1. Delete the `~/.local/share/sonarqube-cli/` folder.
 2. Remove `export PATH="$HOME/.local/share/sonarqube-cli/bin:$PATH"` from your `~/.bashrc` or `~/.zshrc` files.
 
-### Windows
+### Install script (Windows)
 
 1. Delete the `%localappdata%\sonarqube-cli\` folder.
 2. Remove this folder from the `PATH` user-level environment variable.
