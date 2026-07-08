@@ -23,7 +23,7 @@ import type { SqaaAnalysisDepth } from '../../../sonarqube/client';
 import { text } from '../../../ui';
 import { InvalidOptionError } from '../_common/error.js';
 import { resolveCloudAuthAndProject } from './sqaa-auth';
-import { resolveChangeSet } from './sqaa-changeset';
+import { resolveChangeSet, resolveSqaaBranch } from './sqaa-changeset';
 import { confirmLargeRunIfNeeded, resolveDepthForMode, resolveSqaaContext } from './sqaa-context';
 import { resolveSqaaFileArgs } from './sqaa-file-arg';
 import {
@@ -68,10 +68,12 @@ export async function analyzeSqaa(
     throw new InvalidOptionError('--staged and --base cannot be used together');
   }
 
+  const resolvedBranch = await resolveSqaaBranch(branch);
+
   if (rawFiles?.length) {
     await analyzeSqaaExplicitFiles(rawFiles, {
       auth,
-      branch,
+      branch: resolvedBranch,
       project,
       force,
       format,
@@ -87,7 +89,7 @@ export async function analyzeSqaa(
     auth,
     staged,
     base,
-    branch,
+    branch: resolvedBranch,
     project,
     force,
     format,
