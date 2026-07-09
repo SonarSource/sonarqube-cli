@@ -98,47 +98,60 @@
       <div class="hero-install-tabs">
         <span class="hero-install-label">Install:</span>
         <div class="tab-group">
-          <button class="tab-btn active" data-tab-target-group="hero-install-channel" data-tab-name="homebrew">Homebrew</button>
-          <button class="tab-btn" data-tab-target-group="hero-install-channel" data-tab-name="mise">Mise</button>
-          <button class="tab-btn" data-tab-target-group="hero-install-channel" data-tab-name="script">Install script</button>
+          <button class="tab-btn active" data-tab-target-group="hero-install-os" data-tab-name="posix">Linux / macOS</button>
+          <button class="tab-btn" data-tab-target-group="hero-install-os" data-tab-name="windows">Windows</button>
         </div>
       </div>
       <a href="https://github.com/SonarSource/sonarqube-cli?tab=readme-ov-file#sonarqube-cli" class="hero-install-link" target="_blank" rel="noopener">View installation instructions ↗</a>
     </div>
-    <div class="tab-panel active" data-tab-panel-group="hero-install-channel" data-tab-name="homebrew">
-      <p class="install-channel-meta">macOS and Linux</p>
-      <div class="code-block">
-        <pre><code>brew install sonarqube-cli</code></pre>
-        <button class="copy-btn" data-copy-install>Copy</button>
-      </div>
-    </div>
-    <div class="tab-panel" data-tab-panel-group="hero-install-channel" data-tab-name="mise">
-      <p class="install-channel-meta">macOS, Linux, and Windows</p>
-      <div class="code-block">
-        <pre><code>mise use -g sonarqube-cli@latest</code></pre>
-        <button class="copy-btn" data-copy-install>Copy</button>
-      </div>
-    </div>
-    <div class="tab-panel" data-tab-panel-group="hero-install-channel" data-tab-name="script">
-      <div class="install-script-tabs">
+    <div class="tab-panel active" data-tab-panel-group="hero-install-os" data-tab-name="posix">
+      <div class="install-channel-tabs">
+        <span class="install-channel-label">Channel:</span>
         <div class="tab-group">
-          <button class="tab-btn active" data-tab-target-group="hero-install-script-os" data-tab-name="posix">macOS / Linux</button>
-          <button class="tab-btn" data-tab-target-group="hero-install-script-os" data-tab-name="windows">Windows</button>
+          <button class="tab-btn active" data-tab-target-group="hero-posix-channel" data-tab-name="homebrew">Homebrew</button>
+          <button class="tab-btn" data-tab-target-group="hero-posix-channel" data-tab-name="mise">Mise</button>
+          <button class="tab-btn" data-tab-target-group="hero-posix-channel" data-tab-name="script">Install script</button>
         </div>
       </div>
-      <div class="tab-panel active" data-tab-panel-group="hero-install-script-os" data-tab-name="posix">
+      <div class="tab-panel active" data-tab-panel-group="hero-posix-channel" data-tab-name="homebrew">
+        <div class="code-block">
+          <pre><code>brew install sonarqube-cli</code></pre>
+          <button class="copy-btn" data-copy-install>Copy</button>
+        </div>
+      </div>
+      <div class="tab-panel" data-tab-panel-group="hero-posix-channel" data-tab-name="mise">
+        <div class="code-block">
+          <pre><code>mise use -g sonarqube-cli@latest</code></pre>
+          <button class="copy-btn" data-copy-install>Copy</button>
+        </div>
+      </div>
+      <div class="tab-panel" data-tab-panel-group="hero-posix-channel" data-tab-name="script">
         <div class="code-block">
           <pre><code>curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash</code></pre>
           <button class="copy-btn" data-copy-install>Copy</button>
         </div>
       </div>
-      <div class="tab-panel" data-tab-panel-group="hero-install-script-os" data-tab-name="windows">
+    </div>
+    <div class="tab-panel" data-tab-panel-group="hero-install-os" data-tab-name="windows">
+      <div class="install-channel-tabs">
+        <span class="install-channel-label">Channel:</span>
+        <div class="tab-group">
+          <button class="tab-btn active" data-tab-target-group="hero-windows-channel" data-tab-name="mise">Mise</button>
+          <button class="tab-btn" data-tab-target-group="hero-windows-channel" data-tab-name="script">Install script</button>
+        </div>
+      </div>
+      <div class="tab-panel active" data-tab-panel-group="hero-windows-channel" data-tab-name="mise">
+        <div class="code-block">
+          <pre><code>mise use -g sonarqube-cli@latest</code></pre>
+          <button class="copy-btn" data-copy-install>Copy</button>
+        </div>
+      </div>
+      <div class="tab-panel" data-tab-panel-group="hero-windows-channel" data-tab-name="script">
         <div class="code-block">
           <pre><code>irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex</code></pre>
           <button class="copy-btn" data-copy-install>Copy</button>
         </div>
       </div>
-      <p class="install-channel-note">Use the install script when you want the standalone installer.</p>
     </div>
   </div>
 
@@ -168,50 +181,66 @@
 <!-- ─── Install ───────────────────────────────────────────────── -->
 <section class="section" id="install" style="display:none">
   <h2 class="section-title">Installation</h2>
-  <p class="section-sub">Choose Homebrew, Mise, or the official install script.</p>
+  <p class="section-sub">Choose your OS, then your installation method.</p>
 
   <div class="tab-group">
-    <button class="tab-btn active" data-tab-target-group="install-channel" data-tab-name="homebrew">Homebrew</button>
-    <button class="tab-btn" data-tab-target-group="install-channel" data-tab-name="mise">Mise</button>
-    <button class="tab-btn" data-tab-target-group="install-channel" data-tab-name="script">Install script</button>
+    <button class="tab-btn active" data-tab-target-group="install-os" data-tab-name="posix">Linux / macOS</button>
+    <button class="tab-btn" data-tab-target-group="install-os" data-tab-name="windows">Windows</button>
   </div>
 
-  <div class="tab-panel active" data-tab-panel-group="install-channel" data-tab-name="homebrew">
-    <p class="install-channel-meta">macOS and Linux</p>
-    <div class="code-block">
-      <pre><code>brew install sonarqube-cli</code></pre>
-      <button class="copy-btn" data-copy-install>Copy</button>
-    </div>
-    <p class="install-channel-note">Homebrew manages the binary location and PATH automatically.</p>
-  </div>
-  <div class="tab-panel" data-tab-panel-group="install-channel" data-tab-name="mise">
-    <p class="install-channel-meta">macOS, Linux, and Windows</p>
-    <div class="code-block">
-      <pre><code>mise use -g sonarqube-cli@latest</code></pre>
-      <button class="copy-btn" data-copy-install>Copy</button>
-    </div>
-    <p class="install-channel-note">This adds the CLI to your global Mise config and installs the latest release.</p>
-  </div>
-  <div class="tab-panel" data-tab-panel-group="install-channel" data-tab-name="script">
-    <div class="install-script-tabs">
+  <div class="tab-panel active" data-tab-panel-group="install-os" data-tab-name="posix">
+    <div class="install-channel-tabs">
+      <span class="install-channel-label">Channel:</span>
       <div class="tab-group">
-        <button class="tab-btn active" data-tab-target-group="install-script-os" data-tab-name="posix">macOS / Linux</button>
-        <button class="tab-btn" data-tab-target-group="install-script-os" data-tab-name="windows">Windows</button>
+        <button class="tab-btn active" data-tab-target-group="install-posix-channel" data-tab-name="homebrew">Homebrew</button>
+        <button class="tab-btn" data-tab-target-group="install-posix-channel" data-tab-name="mise">Mise</button>
+        <button class="tab-btn" data-tab-target-group="install-posix-channel" data-tab-name="script">Install script</button>
       </div>
     </div>
-    <div class="tab-panel active" data-tab-panel-group="install-script-os" data-tab-name="posix">
+    <div class="tab-panel active" data-tab-panel-group="install-posix-channel" data-tab-name="homebrew">
+      <div class="code-block">
+        <pre><code>brew install sonarqube-cli</code></pre>
+        <button class="copy-btn" data-copy-install>Copy</button>
+      </div>
+      <p class="install-channel-note">Homebrew manages the binary location and PATH automatically.</p>
+    </div>
+    <div class="tab-panel" data-tab-panel-group="install-posix-channel" data-tab-name="mise">
+      <div class="code-block">
+        <pre><code>mise use -g sonarqube-cli@latest</code></pre>
+        <button class="copy-btn" data-copy-install>Copy</button>
+      </div>
+      <p class="install-channel-note">This adds the CLI to your global Mise config and installs the latest release.</p>
+    </div>
+    <div class="tab-panel" data-tab-panel-group="install-posix-channel" data-tab-name="script">
       <div class="code-block">
         <pre><code>curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash</code></pre>
         <button class="copy-btn" data-copy-install>Copy</button>
       </div>
+      <p class="install-channel-note">The install script adds the CLI bin directory to your PATH. Restart your terminal after running it.</p>
     </div>
-    <div class="tab-panel" data-tab-panel-group="install-script-os" data-tab-name="windows">
+  </div>
+  <div class="tab-panel" data-tab-panel-group="install-os" data-tab-name="windows">
+    <div class="install-channel-tabs">
+      <span class="install-channel-label">Channel:</span>
+      <div class="tab-group">
+        <button class="tab-btn active" data-tab-target-group="install-windows-channel" data-tab-name="mise">Mise</button>
+        <button class="tab-btn" data-tab-target-group="install-windows-channel" data-tab-name="script">Install script</button>
+      </div>
+    </div>
+    <div class="tab-panel active" data-tab-panel-group="install-windows-channel" data-tab-name="mise">
+      <div class="code-block">
+        <pre><code>mise use -g sonarqube-cli@latest</code></pre>
+        <button class="copy-btn" data-copy-install>Copy</button>
+      </div>
+      <p class="install-channel-note">This adds the CLI to your global Mise config and installs the latest release.</p>
+    </div>
+    <div class="tab-panel" data-tab-panel-group="install-windows-channel" data-tab-name="script">
       <div class="code-block">
         <pre><code>irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex</code></pre>
         <button class="copy-btn" data-copy-install>Copy</button>
       </div>
+      <p class="install-channel-note">The PowerShell installer updates PATH for future terminals. Open a new PowerShell window after running it.</p>
     </div>
-    <p class="install-channel-note">The install scripts add the CLI bin directory to your PATH. Restart your terminal after running them.</p>
   </div>
 </section>
 
@@ -285,7 +314,7 @@
     </div>
     <div class="feature-card">
       <h3>Multi-platform</h3>
-      <p>Native binaries for Linux, macOS (Apple Silicon), and Windows with install script, Homebrew, and Mise channels.</p>
+      <p>Native binaries for Linux, macOS (Apple Silicon), and Windows with Homebrew, Mise, and install script options.</p>
     </div>
     <div class="feature-card">
       <h3>Code Quality Analysis</h3>

@@ -584,16 +584,25 @@ pre code {
   text-decoration: none;
 }
 .hero-install-link:hover { color: var(--accent); }
-.install-script-tabs {
+.install-channel-tabs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
-.install-script-tabs .tab-group {
-  margin-bottom: 0;
-}
-.install-channel-meta {
-  margin: 0 0 8px;
+.install-channel-label {
   font-size: 12px;
   color: var(--text-muted);
+  white-space: nowrap;
+  font-weight: 500;
+}
+.install-channel-tabs .tab-group {
+  margin-bottom: 0;
+}
+.install-channel-tabs .tab-btn {
+  padding: 6px 14px;
+  font-size: 12px;
 }
 .install-channel-note {
   margin-top: 12px;
