@@ -86,6 +86,22 @@ function serializeToPem(certBags: forge.pkcs12.Bag[], keyBag: forge.pkcs12.Bag):
   return { cert, key: forge.pki.privateKeyToPem(keyBag.key) };
 }
 
+export function pemToPkcs12(certPem: string, keyPem: string): Buffer {
+  try {
+    const cert = forge.pki.certificateFromPem(certPem);
+    const key = forge.pki.privateKeyFromPem(keyPem);
+    const p12Asn1 = forge.pkcs12.toPkcs12Asn1(key, [cert], '', {
+      generateLocalKeyId: true,
+    });
+    return Buffer.from(forge.asn1.toDer(p12Asn1).getBytes(), 'binary');
+  } catch (err) {
+    throw new CryptographicError(
+      err instanceof Error ? err.message : 'Failed to create PKCS12 from PEM files',
+      { cause: err },
+    );
+  }
+}
+
 export function isPkcs12Path(filePath: string): boolean {
   const lower = filePath.toLowerCase();
   return lower.endsWith('.p12') || lower.endsWith('.pfx');

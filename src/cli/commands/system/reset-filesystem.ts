@@ -22,6 +22,7 @@ import { existsSync, rmSync } from 'node:fs';
 
 import {
   CLI_DIR,
+  CLI_TMP_DIR,
   GLOBAL_HOOKS_DIR,
   LOG_DIR,
   SCA_SCANNER_CACHE_DIR,
@@ -35,7 +36,7 @@ export interface FilesystemResetResult {
   item: PhaseItem;
 }
 
-const CACHE_DIRS = [LOG_DIR, SCA_SCANNER_CACHE_DIR, GLOBAL_HOOKS_DIR];
+const CACHE_DIRS = [LOG_DIR, SCA_SCANNER_CACHE_DIR, GLOBAL_HOOKS_DIR, CLI_TMP_DIR];
 
 export function clearFilesystem(): FilesystemResetResult {
   const failed: string[] = [];

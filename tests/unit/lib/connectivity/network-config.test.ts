@@ -215,7 +215,7 @@ describe('resolveNetworkConfig', () => {
       expect(resolveNetworkConfig({}).clientCert).toBeNull();
     });
 
-    it('resolves certPath, keyPath, source, and explicit flag', () => {
+    it('resolves certPath, keyPath, source, explicit flag, and format for a PEM cert', () => {
       const config = resolveNetworkConfig({
         SONAR_TLS_CLIENT_CERT: CERT_PATH,
         SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
@@ -224,6 +224,7 @@ describe('resolveNetworkConfig', () => {
       expect(config.clientCert?.keyPath).toBe(KEY_PATH);
       expect(config.clientCert?.source).toBe('sonar-env');
       expect(config.clientCert?.explicit).toBe(true);
+      expect(config.clientCert?.format).toBe('pem');
     });
 
     it('reads and stores resolved PEM content eagerly', () => {
@@ -265,6 +266,7 @@ describe('resolveNetworkConfig', () => {
       });
       expect(config.clientCert?.certPath).toBe(P12_PATH);
       expect(config.clientCert?.keyPath).toBeNull();
+      expect(config.clientCert?.format).toBe('pkcs12');
       expect(config.clientCert?.resolvedCertPem).toContain('-----BEGIN CERTIFICATE-----');
       expect(config.clientCert?.resolvedKeyPem).toContain('PRIVATE KEY');
     });

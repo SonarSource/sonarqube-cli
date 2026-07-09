@@ -160,6 +160,7 @@ function resolveClientCert(env: NodeJS.ProcessEnv): ClientCertConfig | null {
     return {
       source: 'sonar-env',
       explicit: true,
+      format: 'pkcs12',
       certPath,
       keyPath: null,
       passphrase,
@@ -178,6 +179,7 @@ function resolveClientCert(env: NodeJS.ProcessEnv): ClientCertConfig | null {
   return {
     source: 'sonar-env',
     explicit: true,
+    format: 'pem',
     certPath,
     keyPath,
     passphrase,
