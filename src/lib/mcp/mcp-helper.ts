@@ -29,7 +29,7 @@ import {
   SONARQUBE_MCP_DOCKER_IMAGE_NAME,
 } from '../config-constants';
 import { normalizePath } from '../fs-utils';
-import type { ContainerRuntime } from '../tool-detector';
+import type { ContainerRuntime, ContainerRuntimeDetection } from '../tool-detector';
 
 export interface McpServerConfig {
   command: string;
@@ -86,12 +86,12 @@ export function getMcpConfig(
 export const MCP_DEFAULT_TOOLSETS =
   'analysis,issues,projects,quality-gates,rules,duplications,measures,security-hotspots,dependency-risks,coverage';
 
-export function getMcpContainerCommand(
+function buildDockerRunArgsAndEnv(
   auth: ResolvedAuth,
-  runtime: ContainerRuntime,
   context: McpServerContext,
-  options: McpServerOptions = {},
-): McpContainerCommand {
+  options: McpServerOptions,
+  mountSource: string | undefined,
+): { args: string[]; env: Record<string, string> } {
   const { token, orgKey: org, serverUrl } = auth;
 
   const args = [
@@ -117,9 +117,8 @@ export function getMcpContainerCommand(
     env.SONARQUBE_PROJECT_KEY = context.projectKey;
   }
 
-  if (context.withFsMount) {
-    const hostPath = normalizePath(context.projectRoot);
-    args.push('-v', `${hostPath}:/app/mcp-workspace:ro`);
+  if (mountSource) {
+    args.push('-v', `${mountSource}:/app/mcp-workspace:ro`);
   }
 
   if (options.debug) {
@@ -138,7 +137,55 @@ export function getMcpContainerCommand(
 
   args.push(SONARQUBE_MCP_DOCKER_IMAGE_NAME);
 
+  return { args, env };
+}
+
+export function getMcpContainerCommand(
+  auth: ResolvedAuth,
+  runtime: ContainerRuntime,
+  context: McpServerContext,
+  options: McpServerOptions = {},
+): McpContainerCommand {
+  const mountSource = context.withFsMount ? normalizePath(context.projectRoot) : undefined;
+  const { args, env } = buildDockerRunArgsAndEnv(auth, context, options, mountSource);
   return { command: runtime, args, env };
+}
+
+const WSL_HOST_PATH_ENV_VAR = 'SONARQUBE_MCP_HOST_PATH';
+
+function getMcpWslContainerCommand(
+  auth: ResolvedAuth,
+  runtime: ContainerRuntime,
+  context: McpServerContext,
+  options: McpServerOptions = {},
+): McpContainerCommand {
+  const mountSource = context.withFsMount ? `"$${WSL_HOST_PATH_ENV_VAR}"` : undefined;
+  const { args, env } = buildDockerRunArgsAndEnv(auth, context, options, mountSource);
+
+  const wslenv = Object.keys(env).map((name) => `${name}/u`);
+
+  if (context.withFsMount) {
+    env[WSL_HOST_PATH_ENV_VAR] = context.projectRoot;
+    wslenv.push(`${WSL_HOST_PATH_ENV_VAR}/p`);
+  }
+
+  env.WSLENV = wslenv.join(':');
+
+  return { command: 'wsl.exe', args: ['sh', '-c', [runtime, ...args].join(' ')], env };
+}
+
+export function resolveMcpContainerCommand(
+  auth: ResolvedAuth,
+  detection: ContainerRuntimeDetection,
+  context: McpServerContext,
+  options: McpServerOptions = {},
+): McpContainerCommand {
+  if (!detection.runtime) {
+    throw new Error('resolveMcpContainerCommand requires a detected container runtime');
+  }
+  return detection.viaWsl
+    ? getMcpWslContainerCommand(auth, detection.runtime, context, options)
+    : getMcpContainerCommand(auth, detection.runtime, context, options);
 }
 
 export async function writeMcpServerEntry(filePath: string, serverConfig: object): Promise<void> {

@@ -18,16 +18,27 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { afterEach, describe, expect, it, spyOn } from 'bun:test';
+import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import * as process from '../../../src/lib/process';
-import { detectContainerRuntime } from '../../../src/lib/tool-detector';
+
+// Mock platform-detector so both Windows and non-Windows branches are reachable on any OS.
+const platformDetector = await import('../../../src/lib/platform-detector');
+const isWindowsMock = mock(() => false);
+void mock.module('../../../src/lib/platform-detector', () => ({
+  ...platformDetector,
+  isWindows: isWindowsMock,
+}));
+
+const { detectContainerRuntime } = await import('../../../src/lib/tool-detector');
 
 describe('detectContainerRuntime', () => {
   let spawnSpy: ReturnType<typeof spyOn>;
 
   afterEach(() => {
     spawnSpy.mockRestore();
+    isWindowsMock.mockReset();
+    isWindowsMock.mockImplementation(() => false);
   });
 
   it('returns "docker" when docker is available', async () => {
@@ -37,7 +48,7 @@ describe('detectContainerRuntime', () => {
       stderr: '',
     });
 
-    expect(await detectContainerRuntime()).toBe('docker');
+    expect(await detectContainerRuntime()).toEqual({ runtime: 'docker', viaWsl: false });
     expect(spawnSpy).toHaveBeenCalledWith('docker', ['info']);
   });
 
@@ -49,7 +60,7 @@ describe('detectContainerRuntime', () => {
       return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
     });
 
-    expect(await detectContainerRuntime()).toBe('podman');
+    expect(await detectContainerRuntime()).toEqual({ runtime: 'podman', viaWsl: false });
     expect(spawnSpy).toHaveBeenCalledWith('docker', ['info']);
     expect(spawnSpy).toHaveBeenCalledWith('podman', ['info']);
   });
@@ -62,16 +73,18 @@ describe('detectContainerRuntime', () => {
       return Promise.reject(new Error(`spawn ${cmd} ENOENT`));
     });
 
-    expect(await detectContainerRuntime()).toBe('nerdctl');
+    expect(await detectContainerRuntime()).toEqual({ runtime: 'nerdctl', viaWsl: false });
     expect(spawnSpy).toHaveBeenCalledWith('docker', ['info']);
     expect(spawnSpy).toHaveBeenCalledWith('podman', ['info']);
     expect(spawnSpy).toHaveBeenCalledWith('nerdctl', ['info']);
   });
 
-  it('returns null when no container runtime is available', async () => {
+  it('returns null when no container runtime is available and not on Windows', async () => {
+    isWindowsMock.mockImplementation(() => false);
     spawnSpy = spyOn(process, 'spawnProcess').mockRejectedValue(new Error('ENOENT'));
 
-    expect(await detectContainerRuntime()).toBeNull();
+    expect(await detectContainerRuntime()).toEqual({ runtime: null, viaWsl: false });
+    expect(spawnSpy).not.toHaveBeenCalledWith('wsl.exe', expect.anything());
   });
 
   it('returns "docker" when docker daemon is running even if other runtimes are also available', async () => {
@@ -81,18 +94,57 @@ describe('detectContainerRuntime', () => {
       stderr: '',
     });
 
-    expect(await detectContainerRuntime()).toBe('docker');
+    expect(await detectContainerRuntime()).toEqual({ runtime: 'docker', viaWsl: false });
     // Should not have checked podman/nerdctl since docker succeeded
     expect(spawnSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('returns null when all runtime daemons are not running', async () => {
+  it('returns null when all runtime daemons are not running and not on Windows', async () => {
+    isWindowsMock.mockImplementation(() => false);
     spawnSpy = spyOn(process, 'spawnProcess').mockResolvedValue({
       exitCode: 1,
       stdout: '',
       stderr: 'Cannot connect to daemon',
     });
 
-    expect(await detectContainerRuntime()).toBeNull();
+    expect(await detectContainerRuntime()).toEqual({ runtime: null, viaWsl: false });
+  });
+
+  it('falls back to WSL when no native runtime is available on Windows', async () => {
+    isWindowsMock.mockImplementation(() => true);
+    spawnSpy = spyOn(process, 'spawnProcess').mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'wsl.exe' && args[0] === 'docker') {
+        return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+      }
+      return Promise.reject(new Error('ENOENT'));
+    });
+
+    expect(await detectContainerRuntime()).toEqual({ runtime: 'docker', viaWsl: true });
+    expect(spawnSpy).toHaveBeenCalledWith('wsl.exe', ['docker', 'info']);
+  });
+
+  it('falls through to nerdctl via WSL when native and earlier WSL runtimes are unavailable', async () => {
+    isWindowsMock.mockImplementation(() => true);
+    spawnSpy = spyOn(process, 'spawnProcess').mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'wsl.exe' && args[0] === 'nerdctl') {
+        return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+      }
+      return Promise.reject(new Error('ENOENT'));
+    });
+
+    expect(await detectContainerRuntime()).toEqual({ runtime: 'nerdctl', viaWsl: true });
+    expect(spawnSpy).toHaveBeenCalledWith('docker', ['info']);
+    expect(spawnSpy).toHaveBeenCalledWith('podman', ['info']);
+    expect(spawnSpy).toHaveBeenCalledWith('nerdctl', ['info']);
+    expect(spawnSpy).toHaveBeenCalledWith('wsl.exe', ['docker', 'info']);
+    expect(spawnSpy).toHaveBeenCalledWith('wsl.exe', ['podman', 'info']);
+    expect(spawnSpy).toHaveBeenCalledWith('wsl.exe', ['nerdctl', 'info']);
+  });
+
+  it('returns null when neither a native nor a WSL runtime is available on Windows', async () => {
+    isWindowsMock.mockImplementation(() => true);
+    spawnSpy = spyOn(process, 'spawnProcess').mockRejectedValue(new Error('ENOENT'));
+
+    expect(await detectContainerRuntime()).toEqual({ runtime: null, viaWsl: false });
   });
 });

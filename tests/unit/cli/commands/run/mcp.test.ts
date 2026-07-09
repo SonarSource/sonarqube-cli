@@ -70,13 +70,40 @@ describe('runMcp', () => {
   });
 
   it('throws CommandFailedError when no container runtime is available', () => {
-    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue(null);
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: null,
+      viaWsl: false,
+    });
 
     expect(runMcp(FAKE_AUTH)).rejects.toBeInstanceOf(CommandFailedError);
   });
 
+  it.each(['docker', 'podman', 'nerdctl'] as const)(
+    'runs a WSL-wrapped command when detection reports viaWsl for %s',
+    async (runtime) => {
+      detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+        runtime,
+        viaWsl: true,
+      });
+      spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
+
+      await runMcp(FAKE_AUTH);
+
+      expect(spawnSpy).toHaveBeenCalledWith(
+        'wsl.exe',
+        ['sh', '-c', expect.stringContaining(`${runtime} run`)],
+        expect.objectContaining({ stdio: 'inherit' }),
+      );
+      const spawnEnv = spawnSpy.mock.calls[0][2].env as Record<string, string>;
+      expect(spawnEnv.WSLENV).toContain('SONARQUBE_TOKEN/u');
+    },
+  );
+
   it('spawns with podman when podman is the detected runtime', async () => {
-    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue('podman');
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: 'podman',
+      viaWsl: false,
+    });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
     await runMcp(FAKE_AUTH);
@@ -89,7 +116,10 @@ describe('runMcp', () => {
   });
 
   it('sets SONARQUBE_DEBUG_ENABLED=true in spawn env when --debug is set', async () => {
-    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue('docker');
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: 'docker',
+      viaWsl: false,
+    });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
     await runMcp(FAKE_AUTH, { debug: true });
@@ -101,7 +131,10 @@ describe('runMcp', () => {
   });
 
   it('sets SONARQUBE_READ_ONLY=true in spawn env when --read-only is set', async () => {
-    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue('docker');
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: 'docker',
+      viaWsl: false,
+    });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
     await runMcp(FAKE_AUTH, { readOnly: true });
@@ -112,7 +145,10 @@ describe('runMcp', () => {
   });
 
   it('sets SONARQUBE_TOOLSETS in spawn env when --toolsets is set', async () => {
-    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue('docker');
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: 'docker',
+      viaWsl: false,
+    });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
     await runMcp(FAKE_AUTH, { toolsets: 'issues,rules' });
@@ -123,7 +159,10 @@ describe('runMcp', () => {
   });
 
   it('sets SONARQUBE_PROJECT_KEY in spawn env when --project is set even when discovery runs', async () => {
-    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue('docker');
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: 'docker',
+      viaWsl: false,
+    });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
     await runMcp(FAKE_AUTH, { project: 'my-project' });
@@ -141,7 +180,10 @@ describe('runMcp', () => {
       isGitRepo: true,
       configSources: [],
     });
-    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue('docker');
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: 'docker',
+      viaWsl: false,
+    });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
     await runMcp(FAKE_AUTH, { project: 'my-project' });
@@ -154,7 +196,10 @@ describe('runMcp', () => {
   it('skips project discovery when cwd is user home directory', async () => {
     homeDirSpy = spyOn(os, 'homedir').mockReturnValue('/tmp/home');
     cwdSpy = spyOn(process, 'cwd').mockReturnValue('/tmp/home');
-    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue('docker');
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: 'docker',
+      viaWsl: false,
+    });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
     await runMcp(FAKE_AUTH, { project: 'my-project' });
