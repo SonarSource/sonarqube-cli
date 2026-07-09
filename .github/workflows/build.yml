@@ -83,27 +83,18 @@ jobs:
           set -euo pipefail
 
           build_binary() {
-            local distribution="$1"
-            local target="$2"
-            local classifier="$3"
-            local extension="$4"
-            local filename
+            local target="$1"
+            local classifier="$2"
+            local extension="$3"
+            local filename="sonarqube-cli-${PROJECT_VERSION}-${classifier}.${extension}"
 
-            if [ "$distribution" = "standalone" ]; then
-              filename="sonarqube-cli-${PROJECT_VERSION}-${classifier}.${extension}"
-            else
-              filename="sonarqube-cli-${PROJECT_VERSION}-${distribution}-${classifier}.${extension}"
-            fi
-
-            SONARQUBE_CLI_DISTRIBUTION="$distribution" SONARQUBE_CLI_TARGET="$target" SONARQUBE_CLI_OUTFILE="dist/${filename}" bun build-scripts/build-binary.ts
+            SONARQUBE_CLI_TARGET="$target" SONARQUBE_CLI_OUTFILE="dist/${filename}" bun build-scripts/build-binary.ts
           }
 
-          for distribution in standalone homebrew; do
-            build_binary "$distribution" bun-linux-x64 linux-x86-64 bin
-            build_binary "$distribution" bun-linux-arm64 linux-arm64 bin
-            build_binary "$distribution" bun-darwin-arm64 macos-arm64 bin
-            build_binary "$distribution" bun-windows-x64 windows-x86-64 exe
-          done
+          build_binary bun-linux-x64 linux-x86-64 bin
+          build_binary bun-linux-arm64 linux-arm64 bin
+          build_binary bun-darwin-arm64 macos-arm64 bin
+          build_binary bun-windows-x64 windows-x86-64 exe
 
       - name: GPG-sign all binaries
         shell: bash
@@ -279,7 +270,7 @@ jobs:
           ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
           PROJECT: ${{ github.event.repository.name }}
           BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
-          ARTIFACTS_TO_PUBLISH: 'org.sonarsource.cli:sonarqube-cli:bin:linux-x86-64,org.sonarsource.cli:sonarqube-cli:bin:linux-arm64,org.sonarsource.cli:sonarqube-cli:bin:macos-arm64,org.sonarsource.cli:sonarqube-cli:exe:windows-x86-64,org.sonarsource.cli:sonarqube-cli:bin:homebrew-linux-x86-64,org.sonarsource.cli:sonarqube-cli:bin:homebrew-linux-arm64,org.sonarsource.cli:sonarqube-cli:bin:homebrew-macos-arm64,org.sonarsource.cli:sonarqube-cli:exe:homebrew-windows-x86-64'
+          ARTIFACTS_TO_PUBLISH: 'org.sonarsource.cli:sonarqube-cli:bin:linux-x86-64,org.sonarsource.cli:sonarqube-cli:bin:linux-arm64,org.sonarsource.cli:sonarqube-cli:bin:macos-arm64,org.sonarsource.cli:sonarqube-cli:exe:windows-x86-64'
         run: |
           jf config add repox \
             --artifactory-url="${ARTIFACTORY_URL}" \

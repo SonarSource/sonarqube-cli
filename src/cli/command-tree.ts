@@ -21,7 +21,7 @@
 import { type Command, Help, InvalidArgumentError, Option } from 'commander';
 
 import { version as VERSION } from '../../package.json';
-import { IS_STANDALONE_DISTRIBUTION } from '../lib/distribution';
+import { CURRENT_DISTRIBUTION } from '../lib/distribution';
 import { loadState } from '../lib/repository/state-repository';
 import { initSentry } from '../lib/sentry';
 import { maybeNotifyUpdateAvailable } from '../lib/update-notification';
@@ -574,7 +574,7 @@ system
   .anonymousAction((options: SystemResetOptions) => systemReset(options));
 
 // Update the CLI to the latest version
-if (IS_STANDALONE_DISTRIBUTION) {
+if (CURRENT_DISTRIBUTION.enableSelfUpdate) {
   COMMAND_TREE.command('update')
     .description('Update SonarQube CLI to the latest version')
     .rootHelp({
