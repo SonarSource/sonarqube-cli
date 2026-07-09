@@ -99,7 +99,7 @@
     }
   },
   "dependencies": {
-    "@clack/core": "1.4.1",
+    "@clack/core": "1.4.3",
     "@sentry/bun": "10.64.0",
     "@toon-format/toon": "2.3.0",
     "commander": "15.0.0",
