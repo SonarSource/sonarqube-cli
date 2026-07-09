@@ -22,7 +22,9 @@
 
 import * as childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { readFileSync } from 'node:fs';
 import * as os from 'node:os';
+import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
@@ -34,9 +36,11 @@ import type {
   ProxyGroup,
   ResolvedNetworkConfig,
 } from '../../../../../src/lib/connectivity/types.js';
+import type { ClientCertConfig } from '../../../../../src/lib/connectivity/types.js';
 import {
   getMcpContainerCommand,
   MCP_CONTAINER_CA_CERT_PATH,
+  MCP_CONTAINER_CLIENT_CERT_PATH,
 } from '../../../../../src/lib/mcp/mcp-helper.js';
 import * as projectInfo from '../../../../../src/lib/project-workspace/project-info.js';
 import { createRedactedUrl } from '../../../../../src/lib/redacted-url.js';
@@ -56,6 +60,21 @@ function makeProxyNetwork(proxy: ProxyGroup): ResolvedNetworkConfig {
 
 function makeCaCertNetwork(path: string): ResolvedNetworkConfig {
   return { proxy: null, caCert: { source: 'sonar-env', explicit: true, path }, clientCert: null };
+}
+
+function makeClientCertNetwork(overrides: Partial<ClientCertConfig> = {}): ResolvedNetworkConfig {
+  const clientCert: ClientCertConfig = {
+    source: 'sonar-env',
+    explicit: true,
+    format: 'pkcs12',
+    certPath: '/path/to/client.p12',
+    keyPath: null,
+    passphrase: undefined,
+    resolvedCertPem: 'cert-pem',
+    resolvedKeyPem: 'key-pem',
+    ...overrides,
+  };
+  return { proxy: null, caCert: null, clientCert };
 }
 
 function makeProxy(overrides: Partial<ProxyGroup> = {}): ProxyGroup {
@@ -346,5 +365,123 @@ describe('getMcpContainerCommand — CA cert → volume mount', () => {
 
     expect(result.args).toContain('-v');
     expect(result.args).toContain(`/etc/ssl/corp-ca.pem:${MCP_CONTAINER_CA_CERT_PATH}:ro`);
+  });
+});
+
+describe('getMcpContainerCommand — client cert → volume mount + JAVA_OPTS', () => {
+  const context = { withFsMount: false } as const;
+
+  it('does not add a client cert mount or JAVA_OPTS when no client cert is configured', () => {
+    const result = getMcpContainerCommand(FAKE_AUTH, 'docker', context, {}, NO_NETWORK);
+
+    expect(result.args).not.toContain('-v');
+    expect(result.env.JAVA_OPTS).toBeUndefined();
+  });
+
+  it('mounts the PKCS12 file to the fixed container path', () => {
+    const result = getMcpContainerCommand(
+      FAKE_AUTH,
+      'docker',
+      context,
+      {},
+      makeClientCertNetwork({ certPath: '/path/to/client.p12' }),
+    );
+
+    expect(result.args).toContain(`/path/to/client.p12:${MCP_CONTAINER_CLIENT_CERT_PATH}:ro`);
+  });
+
+  it('sets keyStore and keyStoreType in JAVA_OPTS', () => {
+    const result = getMcpContainerCommand(
+      FAKE_AUTH,
+      'docker',
+      context,
+      {},
+      makeClientCertNetwork(),
+    );
+
+    expect(result.env.JAVA_OPTS).toContain(
+      `-Djavax.net.ssl.keyStore=${MCP_CONTAINER_CLIENT_CERT_PATH}`,
+    );
+    expect(result.env.JAVA_OPTS).toContain('-Djavax.net.ssl.keyStoreType=PKCS12');
+    expect(result.args).toContain('JAVA_OPTS');
+  });
+
+  it('sets keyStorePassword in JAVA_OPTS when passphrase is present', () => {
+    const result = getMcpContainerCommand(
+      FAKE_AUTH,
+      'docker',
+      context,
+      {},
+      makeClientCertNetwork({ passphrase: 'secret' }),
+    );
+
+    expect(result.env.JAVA_OPTS).toContain('-Djavax.net.ssl.keyStorePassword=secret');
+  });
+
+  it('omits keyStorePassword from JAVA_OPTS when no passphrase', () => {
+    const result = getMcpContainerCommand(
+      FAKE_AUTH,
+      'docker',
+      context,
+      {},
+      makeClientCertNetwork(),
+    );
+
+    expect(result.env.JAVA_OPTS).not.toContain('keyStorePassword');
+  });
+
+  it('combines proxy and client cert opts into a single JAVA_OPTS', () => {
+    const network: ResolvedNetworkConfig = {
+      proxy: {
+        source: 'sonar-env',
+        explicit: true,
+        proxyHttps: createRedactedUrl('http://proxy.corp.com:3128'),
+        proxyHttp: null,
+        noProxy: null,
+      },
+      caCert: null,
+      clientCert: {
+        source: 'sonar-env',
+        explicit: true,
+        format: 'pkcs12',
+
+        certPath: '/path/to/client.p12',
+        keyPath: null,
+        passphrase: undefined,
+        resolvedCertPem: '',
+        resolvedKeyPem: '',
+      },
+    };
+    const result = getMcpContainerCommand(FAKE_AUTH, 'docker', context, {}, network);
+
+    expect(result.env.JAVA_OPTS).toContain('-Dhttps.proxyHost=proxy.corp.com');
+    expect(result.env.JAVA_OPTS).toContain(
+      `-Djavax.net.ssl.keyStore=${MCP_CONTAINER_CLIENT_CERT_PATH}`,
+    );
+  });
+
+  it('converts PEM cert+key to PKCS12, mounts temp file, sets keystore opts without password', () => {
+    const FIXTURE_DIR = join(import.meta.dir, '../../../../fixtures/client-cert');
+    const certPem = readFileSync(join(FIXTURE_DIR, 'client-cert.pem'), 'utf-8');
+    const keyPem = readFileSync(join(FIXTURE_DIR, 'client-key.pem'), 'utf-8');
+
+    const result = getMcpContainerCommand(
+      FAKE_AUTH,
+      'docker',
+      context,
+      {},
+      makeClientCertNetwork({
+        format: 'pem',
+        keyPath: '/path/to/client.key',
+        resolvedCertPem: certPem,
+        resolvedKeyPem: keyPem,
+      }),
+    );
+
+    expect(result.args.some((arg) => arg.includes(MCP_CONTAINER_CLIENT_CERT_PATH))).toBe(true);
+    expect(result.env.JAVA_OPTS).toContain(
+      `-Djavax.net.ssl.keyStore=${MCP_CONTAINER_CLIENT_CERT_PATH}`,
+    );
+    expect(result.env.JAVA_OPTS).not.toContain('keyStorePassword');
   });
 });

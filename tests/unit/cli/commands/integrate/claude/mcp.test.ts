@@ -18,15 +18,24 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { setupMcpServer } from '../../../../../../src/cli/commands/integrate/claude/mcp';
 import type { ResolvedAuth } from '../../../../../../src/lib/auth-resolver';
-import { SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '../../../../../../src/lib/config-constants';
+import {
+  CLI_TMP_DIR,
+  SONARQUBE_MCP_DOCKER_IMAGE_NAME,
+} from '../../../../../../src/lib/config-constants';
+import type {
+  ClientCertConfig,
+  ResolvedNetworkConfig,
+} from '../../../../../../src/lib/connectivity/types';
+import * as pkcs12Module from '../../../../../../src/lib/crypto/pkcs12';
 import {
   getMcpConfigFilePath,
   getMcpContainerCommand,
@@ -55,6 +64,8 @@ const CLOUD_US_AUTH: ResolvedAuth = {
   connectionType: 'cloud',
 };
 
+const NO_NETWORK: ResolvedNetworkConfig = { proxy: null, caCert: null, clientCert: null };
+
 const FAKE_PROJECT: DiscoveredProject = {
   rootDir: '/fake/project',
   isGitRepo: false,
@@ -66,7 +77,13 @@ const FAKE_PROJECT: DiscoveredProject = {
 
 describe('getMcpContainerConfig', () => {
   it('returns a docker command with SONARQUBE_TOKEN and SONARQUBE_URL for on-premise', () => {
-    const config = getMcpContainerCommand(ON_PREMISE_AUTH, 'docker', { withFsMount: false });
+    const config = getMcpContainerCommand(
+      ON_PREMISE_AUTH,
+      'docker',
+      { withFsMount: false },
+      {},
+      NO_NETWORK,
+    );
     expect(config).toEqual({
       command: 'docker',
       args: [
@@ -92,7 +109,13 @@ describe('getMcpContainerConfig', () => {
   });
 
   it('returns a podman command with SONARQUBE_TOKEN and SONARQUBE_URL for on-premise', () => {
-    const config = getMcpContainerCommand(ON_PREMISE_AUTH, 'podman', { withFsMount: false });
+    const config = getMcpContainerCommand(
+      ON_PREMISE_AUTH,
+      'podman',
+      { withFsMount: false },
+      {},
+      NO_NETWORK,
+    );
     expect(config).toEqual({
       command: 'podman',
       args: [
@@ -119,7 +142,7 @@ describe('getMcpContainerConfig', () => {
 
   it('returns a docker command with SONARQUBE_ORG for cloud (sonarcloud.io)', () => {
     const auth: ResolvedAuth = { ...CLOUD_AUTH, orgKey: 'my-org' };
-    const config = getMcpContainerCommand(auth, 'docker', { withFsMount: false });
+    const config = getMcpContainerCommand(auth, 'docker', { withFsMount: false }, {}, NO_NETWORK);
     expect(config).toEqual({
       command: 'docker',
       args: [
@@ -149,7 +172,7 @@ describe('getMcpContainerConfig', () => {
 
   it('returns a docker command with SONARQUBE_ORG for cloud US (sonarqube.us)', () => {
     const auth: ResolvedAuth = { ...CLOUD_US_AUTH, orgKey: 'my-org' };
-    const config = getMcpContainerCommand(auth, 'docker', { withFsMount: false });
+    const config = getMcpContainerCommand(auth, 'docker', { withFsMount: false }, {}, NO_NETWORK);
     expect(config).toEqual({
       command: 'docker',
       args: [
@@ -178,10 +201,16 @@ describe('getMcpContainerConfig', () => {
   });
 
   it('uses forward slashes in the -v host path on Windows-style roots', () => {
-    const config = getMcpContainerCommand(ON_PREMISE_AUTH, 'docker', {
-      withFsMount: true,
-      projectRoot: String.raw`C:\Users\tdd\source\repos\sonarlint-core`,
-    });
+    const config = getMcpContainerCommand(
+      ON_PREMISE_AUTH,
+      'docker',
+      {
+        withFsMount: true,
+        projectRoot: String.raw`C:\Users\tdd\source\repos\sonarlint-core`,
+      },
+      {},
+      NO_NETWORK,
+    );
     const args = (config as { args: string[] }).args;
     const vIndex = args.indexOf('-v');
     expect(vIndex).toBeGreaterThan(-1);
@@ -189,10 +218,13 @@ describe('getMcpContainerConfig', () => {
   });
 
   it('returns a docker command with -v ${projectRoot}:/app/mcp-workspace:ro for non-global config', () => {
-    const config = getMcpContainerCommand(ON_PREMISE_AUTH, 'docker', {
-      withFsMount: true,
-      projectRoot: '/fake/project',
-    });
+    const config = getMcpContainerCommand(
+      ON_PREMISE_AUTH,
+      'docker',
+      { withFsMount: true, projectRoot: '/fake/project' },
+      {},
+      NO_NETWORK,
+    );
     expect(config).toEqual({
       command: 'docker',
       args: [
@@ -220,10 +252,13 @@ describe('getMcpContainerConfig', () => {
   });
 
   it('returns a podman command with -v ${projectRoot}:/app/mcp-workspace:ro for non-global config', () => {
-    const config = getMcpContainerCommand(ON_PREMISE_AUTH, 'podman', {
-      withFsMount: true,
-      projectRoot: '/fake/project',
-    });
+    const config = getMcpContainerCommand(
+      ON_PREMISE_AUTH,
+      'podman',
+      { withFsMount: true, projectRoot: '/fake/project' },
+      {},
+      NO_NETWORK,
+    );
     expect(config).toEqual({
       command: 'podman',
       args: [
@@ -251,11 +286,13 @@ describe('getMcpContainerConfig', () => {
   });
 
   it('returns a docker command with SONARQUBE_PROJECT_KEY for non-global config with project key', () => {
-    const config = getMcpContainerCommand(ON_PREMISE_AUTH, 'docker', {
-      withFsMount: true,
-      projectRoot: '/fake/project',
-      projectKey: 'my-project',
-    });
+    const config = getMcpContainerCommand(
+      ON_PREMISE_AUTH,
+      'docker',
+      { withFsMount: true, projectRoot: '/fake/project', projectKey: 'my-project' },
+      {},
+      NO_NETWORK,
+    );
     expect(config).toEqual({
       command: 'docker',
       args: [
@@ -292,6 +329,8 @@ describe('resolveMcpContainerCommand (via WSL)', () => {
       ON_PREMISE_AUTH,
       { runtime: 'docker', viaWsl: true },
       { withFsMount: false },
+      {},
+      NO_NETWORK,
     );
     expect(config).toEqual({
       command: 'wsl.exe',
@@ -314,6 +353,8 @@ describe('resolveMcpContainerCommand (via WSL)', () => {
       ON_PREMISE_AUTH,
       { runtime: 'podman', viaWsl: true },
       { withFsMount: false },
+      {},
+      NO_NETWORK,
     );
     expect(config.command).toBe('wsl.exe');
     expect(config.args[2]).toStartWith('podman run ');
@@ -325,6 +366,8 @@ describe('resolveMcpContainerCommand (via WSL)', () => {
       auth,
       { runtime: 'docker', viaWsl: true },
       { withFsMount: false },
+      {},
+      NO_NETWORK,
     );
     expect(config.args[2]).toContain('-e SONARQUBE_ORG');
     expect(config.env.SONARQUBE_ORG).toBe('my-org');
@@ -336,6 +379,8 @@ describe('resolveMcpContainerCommand (via WSL)', () => {
       ON_PREMISE_AUTH,
       { runtime: 'docker', viaWsl: true },
       { withFsMount: true, projectRoot: String.raw`C:\Users\tdd\source\repos\sonarlint-core` },
+      {},
+      NO_NETWORK,
     );
     expect(config).toEqual({
       command: 'wsl.exe',
@@ -360,6 +405,8 @@ describe('resolveMcpContainerCommand (via WSL)', () => {
       ON_PREMISE_AUTH,
       { runtime: 'docker', viaWsl: true },
       { withFsMount: true, projectRoot: '/fake/project', projectKey: 'my-project' },
+      {},
+      NO_NETWORK,
     );
     expect(config.args[2]).toContain('-e SONARQUBE_PROJECT_KEY');
     expect(config.env.SONARQUBE_PROJECT_KEY).toBe('my-project');
@@ -501,5 +548,127 @@ describe('setupMcpServerForAgent (claude)', () => {
       .filter((c) => c.method === 'warn')
       .map((c) => String(c.args[0]));
     expect(warns.some((m) => m.includes('disk full'))).toBe(true);
+  });
+});
+
+describe('getMcpContainerCommand — client cert mount', () => {
+  const OTHER_READ_BIT = 0o004; // S_IROTH in POSIX
+  const FIXTURE_DIR = join(import.meta.dir, '../../../../../fixtures/client-cert');
+  const CERT_PEM = readFileSync(join(FIXTURE_DIR, 'client-cert.pem'), 'utf-8');
+  const KEY_PEM = readFileSync(join(FIXTURE_DIR, 'client-key.pem'), 'utf-8');
+  const P12_PATH = join(FIXTURE_DIR, 'client-cert.p12');
+
+  const certHash = createHash('sha256').update(CERT_PEM).digest('hex').slice(0, 16);
+  const expectedCachedPath = join(CLI_TMP_DIR, `mcp-client-cert-${certHash}.p12`);
+
+  const altCertPem = CERT_PEM + '\n';
+  const altCertHash = createHash('sha256').update(altCertPem).digest('hex').slice(0, 16);
+  const altCachedPath = join(CLI_TMP_DIR, `mcp-client-cert-${altCertHash}.p12`);
+
+  const pemClientCert: ClientCertConfig = {
+    source: 'sonar-env',
+    explicit: true,
+    format: 'pem',
+    certPath: join(FIXTURE_DIR, 'client-cert.pem'),
+    keyPath: join(FIXTURE_DIR, 'client-key.pem'),
+    passphrase: undefined,
+    resolvedCertPem: CERT_PEM,
+    resolvedKeyPem: KEY_PEM,
+  };
+
+  const pkcs12ClientCert: ClientCertConfig = {
+    source: 'sonar-env',
+    explicit: true,
+    format: 'pkcs12',
+    certPath: P12_PATH,
+    keyPath: null,
+    passphrase: 'sonar',
+    resolvedCertPem: CERT_PEM,
+    resolvedKeyPem: KEY_PEM,
+  };
+
+  let pemToPkcs12Spy: ReturnType<typeof spyOn>;
+
+  afterEach(() => {
+    pemToPkcs12Spy?.mockRestore();
+    rmSync(expectedCachedPath, { force: true });
+    rmSync(altCachedPath, { force: true });
+  });
+
+  it('converts PEM cert+key to PKCS12, writes with restricted permissions, and mounts it', () => {
+    pemToPkcs12Spy = spyOn(pkcs12Module, 'pemToPkcs12').mockReturnValue(Buffer.from('stub-p12'));
+
+    const config = getMcpContainerCommand(
+      ON_PREMISE_AUTH,
+      'docker',
+      { withFsMount: false },
+      {},
+      { proxy: null, caCert: null, clientCert: pemClientCert },
+    );
+
+    expect(pemToPkcs12Spy).toHaveBeenCalledTimes(1);
+    expect(config.args).toContain(`${expectedCachedPath}:/etc/ssl/mcp/client.p12:ro`);
+    expect(existsSync(expectedCachedPath)).toBe(true);
+    if (process.platform !== 'win32') {
+      // o+r is intentional: Docker bind mounts require the container user
+      // (which has a different UID than the host) to be able to read the file.
+      expect(statSync(expectedCachedPath).mode & OTHER_READ_BIT).toBe(OTHER_READ_BIT);
+    }
+  });
+
+  it('reuses the cached PKCS12 and skips conversion when the same cert is presented again', () => {
+    mkdirSync(dirname(expectedCachedPath), { recursive: true });
+    writeFileSync(expectedCachedPath, Buffer.from('pre-existing'));
+    pemToPkcs12Spy = spyOn(pkcs12Module, 'pemToPkcs12').mockReturnValue(Buffer.from('stub-p12'));
+
+    const config = getMcpContainerCommand(
+      ON_PREMISE_AUTH,
+      'docker',
+      { withFsMount: false },
+      {},
+      { proxy: null, caCert: null, clientCert: pemClientCert },
+    );
+
+    expect(pemToPkcs12Spy).not.toHaveBeenCalled();
+    expect(config.args).toContain(`${expectedCachedPath}:/etc/ssl/mcp/client.p12:ro`);
+  });
+
+  it('produces a different cached path for a different cert', () => {
+    pemToPkcs12Spy = spyOn(pkcs12Module, 'pemToPkcs12').mockReturnValue(Buffer.from('stub-p12'));
+    const altClientCert: ClientCertConfig = { ...pemClientCert, resolvedCertPem: altCertPem };
+
+    const configA = getMcpContainerCommand(
+      ON_PREMISE_AUTH,
+      'docker',
+      { withFsMount: false },
+      {},
+      { proxy: null, caCert: null, clientCert: pemClientCert },
+    );
+    const configB = getMcpContainerCommand(
+      ON_PREMISE_AUTH,
+      'docker',
+      { withFsMount: false },
+      {},
+      { proxy: null, caCert: null, clientCert: altClientCert },
+    );
+
+    expect(configA.args).toContain(`${expectedCachedPath}:/etc/ssl/mcp/client.p12:ro`);
+    expect(configB.args).toContain(`${altCachedPath}:/etc/ssl/mcp/client.p12:ro`);
+  });
+
+  it('mounts the PKCS12 file directly and forwards the passphrase without conversion', () => {
+    pemToPkcs12Spy = spyOn(pkcs12Module, 'pemToPkcs12').mockReturnValue(Buffer.from('stub-p12'));
+
+    const config = getMcpContainerCommand(
+      ON_PREMISE_AUTH,
+      'docker',
+      { withFsMount: false },
+      {},
+      { proxy: null, caCert: null, clientCert: pkcs12ClientCert },
+    );
+
+    expect(pemToPkcs12Spy).not.toHaveBeenCalled();
+    expect(config.args).toContain(`${P12_PATH}:/etc/ssl/mcp/client.p12:ro`);
+    expect(config.env.JAVA_OPTS).toContain('javax.net.ssl.keyStorePassword=sonar');
   });
 });

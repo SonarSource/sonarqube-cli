@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -26,10 +27,12 @@ import { dirname, join } from 'node:path';
 import type { ResolvedAuth } from '../auth-resolver';
 import {
   ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
+  CLI_TMP_DIR,
   SONARQUBE_MCP_DOCKER_IMAGE_NAME,
 } from '../config-constants';
 import { getNetworkConfig } from '../connectivity/network-config';
-import type { ProxyGroup, ResolvedNetworkConfig } from '../connectivity/types';
+import type { ClientCertConfig, ProxyGroup, ResolvedNetworkConfig } from '../connectivity/types';
+import { pemToPkcs12 } from '../crypto/pkcs12';
 import { normalizePath } from '../fs-utils';
 import type { RedactedUrl } from '../redacted-url';
 import type { ContainerRuntime, ContainerRuntimeDetection } from '../tool-detector';
@@ -87,6 +90,9 @@ export function getMcpConfig(
 // Path where update-ca-certificates picks up custom CA certs inside the MCP container (Debian/Alpine convention).
 export const MCP_CONTAINER_CA_CERT_PATH = '/usr/local/share/ca-certificates/sonar-ca.crt';
 
+// Fixed mount path for the client certificate PKCS12 keystore inside the MCP container.
+export const MCP_CONTAINER_CLIENT_CERT_PATH = '/etc/ssl/mcp/client.p12';
+
 // All MCP toolsets supported by the server, excluding 'cag' which is available directly via the CLI.
 // Passed explicitly to avoid relying on MCP-side defaults.
 export const MCP_DEFAULT_TOOLSETS =
@@ -115,7 +121,7 @@ function proxyJavaProps(proxyUrl: RedactedUrl, scheme: 'http' | 'https'): string
   return parts;
 }
 
-function buildProxyJavaToolOptions(proxy: ProxyGroup): string {
+function collectProxyJavaOpts(proxy: ProxyGroup): string[] {
   const parts: string[] = [];
 
   if (proxy.proxyHttps) {
@@ -131,14 +137,57 @@ function buildProxyJavaToolOptions(proxy: ProxyGroup): string {
     parts.push(`-Dhttp.nonProxyHosts=${toJavaNonProxyHosts(proxy.noProxy)}`);
   }
 
-  return parts.join(' ');
+  return parts;
+}
+
+interface ClientCertMount {
+  hostCertPath: string;
+  keystorePassphrase: string | undefined;
+}
+
+function pathForCert(clientCert: ClientCertConfig) {
+  const certHash = createHash('sha256')
+    .update(clientCert.resolvedCertPem)
+    .digest('hex')
+    .slice(0, 16);
+  return join(CLI_TMP_DIR, `mcp-client-cert-${certHash}.p12`);
+}
+
+function resolveClientCertMount(clientCert: ClientCertConfig): ClientCertMount {
+  if (clientCert.format === 'pkcs12') {
+    return {
+      hostCertPath: normalizePath(clientCert.certPath),
+      keystorePassphrase: clientCert.passphrase,
+    };
+  }
+  const cachedPath = pathForCert(clientCert);
+  if (!existsSync(cachedPath)) {
+    const pkcs12Buffer = pemToPkcs12(clientCert.resolvedCertPem, clientCert.resolvedKeyPem);
+    mkdirSync(dirname(cachedPath), { recursive: true });
+    writeFileSync(cachedPath, pkcs12Buffer);
+  }
+  return {
+    hostCertPath: normalizePath(cachedPath),
+    keystorePassphrase: undefined,
+  };
+}
+
+function collectClientCertJavaOpts(passphrase: string | undefined): string[] {
+  const parts = [
+    `-Djavax.net.ssl.keyStore=${MCP_CONTAINER_CLIENT_CERT_PATH}`,
+    '-Djavax.net.ssl.keyStoreType=PKCS12',
+  ];
+  if (passphrase) {
+    parts.push(`-Djavax.net.ssl.keyStorePassword=${passphrase}`);
+  }
+  return parts;
 }
 
 function buildDockerRunArgsAndEnv(
   auth: ResolvedAuth,
   context: McpServerContext,
-  options: McpServerOptions = {},
   mountSource: string | undefined,
+  options: McpServerOptions = {},
   network: ResolvedNetworkConfig = getNetworkConfig(),
 ): { args: string[]; env: Record<string, string> } {
   const { token, orgKey: org, serverUrl } = auth;
@@ -184,15 +233,26 @@ function buildDockerRunArgsAndEnv(
   args.push('-e', 'SONARQUBE_TOOLSETS');
   env.SONARQUBE_TOOLSETS = toolsets;
 
+  const javaOpts: string[] = [];
+
   if (network.proxy) {
-    const javaOpts = buildProxyJavaToolOptions(network.proxy);
-    args.push('-e', 'JAVA_OPTS');
-    env.JAVA_OPTS = javaOpts;
+    javaOpts.push(...collectProxyJavaOpts(network.proxy));
   }
 
   if (network.caCert) {
     const hostPath = normalizePath(network.caCert.path);
     args.push('-v', `${hostPath}:${MCP_CONTAINER_CA_CERT_PATH}:ro`);
+  }
+
+  if (network.clientCert) {
+    const { hostCertPath, keystorePassphrase } = resolveClientCertMount(network.clientCert);
+    args.push('-v', `${hostCertPath}:${MCP_CONTAINER_CLIENT_CERT_PATH}:ro`);
+    javaOpts.push(...collectClientCertJavaOpts(keystorePassphrase));
+  }
+
+  if (javaOpts.length > 0) {
+    args.push('-e', 'JAVA_OPTS');
+    env.JAVA_OPTS = javaOpts.join(' ');
   }
 
   args.push(SONARQUBE_MCP_DOCKER_IMAGE_NAME);
@@ -208,7 +268,7 @@ export function getMcpContainerCommand(
   network: ResolvedNetworkConfig = getNetworkConfig(),
 ): McpContainerCommand {
   const mountSource = context.withFsMount ? normalizePath(context.projectRoot) : undefined;
-  const { args, env } = buildDockerRunArgsAndEnv(auth, context, options, mountSource, network);
+  const { args, env } = buildDockerRunArgsAndEnv(auth, context, mountSource, options, network);
   return { command: runtime, args, env };
 }
 
@@ -222,7 +282,7 @@ function getMcpWslContainerCommand(
   network: ResolvedNetworkConfig = getNetworkConfig(),
 ): McpContainerCommand {
   const mountSource = context.withFsMount ? `"$${WSL_HOST_PATH_ENV_VAR}"` : undefined;
-  const { args, env } = buildDockerRunArgsAndEnv(auth, context, options, mountSource, network);
+  const { args, env } = buildDockerRunArgsAndEnv(auth, context, mountSource, options, network);
 
   const wslenv = Object.keys(env).map((name) => `${name}/u`);
 
