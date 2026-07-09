@@ -91,7 +91,7 @@ describe('runMcp', () => {
 
       expect(spawnSpy).toHaveBeenCalledWith(
         'wsl.exe',
-        ['bash', '-c', expect.stringContaining(`${runtime} run`)],
+        ['sh', '-c', expect.stringContaining(`${runtime} run`)],
         expect.objectContaining({ stdio: 'inherit' }),
       );
       const spawnEnv = spawnSpy.mock.calls[0][2].env as Record<string, string>;

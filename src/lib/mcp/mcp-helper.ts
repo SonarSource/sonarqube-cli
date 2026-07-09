@@ -171,7 +171,7 @@ function getMcpWslContainerCommand(
 
   env.WSLENV = wslenv.join(':');
 
-  return { command: 'wsl.exe', args: ['bash', '-c', [runtime, ...args].join(' ')], env };
+  return { command: 'wsl.exe', args: ['sh', '-c', [runtime, ...args].join(' ')], env };
 }
 
 export function resolveMcpContainerCommand(

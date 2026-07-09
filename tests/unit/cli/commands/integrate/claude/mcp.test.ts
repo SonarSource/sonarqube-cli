@@ -287,7 +287,7 @@ describe('getMcpContainerConfig', () => {
 });
 
 describe('resolveMcpContainerCommand (via WSL)', () => {
-  it('returns a wsl.exe/bash -c command with SONARQUBE_TOKEN and SONARQUBE_URL forwarded via WSLENV', () => {
+  it('returns a wsl.exe/sh -c command with SONARQUBE_TOKEN and SONARQUBE_URL forwarded via WSLENV', () => {
     const config = resolveMcpContainerCommand(
       ON_PREMISE_AUTH,
       { runtime: 'docker', viaWsl: true },
@@ -296,7 +296,7 @@ describe('resolveMcpContainerCommand (via WSL)', () => {
     expect(config).toEqual({
       command: 'wsl.exe',
       args: [
-        'bash',
+        'sh',
         '-c',
         `docker run --init --pull=always -i --rm -e SONARQUBE_TOKEN -e SONARQUBE_URL -e SONARQUBE_TOOLSETS ${SONARQUBE_MCP_DOCKER_IMAGE_NAME}`,
       ],
@@ -340,7 +340,7 @@ describe('resolveMcpContainerCommand (via WSL)', () => {
     expect(config).toEqual({
       command: 'wsl.exe',
       args: [
-        'bash',
+        'sh',
         '-c',
         `docker run --init --pull=always -i --rm -e SONARQUBE_TOKEN -e SONARQUBE_URL -v "$SONARQUBE_MCP_HOST_PATH":/app/mcp-workspace:ro -e SONARQUBE_TOOLSETS ${SONARQUBE_MCP_DOCKER_IMAGE_NAME}`,
       ],
