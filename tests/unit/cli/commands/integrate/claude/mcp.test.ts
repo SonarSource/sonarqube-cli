@@ -31,6 +31,7 @@ import {
   getMcpConfigFilePath,
   getMcpContainerCommand,
   MCP_DEFAULT_TOOLSETS,
+  resolveMcpContainerCommand,
   writeMcpServerEntry,
 } from '../../../../../../src/lib/mcp/mcp-helper';
 import { DiscoveredProject } from '../../../../../../src/lib/project-workspace';
@@ -282,6 +283,87 @@ describe('getMcpContainerConfig', () => {
         SONARQUBE_TOOLSETS: MCP_DEFAULT_TOOLSETS,
       },
     });
+  });
+});
+
+describe('resolveMcpContainerCommand (via WSL)', () => {
+  it('returns a wsl.exe/bash -c command with SONARQUBE_TOKEN and SONARQUBE_URL forwarded via WSLENV', () => {
+    const config = resolveMcpContainerCommand(
+      ON_PREMISE_AUTH,
+      { runtime: 'docker', viaWsl: true },
+      { withFsMount: false },
+    );
+    expect(config).toEqual({
+      command: 'wsl.exe',
+      args: [
+        'bash',
+        '-c',
+        `docker run --init --pull=always -i --rm -e SONARQUBE_TOKEN -e SONARQUBE_URL -e SONARQUBE_TOOLSETS ${SONARQUBE_MCP_DOCKER_IMAGE_NAME}`,
+      ],
+      env: {
+        SONARQUBE_TOKEN: 'squ_test',
+        SONARQUBE_URL: 'https://sonarqube.example.com',
+        SONARQUBE_TOOLSETS: MCP_DEFAULT_TOOLSETS,
+        WSLENV: 'SONARQUBE_TOKEN/u:SONARQUBE_URL/u:SONARQUBE_TOOLSETS/u',
+      },
+    });
+  });
+
+  it('runs the detected runtime (e.g. podman) inside WSL', () => {
+    const config = resolveMcpContainerCommand(
+      ON_PREMISE_AUTH,
+      { runtime: 'podman', viaWsl: true },
+      { withFsMount: false },
+    );
+    expect(config.command).toBe('wsl.exe');
+    expect(config.args[2]).toStartWith('podman run ');
+  });
+
+  it('includes SONARQUBE_ORG for cloud, forwarded via WSLENV', () => {
+    const auth: ResolvedAuth = { ...CLOUD_AUTH, orgKey: 'my-org' };
+    const config = resolveMcpContainerCommand(
+      auth,
+      { runtime: 'docker', viaWsl: true },
+      { withFsMount: false },
+    );
+    expect(config.args[2]).toContain('-e SONARQUBE_ORG');
+    expect(config.env.SONARQUBE_ORG).toBe('my-org');
+    expect(config.env.WSLENV).toContain('SONARQUBE_ORG/u');
+  });
+
+  it('references the project root via a WSLENV-translated shell variable instead of a literal path', () => {
+    const config = resolveMcpContainerCommand(
+      ON_PREMISE_AUTH,
+      { runtime: 'docker', viaWsl: true },
+      { withFsMount: true, projectRoot: String.raw`C:\Users\tdd\source\repos\sonarlint-core` },
+    );
+    expect(config).toEqual({
+      command: 'wsl.exe',
+      args: [
+        'bash',
+        '-c',
+        `docker run --init --pull=always -i --rm -e SONARQUBE_TOKEN -e SONARQUBE_URL -v "$SONARQUBE_MCP_HOST_PATH":/app/mcp-workspace:ro -e SONARQUBE_TOOLSETS ${SONARQUBE_MCP_DOCKER_IMAGE_NAME}`,
+      ],
+      env: {
+        SONARQUBE_TOKEN: 'squ_test',
+        SONARQUBE_URL: 'https://sonarqube.example.com',
+        SONARQUBE_TOOLSETS: MCP_DEFAULT_TOOLSETS,
+        // Left untranslated (native Windows separators) so WSL can translate it via the `/p` flag.
+        SONARQUBE_MCP_HOST_PATH: String.raw`C:\Users\tdd\source\repos\sonarlint-core`,
+        WSLENV: 'SONARQUBE_TOKEN/u:SONARQUBE_URL/u:SONARQUBE_TOOLSETS/u:SONARQUBE_MCP_HOST_PATH/p',
+      },
+    });
+  });
+
+  it('includes SONARQUBE_PROJECT_KEY for project-scoped config, forwarded via WSLENV', () => {
+    const config = resolveMcpContainerCommand(
+      ON_PREMISE_AUTH,
+      { runtime: 'docker', viaWsl: true },
+      { withFsMount: true, projectRoot: '/fake/project', projectKey: 'my-project' },
+    );
+    expect(config.args[2]).toContain('-e SONARQUBE_PROJECT_KEY');
+    expect(config.env.SONARQUBE_PROJECT_KEY).toBe('my-project');
+    expect(config.env.WSLENV).toContain('SONARQUBE_PROJECT_KEY/u');
   });
 });
 

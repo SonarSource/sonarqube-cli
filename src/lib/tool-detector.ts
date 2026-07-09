@@ -20,10 +20,13 @@
 
 // Tool detector - checks presence and availability of system tools
 
+import { isWindows } from './platform-detector';
 import { spawnProcess } from './process';
 
 const CONTAINER_RUNTIMES = ['docker', 'podman', 'nerdctl'] as const;
 export type ContainerRuntime = (typeof CONTAINER_RUNTIMES)[number];
+
+const WSL_EXECUTABLE = 'wsl.exe';
 
 async function isRuntimeAvailable(runtime: ContainerRuntime): Promise<boolean> {
   try {
@@ -34,15 +37,40 @@ async function isRuntimeAvailable(runtime: ContainerRuntime): Promise<boolean> {
   }
 }
 
+async function isRuntimeAvailableViaWsl(runtime: ContainerRuntime): Promise<boolean> {
+  try {
+    const result = await spawnProcess(WSL_EXECUTABLE, [runtime, 'info']); // only support the default distro
+    return result.exitCode === 0;
+  } catch {
+    return false;
+  }
+}
+
+export interface ContainerRuntimeDetection {
+  runtime: ContainerRuntime | null;
+  viaWsl: boolean;
+}
+
 /**
  * Detect the first available container runtime, checking in priority order:
- * docker, then podman, then nerdctl. Returns null when neither is available/reachable.
+ * docker, then podman, then nerdctl. On Windows, falls back to checking the same
+ * runtimes from inside WSL when none is reachable natively (e.g. Docker installed
+ * in a WSL distro without Docker Desktop's Windows integration).
  */
-export async function detectContainerRuntime(): Promise<ContainerRuntime | null> {
+export async function detectContainerRuntime(): Promise<ContainerRuntimeDetection> {
   for (const runtime of CONTAINER_RUNTIMES) {
     if (await isRuntimeAvailable(runtime)) {
-      return runtime;
+      return { runtime, viaWsl: false };
     }
   }
-  return null;
+
+  if (isWindows()) {
+    for (const runtime of CONTAINER_RUNTIMES) {
+      if (await isRuntimeAvailableViaWsl(runtime)) {
+        return { runtime, viaWsl: true };
+      }
+    }
+  }
+
+  return { runtime: null, viaWsl: false };
 }
