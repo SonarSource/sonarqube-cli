@@ -36,6 +36,7 @@ import type {
   ResolvedNetworkConfig,
 } from '../../../../../../src/lib/connectivity/types';
 import * as pkcs12Module from '../../../../../../src/lib/crypto/pkcs12';
+import { normalizePath } from '../../../../../../src/lib/fs-utils';
 import {
   getMcpConfigFilePath,
   getMcpContainerCommand,
@@ -552,7 +553,6 @@ describe('setupMcpServerForAgent (claude)', () => {
 });
 
 describe('getMcpContainerCommand — client cert mount', () => {
-  const OTHER_READ_BIT = 0o004; // S_IROTH in POSIX
   const FIXTURE_DIR = join(import.meta.dir, '../../../../../fixtures/client-cert');
   const CERT_PEM = readFileSync(join(FIXTURE_DIR, 'client-cert.pem'), 'utf-8');
   const KEY_PEM = readFileSync(join(FIXTURE_DIR, 'client-key.pem'), 'utf-8');
@@ -606,14 +606,35 @@ describe('getMcpContainerCommand — client cert mount', () => {
       { proxy: null, caCert: null, clientCert: pemClientCert },
     );
 
-    expect(pemToPkcs12Spy).toHaveBeenCalledTimes(1);
-    expect(config.args).toContain(`${expectedCachedPath}:/etc/ssl/mcp/client.p12:ro`);
+    expect(pemToPkcs12Spy).toHaveBeenCalledWith(CERT_PEM, KEY_PEM, undefined);
+    expect(config.args).toContain(
+      `${normalizePath(expectedCachedPath)}:/etc/ssl/mcp/client.p12:ro`,
+    );
     expect(existsSync(expectedCachedPath)).toBe(true);
     if (process.platform !== 'win32') {
-      // o+r is intentional: Docker bind mounts require the container user
-      // (which has a different UID than the host) to be able to read the file.
-      expect(statSync(expectedCachedPath).mode & OTHER_READ_BIT).toBe(OTHER_READ_BIT);
+      // 0o644: chmodSync bypasses umask so the container user (different UID) can always read the file.
+      expect(statSync(expectedCachedPath).mode & 0o777).toBe(0o644);
+      // 0o700: blocks dir enumeration from outside; Docker daemon (root) still sets up bind mounts.
+      expect(statSync(dirname(expectedCachedPath)).mode & 0o777).toBe(0o700);
     }
+  });
+
+  it('forwards the passphrase to pemToPkcs12 when the PEM key is encrypted', () => {
+    pemToPkcs12Spy = spyOn(pkcs12Module, 'pemToPkcs12').mockReturnValue(Buffer.from('stub-p12'));
+    const encryptedPemClientCert: ClientCertConfig = {
+      ...pemClientCert,
+      passphrase: 'secret',
+    };
+
+    getMcpContainerCommand(
+      ON_PREMISE_AUTH,
+      'docker',
+      { withFsMount: false },
+      {},
+      { proxy: null, caCert: null, clientCert: encryptedPemClientCert },
+    );
+
+    expect(pemToPkcs12Spy).toHaveBeenCalledWith(CERT_PEM, KEY_PEM, 'secret');
   });
 
   it('reuses the cached PKCS12 and skips conversion when the same cert is presented again', () => {
@@ -630,7 +651,9 @@ describe('getMcpContainerCommand — client cert mount', () => {
     );
 
     expect(pemToPkcs12Spy).not.toHaveBeenCalled();
-    expect(config.args).toContain(`${expectedCachedPath}:/etc/ssl/mcp/client.p12:ro`);
+    expect(config.args).toContain(
+      `${normalizePath(expectedCachedPath)}:/etc/ssl/mcp/client.p12:ro`,
+    );
   });
 
   it('produces a different cached path for a different cert', () => {
@@ -652,8 +675,10 @@ describe('getMcpContainerCommand — client cert mount', () => {
       { proxy: null, caCert: null, clientCert: altClientCert },
     );
 
-    expect(configA.args).toContain(`${expectedCachedPath}:/etc/ssl/mcp/client.p12:ro`);
-    expect(configB.args).toContain(`${altCachedPath}:/etc/ssl/mcp/client.p12:ro`);
+    expect(configA.args).toContain(
+      `${normalizePath(expectedCachedPath)}:/etc/ssl/mcp/client.p12:ro`,
+    );
+    expect(configB.args).toContain(`${normalizePath(altCachedPath)}:/etc/ssl/mcp/client.p12:ro`);
   });
 
   it('mounts the PKCS12 file directly and forwards the passphrase without conversion', () => {
@@ -668,7 +693,7 @@ describe('getMcpContainerCommand — client cert mount', () => {
     );
 
     expect(pemToPkcs12Spy).not.toHaveBeenCalled();
-    expect(config.args).toContain(`${P12_PATH}:/etc/ssl/mcp/client.p12:ro`);
+    expect(config.args).toContain(`${normalizePath(P12_PATH)}:/etc/ssl/mcp/client.p12:ro`);
     expect(config.env.JAVA_OPTS).toContain('javax.net.ssl.keyStorePassword=sonar');
   });
 });
