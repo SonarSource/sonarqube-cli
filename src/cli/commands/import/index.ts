@@ -20,8 +20,9 @@
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import { SonarQubeClient } from '../../../sonarqube/client';
-import { info, intro, outro } from '../../../ui';
-import { resolveOrg, resolveRepo } from './_common/resolve-options';
+import { info, intro, outro, withSpinner } from '../../../ui';
+import { CommandFailedError } from '../_common/error';
+import { type OnlyPrivateProjects, resolveOrg, resolveRepo } from './_common/resolve-options';
 import type { ImportOptions } from './_common/types';
 
 export { type ImportOptions } from './_common/types';
@@ -31,11 +32,54 @@ export async function importHandler(options: ImportOptions, auth: ResolvedAuth):
 
   intro('Import repository', 'SonarQube');
 
-  const orgKey = await resolveOrg(client, options);
+  const {
+    key: orgKey,
+    almKey: resolvedAlmKey,
+    onlyPrivateProjectsEnabled,
+  } = await resolveOrg(client, options);
+
   info(`Organization: ${orgKey}`);
 
-  const repoSlug = await resolveRepo(client, orgKey, options);
-  info(`Repository: ${repoSlug}`);
+  const [almKey, privateProjectsAvailable] = await Promise.all([
+    resolvedAlmKey ?? client.getOrganizationAlmKey(orgKey),
+    client.hasPrivateProjectsEntitlement(orgKey),
+  ]);
+  const onlyPrivateProjects: OnlyPrivateProjects = {
+    enabled: onlyPrivateProjectsEnabled ?? false,
+    available: privateProjectsAvailable,
+  };
 
-  outro('Repository selected', 'success');
+  const { slug: repoSlug, installationKey } = await resolveRepo(
+    client,
+    orgKey,
+    almKey,
+    onlyPrivateProjects,
+    options,
+  );
+
+  info(`Repository: ${repoSlug}`);
+  let result;
+  try {
+    result = await withSpinner('Creating SonarQube project...', () =>
+      client.provisionProject(orgKey, installationKey),
+    );
+  } catch (err) {
+    throw new CommandFailedError(
+      `Failed to create project: ${err instanceof Error ? err.message : String(err)}`,
+      {
+        remediationHint:
+          'Check that the repository is not already imported and that you have permission to create projects in this organization.',
+      },
+    );
+  }
+
+  if (result.projects.length === 0) {
+    throw new CommandFailedError(
+      'provision_projects returned no project — the repository may already be bound, or the ' +
+        'installation key was rejected by the server.',
+    );
+  }
+  const project = result.projects[0];
+
+  outro(`Project created: ${project.projectKey}`, 'success');
 }
