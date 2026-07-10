@@ -1698,9 +1698,9 @@ describe('analyze agentic — change-set mode (no --file)', () => {
 
       await bareHarness.dispose();
 
-      // git rev-parse --show-toplevel fails outside a git repo → CommandFailedError → exit 1
+      // resolveChangeSet → resolveRepoRoot fails outside a git repo → CommandFailedError → exit 1
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('not a git repository');
+      expect(result.stdout + result.stderr).toContain('Not inside a git repository');
     },
     { timeout: 15000 },
   );
