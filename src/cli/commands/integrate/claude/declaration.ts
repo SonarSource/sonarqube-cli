@@ -52,6 +52,8 @@ import { askUser, jsonPatch, skip, textSnippet, wholeFile } from '../_common/reg
 import { SQAA_HOOK_FEATURE_ID } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import {
+  getContextAugmentationPostToolTemplateUnix,
+  getContextAugmentationPostToolTemplateWindows,
   getSecretPreToolTemplateUnix,
   getSecretPreToolTemplateWindows,
   getSecretPromptTemplateUnix,
@@ -65,6 +67,9 @@ const SETTINGS_FILE = 'settings.json';
 const CLAUDE_MD_FILE = 'CLAUDE.md';
 const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pretool-secrets';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
+const CONTEXT_POSTTOOL_SCRIPT_REL =
+  'sonar-context-augmentation/build-scripts/posttool-context-augmentation';
+const CONTEXT_POSTTOOL_MATCHER = 'Bash|PowerShell|Monitor|Read';
 
 export const CLAUDE_INTEGRATION_ID = 'claude-code';
 
@@ -221,6 +226,37 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
     },
     createContextAugmentationFeature<ClaudeIntegrationOptions>({
       targetPath: resolveClaudeSkillPath,
+      resources: [
+        wholeFile({
+          id: 'posttool-context-augmentation-script',
+          displayName: 'Claude Context Augmentation PostToolUse hook script',
+          targetPath: (context) =>
+            resolveAgentHookScriptPath(context, CLAUDE_CONFIG_DIR, CONTEXT_POSTTOOL_SCRIPT_REL),
+          content: {
+            unix: getContextAugmentationPostToolTemplateUnix(),
+            windows: getContextAugmentationPostToolTemplateWindows(),
+          },
+          executable: true,
+        }),
+        jsonPatch({
+          id: 'claude-settings-context-augmentation-hook',
+          displayName: 'Claude Context Augmentation hook configuration',
+          targetPath: resolveClaudeSettingsPath,
+          defaultValue: { hooks: {} },
+          patch: (document, context) =>
+            upsertAgentHooks(document, [
+              createAgentHookEntry(
+                context,
+                CLAUDE_CONFIG_DIR,
+                'PostToolUse',
+                CONTEXT_POSTTOOL_MATCHER,
+                'sonar-context-augmentation',
+                CONTEXT_POSTTOOL_SCRIPT_REL,
+              ),
+            ]),
+          removePatch: (document) => removeAgentHooks(document, ['sonar-context-augmentation']),
+        }),
+      ],
     }),
   ],
 };

@@ -28,7 +28,7 @@ import {
   CONTEXT_AUGMENTATION_FEATURE_PREVIEW,
 } from '../feature-constants';
 import { contextAugmentationBinaryDependency } from '../registry/dependencies';
-import { wholeFile } from '../registry/resources';
+import { type ResourceDeclaration, wholeFile } from '../registry/resources';
 import { askUser, skip } from '../registry/selection';
 import type { FeatureDeclaration, IntegrationContext } from '../registry/types';
 
@@ -39,6 +39,7 @@ export const CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID =
 
 export interface ContextAugmentationSkillFeatureOptions {
   targetPath: (context: IntegrationContext) => string;
+  resources?: ResourceDeclaration[];
 }
 
 export function createContextAugmentationFeature<
@@ -65,6 +66,7 @@ export function createContextAugmentationFeature<
             scaEnabled: context.attrs?.scaEnabled === true,
           }),
       }),
+      ...(options.resources ?? []),
     ],
     operations: [
       {

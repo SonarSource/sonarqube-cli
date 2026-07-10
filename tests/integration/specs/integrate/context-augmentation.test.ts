@@ -31,7 +31,7 @@ import { COPILOT_INTEGRATION_ID } from '../../../../src/cli/commands/integrate/c
 import { detectPlatform } from '../../../../src/lib/platform-detector.js';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../src/lib/signatures.js';
 import type { CliState, InstalledIntegrationFeature } from '../../../../src/lib/state.js';
-import { TestHarness } from '../../harness';
+import { hookScriptName, TestHarness } from '../../harness';
 import {
   type CagInvocation,
   readCagInvocations as readInvocations,
@@ -125,12 +125,78 @@ function expectSkillFile(harness: TestHarness, relativePath: string, scaEnabled:
   );
 }
 
+interface ClaudeHookCommand {
+  type?: string;
+  command?: string;
+  timeout?: number;
+}
+
+interface ClaudeHookEntry {
+  matcher?: string;
+  hooks?: ClaudeHookCommand[];
+}
+
+interface ClaudeSettings {
+  hooks?: {
+    PostToolUse?: ClaudeHookEntry[];
+  };
+}
+
+type HarnessRoot = 'cwd' | 'userHome';
+
+function readClaudeSettings(harness: TestHarness, root: HarnessRoot): ClaudeSettings | undefined {
+  const file = harness[root].file('.claude', 'settings.json');
+  if (!file.exists()) {
+    return undefined;
+  }
+  return file.asJson() as ClaudeSettings;
+}
+
+function claudeCagPostToolEntries(settings: ClaudeSettings | undefined): ClaudeHookEntry[] {
+  return (settings?.hooks?.PostToolUse ?? []).filter((entry) =>
+    entry.hooks?.some((hook) => hook.command?.includes(CLAUDE_CAG_HOOK_MARKER)),
+  );
+}
+
+function claudeSqaaPostToolEntries(settings: ClaudeSettings | undefined): ClaudeHookEntry[] {
+  return (settings?.hooks?.PostToolUse ?? []).filter((entry) =>
+    entry.hooks?.some((hook) => hook.command?.includes('sonar-sqaa')),
+  );
+}
+
+function expectClaudeCagHookInstalled(harness: TestHarness): void {
+  const script = harness.cwd.file(CLAUDE_CAG_POSTTOOL_SCRIPT_PATH);
+  expect(script.exists()).toBe(true);
+  expect(script.asText()).toContain('sonar context __hook ClaudePostToolUse');
+
+  const entries = claudeCagPostToolEntries(readClaudeSettings(harness, 'cwd'));
+  expect(entries).toHaveLength(1);
+  expect(entries[0]?.matcher).toBe(CLAUDE_CAG_POSTTOOL_MATCHER);
+  expect(entries[0]?.hooks?.[0]?.type).toBe('command');
+  expect(entries[0]?.hooks?.[0]?.command).toContain(CLAUDE_CAG_HOOK_MARKER);
+  expect(entries[0]?.hooks?.[0]?.timeout).toBe(60);
+}
+
+function expectClaudeCagHookAbsent(harness: TestHarness): void {
+  for (const root of ['cwd', 'userHome'] as const) {
+    expect(harness[root].file(CLAUDE_CAG_POSTTOOL_SCRIPT_PATH).exists()).toBe(false);
+    expect(claudeCagPostToolEntries(readClaudeSettings(harness, root))).toHaveLength(0);
+  }
+}
+
+function markHarnessCwdAsGitRoot(harness: TestHarness): void {
+  harness.cwd.writeFile('.git/HEAD', 'ref: refs/heads/main\n');
+}
+
 const PROJECT_KEY = 'my-project';
 const ORG_KEY = 'my-org';
 const TOKEN = 'cloud-token';
 const CLAUDE_SKILL_PATH = '.claude/skills/sonar-context-augmentation/SKILL.md';
 const COPILOT_SKILL_PATH = '.github/skills/sonar-context-augmentation/SKILL.md';
 const CODEX_SKILL_PATH = '.agents/skills/sonar-context-augmentation/SKILL.md';
+const CLAUDE_CAG_HOOK_MARKER = 'sonar-context-augmentation';
+const CLAUDE_CAG_POSTTOOL_MATCHER = 'Bash|PowerShell|Monitor|Read';
+const CLAUDE_CAG_POSTTOOL_SCRIPT_PATH = `.claude/hooks/sonar-context-augmentation/build-scripts/${hookScriptName('posttool-context-augmentation')}`;
 const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 describe('integrate claude — Context Augmentation', () => {
@@ -138,6 +204,7 @@ describe('integrate claude — Context Augmentation', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
+    markHarnessCwdAsGitRoot(harness);
     await harness.newFakeBinariesServer().start();
   });
 
@@ -201,6 +268,7 @@ describe('integrate claude — Context Augmentation', () => {
         `✓  sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION}`,
       );
       expectSkillFile(harness, CLAUDE_SKILL_PATH, true);
+      expectClaudeCagHookInstalled(harness);
 
       // State records the declarative feature.
       const state = loadState(harness);
@@ -210,6 +278,96 @@ describe('integrate claude — Context Augmentation', () => {
         scaEnabled: true,
         serverUrl,
       });
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'does not duplicate the Claude Context Augmentation hook and preserves unrelated PostToolUse entries',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(PROJECT_KEY)
+        .withCagEntitlement(ORG_KEY)
+        .withScaEnabled(true)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+      harness.state().withContextAugmentationBinaryInstalled();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [
+          `sonar.host.url=${serverUrl}`,
+          `sonar.projectKey=${PROJECT_KEY}`,
+          `sonar.organization=${ORG_KEY}`,
+        ].join('\n'),
+      );
+      harness.cwd.writeFile(
+        '.claude/settings.json',
+        JSON.stringify({
+          hooks: {
+            PostToolUse: [
+              {
+                matcher: 'Bash',
+                hooks: [{ type: 'command', command: 'echo user-hook', timeout: 15 }],
+              },
+            ],
+          },
+        }),
+      );
+
+      const env = {
+        SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+        SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+      };
+      expect(
+        (await harness.run('integrate claude --non-interactive', { extraEnv: env })).exitCode,
+      ).toBe(0);
+      expect(
+        (await harness.run('integrate claude --non-interactive', { extraEnv: env })).exitCode,
+      ).toBe(0);
+
+      const settings = readClaudeSettings(harness, 'cwd');
+      expectClaudeCagHookInstalled(harness);
+      expect(claudeCagPostToolEntries(settings)).toHaveLength(1);
+      expect(settings?.hooks?.PostToolUse?.some((entry) => entry.matcher === 'Bash')).toBe(true);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'coexists with the Claude SQAA PostToolUse hook',
+    async () => {
+      const entitlementUuid = 'test-uuid-1234';
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(PROJECT_KEY)
+        .withCagEntitlement(ORG_KEY, { uuid: entitlementUuid })
+        .withSqaaEntitlement(ORG_KEY, entitlementUuid)
+        .withScaEnabled(true)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+      harness.state().withContextAugmentationBinaryInstalled();
+
+      const result = await harness.run(
+        `integrate claude --project ${PROJECT_KEY} --non-interactive`,
+        {
+          extraEnv: {
+            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+          },
+        },
+      );
+
+      expect(result.exitCode).toBe(0);
+      const settings = readClaudeSettings(harness, 'cwd');
+      expectClaudeCagHookInstalled(harness);
+      expect(claudeSqaaPostToolEntries(settings)).toHaveLength(1);
+      expect(claudeSqaaPostToolEntries(settings)[0]?.matcher).toBe('Edit|Write');
+      expect(claudeCagPostToolEntries(settings)).toHaveLength(1);
     },
     { timeout: 30000 },
   );
@@ -250,6 +408,7 @@ describe('integrate claude — Context Augmentation', () => {
       expect(integrate.argv).toEqual(['tool', 'integrate', '--invocation-prefix', 'sonar context']);
       expect(result.stderr).toContain('Could not verify SCA availability');
       expectSkillFile(harness, CLAUDE_SKILL_PATH, false);
+      expectClaudeCagHookInstalled(harness);
       const state = loadState(harness);
       expectRecordedCagFeature(state, {
         integrationId: CLAUDE_INTEGRATION_ID,
@@ -295,6 +454,7 @@ describe('integrate claude — Context Augmentation', () => {
         'sonar-context-augmentation tool print-skill produced empty output',
       );
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
+      expectClaudeCagHookAbsent(harness);
     },
     { timeout: 30000 },
   );
@@ -326,6 +486,7 @@ describe('integrate claude — Context Augmentation', () => {
       const nonProbe = invocations.filter((i) => i.argv[0] !== '--version');
       expect(nonProbe).toEqual([]);
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
+      expectClaudeCagHookAbsent(harness);
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeUndefined();
     },
@@ -366,6 +527,7 @@ describe('integrate claude — Context Augmentation', () => {
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeUndefined();
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
+      expectClaudeCagHookAbsent(harness);
       expect(result.stderr).toContain('not available for your organization');
     },
     { timeout: 30000 },
@@ -405,6 +567,7 @@ describe('integrate claude — Context Augmentation', () => {
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeUndefined();
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
+      expectClaudeCagHookAbsent(harness);
       expect(result.stderr).toContain('could not verify entitlement');
     },
     { timeout: 30000 },
@@ -565,6 +728,7 @@ describe('integrate claude — Context Augmentation', () => {
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeUndefined();
       expectSkillFile(harness, CLAUDE_SKILL_PATH, false);
+      expectClaudeCagHookInstalled(harness);
       expect(result.stderr).toContain('Vortex context augmentation tool integration failed.');
     },
     { timeout: 30000 },
@@ -596,6 +760,7 @@ describe('integrate claude — Context Augmentation', () => {
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeUndefined();
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
+      expectClaudeCagHookAbsent(harness);
       expect(result.stderr).toContain('a project key and organization are required');
     },
     { timeout: 30000 },
@@ -625,6 +790,7 @@ describe('integrate claude — Context Augmentation', () => {
       const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
       expect(nonProbe).toEqual([]);
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
+      expectClaudeCagHookAbsent(harness);
       // "not available on SonarQube Server" info line must appear, not the
       // misleading "organization required" warning
       expect(result.stdout + result.stderr).toContain('not available on SonarQube Server');
@@ -639,6 +805,7 @@ describe('integrate copilot — Context Augmentation', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
+    markHarnessCwdAsGitRoot(harness);
     harness.state().withSecretsBinaryInstalled();
   });
 
@@ -691,6 +858,7 @@ describe('integrate copilot — Context Augmentation', () => {
       expectContextEnv(integrate, serverUrl);
       expect(result.stdout).not.toContain('Running: sonar-context-augmentation');
       expectSkillFile(harness, COPILOT_SKILL_PATH, false);
+      expectClaudeCagHookAbsent(harness);
 
       // State records the declarative feature under the Copilot integration.
       const state = loadState(harness);
@@ -710,6 +878,7 @@ describe('integrate codex — Context Augmentation', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
+    markHarnessCwdAsGitRoot(harness);
     harness.state().withSecretsBinaryInstalled();
   });
 
@@ -762,6 +931,7 @@ describe('integrate codex — Context Augmentation', () => {
       expectContextEnv(integrate, serverUrl);
       expect(result.stdout).not.toContain('Running: sonar-context-augmentation');
       expectSkillFile(harness, CODEX_SKILL_PATH, false);
+      expectClaudeCagHookAbsent(harness);
 
       const state = loadState(harness);
       expectRecordedCagFeature(state, {
@@ -884,6 +1054,7 @@ describe('integrate <agent> --global — Context Augmentation', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
+    markHarnessCwdAsGitRoot(harness);
     harness.state().withSecretsBinaryInstalled();
   });
 
@@ -921,6 +1092,7 @@ describe('integrate <agent> --global — Context Augmentation', () => {
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
       expect(harness.cwd.file(COPILOT_SKILL_PATH).exists()).toBe(false);
       expect(harness.cwd.file(CODEX_SKILL_PATH).exists()).toBe(false);
+      expectClaudeCagHookAbsent(harness);
       expect(result.stderr).toContain(
         'Skipping Vortex context augmentation: not supported with --global',
       );
@@ -952,6 +1124,7 @@ describe('integrate <agent> --global — Context Augmentation', () => {
       expect(nonProbe).toEqual([]);
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeUndefined();
+      expectClaudeCagHookAbsent(harness);
       expect(`${result.stdout}\n${result.stderr}`).not.toContain(
         'Skipping Vortex context augmentation: not supported with --global',
       );
