@@ -19,7 +19,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -145,13 +145,16 @@ interface ClientCertMount {
   keystorePassphrase: string | undefined;
 }
 
-function pathForCert(clientCert: ClientCertConfig) {
+export function clientCertCachePath(clientCert: ClientCertConfig): string {
   const certHash = createHash('sha256')
     .update(clientCert.resolvedCertPem)
     .digest('hex')
     .slice(0, 16);
   return join(CLI_TMP_DIR, `mcp-client-cert-${certHash}.p12`);
 }
+
+const DOCKER_READABLE = 0o644;
+const NON_TRAVERSABLE = 0o700;
 
 function resolveClientCertMount(clientCert: ClientCertConfig): ClientCertMount {
   if (clientCert.format === 'pkcs12') {
@@ -160,11 +163,17 @@ function resolveClientCertMount(clientCert: ClientCertConfig): ClientCertMount {
       keystorePassphrase: clientCert.passphrase,
     };
   }
-  const cachedPath = pathForCert(clientCert);
+  const cachedPath = clientCertCachePath(clientCert);
+  const cacheDir = dirname(cachedPath);
+  mkdirSync(cacheDir, { recursive: true, mode: NON_TRAVERSABLE }); // make the directory non-traversable
   if (!existsSync(cachedPath)) {
-    const pkcs12Buffer = pemToPkcs12(clientCert.resolvedCertPem, clientCert.resolvedKeyPem);
-    mkdirSync(dirname(cachedPath), { recursive: true });
+    const pkcs12Buffer = pemToPkcs12(
+      clientCert.resolvedCertPem,
+      clientCert.resolvedKeyPem,
+      clientCert.passphrase,
+    );
     writeFileSync(cachedPath, pkcs12Buffer);
+    chmodSync(cachedPath, DOCKER_READABLE); // ensure Docker container (different UID) can read the file
   }
   return {
     hostCertPath: normalizePath(cachedPath),
@@ -189,6 +198,7 @@ function buildDockerRunArgsAndEnv(
   mountSource: string | undefined,
   options: McpServerOptions = {},
   network: ResolvedNetworkConfig = getNetworkConfig(),
+  certMountSources: { caCert?: string; clientCert?: string } = {},
 ): { args: string[]; env: Record<string, string> } {
   const { token, orgKey: org, serverUrl } = auth;
 
@@ -240,13 +250,14 @@ function buildDockerRunArgsAndEnv(
   }
 
   if (network.caCert) {
-    const hostPath = normalizePath(network.caCert.path);
+    const hostPath = certMountSources.caCert ?? normalizePath(network.caCert.path);
     args.push('-v', `${hostPath}:${MCP_CONTAINER_CA_CERT_PATH}:ro`);
   }
 
   if (network.clientCert) {
     const { hostCertPath, keystorePassphrase } = resolveClientCertMount(network.clientCert);
-    args.push('-v', `${hostCertPath}:${MCP_CONTAINER_CLIENT_CERT_PATH}:ro`);
+    const mountPath = certMountSources.clientCert ?? hostCertPath;
+    args.push('-v', `${mountPath}:${MCP_CONTAINER_CLIENT_CERT_PATH}:ro`);
     javaOpts.push(...collectClientCertJavaOpts(keystorePassphrase));
   }
 
@@ -273,6 +284,8 @@ export function getMcpContainerCommand(
 }
 
 const WSL_HOST_PATH_ENV_VAR = 'SONARQUBE_MCP_HOST_PATH';
+const WSL_CA_PATH_ENV_VAR = 'SONARQUBE_MCP_CA_PATH';
+const WSL_CLIENT_CERT_PATH_ENV_VAR = 'SONARQUBE_MCP_CLIENT_CERT_PATH';
 
 function getMcpWslContainerCommand(
   auth: ResolvedAuth,
@@ -282,13 +295,47 @@ function getMcpWslContainerCommand(
   network: ResolvedNetworkConfig = getNetworkConfig(),
 ): McpContainerCommand {
   const mountSource = context.withFsMount ? `"$${WSL_HOST_PATH_ENV_VAR}"` : undefined;
-  const { args, env } = buildDockerRunArgsAndEnv(auth, context, mountSource, options, network);
+
+  // Cert host paths must be routed through WSLENV /p-translated env vars so WSL can
+  // convert Windows paths (C:/...) to WSL mount paths (/mnt/c/...) before Docker sees them.
+  // Mirroring the workspace mount pattern: store the Windows path in an env var and reference
+  // it as "$VAR" (quoted to handle spaces) in the docker run args.
+  const certMountSources: { caCert?: string; clientCert?: string } = {};
+  const wslPathEnv: Record<string, string> = {};
+
+  if (network.caCert) {
+    certMountSources.caCert = `"$${WSL_CA_PATH_ENV_VAR}"`;
+    wslPathEnv[WSL_CA_PATH_ENV_VAR] = normalizePath(network.caCert.path);
+  }
+
+  if (network.clientCert) {
+    const hostPath =
+      network.clientCert.format === 'pkcs12'
+        ? normalizePath(network.clientCert.certPath)
+        : normalizePath(clientCertCachePath(network.clientCert));
+    certMountSources.clientCert = `"$${WSL_CLIENT_CERT_PATH_ENV_VAR}"`;
+    wslPathEnv[WSL_CLIENT_CERT_PATH_ENV_VAR] = hostPath;
+  }
+
+  const { args, env } = buildDockerRunArgsAndEnv(
+    auth,
+    context,
+    mountSource,
+    options,
+    network,
+    certMountSources,
+  );
 
   const wslenv = Object.keys(env).map((name) => `${name}/u`);
 
   if (context.withFsMount) {
     env[WSL_HOST_PATH_ENV_VAR] = context.projectRoot;
     wslenv.push(`${WSL_HOST_PATH_ENV_VAR}/p`);
+  }
+
+  for (const [key, value] of Object.entries(wslPathEnv)) {
+    env[key] = value;
+    wslenv.push(`${key}/p`);
   }
 
   env.WSLENV = wslenv.join(':');

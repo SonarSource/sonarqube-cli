@@ -32,6 +32,8 @@ const P12_PATH = join(FIXTURE_DIR, 'client-cert.p12');
 const P12_UNENCRYPTED_KEY_PATH = join(FIXTURE_DIR, 'client-cert-unencrypted-key.p12');
 const CERT_PEM_PATH = join(FIXTURE_DIR, 'client-cert.pem');
 const KEY_PEM_PATH = join(FIXTURE_DIR, 'client-key.pem');
+const ENCRYPTED_KEY_PEM_PATH = join(FIXTURE_DIR, 'client-key-encrypted.pem');
+const ENCRYPTED_KEY_PKCS8_PEM_PATH = join(FIXTURE_DIR, 'client-key-encrypted-pkcs8.pem');
 
 describe('isPkcs12Path', () => {
   it('returns true for .p12', () => {
@@ -102,6 +104,44 @@ describe('pemToPkcs12', () => {
 
     expect(normalizePem(cert)).toBe(certPem);
     expect(normalizePem(key)).toBe(normalizePem(normalizeKey(keyPem)));
+  });
+
+  it('decrypts an encrypted private key when passphrase is provided (round-trip)', () => {
+    const certPem = readFileSync(CERT_PEM_PATH, 'utf-8');
+    const encryptedKeyPem = readFileSync(ENCRYPTED_KEY_PEM_PATH, 'utf-8');
+
+    const p12Buffer = pemToPkcs12(certPem, encryptedKeyPem, 'testpassword');
+    const { cert, key } = pkcs12ToPem(p12Buffer, undefined);
+
+    expect(normalizePem(cert)).toBe(certPem);
+    expect(normalizePem(key)).toBe(normalizePem(normalizeKey(readFileSync(KEY_PEM_PATH, 'utf-8'))));
+  });
+
+  it('decrypts a PKCS#8 encrypted private key when passphrase is provided (round-trip)', () => {
+    const certPem = readFileSync(CERT_PEM_PATH, 'utf-8');
+    const encryptedKeyPem = readFileSync(ENCRYPTED_KEY_PKCS8_PEM_PATH, 'utf-8');
+
+    const p12Buffer = pemToPkcs12(certPem, encryptedKeyPem, 'testpassword');
+    const { cert, key } = pkcs12ToPem(p12Buffer, undefined);
+
+    expect(normalizePem(cert)).toBe(certPem);
+    expect(normalizePem(key)).toBe(normalizePem(normalizeKey(readFileSync(KEY_PEM_PATH, 'utf-8'))));
+  });
+
+  it('throws CryptographicError when key is encrypted but no passphrase is given', () => {
+    const certPem = readFileSync(CERT_PEM_PATH, 'utf-8');
+    const encryptedKeyPem = readFileSync(ENCRYPTED_KEY_PEM_PATH, 'utf-8');
+
+    expect(() => pemToPkcs12(certPem, encryptedKeyPem)).toThrow(CryptographicError);
+  });
+
+  it('throws CryptographicError when key is encrypted and wrong passphrase is given', () => {
+    const certPem = readFileSync(CERT_PEM_PATH, 'utf-8');
+    const encryptedKeyPem = readFileSync(ENCRYPTED_KEY_PEM_PATH, 'utf-8');
+
+    expect(() => pemToPkcs12(certPem, encryptedKeyPem, 'wrongpassword')).toThrow(
+      CryptographicError,
+    );
   });
 
   it('throws CryptographicError on invalid cert PEM', () => {

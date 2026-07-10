@@ -22,7 +22,7 @@
 
 import * as childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import * as os from 'node:os';
 import { join } from 'node:path';
 
@@ -37,10 +37,14 @@ import type {
   ResolvedNetworkConfig,
 } from '../../../../../src/lib/connectivity/types.js';
 import type { ClientCertConfig } from '../../../../../src/lib/connectivity/types.js';
+import * as pkcs12Module from '../../../../../src/lib/crypto/pkcs12.js';
+import { normalizePath } from '../../../../../src/lib/fs-utils.js';
 import {
+  clientCertCachePath,
   getMcpContainerCommand,
   MCP_CONTAINER_CA_CERT_PATH,
   MCP_CONTAINER_CLIENT_CERT_PATH,
+  resolveMcpContainerCommand,
 } from '../../../../../src/lib/mcp/mcp-helper.js';
 import * as projectInfo from '../../../../../src/lib/project-workspace/project-info.js';
 import { createRedactedUrl } from '../../../../../src/lib/redacted-url.js';
@@ -257,6 +261,38 @@ describe('runMcp', () => {
     expect(spawnSpy.mock.calls[0][1]).toContain('SONARQUBE_PROJECT_KEY');
     expect(spawnSpy.mock.calls[0][1]).not.toContain('-v');
   });
+
+  it('deletes the cached PKCS12 file after the MCP container exits', async () => {
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: 'docker',
+      viaWsl: false,
+    });
+    spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
+    // Unique resolvedCertPem gives a cache path that doesn't collide with other test files
+    // that use real fixture certs.
+    const pemToPkcs12Spy = spyOn(pkcs12Module, 'pemToPkcs12').mockReturnValue(Buffer.from('stub'));
+
+    const clientCert: ClientCertConfig = {
+      source: 'sonar-env',
+      explicit: true,
+      format: 'pem',
+      certPath: '/path/to/client.pem',
+      keyPath: '/path/to/client.key',
+      passphrase: undefined,
+      resolvedCertPem: 'cleanup-test-cert',
+      resolvedKeyPem: 'cleanup-test-key',
+    };
+    const cachedPath = clientCertCachePath(clientCert);
+
+    try {
+      await runMcp(FAKE_AUTH, {}, { proxy: null, caCert: null, clientCert });
+
+      expect(existsSync(cachedPath)).toBe(false);
+    } finally {
+      pemToPkcs12Spy.mockRestore();
+      rmSync(cachedPath, { force: true });
+    }
+  });
 });
 
 describe('getMcpContainerCommand — proxy → JAVA_OPTS', () => {
@@ -465,23 +501,110 @@ describe('getMcpContainerCommand — client cert → volume mount + JAVA_OPTS', 
     const certPem = readFileSync(join(FIXTURE_DIR, 'client-cert.pem'), 'utf-8');
     const keyPem = readFileSync(join(FIXTURE_DIR, 'client-key.pem'), 'utf-8');
 
-    const result = getMcpContainerCommand(
+    const clientCert: ClientCertConfig = {
+      source: 'sonar-env',
+      explicit: true,
+      format: 'pem',
+      certPath: join(FIXTURE_DIR, 'client-cert.pem'),
+      keyPath: join(FIXTURE_DIR, 'client-key.pem'),
+      passphrase: undefined,
+      resolvedCertPem: certPem,
+      resolvedKeyPem: keyPem,
+    };
+
+    try {
+      const result = getMcpContainerCommand(
+        FAKE_AUTH,
+        'docker',
+        context,
+        {},
+        { proxy: null, caCert: null, clientCert },
+      );
+
+      expect(result.args.some((arg) => arg.includes(MCP_CONTAINER_CLIENT_CERT_PATH))).toBe(true);
+      expect(result.env.JAVA_OPTS).toContain(
+        `-Djavax.net.ssl.keyStore=${MCP_CONTAINER_CLIENT_CERT_PATH}`,
+      );
+      expect(result.env.JAVA_OPTS).not.toContain('keyStorePassword');
+    } finally {
+      rmSync(clientCertCachePath(clientCert), { force: true });
+    }
+  });
+});
+
+describe('resolveMcpContainerCommand — WSL cert path forwarding', () => {
+  const WSL_DETECTION = { runtime: 'docker', viaWsl: true } as const;
+  const context = { withFsMount: false } as const;
+
+  it('forwards CA cert path via WSLENV /p translation instead of embedding it literally', () => {
+    const result = resolveMcpContainerCommand(
       FAKE_AUTH,
-      'docker',
+      WSL_DETECTION,
       context,
       {},
-      makeClientCertNetwork({
-        format: 'pem',
-        keyPath: '/path/to/client.key',
-        resolvedCertPem: certPem,
-        resolvedKeyPem: keyPem,
-      }),
+      makeCaCertNetwork('/home/user/sonar-ca.pem'),
     );
 
-    expect(result.args.some((arg) => arg.includes(MCP_CONTAINER_CLIENT_CERT_PATH))).toBe(true);
-    expect(result.env.JAVA_OPTS).toContain(
-      `-Djavax.net.ssl.keyStore=${MCP_CONTAINER_CLIENT_CERT_PATH}`,
+    expect(result.command).toBe('wsl.exe');
+    expect(result.env.SONARQUBE_MCP_CA_PATH).toBe('/home/user/sonar-ca.pem');
+    expect(result.env.WSLENV).toContain('SONARQUBE_MCP_CA_PATH/p');
+    expect(result.args[2]).toContain(`"$SONARQUBE_MCP_CA_PATH":${MCP_CONTAINER_CA_CERT_PATH}:ro`);
+    expect(result.args[2]).not.toContain('/home/user/sonar-ca.pem');
+  });
+
+  it('forwards PKCS12 client cert path via WSLENV /p translation instead of embedding it literally', () => {
+    const result = resolveMcpContainerCommand(
+      FAKE_AUTH,
+      WSL_DETECTION,
+      context,
+      {},
+      makeClientCertNetwork({ certPath: '/home/user/client.p12' }),
     );
-    expect(result.env.JAVA_OPTS).not.toContain('keyStorePassword');
+
+    expect(result.env.SONARQUBE_MCP_CLIENT_CERT_PATH).toBe('/home/user/client.p12');
+    expect(result.env.WSLENV).toContain('SONARQUBE_MCP_CLIENT_CERT_PATH/p');
+    expect(result.args[2]).toContain(
+      `"$SONARQUBE_MCP_CLIENT_CERT_PATH":${MCP_CONTAINER_CLIENT_CERT_PATH}:ro`,
+    );
+    expect(result.args[2]).not.toContain('/home/user/client.p12');
+  });
+
+  it('forwards PEM-derived PKCS12 cache path via WSLENV /p translation', () => {
+    const pemToPkcs12Spy = spyOn(pkcs12Module, 'pemToPkcs12').mockReturnValue(Buffer.from('stub'));
+    const clientCert: ClientCertConfig = {
+      source: 'sonar-env',
+      explicit: true,
+      format: 'pem',
+      certPath: '/path/to/cert.pem',
+      keyPath: '/path/to/key.pem',
+      passphrase: undefined,
+      resolvedCertPem: 'wsl-test-cert',
+      resolvedKeyPem: 'wsl-test-key',
+    };
+    const cachedPath = clientCertCachePath(clientCert);
+
+    try {
+      const result = resolveMcpContainerCommand(
+        FAKE_AUTH,
+        WSL_DETECTION,
+        context,
+        {},
+        {
+          proxy: null,
+          caCert: null,
+          clientCert,
+        },
+      );
+
+      expect(result.env.SONARQUBE_MCP_CLIENT_CERT_PATH).toBe(normalizePath(cachedPath));
+      expect(result.env.WSLENV).toContain('SONARQUBE_MCP_CLIENT_CERT_PATH/p');
+      expect(result.args[2]).toContain(
+        `"$SONARQUBE_MCP_CLIENT_CERT_PATH":${MCP_CONTAINER_CLIENT_CERT_PATH}:ro`,
+      );
+      expect(result.args[2]).not.toContain(cachedPath);
+    } finally {
+      pemToPkcs12Spy.mockRestore();
+      rmSync(cachedPath, { force: true });
+    }
   });
 });

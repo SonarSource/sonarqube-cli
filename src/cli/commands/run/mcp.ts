@@ -21,14 +21,19 @@
 // Run the SonarQube MCP server, proxying stdio for MCP transport
 
 import { spawn } from 'node:child_process';
+import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver.js';
-import { getNetworkConfig } from '../../../lib/connectivity/network-config.js';
+import { getNetworkConfigOrThrow } from '../../../lib/connectivity/network-config.js';
 import type { ResolvedNetworkConfig } from '../../../lib/connectivity/types.js';
 import { canonicalizePath } from '../../../lib/fs-utils.js';
 import logger from '../../../lib/logger';
-import { type McpServerContext, resolveMcpContainerCommand } from '../../../lib/mcp/mcp-helper.js';
+import {
+  clientCertCachePath,
+  type McpServerContext,
+  resolveMcpContainerCommand,
+} from '../../../lib/mcp/mcp-helper.js';
 import { discoverProject } from '../../../lib/project-workspace';
 import { detectContainerRuntime } from '../../../lib/tool-detector.js';
 import { warn } from '../../../ui';
@@ -49,7 +54,7 @@ function debugLog(message: string): void {
 export async function runMcp(
   auth: ResolvedAuth,
   options: McpRunOptions = {},
-  network: ResolvedNetworkConfig = getNetworkConfig(),
+  network: ResolvedNetworkConfig = getNetworkConfigOrThrow(),
 ): Promise<void> {
   const detection = await detectContainerRuntime();
   if (!detection.runtime) {
@@ -84,16 +89,31 @@ export async function runMcp(
     debugLog(`launching: ${config.command} ${config.args.join(' ')}`);
   }
 
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(config.command, config.args, {
-      stdio: 'inherit',
-      env: { ...process.env, ...config.env },
-    });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(config.command, config.args, {
+        stdio: 'inherit',
+        env: { ...process.env, ...config.env },
+      });
 
-    child.on('error', reject);
-    child.on('exit', (code) => {
-      process.exitCode = code ?? 1;
-      resolve();
+      child.on('error', reject);
+      child.on('exit', (code) => {
+        process.exitCode = code ?? 1;
+        resolve();
+      });
     });
-  });
+  } finally {
+    cleanup(network);
+  }
+
+  function cleanup(network: ResolvedNetworkConfig) {
+    if (network.clientCert?.format === 'pem') {
+      try {
+        rmSync(clientCertCachePath(network.clientCert), { force: true });
+      } catch (err) {
+        // Windows: Docker Desktop may still hold the file; content-addressed so safe to leave behind
+        logger.warn(`Could not remove cached client certificate: ${String(err)}`);
+      }
+    }
+  }
 }
