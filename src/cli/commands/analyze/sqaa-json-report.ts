@@ -100,6 +100,7 @@ async function buildSqaaJsonReportFromChangeSet(
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'change-set', forcedDepth);
 
   const changeSet = await resolveChangeSet(process.cwd(), { staged, base });
+  const resolvedBranch = await resolveSqaaBranch(branch, changeSet.repoRoot);
   if (changeSet.files.length === 0) {
     return makeReport(
       [],
@@ -123,7 +124,7 @@ async function buildSqaaJsonReportFromChangeSet(
       files,
       allPaths,
       resolved,
-      branch,
+      resolvedBranch,
       wireDepth,
       displayDepth,
       runOptions.propagateForbiddenError,
@@ -145,10 +146,10 @@ export async function buildSqaaJsonReport(
   runOptions: AnalyzeSqaaRunOptions = {},
 ): Promise<SqaaJsonReport | null> {
   const { file: rawFiles, branch, project, force, depth: rawDepth, forcedDepth } = options;
-  const resolvedBranch = await resolveSqaaBranch(branch);
 
   if (rawFiles?.length) {
     const entries = resolveSqaaFileArgs(rawFiles);
+    const resolvedBranch = await resolveSqaaBranch(branch, entries[0].absolutePath);
     const resolution = await resolveCloudAuthAndProject(auth, project);
     const resolved = resolveSqaaContext(resolution, { requireProject: false });
     if (!resolved) return null;
@@ -182,11 +183,5 @@ export async function buildSqaaJsonReport(
     );
   }
 
-  return buildSqaaJsonReportFromChangeSet(
-    { ...options, branch: resolvedBranch },
-    auth,
-    rawDepth,
-    forcedDepth,
-    runOptions,
-  );
+  return buildSqaaJsonReportFromChangeSet(options, auth, rawDepth, forcedDepth, runOptions);
 }

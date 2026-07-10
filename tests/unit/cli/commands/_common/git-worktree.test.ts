@@ -61,9 +61,20 @@ describe('resolveCurrentGitBranch', () => {
     mockGitResponses({
       'rev-parse --show-toplevel': `${process.cwd()}\n`,
       'branch --show-current': '\n',
+      'rev-parse --abbrev-ref HEAD': 'HEAD\n',
     });
 
     expect(await resolveCurrentGitBranch(process.cwd())).toBeUndefined();
+  });
+
+  it('falls back to rev-parse --abbrev-ref HEAD when show-current is unavailable', async () => {
+    mockGitResponses({
+      'rev-parse --show-toplevel': `${process.cwd()}\n`,
+      'branch --show-current': null,
+      'rev-parse --abbrev-ref HEAD': 'legacy-branch\n',
+    });
+
+    expect(await resolveCurrentGitBranch(process.cwd())).toBe('legacy-branch');
   });
 
   it('returns undefined when not inside a git repository', async () => {

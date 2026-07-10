@@ -68,12 +68,10 @@ export async function analyzeSqaa(
     throw new InvalidOptionError('--staged and --base cannot be used together');
   }
 
-  const resolvedBranch = await resolveSqaaBranch(branch);
-
   if (rawFiles?.length) {
     await analyzeSqaaExplicitFiles(rawFiles, {
       auth,
-      branch: resolvedBranch,
+      branch,
       project,
       force,
       format,
@@ -89,7 +87,7 @@ export async function analyzeSqaa(
     auth,
     staged,
     base,
-    branch: resolvedBranch,
+    branch,
     project,
     force,
     format,
@@ -126,11 +124,12 @@ async function analyzeSqaaExplicitFiles(
     requireProject,
     telemetryCallerCommand,
   } = params;
+  const resolvedBranch = await resolveSqaaBranch(branch, entries[0].absolutePath);
 
   if (entries.length === 1) {
     const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'single-file', forcedDepth);
     await runSqaaAnalysis(entries[0].absolutePath, auth, {
-      branch,
+      branch: resolvedBranch,
       explicitProject: project,
       format,
       requireProject,
@@ -151,7 +150,7 @@ async function analyzeSqaaExplicitFiles(
   await runSqaaAnalysisOnExplicitFiles(entries, {
     resolved,
     auth,
-    branch,
+    branch: resolvedBranch,
     format,
     wireDepth,
     displayDepth,
@@ -188,6 +187,7 @@ async function analyzeSqaaChangeSet(params: {
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'change-set', forcedDepth);
 
   const changeSet = await resolveChangeSet(process.cwd(), { staged, base });
+  const resolvedBranch = await resolveSqaaBranch(branch, changeSet.repoRoot);
 
   if (changeSet.files.length === 0 && changeSet.ignored.length === 0) {
     text('Vortex agentic analysis: no files in the change set to analyze.');
@@ -210,7 +210,7 @@ async function analyzeSqaaChangeSet(params: {
   await runSqaaAnalysisOnFiles(changeSet, {
     resolved,
     auth,
-    branch,
+    branch: resolvedBranch,
     format,
     wireDepth,
     displayDepth,

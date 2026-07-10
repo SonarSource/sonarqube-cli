@@ -22,6 +22,7 @@
 
 import { resolve } from 'node:path';
 
+import logger from '../../../lib/logger';
 import { spawnProcess } from '../../../lib/process';
 
 /**
@@ -35,17 +36,33 @@ export async function resolveGitRepoRoot(cwd: string): Promise<string | undefine
 }
 
 /**
- * Returns the current branch name for `cwd`, or `undefined` when not in a repo,
- * git is unavailable, or HEAD is detached (`git branch --show-current` is empty).
+ * Returns the current branch name for a path inside a repository, or `undefined`
+ * when not in a repo, git is unavailable, or HEAD is detached.
+ *
+ * `contextPath` may be a file or directory; git commands run from the resolved
+ * repository root. Uses `git branch --show-current` (Git >= 2.22) with a
+ * fallback to `git rev-parse --abbrev-ref HEAD` for older Git versions.
  */
-export async function resolveCurrentGitBranch(cwd: string): Promise<string | undefined> {
-  const repoRoot = await resolveGitRepoRoot(cwd);
+export async function resolveCurrentGitBranch(contextPath: string): Promise<string | undefined> {
+  const repoRoot = await resolveGitRepoRoot(contextPath);
   if (!repoRoot) return undefined;
 
-  const branch = await tryRunGit(['branch', '--show-current'], repoRoot);
+  const branch = await resolveBranchNameAtRepoRoot(repoRoot);
+  if (branch === undefined) {
+    logger.debug(
+      'Git branch auto-detection skipped: no named branch (detached HEAD, old Git, or git unavailable).',
+    );
+  }
+  return branch;
+}
+
+async function resolveBranchNameAtRepoRoot(repoRoot: string): Promise<string | undefined> {
+  let branch = await tryRunGit(['branch', '--show-current'], repoRoot);
+  branch ??= await tryRunGit(['rev-parse', '--abbrev-ref', 'HEAD'], repoRoot);
   if (branch === undefined) return undefined;
   const trimmed = branch.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
+  if (trimmed.length === 0 || trimmed === 'HEAD') return undefined;
+  return trimmed;
 }
 
 async function tryRunGit(args: string[], cwd: string): Promise<string | undefined> {

@@ -88,7 +88,7 @@ export async function agentPostToolUse(options: AgentPostToolUseOptions): Promis
   try {
     const fileContent = readFileSync(canonicalPath, 'utf-8');
     const cloudAuth = { serverUrl: auth.serverUrl, token: auth.token, orgKey };
-    const branch = await resolveSqaaBranch(undefined);
+    const branch = await resolveSqaaBranch(undefined, canonicalPath);
 
     const timedFetch = await timed(() =>
       fetchSingleFileReport(

@@ -85,10 +85,10 @@ export async function resolveChangeSet(
 /** Explicit `--branch` wins; otherwise auto-detect from git when possible. */
 export async function resolveSqaaBranch(
   explicitBranch: string | undefined,
-  cwd = process.cwd(),
+  contextPath = process.cwd(),
 ): Promise<string | undefined> {
   if (explicitBranch) return explicitBranch;
-  return resolveCurrentGitBranch(cwd);
+  return resolveCurrentGitBranch(contextPath);
 }
 
 /**

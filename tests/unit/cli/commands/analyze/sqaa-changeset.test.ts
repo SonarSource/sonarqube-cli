@@ -66,6 +66,6 @@ describe('resolveSqaaBranch', () => {
       'branch --show-current': 'develop\n',
     });
 
-    expect(await resolveSqaaBranch(undefined)).toBe('develop');
+    expect(await resolveSqaaBranch(undefined, '/path/to/repo/src/file.ts')).toBe('develop');
   });
 });
