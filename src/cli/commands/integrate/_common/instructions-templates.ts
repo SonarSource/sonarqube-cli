@@ -45,7 +45,8 @@ export function sonarEndMarker(id: string): string {
   return `<!-- sonar:end:${id} -->`;
 }
 
-export function buildSqaaSectionBody(projectKey: string): string {
+export function buildSqaaSectionBody(projectKey?: string): string {
+  const projectFlag = projectKey ? ` --project ${projectKey}` : '';
   return `# SonarQube Agentic Analysis protocol
 
 SonarQube Agentic Analysis is the final confirmation layer at the end of every turn in which you wrote to one or more files in the workspace (create, edit, patch, format — any tool call that changed file contents on disk).
@@ -57,13 +58,13 @@ When the trigger fires, you **MUST** run SonarQube Agentic Analysis on the full 
 **Preferred:** pass every path you modified this turn in a single invocation (repeat \`--file\` for each path). Use paths **relative to the project root** (e.g. \`src/foo.ts\`). For end-of-turn analysis, **always** pass \`--depth DEEP\` — even when you changed only one file — so cross-file findings are included.
 
 \`\`\`bash
-sonar analyze agentic --project ${projectKey} --depth DEEP --file <path/to/file1> --file <path/to/file2>
+sonar analyze agentic${projectFlag} --depth DEEP --file <path/to/file1> --file <path/to/file2>
 \`\`\`
 
 **Fallback:** when you cannot reliably list every modified path (e.g. you did not track them, or git state is the only source of truth), use the git change set with DEEP analysis:
 
 \`\`\`bash
-sonar analyze agentic --project ${projectKey} --depth DEEP
+sonar analyze agentic${projectFlag} --depth DEEP
 \`\`\`
 
 Per-edit hooks run faster STANDARD analysis. End-of-turn analysis must always use \`--depth DEEP\` (including a single \`--file\`). Use \`--depth STANDARD\` only for optional faster passes — never for the mandatory end-of-turn run.

@@ -41,6 +41,7 @@ export async function integrateCodex(
     token: ctx.token,
     organization: ctx.organization,
     isGlobal: ctx.isGlobal,
+    allowGlobal: options.onboardMode,
   });
 
   await finalizeAgentInstall<CodexIntegrationOptions>({
@@ -48,6 +49,11 @@ export async function integrateCodex(
     context: ctx,
     options,
     auth,
-    featureOptions: { installSqaaHook: sqaaEligible && Boolean(ctx.projectKey) },
+    featureOptions: {
+      installSqaaHook:
+        sqaaEligible &&
+        !options.skipSqaa &&
+        (Boolean(ctx.projectKey) || options.onboardMode === true),
+    },
   });
 }

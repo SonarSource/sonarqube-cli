@@ -22,7 +22,7 @@ import { join } from 'node:path';
 
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
-import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
+import { getOptionalStringAttr } from '../_common/attrs';
 import {
   AGENTIC_ANALYSIS_FEATURE_BENEFIT,
   AGENTIC_ANALYSIS_FEATURE_PREVIEW,
@@ -136,7 +136,6 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
         return skip();
       },
       targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
-      scope: 'project',
       resources: [
         wholeFile({
           id: 'posttool-sqaa-script',
@@ -148,11 +147,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
               'sonar-sqaa/build-scripts/posttool-sqaa',
             ),
           content: (context) => {
-            const projectKey = getRequiredStringAttr(
-              context,
-              'projectKey',
-              claudeIntegration.displayName,
-            );
+            const projectKey = getOptionalStringAttr(context, 'projectKey');
             return process.platform === 'win32'
               ? getSqaaPostToolTemplateWindows(projectKey)
               : getSqaaPostToolTemplateUnix(projectKey);
@@ -195,10 +190,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           targetPath: resolveClaudeMdPath,
           startMarker: sonarBeginMarker('sonarqube-agentic-analysis-protocol'),
           endMarker: sonarEndMarker('sonarqube-agentic-analysis-protocol'),
-          content: (context) =>
-            buildSqaaSectionBody(
-              getRequiredStringAttr(context, 'projectKey', claudeIntegration.displayName),
-            ),
+          content: (context) => buildSqaaSectionBody(getOptionalStringAttr(context, 'projectKey')),
         }),
       ],
     },

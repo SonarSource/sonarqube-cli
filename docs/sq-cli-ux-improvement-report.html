@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SonarQube CLI — UX Improvement Report</title>
+    <style>
+      :root {
+        --bg: #0f1419;
+        --surface: #1a2332;
+        --surface-2: #243044;
+        --border: #2d3a4f;
+        --text: #e7ecf3;
+        --muted: #8b9cb3;
+        --accent: #4e9eff;
+        --accent-dim: #2a5a8a;
+        --success: #3dd68c;
+        --warning: #f5a623;
+        --danger: #ff6b6b;
+        --sonar: #4e9eff;
+        --lean: #a78bfa;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.65;
+        font-size: 16px;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 260px 1fr;
+        min-height: 100vh;
+      }
+
+      nav {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        overflow-y: auto;
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+        padding: 2rem 1.25rem;
+      }
+
+      nav h2 {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        margin-bottom: 1rem;
+      }
+
+      nav ul {
+        list-style: none;
+      }
+
+      nav li {
+        margin-bottom: 0.35rem;
+      }
+
+      nav a {
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 0.9rem;
+        display: block;
+        padding: 0.35rem 0.5rem;
+        border-radius: 6px;
+        transition: color 0.15s, background 0.15s;
+      }
+
+      nav a:hover {
+        color: var(--text);
+        background: var(--surface-2);
+      }
+
+      main {
+        max-width: 920px;
+        padding: 3rem 3rem 5rem;
+      }
+
+      header.report-header {
+        margin-bottom: 3rem;
+        padding-bottom: 2rem;
+        border-bottom: 1px solid var(--border);
+      }
+
+      header.report-header h1 {
+        font-size: 2.25rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        margin-bottom: 0.75rem;
+        background: linear-gradient(135deg, var(--sonar), var(--lean));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.5rem;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .meta span strong {
+        color: var(--text);
+      }
+
+      h2 {
+        font-size: 1.5rem;
+        margin: 2.5rem 0 1rem;
+        padding-top: 0.5rem;
+        color: var(--text);
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 0.5rem;
+      }
+
+      h3 {
+        font-size: 1.15rem;
+        margin: 1.75rem 0 0.75rem;
+        color: var(--accent);
+      }
+
+      h4 {
+        font-size: 1rem;
+        margin: 1.25rem 0 0.5rem;
+        color: var(--muted);
+      }
+
+      p {
+        margin-bottom: 1rem;
+        color: var(--text);
+      }
+
+      .lead {
+        font-size: 1.125rem;
+        color: var(--muted);
+        margin-bottom: 1.5rem;
+      }
+
+      .callout {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-left: 4px solid var(--accent);
+        border-radius: 8px;
+        padding: 1.25rem 1.5rem;
+        margin: 1.5rem 0;
+      }
+
+      .callout.success {
+        border-left-color: var(--success);
+      }
+
+      .callout.warning {
+        border-left-color: var(--warning);
+      }
+
+      .callout h3 {
+        margin-top: 0;
+        color: var(--text);
+        font-size: 1rem;
+      }
+
+      .north-star {
+        background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
+        border: 1px solid var(--accent-dim);
+        border-radius: 12px;
+        padding: 1.5rem 2rem;
+        margin: 2rem 0;
+      }
+
+      .north-star pre {
+        background: var(--bg);
+        border-radius: 8px;
+        padding: 1rem 1.25rem;
+        margin-top: 1rem;
+        overflow-x: auto;
+        font-size: 0.9rem;
+        border: 1px solid var(--border);
+      }
+
+      pre,
+      code {
+        font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+        font-size: 0.875rem;
+      }
+
+      code {
+        background: var(--surface-2);
+        padding: 0.15rem 0.4rem;
+        border-radius: 4px;
+        color: var(--accent);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1.25rem 0;
+        font-size: 0.9rem;
+      }
+
+      th,
+      td {
+        text-align: left;
+        padding: 0.75rem 1rem;
+        border: 1px solid var(--border);
+      }
+
+      th {
+        background: var(--surface-2);
+        color: var(--text);
+        font-weight: 600;
+      }
+
+      td {
+        background: var(--surface);
+      }
+
+      tr:nth-child(even) td {
+        background: rgba(26, 35, 50, 0.6);
+      }
+
+      .badge {
+        display: inline-block;
+        padding: 0.2rem 0.55rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .badge-p0 {
+        background: rgba(255, 107, 107, 0.2);
+        color: var(--danger);
+      }
+
+      .badge-p1 {
+        background: rgba(245, 166, 35, 0.2);
+        color: var(--warning);
+      }
+
+      .badge-p2 {
+        background: rgba(78, 158, 255, 0.2);
+        color: var(--accent);
+      }
+
+      .badge-p3 {
+        background: rgba(139, 156, 179, 0.2);
+        color: var(--muted);
+      }
+
+      ul,
+      ol {
+        margin: 0.75rem 0 1rem 1.5rem;
+      }
+
+      li {
+        margin-bottom: 0.4rem;
+      }
+
+      .compare-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.25rem;
+        margin: 1.5rem 0;
+      }
+
+      .compare-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1.25rem;
+      }
+
+      .compare-card h4 {
+        margin-top: 0;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .compare-card.sq h4 {
+        color: var(--sonar);
+      }
+
+      .compare-card.lean h4 {
+        color: var(--lean);
+      }
+
+      .flow {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1.5rem;
+        margin: 1.5rem 0;
+        text-align: center;
+        font-size: 0.95rem;
+      }
+
+      .flow-step {
+        display: inline-block;
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+        margin: 0.25rem;
+      }
+
+      .flow-arrow {
+        color: var(--muted);
+        margin: 0 0.25rem;
+      }
+
+      .rec-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1.25rem 1.5rem;
+        margin: 1rem 0;
+      }
+
+      .rec-card .rec-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .rec-card h3 {
+        margin: 0;
+        font-size: 1.05rem;
+        color: var(--text);
+      }
+
+      .dont-list li {
+        color: var(--muted);
+      }
+
+      footer {
+        margin-top: 4rem;
+        padding-top: 2rem;
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+
+      @media (max-width: 900px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+
+        nav {
+          position: static;
+          height: auto;
+          border-right: none;
+          border-bottom: 1px solid var(--border);
+        }
+
+        main {
+          padding: 2rem 1.25rem 3rem;
+        }
+
+        .compare-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media print {
+        body {
+          background: #fff;
+          color: #111;
+        }
+
+        nav {
+          display: none;
+        }
+
+        .layout {
+          display: block;
+        }
+
+        main {
+          max-width: 100%;
+          padding: 1rem;
+        }
+
+        header.report-header h1 {
+          -webkit-text-fill-color: #111;
+          color: #111;
+        }
+
+        th,
+        td,
+        .callout,
+        .rec-card,
+        .compare-card,
+        .north-star {
+          background: #f5f5f5;
+          border-color: #ccc;
+        }
+
+        code {
+          background: #eee;
+          color: #333;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <nav>
+        <h2>Contents</h2>
+        <ul>
+          <li><a href="#executive-summary">Executive Summary</a></li>
+          <li><a href="#current-journey">Current Journey</a></li>
+          <li><a href="#leanctx-lessons">LeanCTX Lessons</a></li>
+          <li><a href="#strengths">Existing Strengths</a></li>
+          <li><a href="#recommendations">Recommendations</a></li>
+          <li><a href="#p0">P0 — Onboarding</a></li>
+          <li><a href="#p0-diagnostics">P0 — Diagnostics</a></li>
+          <li><a href="#p1">P1 — Cognitive Load</a></li>
+          <li><a href="#p1-value">P1 — Value</a></li>
+          <li><a href="#p2">P2 — Simplification</a></li>
+          <li><a href="#target-experience">Target Experience</a></li>
+          <li><a href="#roadmap">Roadmap</a></li>
+          <li><a href="#metrics">Success Metrics</a></li>
+          <li><a href="#bottom-line">Bottom Line</a></li>
+        </ul>
+      </nav>
+
+      <main>
+        <header class="report-header">
+          <h1>SonarQube CLI UX Improvement Report</h1>
+          <p class="lead">
+            How to simplify setup, communicate value, and reduce the knowledge barrier —
+            informed by LeanCTX patterns and the current SQ CLI architecture.
+          </p>
+          <div class="meta">
+            <span><strong>Date:</strong> July 8, 2026</span>
+            <span><strong>Scope:</strong> UX, onboarding, integrate flows</span>
+            <span><strong>Goal:</strong> Easy setup without deep product knowledge</span>
+          </div>
+        </header>
+
+        <section id="executive-summary">
+          <h2>Executive Summary</h2>
+          <p>
+            SonarQube CLI is <strong>powerful but fragmented</strong>. Users must understand
+            authentication, project keys, six agent subcommands, global vs project scope,
+            feature tiers (MCP, secrets, SQAA, CAG, git), and entitlement gates before they
+            capture full value.
+          </p>
+          <p>
+            LeanCTX succeeds with a <strong>single golden path</strong>
+            (<code>lean-ctx onboard</code>), <strong>self-healing diagnostics</strong>
+            (<code>doctor --fix</code>), and <strong>value before vocabulary</strong>.
+          </p>
+
+          <div class="north-star">
+            <h3>North Star</h3>
+            <p>
+              A new user in a repo with Cursor installed should reach
+              <em>“Sonar protects my AI workflow”</em> in three commands:
+            </p>
+            <pre>sonar auth login
+sonar onboard
+sonar system status</pre>
+          </div>
+
+          <div class="callout success">
+            <h3>Key finding</h3>
+            <p style="margin-bottom: 0">
+              SQ CLI’s <strong>integration engine is ahead</strong> of LeanCTX (declarative,
+              scoped, entitlement-aware, stateful). The <strong>UX layer is behind</strong> (no
+              golden path, no batch setup, no self-heal, jargon-heavy quickstart). The fix is
+              mostly <strong>orchestration and copy</strong>, not new features.
+            </p>
+          </div>
+        </section>
+
+        <section id="current-journey">
+          <h2>Current User Journey — Pain Points</h2>
+
+          <h3>What <code>sonar --help</code> tells users today</h3>
+          <pre>QUICKSTART
+  1. Run sonar auth login to authenticate with SonarQube
+  2. Run sonar analyze --file &lt;file&gt; to scan your code for issues</pre>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Issue</th>
+                <th>Impact</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Integrate missing from quickstart</td>
+                <td>Main AI value prop (hooks, MCP, SQAA) not in first steps</td>
+              </tr>
+              <tr>
+                <td><code>analyze --file</code> as step 2</td>
+                <td>Assumes manual scanning; most users want agent-integrated quality</td>
+              </tr>
+              <tr>
+                <td>No “am I done?” step</td>
+                <td>Nothing points users to <code>sonar system status</code></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>Integrate flow friction</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Step</th>
+                <th>Friction</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>sonar integrate</code></td>
+                <td>Pick <strong>one</strong> of 6 tools from a flat list</td>
+              </tr>
+              <tr>
+                <td>Per agent</td>
+                <td>Full preflight + scope prompt + per-feature confirms</td>
+              </tr>
+              <tr>
+                <td>Terminology</td>
+                <td>“Vortex agentic analysis”, “Context augmentation”, MCP, hooks</td>
+              </tr>
+              <tr>
+                <td>Scope</td>
+                <td>User must understand project vs global before knowing what each enables</td>
+              </tr>
+              <tr>
+                <td>CAG / SQAA skips</td>
+                <td>Warn lines easy to miss; users don’t know why features didn’t install</td>
+              </tr>
+              <tr>
+                <td>Multi-agent setup</td>
+                <td>New agent = rerun entire flow; no “wire all my tools”</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>Knowledge users are expected to have</h3>
+          <ul>
+            <li>Project key sources (<code>sonar-project.properties</code>, <code>.sonarlint/</code>, <code>--project</code>)</li>
+            <li>Which agent they use and its subcommand name</li>
+            <li>Global vs project scope (SQAA/CAG are project-only)</li>
+            <li><code>--dependency-risks</code> requires <code>-p</code> and can’t be global</li>
+            <li><code>sonar context</code> requires prior integrate + entitlement</li>
+            <li>Difference between <code>analyze</code>, <code>analyze agentic</code>, <code>analyze secrets</code>, <code>analyze dependency-risks</code></li>
+          </ul>
+          <p><strong>That’s too much for “easy setup.”</strong></p>
+        </section>
+
+        <section id="leanctx-lessons">
+          <h2>What LeanCTX Does Well</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>LeanCTX Pattern</th>
+                <th>SQ CLI Application</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>onboard</code> — zero-prompt, all detected tools</td>
+                <td><code>sonar onboard</code> — all detected agents + optional git</td>
+              </tr>
+              <tr>
+                <td><code>doctor</code> / <code>doctor --fix</code></td>
+                <td><code>sonar doctor --fix</code> or extend <code>system status</code></td>
+              </tr>
+              <tr>
+                <td>Setup tiers (Minimal / Standard / Full)</td>
+                <td>Presets: <code>--minimal</code>, default, <code>--full</code></td>
+              </tr>
+              <tr>
+                <td>Per-agent installation matrix</td>
+                <td>Publish “what files we touch per agent”</td>
+              </tr>
+              <tr>
+                <td>Clear next steps after setup</td>
+                <td>“Restart Cursor → try <code>sonar list issues -p …</code>”</td>
+              </tr>
+              <tr>
+                <td>Non-invasive defaults</td>
+                <td>Default project scope; batch non-interactive install</td>
+              </tr>
+              <tr>
+                <td>Continue-on-error in batch setup</td>
+                <td>One agent fails → others still install</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="compare-grid">
+            <div class="compare-card lean">
+              <h4>LeanCTX model</h4>
+              <p>One wiring model per agent. MCP + hooks + optional rules/skills. No global vs project split for features.</p>
+            </div>
+            <div class="compare-card sq">
+              <h4>SQ CLI model</h4>
+              <p>Two axes: invocation scope (project/global) + per-feature scope pins. SQAA, CAG, git dependency-risks are project-only by design.</p>
+            </div>
+          </div>
+
+          <div class="callout warning">
+            <h3>Implication for batch onboard</h3>
+            <p style="margin-bottom: 0">
+              <code>sonar onboard --global</code> is valid but <strong>intentionally thin</strong>
+              (MCP + secrets). Full AI analysis requires a project-scoped run. This must be
+              explained at decision time, not via post-hoc warn lines.
+            </p>
+          </div>
+        </section>
+
+        <section id="strengths">
+          <h2>What SQ CLI Already Does Well</h2>
+          <ul>
+            <li><strong>Declarative integration registry</strong> — idempotent installs, state tracking, post-update refresh</li>
+            <li><strong>Managed markers</strong> — safe re-runs without clobbering user edits</li>
+            <li><strong>Preflight summary</strong> — connection/project validation before install</li>
+            <li><strong><code>remediationHint</code> on errors</strong> — extend usage across more paths</li>
+            <li><strong><code>sonar system status --json</code></strong> — foundation for doctor/repair</li>
+            <li><strong><code>--non-interactive</code></strong> — auto-accepts feature prompts (underused for onboarding)</li>
+            <li><strong>Global secrets dedup</strong> — avoids duplicate hooks across scopes</li>
+            <li><strong>Post-update <code>migrateDeclarativeIntegrations</code></strong> — upgrades don’t orphan config</li>
+          </ul>
+        </section>
+
+        <section id="recommendations">
+          <h2>Recommendations Overview</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Priority</th>
+                <th>Theme</th>
+                <th>Items</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="badge badge-p0">P0</span></td>
+                <td>Onboarding &amp; golden path</td>
+                <td><code>sonar onboard</code>, quickstart rewrite, post-auth nudge</td>
+              </tr>
+              <tr>
+                <td><span class="badge badge-p0">P0</span></td>
+                <td>Diagnostics &amp; self-healing</td>
+                <td><code>sonar doctor --fix</code>, hook staleness checks</td>
+              </tr>
+              <tr>
+                <td><span class="badge badge-p1">P1</span></td>
+                <td>Cognitive load</td>
+                <td>Presets, plain language, scope explained inline</td>
+              </tr>
+              <tr>
+                <td><span class="badge badge-p1">P1</span></td>
+                <td>Value communication</td>
+                <td>Pre-install outcomes, post-install next-step card</td>
+              </tr>
+              <tr>
+                <td><span class="badge badge-p2">P2</span></td>
+                <td>Command simplification</td>
+                <td>Four-verb model, smarter bare integrate</td>
+              </tr>
+              <tr>
+                <td><span class="badge badge-p3">P3</span></td>
+                <td>Ecosystem</td>
+                <td>LeanCTX addon, CI bootstrap, compact agent output</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="p0">
+          <h2>P0 — Onboarding &amp; Golden Path</h2>
+
+          <div class="rec-card">
+            <div class="rec-header">
+              <span class="badge badge-p0">P0</span>
+              <h3>1. Add <code>sonar onboard</code></h3>
+            </div>
+            <p><strong>The single highest-impact change.</strong></p>
+            <pre>sonar onboard
+  → detect installed agents (Cursor, Claude, Codex, Copilot, Antigravity)
+  → detect git repo (optional checkbox)
+  → ONE scope prompt (default: this project)
+  → ONE entitlement check (SQAA, CAG)
+  → install all selected agents with --non-interactive
+  → rollup summary + next steps</pre>
+            <table>
+              <thead>
+                <tr>
+                  <th>Mode</th>
+                  <th>What gets installed</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Default (project)</strong></td>
+                  <td>Full stack: MCP, secrets, SQAA (if entitled), CAG (if entitled), git hooks</td>
+                </tr>
+                <tr>
+                  <td><code>--global</code></td>
+                  <td>Thin stack: MCP + secrets; banner that SQAA/CAG need project re-run</td>
+                </tr>
+                <tr>
+                  <td><code>--minimal</code></td>
+                  <td>MCP only — data access first</td>
+                </tr>
+              </tbody>
+            </table>
+            <p>
+              Reuses existing guards in <code>resolveSqaaSetup</code> and
+              <code>resolveContextAugmentationSetup</code>. Requires extracting shared preflight
+              from <code>displayAgentIntegratePrelude()</code> and fan-out to existing handlers.
+            </p>
+          </div>
+
+          <div class="rec-card">
+            <div class="rec-header">
+              <span class="badge badge-p0">P0</span>
+              <h3>2. Rewrite root quickstart</h3>
+            </div>
+            <pre>QUICKSTART
+  1. sonar auth login
+  2. sonar onboard              # set up your AI tools (from repo root)
+  3. sonar system status        # verify everything is wired</pre>
+          </div>
+
+          <div class="rec-card">
+            <div class="rec-header">
+              <span class="badge badge-p0">P0</span>
+              <h3>3. Post-auth “what’s next” nudge</h3>
+            </div>
+            <p>After <code>sonar auth login</code>, if cwd looks like a project:</p>
+            <pre>✓ Authenticated as SonarQube Cloud (my-org)
+
+Next: run sonar onboard from your project directory to connect your AI tools.</pre>
+          </div>
+        </section>
+
+        <section id="p0-diagnostics">
+          <h2>P0 — Diagnostics &amp; Self-Healing</h2>
+
+          <div class="rec-card">
+            <div class="rec-header">
+              <span class="badge badge-p0">P0</span>
+              <h3>4. <code>sonar doctor</code> with <code>--fix</code></h3>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Check</th>
+                  <th>Fix action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>MCP config invalid/missing</td>
+                  <td>Re-apply from state (<code>migrateDeclarativeIntegrations</code>)</td>
+                </tr>
+                <tr>
+                  <td>Hook script points to old <code>sonar</code> path</td>
+                  <td>Regenerate hook scripts</td>
+                </tr>
+                <tr>
+                  <td>SQAA rule marker missing</td>
+                  <td>Re-render managed rule</td>
+                </tr>
+                <tr>
+                  <td>CAG skill stale</td>
+                  <td>Refresh skill (post-update path)</td>
+                </tr>
+                <tr>
+                  <td>Auth token invalid</td>
+                  <td><code>sonar auth login</code></td>
+                </tr>
+                <tr>
+                  <td>No integrations at all</td>
+                  <td><code>sonar onboard</code></td>
+                </tr>
+              </tbody>
+            </table>
+            <pre>sonar doctor                  # human-readable per-agent health
+sonar doctor --fix            # repair from state, no re-prompts
+sonar doctor --json           # CI gate</pre>
+          </div>
+
+          <div class="rec-card">
+            <div class="rec-header">
+              <span class="badge badge-p0">P0</span>
+              <h3>5. Hook binary path refresh on self-update</h3>
+            </div>
+            <p>
+              Verify generated hook scripts reference current <code>process.execPath</code> after
+              <code>sonar self-update</code>. Stale paths are the primary silent failure after upgrades.
+            </p>
+          </div>
+        </section>
+
+        <section id="p1">
+          <h2>P1 — Reduce Cognitive Load</h2>
+
+          <div class="rec-card">
+            <div class="rec-header">
+              <span class="badge badge-p1">P1</span>
+              <h3>6. Setup presets</h3>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Preset</th>
+                  <th>Installs</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Recommended</strong> (default)</td>
+                  <td>MCP + secrets + SQAA + CAG (when entitled)</td>
+                </tr>
+                <tr>
+                  <td><strong>Minimal</strong></td>
+                  <td>MCP only</td>
+                </tr>
+                <tr>
+                  <td><strong>Security</strong></td>
+                  <td>MCP + secrets + git hooks</td>
+                </tr>
+                <tr>
+                  <td><strong>Custom</strong></td>
+                  <td>Current per-feature prompts</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="rec-card">
+            <div class="rec-header">
+              <span class="badge badge-p1">P1</span>
+              <h3>7. Plain-language feature names</h3>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Internal</th>
+                  <th>User-facing</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Vortex agentic analysis</td>
+                  <td>AI code review (runs after your agent edits)</td>
+                </tr>
+                <tr>
+                  <td>Context augmentation</td>
+                  <td>Smarter Sonar answers in your agent</td>
+                </tr>
+                <tr>
+                  <td>MCP server</td>
+                  <td>Sonar data in your agent (issues, quality gate, coverage)</td>
+                </tr>
+                <tr>
+                  <td>Secrets scanning hooks</td>
+                  <td>Block secrets before your agent uses them</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="rec-card">
+            <div class="rec-header">
+              <span class="badge badge-p1">P1</span>
+              <h3>8. Scope explained at decision time</h3>
+            </div>
+            <pre>Where should SonarQube be integrated?
+
+  ● This project (recommended)
+    → AI code review, context augmentation, project MCP
+  ○ Global (all projects)
+    → MCP + secrets only; re-run from a project for full AI analysis</pre>
+          </div>
+
+          <div class="rec-card">
+            <div class="rec-header">
+              <span class="badge badge-p1">P1</span>
+              <h3>9. Project key: discover silently, explain when missing</h3>
+            </div>
+            <p>
+              One guided path when discovery fails — not three paragraphs in every subcommand’s
+              <code>--help</code>. Onboard attempts discovery once and shows the resolved key in preflight.
+            </p>
+          </div>
+        </section>
+
+        <section id="p1-value">
+          <h2>P1 — Value Communication</h2>
+
+          <div class="rec-card">
+            <div class="rec-header">
+              <span class="badge badge-p1">P1</span>
+              <h3>10. “What you get” before install</h3>
+            </div>
+            <pre>sonar onboard will:
+  ✓ Block hardcoded secrets in Cursor, Claude Code
+  ✓ Run quality checks on AI-edited code before you finish a task
+  ✓ Give your agent access to SonarQube issues and quality gates
+  ✓ Scan git commits for secrets before push</pre>
+          </div>
+
+          <div class="rec-card">
+            <div class="rec-header">
+              <span class="badge badge-p1">P1</span>
+              <h3>11. Post-install next steps</h3>
+            </div>
+            <pre>Setup complete!
+
+  1. Restart Cursor / Claude Code
+  2. Ask your agent: "What are the open blocker issues?"
+  3. Edit a file — Sonar will review at end of turn
+
+  Verify: sonar system status
+  Issues:  sonar list issues -p &lt;your-project-key&gt;</pre>
+          </div>
+
+          <div class="rec-card">
+            <div class="rec-header">
+              <span class="badge badge-p1">P1</span>
+              <h3>12. Fix root help value proposition</h3>
+            </div>
+            <p>
+              <strong>Current:</strong> “detect security vulnerabilities and code quality issues from terminal.”
+            </p>
+            <p>
+              <strong>Proposed:</strong> “SonarQube CLI connects SonarQube to your AI coding tools —
+              blocking secrets, reviewing agent-written code, and surfacing issues where you work.”
+            </p>
+          </div>
+        </section>
+
+        <section id="p2">
+          <h2>P2 — Command Surface &amp; Docs</h2>
+
+          <h3>Four-verb mental model</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>User intent</th>
+                <th>Command</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Get started</td>
+                <td><code>sonar onboard</code></td>
+              </tr>
+              <tr>
+                <td>Check health</td>
+                <td><code>sonar doctor</code></td>
+              </tr>
+              <tr>
+                <td>Ask Sonar</td>
+                <td><code>sonar list issues</code>, <code>sonar context</code></td>
+              </tr>
+              <tr>
+                <td>Analyze manually</td>
+                <td><code>sonar analyze</code></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>Integration matrix (publish in docs)</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Agent</th>
+                <th>MCP file</th>
+                <th>Hooks</th>
+                <th>AI review</th>
+                <th>Context skill</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Cursor</td>
+                <td><code>.cursor/mcp.json</code></td>
+                <td><code>hooks.json</code></td>
+                <td>always-on rule</td>
+                <td><code>.agents/skills/…</code></td>
+              </tr>
+              <tr>
+                <td>Claude</td>
+                <td><code>.mcp.json</code> / <code>~/.claude.json</code></td>
+                <td><code>settings.json</code></td>
+                <td>PostToolUse + Stop hooks</td>
+                <td><code>.claude/skills/…</code></td>
+              </tr>
+              <tr>
+                <td>Codex</td>
+                <td><code>.codex/config.toml</code></td>
+                <td><code>hooks.json</code></td>
+                <td>PostToolUse hook</td>
+                <td><code>.codex/skills/…</code></td>
+              </tr>
+              <tr>
+                <td>Copilot</td>
+                <td><code>.mcp.json</code></td>
+                <td>instructions file</td>
+                <td>instructions</td>
+                <td><code>.github/skills/…</code></td>
+              </tr>
+              <tr>
+                <td>Antigravity</td>
+                <td>global MCP JSON</td>
+                <td>rules + hooks</td>
+                <td>always-on rule</td>
+                <td><code>.agents/skills/…</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="target-experience">
+          <h2>Target Experience (v2)</h2>
+          <div class="flow">
+            <span class="flow-step">Install sonar</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-step">sonar auth login</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-step">sonar onboard</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-step">Restart AI tool</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-step">sonar system status</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-step">Use agent normally</span>
+          </div>
+          <p>
+            <strong>User knowledge required:</strong> “I use Cursor” (optional — we detect it).
+            Not: MCP, scope, SQAA, CAG, hook events.
+          </p>
+        </section>
+
+        <section id="roadmap">
+          <h2>Implementation Roadmap</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Phase</th>
+                <th>Deliverables</th>
+                <th>Effort</th>
+                <th>Impact</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Phase 1</strong></td>
+                <td><code>sonar onboard</code>, quickstart rewrite, post-auth nudge, presets</td>
+                <td>4–6 weeks</td>
+                <td>First-run dramatically simpler</td>
+              </tr>
+              <tr>
+                <td><strong>Phase 2</strong></td>
+                <td><code>sonar doctor --fix</code>, hook staleness, post-update refresh</td>
+                <td>4–6 weeks</td>
+                <td>Self-healing after upgrades</td>
+              </tr>
+              <tr>
+                <td><strong>Phase 3</strong></td>
+                <td>Plain-language copy, integration matrix, next-step card</td>
+                <td>2–4 weeks</td>
+                <td>Users understand <em>why</em></td>
+              </tr>
+              <tr>
+                <td><strong>Phase 4</strong></td>
+                <td>LeanCTX addon, CI bootstrap, <code>--format agent</code></td>
+                <td>Optional</td>
+                <td>Ecosystem &amp; power users</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="metrics">
+          <h2>Success Metrics</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Metric</th>
+                <th>Measurement</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Time to first successful integrate</td>
+                <td>Telemetry: auth → first <code>IntegrationConfigured</code></td>
+              </tr>
+              <tr>
+                <td>Onboard completion rate</td>
+                <td>% who start onboard vs finish all agents</td>
+              </tr>
+              <tr>
+                <td>Doctor fix usage</td>
+                <td><code>doctor --fix</code> invocations post-upgrade</td>
+              </tr>
+              <tr>
+                <td>Support ticket reduction</td>
+                <td>“how do I set up Cursor/Claude” category</td>
+              </tr>
+              <tr>
+                <td>Feature skip confusion</td>
+                <td>CAG/SQAA skip + immediate re-run rate</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="bottom-line">
+          <h2>Bottom Line</h2>
+
+          <div class="callout">
+            <h3>Do</h3>
+            <ul>
+              <li><code>sonar onboard</code> — one command, project scope, all agents</li>
+              <li><code>sonar doctor --fix</code> — broken setup recovers itself</li>
+              <li>Presets + plain language — users choose outcomes, not feature IDs</li>
+              <li>Quickstart: auth → onboard → status</li>
+            </ul>
+          </div>
+
+          <div class="callout warning">
+            <h3>Don’t</h3>
+            <ul class="dont-list">
+              <li>Remove per-agent subcommands — onboard is the front door</li>
+              <li>Hide global/project — explain once at onboard</li>
+              <li>Auto-install without preview — one aggregated confirm box</li>
+              <li>Rebuild LeanCTX — partner via addon</li>
+            </ul>
+          </div>
+
+          <p>
+            Phase 1 (<code>sonar onboard</code> + quickstart rewrite) is the best place to start —
+            highest leverage, reuses almost all existing integrate infrastructure.
+          </p>
+        </section>
+
+        <footer>
+          <p>
+            SonarQube CLI UX Improvement Report — generated from architecture review and LeanCTX
+            comparative analysis. Repository: sonarqube-cli.
+          </p>
+        </footer>
+      </main>
+    </div>
+  </body>
+</html>

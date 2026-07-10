@@ -22,6 +22,10 @@ export interface IntegrateAgentOptions {
   project?: string;
   nonInteractive?: boolean;
   global?: boolean;
+  /** Machine-wide onboard flow: enables global SQAA/CAG and project-agnostic hooks. */
+  onboardMode?: boolean;
+  /** Skip SQAA features (used by `sonar onboard --minimal`). */
+  skipSqaa?: boolean;
   /** Skip the sonar-context-augmentation install/init/skill step. */
   skipContext?: boolean;
   /** Set by the bare `sonar integrate` router; forwarded to telemetry only. */

@@ -64,6 +64,12 @@ export const CLI_DIR = getCliDir();
 
 export const STATE_FILE = join(CLI_DIR, 'state.json');
 
+/** Machine-wide onboard profile written by `sonar onboard`. */
+export const ONBOARD_PROFILE_FILE = join(CLI_DIR, 'onboard-profile.json');
+
+/** Runtime project-key cache for global hooks and analyze commands. */
+export const RUNTIME_PROJECT_CACHE_FILE = join(CLI_DIR, 'runtime-project-cache.json');
+
 // ---------------------------------------------------------------------------
 // Logs
 // ---------------------------------------------------------------------------

@@ -49,8 +49,10 @@ export async function integrateAntigravity(
     token: ctx.token,
     organization: ctx.organization,
     isGlobal: ctx.isGlobal,
+    allowGlobal: options.onboardMode,
   });
-  const includeSqaa = sqaaEligible && Boolean(ctx.projectKey);
+  const includeSqaa =
+    sqaaEligible && !options.skipSqaa && (Boolean(ctx.projectKey) || options.onboardMode === true);
 
   const contextAugmentation = options.skipContext
     ? null
@@ -58,6 +60,7 @@ export async function integrateAntigravity(
         auth,
         projectKey: ctx.projectKey,
         isGlobal: ctx.isGlobal,
+        allowGlobal: options.onboardMode,
       });
 
   const { installRoot: targetRoot, installScope: scope } = resolveAntigravityInstallTarget(

@@ -65,6 +65,27 @@ export interface DiscoverProjectOptions {
   tryGitRemoteBinding?: boolean;
 }
 
+/** Compare SonarQube server URLs for binding decisions (trailing slash insensitive). */
+export function serverUrlsMatch(left?: string, right?: string): boolean {
+  if (!left || !right) {
+    return false;
+  }
+  return left.replace(/\/$/, '').toLowerCase() === right.replace(/\/$/, '').toLowerCase();
+}
+
+function shouldUseDiscoveredServer(
+  configServerUrl: string | undefined,
+  auth: ResolvedAuth | null | undefined,
+): boolean {
+  if (!configServerUrl || auth === undefined) {
+    return true;
+  }
+  if (auth === null) {
+    return true;
+  }
+  return serverUrlsMatch(configServerUrl, auth.serverUrl);
+}
+
 export interface SonarProperties {
   hostURL: string;
   projectKey: string;
@@ -181,10 +202,18 @@ export async function discoverProject(
     projectInfo.sonarLintConfigPath
   ) {
     config.configSources.push(projectInfo.sonarLintConfigPath);
-    config.serverUrl = config.serverUrl || projectInfo.sonarLintData.serverURL;
-    config.projectKey = config.projectKey || projectInfo.sonarLintData.projectKey;
-    config.organization = config.organization || projectInfo.sonarLintData.organization;
-    if (!silent) {
+    const sonarLintServer = projectInfo.sonarLintData.serverURL;
+    const useSonarLintBinding = shouldUseDiscoveredServer(sonarLintServer, options.auth);
+    if (useSonarLintBinding) {
+      config.serverUrl = config.serverUrl || sonarLintServer;
+      config.projectKey = config.projectKey || projectInfo.sonarLintData.projectKey;
+      config.organization = config.organization || projectInfo.sonarLintData.organization;
+    } else {
+      logger.debug(
+        `Ignoring SonarLint project binding: server ${sonarLintServer || 'unknown'} does not match active auth`,
+      );
+    }
+    if (!silent && useSonarLintBinding) {
       const fields = formatConfigFields(
         projectInfo.sonarLintData.serverURL,
         projectInfo.sonarLintData.projectKey,

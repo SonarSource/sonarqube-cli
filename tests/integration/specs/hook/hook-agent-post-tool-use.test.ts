@@ -177,4 +177,28 @@ describe('sonar hook claude-post-tool-use', () => {
     },
     { timeout: 15000 },
   );
+
+  it(
+    'exits 0 without --project when sonar-project.properties provides the project key',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
+      harness.cwd.writeFile('src/main.ts', 'const x = 1;');
+      const filePath = join(harness.cwd.path, 'src/main.ts');
+
+      const result = await harness.run('hook claude-post-tool-use', {
+        stdin: postToolUseStdin(filePath),
+      });
+
+      expect(result.exitCode).toBe(0);
+      const output = JSON.parse(result.stdout.trim());
+      expect(output.hookSpecificOutput.additionalContext).toContain('No issues found');
+    },
+    { timeout: 15000 },
+  );
 });

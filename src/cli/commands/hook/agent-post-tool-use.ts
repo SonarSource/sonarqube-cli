@@ -27,6 +27,7 @@ import { resolveAuth } from '../../../lib/auth-resolver';
 import { AGENTIC_PACK_URL } from '../../../lib/config-constants';
 import { canonicalizePath, toRelativePosixPath } from '../../../lib/fs-utils';
 import logger from '../../../lib/logger';
+import { resolveRuntimeProjectKey } from '../../../lib/runtime-project-context';
 import { timed } from '../../../lib/timed.js';
 import { SqaaForbiddenError } from '../../../sonarqube/errors';
 import {
@@ -35,7 +36,11 @@ import {
   SQAA_HOOK_TELEMETRY_EXIT_CODE,
 } from '../../../telemetry/sqaa-analysis-telemetry.js';
 import { fetchSingleFileReport, finishSqaaTelemetryFromReport } from '../analyze/sqaa-run.js';
-import { formatSqaaIssuesForHook, writePostToolUseHookOutput } from './format-sqaa-hook-context';
+import {
+  formatSqaaIssuesForHook,
+  formatSqaaJsonReportForHook,
+  writePostToolUseHookOutput,
+} from './format-sqaa-hook-context';
 import { readStdinJson } from './stdin';
 
 interface PostToolUsePayload {
@@ -72,7 +77,7 @@ export async function agentPostToolUse(options: AgentPostToolUseOptions): Promis
   const orgKey = auth.orgKey;
   if (!orgKey) return;
 
-  const projectKey = options.project;
+  const projectKey = options.project ?? (await resolveRuntimeProjectKey(process.cwd(), auth));
   if (!projectKey) return;
 
   const canonicalPath = canonicalizePath(filePath);
@@ -122,6 +127,11 @@ export async function agentPostToolUse(options: AgentPostToolUseOptions): Promis
       writePostToolUseHookOutput(
         `Run \`sonar integrate\` to uninstall unavailable hooks. See ${AGENTIC_PACK_URL}`,
       );
+      return;
+    }
+    const failureText = formatSqaaJsonReportForHook(fetchResult.report);
+    if (failureText) {
+      writePostToolUseHookOutput(failureText);
       return;
     }
     logger.debug(`PostToolUse SQAA analysis failed: ${fetchResult.error.message}`);

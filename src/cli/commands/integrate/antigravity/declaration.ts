@@ -31,7 +31,7 @@ import {
   CLI_COMMAND,
 } from '../../../../lib/config-constants';
 import { getMcpConfig } from '../../../../lib/mcp/mcp-helper';
-import { getRequiredStringAttr } from '../_common/attrs';
+import { getOptionalStringAttr } from '../_common/attrs';
 import {
   AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,
   AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
@@ -133,8 +133,6 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
       previewDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
       shouldInstall: ({ options }) =>
         options.installSqaaInstructions === true ? askUser() : skip(),
-      targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
-      scope: 'project',
       resources: [
         wholeFile({
           id: 'sqaa-rule-file',
@@ -142,9 +140,7 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
           targetPath: resolveSqaaRulePath,
           content: (context) =>
             buildAntigravityAlwaysOnRule(
-              buildSqaaSectionBody(
-                getRequiredStringAttr(context, 'projectKey', antigravityIntegration.displayName),
-              ),
+              buildSqaaSectionBody(getOptionalStringAttr(context, 'projectKey')),
             ),
           managedMarker: SQAA_RULE_MARKER,
         }),

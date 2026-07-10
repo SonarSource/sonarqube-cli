@@ -100,6 +100,7 @@ import {
   VALID_STATUSES,
 } from './commands/list/issues';
 import { listProjects, type ListProjectsOptions } from './commands/list/projects';
+import { type OnboardOptions, runOnboard } from './commands/onboard';
 import { remediate, type RemediateOptions } from './commands/remediate';
 import { runMcp } from './commands/run/mcp.js';
 import { systemReset, type SystemResetOptions } from './commands/system/reset';
@@ -170,6 +171,22 @@ auth
   .command('status')
   .description('Show active authentication connection with token verification')
   .anonymousAction(() => authStatus());
+
+COMMAND_TREE.command('onboard')
+  .description('One-time machine-wide setup for SonarQube AI agent integration')
+  .rootHelp({
+    category: 'core',
+  })
+  .showUpdateNotification()
+  .option('-y, --yes', 'Skip confirmation and install non-interactively')
+  .option('--non-interactive', 'Non-interactive mode (no prompts)')
+  .option(
+    '--agents <list>',
+    'Comma-separated agents to onboard: cursor,claude,codex,copilot,antigravity',
+  )
+  .option('--minimal', 'Install MCP and secrets only; skip SQAA and CAG')
+  .option('--skip-context', 'Skip Context Augmentation skill install')
+  .authenticatedAction((auth, options: OnboardOptions) => runOnboard(options, auth));
 
 // List Sonar resources
 const list = COMMAND_TREE.command('list')
@@ -672,7 +689,10 @@ hookCommand
 hookCommand
   .command('claude-post-tool-use')
   .description('PostToolUse handler: run agentic analysis after agent edits or writes a file')
-  .requiredOption('--project <key>', 'SonarQube Cloud project key')
+  .option(
+    '-p, --project <key>',
+    'SonarQube Cloud project key (auto-detected from cwd when omitted)',
+  )
   .anonymousAction((options: AgentPostToolUseOptions) => agentPostToolUse(options));
 
 hookCommand
@@ -680,7 +700,10 @@ hookCommand
   .description(
     'PostToolUse handler for Codex: run agentic analysis on the git change set after apply_patch',
   )
-  .requiredOption('--project <key>', 'SonarQube Cloud project key')
+  .option(
+    '-p, --project <key>',
+    'SonarQube Cloud project key (auto-detected from cwd when omitted)',
+  )
   .anonymousAction((options: CodexPostToolUseOptions) => codexPostToolUse(options));
 
 hookCommand

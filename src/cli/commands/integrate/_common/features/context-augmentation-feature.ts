@@ -70,7 +70,17 @@ export function createContextAugmentationFeature<
       {
         id: CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID,
         displayName: 'context augmentation tool integration',
-        shouldApply: (context) => context.executionMode === 'install',
+        shouldApply: (context) => {
+          if (context.executionMode !== 'install') {
+            return false;
+          }
+          // Machine-wide onboard installs the skill globally; daemon bootstrap runs
+          // on first `sonar context` once a project key is resolved at runtime.
+          if (context.scope === 'global' && !getOptionalStringAttr(context, 'projectKey')) {
+            return false;
+          }
+          return true;
+        },
         apply: async (context) =>
           runToolIntegrateCommand({
             auth: getRequiredAuth(context),

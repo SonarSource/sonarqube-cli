@@ -26,6 +26,7 @@ import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
 import { spawnProcess } from '../../../lib/process';
 import { loadState } from '../../../lib/repository/state-repository';
+import { resolveRuntimeProjectKey } from '../../../lib/runtime-project-context';
 import { canonicalProjectRoot } from '../../../lib/state-manager';
 import { blank, confirmPrompt, text, warn } from '../../../ui';
 import { CommandFailedError } from '../_common/error.js';
@@ -73,7 +74,8 @@ export async function resolveCloudAuthAndProject(
   const cloudAuth = resolveCloudAuth(auth, explicitProject);
   if (!cloudAuth) return { kind: 'no-cloud' };
 
-  const projectKey = explicitProject ?? (await resolveSqaaProjectKey(projectRoot));
+  const projectKey =
+    explicitProject ?? (await resolveRuntimeProjectKey(projectRoot ?? process.cwd(), auth));
   if (!projectKey) return { kind: 'no-project' };
 
   return { kind: 'resolved', cloudAuth, projectKey };
@@ -120,8 +122,14 @@ export function resolveCloudAuth(
  * single-file path still works outside git.
  */
 export async function resolveSqaaProjectKey(projectRoot?: string): Promise<string | null> {
+  const root = canonicalProjectRoot(projectRoot ?? (await tryResolveRepoRoot(process.cwd())));
+  return resolveSqaaProjectKeyFromState(root);
+}
+
+/** Legacy integration-state lookup used as a runtime-resolution fallback. */
+export function resolveSqaaProjectKeyFromState(projectRoot: string): string | null {
   try {
-    const root = canonicalProjectRoot(projectRoot ?? (await tryResolveRepoRoot(process.cwd())));
+    const root = canonicalProjectRoot(projectRoot);
     const state = loadState();
 
     const claude = state.integrations.installed.find(

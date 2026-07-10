@@ -27,6 +27,7 @@ import { agentPostToolUse } from '../../../../../src/cli/commands/hook/agent-pos
 import * as hookOutput from '../../../../../src/cli/commands/hook/format-sqaa-hook-context';
 import * as stdinModule from '../../../../../src/cli/commands/hook/stdin';
 import * as authResolver from '../../../../../src/lib/auth-resolver';
+import * as runtimeProjectContext from '../../../../../src/lib/runtime-project-context';
 import * as clientModule from '../../../../../src/sonarqube/client';
 import * as sqaaTelemetry from '../../../../../src/telemetry/sqaa-analysis-telemetry.js';
 import {
@@ -45,6 +46,7 @@ describe('agentPostToolUse', () => {
   let readFileSyncSpy: ReturnType<typeof spyOn>;
   let createAnalysisSpy: ReturnType<typeof spyOn>;
   let emitSqaaAnalysisTelemetrySpy: ReturnType<typeof spyOn>;
+  let resolveRuntimeProjectKeySpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
@@ -54,6 +56,10 @@ describe('agentPostToolUse', () => {
       connectionType: 'cloud',
       orgKey: 'myorg',
     });
+    resolveRuntimeProjectKeySpy = spyOn(
+      runtimeProjectContext,
+      'resolveRuntimeProjectKey',
+    ).mockResolvedValue('my-project');
     readStdinJsonSpy = spyOn(stdinModule, 'readStdinJson').mockResolvedValue({
       tool_name: 'Edit',
       tool_input: { file_path: TEST_FILE },
@@ -78,6 +84,7 @@ describe('agentPostToolUse', () => {
     readFileSyncSpy.mockRestore();
     createAnalysisSpy.mockRestore();
     emitSqaaAnalysisTelemetrySpy.mockRestore();
+    resolveRuntimeProjectKeySpy.mockRestore();
   });
 
   it('emits SQAA analysis telemetry after a successful PostToolUse analysis', async () => {
@@ -188,7 +195,9 @@ describe('agentPostToolUse', () => {
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
 
-  it('returns without output when project key is not provided', async () => {
+  it('returns without output when project key cannot be resolved at runtime', async () => {
+    resolveRuntimeProjectKeySpy.mockResolvedValue(null);
+
     await agentPostToolUse({});
 
     expect(createAnalysisSpy).not.toHaveBeenCalled();
@@ -229,12 +238,14 @@ describe('agentPostToolUse', () => {
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
 
-  it('returns without output when analysis throws', async () => {
+  it('surfaces hook output when analysis returns a failure result', async () => {
     createAnalysisSpy.mockRejectedValue(new Error('Network error'));
 
     await agentPostToolUse({ project: 'my-project' });
 
-    expect(stdoutSpy).not.toHaveBeenCalled();
+    expect(stdoutSpy).toHaveBeenCalledTimes(1);
+    const output = JSON.parse(String(stdoutSpy.mock.calls[0][0]));
+    expect(output.hookSpecificOutput.additionalContext).toContain('Network error');
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
       SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
       expect.objectContaining({ connectionType: 'cloud' }),
@@ -262,12 +273,14 @@ describe('agentPostToolUse', () => {
     );
   });
 
-  it('emits failure telemetry when analysis API returns an error result', async () => {
+  it('emits failure telemetry and surfaces hook output when analysis API returns an error result', async () => {
     createAnalysisSpy.mockRejectedValue(new Error('API unavailable'));
 
     await agentPostToolUse({ project: 'my-project' });
 
-    expect(stdoutSpy).not.toHaveBeenCalled();
+    expect(stdoutSpy).toHaveBeenCalledTimes(1);
+    const output = JSON.parse(String(stdoutSpy.mock.calls[0][0]));
+    expect(output.hookSpecificOutput.additionalContext).toContain('API unavailable');
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
       SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
       expect.objectContaining({ connectionType: 'cloud' }),

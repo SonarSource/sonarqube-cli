@@ -26,6 +26,7 @@ import { resolveAuth, type ResolvedAuth } from '../../../lib/auth-resolver';
 import { SONAR_CONTEXT_INVOCATION } from '../../../lib/config-constants';
 import { getToken } from '../../../lib/keychain';
 import logger from '../../../lib/logger';
+import { resolveRuntimeProjectKey } from '../../../lib/runtime-project-context';
 import type { InstalledIntegrationFeature, IntegrationStateAttribute } from '../../../lib/state';
 import { loadState } from '../../../lib/state-manager';
 import { buildContextAugmentationEnv } from '../_common/context-augmentation-env';
@@ -192,12 +193,15 @@ export async function runContextPassthrough(
         remediationHint: 'Run: sonar auth login',
       });
     }
-    const recordedConfig = resolveRecordedContextAugmentationConfig(process.cwd());
+    const cwd = process.cwd();
+    const recordedConfig = resolveRecordedContextAugmentationConfig(cwd);
     const serverUrl = recordedConfig.serverUrl ?? auth.serverUrl;
     const organization = recordedConfig.organization ?? auth.orgKey;
+    const projectKey =
+      recordedConfig.projectKey ?? (await resolveRuntimeProjectKey(cwd, auth)) ?? undefined;
     env = buildContextAugmentationEnv({
       organization,
-      projectKey: recordedConfig.projectKey,
+      projectKey,
       serverUrl,
       token: await resolveContextToken(auth, serverUrl, organization),
     });
@@ -215,7 +219,7 @@ export async function runContextPassthrough(
         reject(
           new CommandFailedError('Vortex context augmentation is not installed.', {
             remediationHint:
-              'Run "sonar integrate claude" or "sonar integrate copilot" to install it.',
+              'Run "sonar onboard" or "sonar integrate claude" / "sonar integrate copilot" to install it.',
           }),
         );
       } else {

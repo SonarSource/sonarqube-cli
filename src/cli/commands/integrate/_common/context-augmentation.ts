@@ -42,6 +42,8 @@ export interface ResolveContextAugmentationSetupParams {
   auth: ResolvedAuth;
   projectKey: string | undefined;
   isGlobal: boolean;
+  /** When true, CAG skill may be installed globally (machine onboard). */
+  allowGlobal?: boolean;
 }
 
 export interface ResolvedContextAugmentationSetup {
@@ -101,7 +103,7 @@ export async function resolveContextAugmentationSetup(
     return null;
   }
 
-  if (p.isGlobal) {
+  if (p.isGlobal && !p.allowGlobal) {
     // CAG is project-scoped, so a global install can never set it up. Only show
     // the skip notice to orgs that are actually entitled (avoids noise for orgs
     // that could not use CAG anyway).
@@ -114,6 +116,30 @@ export async function resolveContextAugmentationSetup(
       }
     }
     return null;
+  }
+
+  if (p.isGlobal && p.allowGlobal) {
+    if (!p.auth.orgKey) {
+      warn('Skipping Vortex context augmentation: organization key is required.');
+      return null;
+    }
+    const client = new SonarQubeClient(p.auth.serverUrl, p.auth.token);
+    const entitlement = await client.hasCagEntitlement(p.auth.orgKey);
+    if (entitlement !== 'allowed') {
+      if (entitlement === 'not_allowed') {
+        warn('Skipping Vortex context augmentation: not enabled for this organization.');
+      } else {
+        warn('Could not determine Vortex context augmentation entitlement — skipping.');
+      }
+      return null;
+    }
+    const scaStatus = await client.getScaEnablement(p.auth.connectionType, p.auth.orgKey);
+    if (scaStatus === 'check_failed') {
+      warn(
+        'Could not verify SCA availability on the connected server. Proceeding with SCA disabled in the generated skill content.',
+      );
+    }
+    return { scaEnabled: scaStatus === 'enabled' };
   }
 
   if (!p.projectKey || !p.auth.orgKey) {

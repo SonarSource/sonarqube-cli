@@ -22,7 +22,7 @@ import { join } from 'node:path';
 
 import { CLI_COMMAND, CURSOR_CONFIG_DIR } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
-import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
+import { getOptionalStringAttr } from '../_common/attrs';
 import {
   AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,
   AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
@@ -116,7 +116,7 @@ function resolveCursorSqaaRulePath(context: IntegrationContext): string {
  * session without the user attaching it manually.
  */
 function buildCursorSqaaRule(context: IntegrationContext): string {
-  const projectKey = getRequiredStringAttr(context, 'projectKey', cursorIntegration.displayName);
+  const projectKey = getOptionalStringAttr(context, 'projectKey');
   return `---\nalwaysApply: true\n---\n\n${buildSqaaSectionBody(projectKey)}`;
 }
 

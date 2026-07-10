@@ -69,6 +69,7 @@ export async function integrateClaude(
     token: config.token,
     organization: config.organization,
     isGlobal: ctx.isGlobal,
+    allowGlobal: options.onboardMode,
   });
 
   const contextAugmentation = options.skipContext
@@ -77,6 +78,7 @@ export async function integrateClaude(
         auth: { ...auth, token: config.token },
         projectKey: ctx.projectKey,
         isGlobal: ctx.isGlobal,
+        allowGlobal: options.onboardMode,
       });
   const featureAttrs = {
     ...buildIntegrationAttrs(config),
@@ -96,8 +98,15 @@ export async function integrateClaude(
     ...options,
     projectRoot: ctx.project.rootDir,
     globalSecretsHookExists: skipSecretsHooks,
-    installSqaaHook: sqaaEnabled && config.projectKey !== undefined,
-    installSqaaInstructions: sqaaEnabled && config.projectKey !== undefined,
+    installSqaaHook:
+      sqaaEnabled &&
+      !options.skipSqaa &&
+      (Boolean(config.projectKey) || options.onboardMode === true),
+    installSqaaInstructions:
+      sqaaEnabled &&
+      !options.skipSqaa &&
+      !ctx.isGlobal &&
+      (Boolean(config.projectKey) || options.onboardMode === true),
     installContextAugmentation: contextAugmentation !== null,
   } satisfies ClaudeIntegrationOptions;
   let installError: Error | undefined;

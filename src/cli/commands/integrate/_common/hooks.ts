@@ -133,30 +133,36 @@ export type SqaaHookSubcommand = 'claude-post-tool-use' | 'codex-post-tool-use';
 
 export function formatSqaaHookCliArgsUnix(
   hookSubcommand: SqaaHookSubcommand,
-  projectKey: string,
+  projectKey?: string,
 ): string {
+  if (!projectKey) {
+    return `hook ${hookSubcommand}`;
+  }
   assertSafeSonarProjectKeyForHookScript(projectKey);
   return `hook ${hookSubcommand} --project ${shellQuoteBash(projectKey)}`;
 }
 
 export function formatSqaaHookCliArgsWindows(
   hookSubcommand: SqaaHookSubcommand,
-  projectKey: string,
+  projectKey?: string,
 ): string {
+  if (!projectKey) {
+    return `hook ${hookSubcommand}`;
+  }
   assertSafeSonarProjectKeyForHookScript(projectKey);
   return `hook ${hookSubcommand} --project ${shellQuotePowerShell(projectKey)}`;
 }
 
 export function formatSqaaPostToolHookCommandUnix(
   hookSubcommand: SqaaHookSubcommand,
-  projectKey: string,
+  projectKey?: string,
 ): string {
   return `sonar ${formatSqaaHookCliArgsUnix(hookSubcommand, projectKey)}`;
 }
 
 export function formatSqaaPostToolHookCommandWindows(
   hookSubcommand: SqaaHookSubcommand,
-  projectKey: string,
+  projectKey?: string,
 ): string {
   return `sonar ${formatSqaaHookCliArgsWindows(hookSubcommand, projectKey)}`;
 }

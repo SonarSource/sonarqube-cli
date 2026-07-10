@@ -37,6 +37,7 @@ export async function integrateCopilot(options: IntegrateAgentOptions, auth: Res
     token: ctx.token,
     organization: ctx.organization,
     isGlobal: ctx.isGlobal,
+    allowGlobal: options.onboardMode,
   });
   const existingGlobalHookPath = ctx.isGlobal ? undefined : await detectGlobalSecretsHook();
 
@@ -48,7 +49,8 @@ export async function integrateCopilot(options: IntegrateAgentOptions, auth: Res
     featureOptions: {
       projectRoot: ctx.project.rootDir,
       globalSecretsHookExists: existingGlobalHookPath !== undefined,
-      installSqaaInstructions: entitled && Boolean(ctx.projectKey),
+      installSqaaInstructions:
+        entitled && !options.skipSqaa && (Boolean(ctx.projectKey) || options.onboardMode === true),
     },
   });
 }

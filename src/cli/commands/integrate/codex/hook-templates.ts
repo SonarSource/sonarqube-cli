@@ -35,10 +35,10 @@ export function getSecretPromptTemplateWindows(): string {
   return windowsTemplate('sonar hook codex-prompt-submit');
 }
 
-export function getSqaaPostToolTemplateUnix(projectKey: string): string {
+export function getSqaaPostToolTemplateUnix(projectKey?: string): string {
   return unixTemplate(formatSqaaPostToolHookCommandUnix('codex-post-tool-use', projectKey));
 }
 
-export function getSqaaPostToolTemplateWindows(projectKey: string): string {
+export function getSqaaPostToolTemplateWindows(projectKey?: string): string {
   return windowsTemplate(formatSqaaPostToolHookCommandWindows('codex-post-tool-use', projectKey));
 }

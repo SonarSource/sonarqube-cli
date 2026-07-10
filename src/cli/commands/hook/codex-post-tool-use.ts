@@ -23,6 +23,7 @@
 import { resolveAuth } from '../../../lib/auth-resolver';
 import { AGENTIC_PACK_URL } from '../../../lib/config-constants';
 import logger from '../../../lib/logger';
+import { resolveRuntimeProjectKey } from '../../../lib/runtime-project-context';
 import { SqaaForbiddenError } from '../../../sonarqube/errors';
 import {
   emitSqaaHookFailureTelemetry,
@@ -46,11 +47,11 @@ const CODEX_HOOK_TELEMETRY_OPTIONS = {
 } as const;
 
 export async function codexPostToolUse(options: CodexPostToolUseOptions): Promise<void> {
-  const projectKey = options.project;
-  if (!projectKey) return;
-
   const auth = await resolveAuth().catch(() => null);
   if (auth?.connectionType !== 'cloud' || !auth.orgKey) return;
+
+  const projectKey = options.project ?? (await resolveRuntimeProjectKey(process.cwd(), auth));
+  if (!projectKey) return;
 
   const runStart = performance.now();
   let report: SqaaJsonReport | null;

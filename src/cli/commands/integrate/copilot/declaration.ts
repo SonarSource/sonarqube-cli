@@ -22,7 +22,7 @@ import { join, relative } from 'node:path';
 
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
-import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
+import { getOptionalStringAttr } from '../_common/attrs';
 import {
   AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,
   AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
@@ -146,8 +146,6 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
       previewDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
       shouldInstall: ({ options }) =>
         options.installSqaaInstructions === true ? askUser() : skip(),
-      targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
-      scope: 'project',
       resources: [
         textSnippet({
           id: 'sqaa-instructions-file',
@@ -155,10 +153,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
           targetPath: resolveInstructionsPath,
           startMarker: sonarBeginMarker('sonarqube-agentic-analysis-protocol'),
           endMarker: sonarEndMarker('sonarqube-agentic-analysis-protocol'),
-          content: (context) =>
-            buildSqaaSectionBody(
-              getRequiredStringAttr(context, 'projectKey', copilotIntegration.displayName),
-            ),
+          content: (context) => buildSqaaSectionBody(getOptionalStringAttr(context, 'projectKey')),
         }),
       ],
     },

@@ -41,6 +41,8 @@ export interface ResolveSqaaSetupParams {
   token: string;
   organization: string | undefined;
   isGlobal: boolean;
+  /** When true, SQAA may be installed globally (machine onboard). */
+  allowGlobal?: boolean;
 }
 
 /**
@@ -64,7 +66,7 @@ export async function resolveSqaaSetup(params: ResolveSqaaSetupParams): Promise<
     info(SQAA_PROMOTION_MESSAGE);
     return false;
   }
-  if (params.isGlobal) {
+  if (params.isGlobal && !params.allowGlobal) {
     warn(SQAA_GLOBAL_SKIP_MESSAGE);
     return false;
   }

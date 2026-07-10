@@ -22,7 +22,7 @@ import { join } from 'node:path';
 
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
-import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
+import { getOptionalStringAttr } from '../_common/attrs';
 import {
   AGENTIC_ANALYSIS_FEATURE_BENEFIT,
   AGENTIC_ANALYSIS_FEATURE_PREVIEW,
@@ -121,7 +121,6 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
         }
         return skip();
       },
-      scope: 'project',
       resources: [
         wholeFile({
           id: 'posttool-sqaa-script',
@@ -129,11 +128,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
           targetPath: (context) =>
             resolveAgentHookScriptPath(context, CODEX_CONFIG_DIR, POSTTOOL_SQAA_SCRIPT_REL),
           content: (context) => {
-            const projectKey = getRequiredStringAttr(
-              context,
-              'projectKey',
-              codexIntegration.displayName,
-            );
+            const projectKey = getOptionalStringAttr(context, 'projectKey');
             return process.platform === 'win32'
               ? getSqaaPostToolTemplateWindows(projectKey)
               : getSqaaPostToolTemplateUnix(projectKey);

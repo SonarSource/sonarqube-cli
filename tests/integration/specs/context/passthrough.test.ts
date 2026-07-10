@@ -254,7 +254,27 @@ describe('sonar context passthrough', () => {
   );
 
   it(
-    'does not inherit caller SONAR_CONTEXT_PROJECT when no recorded CAG feature matches the cwd',
+    'resolves project key at runtime when only global CAG is installed',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'expected-token', ORG_KEY);
+      harness.state().withContextAugmentationBinaryInstalled();
+      harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${PROJECT_KEY}\n`);
+
+      const result = await harness.run('context status');
+
+      expect(result.exitCode).toBe(0);
+      const invocation = findInvocation(readInvocations(harness), ['status']);
+      expect(invocation.env.SONAR_CONTEXT_TOKEN).toBe('expected-token');
+      expect(invocation.env.SONAR_CONTEXT_URL).toBe(serverUrl);
+      expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe(ORG_KEY);
+      expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe(PROJECT_KEY);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     async () => {
       const server = await harness.newFakeServer().start();
       const serverUrl = server.baseUrl();

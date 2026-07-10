@@ -382,6 +382,48 @@ describe('discoverProject', () => {
     }
   });
 
+  it('ignores SonarLint binding when its server does not match active auth and falls back to git remote', async () => {
+    mkdirSync(join(testDir, '.git'), { recursive: true });
+    mkdirSync(join(testDir, '.sonarlint'), { recursive: true });
+    writeFileSync(
+      join(testDir, '.sonarlint', 'connectedMode.json'),
+      JSON.stringify({
+        sonarQubeUri: 'https://next.sonarqube.com/sonarqube',
+        projectKey: 'org.sonarsource.sonarlint.vscode:sonarlint-vscode',
+      }),
+    );
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+      exitCode: 0,
+      stdout: 'https://github.com/SonarSource/sonarlint-vscode.git',
+      stderr: '',
+    });
+    const remoteSpy = spyOn(discoverByRemote, 'discoverProjectKeyByGitRemote').mockResolvedValue({
+      projectKey: 'SonarSource_sonarlint-vscode',
+      serverUrl: 'https://sonarcloud.io',
+      organization: 'sonarsource',
+    });
+
+    try {
+      const result = await discoverProject(testDir, false, {
+        auth: {
+          token: 'token',
+          serverUrl: 'https://sonarcloud.io',
+          orgKey: 'sonarsource',
+          connectionType: 'cloud',
+        },
+      });
+      expect(result.projectKey).toBe('SonarSource_sonarlint-vscode');
+      expect(result.configSources).toEqual([
+        join('.sonarlint', 'connectedMode.json'),
+        GIT_REMOTE_BINDING_SOURCE,
+      ]);
+      expect(remoteSpy).toHaveBeenCalled();
+    } finally {
+      spawnSpy.mockRestore();
+      remoteSpy.mockRestore();
+    }
+  });
+
   it('does not call git remote lookup when projectKey is already in local config', async () => {
     mkdirSync(join(testDir, '.git'), { recursive: true });
     writeFileSync(

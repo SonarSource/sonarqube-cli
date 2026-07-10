@@ -34,7 +34,7 @@ export async function integrateCursor(
 ): Promise<void> {
   const ctx = await displayAgentIntegratePrelude('Cursor', 'cursor', options, auth);
 
-  if (ctx.isGlobal) {
+  if (ctx.isGlobal && !options.onboardMode) {
     warn(
       "Cursor's cloud/background agents only pick up project-level hooks, not global ones. Re-run without --global from a project directory for full hook coverage.",
     );
@@ -50,6 +50,7 @@ export async function integrateCursor(
     token: ctx.token,
     organization: ctx.organization,
     isGlobal: ctx.isGlobal,
+    allowGlobal: options.onboardMode,
   });
 
   await finalizeAgentInstall<CursorIntegrationOptions>({
@@ -57,6 +58,12 @@ export async function integrateCursor(
     context: ctx,
     options,
     auth,
-    featureOptions: { installSqaaInstructions: sqaaEligible && Boolean(ctx.projectKey) },
+    featureOptions: {
+      installSqaaInstructions:
+        sqaaEligible &&
+        !options.skipSqaa &&
+        !ctx.isGlobal &&
+        (Boolean(ctx.projectKey) || options.onboardMode === true),
+    },
   });
 }

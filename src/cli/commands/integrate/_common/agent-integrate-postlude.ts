@@ -66,6 +66,7 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
         auth,
         projectKey: context.projectKey,
         isGlobal: context.isGlobal,
+        allowGlobal: options.onboardMode,
       });
   const { installRoot, installScope } = resolveIntegrateInstallTarget(
     context.isGlobal,
