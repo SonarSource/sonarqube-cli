@@ -58,6 +58,11 @@ V1 and V2 routing:
   Both cloud and server have V1 and V2 versions of their APIs.
   This tool automatically switches its behavior based on the endpoint path you choose.
 
+  SonarQube Server's V2 paths (/api/v2/...) have no such prefix on SonarQube Cloud —
+  the same endpoint lives on the API host (api.<domain>) without it. This tool detects
+  that and rewrites the request automatically, so a path copied from SonarQube Server
+  docs, such as "/api/v2/sca/issues-releases", also works unchanged against Cloud.
+
 API Usage Documentation:
   SonarQube Cloud:  ${CLOUD_API_DOCS_URL}
   SonarQube Server: ${SERVER_API_DOCS_URL}

@@ -176,3 +176,20 @@ export function cloudRegionFromUrl(serverUrl: string): CloudRegion | undefined {
 export function isSonarQubeCloud(serverUrl: string): boolean {
   return cloudRegionFromUrl(serverUrl) !== undefined;
 }
+
+const SERVER_V2_PREFIX = '/api/v2';
+
+/**
+ * SonarQube Server's V2 API paths (`/api/v2/...`) have no equivalent under that
+ * prefix on SonarCloud: the same functionality lives at the API host without it
+ * (e.g. Server's `/api/v2/sca/issues-releases` is SonarCloud's `/sca/issues-releases`).
+ * A request with that prefix 404s or 403s on SonarCloud regardless of host, so
+ * stripping it is always correct there. Only relevant for `sonar api`'s free-form
+ * endpoint — every other caller already picks the right path per connection type.
+ */
+export function normalizeCloudV2Endpoint(serverUrl: string, endpoint: string): string {
+  if (isSonarQubeCloud(serverUrl) && endpoint.startsWith(`${SERVER_V2_PREFIX}/`)) {
+    return endpoint.slice(SERVER_V2_PREFIX.length);
+  }
+  return endpoint;
+}

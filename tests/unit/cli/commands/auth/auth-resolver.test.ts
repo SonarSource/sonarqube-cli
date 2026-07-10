@@ -26,6 +26,7 @@ import {
   cloudRegionFromUrl,
   ENV_SERVER,
   ENV_TOKEN,
+  normalizeCloudV2Endpoint,
   resolveAuth,
   resolveFromEndpoint,
 } from '../../../../../src/lib/auth-resolver.js';
@@ -255,6 +256,31 @@ describe('resolveBaseUrl', () => {
   it('returns the SonarCloud US API URL for non-/api endpoints', () => {
     const result = resolveFromEndpoint('https://sonarqube.us', '/organizations/search');
     expect(result).toBe('https://api.sonarqube.us');
+  });
+});
+
+describe('normalizeCloudV2Endpoint', () => {
+  it('strips the /api/v2 prefix for SonarCloud EU', () => {
+    const result = normalizeCloudV2Endpoint('https://sonarcloud.io', '/api/v2/sca/issues-releases');
+    expect(result).toBe('/sca/issues-releases');
+  });
+
+  it('strips the /api/v2 prefix for SonarCloud US', () => {
+    const result = normalizeCloudV2Endpoint('https://sonarqube.us', '/api/v2/sca/issues-releases');
+    expect(result).toBe('/sca/issues-releases');
+  });
+
+  it('leaves non-/api/v2 endpoints unchanged on SonarCloud', () => {
+    const result = normalizeCloudV2Endpoint('https://sonarcloud.io', '/api/system/status');
+    expect(result).toBe('/api/system/status');
+  });
+
+  it('leaves /api/v2 endpoints unchanged on self-hosted servers', () => {
+    const result = normalizeCloudV2Endpoint(
+      'https://sonar.mycompany.com',
+      '/api/v2/sca/issues-releases',
+    );
+    expect(result).toBe('/api/v2/sca/issues-releases');
   });
 });
 

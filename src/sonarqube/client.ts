@@ -21,7 +21,11 @@
 // SonarQube API HTTP client
 
 import { version as VERSION } from '../../package.json';
-import { isSonarQubeCloud, resolveFromEndpoint } from '../lib/auth-resolver';
+import {
+  isSonarQubeCloud,
+  normalizeCloudV2Endpoint,
+  resolveFromEndpoint,
+} from '../lib/auth-resolver';
 import { buildFetchNetworkOptions } from '../lib/connectivity/network-config.js';
 import { buildFetchInit, fetchGuarded } from '../lib/fetch-guarded.js';
 import logger from '../lib/logger';
@@ -168,8 +172,9 @@ export class SonarQubeClient {
 
     const timeout = method === 'GET' ? GET_REQUEST_TIMEOUT_MS : POST_REQUEST_TIMEOUT_MS;
 
-    const transformedServerURL = resolveFromEndpoint(this.serverURL, endpoint);
-    const url = `${transformedServerURL}${endpoint}`;
+    const normalizedEndpoint = normalizeCloudV2Endpoint(this.serverURL, endpoint);
+    const transformedServerURL = resolveFromEndpoint(this.serverURL, normalizedEndpoint);
+    const url = `${transformedServerURL}${normalizedEndpoint}`;
 
     if (debug) {
       print(`request method: ${method}`, 'stderr');

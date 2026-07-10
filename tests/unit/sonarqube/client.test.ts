@@ -1129,13 +1129,22 @@ describe('SonarQubeClient', () => {
       expect(client.genericRequest('GET', '/api/system/status')).rejects.toThrow('Access denied');
     });
 
-    it('resolves SonarCloud endpoint correctly', async () => {
+    it('resolves a plain SonarCloud /api endpoint correctly', async () => {
       const cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
       fetchSpy = mockFetch({ ok: true });
-      await cloudClient.genericRequest('GET', '/api/v2/issues');
+      await cloudClient.genericRequest('GET', '/api/issues/search');
 
       const url = (fetchSpy.mock.calls[0][0] as string).toString();
-      expect(url).toBe(`${SONARCLOUD_URL}/api/v2/issues`);
+      expect(url).toBe(`${SONARCLOUD_URL}/api/issues/search`);
+    });
+
+    it('strips the /api/v2 prefix and routes to the API host on SonarCloud', async () => {
+      const cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
+      fetchSpy = mockFetch({ ok: true });
+      await cloudClient.genericRequest('GET', '/api/v2/sca/issues-releases');
+
+      const url = (fetchSpy.mock.calls[0][0] as string).toString();
+      expect(url).toBe(`${SONARCLOUD_API_URL}/sca/issues-releases`);
     });
   });
 

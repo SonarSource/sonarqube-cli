@@ -176,6 +176,44 @@ describe('api', () => {
   );
 
   it(
+    'a /api/v2-prefixed endpoint is rewritten and routed to the SonarCloud API host',
+    async () => {
+      const mainServer = await harness.newFakeServer().withAuthToken('cloud-token').start();
+      const apiServer = await harness.newFakeServer().withAuthToken('cloud-token').start();
+      const mainServerUrl = mainServer.baseUrl();
+      harness.withAuth(mainServerUrl, 'cloud-token', 'my-org');
+
+      await harness.run('api get "/api/v2/sca/issues-releases?projectKey=my-project"', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: mainServerUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: apiServer.baseUrl(),
+        },
+      });
+
+      expect(apiServer.getRecordedRequests().some((r) => r.path === '/sca/issues-releases')).toBe(
+        true,
+      );
+      expect(mainServer.getRecordedRequests()).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'a /api/v2-prefixed endpoint is left unchanged on SonarQube Server',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('valid-token').start();
+      harness.withAuth(server.baseUrl(), 'valid-token');
+
+      await harness.run('api get "/api/v2/sca/issues-releases?projectKey=my-project"');
+
+      expect(
+        server.getRecordedRequests().some((r) => r.path === '/api/v2/sca/issues-releases'),
+      ).toBe(true);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits with code 1 when server returns 401 for invalid token',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('correct-token').start();
