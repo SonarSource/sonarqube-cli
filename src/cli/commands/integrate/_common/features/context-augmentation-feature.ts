@@ -45,6 +45,8 @@ export interface ContextAugmentationSkillFeatureOptions {
 export function createContextAugmentationFeature<
   TOptions extends { installContextAugmentation?: boolean },
 >(options: ContextAugmentationSkillFeatureOptions): FeatureDeclaration<TOptions> {
+  const extraResources = options.resources ?? [];
+
   return {
     id: CONTEXT_AUGMENTATION_FEATURE_ID,
     displayName: 'context augmentation',
@@ -66,21 +68,29 @@ export function createContextAugmentationFeature<
             scaEnabled: context.attrs?.scaEnabled === true,
           }),
       }),
-      ...(options.resources ?? []),
+      ...extraResources,
     ],
     operations: [
       {
         id: CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID,
         displayName: 'context augmentation tool integration',
         shouldApply: (context) => context.executionMode === 'install',
-        apply: async (context) =>
-          runToolIntegrateCommand({
-            auth: getRequiredAuth(context),
-            binaryPath: resolveContextAugmentationBinaryPath(context),
-            projectRoot: context.targetRoot,
-            projectKey: getOptionalStringAttr(context, 'projectKey'),
-            scaEnabled: context.attrs?.scaEnabled === true,
-          }),
+        apply: async (context) => {
+          try {
+            await runToolIntegrateCommand({
+              auth: getRequiredAuth(context),
+              binaryPath: resolveContextAugmentationBinaryPath(context),
+              projectRoot: context.targetRoot,
+              projectKey: getOptionalStringAttr(context, 'projectKey'),
+              scaEnabled: context.attrs?.scaEnabled === true,
+            });
+          } catch (error) {
+            for (const resource of [...extraResources].reverse()) {
+              await resource.remove(context);
+            }
+            throw error;
+          }
+        },
       },
     ],
   };

@@ -728,7 +728,7 @@ describe('integrate claude — Context Augmentation', () => {
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeUndefined();
       expectSkillFile(harness, CLAUDE_SKILL_PATH, false);
-      expectClaudeCagHookInstalled(harness);
+      expectClaudeCagHookAbsent(harness);
       expect(result.stderr).toContain('Vortex context augmentation tool integration failed.');
     },
     { timeout: 30000 },
