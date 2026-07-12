@@ -6,7 +6,7 @@
       "name": "sonarqube-cli",
       "dependencies": {
         "@clack/core": "1.4.1",
-        "@sentry/bun": "10.58.0",
+        "@sentry/bun": "10.64.0",
         "@toon-format/toon": "2.3.0",
         "commander": "15.0.0",
         "js-yaml": "4.2.0",
@@ -46,6 +46,12 @@
     "flatted": "3.4.2",
   },
   "packages": {
+    "@apm-js-collab/code-transformer": ["@apm-js-collab/code-transformer@0.15.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@apm-js-collab/code-transformer/-/code-transformer-0.15.0.tgz", { "dependencies": { "@types/estree": "^1.0.8", "astring": "^1.9.0", "esquery": "^1.7.0", "meriyah": "^6.1.4", "semifies": "^1.0.0", "source-map": "^0.6.0" }, "bin": { "code-transformer": "cli.js" } }, "sha512-XmXYVs8CzJ1Aj79noVbn2weUO/XWtRyURpGqx7aU7DOXlUQhR0WKOQNF0okh7PCeY37vxf7kU3v57OAkEPm3ww=="],
+
+    "@apm-js-collab/code-transformer-bundler-plugins": ["@apm-js-collab/code-transformer-bundler-plugins@0.5.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@apm-js-collab/code-transformer-bundler-plugins/-/code-transformer-bundler-plugins-0.5.0.tgz", { "dependencies": { "@apm-js-collab/code-transformer": "^0.15.0", "es-module-lexer": "^2.1.0", "magic-string": "^0.30.21", "module-details-from-path": "^1.0.4" } }, "sha512-YxLBY5nGlurL7QeJLq6e5g0ouBpAp0pwgyA/5rHXEXwhiPLn9ZHbT+Y2LlP90GT872cSocfjWRYu/fnpuBudNQ=="],
+
+    "@apm-js-collab/tracing-hooks": ["@apm-js-collab/tracing-hooks@0.10.1", "https://repox.jfrog.io/artifactory/api/npm/npm/@apm-js-collab/tracing-hooks/-/tracing-hooks-0.10.1.tgz", { "dependencies": { "@apm-js-collab/code-transformer": "^0.15.0", "debug": "^4.4.1", "module-details-from-path": "^1.0.4" } }, "sha512-w2OWXR7FWrKqSziuE9+QclaZrStxO/8+OwbXM635s/zs0Eez1Qo3ivSPdB2WsaPY/iznKTytONPx/PitD7IXcA=="],
+
     "@babel/code-frame": ["@babel/code-frame@7.29.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@babel/code-frame/-/code-frame-7.29.0.tgz", { "dependencies": { "@babel/helper-validator-identifier": "^7.28.5", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-9NhCeYjq9+3uxgdtp20LSiJXJvN0FeCtNGpJxuMFZ1Kv3cWUNb6DOhJwUvcVCzKGR66cw4njwM6hrJLqgOwbcw=="],
 
     "@babel/compat-data": ["@babel/compat-data@7.29.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@babel/compat-data/-/compat-data-7.29.0.tgz", {}, "sha512-T1NCJqT/j9+cn8fvkt7jtwbLBfLC/1y1c7NtCeXFRgzGTsafi68MRv8yzkYSapBnFA6L3U2VSc02ciDzoAJhJg=="],
@@ -116,19 +122,21 @@
 
     "@opentelemetry/api": ["@opentelemetry/api@1.9.1", "https://repox.jfrog.io/artifactory/api/npm/npm/@opentelemetry/api/-/api-1.9.1.tgz", {}, "sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q=="],
 
-    "@opentelemetry/api-logs": ["@opentelemetry/api-logs@0.214.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@opentelemetry/api-logs/-/api-logs-0.214.0.tgz", { "dependencies": { "@opentelemetry/api": "^1.3.0" } }, "sha512-40lSJeqYO8Uz2Yj7u94/SJWE/wONa7rmMKjI1ZcIjgf3MHNHv1OZUCrCETGuaRF62d5pQD1wKIW+L4lmSMTzZA=="],
+    "@opentelemetry/api-logs": ["@opentelemetry/api-logs@0.220.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@opentelemetry/api-logs/-/api-logs-0.220.0.tgz", { "dependencies": { "@opentelemetry/api": "^1.3.0" } }, "sha512-CmVa4ImJ+ynfrPMNaAXHET6Bhb44SwzmfyVJFq9ni2jgXJR/l7C6gfVFddNmHP+ZOkP9cf4f9DBe68qVLTHc9w=="],
 
-    "@opentelemetry/core": ["@opentelemetry/core@2.6.1", "https://repox.jfrog.io/artifactory/api/npm/npm/@opentelemetry/core/-/core-2.6.1.tgz", { "dependencies": { "@opentelemetry/semantic-conventions": "^1.29.0" }, "peerDependencies": { "@opentelemetry/api": ">=1.0.0 <1.10.0" } }, "sha512-8xHSGWpJP9wBxgBpnqGL0R3PbdWQndL1Qp50qrg71+B28zK5OQmUgcDKLJgzyAAV38t4tOyLMGDD60LneR5W8g=="],
+    "@opentelemetry/core": ["@opentelemetry/core@2.9.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@opentelemetry/core/-/core-2.9.0.tgz", { "dependencies": { "@opentelemetry/semantic-conventions": "^1.29.0" }, "peerDependencies": { "@opentelemetry/api": ">=1.0.0 <1.10.0" } }, "sha512-m2nckMT80NnmjTYSPjJQObBJ+8dgkoajEOUbznL8AHZ3T3yHRk2P7gI1PhEBc1+lOnrYE9UWrWHqJDsmqjmNbw=="],
 
-    "@opentelemetry/instrumentation": ["@opentelemetry/instrumentation@0.214.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@opentelemetry/instrumentation/-/instrumentation-0.214.0.tgz", { "dependencies": { "@opentelemetry/api-logs": "0.214.0", "import-in-the-middle": "^3.0.0", "require-in-the-middle": "^8.0.0" }, "peerDependencies": { "@opentelemetry/api": "^1.3.0" } }, "sha512-MHqEX5Dk59cqVah5LiARMACku7jXSVk9iVDWOea4x3cr7VfdByeDCURK6o1lntT1JS/Tsovw01UJrBhN3/uC5w=="],
+    "@opentelemetry/instrumentation": ["@opentelemetry/instrumentation@0.220.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@opentelemetry/instrumentation/-/instrumentation-0.220.0.tgz", { "dependencies": { "@opentelemetry/api-logs": "0.220.0", "import-in-the-middle": "^3.0.0", "require-in-the-middle": "^8.0.0" }, "peerDependencies": { "@opentelemetry/api": "^1.3.0" } }, "sha512-xQx3E2WxP1mDvKzxLxX+CTCtNLa560YJZ3087qYHerl2YmiKpv7AH+dAy7vmx+eVrZ5BwhfWUAVoKOoxCNHcpw=="],
 
-    "@opentelemetry/resources": ["@opentelemetry/resources@2.6.1", "https://repox.jfrog.io/artifactory/api/npm/npm/@opentelemetry/resources/-/resources-2.6.1.tgz", { "dependencies": { "@opentelemetry/core": "2.6.1", "@opentelemetry/semantic-conventions": "^1.29.0" }, "peerDependencies": { "@opentelemetry/api": ">=1.3.0 <1.10.0" } }, "sha512-lID/vxSuKWXM55XhAKNoYXu9Cutoq5hFdkbTdI/zDKQktXzcWBVhNsOkiZFTMU9UtEWuGRNe0HUgmsFldIdxVA=="],
+    "@opentelemetry/resources": ["@opentelemetry/resources@2.9.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@opentelemetry/resources/-/resources-2.9.0.tgz", { "dependencies": { "@opentelemetry/core": "2.9.0", "@opentelemetry/semantic-conventions": "^1.29.0" }, "peerDependencies": { "@opentelemetry/api": ">=1.3.0 <1.10.0" } }, "sha512-jyA5MBLQ+Dkl3+JsZkUoUvL7yHvU64kLsvpXKarWm6347Sl1t1bXFTFykUePNpT5WH5pm9a2Qtt03iIYQhZ1Fg=="],
 
-    "@opentelemetry/sdk-trace-base": ["@opentelemetry/sdk-trace-base@2.6.1", "https://repox.jfrog.io/artifactory/api/npm/npm/@opentelemetry/sdk-trace-base/-/sdk-trace-base-2.6.1.tgz", { "dependencies": { "@opentelemetry/core": "2.6.1", "@opentelemetry/resources": "2.6.1", "@opentelemetry/semantic-conventions": "^1.29.0" }, "peerDependencies": { "@opentelemetry/api": ">=1.3.0 <1.10.0" } }, "sha512-r86ut4T1e8vNwB35CqCcKd45yzqH6/6Wzvpk2/cZB8PsPLlZFTvrh8yfOS3CYZYcUmAx4hHTZJ8AO8Dj8nrdhw=="],
+    "@opentelemetry/sdk-trace": ["@opentelemetry/sdk-trace@2.9.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@opentelemetry/sdk-trace/-/sdk-trace-2.9.0.tgz", { "dependencies": { "@opentelemetry/core": "2.9.0", "@opentelemetry/resources": "2.9.0", "@opentelemetry/semantic-conventions": "^1.29.0" }, "peerDependencies": { "@opentelemetry/api": ">=1.3.0 <1.10.0" } }, "sha512-sGA19HvtrrSKYsseHphluH6j3p6Xa3fqc7c7y8f/7mYWejc1lyDFcpSdD1kYa50HCLUeEo4zA5bW0pniaPszuw=="],
+
+    "@opentelemetry/sdk-trace-base": ["@opentelemetry/sdk-trace-base@2.9.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@opentelemetry/sdk-trace-base/-/sdk-trace-base-2.9.0.tgz", { "dependencies": { "@opentelemetry/core": "2.9.0", "@opentelemetry/resources": "2.9.0", "@opentelemetry/sdk-trace": "2.9.0", "@opentelemetry/semantic-conventions": "^1.29.0" }, "peerDependencies": { "@opentelemetry/api": ">=1.3.0 <1.10.0" } }, "sha512-cp9zmTl62R8PJrpvFcmc8N2JQU/xfa0S+61q511Nji+QxCfZ8Ifvg7H27G8cANe4crg4RTrWsVvanHiXjSp6ag=="],
 
     "@opentelemetry/semantic-conventions": ["@opentelemetry/semantic-conventions@1.40.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@opentelemetry/semantic-conventions/-/semantic-conventions-1.40.0.tgz", {}, "sha512-cifvXDhcqMwwTlTK04GBNeIe7yyo28Mfby85QXFe1Yk8nmi36Ab/5UQwptOx84SsoGNRg+EVSjwzfSZMy6pmlw=="],
 
-    "@sentry/bun": ["@sentry/bun@10.58.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/bun/-/bun-10.58.0.tgz", { "dependencies": { "@sentry/core": "10.58.0", "@sentry/node": "10.58.0" } }, "sha512-H7Dmiai/VhhSz7U9lcYJjNiHliJq3+/k5xjMRPxB+01IBE/kSXuhu4p5EdAlP1Y8bPkZqztQEt+/vLfOyQ1gwg=="],
+    "@sentry/bun": ["@sentry/bun@10.64.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/bun/-/bun-10.64.0.tgz", { "dependencies": { "@apm-js-collab/code-transformer-bundler-plugins": "^0.5.0", "@sentry/core": "10.64.0", "@sentry/node": "10.64.0", "@sentry/server-utils": "10.64.0" } }, "sha512-z1cZH99RkhepTqSKyTpY1dmjEBK1q0xWpWdX6BhUpXH/MBnEtT7pYZnGjfU/u3ss/ObzzXDNq40QrZWQjWtmrg=="],
 
     "@sentry/cli": ["@sentry/cli@3.6.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/cli/-/cli-3.6.0.tgz", { "dependencies": { "progress": "^2.0.3", "proxy-from-env": "^1.1.0", "undici": "^6.22.0", "which": "^2.0.2" }, "optionalDependencies": { "@sentry/cli-darwin": "3.6.0", "@sentry/cli-linux-arm": "3.6.0", "@sentry/cli-linux-arm64": "3.6.0", "@sentry/cli-linux-i686": "3.6.0", "@sentry/cli-linux-x64": "3.6.0", "@sentry/cli-win32-arm64": "3.6.0", "@sentry/cli-win32-i686": "3.6.0", "@sentry/cli-win32-x64": "3.6.0" }, "bin": { "sentry-cli": "bin/sentry-cli" } }, "sha512-79XC8o59G/i3VqmnoQD74a/QD/422eQQlUqiPd3sEvcYCxnaZialRVAsxuNEFd6sx4aVGpqt775MMDT9cV/lMg=="],
 
@@ -148,15 +156,17 @@
 
     "@sentry/cli-win32-x64": ["@sentry/cli-win32-x64@3.6.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/cli-win32-x64/-/cli-win32-x64-3.6.0.tgz", { "os": "win32", "cpu": "x64" }, "sha512-LW0078VlxaUeVMMLA15A1zhkvZ5vby/lwthtBXPoBSDdTcgbTE4D4gQXM9vEapV28SvCO3fVIek3pbtrkaeDMw=="],
 
-    "@sentry/core": ["@sentry/core@10.58.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/core/-/core-10.58.0.tgz", {}, "sha512-bkIbh2c6dzwhrWn/FGWu7j8hf6TAat2XxpkGM91LiN09fLYUXIMwcohVsXqze5l2cq35TnvqmSROAbRNr27GVw=="],
+    "@sentry/conventions": ["@sentry/conventions@0.15.1", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/conventions/-/conventions-0.15.1.tgz", {}, "sha512-ZLP8bRdMON3prWE2tJyImuYscCxdcJeIPIhrOs/rgyFm3C1nCh1B6gdvPj3AZ5zW08oSFFCsq7T+tYEW3h8MNA=="],
 
-    "@sentry/node": ["@sentry/node@10.58.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/node/-/node-10.58.0.tgz", { "dependencies": { "@opentelemetry/api": "^1.9.1", "@opentelemetry/core": "^2.6.1", "@opentelemetry/instrumentation": "^0.214.0", "@opentelemetry/sdk-trace-base": "^2.6.1", "@opentelemetry/semantic-conventions": "^1.40.0", "@sentry/core": "10.58.0", "@sentry/node-core": "10.58.0", "@sentry/opentelemetry": "10.58.0", "@sentry/server-utils": "10.58.0", "import-in-the-middle": "^3.0.0" } }, "sha512-KICgacBS+I/eWzFlAembutSwFwy0WVSrGp8UMV9n1XZqqu4EBTlALRsbLNlDSv61UgH85L9L3vk91tgq6nJXAA=="],
+    "@sentry/core": ["@sentry/core@10.64.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/core/-/core-10.64.0.tgz", { "dependencies": { "@sentry/conventions": "^0.15.1" } }, "sha512-HjojJcXD1l2qZ1AXje2s0XY/nYsaUt00wsM1HMBImA8vAClyPisFE/CC0/UD6pEvsGFhVgi8Dcxo7EN41uyeFw=="],
 
-    "@sentry/node-core": ["@sentry/node-core@10.58.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/node-core/-/node-core-10.58.0.tgz", { "dependencies": { "@sentry/core": "10.58.0", "@sentry/opentelemetry": "10.58.0", "import-in-the-middle": "^3.0.0" }, "peerDependencies": { "@opentelemetry/api": "^1.9.0", "@opentelemetry/core": "^1.30.1 || ^2.1.0", "@opentelemetry/exporter-trace-otlp-http": ">=0.57.0 <1", "@opentelemetry/instrumentation": ">=0.57.1 <1", "@opentelemetry/sdk-trace-base": "^1.30.1 || ^2.1.0", "@opentelemetry/semantic-conventions": "^1.39.0" }, "optionalPeers": ["@opentelemetry/api", "@opentelemetry/core", "@opentelemetry/exporter-trace-otlp-http", "@opentelemetry/instrumentation", "@opentelemetry/sdk-trace-base", "@opentelemetry/semantic-conventions"] }, "sha512-7dTbYuoaSwSmF2GWDl7KK+sXQL8iqaZeZ2I/aFm+SvPZLckZF3OGFb2VsluWsSXQLnxtxPX9QP93viyK+VZsuA=="],
+    "@sentry/node": ["@sentry/node@10.64.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/node/-/node-10.64.0.tgz", { "dependencies": { "@opentelemetry/api": "^1.9.1", "@opentelemetry/instrumentation": "^0.220.0", "@opentelemetry/sdk-trace-base": "^2.9.0", "@sentry/conventions": "^0.15.1", "@sentry/core": "10.64.0", "@sentry/node-core": "10.64.0", "@sentry/opentelemetry": "10.64.0", "@sentry/server-utils": "10.64.0", "import-in-the-middle": "^3.0.0" } }, "sha512-rhNZ3CTqwdTQHo9Zd+NsoLyW69VIzbMcGMRX9y8W1A6runT4YH/MDhmT0U9oWfNZKN8ngqR/gfVMTnlYVQliCA=="],
 
-    "@sentry/opentelemetry": ["@sentry/opentelemetry@10.58.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/opentelemetry/-/opentelemetry-10.58.0.tgz", { "dependencies": { "@sentry/core": "10.58.0" }, "peerDependencies": { "@opentelemetry/api": "^1.9.0", "@opentelemetry/core": "^1.30.1 || ^2.1.0", "@opentelemetry/sdk-trace-base": "^1.30.1 || ^2.1.0", "@opentelemetry/semantic-conventions": "^1.39.0" } }, "sha512-qKOGVmt02wDaq7E70VekG8Z9XM641trJPoTHSeVUfGaXVcmGc46ZldTNtfWbxJq/8f/fge2pap60gn066ido2Q=="],
+    "@sentry/node-core": ["@sentry/node-core@10.64.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/node-core/-/node-core-10.64.0.tgz", { "dependencies": { "@sentry/conventions": "^0.15.1", "@sentry/core": "10.64.0", "@sentry/opentelemetry": "10.64.0", "import-in-the-middle": "^3.0.0" }, "peerDependencies": { "@opentelemetry/api": "^1.9.0", "@opentelemetry/core": "^1.30.1 || ^2.1.0", "@opentelemetry/exporter-trace-otlp-http": ">=0.57.0 <1", "@opentelemetry/instrumentation": ">=0.57.1 <1", "@opentelemetry/sdk-trace-base": "^1.30.1 || ^2.1.0" }, "optionalPeers": ["@opentelemetry/api", "@opentelemetry/core", "@opentelemetry/exporter-trace-otlp-http", "@opentelemetry/instrumentation", "@opentelemetry/sdk-trace-base"] }, "sha512-dcma5uEWl0SXywY4vzrlOwuz4NBPyPhrzqL1NjlU6Di/OVbyYAZJPCwsR8XYDz73PGc5sU3qKSRoXWX56Ip0wA=="],
 
-    "@sentry/server-utils": ["@sentry/server-utils@10.58.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/server-utils/-/server-utils-10.58.0.tgz", { "dependencies": { "@sentry/core": "10.58.0" } }, "sha512-PywIl2jvl+tO5R4j+n72Lcf3ItanHcaMN/oL1U9ZHE8icaT2zpo2W4uOaslpQeQvqPC24HGZ3BW2etzsCFQbag=="],
+    "@sentry/opentelemetry": ["@sentry/opentelemetry@10.64.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/opentelemetry/-/opentelemetry-10.64.0.tgz", { "dependencies": { "@sentry/conventions": "^0.15.1", "@sentry/core": "10.64.0" }, "peerDependencies": { "@opentelemetry/api": "^1.9.0", "@opentelemetry/core": "^1.30.1 || ^2.1.0", "@opentelemetry/sdk-trace-base": "^1.30.1 || ^2.1.0" } }, "sha512-hXw8dwSSA9/9r3VGy0PO2SJp7g5/yH2+7Bak60EkOT21AT1BwFnVEsVQyZb+UHjG7UWne/jDbwdWPSUm/rtovw=="],
+
+    "@sentry/server-utils": ["@sentry/server-utils@10.64.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/server-utils/-/server-utils-10.64.0.tgz", { "dependencies": { "@apm-js-collab/code-transformer": "^0.15.0", "@apm-js-collab/code-transformer-bundler-plugins": "^0.5.0", "@apm-js-collab/tracing-hooks": "^0.10.1", "@sentry/conventions": "^0.15.1", "@sentry/core": "10.64.0", "magic-string": "~0.30.0" } }, "sha512-d568Jhn3WBfm07dsdPsLh0q+qRj71xZEDZFsA33kizD0UuSCR8axtc2YW6aKdPhtuqgm9tHjSX35Q9vK/XmujA=="],
 
     "@sonar/scan": ["@sonar/scan@4.3.8", "https://repox.jfrog.io/artifactory/api/npm/npm/@sonar/scan/-/@sonar/scan-4.3.8.tgz", { "dependencies": { "adm-zip": "0.5.17", "axios": "1.17.0", "commander": "14.0.3", "hpagent": "1.2.0", "node-forge": "1.4.0", "properties-file": "5.0.5", "proxy-from-env": "2.1.0", "semver": "7.8.4", "slugify": "1.6.9", "tar-stream": "3.2.0" }, "bin": { "sonar": "bin/sonar-scanner.js", "sonar-scanner": "bin/sonar-scanner.js" } }, "sha512-JibF2fBqUNxyhRzNdEtbnay3krit/vLXPwr34easahTMeIClZflmXBWt/z9lUoqEWki2UhzrCxzGt6wrEFMJLg=="],
 
@@ -230,6 +240,8 @@
 
     "argparse": ["argparse@2.0.1", "https://repox.jfrog.io/artifactory/api/npm/npm/argparse/-/argparse-2.0.1.tgz", {}, "sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q=="],
 
+    "astring": ["astring@1.9.0", "https://repox.jfrog.io/artifactory/api/npm/npm/astring/-/astring-1.9.0.tgz", { "bin": { "astring": "bin/astring" } }, "sha512-LElXdjswlqjWrPpJFg1Fx4wpkOCxj1TDHlSV4PlaRxHGWko024xICaa97ZkMfs6DRKlCguiAI+rbXv5GWwXIkg=="],
+
     "asynckit": ["asynckit@0.4.0", "https://repox.jfrog.io/artifactory/api/npm/npm/asynckit/-/asynckit-0.4.0.tgz", {}, "sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q=="],
 
     "axios": ["axios@1.17.0", "https://repox.jfrog.io/artifactory/api/npm/npm/axios/-/axios-1.17.0.tgz", { "dependencies": { "follow-redirects": "^1.16.0", "form-data": "^4.0.5", "https-proxy-agent": "^5.0.1", "proxy-from-env": "^2.1.0" } }, "sha512-J8SwNxprqqpbfenehxWYXE7CW+wM1BB4w3+N+g+/Wx40xM4rsLrfPmHHxSWIxJLYDgSY/HqlFPIYb2/S3rxafw=="],
@@ -295,6 +307,8 @@
     "es-define-property": ["es-define-property@1.0.1", "https://repox.jfrog.io/artifactory/api/npm/npm/es-define-property/-/es-define-property-1.0.1.tgz", {}, "sha512-e3nRfgfUZ4rNGL232gUgX06QNyyez04KdjFrF+LTRoOXmrOgFKDg4BCdsjW8EnT69eqdYGmRpJwiPVYNrCaW3g=="],
 
     "es-errors": ["es-errors@1.3.0", "https://repox.jfrog.io/artifactory/api/npm/npm/es-errors/-/es-errors-1.3.0.tgz", {}, "sha512-Zf5H2Kxt2xjTvbJvP2ZWLEICxA6j+hAmMzIlypy4xcBg1vKVnx89Wy0GbS+kf5cwCVFFzdCFh2XSCFNULS6csw=="],
+
+    "es-module-lexer": ["es-module-lexer@2.3.1", "https://repox.jfrog.io/artifactory/api/npm/npm/es-module-lexer/-/es-module-lexer-2.3.1.tgz", {}, "sha512-shc1dbU90Yl/xq1QrC7QRtfcwURZuVRfPhZbDoldJ1cn1gzDvBaBWlv0eFolj5+0znnPJz5TXLxsN77X/12KTA=="],
 
     "es-object-atoms": ["es-object-atoms@1.1.1", "https://repox.jfrog.io/artifactory/api/npm/npm/es-object-atoms/-/es-object-atoms-1.1.1.tgz", { "dependencies": { "es-errors": "^1.3.0" } }, "sha512-FGgH2h8zKNim9ljj7dankFPcICIK9Cp5bm+c2gQSYePhpaG5+esrLODihIorn+Pe6FGJzWhXQotPv73jTaldXA=="],
 
@@ -438,9 +452,13 @@
 
     "lru-cache": ["lru-cache@5.1.1", "https://repox.jfrog.io/artifactory/api/npm/npm/lru-cache/-/lru-cache-5.1.1.tgz", { "dependencies": { "yallist": "^3.0.2" } }, "sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w=="],
 
+    "magic-string": ["magic-string@0.30.21", "https://repox.jfrog.io/artifactory/api/npm/npm/magic-string/-/magic-string-0.30.21.tgz", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.5" } }, "sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ=="],
+
     "make-dir": ["make-dir@4.0.0", "https://repox.jfrog.io/artifactory/api/npm/npm/make-dir/-/make-dir-4.0.0.tgz", { "dependencies": { "semver": "^7.5.3" } }, "sha512-hXdUTZYIVOt1Ex//jAQi+wTZZpUpwBj/0QsOzqegb3rGMMeJiSEu5xLHnYfBrRV4RH2+OCSOO95Is/7x1WJ4bw=="],
 
     "math-intrinsics": ["math-intrinsics@1.1.0", "https://repox.jfrog.io/artifactory/api/npm/npm/math-intrinsics/-/math-intrinsics-1.1.0.tgz", {}, "sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g=="],
+
+    "meriyah": ["meriyah@6.1.4", "https://repox.jfrog.io/artifactory/api/npm/npm/meriyah/-/meriyah-6.1.4.tgz", {}, "sha512-Sz8FzjzI0kN13GK/6MVEsVzMZEPvOhnmmI1lU5+/1cGOiK3QUahntrNNtdVeihrO7t9JpoH75iMNXg6R6uWflQ=="],
 
     "mime-db": ["mime-db@1.52.0", "https://repox.jfrog.io/artifactory/api/npm/npm/mime-db/-/mime-db-1.52.0.tgz", {}, "sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg=="],
 
@@ -495,6 +513,8 @@
     "restore-cursor": ["restore-cursor@5.1.0", "https://repox.jfrog.io/artifactory/api/npm/npm/restore-cursor/-/restore-cursor-5.1.0.tgz", { "dependencies": { "onetime": "^7.0.0", "signal-exit": "^4.1.0" } }, "sha512-oMA2dcrw6u0YfxJQXm342bFKX/E4sG9rbTzO9ptUcR/e8A33cHuvStiYOwH7fszkZlZ1z/ta9AAoPk2F4qIOHA=="],
 
     "rfdc": ["rfdc@1.4.1", "https://repox.jfrog.io/artifactory/api/npm/npm/rfdc/-/rfdc-1.4.1.tgz", {}, "sha512-q1b3N5QkRUWUl7iyylaaj3kOpIT0N2i9MqIEQXP73GVsN9cw3fdx8X63cEmWhJGi2PPCF23Ijp7ktmd39rawIA=="],
+
+    "semifies": ["semifies@1.0.0", "https://repox.jfrog.io/artifactory/api/npm/npm/semifies/-/semifies-1.0.0.tgz", {}, "sha512-xXR3KGeoxTNWPD4aBvL5NUpMTT7WMANr3EWnaS190QVkY52lqqcVRD7Q05UVbBhiWDGWMlJEUam9m7uFFGVScw=="],
 
     "semver": ["semver@7.8.4", "https://repox.jfrog.io/artifactory/api/npm/npm/semver/-/semver-7.8.4.tgz", { "bin": { "semver": "bin/semver.js" } }, "sha512-rUCObTnP32Q08R2uuIrt7r9PlEonuTmtuXYcW6s5kjdlj3xbnwe+21yXptAUYcMAABLkYYTtnmzb3w3EDZfueA=="],
 
