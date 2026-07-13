@@ -19,9 +19,7 @@
  */
 
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../../../lib/install-types';
-import logger from '../../../../../lib/logger';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../../lib/signatures';
-import { warn } from '../../../../../ui';
 import { CommandFailedError } from '../../../_common/error';
 import { getOptionalStringAttr } from '../attrs';
 import { printContextAugmentationSkill, runToolIntegrateCommand } from '../context-augmentation';
@@ -87,7 +85,9 @@ export function createContextAugmentationFeature<
               scaEnabled: context.attrs?.scaEnabled === true,
             });
           } catch (error) {
-            await rollBackExtraResourcesBestEffort(extraResources, context);
+            for (const resource of [...extraResources].reverse()) {
+              await resource.remove(context);
+            }
             throw error;
           }
         },
@@ -109,32 +109,4 @@ function getRequiredAuth(context: IntegrationContext) {
     throw new CommandFailedError('Authentication is unavailable for Vortex context augmentation.');
   }
   return context.auth;
-}
-
-async function rollBackExtraResourcesBestEffort(
-  resources: ResourceDeclaration[],
-  context: IntegrationContext,
-): Promise<void> {
-  const failedResources: string[] = [];
-
-  for (const resource of [...resources].reverse()) {
-    try {
-      await resource.remove(context);
-    } catch (rollbackError) {
-      failedResources.push(resource.displayName ?? resource.id);
-      logger.warn(
-        `Failed to roll back context augmentation resource ${resource.id}: ${
-          (rollbackError as Error).message
-        }`,
-      );
-    }
-  }
-
-  if (failedResources.length > 0) {
-    warn(
-      `Could not fully roll back Vortex context augmentation resources after setup failed. Manual cleanup may be needed for: ${failedResources.join(
-        ', ',
-      )}.`,
-    );
-  }
 }
