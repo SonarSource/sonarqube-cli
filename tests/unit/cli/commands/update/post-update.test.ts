@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -36,19 +37,26 @@ import {
   wholeFile,
 } from '../../../../../src/cli/commands/integrate/_common/registry';
 import * as hooks from '../../../../../src/cli/commands/integrate/claude/hooks';
+import { DISTRIBUTION } from '../../../../../src/lib/distribution';
 import { SCA_SCANNER_BINARY_NAME } from '../../../../../src/lib/install-types';
 import * as migration from '../../../../../src/lib/migration';
 import {
   migrateClaudeCodeHooks,
   migrateDeclarativeIntegrations,
+  migrateLegacyTelemetryEvents,
   runPostUpdateActions,
   updateScaScannerBinaryIfNeeded,
   updateSecretsBinaryIfNeeded,
 } from '../../../../../src/lib/post-update';
 import * as stateRepository from '../../../../../src/lib/repository/state-repository';
-import type { CliState, HookExtension } from '../../../../../src/lib/state';
+import type {
+  CliState,
+  HookExtension,
+  StoredCommandExecutedEvent,
+} from '../../../../../src/lib/state';
 import { getDefaultState } from '../../../../../src/lib/state';
 import * as versionLib from '../../../../../src/lib/version';
+import * as findings from '../../../../../src/telemetry/findings';
 
 const FAKE_HOME = '/fake/home';
 const homedirFn = () => FAKE_HOME;
@@ -145,21 +153,23 @@ describe('runPostUpdateActions', () => {
   });
 
   it('saves the reloaded state, not the pre-runActions snapshot', async () => {
-    // loadState is called 6 times:
+    // loadState is called 7 times:
     //   1. version check in runPostUpdateActions
-    //   2. inside migrateDeclarativeIntegrations
-    //   3. inside migrateClaudeCodeHooks
-    //   4. inside updateSecretsBinaryIfNeeded
-    //   5. inside updateScaScannerBinaryIfNeeded
-    //   6. the reload after runActions (the fix being tested)
+    //   2. inside migrateLegacyTelemetryEvents
+    //   3. inside migrateDeclarativeIntegrations
+    //   4. inside migrateClaudeCodeHooks
+    //   5. inside updateSecretsBinaryIfNeeded
+    //   6. inside updateScaScannerBinaryIfNeeded
+    //   7. the reload after runActions (the fix being tested)
     const reloadedState = makeState();
     loadStateSpy
       .mockReturnValueOnce(makeState()) // call 1: version check
-      .mockReturnValueOnce(makeState()) // call 2: migrateDeclarativeIntegrations
-      .mockReturnValueOnce(makeState()) // call 3: migrateClaudeCodeHooks
-      .mockReturnValueOnce(makeState()) // call 4: updateSecretsBinaryIfNeeded
-      .mockReturnValueOnce(makeState()) // call 5: updateScaScannerBinaryIfNeeded
-      .mockReturnValueOnce(reloadedState); // call 6: reload
+      .mockReturnValueOnce(makeState()) // call 2: migrateLegacyTelemetryEvents
+      .mockReturnValueOnce(makeState()) // call 3: migrateDeclarativeIntegrations
+      .mockReturnValueOnce(makeState()) // call 4: migrateClaudeCodeHooks
+      .mockReturnValueOnce(makeState()) // call 5: updateSecretsBinaryIfNeeded
+      .mockReturnValueOnce(makeState()) // call 6: updateScaScannerBinaryIfNeeded
+      .mockReturnValueOnce(reloadedState); // call 7: reload
 
     await runPostUpdateActions();
 
@@ -211,6 +221,75 @@ describe('runPostUpdateActions', () => {
     expect(saved.agents['claude-code'].hooks.installed.some((h) => h.name === 'sonar-a3s')).toBe(
       false,
     );
+  });
+});
+
+function makeLegacyCommandEvent(command: string): StoredCommandExecutedEvent {
+  return {
+    metadata: {
+      event_id: randomUUID(),
+      source: { domain: 'CLI' },
+      event_type: 'Analytics.Cli.CliCommandExecuted',
+      event_timestamp: String(Date.now()),
+    },
+    event_payload: {
+      cli_installation_id: 'install-id',
+      machine_id: 'machine-id',
+      cli_version: '1.0.0',
+      invocation_id: 'inv-id',
+      os: 'linux',
+      connection_type: null,
+      user_uuid: null,
+      organization_uuid_v4: null,
+      sqs_installation_id: null,
+      caller_agent: null,
+      command,
+      subcommand: null,
+      result: 'success',
+      distribution: DISTRIBUTION,
+    },
+  };
+}
+
+describe('migrateLegacyTelemetryEvents', () => {
+  let loadStateSpy: Mock<typeof stateRepository.loadState>;
+  let saveStateSpy: Mock<typeof stateRepository.saveState>;
+  let appendAnalysisEventSpy: Mock<typeof findings.appendAnalysisEvent>;
+
+  beforeEach(() => {
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeState());
+    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
+    appendAnalysisEventSpy = spyOn(findings, 'appendAnalysisEvent').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    loadStateSpy.mockRestore();
+    saveStateSpy.mockRestore();
+    appendAnalysisEventSpy.mockRestore();
+  });
+
+  it('does nothing when there are no legacy telemetry events', () => {
+    // Default state has no telemetry.events queue.
+    migrateLegacyTelemetryEvents();
+
+    expect(appendAnalysisEventSpy).not.toHaveBeenCalled();
+    expect(saveStateSpy).not.toHaveBeenCalled();
+  });
+
+  it('migrates each legacy event to findings.ndjson and clears the queue', () => {
+    const state = makeState();
+    const events = [makeLegacyCommandEvent('auth'), makeLegacyCommandEvent('analyze')];
+    state.telemetry.events = events;
+    loadStateSpy.mockReturnValue(state);
+
+    migrateLegacyTelemetryEvents();
+
+    expect(appendAnalysisEventSpy).toHaveBeenCalledTimes(2);
+    expect(appendAnalysisEventSpy).toHaveBeenNthCalledWith(1, events[0]);
+    expect(appendAnalysisEventSpy).toHaveBeenNthCalledWith(2, events[1]);
+
+    expect(saveStateSpy).toHaveBeenCalledTimes(1);
+    expect(saveStateSpy.mock.calls[0][0].telemetry.events).toBeUndefined();
   });
 });
 

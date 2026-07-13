@@ -35,6 +35,7 @@ import {
 } from '../cli/commands/integrate/_common/registry';
 import { CLAUDE_INTEGRATION_ID } from '../cli/commands/integrate/claude/declaration';
 import { installHooks } from '../cli/commands/integrate/claude/hooks.js';
+import { appendAnalysisEvent } from '../telemetry/findings.js';
 import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from './install-types.js';
 import logger from './logger';
 import {
@@ -84,10 +85,30 @@ export async function runPostUpdateActions(): Promise<void> {
 }
 
 async function runActions(_previousVersion: string, _currentVersion: string): Promise<void> {
+  migrateLegacyTelemetryEvents();
   await migrateDeclarativeIntegrations();
   await migrateClaudeCodeHooks();
   await updateSecretsBinaryIfNeeded();
   await updateScaScannerBinaryIfNeeded();
+}
+
+/**
+ * Move any command-telemetry events left in the legacy
+ * `state.telemetry.events` queue into findings.ndjson.
+ */
+export function migrateLegacyTelemetryEvents(): void {
+  const state = loadState();
+  const legacyEvents = state.telemetry.events ?? [];
+  if (legacyEvents.length === 0) {
+    return;
+  }
+
+  for (const event of legacyEvents) {
+    appendAnalysisEvent(event);
+  }
+  delete state.telemetry.events;
+  saveState(state);
+  logger.debug(`Migrated ${legacyEvents.length} legacy telemetry event(s) to findings.ndjson`);
 }
 
 export async function migrateDeclarativeIntegrations(

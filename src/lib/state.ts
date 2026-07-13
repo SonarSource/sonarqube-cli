@@ -416,55 +416,6 @@ export interface IntegrationsState {
  */
 export type TelemetryConnectionType = 'sqc' | 'sqs' | null;
 
-/**
- * Metadata envelope for a telemetry event.
- */
-export interface TelemetryEventMetadata {
-  event_id: string;
-  source: {
-    domain: 'CLI';
-  };
-  event_type: 'Analytics.Cli.CliCommandExecuted';
-  /** Epoch milliseconds as a string */
-  event_timestamp: string;
-}
-
-/**
- * The payload describing the specific CLI command invocation.
- */
-export interface TelemetryEventPayload {
-  cli_installation_id: string;
-  machine_id: string;
-  cli_version: string;
-  /** First-level command name (e.g. "auth" for `sonar auth login`) */
-  command: string;
-  /** Remainder of the command path, null when there is no subcommand */
-  subcommand: string | null;
-  invocation_id: string;
-  result: 'success' | 'failure';
-  os: string;
-  /** {@link TelemetryConnectionType} — null when not authenticated */
-  connection_type: TelemetryConnectionType;
-  /** UUID of the user on SonarQube Cloud or Server, null when not authenticated or on older SQS versions */
-  user_uuid: string | null;
-  /** UUID of the SonarQube Cloud organization, null when not authenticated or SQS */
-  organization_uuid_v4: string | null;
-  /** Installation ID of the SonarQube Server, null when not authenticated or SQC */
-  sqs_installation_id: string | null;
-  /** Distribution channel of the running CLI binary. */
-  distribution: Distribution;
-  /** Inferred caller (Cursor, Claude Code, or Copilot CLI) from the process environment. See `detectCallerAgent`. */
-  caller_agent: CallerAgent | null;
-}
-
-/**
- * Full telemetry event stored in state and sent to the backend.
- */
-export interface StoredTelemetryEvent {
-  metadata: TelemetryEventMetadata;
-  event_payload: TelemetryEventPayload;
-}
-
 /** Shared identity fields on every analysis telemetry event. */
 export interface AnalysisEventIdentityPayload {
   cli_installation_id: string;
@@ -568,8 +519,32 @@ export interface StoredIntegrationConfiguredEvent {
   event_payload: IntegrationConfiguredEventPayload;
 }
 
+/**
+ * Payload describing a specific CLI command invocation.
+ */
+export interface CommandExecutedEventPayload extends AnalysisEventIdentityPayload {
+  /** First-level command name (e.g. "auth" for `sonar auth login`) */
+  command: string;
+  /** Remainder of the command path, null when there is no subcommand */
+  subcommand: string | null;
+  result: 'success' | 'failure';
+  /** Distribution channel of the running CLI binary. */
+  distribution: Distribution;
+}
+
+/** Full CliCommandExecuted event written to findings.ndjson. */
+export interface StoredCommandExecutedEvent {
+  metadata: AnalysisEventMetadataBase & {
+    event_type: 'Analytics.Cli.CliCommandExecuted';
+  };
+  event_payload: CommandExecutedEventPayload;
+}
+
 /** Any event stored in findings.ndjson and drained by flushFindings. */
-export type StoredAnalysisEvent = StoredAnalysisCompletedEvent | StoredIntegrationConfiguredEvent;
+export type StoredAnalysisEvent =
+  | StoredAnalysisCompletedEvent
+  | StoredIntegrationConfiguredEvent
+  | StoredCommandExecutedEvent;
 
 /**
  * Telemetry configuration and pending event batch
@@ -581,8 +556,8 @@ export interface TelemetryState {
   firstUseDate: string;
   /** Stable installation ID created once when state is first initialized */
   installationId?: string;
-  /** Pending events not yet sent to the backend */
-  events: StoredTelemetryEvent[];
+  /** Legacy CliCommandExecuted events queue. Migrated in post-update. */
+  events?: StoredCommandExecutedEvent[];
 }
 
 /**
@@ -649,7 +624,6 @@ export function getDefaultState(cliVersion: string): CliState {
       enabled: true,
       installationId: randomUUID(),
       firstUseDate: new Date().toISOString(),
-      events: [],
     },
     agentExtensions: [],
     integrations: {

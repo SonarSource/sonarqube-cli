@@ -24,7 +24,7 @@
  *   flushFindings         — atomic rename, retention cap, send, re-queue, concurrent safety
  */
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -35,20 +35,20 @@ import { scanAndEmitSecrets } from '../../../src/cli/commands/analyze/secrets.js
 import * as agentDetector from '../../../src/lib/agent-detector.js';
 import type { ResolvedAuth } from '../../../src/lib/auth-resolver.js';
 import { ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
+import { DISTRIBUTION } from '../../../src/lib/distribution.js';
 import type { SpawnResult } from '../../../src/lib/process.js';
 import * as stateRepository from '../../../src/lib/repository/state-repository.js';
 import type {
   AnalysisCompletedEventPayload,
-  CliState,
   StoredAnalysisCompletedEvent,
-  StoredAnalysisEvent,
+  StoredCommandExecutedEvent,
   StoredIntegrationConfiguredEvent,
 } from '../../../src/lib/state.js';
-import { getDefaultState } from '../../../src/lib/state.js';
 import * as stateManager from '../../../src/lib/state-manager.js';
 import {
   type AnalysisCompletedFields,
   emitAnalysisCompleted,
+  emitCommandExecuted,
   emitIntegrationConfigured,
   flushFindings,
   type IntegrationConfiguredFields,
@@ -56,6 +56,12 @@ import {
 import { SECRETS_CALLER_COMMANDS } from '../../../src/telemetry/secrets-analysis-telemetry.js';
 import { SQAA_ANALYZE_AGENTIC_CALLER_COMMAND } from '../../../src/telemetry/sqaa-analysis-telemetry.js';
 import * as userModule from '../../../src/telemetry/user.js';
+import {
+  makeTelemetryState,
+  readTelemetryEvents,
+  telemetryEventsPath,
+  writeTelemetryEvent,
+} from './telemetry-helpers.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -115,25 +121,6 @@ function makeStoredCompletedEvent(
   };
 }
 
-function findingsPath(sonarUserHome: string): string {
-  return join(sonarUserHome, 'sonarqube-cli', 'telemetry', 'findings.ndjson');
-}
-
-function readLines(sonarUserHome: string): StoredAnalysisEvent[] {
-  const path = findingsPath(sonarUserHome);
-  if (!existsSync(path)) return [];
-  return readFileSync(path, 'utf-8')
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as StoredAnalysisEvent);
-}
-
-function writeStoredEvent(event: StoredAnalysisEvent): void {
-  const telemetryDir = join(testSonarUserHome, 'sonarqube-cli', 'telemetry');
-  mkdirSync(telemetryDir, { recursive: true });
-  appendFileSync(findingsPath(testSonarUserHome), JSON.stringify(event) + '\n');
-}
-
 function mockFetch(ok = true): ReturnType<typeof spyOn> {
   return spyOn(globalThis, 'fetch').mockResolvedValue({
     ok,
@@ -142,13 +129,6 @@ function mockFetch(ok = true): ReturnType<typeof spyOn> {
     json: () => Promise.resolve({}),
     text: () => Promise.resolve('{}'),
   } as Response);
-}
-
-function makeTelemetryState(enabled = true): CliState {
-  const state = getDefaultState('1.0.0');
-  state.telemetry.enabled = enabled;
-  state.telemetry.installationId = 'install-id';
-  return state;
 }
 
 const AUTH: ResolvedAuth = {
@@ -208,7 +188,7 @@ describe('emitAnalysisCompleted()', () => {
   it('writes a valid CliAnalysisCompleted envelope', async () => {
     await emitAnalysisCompleted(AUTH, makeCompletedFields({ findings_count: 2, exit_code: 51 }));
 
-    const [event] = readLines(testSonarUserHome);
+    const [event] = readTelemetryEvents(testSonarUserHome);
     expect(event.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
     const completedEvent = event as StoredAnalysisCompletedEvent;
     expect(completedEvent.event_payload.analyzer).toBe('sqaa');
@@ -222,7 +202,7 @@ describe('emitAnalysisCompleted()', () => {
 
     await emitAnalysisCompleted(AUTH, makeCompletedFields());
 
-    expect(readLines(testSonarUserHome)).toHaveLength(0);
+    expect(readTelemetryEvents(testSonarUserHome)).toHaveLength(0);
   });
 
   it('does not append when installationId is absent', async () => {
@@ -232,20 +212,20 @@ describe('emitAnalysisCompleted()', () => {
 
     await emitAnalysisCompleted(AUTH, makeCompletedFields());
 
-    expect(readLines(testSonarUserHome)).toHaveLength(0);
+    expect(readTelemetryEvents(testSonarUserHome)).toHaveLength(0);
   });
 
   it('sets connection_type to sqc for cloud connections', async () => {
     await emitAnalysisCompleted({ ...AUTH, connectionType: 'cloud' }, makeCompletedFields());
 
-    const [event] = readLines(testSonarUserHome);
+    const [event] = readTelemetryEvents(testSonarUserHome);
     expect(event.event_payload.connection_type).toBe('sqc');
   });
 
   it('sets connection_type to sqs for server connections', async () => {
     await emitAnalysisCompleted({ ...AUTH, connectionType: 'on-premise' }, makeCompletedFields());
 
-    const [event] = readLines(testSonarUserHome);
+    const [event] = readTelemetryEvents(testSonarUserHome);
     expect(event.event_payload.connection_type).toBe('sqs');
   });
 
@@ -263,7 +243,7 @@ describe('emitAnalysisCompleted()', () => {
 
     await emitAnalysisCompleted(AUTH, makeCompletedFields());
 
-    const payload = readLines(testSonarUserHome)[0].event_payload;
+    const payload = readTelemetryEvents(testSonarUserHome)[0].event_payload;
     expect(payload.user_uuid).toBe('user-uuid-abc');
     expect(payload.organization_uuid_v4).toBe('org-uuid-xyz');
     expect(payload.sqs_installation_id).toBe('sqs-install-id-123');
@@ -274,7 +254,7 @@ describe('emitAnalysisCompleted()', () => {
 
     await emitAnalysisCompleted(AUTH, makeCompletedFields());
 
-    const payload = readLines(testSonarUserHome)[0].event_payload;
+    const payload = readTelemetryEvents(testSonarUserHome)[0].event_payload;
     expect(payload.caller_agent).toBe('cursor');
   });
 
@@ -319,7 +299,7 @@ describe('emitIntegrationConfigured()', () => {
       }),
     );
 
-    const [event] = readLines(testSonarUserHome);
+    const [event] = readTelemetryEvents(testSonarUserHome);
     expect(event.metadata.event_type).toBe('Analytics.Cli.CliIntegrationConfigured');
     const configured = event as StoredIntegrationConfiguredEvent;
     expect(configured.event_payload.integration_id).toBe('git');
@@ -339,7 +319,58 @@ describe('emitIntegrationConfigured()', () => {
 
     await emitIntegrationConfigured(AUTH, makeIntegrationConfiguredFields());
 
-    expect(readLines(testSonarUserHome)).toHaveLength(0);
+    expect(readTelemetryEvents(testSonarUserHome)).toHaveLength(0);
+  });
+});
+
+// ─── emitCommandExecuted ───────────────────────────────────────────────────────
+
+describe('emitCommandExecuted()', () => {
+  it('writes a valid CliCommandExecuted envelope with identity base merged in', async () => {
+    await emitCommandExecuted({
+      command: 'auth',
+      subcommand: 'login',
+      result: 'success',
+      distribution: DISTRIBUTION,
+    });
+
+    const [event] = readTelemetryEvents<StoredCommandExecutedEvent>(testSonarUserHome);
+    expect(event.metadata.event_type).toBe('Analytics.Cli.CliCommandExecuted');
+    expect(event.event_payload.command).toBe('auth');
+    expect(event.event_payload.subcommand).toBe('login');
+    expect(event.event_payload.result).toBe('success');
+    expect(event.event_payload.distribution).toBe(DISTRIBUTION);
+    // Identity base is merged in.
+    expect(event.event_payload.cli_installation_id).toBe('install-id');
+    expect(event.event_payload.machine_id).toBe('machine-id');
+  });
+
+  it('does not append when telemetry is disabled', async () => {
+    loadStateSpy.mockReturnValue(makeTelemetryState(false));
+
+    await emitCommandExecuted({
+      command: 'auth',
+      subcommand: null,
+      result: 'success',
+      distribution: DISTRIBUTION,
+    });
+
+    expect(readTelemetryEvents(testSonarUserHome)).toHaveLength(0);
+  });
+
+  it('does not append when installationId is absent', async () => {
+    const stateWithoutId = makeTelemetryState();
+    stateWithoutId.telemetry.installationId = undefined;
+    loadStateSpy.mockReturnValue(stateWithoutId);
+
+    await emitCommandExecuted({
+      command: 'auth',
+      subcommand: null,
+      result: 'success',
+      distribution: DISTRIBUTION,
+    });
+
+    expect(readTelemetryEvents(testSonarUserHome)).toHaveLength(0);
   });
 });
 
@@ -357,8 +388,8 @@ describe('flushFindings()', () => {
   });
 
   it('POSTs each event to the telemetry endpoint', async () => {
-    writeStoredEvent(makeStoredCompletedEvent({ analysis_id: 'run-a' }));
-    writeStoredEvent(makeStoredCompletedEvent({ analysis_id: 'run-b' }));
+    writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent({ analysis_id: 'run-a' }));
+    writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent({ analysis_id: 'run-b' }));
 
     const fetchSpy = mockFetch();
     try {
@@ -370,19 +401,19 @@ describe('flushFindings()', () => {
   });
 
   it('deletes findings.ndjson after draining', async () => {
-    writeStoredEvent(makeStoredCompletedEvent());
+    writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent());
 
     const fetchSpy = mockFetch();
     try {
       await flushFindings(Date.now() + 60_000);
-      expect(existsSync(findingsPath(testSonarUserHome))).toBe(false);
+      expect(existsSync(telemetryEventsPath(testSonarUserHome))).toBe(false);
     } finally {
       fetchSpy.mockRestore();
     }
   });
 
   it('sends with correct headers and POST method', async () => {
-    writeStoredEvent(makeStoredCompletedEvent());
+    writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent());
 
     const fetchSpy = mockFetch();
     try {
@@ -397,7 +428,10 @@ describe('flushFindings()', () => {
   });
 
   it('serialises the analysis event in the request body', async () => {
-    writeStoredEvent(makeStoredCompletedEvent({ findings_count: 3, exit_code: 51 }));
+    writeTelemetryEvent(
+      testSonarUserHome,
+      makeStoredCompletedEvent({ findings_count: 3, exit_code: 51 }),
+    );
 
     const fetchSpy = mockFetch();
     try {
@@ -412,7 +446,7 @@ describe('flushFindings()', () => {
   });
 
   it('omits null values from the serialised body', async () => {
-    writeStoredEvent(makeStoredCompletedEvent());
+    writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent());
 
     const fetchSpy = mockFetch();
     try {
@@ -451,7 +485,7 @@ describe('flushFindings()', () => {
     const telemetryDir = join(testSonarUserHome, 'sonarqube-cli', 'telemetry');
     mkdirSync(telemetryDir, { recursive: true });
     writeFileSync(
-      findingsPath(testSonarUserHome),
+      telemetryEventsPath(testSonarUserHome),
       [JSON.stringify(staleEvent), JSON.stringify(freshEvent)].join('\n') + '\n',
     );
 
@@ -479,7 +513,7 @@ describe('flushFindings()', () => {
       },
       event_payload: makeCompletedPayload(),
     };
-    writeFileSync(findingsPath(testSonarUserHome), JSON.stringify(nanTsEvent) + '\n');
+    writeFileSync(telemetryEventsPath(testSonarUserHome), JSON.stringify(nanTsEvent) + '\n');
 
     const fetchSpy = mockFetch();
     try {
@@ -495,7 +529,7 @@ describe('flushFindings()', () => {
     mkdirSync(telemetryDir, { recursive: true });
     const validEvent = makeStoredCompletedEvent({ analysis_id: 'valid-run' });
     writeFileSync(
-      findingsPath(testSonarUserHome),
+      telemetryEventsPath(testSonarUserHome),
       ['not-valid-json', JSON.stringify(validEvent), '{broken'].join('\n') + '\n',
     );
 
@@ -509,8 +543,8 @@ describe('flushFindings()', () => {
   });
 
   it('re-queues events that fail to send for the next flush', async () => {
-    writeStoredEvent(makeStoredCompletedEvent({ analysis_id: 'run-a' }));
-    writeStoredEvent(makeStoredCompletedEvent({ analysis_id: 'run-b' }));
+    writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent({ analysis_id: 'run-a' }));
+    writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent({ analysis_id: 'run-b' }));
 
     const fetchSpy = spyOn(globalThis, 'fetch')
       .mockRejectedValueOnce(new Error('network error'))
@@ -518,7 +552,7 @@ describe('flushFindings()', () => {
 
     try {
       await flushFindings(Date.now() + 60_000);
-      const requeued = readLines(testSonarUserHome);
+      const requeued = readTelemetryEvents(testSonarUserHome);
       expect(requeued).toHaveLength(1);
       expect(requeued[0].metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
       expect((requeued[0] as StoredAnalysisCompletedEvent).event_payload.analysis_id).toBe('run-a');
@@ -528,14 +562,14 @@ describe('flushFindings()', () => {
   });
 
   it('re-queues all events when the deadline has already passed', async () => {
-    writeStoredEvent(makeStoredCompletedEvent({ analysis_id: 'run-a' }));
-    writeStoredEvent(makeStoredCompletedEvent({ analysis_id: 'run-b' }));
+    writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent({ analysis_id: 'run-a' }));
+    writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent({ analysis_id: 'run-b' }));
 
     const fetchSpy = mockFetch();
     try {
       await flushFindings(Date.now() - 1);
       expect(fetchSpy).not.toHaveBeenCalled();
-      const requeued = readLines(testSonarUserHome);
+      const requeued = readTelemetryEvents(testSonarUserHome);
       expect(requeued).toHaveLength(2);
     } finally {
       fetchSpy.mockRestore();
@@ -543,9 +577,9 @@ describe('flushFindings()', () => {
   });
 
   it('is a no-op when a concurrent flush already renamed the file (ENOENT race)', async () => {
-    writeStoredEvent(makeStoredCompletedEvent());
+    writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent());
 
-    const path = findingsPath(testSonarUserHome);
+    const path = telemetryEventsPath(testSonarUserHome);
     const { renameSync: realRename } = await import('node:fs');
     let calls = 0;
     const renameSpy = spyOn(await import('node:fs'), 'renameSync').mockImplementation(
@@ -571,8 +605,8 @@ describe('flushFindings()', () => {
   });
 
   it('silently swallows individual send failures', async () => {
-    writeStoredEvent(makeStoredCompletedEvent({ analysis_id: 'run-a' }));
-    writeStoredEvent(makeStoredCompletedEvent({ analysis_id: 'run-b' }));
+    writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent({ analysis_id: 'run-a' }));
+    writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent({ analysis_id: 'run-b' }));
 
     const fetchSpy = spyOn(globalThis, 'fetch')
       .mockRejectedValueOnce(new Error('network error'))
@@ -604,7 +638,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
   it('does nothing when telemetry is disabled', async () => {
     loadStateSpy.mockReturnValue(makeTelemetryState(false));
     await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.analyzeSecrets, AUTH, resolvedRun(0, '{}'));
-    expect(readLines(testSonarUserHome)).toHaveLength(0);
+    expect(readTelemetryEvents(testSonarUserHome)).toHaveLength(0);
   });
 
   it('emits a single CliAnalysisCompleted with details "" on a clean scan (exit 0, no issues)', async () => {
@@ -614,7 +648,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
       resolvedRun(0, JSON.stringify({ issues: [] })),
     );
 
-    const lines = readLines(testSonarUserHome);
+    const lines = readTelemetryEvents(testSonarUserHome);
     expect(lines).toHaveLength(1);
     expect(lines[0].metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
     const completed = lines[0] as StoredAnalysisCompletedEvent;
@@ -638,7 +672,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
     });
     await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.gitPreCommit, AUTH, resolvedRun(51, stdout));
 
-    const lines = readLines(testSonarUserHome);
+    const lines = readTelemetryEvents(testSonarUserHome);
     expect(lines).toHaveLength(1);
 
     const completed = lines[0] as StoredAnalysisCompletedEvent;
@@ -669,7 +703,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
       resolvedRun(51, stdout),
     );
 
-    const lines = readLines(testSonarUserHome);
+    const lines = readTelemetryEvents(testSonarUserHome);
     const completed = lines[0] as StoredAnalysisCompletedEvent;
     const details = JSON.parse(completed.event_payload.details) as {
       files_with_findings_count: number;
@@ -682,7 +716,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
   it('emits only CliAnalysisCompleted with failures_count 1 for a non-clean, non-findings exit code', async () => {
     await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.copilotPreToolUse, AUTH, resolvedRun(2, '{}'));
 
-    const lines = readLines(testSonarUserHome);
+    const lines = readTelemetryEvents(testSonarUserHome);
     expect(lines).toHaveLength(1);
     const completed = lines[0] as StoredAnalysisCompletedEvent;
     expect(completed.event_payload.failures_count).toBe(1);
@@ -697,7 +731,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
       resolvedRun(null, '{}'),
     );
 
-    const lines = readLines(testSonarUserHome);
+    const lines = readTelemetryEvents(testSonarUserHome);
     expect(lines).toHaveLength(1);
     const completed = lines[0] as StoredAnalysisCompletedEvent;
     expect(completed.event_payload.failures_count).toBe(1);
@@ -709,7 +743,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
     // exit 2: run failed (failures_count 1) AND reported errors[] (errors_count 2) — not mutually exclusive
     await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.analyzeSecrets, AUTH, resolvedRun(2, stdout));
 
-    const lines = readLines(testSonarUserHome);
+    const lines = readTelemetryEvents(testSonarUserHome);
     const completed = lines[0] as StoredAnalysisCompletedEvent;
     expect(completed.event_payload.errors_count).toBe(2);
     expect(completed.event_payload.failures_count).toBe(1);
@@ -730,7 +764,7 @@ describe('scanAndEmitSecrets() — wrapper behavior', () => {
     expect(out.result).toBe(result);
     expect(out.parsed.issues).toHaveLength(1);
 
-    const lines = readLines(testSonarUserHome);
+    const lines = readTelemetryEvents(testSonarUserHome);
     // a single Completed event carrying details (findings present)
     expect(lines).toHaveLength(1);
     const completed = lines[0] as StoredAnalysisCompletedEvent;
@@ -750,7 +784,7 @@ describe('scanAndEmitSecrets() — wrapper behavior', () => {
     });
     expect(thrown).toBe(boom);
 
-    const lines = readLines(testSonarUserHome);
+    const lines = readTelemetryEvents(testSonarUserHome);
     expect(lines).toHaveLength(1);
     const completed = lines[0] as StoredAnalysisCompletedEvent;
     expect(completed.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
