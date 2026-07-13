@@ -63,41 +63,31 @@ export function buildContextAugmentationEnv(
     return env;
   }
 
-  setContextEnvValue(env, 'SONAR_CONTEXT_ORGANIZATION', context.organization);
-  setContextEnvValue(env, 'SONAR_CONTEXT_PROJECT', context.projectKey);
-  setContextEnvValue(env, 'SONAR_CONTEXT_TOKEN', context.token);
-  setContextEnvValue(env, 'SONAR_CONTEXT_URL', context.serverUrl);
-  setContextEnvValue(env, 'SONAR_CONTEXT_WORKSPACE_ROOT', context.workspaceDir);
+  // A context object fully determines the SONAR_CONTEXT_* values. Clear any
+  // inherited from the parent env first (static literal deletes — the dynamic
+  // form trips @typescript-eslint/no-dynamic-delete), then set only the fields
+  // provided so e.g. an explicit token is never paired with an inherited key.
+  delete env.SONAR_CONTEXT_ORGANIZATION;
+  delete env.SONAR_CONTEXT_PROJECT;
+  delete env.SONAR_CONTEXT_TOKEN;
+  delete env.SONAR_CONTEXT_URL;
+  delete env.SONAR_CONTEXT_WORKSPACE_ROOT;
+
+  assignContextEnvValue(env, 'SONAR_CONTEXT_ORGANIZATION', context.organization);
+  assignContextEnvValue(env, 'SONAR_CONTEXT_PROJECT', context.projectKey);
+  assignContextEnvValue(env, 'SONAR_CONTEXT_TOKEN', context.token);
+  assignContextEnvValue(env, 'SONAR_CONTEXT_URL', context.serverUrl);
+  assignContextEnvValue(env, 'SONAR_CONTEXT_WORKSPACE_ROOT', context.workspaceDir);
 
   return env;
 }
 
-function setContextEnvValue(
+function assignContextEnvValue(
   env: NodeJS.ProcessEnv,
   key: ContextAugmentationEnvKey,
   value: string | undefined,
 ): void {
   if (value !== undefined && value.length > 0) {
     env[key] = value;
-    return;
-  }
-
-  // Explicit per-key delete: @typescript-eslint/no-dynamic-delete forbids `delete env[key]`.
-  switch (key) {
-    case 'SONAR_CONTEXT_ORGANIZATION':
-      delete env.SONAR_CONTEXT_ORGANIZATION;
-      return;
-    case 'SONAR_CONTEXT_PROJECT':
-      delete env.SONAR_CONTEXT_PROJECT;
-      return;
-    case 'SONAR_CONTEXT_TOKEN':
-      delete env.SONAR_CONTEXT_TOKEN;
-      return;
-    case 'SONAR_CONTEXT_URL':
-      delete env.SONAR_CONTEXT_URL;
-      return;
-    case 'SONAR_CONTEXT_WORKSPACE_ROOT':
-      delete env.SONAR_CONTEXT_WORKSPACE_ROOT;
-      return;
   }
 }

@@ -18,13 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '../../../../src/lib/config-constants';
+import { canonicalizePath } from '../../../../src/lib/fs-utils';
 import logger from '../../../../src/lib/logger';
 import * as processLib from '../../../../src/lib/process.js';
 import * as projectWorkspace from '../../../../src/lib/project-workspace';
@@ -98,7 +99,7 @@ it('discoverProjectInfo: detects git repository when .git dir present', async ()
   try {
     const info = await discoverProjectInfo(testDir);
     expect(info.isGitRepo).toBe(true);
-    expect(info.root).toBe(realpathSync(testDir));
+    expect(info.root).toBe(canonicalizePath(testDir));
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }
@@ -219,13 +220,13 @@ describe('discoverProject', () => {
   });
 
   it('resolves rootDir and isGitRepo from filesystem', async () => {
-    expect((await discoverProject(testDir)).rootDir).toBe(realpathSync(testDir));
+    expect((await discoverProject(testDir)).rootDir).toBe(canonicalizePath(testDir));
     expect((await discoverProject(testDir)).isGitRepo).toBe(false);
 
     mkdirSync(join(testDir, '.git'));
     const withGit = await discoverProject(testDir);
     expect(withGit.isGitRepo).toBe(true);
-    expect(withGit.rootDir).toBe(realpathSync(testDir));
+    expect(withGit.rootDir).toBe(canonicalizePath(testDir));
   });
 
   it('no config: no server fields and no text UI', async () => {

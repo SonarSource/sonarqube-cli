@@ -24,14 +24,13 @@ import { homedir } from 'node:os';
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { OBSOLETE_A3S_MARKER, removeObsoleteHookArtifacts } from '../../../../lib/migration';
-import { resolveRecordedRepoRoot } from '../../../../lib/project-workspace/git-worktree';
 import type { IntegrationStateAttribute } from '../../../../lib/state';
 import {
   displayAgentIntegratePrelude,
   resolveIntegrateInstallTarget,
 } from '../_common/agent-integrate-prelude';
 import {
-  buildContextAugmentationAttrs,
+  buildRecordedIntegrationAttrs,
   resolveContextAugmentationSetup,
 } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
@@ -79,19 +78,13 @@ export async function integrateClaude(
         projectKey: ctx.projectKey,
         isGlobal: ctx.isGlobal,
       });
-  const repoRoot = await resolveRecordedRepoRoot(ctx.project.rootDir);
-  const featureAttrs = {
-    ...buildIntegrationAttrs(config),
-    repoRoot,
-    ...(contextAugmentation
-      ? await buildContextAugmentationAttrs(
-          config.serverURL,
-          config.organization,
-          contextAugmentation.scaEnabled,
-          ctx.project.rootDir,
-        )
-      : {}),
-  };
+  const featureAttrs = await buildRecordedIntegrationAttrs({
+    baseAttrs: buildIntegrationAttrs(config),
+    projectRoot: ctx.project.rootDir,
+    serverUrl: config.serverURL,
+    orgKey: config.organization,
+    contextAugmentation,
+  });
   const { installRoot, installScope } = resolveIntegrateInstallTarget(
     ctx.isGlobal,
     ctx.project.rootDir,

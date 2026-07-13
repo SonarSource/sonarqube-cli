@@ -24,15 +24,13 @@
 // integration options and recorded attrs, and run the install.
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
-import { resolveRecordedRepoRoot } from '../../../../lib/project-workspace/git-worktree';
-import type { IntegrationStateAttribute } from '../../../../lib/state';
 import { supportedIntegrations } from '../index.js';
 import {
   type AgentIntegrateContext,
   resolveIntegrateInstallTarget,
 } from './agent-integrate-prelude';
 import {
-  buildContextAugmentationAttrs,
+  buildRecordedIntegrationAttrs,
   resolveContextAugmentationSetup,
 } from './context-augmentation';
 import { installIntegration } from './registry';
@@ -72,19 +70,13 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
     context.isGlobal,
     context.project.rootDir,
   );
-  const repoRoot = await resolveRecordedRepoRoot(context.project.rootDir);
-  const attrs: Record<string, IntegrationStateAttribute> = {
-    projectKey: context.projectKey ?? null,
-    repoRoot,
-    ...(contextAugmentation
-      ? await buildContextAugmentationAttrs(
-          context.serverUrl,
-          context.organization,
-          contextAugmentation.scaEnabled,
-          context.project.rootDir,
-        )
-      : {}),
-  };
+  const attrs = await buildRecordedIntegrationAttrs({
+    baseAttrs: { projectKey: context.projectKey ?? null },
+    projectRoot: context.project.rootDir,
+    serverUrl: context.serverUrl,
+    orgKey: context.organization,
+    contextAugmentation,
+  });
   await installIntegration({
     registry: supportedIntegrations,
     integrationId: params.integrationId,

@@ -49,23 +49,45 @@ export interface ResolvedContextAugmentationSetup {
   scaEnabled: boolean;
 }
 
-/**
- * Build the persisted Context Augmentation attrs. `repoRoot` records the
- * repository's main working tree (resolved from `projectRoot`) so `sonar context`
- * can match the recorded connection from any linked worktree — including ones
- * created after integrate ran. Falls back to `projectRoot` outside a git repo.
- */
-export async function buildContextAugmentationAttrs(
+/** Context-Augmentation-specific persisted attrs (connection + SCA flag). */
+export function buildContextAugmentationAttrs(
   serverUrl: string,
   orgKey: string | undefined,
   scaEnabled: boolean,
-  projectRoot: string,
-): Promise<Record<string, IntegrationStateAttribute>> {
+): Record<string, IntegrationStateAttribute> {
   return {
     orgKey: orgKey ?? null,
     scaEnabled,
     serverUrl,
-    repoRoot: await resolveRecordedRepoRoot(projectRoot),
+  };
+}
+
+/**
+ * Assemble the attrs persisted on an agent integration's features, shared by
+ * every agent handler. Records the repository's main working tree as `repoRoot`
+ * (resolved once from `projectRoot`) so `sonar analyze`/`sonar context` can match
+ * the integration from any linked worktree — including ones created after
+ * integrate ran; falls back to `projectRoot` outside a git repo. Layers the
+ * agent's `baseAttrs` first, then the Context Augmentation connection attrs when
+ * CAG was set up.
+ */
+export async function buildRecordedIntegrationAttrs(params: {
+  baseAttrs: Record<string, IntegrationStateAttribute>;
+  projectRoot: string;
+  serverUrl: string;
+  orgKey: string | undefined;
+  contextAugmentation: ResolvedContextAugmentationSetup | null;
+}): Promise<Record<string, IntegrationStateAttribute>> {
+  return {
+    ...params.baseAttrs,
+    repoRoot: await resolveRecordedRepoRoot(params.projectRoot),
+    ...(params.contextAugmentation
+      ? buildContextAugmentationAttrs(
+          params.serverUrl,
+          params.orgKey,
+          params.contextAugmentation.scaEnabled,
+        )
+      : {}),
   };
 }
 
