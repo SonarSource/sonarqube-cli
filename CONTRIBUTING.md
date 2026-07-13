@@ -101,7 +101,7 @@ To avoid this, install the SonarSource Developer ID certificate locally. Once in
    ```bash
    security import certificate.p12 -k ~/Library/Keychains/login.keychain-db
    ```
-4. In **Keychain Access**, find the private key named _Developer ID Application: SonarSource SA_, open **Get Info → Access Control**, and select **Allow all applications to access this item**.
+4. In **Keychain Access**, find the private key named _Developer ID Application: SonarSource Sarl_, open **Get Info → Access Control**, and select **Allow all applications to access this item**.
 
 After this, every build signs the binary automatically. On machines without the certificate or without `APPLE_TEAM_ID` set the step is silently skipped.
 

@@ -31,7 +31,7 @@ if (!teamId) {
   process.exit(0);
 }
 
-const SIGN_IDENTITY = `Developer ID Application: SonarSource SA (${teamId})`;
+const SIGN_IDENTITY = `Developer ID Application: SonarSource Sarl (${teamId})`;
 
 const findIdentity = spawnSync('/usr/bin/security', ['find-identity', '-v', '-p', 'codesigning'], {
   encoding: 'utf8',
@@ -42,7 +42,7 @@ if (!findIdentity.stdout.includes(teamId)) {
   process.exit(0);
 }
 
-console.log(`Signing ${BINARY} with Developer ID Application: SonarSource SA...`);
+console.log(`Signing ${BINARY} with Developer ID Application: SonarSource Sarl...`);
 const result = spawnSync(
   '/usr/bin/codesign',
   ['--sign', SIGN_IDENTITY, '--force', '--options', 'runtime', BINARY],
