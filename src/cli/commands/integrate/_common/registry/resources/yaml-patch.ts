@@ -21,7 +21,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 
 import {
   PatchResource,
