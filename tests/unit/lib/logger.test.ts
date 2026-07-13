@@ -100,8 +100,8 @@ describe('Logger', () => {
     logger.error('Silent error');
     logger.info('Silent info');
 
-    expect(logOutput.length).toBe(0);
-    expect(errorOutput.length).toBe(0);
+    expect(logOutput).toHaveLength(0);
+    expect(errorOutput).toHaveLength(0);
   });
 
   it('should accept multiple arguments', () => {
