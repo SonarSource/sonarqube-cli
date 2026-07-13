@@ -225,7 +225,6 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       ],
     },
     createContextAugmentationFeature<ClaudeIntegrationOptions>({
-      integrationId: CLAUDE_INTEGRATION_ID,
       targetPath: resolveClaudeSkillPath,
       resources: [
         wholeFile({

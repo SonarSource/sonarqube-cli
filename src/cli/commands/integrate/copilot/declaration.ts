@@ -180,7 +180,6 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
       ],
     },
     createContextAugmentationFeature<CopilotIntegrationOptions>({
-      integrationId: COPILOT_INTEGRATION_ID,
       targetPath: resolveCopilotSkillPath,
     }),
   ],

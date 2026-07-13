@@ -59,7 +59,6 @@ describe('createContextAugmentationFeature', () => {
     const removed: string[] = [];
     const rollbackError = new Error('rollback failed');
     const feature = createContextAugmentationFeature({
-      integrationId: 'test-integration',
       targetPath: () => 'SKILL.md',
       resources: [
         makeResource('first-extra-resource', () => {
