@@ -44,11 +44,11 @@ export function getSecretPromptTemplateWindows(): string {
 }
 
 export function getContextAugmentationPostToolTemplateUnix(): string {
-  return unixTemplate('sonar context __hook ClaudePostToolUse');
+  return unixTemplate('sonar context __hook Claude');
 }
 
 export function getContextAugmentationPostToolTemplateWindows(): string {
-  return windowsTemplate('sonar context __hook ClaudePostToolUse');
+  return windowsTemplate('sonar context __hook Claude');
 }
 
 export function getSqaaPostToolTemplateUnix(projectKey: string): string {

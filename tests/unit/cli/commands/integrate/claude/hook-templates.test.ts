@@ -89,14 +89,16 @@ describe('Context Augmentation PostToolUse Hook Templates', () => {
     const template = getContextAugmentationPostToolTemplateUnix();
 
     expect(template.startsWith('#!/bin/bash')).toBe(true);
-    expect(template.includes('sonar context __hook ClaudePostToolUse')).toBe(true);
+    expect(template.includes('sonar context __hook Claude')).toBe(true);
+    expect(template.includes('ClaudePostToolUse')).toBe(false);
     expect(template.includes(UNIX_SONAR_COMMAND_GUARD)).toBe(true);
   });
 
   it('PostTool Windows hook: delegates to sonar context hook', () => {
     const template = getContextAugmentationPostToolTemplateWindows();
 
-    expect(template.includes('sonar context __hook ClaudePostToolUse')).toBe(true);
+    expect(template.includes('sonar context __hook Claude')).toBe(true);
+    expect(template.includes('ClaudePostToolUse')).toBe(false);
     expect(template.includes(WINDOWS_SONAR_COMMAND_GUARD)).toBe(true);
   });
 });
@@ -189,9 +191,7 @@ describe('Template Integrity', () => {
 
   it('Context Augmentation template routes to the double-underscore CAG hook', () => {
     expect(
-      getContextAugmentationPostToolTemplateUnix().includes(
-        'sonar context __hook ClaudePostToolUse',
-      ),
+      getContextAugmentationPostToolTemplateUnix().includes('sonar context __hook Claude'),
     ).toBe(true);
     expect(getContextAugmentationPostToolTemplateUnix().includes('sonar context _hook')).toBe(
       false,

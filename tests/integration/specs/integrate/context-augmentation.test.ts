@@ -139,6 +139,7 @@ interface ClaudeHookEntry {
 interface ClaudeSettings {
   hooks?: {
     PostToolUse?: ClaudeHookEntry[];
+    PostToolUseFailure?: ClaudeHookEntry[];
   };
 }
 
@@ -152,10 +153,17 @@ function readClaudeSettings(harness: TestHarness, root: HarnessRoot): ClaudeSett
   return file.asJson() as ClaudeSettings;
 }
 
-function claudeCagPostToolEntries(settings: ClaudeSettings | undefined): ClaudeHookEntry[] {
-  return (settings?.hooks?.PostToolUse ?? []).filter((entry) =>
+function claudeCagHookEntries(
+  settings: ClaudeSettings | undefined,
+  eventType: keyof NonNullable<ClaudeSettings['hooks']>,
+): ClaudeHookEntry[] {
+  return (settings?.hooks?.[eventType] ?? []).filter((entry) =>
     entry.hooks?.some((hook) => hook.command?.includes(CLAUDE_CAG_HOOK_MARKER)),
   );
+}
+
+function claudeCagPostToolEntries(settings: ClaudeSettings | undefined): ClaudeHookEntry[] {
+  return claudeCagHookEntries(settings, 'PostToolUse');
 }
 
 function claudeSqaaPostToolEntries(settings: ClaudeSettings | undefined): ClaudeHookEntry[] {
@@ -167,20 +175,26 @@ function claudeSqaaPostToolEntries(settings: ClaudeSettings | undefined): Claude
 function expectClaudeCagHookInstalled(harness: TestHarness): void {
   const script = harness.cwd.file(CLAUDE_CAG_POSTTOOL_SCRIPT_PATH);
   expect(script.exists()).toBe(true);
-  expect(script.asText()).toContain('sonar context __hook ClaudePostToolUse');
+  expect(script.asText()).toContain('sonar context __hook Claude');
+  expect(script.asText()).not.toContain('ClaudePostToolUse');
 
-  const entries = claudeCagPostToolEntries(readClaudeSettings(harness, 'cwd'));
-  expect(entries).toHaveLength(1);
-  expect(entries[0]?.matcher).toBe(CLAUDE_CAG_POSTTOOL_MATCHER);
-  expect(entries[0]?.hooks?.[0]?.type).toBe('command');
-  expect(entries[0]?.hooks?.[0]?.command).toContain(CLAUDE_CAG_HOOK_MARKER);
-  expect(entries[0]?.hooks?.[0]?.timeout).toBe(60);
+  const settings = readClaudeSettings(harness, 'cwd');
+  for (const eventType of ['PostToolUse', 'PostToolUseFailure'] as const) {
+    const entries = claudeCagHookEntries(settings, eventType);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.matcher).toBe(CLAUDE_CAG_POSTTOOL_MATCHER);
+    expect(entries[0]?.hooks?.[0]?.type).toBe('command');
+    expect(entries[0]?.hooks?.[0]?.command).toContain(CLAUDE_CAG_HOOK_MARKER);
+    expect(entries[0]?.hooks?.[0]?.timeout).toBe(60);
+  }
 }
 
 function expectClaudeCagHookAbsent(harness: TestHarness): void {
   for (const root of ['cwd', 'userHome'] as const) {
     expect(harness[root].file(CLAUDE_CAG_POSTTOOL_SCRIPT_PATH).exists()).toBe(false);
-    expect(claudeCagPostToolEntries(readClaudeSettings(harness, root))).toHaveLength(0);
+    const settings = readClaudeSettings(harness, root);
+    expect(claudeCagHookEntries(settings, 'PostToolUse')).toHaveLength(0);
+    expect(claudeCagHookEntries(settings, 'PostToolUseFailure')).toHaveLength(0);
   }
 }
 
@@ -331,6 +345,7 @@ describe('integrate claude — Context Augmentation', () => {
       const settings = readClaudeSettings(harness, 'cwd');
       expectClaudeCagHookInstalled(harness);
       expect(claudeCagPostToolEntries(settings)).toHaveLength(1);
+      expect(claudeCagHookEntries(settings, 'PostToolUseFailure')).toHaveLength(1);
       expect(settings?.hooks?.PostToolUse?.some((entry) => entry.matcher === 'Bash')).toBe(true);
     },
     { timeout: 30000 },
@@ -368,6 +383,7 @@ describe('integrate claude — Context Augmentation', () => {
       expect(claudeSqaaPostToolEntries(settings)).toHaveLength(1);
       expect(claudeSqaaPostToolEntries(settings)[0]?.matcher).toBe('Edit|Write');
       expect(claudeCagPostToolEntries(settings)).toHaveLength(1);
+      expect(claudeCagHookEntries(settings, 'PostToolUseFailure')).toHaveLength(1);
     },
     { timeout: 30000 },
   );

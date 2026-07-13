@@ -69,7 +69,7 @@ const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pretool-secrets';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 const CONTEXT_POSTTOOL_SCRIPT_REL =
   'sonar-context-augmentation/build-scripts/posttool-context-augmentation';
-const CONTEXT_POSTTOOL_MATCHER = 'Bash|PowerShell|Monitor|Read';
+const CONTEXT_TOOL_MATCHER = 'Bash|PowerShell|Monitor|Read';
 
 export const CLAUDE_INTEGRATION_ID = 'claude-code';
 
@@ -229,7 +229,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       resources: [
         wholeFile({
           id: 'posttool-context-augmentation-script',
-          displayName: 'Claude Context Augmentation PostToolUse hook script',
+          displayName: 'Claude Context Augmentation hook script',
           targetPath: (context) =>
             resolveAgentHookScriptPath(context, CLAUDE_CONFIG_DIR, CONTEXT_POSTTOOL_SCRIPT_REL),
           content: {
@@ -249,7 +249,15 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
                 context,
                 CLAUDE_CONFIG_DIR,
                 'PostToolUse',
-                CONTEXT_POSTTOOL_MATCHER,
+                CONTEXT_TOOL_MATCHER,
+                'sonar-context-augmentation',
+                CONTEXT_POSTTOOL_SCRIPT_REL,
+              ),
+              createAgentHookEntry(
+                context,
+                CLAUDE_CONFIG_DIR,
+                'PostToolUseFailure',
+                CONTEXT_TOOL_MATCHER,
                 'sonar-context-augmentation',
                 CONTEXT_POSTTOOL_SCRIPT_REL,
               ),
