@@ -21,8 +21,8 @@
 // Integration tests for the Context Augmentation step inside `sonar integrate
 // claude`, `sonar integrate copilot`, and `sonar integrate codex`.
 
-import { realpathSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -31,6 +31,7 @@ import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/cli/commands/in
 import { CLAUDE_INTEGRATION_ID } from '../../../../src/cli/commands/integrate/claude/declaration.js';
 import { CODEX_INTEGRATION_ID } from '../../../../src/cli/commands/integrate/codex/declaration.js';
 import { COPILOT_INTEGRATION_ID } from '../../../../src/cli/commands/integrate/copilot/declaration.js';
+import { pathComparisonKey } from '../../../../src/lib/fs-utils.js';
 import { detectPlatform } from '../../../../src/lib/platform-detector.js';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../src/lib/signatures.js';
 import type { CliState, InstalledIntegrationFeature } from '../../../../src/lib/state.js';
@@ -40,22 +41,6 @@ import {
   readCagInvocations as readInvocations,
 } from '../../harness/cag-invocations';
 import { commitFile, git, initGitRepo } from '../hook/git-test-helpers';
-
-// Canonicalize a path to its real on-disk form for stable full-path assertions
-// across 8.3 short vs long path forms. Uses realpathSync.native like production
-// (git-worktree canonicalize); the extra lowercase on Windows is a test-only
-// normalization — production does not lowercase, it relies on realpathSync.native
-// returning canonical drive-letter casing. Lowercasing here is strictly more
-// tolerant, so assertions never fail on casing alone.
-function canonical(path: string): string {
-  let resolved: string;
-  try {
-    resolved = realpathSync.native(path);
-  } catch {
-    resolved = resolve(path);
-  }
-  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
-}
 
 function findToolInvocation(invocations: CagInvocation[], subcommand: string): CagInvocation {
   const match = invocations.find((i) => i.argv[0] === 'tool' && i.argv[1] === subcommand);
@@ -285,8 +270,8 @@ describe('integrate claude — Context Augmentation', () => {
       expect(typeof repoRoot).toBe('string');
       // Compare full canonical paths (not just basenames): targetRoot resolves to
       // the physical worktree, repoRoot to the main working tree.
-      expect(canonical(targetRoot)).toBe(canonical(worktreePath));
-      expect(canonical(repoRoot as string)).toBe(canonical(harness.cwd.path));
+      expect(pathComparisonKey(targetRoot)).toBe(pathComparisonKey(worktreePath));
+      expect(pathComparisonKey(repoRoot as string)).toBe(pathComparisonKey(harness.cwd.path));
       expect(repoRoot).not.toBe(targetRoot);
     },
     { timeout: 30000 },

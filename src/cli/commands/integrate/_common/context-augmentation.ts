@@ -189,6 +189,7 @@ export async function runToolIntegrateCommand(
     projectKey: p.projectKey,
     serverUrl: p.auth.serverUrl,
     token: p.auth.token,
+    workspaceDir: p.projectRoot,
   });
 
   await runCagStepOrThrow(

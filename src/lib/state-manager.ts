@@ -27,7 +27,7 @@ import crypto from 'node:crypto';
 
 import { version as VERSION } from '../../package.json';
 import { warn } from '../ui';
-import { pathCompareKey } from './fs-utils';
+import { pathComparisonKey } from './fs-utils';
 import logger from './logger';
 import { loadState, saveState } from './repository/state-repository.js';
 
@@ -46,7 +46,7 @@ export function getActiveConnection(state: CliState): AuthConnection | undefined
 }
 
 export function canonicalProjectRoot(projectRoot: string): string {
-  return pathCompareKey(projectRoot);
+  return pathComparisonKey(projectRoot);
 }
 
 /**

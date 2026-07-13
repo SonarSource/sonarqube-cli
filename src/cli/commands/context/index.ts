@@ -23,7 +23,7 @@ import { isAbsolute, relative } from 'node:path';
 
 import { resolveAuth, type ResolvedAuth } from '../../../lib/auth-resolver';
 import { SONAR_CONTEXT_INVOCATION } from '../../../lib/config-constants';
-import { canonicalizePath, pathCompareKey } from '../../../lib/fs-utils';
+import { canonicalizePath, pathComparisonKey } from '../../../lib/fs-utils';
 import { getToken } from '../../../lib/keychain';
 import logger from '../../../lib/logger';
 import {
@@ -87,13 +87,8 @@ interface RecordedContextAugmentationConfig {
   workspaceDir?: string;
 }
 
-/** Case-insensitive path key for matching recorded integration roots on Windows. */
-function comparePath(path: string): string {
-  return pathCompareKey(path);
-}
-
 function isPathInside(parent: string, child: string): boolean {
-  if (pathCompareKey(child) === pathCompareKey(parent)) {
+  if (pathComparisonKey(child) === pathComparisonKey(parent)) {
     return true;
   }
   const rel = relative(parent, child);
@@ -120,14 +115,14 @@ async function resolveRecordedContextAugmentationConfig(
   try {
     // Consult cwd, then its equivalent in the main working tree, so a linked
     // worktree still matches state recorded in the main checkout.
-    const candidates = (await resolveWorktreeEquivalentPaths(cwd)).map(comparePath);
+    const candidates = (await resolveWorktreeEquivalentPaths(cwd)).map(pathComparisonKey);
     const matches = loadState()
       .integrations.installed.flatMap((integration) =>
         integration.features.filter(isProjectContextAugmentationFeature).map((feature) => ({
           feature,
           // Prefer the stable main-working-tree key recorded at integrate time;
           // fall back to targetRoot for state written by older CLI versions.
-          projectRoot: comparePath(
+          projectRoot: pathComparisonKey(
             getOptionalStringAttr(feature.attrs, 'repoRoot') ?? feature.targetRoot,
           ),
         })),

@@ -23,21 +23,25 @@ import { isAbsolute, relative, resolve } from 'node:path';
 
 export const normalizePath = (p: string): string => p.replaceAll('\\', '/');
 
+// Win32 extended-length prefix emitted by realpathSync.native
+// (GetFinalPathNameByHandleW), anchored at the start of a path. The optional
+// `UNC\` group distinguishes the two forms the strip below must handle:
+//   \\?\C:\dir            (drive)   -> C:\dir
+//   \\?\UNC\server\share  (network) -> \\server\share
+// (String.raw can't express these — a raw literal may not end in a backslash.)
+const WIN32_EXTENDED_PREFIX_RE = /^\\\\\?\\(UNC\\)?/;
+
 /**
  * Strip the Win32 `\\?\` extended-length path prefix so paths from different
- * realpath implementations (native vs libuv) compare equal.
+ * realpath implementations (native vs libuv) compare equal. No-op off Windows
+ * and on paths without the prefix.
  */
 function stripWin32ExtendedPathPrefix(p: string): string {
   if (process.platform !== 'win32') {
     return p;
   }
-  if (p.startsWith('\\\\?\\UNC\\')) {
-    return `\\\\${p.slice('\\\\?\\UNC\\'.length)}`;
-  }
-  if (p.startsWith('\\\\?\\')) {
-    return p.slice(4);
-  }
-  return p;
+  // For the UNC form, the prefix collapses back to the `\\` network root.
+  return p.replace(WIN32_EXTENDED_PREFIX_RE, (_full, uncMarker) => (uncMarker ? '\\\\' : ''));
 }
 
 /**
@@ -67,9 +71,12 @@ export function canonicalizePath(p: string): string {
 }
 
 /**
- * Canonical path normalized for stable comparisons (case-insensitive on Windows).
+ * Derive an equality key for a path: its canonical form, lowercased on Windows
+ * (a case-insensitive filesystem). Use only to compare paths for equality — the
+ * Windows result is case-folded and not suitable for display or filesystem use;
+ * call `canonicalizePath` when you need the real path.
  */
-export function pathCompareKey(p: string): string {
+export function pathComparisonKey(p: string): string {
   const canonical = canonicalizePath(p);
   return process.platform === 'win32' ? canonical.toLowerCase() : canonical;
 }
