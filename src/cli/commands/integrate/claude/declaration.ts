@@ -248,6 +248,14 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
               createAgentHookEntry(
                 context,
                 CLAUDE_CONFIG_DIR,
+                'PreToolUse',
+                CONTEXT_TOOL_MATCHER,
+                'sonar-context-augmentation',
+                CONTEXT_POSTTOOL_SCRIPT_REL,
+              ),
+              createAgentHookEntry(
+                context,
+                CLAUDE_CONFIG_DIR,
                 'PostToolUse',
                 CONTEXT_TOOL_MATCHER,
                 'sonar-context-augmentation',
