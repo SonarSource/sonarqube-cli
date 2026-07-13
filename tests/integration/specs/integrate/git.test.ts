@@ -24,7 +24,7 @@ import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 
 import { ISOLATED_CLI_SPAWN_ENV } from '../../../_common/isolated-cli-env.js';
 import { TestHarness } from '../../harness';

@@ -22,7 +22,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 
 import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error';
 import type { ContainerIntegrationContext } from '../../../../../../src/cli/commands/integrate/_common/registry';
