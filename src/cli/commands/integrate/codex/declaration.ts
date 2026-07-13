@@ -204,6 +204,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
       ],
     },
     createContextAugmentationFeature<CodexIntegrationOptions>({
+      integrationId: CODEX_INTEGRATION_ID,
       targetPath: resolveCodexSkillPath,
     }),
   ],

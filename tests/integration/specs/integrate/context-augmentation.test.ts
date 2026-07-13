@@ -751,6 +751,67 @@ describe('integrate claude — Context Augmentation', () => {
   );
 
   it(
+    'preserves existing Claude CAG hook resources when retry setup fails',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(PROJECT_KEY)
+        .withCagEntitlement(ORG_KEY)
+        .withScaEnabled(true)
+        .start();
+      const serverUrl = server.baseUrl();
+      const env = {
+        SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+        SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+      };
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+      harness.state().withContextAugmentationBinaryInstalled();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [
+          `sonar.host.url=${serverUrl}`,
+          `sonar.projectKey=${PROJECT_KEY}`,
+          `sonar.organization=${ORG_KEY}`,
+        ].join('\n'),
+      );
+
+      const firstResult = await harness.run('integrate claude --non-interactive', {
+        extraEnv: env,
+      });
+
+      expect(firstResult.exitCode).toBe(0);
+      expectClaudeCagHookInstalled(harness);
+      const stateAfterSuccessfulInstall = harness.stateJsonFile.asText();
+      const hookScriptBeforeRetry = harness.cwd.file(CLAUDE_CAG_POSTTOOL_SCRIPT_PATH).asText();
+      const settingsBeforeRetry = harness.cwd.file('.claude', 'settings.json').asText();
+      harness
+        .state()
+        .withRawState(stateAfterSuccessfulInstall)
+        .withContextAugmentationBinaryInstalled({ initExitCode: 1 });
+
+      const retryResult = await harness.run('integrate claude --non-interactive', {
+        extraEnv: env,
+      });
+
+      expect(retryResult.exitCode).toBe(1);
+      expect(retryResult.stderr).toContain('Vortex context augmentation tool integration failed.');
+      expect(harness.cwd.file(CLAUDE_CAG_POSTTOOL_SCRIPT_PATH).asText()).toBe(
+        hookScriptBeforeRetry,
+      );
+      expect(harness.cwd.file('.claude', 'settings.json').asText()).toBe(settingsBeforeRetry);
+      expectClaudeCagHookInstalled(harness);
+      expectRecordedCagFeature(loadState(harness), {
+        integrationId: CLAUDE_INTEGRATION_ID,
+        projectRoot: harness.cwd.path,
+        scaEnabled: true,
+        serverUrl,
+      });
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'skips CAG with a warning on SonarQube Cloud when no project key is configured',
     async () => {
       const server = await harness

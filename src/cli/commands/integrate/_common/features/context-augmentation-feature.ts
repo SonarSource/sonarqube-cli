@@ -40,6 +40,7 @@ export const CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID =
   'context-augmentation-tool-integrate';
 
 export interface ContextAugmentationSkillFeatureOptions {
+  integrationId: string;
   targetPath: (context: IntegrationContext) => string;
   resources?: ResourceDeclaration[];
 }
@@ -87,7 +88,13 @@ export function createContextAugmentationFeature<
               scaEnabled: context.attrs?.scaEnabled === true,
             });
           } catch (error) {
-            await rollBackExtraResourcesBestEffort(extraResources, context);
+            // context augmentation faced an error, so we need to rollback (e.g. installed hooks).
+            // Ideally the declarative installer would tell operations which resources were
+            // applied during the current attempt, so rollback could remove only those. Until
+            // that plumbing exists, keep already-recorded resources intact on retry failures.
+            if (!isContextAugmentationFeatureRecorded(context, options.integrationId)) {
+              await rollBackExtraResourcesBestEffort(extraResources, context);
+            }
             throw error;
           }
         },
@@ -109,6 +116,22 @@ function getRequiredAuth(context: IntegrationContext) {
     throw new CommandFailedError('Authentication is unavailable for Vortex context augmentation.');
   }
   return context.auth;
+}
+
+function isContextAugmentationFeatureRecorded(
+  context: IntegrationContext,
+  integrationId: string,
+): boolean {
+  return (
+    context.state.integrations.installed
+      .find((integration) => integration.integrationId === integrationId)
+      ?.features.some(
+        (feature) =>
+          feature.featureId === CONTEXT_AUGMENTATION_FEATURE_ID &&
+          feature.scope === context.scope &&
+          feature.targetRoot === context.targetRoot,
+      ) ?? false
+  );
 }
 
 async function rollBackExtraResourcesBestEffort(

@@ -254,6 +254,7 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
       ],
     },
     createContextAugmentationFeature<CursorIntegrationOptions>({
+      integrationId: CURSOR_INTEGRATION_ID,
       targetPath: resolveCursorCagSkillPath,
     }),
   ],

@@ -234,6 +234,7 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
       ],
     },
     createContextAugmentationFeature<AntigravityIntegrationOptions>({
+      integrationId: ANTIGRAVITY_INTEGRATION_ID,
       targetPath: resolveAntigravitySkillPath,
     }),
   ],
