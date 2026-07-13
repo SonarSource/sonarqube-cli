@@ -40,9 +40,7 @@ export interface PlatformSpecificContent {
 }
 
 export type WholeFileContent =
-  | string
-  | PlatformSpecificContent
-  | ((context: IntegrationContext) => MaybePromise<string>);
+  string | PlatformSpecificContent | ((context: IntegrationContext) => MaybePromise<string>);
 
 export interface WholeFileResourceOptions extends BaseResourceOptions {
   targetPath: PathResolver;

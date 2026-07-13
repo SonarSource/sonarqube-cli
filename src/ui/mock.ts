@@ -26,14 +26,7 @@ export interface UiCall {
 }
 
 export type UiMethod =
-  | 'blank'
-  | 'discreetSuccess'
-  | 'error'
-  | 'info'
-  | 'print'
-  | 'success'
-  | 'text'
-  | 'warn';
+  'blank' | 'discreetSuccess' | 'error' | 'info' | 'print' | 'success' | 'text' | 'warn';
 
 let mockActive = false;
 const calls: UiCall[] = [];
