@@ -21,10 +21,7 @@
 import type { FixVersionVM } from './fix-version.ts';
 
 export type RecommendationAction =
-  | 'REMOVE_PACKAGE'
-  | 'REVIEW_LICENSE'
-  | 'UPGRADE_PACKAGE'
-  | 'NO_FIX_AVAILABLE';
+  'REMOVE_PACKAGE' | 'REVIEW_LICENSE' | 'UPGRADE_PACKAGE' | 'NO_FIX_AVAILABLE';
 
 export interface RecommendationVM {
   action: RecommendationAction;

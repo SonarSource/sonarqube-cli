@@ -64,8 +64,7 @@ export interface IntegrationInvocation<TOptions = Record<string, unknown>> {
 }
 
 export type FeatureTargetRoot<TOptions = Record<string, unknown>> =
-  | string
-  | ((invocation: IntegrationInvocation<TOptions>) => MaybePromise<string>);
+  string | ((invocation: IntegrationInvocation<TOptions>) => MaybePromise<string>);
 
 export type FeatureScope<TOptions = Record<string, unknown>> =
   | IntegrationScope
