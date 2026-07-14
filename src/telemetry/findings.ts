@@ -54,14 +54,12 @@ function getFindingsPath(): string {
   return join(getTelemetryDir(), FINDINGS_FILENAME);
 }
 
-export function appendAnalysisEvent(event: StoredAnalysisEvent): boolean {
+export function appendAnalysisEvent(event: StoredAnalysisEvent): void {
   try {
     mkdirSync(getTelemetryDir(), { recursive: true });
     appendFileSync(getFindingsPath(), JSON.stringify(event) + '\n');
-    return true;
   } catch {
     // fire-and-forget
-    return false;
   }
 }
 

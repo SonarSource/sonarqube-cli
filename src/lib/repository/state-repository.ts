@@ -52,7 +52,6 @@ function migrateState(raw: Record<string, unknown>): CliState {
       enabled: true,
       installationId: randomUUID(),
       firstUseDate: new Date().toISOString(),
-      events: [],
     };
   }
   if (!raw.agentExtensions) {

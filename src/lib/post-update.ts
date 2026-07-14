@@ -103,17 +103,16 @@ export function migrateLegacyTelemetryEvents(): void {
     return;
   }
 
-  const unmigrated = legacyEvents.filter((event) => !appendAnalysisEvent(event));
-  if (unmigrated.length === 0) {
-    delete state.telemetry.events;
-  } else {
-    state.telemetry.events = unmigrated;
-  }
+  // Clear the queue first, then drain: a crash mid-way loses a rare
+  // best-effort event instead of re-appending duplicates on the next launch.
+  delete state.telemetry.events;
   saveState(state);
-  const migrated = legacyEvents.length - unmigrated.length;
-  logger.debug(
-    `Migrated ${migrated}/${legacyEvents.length} legacy telemetry event(s) to findings.ndjson`,
-  );
+
+  for (const event of legacyEvents) {
+    appendAnalysisEvent(event);
+  }
+
+  logger.debug(`Migrated ${legacyEvents.length} legacy telemetry event(s) to findings.ndjson`);
 }
 
 export async function migrateDeclarativeIntegrations(
