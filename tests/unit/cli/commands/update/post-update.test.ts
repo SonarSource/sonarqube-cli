@@ -37,6 +37,7 @@ import {
   wholeFile,
 } from '../../../../../src/cli/commands/integrate/_common/registry';
 import * as hooks from '../../../../../src/cli/commands/integrate/claude/hooks';
+import * as configConstants from '../../../../../src/lib/config-constants';
 import { DISTRIBUTION } from '../../../../../src/lib/distribution';
 import { SCA_SCANNER_BINARY_NAME } from '../../../../../src/lib/install-types';
 import * as migration from '../../../../../src/lib/migration';
@@ -56,7 +57,7 @@ import type {
 } from '../../../../../src/lib/state';
 import { getDefaultState } from '../../../../../src/lib/state';
 import * as versionLib from '../../../../../src/lib/version';
-import * as findings from '../../../../../src/telemetry/findings';
+import * as telemetryEvents from '../../../../../src/telemetry/telemetry-events';
 
 const FAKE_HOME = '/fake/home';
 const homedirFn = () => FAKE_HOME;
@@ -254,29 +255,37 @@ function makeLegacyCommandEvent(command: string): StoredCommandExecutedEvent {
 describe('migrateLegacyTelemetryEvents', () => {
   let loadStateSpy: Mock<typeof stateRepository.loadState>;
   let saveStateSpy: Mock<typeof stateRepository.saveState>;
-  let appendAnalysisEventSpy: Mock<typeof findings.appendAnalysisEvent>;
+  let appendTelemetryEventSpy: Mock<typeof telemetryEvents.appendTelemetryEvent>;
+  let getTelemetryDirSpy: Mock<typeof configConstants.getTelemetryDir>;
+  let telemetryDir: string;
 
   beforeEach(() => {
+    telemetryDir = fs.mkdtempSync(join(tmpdir(), 'cli-post-update-telemetry-'));
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeState());
     saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
-    appendAnalysisEventSpy = spyOn(findings, 'appendAnalysisEvent').mockImplementation(() => {});
+    appendTelemetryEventSpy = spyOn(telemetryEvents, 'appendTelemetryEvent').mockImplementation(
+      () => {},
+    );
+    getTelemetryDirSpy = spyOn(configConstants, 'getTelemetryDir').mockReturnValue(telemetryDir);
   });
 
   afterEach(() => {
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
-    appendAnalysisEventSpy.mockRestore();
+    appendTelemetryEventSpy.mockRestore();
+    getTelemetryDirSpy.mockRestore();
+    fs.rmSync(telemetryDir, { recursive: true, force: true });
   });
 
   it('does nothing when there are no legacy telemetry events', () => {
     // Default state has no telemetry.events queue.
     migrateLegacyTelemetryEvents();
 
-    expect(appendAnalysisEventSpy).not.toHaveBeenCalled();
+    expect(appendTelemetryEventSpy).not.toHaveBeenCalled();
     expect(saveStateSpy).not.toHaveBeenCalled();
   });
 
-  it('migrates each legacy event to findings.ndjson and clears the queue', () => {
+  it('migrates each legacy event to telemetry-events.ndjson and clears the queue', () => {
     const state = makeState();
     const events = [makeLegacyCommandEvent('auth'), makeLegacyCommandEvent('analyze')];
     state.telemetry.events = events;
@@ -284,12 +293,35 @@ describe('migrateLegacyTelemetryEvents', () => {
 
     migrateLegacyTelemetryEvents();
 
-    expect(appendAnalysisEventSpy).toHaveBeenCalledTimes(2);
-    expect(appendAnalysisEventSpy).toHaveBeenNthCalledWith(1, events[0]);
-    expect(appendAnalysisEventSpy).toHaveBeenNthCalledWith(2, events[1]);
+    expect(appendTelemetryEventSpy).toHaveBeenCalledTimes(2);
+    expect(appendTelemetryEventSpy).toHaveBeenNthCalledWith(1, events[0]);
+    expect(appendTelemetryEventSpy).toHaveBeenNthCalledWith(2, events[1]);
 
     expect(saveStateSpy).toHaveBeenCalledTimes(1);
     expect(saveStateSpy.mock.calls[0][0].telemetry.events).toBeUndefined();
+  });
+
+  it('renames the on-disk findings.ndjson sink to telemetry-events.ndjson', () => {
+    const oldPath = join(telemetryDir, 'findings.ndjson');
+    const newPath = join(telemetryDir, 'telemetry-events.ndjson');
+    fs.writeFileSync(oldPath, '{"event":"buffered"}\n');
+
+    migrateLegacyTelemetryEvents();
+
+    expect(fs.existsSync(oldPath)).toBe(false);
+    expect(fs.readFileSync(newPath, 'utf-8')).toBe('{"event":"buffered"}\n');
+  });
+
+  it('appends the old sink contents when telemetry-events.ndjson already exists', () => {
+    const oldPath = join(telemetryDir, 'findings.ndjson');
+    const newPath = join(telemetryDir, 'telemetry-events.ndjson');
+    fs.writeFileSync(newPath, '{"event":"existing"}\n');
+    fs.writeFileSync(oldPath, '{"event":"buffered"}\n');
+
+    migrateLegacyTelemetryEvents();
+
+    expect(fs.existsSync(oldPath)).toBe(false);
+    expect(fs.readFileSync(newPath, 'utf-8')).toBe('{"event":"existing"}\n{"event":"buffered"}\n');
   });
 });
 

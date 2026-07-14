@@ -25,8 +25,8 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { ResolvedAuth } from '../../../src/lib/auth-resolver.js';
 import { canonicalizePath } from '../../../src/lib/fs-utils.js';
 import type { InstalledIntegrationFeature } from '../../../src/lib/state.js';
-import * as findings from '../../../src/telemetry/findings.js';
 import { emitIntegrationConfiguredTelemetry } from '../../../src/telemetry/integrate-telemetry.js';
+import * as telemetryEvents from '../../../src/telemetry/telemetry-events.js';
 
 const AUTH: ResolvedAuth = {
   connectionType: 'cloud',
@@ -57,7 +57,7 @@ function makeInstalledFeature(
 let emitSpy: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
-  emitSpy = spyOn(findings, 'emitIntegrationConfigured').mockResolvedValue(undefined);
+  emitSpy = spyOn(telemetryEvents, 'emitIntegrationConfigured').mockResolvedValue(undefined);
 });
 
 afterEach(() => {

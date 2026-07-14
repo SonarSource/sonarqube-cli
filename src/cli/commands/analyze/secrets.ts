@@ -25,11 +25,11 @@ import { buildSubprocessNetworkEnv } from '../../../lib/connectivity/network-con
 import logger from '../../../lib/logger';
 import type { SpawnResult, StdioMode } from '../../../lib/process';
 import { spawnProcessWithTimeout } from '../../../lib/process';
-import { emitAnalysisCompleted } from '../../../telemetry/findings.js';
 import {
   SECRETS_CALLER_COMMANDS,
   type SecretsCallerCommand,
 } from '../../../telemetry/secrets-analysis-telemetry.js';
+import { emitAnalysisCompleted } from '../../../telemetry/telemetry-events.js';
 import { blank, print, success, warn } from '../../../ui';
 import { green, yellow } from '../../../ui/colors.js';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';

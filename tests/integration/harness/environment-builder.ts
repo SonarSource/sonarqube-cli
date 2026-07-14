@@ -345,7 +345,7 @@ export class EnvironmentBuilder {
 
   /**
    * Enables telemetry in the generated state (off by default for integration tests).
-   * Use when a test needs to assert telemetry side effects such as findings.ndjson.
+   * Use when a test needs to assert telemetry side effects such as telemetry-events.ndjson.
    * Pair with extraEnv `__SQ_CLI_TELEMETRY_FLUSH__=1` so the sink is written but the
    * detached flush worker never spawns, and nothing is POSTed to the telemetry endpoint.
    */

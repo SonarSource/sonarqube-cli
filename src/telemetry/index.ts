@@ -23,7 +23,7 @@ import { type Command } from 'commander';
 import { DISTRIBUTION } from '../lib/distribution.js';
 import { loadState } from '../lib/state-manager.js';
 import { isTelemetryEnabled } from './enabled.js';
-import { emitCommandExecuted, flushFindings } from './findings.js';
+import { emitCommandExecuted, flushTelemetryEvents } from './telemetry-events.js';
 
 export const TELEMETRY_FLUSH_MODE_ENV = '__SQ_CLI_TELEMETRY_FLUSH__';
 
@@ -38,7 +38,7 @@ export function setPassthroughSubcommand(command: Command, subcommand: string | 
 
 /**
  * Emit one CliCommandExecuted event for a finished command and spawn the detached flush
- * worker that drains findings.ndjson.
+ * worker that drains telemetry-events.ndjson.
  *
  * No-ops when called from within a flush worker (prevents infinite recursion) or when
  * telemetry is disabled.
@@ -94,7 +94,7 @@ function spawnFlushWorker() {
 const FLUSH_TIMEOUT_MS = 60_000;
 
 /**
- * Drain findings.ndjson to the telemetry backend, stopping after FLUSH_TIMEOUT_MS (1 minute).
+ * Drain telemetry-events.ndjson to the telemetry backend, stopping after FLUSH_TIMEOUT_MS (1 minute).
  * Called by the hidden `sonar flush-telemetry` command.
  */
 export async function flushTelemetry(): Promise<void> {
@@ -103,5 +103,5 @@ export async function flushTelemetry(): Promise<void> {
   }
 
   const deadline = Date.now() + FLUSH_TIMEOUT_MS;
-  await flushFindings(deadline);
+  await flushTelemetryEvents(deadline);
 }

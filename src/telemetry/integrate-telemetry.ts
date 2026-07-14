@@ -24,7 +24,7 @@ import type { ResolvedAuth } from '../lib/auth-resolver.js';
 import { canonicalizePath } from '../lib/fs-utils.js';
 import logger from '../lib/logger.js';
 import type { InstalledIntegrationFeature, IntegrationScope } from '../lib/state.js';
-import { emitIntegrationConfigured } from './findings.js';
+import { emitIntegrationConfigured } from './telemetry-events.js';
 
 export interface IntegrationConfiguredTelemetryParams {
   auth: ResolvedAuth;

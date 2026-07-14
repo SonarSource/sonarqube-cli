@@ -416,8 +416,8 @@ export interface IntegrationsState {
  */
 export type TelemetryConnectionType = 'sqc' | 'sqs' | null;
 
-/** Shared identity fields on every analysis telemetry event. */
-export interface AnalysisEventIdentityPayload {
+/** Shared identity fields on every telemetry event. */
+export interface TelemetryEventIdentityPayload {
   cli_installation_id: string;
   machine_id: string;
   cli_version: string;
@@ -435,7 +435,7 @@ export type AnalysisTelemetryAnalyzer = 'sonar-secrets' | 'sqaa' | 'sca-scanner-
 /**
  * Payload for a CliAnalysisCompleted event — one event per analyzer run.
  */
-export interface AnalysisCompletedEventPayload extends AnalysisEventIdentityPayload {
+export interface AnalysisCompletedEventPayload extends TelemetryEventIdentityPayload {
   /** Literal CLI subcommand path (e.g. "analyze agentic", "hook git-pre-commit") */
   caller_command: string;
   analyzer: AnalysisTelemetryAnalyzer;
@@ -467,21 +467,21 @@ export interface AnalysisCompletedEventPayload extends AnalysisEventIdentityPayl
    * JSON-encoded, analyzer-specific allowlist blob (rule keys and per-rule counts only) when
    * `findings_count > 0`; empty string otherwise. Always a flat JSON-encoded string, never a
    * nested object — the ingestion endpoint requires flat event payloads. Empty string (not
-   * `null`) so the field survives the `flushFindings` replacer, which strips `null` values.
+   * `null`) so the field survives the `flushTelemetryEvents` replacer, which strips `null` values.
    */
   details: string;
 }
 
-interface AnalysisEventMetadataBase {
+interface TelemetryEventMetadataBase {
   event_id: string;
   source: { domain: 'CLI' };
   /** Epoch milliseconds as a string */
   event_timestamp: string;
 }
 
-/** Full CliAnalysisCompleted event written to findings.ndjson. */
+/** Full CliAnalysisCompleted event written to telemetry-events.ndjson. */
 export interface StoredAnalysisCompletedEvent {
-  metadata: AnalysisEventMetadataBase & {
+  metadata: TelemetryEventMetadataBase & {
     event_type: 'Analytics.Cli.CliAnalysisCompleted';
   };
   event_payload: AnalysisCompletedEventPayload;
@@ -491,7 +491,7 @@ export interface StoredAnalysisCompletedEvent {
  * Payload for a CliIntegrationConfigured event.
  * One event per successful `sonar integrate` run.
  */
-export interface IntegrationConfiguredEventPayload extends AnalysisEventIdentityPayload {
+export interface IntegrationConfiguredEventPayload extends TelemetryEventIdentityPayload {
   /** Integration id, e.g. "claude", "codex", "git". */
   integration_id: string;
   /**
@@ -511,9 +511,9 @@ export interface IntegrationConfiguredEventPayload extends AnalysisEventIdentity
   is_from_router: boolean;
 }
 
-/** Full CliIntegrationConfigured event written to findings.ndjson. */
+/** Full CliIntegrationConfigured event written to telemetry-events.ndjson. */
 export interface StoredIntegrationConfiguredEvent {
-  metadata: AnalysisEventMetadataBase & {
+  metadata: TelemetryEventMetadataBase & {
     event_type: 'Analytics.Cli.CliIntegrationConfigured';
   };
   event_payload: IntegrationConfiguredEventPayload;
@@ -522,7 +522,7 @@ export interface StoredIntegrationConfiguredEvent {
 /**
  * Payload describing a specific CLI command invocation.
  */
-export interface CommandExecutedEventPayload extends AnalysisEventIdentityPayload {
+export interface CommandExecutedEventPayload extends TelemetryEventIdentityPayload {
   /** First-level command name (e.g. "auth" for `sonar auth login`) */
   command: string;
   /** Remainder of the command path, null when there is no subcommand */
@@ -532,16 +532,16 @@ export interface CommandExecutedEventPayload extends AnalysisEventIdentityPayloa
   distribution: Distribution;
 }
 
-/** Full CliCommandExecuted event written to findings.ndjson. */
+/** Full CliCommandExecuted event written to telemetry-events.ndjson. */
 export interface StoredCommandExecutedEvent {
-  metadata: AnalysisEventMetadataBase & {
+  metadata: TelemetryEventMetadataBase & {
     event_type: 'Analytics.Cli.CliCommandExecuted';
   };
   event_payload: CommandExecutedEventPayload;
 }
 
-/** Any event stored in findings.ndjson and drained by flushFindings. */
-export type StoredAnalysisEvent =
+/** Any event stored in telemetry-events.ndjson and drained by flushTelemetryEvents. */
+export type StoredTelemetryEvent =
   StoredAnalysisCompletedEvent | StoredIntegrationConfiguredEvent | StoredCommandExecutedEvent;
 
 /**

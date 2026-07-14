@@ -29,7 +29,6 @@ import type { SqaaJsonReport } from '../../../src/cli/commands/analyze/sqaa-disp
 import type { ResolvedAuth } from '../../../src/lib/auth-resolver.js';
 import { ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
 import * as stateRepository from '../../../src/lib/repository/state-repository.js';
-import type { StoredAnalysisCompletedEvent } from '../../../src/lib/state.js';
 import * as stateManager from '../../../src/lib/state-manager.js';
 import type { SqaaIssue } from '../../../src/sonarqube/client.js';
 import {
@@ -40,7 +39,7 @@ import {
   tallyFromSqaaJsonReport,
 } from '../../../src/telemetry/sqaa-analysis-telemetry.js';
 import * as userModule from '../../../src/telemetry/user.js';
-import { makeTelemetryState, readTelemetryEvents } from './telemetry-helpers.js';
+import { makeTelemetryState, readAnalysisEvents } from '../../_common/telemetry-helpers.js';
 
 const AUTH: ResolvedAuth = {
   connectionType: 'cloud',
@@ -149,7 +148,7 @@ describe('emitSqaaAnalysisTelemetry()', () => {
   it('writes a single CliAnalysisCompleted with details "" on a clean run', async () => {
     await emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, makeTally(), 123, 0);
 
-    const events = readTelemetryEvents<StoredAnalysisCompletedEvent>(testSonarUserHome);
+    const events = readAnalysisEvents(testSonarUserHome);
     expect(events).toHaveLength(1);
     expect(events[0].metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
     const completed = events[0];
@@ -172,7 +171,7 @@ describe('emitSqaaAnalysisTelemetry()', () => {
       123,
     );
 
-    const completed = readTelemetryEvents<StoredAnalysisCompletedEvent>(testSonarUserHome)[0];
+    const completed = readAnalysisEvents(testSonarUserHome)[0];
     expect(completed.event_payload.exit_code).toBeNull();
     expect(completed.event_payload.failures_count).toBe(0);
   });
@@ -191,7 +190,7 @@ describe('emitSqaaAnalysisTelemetry()', () => {
 
     await emitSqaaAnalysisTelemetry(SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND, AUTH, tally, 123);
 
-    const completed = readTelemetryEvents<StoredAnalysisCompletedEvent>(testSonarUserHome)[0];
+    const completed = readAnalysisEvents(testSonarUserHome)[0];
     expect(completed.event_payload.exit_code).toBeNull();
     expect(completed.event_payload.failures_count).toBe(1);
   });
@@ -211,7 +210,7 @@ describe('emitSqaaAnalysisTelemetry()', () => {
 
     await emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, tally, 456, 51);
 
-    const events = readTelemetryEvents<StoredAnalysisCompletedEvent>(testSonarUserHome);
+    const events = readAnalysisEvents(testSonarUserHome);
     expect(events).toHaveLength(1);
     const completed = events[0];
     expect(completed.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
@@ -237,7 +236,7 @@ describe('emitSqaaAnalysisTelemetry()', () => {
 
     await emitSqaaAnalysisTelemetry(SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND, AUTH, tally, 789, 1);
 
-    const events = readTelemetryEvents<StoredAnalysisCompletedEvent>(testSonarUserHome);
+    const events = readAnalysisEvents(testSonarUserHome);
     expect(events).toHaveLength(1);
     const completed = events[0];
     expect(completed.event_payload.caller_command).toBe(SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND);
@@ -266,7 +265,7 @@ describe('emitSqaaAnalysisTelemetry()', () => {
 
     await emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, tally, 100, 51);
 
-    const completed = readTelemetryEvents<StoredAnalysisCompletedEvent>(testSonarUserHome)[0];
+    const completed = readAnalysisEvents(testSonarUserHome)[0];
     expect(completed.event_payload.exit_code).toBe(51);
     expect(completed.event_payload.errors_count).toBe(2);
   });
@@ -292,7 +291,7 @@ describe('emitSqaaAnalysisTelemetry()', () => {
 
     await emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, tally, 100, 1);
 
-    const events = readTelemetryEvents<StoredAnalysisCompletedEvent>(testSonarUserHome);
+    const events = readAnalysisEvents(testSonarUserHome);
     expect(events).toHaveLength(1);
     const completed = events[0];
     expect(completed.event_payload.exit_code).toBe(1);
@@ -311,7 +310,7 @@ describe('emitSqaaAnalysisTelemetry()', () => {
       100,
     );
 
-    expect(readTelemetryEvents<StoredAnalysisCompletedEvent>(testSonarUserHome)).toHaveLength(0);
+    expect(readAnalysisEvents(testSonarUserHome)).toHaveLength(0);
   });
 
   it('does not write when installationId is absent', async () => {
@@ -321,6 +320,6 @@ describe('emitSqaaAnalysisTelemetry()', () => {
 
     await emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, makeTally(), 100);
 
-    expect(readTelemetryEvents<StoredAnalysisCompletedEvent>(testSonarUserHome)).toHaveLength(0);
+    expect(readAnalysisEvents(testSonarUserHome)).toHaveLength(0);
   });
 });

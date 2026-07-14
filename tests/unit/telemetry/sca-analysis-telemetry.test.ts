@@ -35,7 +35,6 @@ import type {
 import type { ResolvedAuth } from '../../../src/lib/auth-resolver.js';
 import { ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
 import * as stateRepository from '../../../src/lib/repository/state-repository.js';
-import type { StoredAnalysisCompletedEvent } from '../../../src/lib/state.js';
 import * as stateManager from '../../../src/lib/state-manager.js';
 import {
   emitScaAnalysisTelemetry,
@@ -43,7 +42,7 @@ import {
   summarizeScaFindings,
 } from '../../../src/telemetry/sca-analysis-telemetry.js';
 import * as userModule from '../../../src/telemetry/user.js';
-import { makeTelemetryState, readTelemetryEvents } from './telemetry-helpers.js';
+import { makeTelemetryState, readAnalysisEvents } from '../../_common/telemetry-helpers.js';
 
 const AUTH: ResolvedAuth = {
   connectionType: 'cloud',
@@ -200,7 +199,7 @@ describe('emitScaAnalysisTelemetry()', () => {
       0,
     );
 
-    const events = readTelemetryEvents<StoredAnalysisCompletedEvent>(testSonarUserHome);
+    const events = readAnalysisEvents(testSonarUserHome);
     expect(events).toHaveLength(1);
     const completed = events[0];
     expect(completed.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
@@ -229,7 +228,7 @@ describe('emitScaAnalysisTelemetry()', () => {
       51,
     );
 
-    const events = readTelemetryEvents<StoredAnalysisCompletedEvent>(testSonarUserHome);
+    const events = readAnalysisEvents(testSonarUserHome);
     expect(events).toHaveLength(1);
     const completed = events[0];
     expect(completed.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
@@ -246,7 +245,7 @@ describe('emitScaAnalysisTelemetry()', () => {
   it('records a failed-to-run scan (response null) as failures_count 1 with details ""', async () => {
     await emitScaAnalysisTelemetry(SCA_CALLER_COMMANDS.gitPreCommit, AUTH, null, 77, null);
 
-    const events = readTelemetryEvents<StoredAnalysisCompletedEvent>(testSonarUserHome);
+    const events = readAnalysisEvents(testSonarUserHome);
     expect(events).toHaveLength(1);
     const completed = events[0];
     expect(completed.event_payload.caller_command).toBe('git-pre-commit');
@@ -264,7 +263,7 @@ describe('emitScaAnalysisTelemetry()', () => {
 
     await emitScaAnalysisTelemetry(SCA_CALLER_COMMANDS.gitPreCommit, AUTH, response, 10, null);
 
-    const events = readTelemetryEvents<StoredAnalysisCompletedEvent>(testSonarUserHome);
+    const events = readAnalysisEvents(testSonarUserHome);
     expect(events).toHaveLength(1);
     const completed = events[0];
     expect(completed.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
@@ -285,7 +284,7 @@ describe('emitScaAnalysisTelemetry()', () => {
       51,
     );
 
-    expect(readTelemetryEvents<StoredAnalysisCompletedEvent>(testSonarUserHome)).toHaveLength(0);
+    expect(readAnalysisEvents(testSonarUserHome)).toHaveLength(0);
   });
 
   it('does not write when installationId is absent', async () => {
@@ -301,7 +300,7 @@ describe('emitScaAnalysisTelemetry()', () => {
       null,
     );
 
-    expect(readTelemetryEvents<StoredAnalysisCompletedEvent>(testSonarUserHome)).toHaveLength(0);
+    expect(readAnalysisEvents(testSonarUserHome)).toHaveLength(0);
   });
 
   it('never throws when identity resolution fails (strictly fire-and-forget)', async () => {
@@ -320,6 +319,6 @@ describe('emitScaAnalysisTelemetry()', () => {
       51,
     );
 
-    expect(readTelemetryEvents<StoredAnalysisCompletedEvent>(testSonarUserHome)).toHaveLength(0);
+    expect(readAnalysisEvents(testSonarUserHome)).toHaveLength(0);
   });
 });
