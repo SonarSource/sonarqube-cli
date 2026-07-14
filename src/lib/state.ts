@@ -542,9 +542,7 @@ export interface StoredCommandExecutedEvent {
 
 /** Any event stored in findings.ndjson and drained by flushFindings. */
 export type StoredAnalysisEvent =
-  | StoredAnalysisCompletedEvent
-  | StoredIntegrationConfiguredEvent
-  | StoredCommandExecutedEvent;
+  StoredAnalysisCompletedEvent | StoredIntegrationConfiguredEvent | StoredCommandExecutedEvent;
 
 /**
  * Telemetry configuration and pending event batch
