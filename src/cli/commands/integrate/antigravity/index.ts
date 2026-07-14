@@ -21,6 +21,7 @@
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import type { IntegrationStateAttribute } from '../../../../lib/state';
 import { info } from '../../../../ui';
+import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude';
 import {
   buildContextAugmentationAttrs,
@@ -38,6 +39,13 @@ export async function integrateAntigravity(
   options: IntegrateAgentOptions,
   auth: ResolvedAuth,
 ): Promise<void> {
+  if (!options.nonInteractive) {
+    printAgentNonInteractiveAlternativeHint(
+      'sonar integrate antigravity -p <project-key>',
+      'sonar integrate antigravity -g',
+    );
+  }
+
   const ctx = await displayAgentIntegratePrelude('Antigravity', 'antigravity', options, auth);
 
   if (options.skipContext) {

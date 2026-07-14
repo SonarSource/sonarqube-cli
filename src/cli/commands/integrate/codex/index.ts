@@ -21,6 +21,7 @@
 // Integrate command — setup SonarQube integration for Codex.
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
+import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint';
 import { finalizeAgentInstall } from '../_common/agent-integrate-postlude';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude';
 import { resolveSqaaSetup } from '../_common/sqaa-entitlement';
@@ -31,6 +32,13 @@ export async function integrateCodex(
   options: IntegrateAgentOptions,
   auth: ResolvedAuth,
 ): Promise<void> {
+  if (!options.nonInteractive) {
+    printAgentNonInteractiveAlternativeHint(
+      'sonar integrate codex -p <project-key>',
+      'sonar integrate codex -g',
+    );
+  }
+
   const ctx = await displayAgentIntegratePrelude('Codex', 'codex', options, auth);
 
   // SQAA is always project-scoped. resolveSqaaSetup returns false (and surfaces

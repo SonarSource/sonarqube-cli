@@ -19,6 +19,7 @@
  */
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
+import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint';
 import { finalizeAgentInstall } from '../_common/agent-integrate-postlude';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude';
 import { resolveSqaaSetup } from '../_common/sqaa-entitlement';
@@ -27,6 +28,13 @@ import { COPILOT_INTEGRATION_ID, type CopilotIntegrationOptions } from './declar
 import { detectGlobalSecretsHook } from './hooks';
 
 export async function integrateCopilot(options: IntegrateAgentOptions, auth: ResolvedAuth) {
+  if (!options.nonInteractive) {
+    printAgentNonInteractiveAlternativeHint(
+      'sonar integrate copilot -p <project-key>',
+      'sonar integrate copilot -g',
+    );
+  }
+
   const ctx = await displayAgentIntegratePrelude('Copilot', 'copilot', options, auth);
 
   // SQAA is always project-scoped. resolveSqaaSetup owns the user-facing

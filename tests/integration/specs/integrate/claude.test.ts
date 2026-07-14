@@ -29,6 +29,10 @@ import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/insta
 import { claudeIntegration } from '../../../../src/cli/commands/integrate/claude/declaration.js';
 import { detectPlatform } from '../../../../src/lib/platform-detector.js';
 import {
+  expectAgentPromptHint,
+  expectNoAgentPromptHint,
+} from '../../../_common/agent-hint-assertions.js';
+import {
   hookScriptName,
   hookScriptPath,
   IS_WINDOWS,
@@ -1871,6 +1875,45 @@ describe('integrate claude — interactive feature selection', () => {
       expect(findClaudeFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
       expect(findClaudeFeature(harness, 'mcp-server')).toBeDefined();
       expect(findClaudeFeature(harness, 'sonar-sqaa-hook')).toBeUndefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it.each([
+    [true, true, true],
+    [true, false, false],
+    [false, true, false],
+    [false, false, false],
+  ])(
+    'prints a non-interactive hint using the CLI subcommand (not the claude-code registry id) only for a detected AI agent without --non-interactive (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
+    async (isAgent, isInteractive, expectedShownPrompt) => {
+      const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
+      );
+
+      const result = await harness.run(
+        `integrate claude${isInteractive ? '' : ' --non-interactive'}`,
+        {
+          ...(isInteractive ? { stdinChunks: ['\r', '\r', '\r'] } : {}),
+          extraEnv: isAgent ? { CLAUDECODE: '1' } : {},
+        },
+      );
+
+      expect(result.exitCode).toBe(0);
+      if (expectedShownPrompt) {
+        expectAgentPromptHint(
+          result.stdout,
+          'Claude Code',
+          'sonar integrate claude -p <project-key>',
+          'sonar integrate claude -g',
+        );
+        expect(result.stdout).not.toContain('sonar integrate claude-code');
+      } else {
+        expectNoAgentPromptHint(result.stdout);
+      }
     },
     { timeout: 30000 },
   );

@@ -23,6 +23,7 @@ import { loadState, saveState } from '../../../lib/repository/state-repository';
 import { type CliState, getDefaultState, type InstalledIntegration } from '../../../lib/state';
 import type { PhaseItem } from '../../../ui';
 import { info, phase, print, success, text, textPrompt, warn } from '../../../ui';
+import { printAgentNonInteractiveAlternativeHint } from '../_common/agent-prompt-hint';
 import { supportedIntegrations } from '../integrate';
 import { purgeAuth } from './reset-auth';
 import { removeBinaries } from './reset-binaries';
@@ -69,8 +70,11 @@ function mergeCleanedFields(fields: CleanedFields[]): CleanedFields {
  * and cached files. Telemetry settings are preserved.
  */
 export async function systemReset(options: SystemResetOptions): Promise<void> {
-  if (!(options.force || (await confirmDestructiveAction()))) {
-    return;
+  if (!options.force) {
+    printAgentNonInteractiveAlternativeHint('sonar system reset --force');
+    if (!(await confirmDestructiveAction())) {
+      return;
+    }
   }
 
   info('Cleaning up SonarQube CLI environment...');

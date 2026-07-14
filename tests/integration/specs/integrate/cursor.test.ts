@@ -28,6 +28,10 @@ import { isAbsolute } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { cursorIntegration } from '../../../../src/cli/commands/integrate/cursor/declaration';
+import {
+  expectAgentPromptHint,
+  expectNoAgentPromptHint,
+} from '../../../_common/agent-hint-assertions.js';
 import { hookScriptName, hookScriptPath, normalizePath, TestHarness } from '../../harness';
 import { findInstalledFeature, getInstalledIntegration } from './state-helpers';
 
@@ -537,6 +541,39 @@ describe('integrate cursor', () => {
         expect(
           findInstalledFeature(harness, 'cursor', 'sqaa-instructions', 'project'),
         ).toBeDefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it.each([
+      [true, true, true],
+      [true, false, false],
+      [false, true, false],
+      [false, false, false],
+    ])(
+      'prints a non-interactive hint using -p/-g only for a detected AI agent without --non-interactive (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
+      async (isAgent, isInteractive, expectedShownPrompt) => {
+        const { extraEnv } = await setupCloudWithEntitlement();
+
+        const result = await harness.run(
+          `integrate cursor --project ${TEST_PROJECT}${isInteractive ? '' : ' --non-interactive'}`,
+          {
+            extraEnv: isAgent ? { ...extraEnv, CURSOR_AGENT: '1' } : extraEnv,
+            ...(isInteractive ? { stdinChunks: ['\r', '\r', '\r'] } : {}),
+          },
+        );
+
+        expect(result.exitCode).toBe(0);
+        if (expectedShownPrompt) {
+          expectAgentPromptHint(
+            result.stdout,
+            'Cursor',
+            'sonar integrate cursor -p <project-key>',
+            'sonar integrate cursor -g',
+          );
+        } else {
+          expectNoAgentPromptHint(result.stdout);
+        }
       },
       { timeout: 30000 },
     );

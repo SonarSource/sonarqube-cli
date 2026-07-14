@@ -26,6 +26,10 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as yaml from 'js-yaml';
 
+import {
+  expectAgentPromptHint,
+  expectNoAgentPromptHint,
+} from '../../../_common/agent-hint-assertions.js';
 import { ISOLATED_CLI_SPAWN_ENV } from '../../../_common/isolated-cli-env.js';
 import { TestHarness } from '../../harness';
 import { getCliBinaryPath } from '../../harness/cli-runner.js';
@@ -432,6 +436,44 @@ describe('integrate git (native hooks)', () => {
     { timeout: 15000 },
   );
 
+  it.each([
+    [true, true, true],
+    [true, false, false],
+    [false, true, false],
+    [false, false, false],
+  ])(
+    'prints a non-interactive hint before scope and feature prompts only for a detected AI agent without --non-interactive (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
+    async (isAgent, isInteractive, expectedShownPrompt) => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+
+      const result = await harness.run(
+        `integrate git${isInteractive ? '' : ' --non-interactive'}`,
+        {
+          ...(isInteractive
+            ? { stdinChunks: ['\r', '\r', 'n'], stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS }
+            : {}),
+          extraEnv: isAgent ? { CLAUDECODE: '1' } : {},
+        },
+      );
+
+      expect(result.exitCode).toBe(0);
+      if (expectedShownPrompt) {
+        expectAgentPromptHint(
+          result.stdout,
+          'Claude Code',
+          'sonar integrate git --non-interactive',
+        );
+        // Must use the CLI subcommand "git", not the internal registry
+        // integrationId (native-git/husky/pre-commit).
+        expect(result.stdout).not.toContain('sonar integrate native-git');
+      } else {
+        expectNoAgentPromptHint(result.stdout);
+      }
+    },
+    { timeout: 15000 },
+  );
+
   it(
     'installs all hooks when --non-interactive is used without --hook',
     async () => {
@@ -750,6 +792,38 @@ describe('integrate git (native hooks)', () => {
       expect(result.stdout + result.stderr).toContain('✓  pre-commit code scanning hook');
       expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-commit')).toBe(true);
       expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-push')).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it.each([
+    [true, true, true],
+    [true, false, false],
+    [false, true, false],
+    [false, false, false],
+  ])(
+    'prints a non-interactive hint before the global-install confirmation only for a detected AI agent without --non-interactive (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
+    async (isAgent, isInteractive, expectedShownPrompt) => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+
+      const result = await harness.run(
+        `integrate git --global${isInteractive ? '' : ' --non-interactive'}`,
+        {
+          ...(isInteractive ? { stdinChunks: ['\r', '\r', 'n'] } : {}),
+          extraEnv: isAgent ? { CLAUDECODE: '1' } : {},
+        },
+      );
+
+      expect(result.exitCode).toBe(0);
+      if (expectedShownPrompt) {
+        expectAgentPromptHint(
+          result.stdout,
+          'Claude Code',
+          'sonar integrate git --non-interactive',
+        );
+      } else {
+        expectNoAgentPromptHint(result.stdout);
+      }
     },
     { timeout: 15000 },
   );

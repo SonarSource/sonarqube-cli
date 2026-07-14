@@ -28,6 +28,7 @@ import { spawnProcess } from '../../../lib/process';
 import { loadState } from '../../../lib/repository/state-repository';
 import { canonicalProjectRoot } from '../../../lib/state-manager';
 import { blank, confirmPrompt, text, warn } from '../../../ui';
+import { printAgentNonInteractiveAlternativeHint } from '../_common/agent-prompt-hint';
 import { CommandFailedError } from '../_common/error.js';
 import { SQAA_HOOK_FEATURE_ID } from '../integrate/_common/sqaa-entitlement';
 import { CLAUDE_INTEGRATION_ID } from '../integrate/claude/declaration';
@@ -174,11 +175,12 @@ export async function confirmLargeChangeset(fileCount: number): Promise<boolean>
     `You are about to analyze a large number of files (${fileCount}). This may take longer to process.\n${LARGE_CHANGESET_HINT}`,
   );
 
-  if (!process.stdin.isTTY) {
+  if (!process.stdin.isTTY && !process.env.SONARQUBE_CLI_MOCK_TTY) {
     return true;
   }
 
   blank();
+  printAgentNonInteractiveAlternativeHint('sonar analyze --force');
   const confirmed = await confirmPrompt('Do you wish to proceed?', true);
   if (!confirmed) {
     blank();

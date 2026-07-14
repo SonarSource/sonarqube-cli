@@ -32,6 +32,10 @@ import {
   SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
   SQAA_ANALYZE_CALLER_COMMAND,
 } from '../../../../src/telemetry/sqaa-analysis-telemetry.js';
+import {
+  expectAgentPromptHint,
+  expectNoAgentPromptHint,
+} from '../../../_common/agent-hint-assertions.js';
 import { readAnalysisEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
 import { commitFile, git, initGitRepo, stageFile } from '../hook/git-test-helpers';
@@ -1322,6 +1326,72 @@ describe('analyze agentic — change-set mode (no --file)', () => {
         .filter((r) => r.path === '/a3s-analysis/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(totalSqaaFilesSent(sqaaCalls)).toBe(51);
+    },
+    { timeout: 30000 },
+  );
+
+  it.each([
+    [true, true, true],
+    [true, false, false],
+    [false, true, false],
+    [false, false, false],
+  ])(
+    'prints a non-interactive hint before the large change set confirmation only for a detected AI agent without --force (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
+    async (isAgent, isInteractive, expectedShownPrompt) => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      commitFile(harness.cwd.path, 'README.md', 'hello');
+      for (let i = 1; i <= 51; i++) {
+        harness.cwd.writeFile(`file${i}.ts`, `const x${i} = ${i};`);
+      }
+
+      const result = await harness.run(`analyze agentic${isInteractive ? '' : ' --force'}`, {
+        ...(isInteractive ? { stdinChunks: ['\r'] } : {}),
+        extraEnv: {
+          SONARQUBE_CLI_MOCK_TTY: '1',
+          ...(isAgent ? { CLAUDECODE: '1' } : {}),
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      if (expectedShownPrompt) {
+        expectAgentPromptHint(result.stdout, 'Claude Code', 'sonar analyze --force');
+      } else {
+        expectNoAgentPromptHint(result.stdout);
+      }
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'does not print a non-interactive hint for a detected AI agent when the change set is below the large-set threshold',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      commitFile(harness.cwd.path, 'README.md', 'hello');
+
+      const result = await harness.run('analyze agentic', {
+        extraEnv: { SONARQUBE_CLI_MOCK_TTY: '1', CLAUDECODE: '1' },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expectNoAgentPromptHint(result.stdout);
     },
     { timeout: 30000 },
   );
