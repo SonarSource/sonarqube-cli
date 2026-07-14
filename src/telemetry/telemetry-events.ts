@@ -30,12 +30,12 @@ import { buildFetchInit, fetchGuarded } from '../lib/fetch-guarded.js';
 import { INVOCATION_ID } from '../lib/invocation-id.js';
 import type {
   AnalysisCompletedEventPayload,
-  AnalysisEventIdentityPayload,
   AuthConnection,
   CommandExecutedEventPayload,
   IntegrationConfiguredEventPayload,
-  StoredAnalysisEvent,
+  StoredTelemetryEvent,
   TelemetryConnectionType,
+  TelemetryEventIdentityPayload,
 } from '../lib/state.js';
 import { getActiveConnection, loadState } from '../lib/state-manager.js';
 import { isTelemetryEnabled } from './enabled.js';
@@ -46,18 +46,18 @@ import {
 } from './identity.js';
 import { getOrCreateUserId } from './user.js';
 
-const FINDINGS_FILENAME = 'findings.ndjson';
-const FINDINGS_RETENTION_DAYS = 7;
-const FINDINGS_RETENTION_MS = FINDINGS_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+const TELEMETRY_EVENTS_FILENAME = 'telemetry-events.ndjson';
+const TELEMETRY_EVENTS_RETENTION_DAYS = 7;
+const TELEMETRY_EVENTS_RETENTION_MS = TELEMETRY_EVENTS_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
-function getFindingsPath(): string {
-  return join(getTelemetryDir(), FINDINGS_FILENAME);
+function getTelemetryEventsPath(): string {
+  return join(getTelemetryDir(), TELEMETRY_EVENTS_FILENAME);
 }
 
-export function appendAnalysisEvent(event: StoredAnalysisEvent): void {
+export function appendTelemetryEvent(event: StoredTelemetryEvent): void {
   try {
     mkdirSync(getTelemetryDir(), { recursive: true });
-    appendFileSync(getFindingsPath(), JSON.stringify(event) + '\n');
+    appendFileSync(getTelemetryEventsPath(), JSON.stringify(event) + '\n');
   } catch {
     // fire-and-forget
   }
@@ -73,7 +73,7 @@ type IdentityResolver = (
  */
 async function buildIdentityBase(
   resolve: IdentityResolver,
-): Promise<AnalysisEventIdentityPayload | null> {
+): Promise<TelemetryEventIdentityPayload | null> {
   const state = loadState();
   if (!isTelemetryEnabled(state)) return null;
   const installationId = state.telemetry.installationId;
@@ -98,17 +98,17 @@ async function buildIdentityBase(
 
 export type AnalysisCompletedFields = Omit<
   AnalysisCompletedEventPayload,
-  keyof AnalysisEventIdentityPayload
+  keyof TelemetryEventIdentityPayload
 >;
 
 export type IntegrationConfiguredFields = Omit<
   IntegrationConfiguredEventPayload,
-  keyof AnalysisEventIdentityPayload
+  keyof TelemetryEventIdentityPayload
 >;
 
 export type CommandExecutedFields = Omit<
   CommandExecutedEventPayload,
-  keyof AnalysisEventIdentityPayload
+  keyof TelemetryEventIdentityPayload
 >;
 
 /**
@@ -121,7 +121,7 @@ export async function emitAnalysisCompleted(
 ): Promise<void> {
   const base = await buildIdentityBase((conn) => resolveCommandTelemetryIdentity(conn, auth));
   if (!base) return;
-  appendAnalysisEvent({
+  appendTelemetryEvent({
     metadata: {
       event_id: randomUUID(),
       source: { domain: 'CLI' },
@@ -142,7 +142,7 @@ export async function emitIntegrationConfigured(
 ): Promise<void> {
   const base = await buildIdentityBase((conn) => resolveCommandTelemetryIdentity(conn, auth));
   if (!base) return;
-  appendAnalysisEvent({
+  appendTelemetryEvent({
     metadata: {
       event_id: randomUUID(),
       source: { domain: 'CLI' },
@@ -160,7 +160,7 @@ export async function emitIntegrationConfigured(
 export async function emitCommandExecuted(fields: CommandExecutedFields): Promise<void> {
   const base = await buildIdentityBase(resolveStoreEventTelemetryIdentitySafely);
   if (!base) return;
-  appendAnalysisEvent({
+  appendTelemetryEvent({
     metadata: {
       event_id: randomUUID(),
       source: { domain: 'CLI' },
@@ -171,14 +171,14 @@ export async function emitCommandExecuted(fields: CommandExecutedFields): Promis
   });
 }
 
-function parseValidEvents(content: string, now: number): StoredAnalysisEvent[] {
-  const events: StoredAnalysisEvent[] = [];
+function parseValidEvents(content: string, now: number): StoredTelemetryEvent[] {
+  const events: StoredTelemetryEvent[] = [];
   for (const line of content.split('\n')) {
     if (!line.trim()) continue;
     try {
-      const event = JSON.parse(line) as StoredAnalysisEvent;
+      const event = JSON.parse(line) as StoredTelemetryEvent;
       const ts = Number(event.metadata.event_timestamp);
-      if (!Number.isNaN(ts) && now - ts <= FINDINGS_RETENTION_MS) {
+      if (!Number.isNaN(ts) && now - ts <= TELEMETRY_EVENTS_RETENTION_MS) {
         events.push(event);
       }
     } catch {
@@ -189,27 +189,27 @@ function parseValidEvents(content: string, now: number): StoredAnalysisEvent[] {
 }
 
 /**
- * Atomically drains findings.ndjson: renames it to a UUID-suffixed .sending file so
+ * Atomically drains telemetry-events.ndjson: renames it to a UUID-suffixed .sending file so
  * concurrent flush workers each get their own slice, parses valid lines, discards
  * events older than 7 days, then POSTs each remaining event to the telemetry backend.
- * Unsent events (deadline reached or send error) are re-appended to findings.ndjson
+ * Unsent events (deadline reached or send error) are re-appended to telemetry-events.ndjson
  * for the next flush attempt. The .sending file is deleted in all cases.
  */
-export async function flushFindings(deadline: number): Promise<void> {
-  const findingsPath = getFindingsPath();
-  if (!existsSync(findingsPath)) return;
+export async function flushTelemetryEvents(deadline: number): Promise<void> {
+  const eventsPath = getTelemetryEventsPath();
+  if (!existsSync(eventsPath)) return;
 
-  const sendingPath = join(getTelemetryDir(), `findings.${randomUUID()}.sending`);
+  const sendingPath = join(getTelemetryDir(), `telemetry-events.${randomUUID()}.sending`);
   try {
-    renameSync(findingsPath, sendingPath);
+    renameSync(eventsPath, sendingPath);
   } catch {
     // ENOENT: another flush worker won the rename race — nothing to drain.
-    // Any other error is also swallowed: flushFindings only runs in the detached
+    // Any other error is also swallowed: flushTelemetryEvents only runs in the detached
     // flush-telemetry worker, so failures here never surface to the user.
     return;
   }
 
-  const unsent: StoredAnalysisEvent[] = [];
+  const unsent: StoredTelemetryEvent[] = [];
 
   try {
     const events = parseValidEvents(readFileSync(sendingPath, 'utf-8'), Date.now());
@@ -238,7 +238,10 @@ export async function flushFindings(deadline: number): Promise<void> {
   } finally {
     if (unsent.length > 0) {
       try {
-        appendFileSync(getFindingsPath(), unsent.map((e) => JSON.stringify(e)).join('\n') + '\n');
+        appendFileSync(
+          getTelemetryEventsPath(),
+          unsent.map((e) => JSON.stringify(e)).join('\n') + '\n',
+        );
       } catch {
         // fire-and-forget
       }

@@ -20,8 +20,8 @@
 
 /**
  * Tests for telemetry/index.ts:
- * storeEvent (CliCommandExecuted event building via findings.ndjson, no-op conditions)
- * flushTelemetry (drains findings.ndjson, disabled state)
+ * storeEvent (CliCommandExecuted event building via telemetry-events.ndjson, no-op conditions)
+ * flushTelemetry (drains telemetry-events.ndjson, disabled state)
  */
 
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -37,10 +37,7 @@ import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '../../../src/lib/auth-resolver.j
 import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
 import { DISTRIBUTION } from '../../../src/lib/distribution.js';
 import * as stateRepository from '../../../src/lib/repository/state-repository.js';
-import type {
-  StoredAnalysisCompletedEvent,
-  StoredCommandExecutedEvent,
-} from '../../../src/lib/state.js';
+import type { StoredAnalysisCompletedEvent } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 import * as stateManager from '../../../src/lib/state-manager.js';
 import {
@@ -53,8 +50,8 @@ import { resolveTelemetryIdentity } from '../../../src/telemetry/identity.js';
 import * as userModule from '../../../src/telemetry/user.js';
 import * as ui from '../../../src/ui';
 import { restoreEnv } from '../../_common/isolated-cli-env.js';
+import { readCommandEvents, writeTelemetryEvent } from '../../_common/telemetry-helpers.js';
 import { mockIdentityGetSafe } from './identity-api-mock.js';
-import { readTelemetryEvents, writeTelemetryEvent } from './telemetry-helpers.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -77,11 +74,6 @@ function mockFetch(ok = true, status = 200): ReturnType<typeof spyOn> {
     json: () => Promise.resolve({}),
     text: () => Promise.resolve('{}'),
   } as Response);
-}
-
-/** Reads the CliCommandExecuted events storeEvent appended to findings.ndjson. */
-function readCommandEvents(): StoredCommandExecutedEvent[] {
-  return readTelemetryEvents<StoredCommandExecutedEvent>(testDir);
 }
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
@@ -140,7 +132,7 @@ describe('storeEvent', () => {
       process.env[TELEMETRY_FLUSH_MODE_ENV] = '1';
       await storeEvent(makeCommand('auth login'), true);
       expect(loadStateSpy).not.toHaveBeenCalled();
-      expect(readCommandEvents()).toHaveLength(0);
+      expect(readCommandEvents(testDir)).toHaveLength(0);
       expect(spawnSpy).not.toHaveBeenCalled();
     });
 
@@ -151,7 +143,7 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('auth login'), true);
 
-      expect(readCommandEvents()).toHaveLength(0);
+      expect(readCommandEvents(testDir)).toHaveLength(0);
       expect(spawnSpy).not.toHaveBeenCalled();
     });
 
@@ -160,41 +152,41 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('auth login'), true);
 
-      expect(readCommandEvents()).toHaveLength(0);
+      expect(readCommandEvents(testDir)).toHaveLength(0);
       expect(spawnSpy).not.toHaveBeenCalled();
     });
   });
 
   describe('event building', () => {
-    it('appends one CliCommandExecuted event to findings.ndjson', async () => {
+    it('appends one CliCommandExecuted event to telemetry-events.ndjson', async () => {
       await storeEvent(makeCommand('auth login'), true);
 
-      const events = readCommandEvents();
+      const events = readCommandEvents(testDir);
       expect(events).toHaveLength(1);
     });
 
     it('sets command to the first word of the command string', async () => {
       await storeEvent(makeCommand('auth login'), true);
 
-      expect(readCommandEvents()[0].event_payload.command).toBe('auth');
+      expect(readCommandEvents(testDir)[0].event_payload.command).toBe('auth');
     });
 
     it('sets subcommand to the rest of the command string', async () => {
       await storeEvent(makeCommand('auth login'), true);
 
-      expect(readCommandEvents()[0].event_payload.subcommand).toBe('login');
+      expect(readCommandEvents(testDir)[0].event_payload.subcommand).toBe('login');
     });
 
     it('sets subcommand to null for single-word commands', async () => {
       await storeEvent(makeCommand('auth'), true);
 
-      expect(readCommandEvents()[0].event_payload.subcommand).toBeNull();
+      expect(readCommandEvents(testDir)[0].event_payload.subcommand).toBeNull();
     });
 
     it('joins multiple subcommand words with a space', async () => {
       await storeEvent(makeCommand('analyze secrets check'), true);
 
-      const event = readCommandEvents()[0];
+      const event = readCommandEvents(testDir)[0];
       expect(event.event_payload.command).toBe('analyze');
       expect(event.event_payload.subcommand).toBe('secrets check');
     });
@@ -205,7 +197,7 @@ describe('storeEvent', () => {
 
       await storeEvent(command, true);
 
-      const event = readCommandEvents()[0];
+      const event = readCommandEvents(testDir)[0];
       expect(event.event_payload.command).toBe('context');
       expect(event.event_payload.subcommand).toBe('get-source');
     });
@@ -216,25 +208,25 @@ describe('storeEvent', () => {
 
       await storeEvent(command, true);
 
-      expect(readCommandEvents()[0].event_payload.subcommand).toBeNull();
+      expect(readCommandEvents(testDir)[0].event_payload.subcommand).toBeNull();
     });
 
     it('sets result to "success" when success is true', async () => {
       await storeEvent(makeCommand('auth login'), true);
 
-      expect(readCommandEvents()[0].event_payload.result).toBe('success');
+      expect(readCommandEvents(testDir)[0].event_payload.result).toBe('success');
     });
 
     it('sets result to "failure" when success is false', async () => {
       await storeEvent(makeCommand('auth login'), false);
 
-      expect(readCommandEvents()[0].event_payload.result).toBe('failure');
+      expect(readCommandEvents(testDir)[0].event_payload.result).toBe('failure');
     });
 
     it('sets distribution from the resolved CLI distribution', async () => {
       await storeEvent(makeCommand('auth login'), true);
 
-      expect(readCommandEvents()[0].event_payload.distribution).toBe(DISTRIBUTION);
+      expect(readCommandEvents(testDir)[0].event_payload.distribution).toBe(DISTRIBUTION);
     });
 
     it('sets event_payload.caller_agent from detectCallerAgent', async () => {
@@ -242,7 +234,7 @@ describe('storeEvent', () => {
       try {
         await storeEvent(makeCommand('auth login'), true);
         expect(spy).toHaveBeenCalled();
-        expect(readCommandEvents()[0].event_payload.caller_agent).toBe('claude');
+        expect(readCommandEvents(testDir)[0].event_payload.caller_agent).toBe('claude');
       } finally {
         spy.mockRestore();
       }
@@ -253,7 +245,7 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('auth login'), true);
 
-      expect(readCommandEvents()[0].event_payload.machine_id).toBe('my-stable-machine-id');
+      expect(readCommandEvents(testDir)[0].event_payload.machine_id).toBe('my-stable-machine-id');
     });
 
     it('uses the cli_installation_id from state.telemetry.installationId', async () => {
@@ -263,19 +255,23 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('auth login'), true);
 
-      expect(readCommandEvents()[0].event_payload.cli_installation_id).toBe('fixed-install-id');
+      expect(readCommandEvents(testDir)[0].event_payload.cli_installation_id).toBe(
+        'fixed-install-id',
+      );
     });
 
     it('sets correct event_type in metadata', async () => {
       await storeEvent(makeCommand('auth login'), true);
 
-      expect(readCommandEvents()[0].metadata.event_type).toBe('Analytics.Cli.CliCommandExecuted');
+      expect(readCommandEvents(testDir)[0].metadata.event_type).toBe(
+        'Analytics.Cli.CliCommandExecuted',
+      );
     });
 
     it('sets source.domain to "CLI" in metadata', async () => {
       await storeEvent(makeCommand('auth login'), true);
 
-      expect(readCommandEvents()[0].metadata.source.domain).toBe('CLI');
+      expect(readCommandEvents(testDir)[0].metadata.source.domain).toBe('CLI');
     });
   });
 
@@ -289,7 +285,7 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('auth login'), true);
 
-      expect(readCommandEvents()[0].event_payload.connection_type).toBe('sqc');
+      expect(readCommandEvents(testDir)[0].event_payload.connection_type).toBe('sqc');
     });
 
     it('sets connection_type to "sqs" for an on-premise connection', async () => {
@@ -299,14 +295,14 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('auth login'), true);
 
-      expect(readCommandEvents()[0].event_payload.connection_type).toBe('sqs');
+      expect(readCommandEvents(testDir)[0].event_payload.connection_type).toBe('sqs');
     });
 
     it('sets connection_type to null when there is no active connection', async () => {
       // Default state has no connections
       await storeEvent(makeCommand('auth login'), true);
 
-      expect(readCommandEvents()[0].event_payload.connection_type).toBeNull();
+      expect(readCommandEvents(testDir)[0].event_payload.connection_type).toBeNull();
     });
 
     it('includes user_uuid from the active connection', async () => {
@@ -319,7 +315,7 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('auth login'), true);
 
-      expect(readCommandEvents()[0].event_payload.user_uuid).toBe('user-uuid-abc');
+      expect(readCommandEvents(testDir)[0].event_payload.user_uuid).toBe('user-uuid-abc');
     });
 
     it('includes organization_uuid_v4 from a cloud connection', async () => {
@@ -332,7 +328,7 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('auth login'), true);
 
-      expect(readCommandEvents()[0].event_payload.organization_uuid_v4).toBe('org-uuid-xyz');
+      expect(readCommandEvents(testDir)[0].event_payload.organization_uuid_v4).toBe('org-uuid-xyz');
     });
 
     it('does not resolve auth from state when the active connection already has UUIDs', async () => {
@@ -363,7 +359,7 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('auth login'), true);
 
-      const event = readCommandEvents()[0];
+      const event = readCommandEvents(testDir)[0];
       expect(event.event_payload.connection_type).toBe('sqc');
       expect(event.event_payload.user_uuid).toBeNull();
       expect(event.event_payload.organization_uuid_v4).toBeNull();
@@ -385,7 +381,9 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('auth login'), true);
 
-      expect(readCommandEvents()[0].event_payload.sqs_installation_id).toBe('sqs-install-id-123');
+      expect(readCommandEvents(testDir)[0].event_payload.sqs_installation_id).toBe(
+        'sqs-install-id-123',
+      );
     });
   });
 
@@ -411,7 +409,7 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('context'), true);
 
-      const event = readCommandEvents()[0];
+      const event = readCommandEvents(testDir)[0];
       expect(event.event_payload.user_uuid).toBe('user-from-api');
       expect(event.event_payload.organization_uuid_v4).toBe('org-from-api');
       expect(
@@ -442,7 +440,7 @@ describe('storeEvent', () => {
         ),
       ).toHaveLength(1);
 
-      const secondEvent = readCommandEvents()[1];
+      const secondEvent = readCommandEvents(testDir)[1];
       expect(secondEvent.event_payload.user_uuid).toBe('cached-user');
       expect(secondEvent.event_payload.organization_uuid_v4).toBeNull();
 
@@ -489,7 +487,7 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('context'), true);
 
-      const event = readCommandEvents()[0];
+      const event = readCommandEvents(testDir)[0];
       expect(event.event_payload.connection_type).toBe('sqs');
       expect(event.event_payload.user_uuid).toBe('server-user-from-api');
       expect(event.event_payload.sqs_installation_id).toBe('sqs-from-api');
@@ -518,7 +516,7 @@ describe('storeEvent', () => {
         ),
       ).toHaveLength(1);
 
-      const secondEvent = readCommandEvents()[1];
+      const secondEvent = readCommandEvents(testDir)[1];
       expect(secondEvent.event_payload.user_uuid).toBe('cached-user');
       expect(secondEvent.event_payload.organization_uuid_v4).toBe('cached-org');
 
@@ -576,7 +574,7 @@ describe('flushTelemetry', () => {
   });
 
   describe('findings drain', () => {
-    it('drains findings.ndjson to the telemetry backend', async () => {
+    it('drains telemetry-events.ndjson to the telemetry backend', async () => {
       writeTelemetryEvent(testDir, makeCompletedFinding());
 
       const fetchSpy = mockFetch();

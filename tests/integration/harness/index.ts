@@ -47,6 +47,7 @@ export type { CliResult, RecordedRequest } from './types.js';
 export class TestHarness {
   public readonly cwd: Dir;
   public readonly userHome: Dir;
+  public readonly sonarUserHome: Dir;
   public readonly cliHome: Dir;
   public readonly stateJsonFile: File;
   public readonly keychainJsonFile: string;
@@ -61,7 +62,8 @@ export class TestHarness {
     this.tempDir = new Dir(tempDir);
     this.cwd = this.tempDir.dir('cwd');
     this.userHome = this.tempDir.dir('home');
-    this.cliHome = this.userHome.dir('.sonar', 'sonarqube-cli');
+    this.sonarUserHome = this.userHome.dir('.sonar');
+    this.cliHome = this.sonarUserHome.dir('sonarqube-cli');
     this.stateJsonFile = this.cliHome.file('state.json');
     this.keychainJsonFile = join(this.cliHome.path, 'keychain.json');
     for (const key of ['PATH', 'PATHEXT', 'HOME', 'TMPDIR', 'USER', 'LOGNAME', 'SHELL', 'TERM']) {
@@ -259,7 +261,7 @@ export class TestHarness {
     const spawnEnv = { ...composed, ...ISOLATED_CLI_SPAWN_ENV };
     // ISOLATED_CLI_SPAWN_ENV force-disables telemetry (DO_NOT_TRACK=1) for every spawn.
     // Tests that opted into telemetry via withTelemetryEnabled() need it re-enabled so the
-    // findings.ndjson sink is written; pair with __SQ_CLI_TELEMETRY_FLUSH__=1 to avoid posting.
+    // telemetry-events.ndjson sink is written; pair with __SQ_CLI_TELEMETRY_FLUSH__=1 to avoid posting.
     if (this._envBuilder?.telemetryEnabled) {
       spawnEnv[ENV_DO_NOT_TRACK] = '0';
     }

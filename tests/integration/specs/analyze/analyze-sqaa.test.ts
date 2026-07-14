@@ -20,7 +20,7 @@
 
 // Integration tests for `analyze agentic` and `verify` commands.
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -32,6 +32,7 @@ import {
   SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
   SQAA_ANALYZE_CALLER_COMMAND,
 } from '../../../../src/telemetry/sqaa-analysis-telemetry.js';
+import { readAnalysisEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
 import { commitFile, git, initGitRepo, stageFile } from '../hook/git-test-helpers';
 import {
@@ -942,25 +943,12 @@ describe('analyze agentic — analysis telemetry', () => {
     await harness.dispose();
   });
 
-  function findingsPath(): string {
-    return join(harness.cliHome.path, 'telemetry', 'findings.ndjson');
-  }
-
-  function readAnalysisEvents(): StoredAnalysisCompletedEvent[] {
-    const path = findingsPath();
-    if (!existsSync(path)) return [];
-    return readFileSync(path, 'utf-8')
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => JSON.parse(line) as StoredAnalysisCompletedEvent);
-  }
-
   function enableFlushTelemetry(): void {
     harness.withExtraEnv({ [TELEMETRY_FLUSH_MODE_ENV]: '1' });
   }
 
   it(
-    'writes CliAnalysisCompleted to findings.ndjson on a clean run',
+    'writes CliAnalysisCompleted to telemetry-events.ndjson on a clean run',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -980,7 +968,7 @@ describe('analyze agentic — analysis telemetry', () => {
       const result = await harness.run('analyze agentic --file src/index.ts');
 
       expect(result.exitCode).toBe(0);
-      const events = readAnalysisEvents();
+      const events = readAnalysisEvents(harness.sonarUserHome.path);
       expect(events).toHaveLength(1);
       expect(events[0].metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
       const completed = events[0];
@@ -1022,15 +1010,12 @@ describe('analyze agentic — analysis telemetry', () => {
       const result = await harness.run('analyze agentic --file src/index.ts');
 
       expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
-      const events = readAnalysisEvents();
+      const events = readAnalysisEvents(harness.sonarUserHome.path);
       expect(events).toHaveLength(1);
-      const completed = events.find(
-        (event) => event.metadata.event_type === 'Analytics.Cli.CliAnalysisCompleted',
-      );
-      expect(completed).toBeDefined();
-      expect(completed!.event_payload.findings_count).toBe(2);
-      expect(completed!.event_payload.exit_code).toBe(EXIT_CODE_SECRETS_FOUND);
-      expect(JSON.parse(completed!.event_payload.details)).toEqual({
+      const [completed] = events;
+      expect(completed.event_payload.findings_count).toBe(2);
+      expect(completed.event_payload.exit_code).toBe(EXIT_CODE_SECRETS_FOUND);
+      expect(JSON.parse(completed.event_payload.details)).toEqual({
         rule_keys: ['typescript:S1234'],
         counts_by_rule: { 'typescript:S1234': 2 },
       });
@@ -1050,10 +1035,6 @@ describe('sonar analyze — analysis telemetry', () => {
     await harness.dispose();
   });
 
-  function findingsPath(): string {
-    return join(harness.cliHome.path, 'telemetry', 'findings.ndjson');
-  }
-
   function enableFlushTelemetry(): void {
     harness.withExtraEnv({ [TELEMETRY_FLUSH_MODE_ENV]: '1' });
   }
@@ -1061,17 +1042,9 @@ describe('sonar analyze — analysis telemetry', () => {
   function readCompletedEventsForAnalyzer(
     analyzer: 'sqaa' | 'sonar-secrets',
   ): StoredAnalysisCompletedEvent[] {
-    const path = findingsPath();
-    if (!existsSync(path)) return [];
-    return readFileSync(path, 'utf-8')
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => JSON.parse(line) as StoredAnalysisCompletedEvent)
-      .filter(
-        (event): event is StoredAnalysisCompletedEvent =>
-          event.metadata.event_type === 'Analytics.Cli.CliAnalysisCompleted' &&
-          event.event_payload.analyzer === analyzer,
-      );
+    return readAnalysisEvents(harness.sonarUserHome.path).filter(
+      (event) => event.event_payload.analyzer === analyzer,
+    );
   }
 
   it(

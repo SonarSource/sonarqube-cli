@@ -21,8 +21,14 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import type { CliState, StoredAnalysisEvent } from '../../../src/lib/state.js';
-import { getDefaultState } from '../../../src/lib/state.js';
+import type {
+  CliState,
+  StoredAnalysisCompletedEvent,
+  StoredCommandExecutedEvent,
+  StoredIntegrationConfiguredEvent,
+  StoredTelemetryEvent,
+} from '../../src/lib/state.js';
+import { getDefaultState } from '../../src/lib/state.js';
 
 export function makeTelemetryState(enabled = true): CliState {
   const state = getDefaultState('1.0.0');
@@ -32,21 +38,44 @@ export function makeTelemetryState(enabled = true): CliState {
 }
 
 export function telemetryEventsPath(sonarUserHome: string): string {
-  return join(sonarUserHome, 'sonarqube-cli', 'telemetry', 'findings.ndjson');
+  return join(sonarUserHome, 'sonarqube-cli', 'telemetry', 'telemetry-events.ndjson');
 }
 
-export function readTelemetryEvents<T extends StoredAnalysisEvent = StoredAnalysisEvent>(
+export function readTelemetryEvents<T extends StoredTelemetryEvent = StoredTelemetryEvent>(
   sonarUserHome: string,
+  eventType: T['metadata']['event_type'],
 ): T[] {
   const path = telemetryEventsPath(sonarUserHome);
   if (!existsSync(path)) return [];
   return readFileSync(path, 'utf-8')
     .split('\n')
     .filter(Boolean)
-    .map((line) => JSON.parse(line) as T);
+    .map((line) => JSON.parse(line) as StoredTelemetryEvent)
+    .filter((event) => event.metadata.event_type === eventType) as T[];
 }
 
-export function writeTelemetryEvent(sonarUserHome: string, event: StoredAnalysisEvent): void {
+export function readAnalysisEvents(sonarUserHome: string): StoredAnalysisCompletedEvent[] {
+  return readTelemetryEvents<StoredAnalysisCompletedEvent>(
+    sonarUserHome,
+    'Analytics.Cli.CliAnalysisCompleted',
+  );
+}
+
+export function readCommandEvents(sonarUserHome: string): StoredCommandExecutedEvent[] {
+  return readTelemetryEvents<StoredCommandExecutedEvent>(
+    sonarUserHome,
+    'Analytics.Cli.CliCommandExecuted',
+  );
+}
+
+export function readIntegrationEvents(sonarUserHome: string): StoredIntegrationConfiguredEvent[] {
+  return readTelemetryEvents<StoredIntegrationConfiguredEvent>(
+    sonarUserHome,
+    'Analytics.Cli.CliIntegrationConfigured',
+  );
+}
+
+export function writeTelemetryEvent(sonarUserHome: string, event: StoredTelemetryEvent): void {
   const path = telemetryEventsPath(sonarUserHome);
   mkdirSync(dirname(path), { recursive: true });
   appendFileSync(path, JSON.stringify(event) + '\n');
