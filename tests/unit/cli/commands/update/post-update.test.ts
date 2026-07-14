@@ -259,7 +259,7 @@ describe('migrateLegacyTelemetryEvents', () => {
   beforeEach(() => {
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeState());
     saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
-    appendAnalysisEventSpy = spyOn(findings, 'appendAnalysisEvent').mockImplementation(() => {});
+    appendAnalysisEventSpy = spyOn(findings, 'appendAnalysisEvent').mockImplementation(() => true);
   });
 
   afterEach(() => {
@@ -290,6 +290,26 @@ describe('migrateLegacyTelemetryEvents', () => {
 
     expect(saveStateSpy).toHaveBeenCalledTimes(1);
     expect(saveStateSpy.mock.calls[0][0].telemetry.events).toBeUndefined();
+  });
+
+  it('keeps only the events that failed to append so the next update can retry them', () => {
+    const state = makeState();
+    const events = [
+      makeLegacyCommandEvent('auth'),
+      makeLegacyCommandEvent('analyze'),
+      makeLegacyCommandEvent('list'),
+    ];
+    state.telemetry.events = events;
+    loadStateSpy.mockReturnValue(state);
+    appendAnalysisEventSpy.mockImplementationOnce(() => true);
+    appendAnalysisEventSpy.mockImplementationOnce(() => false);
+    appendAnalysisEventSpy.mockImplementationOnce(() => true);
+
+    migrateLegacyTelemetryEvents();
+
+    expect(appendAnalysisEventSpy).toHaveBeenCalledTimes(3);
+    expect(saveStateSpy).toHaveBeenCalledTimes(1);
+    expect(saveStateSpy.mock.calls[0][0].telemetry.events).toEqual([events[1]]);
   });
 });
 

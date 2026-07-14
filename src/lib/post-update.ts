@@ -103,12 +103,17 @@ export function migrateLegacyTelemetryEvents(): void {
     return;
   }
 
-  for (const event of legacyEvents) {
-    appendAnalysisEvent(event);
+  const unmigrated = legacyEvents.filter((event) => !appendAnalysisEvent(event));
+  if (unmigrated.length === 0) {
+    delete state.telemetry.events;
+  } else {
+    state.telemetry.events = unmigrated;
   }
-  delete state.telemetry.events;
   saveState(state);
-  logger.debug(`Migrated ${legacyEvents.length} legacy telemetry event(s) to findings.ndjson`);
+  const migrated = legacyEvents.length - unmigrated.length;
+  logger.debug(
+    `Migrated ${migrated}/${legacyEvents.length} legacy telemetry event(s) to findings.ndjson`,
+  );
 }
 
 export async function migrateDeclarativeIntegrations(
