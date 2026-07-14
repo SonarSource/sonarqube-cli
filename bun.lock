@@ -5,7 +5,7 @@
     "": {
       "name": "sonarqube-cli",
       "dependencies": {
-        "@clack/core": "1.4.1",
+        "@clack/core": "1.4.3",
         "@sentry/bun": "10.64.0",
         "@toon-format/toon": "2.3.0",
         "commander": "15.0.0",
@@ -13,7 +13,7 @@
         "node-forge": "1.4.0",
         "openpgp": "6.3.1",
         "picocolors": "1.1.1",
-        "picomatch": "4.0.4",
+        "picomatch": "4.0.5",
         "smol-toml": "1.6.1",
       },
       "devDependencies": {
@@ -83,7 +83,7 @@
 
     "@babel/types": ["@babel/types@7.29.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@babel/types/-/types-7.29.0.tgz", { "dependencies": { "@babel/helper-string-parser": "^7.27.1", "@babel/helper-validator-identifier": "^7.28.5" } }, "sha512-LwdZHpScM4Qz8Xw2iKSzS+cfglZzJGvofQICy7W7v4caru4EaAmyUuO6BGrbyQ2mYV11W0U8j5mBhd14dd3B0A=="],
 
-    "@clack/core": ["@clack/core@1.4.1", "https://repox.jfrog.io/artifactory/api/npm/npm/@clack/core/-/core-1.4.1.tgz", { "dependencies": { "fast-wrap-ansi": "^0.2.0", "sisteransi": "^1.0.5" } }, "sha512-FILJa1gGKEFTGZAJE9RpVhrjKz3c3h4ar60dSv6cGuDqufQ84YEIS3GAGvZiN+H6yaLbbvTFNejjCC4tXpZEuw=="],
+    "@clack/core": ["@clack/core@1.4.3", "https://repox.jfrog.io/artifactory/api/npm/npm/@clack/core/-/core-1.4.3.tgz", { "dependencies": { "fast-wrap-ansi": "^0.2.0", "sisteransi": "^1.0.5" } }, "sha512-/kr3UWNtdJfxZtPgDqUOmG2pvwlmcLGheex5yiZKdwbzZJxhV+HMNR9QNmyY5cGwTNV6LrR7Jtp+KjhUAP1qBQ=="],
 
     "@eslint-community/eslint-utils": ["@eslint-community/eslint-utils@4.9.1", "https://repox.jfrog.io/artifactory/api/npm/npm/@eslint-community/eslint-utils/-/eslint-utils-4.9.1.tgz", { "dependencies": { "eslint-visitor-keys": "^3.4.3" }, "peerDependencies": { "eslint": "^6.0.0 || ^7.0.0 || >=8.0.0" } }, "sha512-phrYmNiYppR7znFEdqgfWHXR6NCkZEK7hwWDHZUjit/2/U0r6XvkDl0SYnoM51Hq7FhCGdLDT6zxCCOY1hexsQ=="],
 
@@ -491,7 +491,7 @@
 
     "picocolors": ["picocolors@1.1.1", "https://repox.jfrog.io/artifactory/api/npm/npm/picocolors/-/picocolors-1.1.1.tgz", {}, "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA=="],
 
-    "picomatch": ["picomatch@4.0.4", "https://repox.jfrog.io/artifactory/api/npm/npm/picomatch/-/picomatch-4.0.4.tgz", {}, "sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A=="],
+    "picomatch": ["picomatch@4.0.5", "https://repox.jfrog.io/artifactory/api/npm/npm/picomatch/-/picomatch-4.0.5.tgz", {}, "sha512-RvwwcruNjI1ncT5xRakeyS9Lf8lcItv34KD+aif+VH9kduAyfYBipGh12274xtenIPZ119/R9BdTBa8gAwSh0A=="],
 
     "prelude-ls": ["prelude-ls@1.2.1", "https://repox.jfrog.io/artifactory/api/npm/npm/prelude-ls/-/prelude-ls-1.2.1.tgz", {}, "sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g=="],
 
