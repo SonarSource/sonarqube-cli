@@ -93,7 +93,7 @@ The CAG installer (`src/cli/commands/_common/install/context-augmentation.ts`) h
 
 ### Telemetry
 
-Command telemetry (`storeEvent` in `src/telemetry/index.ts`) and analysis telemetry (`emitAnalysisCompleted` in `src/telemetry/findings.ts`) share a tiered identity resolver in `src/telemetry/identity.ts`. Each analyzer run (sonar-secrets, SQAA, SCA) emits exactly one `CliAnalysisCompleted` event; its required `details` field carries a JSON-encoded, analyzer-specific per-rule blob when `findings_count > 0` and is `""` (empty string, never `null`, so `flushFindings`'s null-stripping replacer keeps the column) otherwise. Each analyzer helper builds its own `details`; the shared emitter stays analyzer-agnostic. It fills `connection_type`, `user_uuid`, `organization_uuid_v4`, and `sqs_installation_id` on every event — including env-var auth (`SONARQUBE_CLI_TOKEN` + `SONARQUBE_CLI_ORG` or `SONARQUBE_CLI_SERVER`) where those fields were previously always null.
+All telemetry events (`CliCommandExecuted` from `storeEvent`, `CliAnalysisCompleted`, `CliIntegrationConfigured`) are appended to `findings.ndjson` in `src/telemetry/findings.ts` and drained by `flushFindings`, sharing the tiered identity resolver in `src/telemetry/identity.ts`. Each analyzer run (sonar-secrets, SQAA, SCA) emits exactly one `CliAnalysisCompleted` event; its required `details` field carries a JSON-encoded, analyzer-specific per-rule blob when `findings_count > 0` and is `""` (empty string, never `null`, so `flushFindings`'s null-stripping replacer keeps the column) otherwise. Each analyzer helper builds its own `details`; the shared emitter stays analyzer-agnostic. It fills `connection_type`, `user_uuid`, `organization_uuid_v4`, and `sqs_installation_id` on every event — including env-var auth (`SONARQUBE_CLI_TOKEN` + `SONARQUBE_CLI_ORG` or `SONARQUBE_CLI_SERVER`) where those fields were previously always null.
 
 **Resolution order** (per auth token, keyed by connection type + server URL + org key + token fingerprint):
 
@@ -180,6 +180,7 @@ The docs site is generated from the CLI source — do not edit `commands.json`, 
 Keep a fixed `<base href="/sonarqube/cli/">` in the docs HTML so production resolves relative assets and internal links under the public mount point. This is intentionally production-oriented: Netlify deploy previews served from `/` will not work with that fixed base.
 
 <!-- sonar:begin:sonarqube-agentic-analysis-protocol -->
+
 # SonarQube Agentic Analysis protocol
 
 SonarQube Agentic Analysis is the final confirmation layer at the end of every turn in which you wrote to one or more files in the workspace (create, edit, patch, format — any tool call that changed file contents on disk).

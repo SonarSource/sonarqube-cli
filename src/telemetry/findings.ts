@@ -31,12 +31,19 @@ import { INVOCATION_ID } from '../lib/invocation-id.js';
 import type {
   AnalysisCompletedEventPayload,
   AnalysisEventIdentityPayload,
+  AuthConnection,
+  CommandExecutedEventPayload,
   IntegrationConfiguredEventPayload,
   StoredAnalysisEvent,
+  TelemetryConnectionType,
 } from '../lib/state.js';
 import { getActiveConnection, loadState } from '../lib/state-manager.js';
 import { isTelemetryEnabled } from './enabled.js';
-import { resolveCommandTelemetryIdentity } from './identity.js';
+import {
+  resolveCommandTelemetryIdentity,
+  resolveStoreEventTelemetryIdentitySafely,
+  type TelemetryIdentity,
+} from './identity.js';
 import { getOrCreateUserId } from './user.js';
 
 const FINDINGS_FILENAME = 'findings.ndjson';
@@ -47,7 +54,7 @@ function getFindingsPath(): string {
   return join(getTelemetryDir(), FINDINGS_FILENAME);
 }
 
-function appendAnalysisEvent(event: StoredAnalysisEvent): void {
+export function appendAnalysisEvent(event: StoredAnalysisEvent): void {
   try {
     mkdirSync(getTelemetryDir(), { recursive: true });
     appendFileSync(getFindingsPath(), JSON.stringify(event) + '\n');
@@ -56,12 +63,16 @@ function appendAnalysisEvent(event: StoredAnalysisEvent): void {
   }
 }
 
+type IdentityResolver = (
+  conn: AuthConnection | undefined,
+) => Promise<{ connectionType: TelemetryConnectionType; identity: TelemetryIdentity }>;
+
 /**
- * Resolves shared identity fields for analysis telemetry events.
+ * Resolves shared identity fields for telemetry events.
  * Returns null when telemetry is disabled or installationId is absent.
  */
-export async function buildAnalysisIdentityBase(
-  auth: ResolvedAuth,
+async function buildIdentityBase(
+  resolve: IdentityResolver,
 ): Promise<AnalysisEventIdentityPayload | null> {
   const state = loadState();
   if (!isTelemetryEnabled(state)) return null;
@@ -69,7 +80,7 @@ export async function buildAnalysisIdentityBase(
   if (!installationId) return null;
 
   const conn = getActiveConnection(state);
-  const { connectionType, identity } = await resolveCommandTelemetryIdentity(conn, auth);
+  const { connectionType, identity } = await resolve(conn);
 
   return {
     cli_installation_id: installationId,
@@ -95,6 +106,11 @@ export type IntegrationConfiguredFields = Omit<
   keyof AnalysisEventIdentityPayload
 >;
 
+export type CommandExecutedFields = Omit<
+  CommandExecutedEventPayload,
+  keyof AnalysisEventIdentityPayload
+>;
+
 /**
  * Emits one CliAnalysisCompleted event when telemetry is enabled.
  * Resolves identity from state + auth; no-ops on opt-out or missing installationId.
@@ -103,7 +119,7 @@ export async function emitAnalysisCompleted(
   auth: ResolvedAuth,
   fields: AnalysisCompletedFields,
 ): Promise<void> {
-  const base = await buildAnalysisIdentityBase(auth);
+  const base = await buildIdentityBase((conn) => resolveCommandTelemetryIdentity(conn, auth));
   if (!base) return;
   appendAnalysisEvent({
     metadata: {
@@ -124,13 +140,31 @@ export async function emitIntegrationConfigured(
   auth: ResolvedAuth,
   fields: IntegrationConfiguredFields,
 ): Promise<void> {
-  const base = await buildAnalysisIdentityBase(auth);
+  const base = await buildIdentityBase((conn) => resolveCommandTelemetryIdentity(conn, auth));
   if (!base) return;
   appendAnalysisEvent({
     metadata: {
       event_id: randomUUID(),
       source: { domain: 'CLI' },
       event_type: 'Analytics.Cli.CliIntegrationConfigured',
+      event_timestamp: String(Date.now()),
+    },
+    event_payload: { ...base, ...fields },
+  });
+}
+
+/**
+ * Emits one CliCommandExecuted event when telemetry is enabled.
+ * Resolves identity from the active connection; no-ops on opt-out or missing installationId.
+ */
+export async function emitCommandExecuted(fields: CommandExecutedFields): Promise<void> {
+  const base = await buildIdentityBase(resolveStoreEventTelemetryIdentitySafely);
+  if (!base) return;
+  appendAnalysisEvent({
+    metadata: {
+      event_id: randomUUID(),
+      source: { domain: 'CLI' },
+      event_type: 'Analytics.Cli.CliCommandExecuted',
       event_timestamp: String(Date.now()),
     },
     event_payload: { ...base, ...fields },

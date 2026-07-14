@@ -20,11 +20,11 @@
 
 /**
  * Tests for telemetry/index.ts:
- * storeEvent (event building, state persistence, no-op conditions)
- * flushTelemetry (fetch calls, partial failure handling, disabled state)
+ * storeEvent (CliCommandExecuted event building via findings.ndjson, no-op conditions)
+ * flushTelemetry (drains findings.ndjson, disabled state)
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -38,9 +38,8 @@ import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '../../../src/lib/config-c
 import { DISTRIBUTION } from '../../../src/lib/distribution.js';
 import * as stateRepository from '../../../src/lib/repository/state-repository.js';
 import type {
-  CliState,
   StoredAnalysisCompletedEvent,
-  StoredTelemetryEvent,
+  StoredCommandExecutedEvent,
 } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 import * as stateManager from '../../../src/lib/state-manager.js';
@@ -55,6 +54,7 @@ import * as userModule from '../../../src/telemetry/user.js';
 import * as ui from '../../../src/ui';
 import { restoreEnv } from '../../_common/isolated-cli-env.js';
 import { mockIdentityGetSafe } from './identity-api-mock.js';
+import { readTelemetryEvents, writeTelemetryEvent } from './telemetry-helpers.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -79,38 +79,9 @@ function mockFetch(ok = true, status = 200): ReturnType<typeof spyOn> {
   } as Response);
 }
 
-function makeStateWithEvents(events: StoredTelemetryEvent[]): CliState {
-  const state = getDefaultState('1.0.0');
-  state.telemetry.events = events;
-  return state;
-}
-
-function makeStoredEvent(overrides: Partial<StoredTelemetryEvent> = {}): StoredTelemetryEvent {
-  return {
-    metadata: {
-      event_id: 'test-event-id',
-      source: { domain: 'CLI' },
-      event_type: 'Analytics.Cli.CliCommandExecuted',
-      event_timestamp: String(Date.now()),
-    },
-    event_payload: {
-      cli_installation_id: 'install-id',
-      machine_id: 'machine-id',
-      cli_version: '1.0.0',
-      command: 'auth',
-      subcommand: 'login',
-      invocation_id: 'inv-id',
-      result: 'success',
-      os: 'linux',
-      connection_type: null,
-      user_uuid: null,
-      organization_uuid_v4: null,
-      sqs_installation_id: null,
-      distribution: DISTRIBUTION,
-      caller_agent: null,
-    },
-    ...overrides,
-  };
+/** Reads the CliCommandExecuted events storeEvent appended to findings.ndjson. */
+function readCommandEvents(): StoredCommandExecutedEvent[] {
+  return readTelemetryEvents<StoredCommandExecutedEvent>(testDir);
 }
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
@@ -169,7 +140,8 @@ describe('storeEvent', () => {
       process.env[TELEMETRY_FLUSH_MODE_ENV] = '1';
       await storeEvent(makeCommand('auth login'), true);
       expect(loadStateSpy).not.toHaveBeenCalled();
-      expect(saveStateSpy).not.toHaveBeenCalled();
+      expect(readCommandEvents()).toHaveLength(0);
+      expect(spawnSpy).not.toHaveBeenCalled();
     });
 
     it('does nothing when telemetry is disabled in state', async () => {
@@ -179,7 +151,8 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('auth login'), true);
 
-      expect(saveStateSpy).not.toHaveBeenCalled();
+      expect(readCommandEvents()).toHaveLength(0);
+      expect(spawnSpy).not.toHaveBeenCalled();
     });
 
     it('does nothing when DO_NOT_TRACK is set', async () => {
@@ -187,43 +160,41 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('auth login'), true);
 
-      expect(saveStateSpy).not.toHaveBeenCalled();
+      expect(readCommandEvents()).toHaveLength(0);
+      expect(spawnSpy).not.toHaveBeenCalled();
     });
   });
 
   describe('event building', () => {
-    it('appends one event to state.telemetry.events', async () => {
+    it('appends one CliCommandExecuted event to findings.ndjson', async () => {
       await storeEvent(makeCommand('auth login'), true);
 
-      const savedState: CliState = saveStateSpy.mock.calls[0][0];
-      expect(savedState.telemetry.events).toHaveLength(1);
+      const events = readCommandEvents();
+      expect(events).toHaveLength(1);
     });
 
     it('sets command to the first word of the command string', async () => {
       await storeEvent(makeCommand('auth login'), true);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
-      expect(event.event_payload.command).toBe('auth');
+      expect(readCommandEvents()[0].event_payload.command).toBe('auth');
     });
 
     it('sets subcommand to the rest of the command string', async () => {
       await storeEvent(makeCommand('auth login'), true);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
-      expect(event.event_payload.subcommand).toBe('login');
+      expect(readCommandEvents()[0].event_payload.subcommand).toBe('login');
     });
 
     it('sets subcommand to null for single-word commands', async () => {
       await storeEvent(makeCommand('auth'), true);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
-      expect(event.event_payload.subcommand).toBeNull();
+      expect(readCommandEvents()[0].event_payload.subcommand).toBeNull();
     });
 
     it('joins multiple subcommand words with a space', async () => {
       await storeEvent(makeCommand('analyze secrets check'), true);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
+      const event = readCommandEvents()[0];
       expect(event.event_payload.command).toBe('analyze');
       expect(event.event_payload.subcommand).toBe('secrets check');
     });
@@ -234,7 +205,7 @@ describe('storeEvent', () => {
 
       await storeEvent(command, true);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
+      const event = readCommandEvents()[0];
       expect(event.event_payload.command).toBe('context');
       expect(event.event_payload.subcommand).toBe('get-source');
     });
@@ -245,38 +216,33 @@ describe('storeEvent', () => {
 
       await storeEvent(command, true);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
-      expect(event.event_payload.subcommand).toBeNull();
+      expect(readCommandEvents()[0].event_payload.subcommand).toBeNull();
     });
 
     it('sets result to "success" when success is true', async () => {
       await storeEvent(makeCommand('auth login'), true);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
-      expect(event.event_payload.result).toBe('success');
+      expect(readCommandEvents()[0].event_payload.result).toBe('success');
     });
 
     it('sets result to "failure" when success is false', async () => {
       await storeEvent(makeCommand('auth login'), false);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
-      expect(event.event_payload.result).toBe('failure');
+      expect(readCommandEvents()[0].event_payload.result).toBe('failure');
     });
 
     it('sets distribution from the resolved CLI distribution', async () => {
       await storeEvent(makeCommand('auth login'), true);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
-      expect(event.event_payload.distribution).toBe(DISTRIBUTION);
+      expect(readCommandEvents()[0].event_payload.distribution).toBe(DISTRIBUTION);
     });
 
-    it('sets event_payload.caller from detectCallerAgent', async () => {
+    it('sets event_payload.caller_agent from detectCallerAgent', async () => {
       const spy = spyOn(agentDetector, 'detectCallerAgent').mockReturnValue('claude');
       try {
         await storeEvent(makeCommand('auth login'), true);
         expect(spy).toHaveBeenCalled();
-        const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
-        expect(event.event_payload.caller_agent).toBe('claude');
+        expect(readCommandEvents()[0].event_payload.caller_agent).toBe('claude');
       } finally {
         spy.mockRestore();
       }
@@ -287,8 +253,7 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('auth login'), true);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
-      expect(event.event_payload.machine_id).toBe('my-stable-machine-id');
+      expect(readCommandEvents()[0].event_payload.machine_id).toBe('my-stable-machine-id');
     });
 
     it('uses the cli_installation_id from state.telemetry.installationId', async () => {
@@ -298,22 +263,19 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('auth login'), true);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
-      expect(event.event_payload.cli_installation_id).toBe('fixed-install-id');
+      expect(readCommandEvents()[0].event_payload.cli_installation_id).toBe('fixed-install-id');
     });
 
     it('sets correct event_type in metadata', async () => {
       await storeEvent(makeCommand('auth login'), true);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
-      expect(event.metadata.event_type).toBe('Analytics.Cli.CliCommandExecuted');
+      expect(readCommandEvents()[0].metadata.event_type).toBe('Analytics.Cli.CliCommandExecuted');
     });
 
     it('sets source.domain to "CLI" in metadata', async () => {
       await storeEvent(makeCommand('auth login'), true);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
-      expect(event.metadata.source.domain).toBe('CLI');
+      expect(readCommandEvents()[0].metadata.source.domain).toBe('CLI');
     });
   });
 
@@ -327,8 +289,7 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('auth login'), true);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
-      expect(event.event_payload.connection_type).toBe('sqc');
+      expect(readCommandEvents()[0].event_payload.connection_type).toBe('sqc');
     });
 
     it('sets connection_type to "sqs" for an on-premise connection', async () => {
@@ -338,16 +299,14 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('auth login'), true);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
-      expect(event.event_payload.connection_type).toBe('sqs');
+      expect(readCommandEvents()[0].event_payload.connection_type).toBe('sqs');
     });
 
     it('sets connection_type to null when there is no active connection', async () => {
       // Default state has no connections
       await storeEvent(makeCommand('auth login'), true);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
-      expect(event.event_payload.connection_type).toBeNull();
+      expect(readCommandEvents()[0].event_payload.connection_type).toBeNull();
     });
 
     it('includes user_uuid from the active connection', async () => {
@@ -360,8 +319,7 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('auth login'), true);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
-      expect(event.event_payload.user_uuid).toBe('user-uuid-abc');
+      expect(readCommandEvents()[0].event_payload.user_uuid).toBe('user-uuid-abc');
     });
 
     it('includes organization_uuid_v4 from a cloud connection', async () => {
@@ -374,8 +332,7 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('auth login'), true);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
-      expect(event.event_payload.organization_uuid_v4).toBe('org-uuid-xyz');
+      expect(readCommandEvents()[0].event_payload.organization_uuid_v4).toBe('org-uuid-xyz');
     });
 
     it('does not resolve auth from state when the active connection already has UUIDs', async () => {
@@ -406,7 +363,7 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('auth login'), true);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
+      const event = readCommandEvents()[0];
       expect(event.event_payload.connection_type).toBe('sqc');
       expect(event.event_payload.user_uuid).toBeNull();
       expect(event.event_payload.organization_uuid_v4).toBeNull();
@@ -428,8 +385,7 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('auth login'), true);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
-      expect(event.event_payload.sqs_installation_id).toBe('sqs-install-id-123');
+      expect(readCommandEvents()[0].event_payload.sqs_installation_id).toBe('sqs-install-id-123');
     });
   });
 
@@ -455,7 +411,7 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('context'), true);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
+      const event = readCommandEvents()[0];
       expect(event.event_payload.user_uuid).toBe('user-from-api');
       expect(event.event_payload.organization_uuid_v4).toBe('org-from-api');
       expect(
@@ -486,7 +442,7 @@ describe('storeEvent', () => {
         ),
       ).toHaveLength(1);
 
-      const secondEvent = saveStateSpy.mock.calls[1][0].telemetry.events[0] as StoredTelemetryEvent;
+      const secondEvent = readCommandEvents()[1];
       expect(secondEvent.event_payload.user_uuid).toBe('cached-user');
       expect(secondEvent.event_payload.organization_uuid_v4).toBeNull();
 
@@ -533,7 +489,7 @@ describe('storeEvent', () => {
 
       await storeEvent(makeCommand('context'), true);
 
-      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
+      const event = readCommandEvents()[0];
       expect(event.event_payload.connection_type).toBe('sqs');
       expect(event.event_payload.user_uuid).toBe('server-user-from-api');
       expect(event.event_payload.sqs_installation_id).toBe('sqs-from-api');
@@ -562,7 +518,7 @@ describe('storeEvent', () => {
         ),
       ).toHaveLength(1);
 
-      const secondEvent = saveStateSpy.mock.calls[1][0].telemetry.events[0] as StoredTelemetryEvent;
+      const secondEvent = readCommandEvents()[1];
       expect(secondEvent.event_payload.user_uuid).toBe('cached-user');
       expect(secondEvent.event_payload.organization_uuid_v4).toBe('cached-org');
 
@@ -593,8 +549,8 @@ describe('flushTelemetry', () => {
     it('does nothing when telemetry is disabled', async () => {
       const state = getDefaultState('1.0.0');
       state.telemetry.enabled = false;
-      state.telemetry.events = [makeStoredEvent()];
       loadStateSpy.mockReturnValue(state);
+      writeTelemetryEvent(testDir, makeCompletedFinding());
 
       const fetchSpy = mockFetch();
       try {
@@ -607,154 +563,12 @@ describe('flushTelemetry', () => {
 
     it('does nothing when DO_NOT_TRACK is set', async () => {
       process.env[ENV_DO_NOT_TRACK] = '1';
-      loadStateSpy.mockReturnValue(makeStateWithEvents([makeStoredEvent()]));
+      writeTelemetryEvent(testDir, makeCompletedFinding());
 
       const fetchSpy = mockFetch();
       try {
         await flushTelemetry();
         expect(fetchSpy).not.toHaveBeenCalled();
-      } finally {
-        fetchSpy.mockRestore();
-      }
-    });
-
-    it('does nothing when there are no pending events', async () => {
-      loadStateSpy.mockReturnValue(makeStateWithEvents([]));
-
-      const fetchSpy = mockFetch();
-      try {
-        await flushTelemetry();
-        expect(fetchSpy).not.toHaveBeenCalled();
-      } finally {
-        fetchSpy.mockRestore();
-      }
-    });
-  });
-
-  describe('sending events', () => {
-    it('POSTs each event to the telemetry endpoint', async () => {
-      const events = [makeStoredEvent(), makeStoredEvent()];
-      loadStateSpy.mockReturnValue(makeStateWithEvents(events));
-
-      const fetchSpy = mockFetch();
-      try {
-        await flushTelemetry();
-        expect(fetchSpy).toHaveBeenCalledTimes(2);
-      } finally {
-        fetchSpy.mockRestore();
-      }
-    });
-
-    it('sends with Content-Type application/json header', async () => {
-      loadStateSpy.mockReturnValue(makeStateWithEvents([makeStoredEvent()]));
-
-      const fetchSpy = mockFetch();
-      try {
-        await flushTelemetry();
-        const init = fetchSpy.mock.calls[0][1] as RequestInit;
-        expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
-      } finally {
-        fetchSpy.mockRestore();
-      }
-    });
-
-    it('sends with an x-api-key header', async () => {
-      loadStateSpy.mockReturnValue(makeStateWithEvents([makeStoredEvent()]));
-
-      const fetchSpy = mockFetch();
-      try {
-        await flushTelemetry();
-        const init = fetchSpy.mock.calls[0][1] as RequestInit;
-        expect((init.headers as Record<string, string>)['x-api-key']).toBeTruthy();
-      } finally {
-        fetchSpy.mockRestore();
-      }
-    });
-
-    it('uses POST method', async () => {
-      loadStateSpy.mockReturnValue(makeStateWithEvents([makeStoredEvent()]));
-
-      const fetchSpy = mockFetch();
-      try {
-        await flushTelemetry();
-        const init = fetchSpy.mock.calls[0][1] as RequestInit;
-        expect(init.method).toBe('POST');
-      } finally {
-        fetchSpy.mockRestore();
-      }
-    });
-
-    it('serialises the event as JSON in the request body', async () => {
-      const event = makeStoredEvent();
-      loadStateSpy.mockReturnValue(makeStateWithEvents([event]));
-
-      const fetchSpy = mockFetch();
-      try {
-        await flushTelemetry();
-        const init = fetchSpy.mock.calls[0][1] as RequestInit;
-        const parsed = JSON.parse(init.body as string);
-        expect(parsed.metadata.event_type).toBe('Analytics.Cli.CliCommandExecuted');
-      } finally {
-        fetchSpy.mockRestore();
-      }
-    });
-
-    it('omits null values from the serialised body', async () => {
-      const event = makeStoredEvent();
-      // user_uuid is null in the fixture
-      loadStateSpy.mockReturnValue(makeStateWithEvents([event]));
-
-      const fetchSpy = mockFetch();
-      try {
-        await flushTelemetry();
-        const init = fetchSpy.mock.calls[0][1] as RequestInit;
-        const parsed = JSON.parse(init.body as string);
-        expect('user_uuid' in parsed.event_payload).toBe(false);
-      } finally {
-        fetchSpy.mockRestore();
-      }
-    });
-  });
-
-  describe('state cleanup after flush', () => {
-    it('removes sent events from state and saves', async () => {
-      loadStateSpy.mockReturnValue(makeStateWithEvents([makeStoredEvent()]));
-
-      const fetchSpy = mockFetch();
-      try {
-        await flushTelemetry();
-        const savedState: CliState = saveStateSpy.mock.calls[0][0];
-        expect(savedState.telemetry.events).toHaveLength(0);
-      } finally {
-        fetchSpy.mockRestore();
-      }
-    });
-
-    it('does not save state when no events were sent successfully', async () => {
-      loadStateSpy.mockReturnValue(makeStateWithEvents([makeStoredEvent()]));
-
-      const fetchSpy = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Network error'));
-      try {
-        await flushTelemetry();
-        expect(saveStateSpy).not.toHaveBeenCalled();
-      } finally {
-        fetchSpy.mockRestore();
-      }
-    });
-
-    it('removes only successfully sent events when some fetches fail', async () => {
-      const events = [makeStoredEvent(), makeStoredEvent(), makeStoredEvent()];
-      loadStateSpy.mockReturnValue(makeStateWithEvents(events));
-
-      // First call succeeds, second fails, third succeeds
-      const fetchSpy = spyOn(globalThis, 'fetch')
-        .mockResolvedValueOnce({ ok: true } as Response)
-        .mockRejectedValueOnce(new Error('timeout'))
-        .mockResolvedValueOnce({ ok: true } as Response);
-      try {
-        await flushTelemetry();
-        const savedState: CliState = saveStateSpy.mock.calls[0][0];
-        expect(savedState.telemetry.events).toHaveLength(1);
       } finally {
         fetchSpy.mockRestore();
       }
@@ -763,39 +577,7 @@ describe('flushTelemetry', () => {
 
   describe('findings drain', () => {
     it('drains findings.ndjson to the telemetry backend', async () => {
-      const telemetryDir = join(testDir, 'sonarqube-cli', 'telemetry');
-      mkdirSync(telemetryDir, { recursive: true });
-      const finding: StoredAnalysisCompletedEvent = {
-        metadata: {
-          event_id: 'finding-id',
-          source: { domain: 'CLI' },
-          event_type: 'Analytics.Cli.CliAnalysisCompleted',
-          event_timestamp: String(Date.now()),
-        },
-        event_payload: {
-          cli_installation_id: 'install-id',
-          machine_id: 'machine-id',
-          cli_version: '1.0.0',
-          invocation_id: 'inv-id',
-          os: 'linux',
-          connection_type: null,
-          user_uuid: null,
-          organization_uuid_v4: null,
-          sqs_installation_id: null,
-          caller_agent: null,
-          caller_command: 'analyze secrets',
-          analyzer: 'sonar-secrets',
-          analysis_id: 'analysis-id',
-          findings_count: 1,
-          exit_code: 51,
-          errors_count: 0,
-          failures_count: 0,
-          scan_duration_ms: 123,
-          details: '',
-        },
-      };
-      writeFileSync(join(telemetryDir, 'findings.ndjson'), JSON.stringify(finding) + '\n');
-      loadStateSpy.mockReturnValue(makeStateWithEvents([]));
+      writeTelemetryEvent(testDir, makeCompletedFinding());
 
       const fetchSpy = mockFetch();
       try {
@@ -812,3 +594,35 @@ describe('flushTelemetry', () => {
     });
   });
 });
+
+function makeCompletedFinding(): StoredAnalysisCompletedEvent {
+  return {
+    metadata: {
+      event_id: 'finding-id',
+      source: { domain: 'CLI' },
+      event_type: 'Analytics.Cli.CliAnalysisCompleted',
+      event_timestamp: String(Date.now()),
+    },
+    event_payload: {
+      cli_installation_id: 'install-id',
+      machine_id: 'machine-id',
+      cli_version: '1.0.0',
+      invocation_id: 'inv-id',
+      os: 'linux',
+      connection_type: null,
+      user_uuid: null,
+      organization_uuid_v4: null,
+      sqs_installation_id: null,
+      caller_agent: null,
+      caller_command: 'analyze secrets',
+      analyzer: 'sonar-secrets',
+      analysis_id: 'analysis-id',
+      findings_count: 1,
+      exit_code: 51,
+      errors_count: 0,
+      failures_count: 0,
+      scan_duration_ms: 123,
+      details: '',
+    },
+  };
+}
