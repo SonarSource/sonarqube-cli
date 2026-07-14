@@ -132,8 +132,11 @@ function migrateSinkFile(): void {
 
   try {
     if (fs.existsSync(newPath)) {
-      fs.appendFileSync(newPath, fs.readFileSync(oldPath, 'utf-8'));
+      // Remove the old sink first, then append: a crash mid-way loses a rare
+      // best-effort event instead of re-appending duplicates on the next launch.
+      const oldContents = fs.readFileSync(oldPath, 'utf-8');
       fs.rmSync(oldPath);
+      fs.appendFileSync(newPath, oldContents);
     } else {
       fs.renameSync(oldPath, newPath);
     }
