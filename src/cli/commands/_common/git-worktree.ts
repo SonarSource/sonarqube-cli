@@ -20,17 +20,18 @@
 
 // Shared git worktree helpers (repo root, current branch).
 
-import { resolve } from 'node:path';
+import { statSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 
 import logger from '../../../lib/logger';
 import { spawnProcess } from '../../../lib/process';
 
 /**
- * Returns the repository top-level for `cwd`, or `undefined` when not in a repo
- * or git is unavailable.
+ * Returns the repository top-level for `contextPath`, or `undefined` when not in a repo
+ * or git is unavailable. `contextPath` may be a file or directory.
  */
-export async function resolveGitRepoRoot(cwd: string): Promise<string | undefined> {
-  const out = await tryRunGit(['rev-parse', '--show-toplevel'], cwd);
+export async function resolveGitRepoRoot(contextPath: string): Promise<string | undefined> {
+  const out = await tryRunGit(['rev-parse', '--show-toplevel'], gitSpawnCwd(contextPath));
   if (out === undefined) return undefined;
   return resolve(out.trim());
 }
@@ -47,7 +48,7 @@ export async function resolveCurrentGitBranch(contextPath: string): Promise<stri
   const repoRoot = await resolveGitRepoRoot(contextPath);
   if (!repoRoot) return undefined;
 
-  const branch = await resolveBranchNameAtRepoRoot(repoRoot);
+  const branch = await resolveGitBranchAtRepoRoot(repoRoot);
   if (branch === undefined) {
     logger.debug(
       'Git branch auto-detection skipped: no named branch (detached HEAD, old Git, or git unavailable).',
@@ -56,13 +57,22 @@ export async function resolveCurrentGitBranch(contextPath: string): Promise<stri
   return branch;
 }
 
-async function resolveBranchNameAtRepoRoot(repoRoot: string): Promise<string | undefined> {
+/** Returns the current branch at an already-resolved repository root. */
+export async function resolveGitBranchAtRepoRoot(repoRoot: string): Promise<string | undefined> {
   let branch = await tryRunGit(['branch', '--show-current'], repoRoot);
   branch ??= await tryRunGit(['rev-parse', '--abbrev-ref', 'HEAD'], repoRoot);
   if (branch === undefined) return undefined;
   const trimmed = branch.trim();
   if (trimmed.length === 0 || trimmed === 'HEAD') return undefined;
   return trimmed;
+}
+
+function gitSpawnCwd(contextPath: string): string {
+  try {
+    return statSync(contextPath).isFile() ? dirname(contextPath) : contextPath;
+  } catch {
+    return contextPath;
+  }
 }
 
 async function tryRunGit(args: string[], cwd: string): Promise<string | undefined> {

@@ -25,7 +25,11 @@ import { join } from 'node:path';
 
 import { spawnProcess } from '../../../lib/process';
 import { CommandFailedError } from '../_common/error';
-import { resolveCurrentGitBranch, resolveGitRepoRoot } from '../_common/git-worktree';
+import {
+  resolveCurrentGitBranch,
+  resolveGitBranchAtRepoRoot,
+  resolveGitRepoRoot,
+} from '../_common/git-worktree';
 
 /** Maximum byte size per file sent to SQAA. Files exceeding this are skipped. */
 export const SQAA_MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -85,9 +89,11 @@ export async function resolveChangeSet(
 /** Explicit `--branch` wins; otherwise auto-detect from git when possible. */
 export async function resolveSqaaBranch(
   explicitBranch: string | undefined,
-  contextPath = process.cwd(),
+  contextPath: string = process.cwd(),
+  knownRepoRoot?: string,
 ): Promise<string | undefined> {
   if (explicitBranch) return explicitBranch;
+  if (knownRepoRoot) return resolveGitBranchAtRepoRoot(knownRepoRoot);
   return resolveCurrentGitBranch(contextPath);
 }
 

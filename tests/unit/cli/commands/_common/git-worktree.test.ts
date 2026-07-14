@@ -18,9 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { resolveCurrentGitBranch } from '../../../../../src/cli/commands/_common/git-worktree';
+import {
+  resolveCurrentGitBranch,
+  resolveGitRepoRoot,
+} from '../../../../../src/cli/commands/_common/git-worktree';
 import * as processLib from '../../../../../src/lib/process.js';
 
 let spawnProcessSpy: ReturnType<typeof spyOn>;
@@ -83,5 +88,16 @@ describe('resolveCurrentGitBranch', () => {
     });
 
     expect(await resolveCurrentGitBranch(process.cwd())).toBeUndefined();
+  });
+
+  it('resolves branch when contextPath is a file (spawn cwd uses parent directory)', async () => {
+    spawnProcessSpy.mockRestore();
+
+    const file = join(process.cwd(), 'src/cli/commands/_common/git-worktree.ts');
+    const repoRoot = await resolveGitRepoRoot(file);
+    const branch = await resolveCurrentGitBranch(file);
+
+    expect(repoRoot).toBe(process.cwd());
+    expect(branch).toBeTruthy();
   });
 });

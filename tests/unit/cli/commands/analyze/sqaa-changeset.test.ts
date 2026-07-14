@@ -67,5 +67,21 @@ describe('resolveSqaaBranch', () => {
     });
 
     expect(await resolveSqaaBranch(undefined, '/path/to/repo/src/file.ts')).toBe('develop');
+    expect(
+      spawnProcessSpy.mock.calls.some(([, args]: [string, string[]]) => args[0] === 'rev-parse'),
+    ).toBe(true);
+  });
+
+  it('skips repo-root resolution when knownRepoRoot is provided', async () => {
+    mockGitResponses({
+      'branch --show-current': 'feature/change-set\n',
+    });
+
+    expect(await resolveSqaaBranch(undefined, '/ignored/context', '/path/to/repo')).toBe(
+      'feature/change-set',
+    );
+    expect(
+      spawnProcessSpy.mock.calls.some(([, args]: [string, string[]]) => args[0] === 'rev-parse'),
+    ).toBe(false);
   });
 });

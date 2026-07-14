@@ -187,7 +187,7 @@ async function analyzeSqaaChangeSet(params: {
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'change-set', forcedDepth);
 
   const changeSet = await resolveChangeSet(process.cwd(), { staged, base });
-  const resolvedBranch = await resolveSqaaBranch(branch, changeSet.repoRoot);
+  const resolvedBranch = await resolveSqaaBranch(branch, changeSet.repoRoot, changeSet.repoRoot);
 
   if (changeSet.files.length === 0 && changeSet.ignored.length === 0) {
     text('Vortex agentic analysis: no files in the change set to analyze.');

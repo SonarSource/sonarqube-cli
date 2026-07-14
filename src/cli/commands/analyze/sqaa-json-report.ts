@@ -100,7 +100,7 @@ async function buildSqaaJsonReportFromChangeSet(
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'change-set', forcedDepth);
 
   const changeSet = await resolveChangeSet(process.cwd(), { staged, base });
-  const resolvedBranch = await resolveSqaaBranch(branch, changeSet.repoRoot);
+  const resolvedBranch = await resolveSqaaBranch(branch, changeSet.repoRoot, changeSet.repoRoot);
   if (changeSet.files.length === 0) {
     return makeReport(
       [],
