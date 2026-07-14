@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
@@ -90,14 +90,26 @@ describe('resolveCurrentGitBranch', () => {
     expect(await resolveCurrentGitBranch(process.cwd())).toBeUndefined();
   });
 
-  it('resolves branch when contextPath is a file (spawn cwd uses parent directory)', async () => {
-    spawnProcessSpy.mockRestore();
-
+  it('resolves repo root and branch when contextPath is a file (spawn cwd uses parent directory)', async () => {
     const file = join(process.cwd(), 'src/cli/commands/_common/git-worktree.ts');
-    const repoRoot = await resolveGitRepoRoot(file);
-    const branch = await resolveCurrentGitBranch(file);
+    const parentDir = dirname(file);
 
-    expect(repoRoot).toBe(process.cwd());
-    expect(branch).toBeTruthy();
+    spawnProcessSpy.mockImplementation(
+      (_cmd: string, args: string[], options?: { cwd?: string }) => {
+        const key = args.join(' ');
+        if (key === 'rev-parse --show-toplevel') {
+          expect(options?.cwd).toBe(parentDir);
+          return Promise.resolve({ exitCode: 0, stdout: `${process.cwd()}\n`, stderr: '' });
+        }
+        if (key === 'branch --show-current') {
+          expect(options?.cwd).toBe(process.cwd());
+          return Promise.resolve({ exitCode: 0, stdout: 'feature/from-file\n', stderr: '' });
+        }
+        return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+      },
+    );
+
+    expect(await resolveGitRepoRoot(file)).toBe(process.cwd());
+    expect(await resolveCurrentGitBranch(file)).toBe('feature/from-file');
   });
 });
