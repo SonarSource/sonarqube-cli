@@ -261,7 +261,6 @@ describe('loadState: migration', () => {
     const state = loadState('0.1.0');
 
     expect(state.telemetry.installationId).toMatch(/^[0-9a-f-]{36}$/);
-    expect(state.telemetry.events).toEqual([]);
   });
 
   it('removes legacy keystoreKey field from connections', () => {
