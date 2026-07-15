@@ -391,14 +391,17 @@ describe('agentPostToolUse', () => {
     existsSyncSpy.mockReturnValue(true);
 
     // Simulate symlink swap: first realpathSync call sees the safe file,
-    // second call (if it happens) sees the attacker file.
+    // second call (if it happens) sees the attacker file. canonicalizePath()
+    // resolves via realpathSync.native, so that is the function to intercept.
     let resolveCount = 0;
-    const realpathSyncSpy = spyOn(fs, 'realpathSync').mockImplementation(((p: fs.PathLike) => {
+    const realpathSyncSpy = spyOn(fs.realpathSync, 'native').mockImplementation(((
+      p: fs.PathLike,
+    ) => {
       if (p === symlinkPath) {
         return ++resolveCount === 1 ? safeTarget : attackerTarget;
       }
       return String(p);
-    }) as typeof fs.realpathSync);
+    }) as typeof fs.realpathSync.native);
 
     await agentPostToolUse({ project: 'my-project' });
 

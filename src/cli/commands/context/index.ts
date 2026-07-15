@@ -19,13 +19,14 @@
  */
 
 import { spawn } from 'node:child_process';
-import { realpathSync } from 'node:fs';
-import { isAbsolute, relative, resolve } from 'node:path';
 
 import { resolveAuth, type ResolvedAuth } from '../../../lib/auth-resolver';
 import { SONAR_CONTEXT_INVOCATION } from '../../../lib/config-constants';
+import { canonicalizePath } from '../../../lib/fs-utils';
 import { getToken } from '../../../lib/keychain';
 import logger from '../../../lib/logger';
+import { resolveContextWorkspaceRoot } from '../../../lib/project-workspace/git-worktree';
+import { selectRecordedFeatureForDir } from '../../../lib/project-workspace/recorded-feature-resolver';
 import type { InstalledIntegrationFeature, IntegrationStateAttribute } from '../../../lib/state';
 import { loadState } from '../../../lib/state-manager';
 import { buildContextAugmentationEnv } from '../_common/context-augmentation-env';
@@ -79,24 +80,8 @@ interface RecordedContextAugmentationConfig {
   organization?: string;
   projectKey?: string;
   serverUrl?: string;
-}
-
-function canonicalPath(path: string): string {
-  let canonical: string;
-  try {
-    canonical = realpathSync.native(path);
-  } catch {
-    canonical = resolve(path);
-  }
-  return process.platform === 'win32' ? canonical.toLowerCase() : canonical;
-}
-
-function isPathInside(parent: string, child: string): boolean {
-  if (child === parent) {
-    return true;
-  }
-  const rel = relative(parent, child);
-  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+  /** Git working tree root containing the current invocation; set only when a recorded integration matched. */
+  workspaceDir?: string;
 }
 
 function isProjectContextAugmentationFeature(feature: InstalledIntegrationFeature): boolean {
@@ -113,23 +98,22 @@ function getOptionalStringAttr(
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-function resolveRecordedContextAugmentationConfig(cwd: string): RecordedContextAugmentationConfig {
+async function resolveRecordedContextAugmentationConfig(
+  cwd: string,
+): Promise<RecordedContextAugmentationConfig> {
   try {
-    const current = canonicalPath(cwd);
-    const matches = loadState()
-      .integrations.installed.flatMap((integration) =>
-        integration.features.filter(isProjectContextAugmentationFeature).map((feature) => ({
-          feature,
-          projectRoot: canonicalPath(feature.targetRoot),
-        })),
-      )
-      .filter(({ projectRoot }) => isPathInside(projectRoot, current))
-      .sort(
-        (a, b) =>
-          b.projectRoot.length - a.projectRoot.length ||
-          getUpdatedAtTimestamp(b.feature) - getUpdatedAtTimestamp(a.feature),
-      );
-    const match = matches.at(0)?.feature;
+    // Worktree-aware matching (current worktree, then main tree; targetRoot before
+    // repoRoot; nearest ancestor; most recent) is owned by the shared resolver, so
+    // this stays identical to SQAA's project-key lookup (see resolveSqaaProjectKey).
+    const candidates = loadState().integrations.installed.flatMap((integration) =>
+      integration.features.filter(isProjectContextAugmentationFeature).map((feature) => ({
+        feature,
+        targetRoot: feature.targetRoot,
+        repoRoot: getOptionalStringAttr(feature.attrs, 'repoRoot'),
+        updatedAt: feature.updatedAt,
+      })),
+    );
+    const match = await selectRecordedFeatureForDir(cwd, candidates);
     if (!match) {
       return {};
     }
@@ -137,6 +121,10 @@ function resolveRecordedContextAugmentationConfig(cwd: string): RecordedContextA
       organization: getOptionalStringAttr(match.attrs, 'orgKey'),
       projectKey: getOptionalStringAttr(match.attrs, 'projectKey'),
       serverUrl: getOptionalStringAttr(match.attrs, 'serverUrl'),
+      // CAG daemon folder: git working-tree root (climbs up from subdirs), or the
+      // physical integrate targetRoot outside a git repo. Project metadata above
+      // comes from recorded state matched via targetRoot / repoRoot.
+      workspaceDir: canonicalizePath(await resolveContextWorkspaceRoot(cwd, match.targetRoot)),
     };
   } catch (err) {
     logger.debug(
@@ -144,11 +132,6 @@ function resolveRecordedContextAugmentationConfig(cwd: string): RecordedContextA
     );
     return {};
   }
-}
-
-function getUpdatedAtTimestamp(feature: InstalledIntegrationFeature): number {
-  const timestamp = Date.parse(feature.updatedAt);
-  return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
 async function resolveContextToken(
@@ -192,7 +175,7 @@ export async function runContextPassthrough(
         remediationHint: 'Run: sonar auth login',
       });
     }
-    const recordedConfig = resolveRecordedContextAugmentationConfig(process.cwd());
+    const recordedConfig = await resolveRecordedContextAugmentationConfig(process.cwd());
     const serverUrl = recordedConfig.serverUrl ?? auth.serverUrl;
     const organization = recordedConfig.organization ?? auth.orgKey;
     env = buildContextAugmentationEnv({
@@ -200,6 +183,7 @@ export async function runContextPassthrough(
       projectKey: recordedConfig.projectKey,
       serverUrl,
       token: await resolveContextToken(auth, serverUrl, organization),
+      workspaceDir: recordedConfig.workspaceDir,
     });
   }
 

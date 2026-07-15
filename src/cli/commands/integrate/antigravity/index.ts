@@ -23,7 +23,7 @@ import type { IntegrationStateAttribute } from '../../../../lib/state';
 import { info } from '../../../../ui';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude';
 import {
-  buildContextAugmentationAttrs,
+  buildRecordedIntegrationAttrs,
   resolveContextAugmentationSetup,
 } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
@@ -75,6 +75,14 @@ export async function integrateAntigravity(
     installContextAugmentation: contextAugmentation !== null,
   };
 
+  const attrs = await buildRecordedIntegrationAttrs({
+    baseAttrs: buildIntegrationAttrs(ctx),
+    projectRoot: ctx.project.rootDir,
+    serverUrl: ctx.serverUrl,
+    orgKey: ctx.organization,
+    contextAugmentation,
+  });
+
   await installIntegration({
     registry: supportedIntegrations,
     integrationId: ANTIGRAVITY_INTEGRATION_ID,
@@ -84,16 +92,7 @@ export async function integrateAntigravity(
     auth,
     nonInteractive: options.nonInteractive,
     isFromRouter: options.isFromRouter,
-    attrs: {
-      ...buildIntegrationAttrs(ctx),
-      ...(contextAugmentation
-        ? buildContextAugmentationAttrs(
-            ctx.serverUrl,
-            ctx.organization,
-            contextAugmentation.scaEnabled,
-          )
-        : {}),
-    },
+    attrs,
   });
 }
 

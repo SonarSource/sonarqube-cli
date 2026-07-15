@@ -26,13 +26,21 @@ export interface ContextAugmentationEnvContext {
   projectKey?: string;
   serverUrl?: string;
   token?: string;
+  /**
+   * Workspace root passed to CAG for its per-workspace daemon folder: the git
+   * working-tree root containing the invocation (climbing up from subdirs), or
+   * the physical integrate target when not in a git repo. Set only when a
+   * recorded integration matched.
+   */
+  workspaceDir?: string;
 }
 
 type ContextAugmentationEnvKey =
   | 'SONAR_CONTEXT_ORGANIZATION'
   | 'SONAR_CONTEXT_PROJECT'
   | 'SONAR_CONTEXT_TOKEN'
-  | 'SONAR_CONTEXT_URL';
+  | 'SONAR_CONTEXT_URL'
+  | 'SONAR_CONTEXT_WORKSPACE_ROOT';
 
 /**
  * Build the env passed to sonar-context-augmentation subprocesses.
@@ -55,37 +63,31 @@ export function buildContextAugmentationEnv(
     return env;
   }
 
-  setContextEnvValue(env, 'SONAR_CONTEXT_ORGANIZATION', context.organization);
-  setContextEnvValue(env, 'SONAR_CONTEXT_PROJECT', context.projectKey);
-  setContextEnvValue(env, 'SONAR_CONTEXT_TOKEN', context.token);
-  setContextEnvValue(env, 'SONAR_CONTEXT_URL', context.serverUrl);
+  // A context object fully determines the SONAR_CONTEXT_* values. Clear any
+  // inherited from the parent env first (static literal deletes — the dynamic
+  // form trips @typescript-eslint/no-dynamic-delete), then set only the fields
+  // provided so e.g. an explicit token is never paired with an inherited key.
+  delete env.SONAR_CONTEXT_ORGANIZATION;
+  delete env.SONAR_CONTEXT_PROJECT;
+  delete env.SONAR_CONTEXT_TOKEN;
+  delete env.SONAR_CONTEXT_URL;
+  delete env.SONAR_CONTEXT_WORKSPACE_ROOT;
+
+  assignContextEnvValue(env, 'SONAR_CONTEXT_ORGANIZATION', context.organization);
+  assignContextEnvValue(env, 'SONAR_CONTEXT_PROJECT', context.projectKey);
+  assignContextEnvValue(env, 'SONAR_CONTEXT_TOKEN', context.token);
+  assignContextEnvValue(env, 'SONAR_CONTEXT_URL', context.serverUrl);
+  assignContextEnvValue(env, 'SONAR_CONTEXT_WORKSPACE_ROOT', context.workspaceDir);
 
   return env;
 }
 
-function setContextEnvValue(
+function assignContextEnvValue(
   env: NodeJS.ProcessEnv,
   key: ContextAugmentationEnvKey,
   value: string | undefined,
 ): void {
   if (value !== undefined && value.length > 0) {
     env[key] = value;
-    return;
-  }
-
-  // Explicit per-key delete: @typescript-eslint/no-dynamic-delete forbids `delete env[key]`.
-  switch (key) {
-    case 'SONAR_CONTEXT_ORGANIZATION':
-      delete env.SONAR_CONTEXT_ORGANIZATION;
-      return;
-    case 'SONAR_CONTEXT_PROJECT':
-      delete env.SONAR_CONTEXT_PROJECT;
-      return;
-    case 'SONAR_CONTEXT_TOKEN':
-      delete env.SONAR_CONTEXT_TOKEN;
-      return;
-    case 'SONAR_CONTEXT_URL':
-      delete env.SONAR_CONTEXT_URL;
-      return;
   }
 }

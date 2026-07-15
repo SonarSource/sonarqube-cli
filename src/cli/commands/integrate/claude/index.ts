@@ -30,7 +30,7 @@ import {
   resolveIntegrateInstallTarget,
 } from '../_common/agent-integrate-prelude';
 import {
-  buildContextAugmentationAttrs,
+  buildRecordedIntegrationAttrs,
   resolveContextAugmentationSetup,
 } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
@@ -78,16 +78,13 @@ export async function integrateClaude(
         projectKey: ctx.projectKey,
         isGlobal: ctx.isGlobal,
       });
-  const featureAttrs = {
-    ...buildIntegrationAttrs(config),
-    ...(contextAugmentation
-      ? buildContextAugmentationAttrs(
-          config.serverURL,
-          config.organization,
-          contextAugmentation.scaEnabled,
-        )
-      : {}),
-  };
+  const featureAttrs = await buildRecordedIntegrationAttrs({
+    baseAttrs: buildIntegrationAttrs(config),
+    projectRoot: ctx.project.rootDir,
+    serverUrl: config.serverURL,
+    orgKey: config.organization,
+    contextAugmentation,
+  });
   const { installRoot, installScope } = resolveIntegrateInstallTarget(
     ctx.isGlobal,
     ctx.project.rootDir,
