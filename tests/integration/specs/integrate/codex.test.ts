@@ -709,8 +709,7 @@ describe('integrate codex', () => {
         if (expectedShownPrompt) {
           expectAgentPromptHint(
             result.stdout,
-            'Codex',
-            'sonar integrate codex --non-interactive -p <project-key>',
+            'sonar integrate codex --non-interactive',
             'sonar integrate codex --non-interactive -g',
           );
         } else {

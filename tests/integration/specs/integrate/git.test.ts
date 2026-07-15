@@ -459,11 +459,7 @@ describe('integrate git (native hooks)', () => {
 
       expect(result.exitCode).toBe(0);
       if (expectedShownPrompt) {
-        expectAgentPromptHint(
-          result.stdout,
-          'Claude Code',
-          'sonar integrate git --non-interactive',
-        );
+        expectAgentPromptHint(result.stdout, 'sonar integrate git --non-interactive');
         // Must use the CLI subcommand "git", not the internal registry
         // integrationId (native-git/husky/pre-commit).
         expect(result.stdout).not.toContain('sonar integrate native-git');
@@ -816,11 +812,7 @@ describe('integrate git (native hooks)', () => {
 
       expect(result.exitCode).toBe(0);
       if (expectedShownPrompt) {
-        expectAgentPromptHint(
-          result.stdout,
-          'Claude Code',
-          'sonar integrate git --non-interactive',
-        );
+        expectAgentPromptHint(result.stdout, 'sonar integrate git --non-interactive');
       } else {
         expectNoAgentPromptHint(result.stdout);
       }

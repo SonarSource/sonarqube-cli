@@ -30,7 +30,7 @@ import { detectGlobalSecretsHook } from './hooks';
 export async function integrateCopilot(options: IntegrateAgentOptions, auth: ResolvedAuth) {
   if (!options.nonInteractive) {
     printAgentNonInteractiveAlternativeHint(
-      'sonar integrate copilot --non-interactive -p <project-key>',
+      'sonar integrate copilot --non-interactive',
       'sonar integrate copilot --non-interactive -g',
     );
   }

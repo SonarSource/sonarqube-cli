@@ -18,23 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { type CallerAgent, detectCallerAgent } from '../../../lib/agent-detector';
+import { detectCallerAgent } from '../../../lib/agent-detector';
 import { info, print } from '../../../ui';
 
-const AGENT_DISPLAY_NAMES: Record<CallerAgent, string> = {
-  claude: 'Claude Code',
-  cursor: 'Cursor',
-  copilot: 'Copilot CLI',
-  codex: 'Codex',
-  antigravity: 'Antigravity',
-};
-
 export function printAgentNonInteractiveAlternativeHint(...nonInteractiveExamples: string[]): void {
-  const agent = detectCallerAgent();
-  if (agent === null) {
+  if (detectCallerAgent() === null) {
     return;
   }
-  info(`[${AGENT_DISPLAY_NAMES[agent]}] To run non-interactively:`);
+  info('Agent environment detected. To run non-interactively:');
   for (const example of nonInteractiveExamples) {
     print(`   → ${example}`);
   }

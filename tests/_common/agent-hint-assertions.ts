@@ -20,18 +20,13 @@
 
 // Shared assertions for `printAgentNonInteractiveAlternativeHint` output
 // (src/cli/commands/_common/agent-prompt-hint.ts). Callers only supply the
-// agent display name and the non-interactive example(s), mirroring the real
-// function's own signature.
+// non-interactive example(s), mirroring the real function's own signature.
 
 import { expect } from 'bun:test';
 
-/** Asserts the hint was printed for `displayName`, with one line per example. */
-export function expectAgentPromptHint(
-  output: string,
-  displayName: string,
-  ...examples: string[]
-): void {
-  expect(output).toContain(`[${displayName}] To run non-interactively:`);
+/** Asserts the hint was printed, with one line per example. */
+export function expectAgentPromptHint(output: string, ...examples: string[]): void {
+  expect(output).toContain('Agent environment detected. To run non-interactively:');
   for (const example of examples) {
     expect(output).toContain(`   → ${example}`);
   }

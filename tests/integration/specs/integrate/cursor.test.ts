@@ -567,8 +567,7 @@ describe('integrate cursor', () => {
         if (expectedShownPrompt) {
           expectAgentPromptHint(
             result.stdout,
-            'Cursor',
-            'sonar integrate cursor --non-interactive -p <project-key>',
+            'sonar integrate cursor --non-interactive',
             'sonar integrate cursor --non-interactive -g',
           );
         } else {

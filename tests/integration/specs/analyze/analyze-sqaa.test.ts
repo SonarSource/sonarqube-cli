@@ -1363,7 +1363,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
 
       expect(result.exitCode).toBe(0);
       if (expectedShownPrompt) {
-        expectAgentPromptHint(result.stdout, 'Claude Code', 'sonar analyze --force');
+        expectAgentPromptHint(result.stdout, 'sonar analyze --force');
       } else {
         expectNoAgentPromptHint(result.stdout);
       }

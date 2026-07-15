@@ -35,7 +35,7 @@ export async function integrateCursor(
 ): Promise<void> {
   if (!options.nonInteractive) {
     printAgentNonInteractiveAlternativeHint(
-      'sonar integrate cursor --non-interactive -p <project-key>',
+      'sonar integrate cursor --non-interactive',
       'sonar integrate cursor --non-interactive -g',
     );
   }
