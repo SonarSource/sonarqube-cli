@@ -91,6 +91,7 @@ describe('runPostUpdateActions', () => {
   let existsSyncSpy: Mock<typeof fs.existsSync>;
   let stateFileExistsSpy: Mock<typeof stateRepository.stateFileExists>;
   let loadStateSpy: Mock<typeof stateRepository.loadState>;
+  let tryLoadStateSpy: Mock<typeof stateRepository.tryLoadState>;
   let saveStateSpy: Mock<typeof stateRepository.saveState>;
   let isNewerVersionSpy: Mock<typeof versionLib.isNewerVersion>;
   let migrateHookScriptsSpy: Mock<typeof migration.migrateHookScripts>;
@@ -102,6 +103,7 @@ describe('runPostUpdateActions', () => {
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
     stateFileExistsSpy = spyOn(stateRepository, 'stateFileExists').mockReturnValue(true);
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeState());
+    tryLoadStateSpy = spyOn(stateRepository, 'tryLoadState').mockReturnValue(makeState());
     saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
     isNewerVersionSpy = spyOn(versionLib, 'isNewerVersion').mockReturnValue(true);
     migrateHookScriptsSpy = spyOn(migration, 'migrateHookScripts').mockImplementation(() => {});
@@ -119,6 +121,7 @@ describe('runPostUpdateActions', () => {
     existsSyncSpy.mockRestore();
     stateFileExistsSpy.mockRestore();
     loadStateSpy.mockRestore();
+    tryLoadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     isNewerVersionSpy.mockRestore();
     migrateHookScriptsSpy.mockRestore();
@@ -133,6 +136,16 @@ describe('runPostUpdateActions', () => {
     await runPostUpdateActions();
 
     expect(loadStateSpy).not.toHaveBeenCalled();
+    expect(saveStateSpy).not.toHaveBeenCalled();
+  });
+
+  it('quits quietly when state cannot be read (CLI-834)', async () => {
+    tryLoadStateSpy.mockReturnValue(null);
+
+    const actual = await runPostUpdateActions();
+
+    expect(actual).toBeUndefined();
+    expect(isNewerVersionSpy).not.toHaveBeenCalled();
     expect(saveStateSpy).not.toHaveBeenCalled();
   });
 
@@ -154,23 +167,21 @@ describe('runPostUpdateActions', () => {
   });
 
   it('saves the reloaded state, not the pre-runActions snapshot', async () => {
-    // loadState is called 7 times:
-    //   1. version check in runPostUpdateActions
-    //   2. inside migrateLegacyTelemetryEvents
-    //   3. inside migrateDeclarativeIntegrations
-    //   4. inside migrateClaudeCodeHooks
-    //   5. inside updateSecretsBinaryIfNeeded
-    //   6. inside updateScaScannerBinaryIfNeeded
-    //   7. the reload after runActions (the fix being tested)
+    // The version check reads via tryLoadState, so loadState is called 6 times:
+    //   1. inside migrateLegacyTelemetryEvents
+    //   2. inside migrateDeclarativeIntegrations
+    //   3. inside migrateClaudeCodeHooks
+    //   4. inside updateSecretsBinaryIfNeeded
+    //   5. inside updateScaScannerBinaryIfNeeded
+    //   6. the reload after runActions (the fix being tested)
     const reloadedState = makeState();
     loadStateSpy
-      .mockReturnValueOnce(makeState()) // call 1: version check
-      .mockReturnValueOnce(makeState()) // call 2: migrateLegacyTelemetryEvents
-      .mockReturnValueOnce(makeState()) // call 3: migrateDeclarativeIntegrations
-      .mockReturnValueOnce(makeState()) // call 4: migrateClaudeCodeHooks
-      .mockReturnValueOnce(makeState()) // call 5: updateSecretsBinaryIfNeeded
-      .mockReturnValueOnce(makeState()) // call 6: updateScaScannerBinaryIfNeeded
-      .mockReturnValueOnce(reloadedState); // call 7: reload
+      .mockReturnValueOnce(makeState()) // call 1: migrateLegacyTelemetryEvents
+      .mockReturnValueOnce(makeState()) // call 2: migrateDeclarativeIntegrations
+      .mockReturnValueOnce(makeState()) // call 3: migrateClaudeCodeHooks
+      .mockReturnValueOnce(makeState()) // call 4: updateSecretsBinaryIfNeeded
+      .mockReturnValueOnce(makeState()) // call 5: updateScaScannerBinaryIfNeeded
+      .mockReturnValueOnce(reloadedState); // call 6: reload
 
     await runPostUpdateActions();
 

@@ -106,7 +106,7 @@ export function loadState(cliVersion?: string): CliState {
     }
   }
 
-  logger.debug(`Failed to load state from ${getStateFile()}: ${(lastError as Error).message}`);
+  logger.error(`Failed to load state from ${getStateFile()}: ${(lastError as Error).message}`);
   throw new CommandFailedError(`Failed to read state: ${(lastError as Error).message}`, {
     cause: lastError,
     remediationHint: `The state file may be corrupted. Inspect or remove it at ${getStateFile()}, then try again.`,
