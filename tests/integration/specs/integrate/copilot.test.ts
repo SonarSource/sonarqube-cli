@@ -623,7 +623,7 @@ describe('integrate copilot', () => {
      * entitlement endpoint both resolve to the fake).
      */
     async function setupCloudWithEntitlement(
-      options: { eligible?: boolean; enabled?: boolean } = {},
+      options: { allowed?: boolean; hasEntitlement?: boolean } = {},
     ): Promise<{ extraEnv: Record<string, string> }> {
       const server = await harness
         .newFakeServer()
@@ -736,8 +736,8 @@ describe('integrate copilot', () => {
       'omits the SQAA section when the org is not entitled to SQAA',
       async () => {
         const { extraEnv } = await setupCloudWithEntitlement({
-          eligible: false,
-          enabled: false,
+          allowed: false,
+          hasEntitlement: false,
         });
 
         const result = await harness.run(

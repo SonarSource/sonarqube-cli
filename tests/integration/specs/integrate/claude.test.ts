@@ -710,7 +710,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
         .newFakeServer()
         .withAuthToken('cloud-token')
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-        .withSqaaEntitlement('my-org', 'test-uuid-1234', { eligible: false, enabled: false })
+        .withSqaaEntitlement('my-org', 'test-uuid-1234', { allowed: false, hasEntitlement: false })
         .start();
 
       const serverUrl = server.baseUrl();
@@ -735,6 +735,49 @@ describe('integrate claude — SQAA entitlement guard', () => {
           hookScriptName('posttool-sqaa'),
         ),
       ).toBe(false);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'installs the SQAA hook and warns when the org is entitled but over its usage limit',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .withSqaaEntitlement('my-org', 'test-uuid-1234', {
+          allowed: false,
+          hasEntitlement: true,
+        })
+        .withProject('my-project')
+        .start();
+
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', 'my-org');
+
+      const result = await harness.run(`integrate claude --project my-project --non-interactive`, {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(
+        'Your organization has reached its Vortex agentic analysis usage limit',
+      );
+      const settings = harness.cwd.file('.claude', 'settings.json').asJson();
+      expect(settings.hooks?.PostToolUse).toBeDefined();
+      expect(
+        harness.cwd.exists(
+          '.claude',
+          'hooks',
+          'sonar-sqaa',
+          'build-scripts',
+          hookScriptName('posttool-sqaa'),
+        ),
+      ).toBe(true);
     },
     { timeout: 30000 },
   );

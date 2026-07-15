@@ -699,7 +699,7 @@ describe('SonarQubeClient', () => {
       expect(await cloudClient.hasSqaaEntitlement('my-org')).toBe('check_failed');
     });
 
-    it("returns 'enabled' when org UUID is resolved and entitlement is enabled and eligible", async () => {
+    it("returns 'enabled' when org UUID is resolved and entitlement is allowed", async () => {
       fetchSpy = spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({
           ok: true,
@@ -709,13 +709,13 @@ describe('SonarQubeClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: () => Promise.resolve({ id: 'org-uuid', enabled: true, eligible: true }),
+          json: () => Promise.resolve({ id: 'org-uuid', allowed: true, hasEntitlement: true }),
         } as Response);
 
       expect(await cloudClient.hasSqaaEntitlement('my-org')).toBe('enabled');
     });
 
-    it("returns 'not_enabled' when entitlement is enabled but not eligible", async () => {
+    it("returns 'not_enabled' when the org is not entitled at all", async () => {
       fetchSpy = spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({
           ok: true,
@@ -725,13 +725,13 @@ describe('SonarQubeClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: () => Promise.resolve({ id: 'org-uuid', enabled: true, eligible: false }),
+          json: () => Promise.resolve({ id: 'org-uuid', allowed: false, hasEntitlement: false }),
         } as Response);
 
       expect(await cloudClient.hasSqaaEntitlement('my-org')).toBe('not_enabled');
     });
 
-    it("returns 'not_enabled' when entitlement is eligible but not enabled", async () => {
+    it("returns 'over_consumption' when the org is entitled but over its usage limit", async () => {
       fetchSpy = spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({
           ok: true,
@@ -741,10 +741,10 @@ describe('SonarQubeClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: () => Promise.resolve({ id: 'org-uuid', enabled: false, eligible: true }),
+          json: () => Promise.resolve({ id: 'org-uuid', allowed: false, hasEntitlement: true }),
         } as Response);
 
-      expect(await cloudClient.hasSqaaEntitlement('my-org')).toBe('not_enabled');
+      expect(await cloudClient.hasSqaaEntitlement('my-org')).toBe('over_consumption');
     });
 
     it("returns 'check_failed' when the entitlement check fails with an API error", async () => {
@@ -775,13 +775,13 @@ describe('SonarQubeClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: () => Promise.resolve({ id: targetUuid, enabled: true, eligible: true }),
+          json: () => Promise.resolve({ id: targetUuid, allowed: true, hasEntitlement: true }),
         } as Response);
 
       await cloudClient.hasSqaaEntitlement('my-org');
 
       const entitlementUrl = new URL((fetchSpy.mock.calls[1][0] as URL).toString());
-      expect(entitlementUrl.pathname).toBe(`/a3s-analysis/org-config/${targetUuid}`);
+      expect(entitlementUrl.pathname).toBe(`/a3s-analysis/org-entitlement/${targetUuid}`);
     });
 
     it("returns 'enabled' for SonarQube Cloud US and hits US API", async () => {
@@ -795,7 +795,7 @@ describe('SonarQubeClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: () => Promise.resolve({ id: 'org-uuid', enabled: true, eligible: true }),
+          json: () => Promise.resolve({ id: 'org-uuid', allowed: true, hasEntitlement: true }),
         } as Response);
 
       expect(await usClient.hasSqaaEntitlement('my-org')).toBe('enabled');

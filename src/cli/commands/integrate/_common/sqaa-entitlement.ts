@@ -36,6 +36,14 @@ export const SQAA_GLOBAL_SKIP_MESSAGE =
  */
 export const SQAA_PROMOTION_MESSAGE = `Vortex agentic analysis is available on SonarQube Cloud. Learn more: ${AGENTIC_ANALYSIS_DOCS_URL}`;
 
+/**
+ * Shown when the organization is entitled to SonarQube Agentic Analysis but has
+ * reached its current usage limit. The integration is still installed so it works
+ * again once consumption resets.
+ */
+export const SQAA_OVER_CONSUMPTION_MESSAGE =
+  'Your organization has reached its Vortex agentic analysis usage limit. Installing it anyway — analysis will resume once your usage resets.';
+
 export interface ResolveSqaaSetupParams {
   serverURL: string;
   token: string;
@@ -68,7 +76,12 @@ export async function resolveSqaaSetup(params: ResolveSqaaSetupParams): Promise<
     warn(SQAA_GLOBAL_SKIP_MESSAGE);
     return false;
   }
+  // Entitled but over the current usage limit: still install so it works once
+  // consumption resets, and warn the user it cannot run right now.
+  if (status === 'over_consumption') {
+    warn(SQAA_OVER_CONSUMPTION_MESSAGE);
+  }
   // Explicit check so future statuses don't fall through to true.
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  return status === 'enabled';
+  return status === 'enabled' || status === 'over_consumption';
 }
