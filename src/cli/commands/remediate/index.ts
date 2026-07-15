@@ -62,7 +62,7 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
     options.issues === undefined ? undefined : parseIssueKeys(options.issues);
 
   if (suppliedIssueKeys === undefined) {
-    printAgentNonInteractiveAlternativeHint('sonar remediate --issues PROJ-1,PROJ-2');
+    printAgentNonInteractiveAlternativeHint('sonar remediate --issues <issue-key-1>,<issue-key-2>');
   }
 
   assertCloudConnection(auth);

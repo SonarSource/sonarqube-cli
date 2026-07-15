@@ -287,7 +287,7 @@ describe('sonar remediate', () => {
         expectAgentPromptHint(
           result.stdout,
           'Claude Code',
-          'sonar remediate --issues PROJ-1,PROJ-2',
+          'sonar remediate --issues <issue-key-1>,<issue-key-2>',
         );
       } else {
         expectNoAgentPromptHint(result.stdout);

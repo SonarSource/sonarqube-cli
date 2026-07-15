@@ -551,7 +551,7 @@ describe('integrate cursor', () => {
       [false, true, false],
       [false, false, false],
     ])(
-      'prints a non-interactive hint using -p/-g only for a detected AI agent without --non-interactive (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
+      'prints a non-interactive hint with --non-interactive plus -p/-g examples only for a detected AI agent without --non-interactive (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
       async (isAgent, isInteractive, expectedShownPrompt) => {
         const { extraEnv } = await setupCloudWithEntitlement();
 

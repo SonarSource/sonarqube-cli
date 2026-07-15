@@ -1885,7 +1885,7 @@ describe('integrate claude — interactive feature selection', () => {
     [false, true, false],
     [false, false, false],
   ])(
-    'prints a non-interactive hint using the CLI subcommand (not the claude-code registry id) only for a detected AI agent without --non-interactive (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
+    'prints a non-interactive hint with --non-interactive plus -p/-g examples, using the CLI subcommand (not the claude-code registry id), only for a detected AI agent without --non-interactive (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
     async (isAgent, isInteractive, expectedShownPrompt) => {
       const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
       harness.withAuth(server.baseUrl(), 'tok');

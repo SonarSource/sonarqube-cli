@@ -192,7 +192,7 @@ describe('integrate antigravity', () => {
       [false, true, false],
       [false, false, false],
     ])(
-      'prints a non-interactive hint using -p/-g only for a detected AI agent without --non-interactive (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
+      'prints a non-interactive hint with --non-interactive plus -p/-g examples only for a detected AI agent without --non-interactive (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
       async (isAgent, isInteractive, expectedShownPrompt) => {
         // -p skips the scope prompt; three features ask by default (secrets
         // hooks, MCP server, prompt-secrets project rules) — SQAA is skipped
