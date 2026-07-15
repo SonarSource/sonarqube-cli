@@ -31,6 +31,10 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import {
+  SECRETS_INACTIVE_BINARY_MISSING,
+  SECRETS_INACTIVE_UNAUTHENTICATED,
+} from '../../../../src/cli/commands/hook/hook-dependencies.js';
 import { TestHarness } from '../../harness';
 
 // Hardcoded test token — intentional fixture for secret detection, not a real credential
@@ -105,7 +109,7 @@ describe('sonar hook claude-pre-tool-use', () => {
   );
 
   it(
-    'exits 0 and allows when not authenticated (graceful skip)',
+    'exits 0 and denies with the unauthenticated message when not authenticated',
     async () => {
       harness.state().withSecretsBinaryInstalled();
       harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
@@ -117,13 +121,17 @@ describe('sonar hook claude-pre-tool-use', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).not.toContain('"deny"');
+      const output = JSON.parse(result.stdout.trim());
+      expect(output.hookSpecificOutput.permissionDecision).toBe('deny');
+      expect(output.hookSpecificOutput.permissionDecisionReason).toBe(
+        SECRETS_INACTIVE_UNAUTHENTICATED,
+      );
     },
     { timeout: 15000 },
   );
 
   it(
-    'exits 0 and allows when binary is not installed (graceful skip)',
+    'exits 0 and denies with the binary-missing message when binary is not installed',
     async () => {
       harness.withAuth(FAKE_SERVER, VALID_TOKEN);
       harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
@@ -135,7 +143,11 @@ describe('sonar hook claude-pre-tool-use', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).not.toContain('"deny"');
+      const output = JSON.parse(result.stdout.trim());
+      expect(output.hookSpecificOutput.permissionDecision).toBe('deny');
+      expect(output.hookSpecificOutput.permissionDecisionReason).toBe(
+        SECRETS_INACTIVE_BINARY_MISSING,
+      );
     },
     { timeout: 15000 },
   );
