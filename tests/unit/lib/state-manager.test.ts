@@ -268,6 +268,37 @@ describe('loadState: retry on transient read failure', () => {
       readSpy.mockRestore();
     }
   });
+
+  it('memoizes the failure so a persistently corrupt file is only retried once per process (CLI-834)', () => {
+    mkdirSync(testCliDir, { recursive: true });
+    writeFileSync(testStateFile, 'not-valid-json', 'utf-8');
+
+    const readSpy = spyOn(fs, 'readFileSync');
+
+    try {
+      expect(() => loadState('0.4.0')).toThrow(/Failed to read state/);
+      // Second call at another call site must reuse the cached failure, not retry.
+      expect(() => loadState('0.4.0')).toThrow(/Failed to read state/);
+      expect(readSpy).toHaveBeenCalledTimes(STATE_READ_MAX_ATTEMPTS);
+    } finally {
+      readSpy.mockRestore();
+    }
+  });
+
+  it('retries fresh once the file is rewritten (fingerprint changes)', () => {
+    mkdirSync(testCliDir, { recursive: true });
+    writeFileSync(testStateFile, 'not-valid-json', 'utf-8');
+
+    expect(() => loadState('0.4.0')).toThrow(/Failed to read state/);
+
+    // Overwrite with a valid file: a later read must not reuse the cached failure.
+    const recovered = getDefaultState('0.4.0');
+    recovered.auth.isAuthenticated = true;
+    writeFileSync(testStateFile, JSON.stringify(recovered), 'utf-8');
+
+    const state = loadState('0.4.0');
+    expect(state.auth.isAuthenticated).toBe(true);
+  });
 });
 
 describe('loadState: migration', () => {
