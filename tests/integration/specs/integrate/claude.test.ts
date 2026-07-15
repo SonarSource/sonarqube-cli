@@ -1907,8 +1907,8 @@ describe('integrate claude — interactive feature selection', () => {
         expectAgentPromptHint(
           result.stdout,
           'Claude Code',
-          'sonar integrate claude -p <project-key>',
-          'sonar integrate claude -g',
+          'sonar integrate claude --non-interactive -p <project-key>',
+          'sonar integrate claude --non-interactive -g',
         );
         expect(result.stdout).not.toContain('sonar integrate claude-code');
       } else {

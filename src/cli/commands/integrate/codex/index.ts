@@ -34,8 +34,8 @@ export async function integrateCodex(
 ): Promise<void> {
   if (!options.nonInteractive) {
     printAgentNonInteractiveAlternativeHint(
-      'sonar integrate codex -p <project-key>',
-      'sonar integrate codex -g',
+      'sonar integrate codex --non-interactive -p <project-key>',
+      'sonar integrate codex --non-interactive -g',
     );
   }
 

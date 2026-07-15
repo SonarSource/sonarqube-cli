@@ -899,8 +899,8 @@ describe('integrate copilot', () => {
           expectAgentPromptHint(
             result.stdout,
             'Copilot CLI',
-            'sonar integrate copilot -p <project-key>',
-            'sonar integrate copilot -g',
+            'sonar integrate copilot --non-interactive -p <project-key>',
+            'sonar integrate copilot --non-interactive -g',
           );
           expect(result.stdout).not.toContain('sonar integrate copilot-cli');
         } else {

@@ -710,8 +710,8 @@ describe('integrate codex', () => {
           expectAgentPromptHint(
             result.stdout,
             'Codex',
-            'sonar integrate codex -p <project-key>',
-            'sonar integrate codex -g',
+            'sonar integrate codex --non-interactive -p <project-key>',
+            'sonar integrate codex --non-interactive -g',
           );
         } else {
           expectNoAgentPromptHint(result.stdout);

@@ -211,8 +211,8 @@ describe('integrate antigravity', () => {
           expectAgentPromptHint(
             result.stdout,
             'Antigravity',
-            'sonar integrate antigravity -p <project-key>',
-            'sonar integrate antigravity -g',
+            'sonar integrate antigravity --non-interactive -p <project-key>',
+            'sonar integrate antigravity --non-interactive -g',
           );
         } else {
           expectNoAgentPromptHint(result.stdout);

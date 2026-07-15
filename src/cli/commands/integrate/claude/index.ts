@@ -57,8 +57,8 @@ export async function integrateClaude(
 ): Promise<void> {
   if (!options.nonInteractive) {
     printAgentNonInteractiveAlternativeHint(
-      'sonar integrate claude -p <project-key>',
-      'sonar integrate claude -g',
+      'sonar integrate claude --non-interactive -p <project-key>',
+      'sonar integrate claude --non-interactive -g',
     );
   }
 

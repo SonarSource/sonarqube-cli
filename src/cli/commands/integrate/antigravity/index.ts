@@ -41,8 +41,8 @@ export async function integrateAntigravity(
 ): Promise<void> {
   if (!options.nonInteractive) {
     printAgentNonInteractiveAlternativeHint(
-      'sonar integrate antigravity -p <project-key>',
-      'sonar integrate antigravity -g',
+      'sonar integrate antigravity --non-interactive -p <project-key>',
+      'sonar integrate antigravity --non-interactive -g',
     );
   }
 
