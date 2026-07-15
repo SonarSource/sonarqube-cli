@@ -22,10 +22,9 @@
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
-import { resolveWorktreeRootCandidates } from '../../../lib/project-workspace/git-worktree';
+import { selectRecordedFeatureForDir } from '../../../lib/project-workspace/recorded-feature-resolver';
 import { loadState } from '../../../lib/repository/state-repository';
-import type { InstalledIntegrationFeature, IntegrationStateAttribute } from '../../../lib/state';
-import { canonicalProjectRoot } from '../../../lib/state-manager';
+import type { IntegrationStateAttribute } from '../../../lib/state';
 import { blank, confirmPrompt, text, warn } from '../../../ui';
 import { CommandFailedError } from '../_common/error.js';
 import { SQAA_HOOK_FEATURE_ID } from '../integrate/_common/sqaa-entitlement';
@@ -37,14 +36,6 @@ function getOptionalStringAttr(
 ): string | undefined {
   const value = attrs?.[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function sqaaFeatureMatchesRoot(feature: InstalledIntegrationFeature, root: string): boolean {
-  if (canonicalProjectRoot(feature.targetRoot) === root) {
-    return true;
-  }
-  const repoRoot = getOptionalStringAttr(feature.attrs, 'repoRoot');
-  return repoRoot !== undefined && canonicalProjectRoot(repoRoot) === root;
 }
 
 const LARGE_CHANGESET_HINT =
@@ -125,36 +116,30 @@ export function resolveCloudAuth(
  * Look up the project key for the current project from the declarative
  * integration state (`integrations.installed`).
  *
- * The SQAA hook feature is recorded per install target root, so
- * `resolveWorktreeRootCandidates` maps the current directory to its working-tree
- * root(s) — the current tree, then the main tree — via a single `git worktree
- * list` call. Features are matched on `attrs.repoRoot` (recorded at integrate
- * time as the main working tree) with a `targetRoot` fallback for older state.
- * Candidate order prefers the current worktree before the main tree. Falls back
- * to `process.cwd()` when not inside a git repository so the single-file path
- * still works outside git.
+ * Delegates the worktree-aware matching to the shared resolver (see
+ * `selectRecordedFeatureForDir`): the current directory is mapped to its working
+ * tree — and, from a linked worktree, to the main working tree — then matched
+ * against the recorded Claude SQAA hook features, preferring a `targetRoot`
+ * (physical install dir) match over a `repoRoot`-only one. Falls back to
+ * `process.cwd()` when no `projectRoot` is given so the single-file path still
+ * works, including from a subdirectory or outside git.
  */
 export async function resolveSqaaProjectKey(projectRoot?: string): Promise<string | null> {
   try {
-    const state = loadState();
-    const claude = state.integrations.installed.find(
+    const claude = loadState().integrations.installed.find(
       (integration) => integration.integrationId === CLAUDE_INTEGRATION_ID,
     );
-    const lookupRoots = (await resolveWorktreeRootCandidates(projectRoot ?? process.cwd())).map(
-      canonicalProjectRoot,
-    );
-    let sqaaFeature;
-    for (const root of lookupRoots) {
-      sqaaFeature = claude?.features.find(
-        (feature) =>
-          feature.featureId === SQAA_HOOK_FEATURE_ID &&
-          feature.scope === 'project' &&
-          sqaaFeatureMatchesRoot(feature, root),
-      );
-      if (sqaaFeature) {
-        break;
-      }
-    }
+    const candidates = (claude?.features ?? [])
+      .filter(
+        (feature) => feature.featureId === SQAA_HOOK_FEATURE_ID && feature.scope === 'project',
+      )
+      .map((feature) => ({
+        feature,
+        targetRoot: feature.targetRoot,
+        repoRoot: getOptionalStringAttr(feature.attrs, 'repoRoot'),
+        updatedAt: feature.updatedAt,
+      }));
+    const sqaaFeature = await selectRecordedFeatureForDir(projectRoot ?? process.cwd(), candidates);
 
     const projectKey = sqaaFeature?.attrs?.projectKey;
     if (typeof projectKey !== 'string' || projectKey.length === 0) {

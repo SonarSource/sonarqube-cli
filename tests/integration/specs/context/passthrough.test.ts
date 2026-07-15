@@ -298,6 +298,52 @@ describe('sonar context passthrough', () => {
   );
 
   it(
+    'prefers a targetRoot match over a more recent repoRoot-only match',
+    async () => {
+      // Two worktrees integrated with different project keys, both recording the
+      // same main working tree as repoRoot. Running from the main tree, the
+      // feature whose targetRoot IS the main tree must win over a sibling that
+      // only shares the repoRoot — even though the sibling was updated later, so
+      // recency alone would pick the wrong one.
+      const server = await harness.newFakeServer().start();
+      const serverUrl = server.baseUrl();
+      const stateBuilder = harness
+        .state()
+        .withAuth(serverUrl, 'main-token', ORG_KEY)
+        .withContextAugmentationBinaryInstalled();
+      const state = stateBuilder.build();
+      // repoRoot-only match, integrated in a sibling worktree, updated LATER.
+      appendRecordedCagFeature(state, {
+        integrationId: CLAUDE_INTEGRATION_ID,
+        targetRoot: join(dirname(harness.cwd.path), 'some-other-worktree'),
+        repoRoot: harness.cwd.path,
+        updatedAt: '2026-02-01T00:00:00.000Z',
+        projectKey: 'wrong-worktree-project',
+        orgKey: ORG_KEY,
+        serverUrl,
+      });
+      // Exact targetRoot match for the current directory, updated EARLIER.
+      appendRecordedCagFeature(state, {
+        integrationId: COPILOT_INTEGRATION_ID,
+        targetRoot: harness.cwd.path,
+        repoRoot: harness.cwd.path,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        projectKey: 'right-here-project',
+        orgKey: ORG_KEY,
+        serverUrl,
+      });
+      stateBuilder.withRawState(JSON.stringify(state, null, 2));
+
+      const result = await harness.run('context status');
+
+      expect(result.exitCode).toBe(0);
+      const invocation = findInvocation(readInvocations(harness), ['status']);
+      expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe('right-here-project');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'uses the latest recorded CAG feature when multiple entries share the same project root',
     async () => {
       const server = await harness.newFakeServer().start();

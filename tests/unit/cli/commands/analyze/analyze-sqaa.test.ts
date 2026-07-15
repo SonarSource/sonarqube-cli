@@ -197,6 +197,63 @@ describe('analyzeSqaa: auth resolution', () => {
   });
 });
 
+/**
+ * Cloud state with two project-scoped SQAA features that both resolve to the
+ * current directory, but via different signals: the first (array order) matches
+ * only on `repoRoot` (as if a sibling worktree integrated with a different key
+ * shares this main working tree); the second matches exactly on `targetRoot`
+ * (the install actually rooted here). The exact targetRoot match must win.
+ */
+function stateWithTargetAndRepoRootSqaaFeatures(
+  repoRootOnlyKey: string,
+  targetRootKey: string,
+): CliState {
+  const state = getDefaultState('test');
+  stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', { orgKey: TEST_ORG });
+  const now = new Date().toISOString();
+  const makeFeature = (targetRoot: string, projectKey: string) => ({
+    featureId: SQAA_HOOK_FEATURE_ID,
+    scope: 'project' as const,
+    targetRoot,
+    installedByCliVersion: '1.0.0',
+    installedAt: now,
+    updatedByCliVersion: '1.0.0',
+    updatedAt: now,
+    dependencies: [],
+    resources: [],
+    operations: [],
+    attrs: { projectKey, repoRoot: process.cwd() },
+  });
+  state.integrations.installed.push({
+    id: randomUUID(),
+    integrationId: CLAUDE_INTEGRATION_ID,
+    installedByCliVersion: '1.0.0',
+    installedAt: now,
+    updatedByCliVersion: '1.0.0',
+    updatedAt: now,
+    features: [
+      // repoRoot-only match listed first — would win on array order under a
+      // combined targetRoot-OR-repoRoot search.
+      makeFeature('/some/other/worktree', repoRootOnlyKey),
+      makeFeature(process.cwd(), targetRootKey),
+    ],
+  });
+  return state;
+}
+
+describe('analyzeSqaa: project-key resolution across worktrees', () => {
+  it('prefers a targetRoot match over a repoRoot-only match regardless of feature order', async () => {
+    loadStateSpy.mockReturnValue(
+      stateWithTargetAndRepoRootSqaaFeatures('wrong-worktree-key', 'right-here-key'),
+    );
+
+    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTH);
+
+    expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
+    expect(createAnalysisSpy.mock.calls[0][0].projectKey).toBe('right-here-key');
+  });
+});
+
 describe('analyzeSqaa: API call and result display', () => {
   it('calls client.createAnalysis with correct parameters', async () => {
     await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTH);

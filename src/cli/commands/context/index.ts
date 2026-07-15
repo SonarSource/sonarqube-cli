@@ -19,17 +19,14 @@
  */
 
 import { spawn } from 'node:child_process';
-import { isAbsolute, relative } from 'node:path';
 
 import { resolveAuth, type ResolvedAuth } from '../../../lib/auth-resolver';
 import { SONAR_CONTEXT_INVOCATION } from '../../../lib/config-constants';
-import { canonicalizePath, pathComparisonKey } from '../../../lib/fs-utils';
+import { canonicalizePath } from '../../../lib/fs-utils';
 import { getToken } from '../../../lib/keychain';
 import logger from '../../../lib/logger';
-import {
-  resolveContextWorkspaceRoot,
-  resolveWorktreeEquivalentPaths,
-} from '../../../lib/project-workspace/git-worktree';
+import { resolveContextWorkspaceRoot } from '../../../lib/project-workspace/git-worktree';
+import { selectRecordedFeatureForDir } from '../../../lib/project-workspace/recorded-feature-resolver';
 import type { InstalledIntegrationFeature, IntegrationStateAttribute } from '../../../lib/state';
 import { loadState } from '../../../lib/state-manager';
 import { buildContextAugmentationEnv } from '../_common/context-augmentation-env';
@@ -87,14 +84,6 @@ interface RecordedContextAugmentationConfig {
   workspaceDir?: string;
 }
 
-function isPathInside(parent: string, child: string): boolean {
-  if (pathComparisonKey(child) === pathComparisonKey(parent)) {
-    return true;
-  }
-  const rel = relative(parent, child);
-  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
-}
-
 function isProjectContextAugmentationFeature(feature: InstalledIntegrationFeature): boolean {
   // Global CAG installs are skipped, so only project-scoped feature entries
   // can provide passthrough context.
@@ -113,27 +102,18 @@ async function resolveRecordedContextAugmentationConfig(
   cwd: string,
 ): Promise<RecordedContextAugmentationConfig> {
   try {
-    // Consult cwd, then its equivalent in the main working tree, so a linked
-    // worktree still matches state recorded in the main checkout.
-    const candidates = (await resolveWorktreeEquivalentPaths(cwd)).map(pathComparisonKey);
-    const matches = loadState()
-      .integrations.installed.flatMap((integration) =>
-        integration.features.filter(isProjectContextAugmentationFeature).map((feature) => ({
-          feature,
-          // Prefer the stable main-working-tree key recorded at integrate time;
-          // fall back to targetRoot for state written by older CLI versions.
-          projectRoot: pathComparisonKey(
-            getOptionalStringAttr(feature.attrs, 'repoRoot') ?? feature.targetRoot,
-          ),
-        })),
-      )
-      .filter(({ projectRoot }) => candidates.some((path) => isPathInside(projectRoot, path)))
-      .sort(
-        (a, b) =>
-          b.projectRoot.length - a.projectRoot.length ||
-          getUpdatedAtTimestamp(b.feature) - getUpdatedAtTimestamp(a.feature),
-      );
-    const match = matches.at(0)?.feature;
+    // Worktree-aware matching (current worktree, then main tree; targetRoot before
+    // repoRoot; nearest ancestor; most recent) is owned by the shared resolver, so
+    // this stays identical to SQAA's project-key lookup (see resolveSqaaProjectKey).
+    const candidates = loadState().integrations.installed.flatMap((integration) =>
+      integration.features.filter(isProjectContextAugmentationFeature).map((feature) => ({
+        feature,
+        targetRoot: feature.targetRoot,
+        repoRoot: getOptionalStringAttr(feature.attrs, 'repoRoot'),
+        updatedAt: feature.updatedAt,
+      })),
+    );
+    const match = await selectRecordedFeatureForDir(cwd, candidates);
     if (!match) {
       return {};
     }
@@ -143,7 +123,7 @@ async function resolveRecordedContextAugmentationConfig(
       serverUrl: getOptionalStringAttr(match.attrs, 'serverUrl'),
       // CAG daemon folder: git working-tree root (climbs up from subdirs), or the
       // physical integrate targetRoot outside a git repo. Project metadata above
-      // comes from recorded state matched via repoRoot / targetRoot.
+      // comes from recorded state matched via targetRoot / repoRoot.
       workspaceDir: canonicalizePath(await resolveContextWorkspaceRoot(cwd, match.targetRoot)),
     };
   } catch (err) {
@@ -152,11 +132,6 @@ async function resolveRecordedContextAugmentationConfig(
     );
     return {};
   }
-}
-
-function getUpdatedAtTimestamp(feature: InstalledIntegrationFeature): number {
-  const timestamp = Date.parse(feature.updatedAt);
-  return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
 async function resolveContextToken(
