@@ -221,6 +221,7 @@ describe('sonar hook git-pre-commit', () => {
 
         const result = await harness.run('hook git-pre-commit -p demo --dependency-risks');
         expect(result.exitCode).toBe(0);
+        expect(result.stderr).toContain('sca-scanner binary not installed');
       },
       { timeout: 15000 },
     );
