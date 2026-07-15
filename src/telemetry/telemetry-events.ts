@@ -37,7 +37,7 @@ import type {
   TelemetryConnectionType,
   TelemetryEventIdentityPayload,
 } from '../lib/state.js';
-import { getActiveConnection, loadState } from '../lib/state-manager.js';
+import { getActiveConnection, tryLoadState } from '../lib/state-manager.js';
 import { isTelemetryEnabled } from './enabled.js';
 import {
   resolveCommandTelemetryIdentity,
@@ -74,8 +74,8 @@ type IdentityResolver = (
 async function buildIdentityBase(
   resolve: IdentityResolver,
 ): Promise<TelemetryEventIdentityPayload | null> {
-  const state = loadState();
-  if (!isTelemetryEnabled(state)) return null;
+  const state = tryLoadState();
+  if (!state || !isTelemetryEnabled(state)) return null;
   const installationId = state.telemetry.installationId;
   if (!installationId) return null;
 
