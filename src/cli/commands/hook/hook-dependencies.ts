@@ -18,8 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Shared guard for hook handlers — resolves auth and binary path, returning null if either is
-// unavailable so handlers can exit gracefully without repeating the same boilerplate.
+// Shared guard for hook handlers — resolves auth and binary path, throwing
+// MissingDependenciesError if either is unavailable so handlers fail loudly.
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import { isEnvBasedAuth, resolveAuth } from '../../../lib/auth-resolver';
@@ -38,6 +38,18 @@ export interface HookDependencies {
   binaryPath: string;
 }
 
+export const SECRETS_INACTIVE_UNAUTHENTICATED =
+  "SonarQube secret scanning is inactive: not authenticated. Run 'sonar auth login'.";
+export const SECRETS_INACTIVE_BINARY_MISSING =
+  "SonarQube secret scanning is inactive: analyzer not installed. Re-run 'sonar integrate'.";
+
+export class MissingDependenciesError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MissingDependenciesError';
+  }
+}
+
 export function handleScanError(context: 'Commit' | 'Push', err: Error): void {
   if (isEnvBasedAuth()) {
     throw new CommandFailedError('Secrets scan failed.', {
@@ -50,12 +62,12 @@ export function handleScanError(context: 'Commit' | 'Push', err: Error): void {
   );
 }
 
-export async function resolveAuthAndSecrets(): Promise<HookDependencies | null> {
+export async function resolveAuthAndSecrets(): Promise<HookDependencies> {
   const auth = await resolveAuth().catch(() => null);
-  if (!auth) return null; // not authenticated — allow gracefully
+  if (!auth) throw new MissingDependenciesError(SECRETS_INACTIVE_UNAUTHENTICATED);
 
   const binaryPath = resolveSecretsBinaryPath();
-  if (!binaryPath) return null; // binary not installed — allow gracefully
+  if (!binaryPath) throw new MissingDependenciesError(SECRETS_INACTIVE_BINARY_MISSING);
 
   return { auth, binaryPath };
 }

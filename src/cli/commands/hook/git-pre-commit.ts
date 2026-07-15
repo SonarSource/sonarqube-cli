@@ -27,6 +27,7 @@ import { spawnProcess } from '../../../lib/process';
 import { InvalidOptionError } from '../_common/error';
 import { runDepRisksStage } from './git-pre-commit-dependency-risks.ts';
 import { runCommitSecretsStage } from './git-pre-commit-secrets.ts';
+import { MissingDependenciesError, SECRETS_INACTIVE_UNAUTHENTICATED } from './hook-dependencies.ts';
 
 export interface GitPreCommitOptions {
   project?: string;
@@ -45,7 +46,9 @@ export async function gitPreCommit(
   if (stagedFiles.length === 0) return;
 
   const auth = await resolveAuth().catch(() => null);
-  if (!auth) return;
+  if (!auth) {
+    throw new MissingDependenciesError(SECRETS_INACTIVE_UNAUTHENTICATED);
+  }
 
   await runCommitSecretsStage(stagedFiles, auth);
 

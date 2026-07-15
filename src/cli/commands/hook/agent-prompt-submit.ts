@@ -24,7 +24,12 @@
 import logger from '../../../lib/logger';
 import { SECRETS_CALLER_COMMANDS } from '../../../telemetry/secrets-analysis-telemetry.js';
 import { EXIT_CODE_SECRETS_FOUND } from '../analyze/secrets';
-import { resolveAuthAndSecrets, runAndEmitTextSecretsScan } from './hook-dependencies';
+import {
+  type HookDependencies,
+  MissingDependenciesError,
+  resolveAuthAndSecrets,
+  runAndEmitTextSecretsScan,
+} from './hook-dependencies';
 import { readStdinJson } from './stdin';
 
 interface PromptSubmitPayload {
@@ -43,8 +48,16 @@ export async function agentPromptSubmit(): Promise<void> {
   const prompt = payload.prompt;
   if (!prompt) return;
 
-  const deps = await resolveAuthAndSecrets();
-  if (!deps) return;
+  let deps: HookDependencies;
+  try {
+    deps = await resolveAuthAndSecrets();
+  } catch (err) {
+    if (err instanceof MissingDependenciesError) {
+      process.stdout.write(JSON.stringify({ decision: 'block', reason: err.message }) + '\n');
+      return;
+    }
+    throw err;
+  }
 
   try {
     const exitCode = await runAndEmitTextSecretsScan(

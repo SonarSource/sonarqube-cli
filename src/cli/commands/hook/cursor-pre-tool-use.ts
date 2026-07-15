@@ -30,11 +30,16 @@ import logger from '../../../lib/logger';
 import { SECRETS_CALLER_COMMANDS } from '../../../telemetry/secrets-analysis-telemetry.js';
 import { scanAndEmitSecrets } from '../analyze/secrets';
 import {
+  denyCursor,
   denyCursorFileAccess,
   scanTextForSecrets,
   secretsFoundInScan,
 } from './cursor-secrets-block';
-import { resolveAuthAndSecrets } from './hook-dependencies';
+import {
+  type HookDependencies,
+  MissingDependenciesError,
+  resolveAuthAndSecrets,
+} from './hook-dependencies';
 import { readStdinJson } from './stdin';
 
 interface CursorPreToolUsePayload {
@@ -55,8 +60,16 @@ export async function cursorPreToolUse(): Promise<void> {
   const filePath = payload.tool_input?.file_path ?? payload.tool_input?.path;
   if (!filePath || !existsSync(filePath)) return;
 
-  const deps = await resolveAuthAndSecrets();
-  if (!deps) return;
+  let deps: HookDependencies;
+  try {
+    deps = await resolveAuthAndSecrets();
+  } catch (err) {
+    if (err instanceof MissingDependenciesError) {
+      await denyCursor(err.message);
+      return;
+    }
+    throw err;
+  }
 
   let scan: Awaited<ReturnType<typeof scanAndEmitSecrets>>;
   try {

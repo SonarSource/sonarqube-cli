@@ -28,12 +28,18 @@ import {
   scanAndEmitSecrets,
   warnScanErrors,
 } from '../analyze/secrets';
-import { handleScanError } from './hook-dependencies';
+import {
+  handleScanError,
+  MissingDependenciesError,
+  SECRETS_INACTIVE_BINARY_MISSING,
+} from './hook-dependencies';
 
 export async function runSecretsStage(files: string[], auth: ResolvedAuth): Promise<void> {
-  const binaryPath = resolveSecretsBinaryPath();
-  if (!binaryPath) return;
   if (files.length === 0) return;
+  const binaryPath = resolveSecretsBinaryPath();
+  if (!binaryPath) {
+    throw new MissingDependenciesError(SECRETS_INACTIVE_BINARY_MISSING);
+  }
 
   let scan: Awaited<ReturnType<typeof scanAndEmitSecrets>>;
   try {

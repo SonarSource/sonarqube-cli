@@ -33,7 +33,12 @@ import { existsSync } from 'node:fs';
 import logger from '../../../lib/logger';
 import { SECRETS_CALLER_COMMANDS } from '../../../telemetry/secrets-analysis-telemetry.js';
 import { EXIT_CODE_SECRETS_FOUND } from '../analyze/secrets';
-import { resolveAuthAndSecrets, runAndEmitFileSecretsScan } from './hook-dependencies';
+import {
+  type HookDependencies,
+  MissingDependenciesError,
+  resolveAuthAndSecrets,
+  runAndEmitFileSecretsScan,
+} from './hook-dependencies';
 import { readStdinJson } from './stdin';
 
 interface AntigravityPreToolUsePayload {
@@ -58,8 +63,16 @@ export async function antigravityPreToolUse(): Promise<void> {
   const filePath = payload.toolCall.args?.AbsolutePath;
   if (!filePath || !existsSync(filePath)) return;
 
-  const deps = await resolveAuthAndSecrets();
-  if (!deps) return;
+  let deps: HookDependencies;
+  try {
+    deps = await resolveAuthAndSecrets();
+  } catch (err) {
+    if (err instanceof MissingDependenciesError) {
+      process.stdout.write(JSON.stringify({ decision: 'deny', reason: err.message }) + '\n');
+      return;
+    }
+    throw err;
+  }
 
   try {
     const exitCode = await runAndEmitFileSecretsScan(
