@@ -372,6 +372,43 @@ describe('integrate claude — Context Augmentation', () => {
   );
 
   it(
+    'installs CAG when the org is entitled but consumption limit is reached',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(PROJECT_KEY)
+        .withCagEntitlement(ORG_KEY, { allowed: false, hasEntitlement: true })
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+      harness.state().withContextAugmentationBinaryInstalled();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [
+          `sonar.host.url=${serverUrl}`,
+          `sonar.projectKey=${PROJECT_KEY}`,
+          `sonar.organization=${ORG_KEY}`,
+        ].join('\n'),
+      );
+
+      const result = await harness.run('integrate claude --non-interactive', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).not.toContain('not available for your organization');
+      const state = loadState(harness);
+      expect(findRecordedCagFeature(state)).toBeDefined();
+      expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(true);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'skips CAG with a warning when the entitlement check fails',
     async () => {
       const server = await harness

@@ -132,7 +132,10 @@ export class FakeSonarQubeServerBuilder {
     string,
     { uuid: string; eligible: boolean; enabled: boolean }
   > = new Map();
-  private readonly cagEntitlementOrgs: Map<string, { uuid: string; allowed: boolean }> = new Map();
+  private readonly cagEntitlementOrgs: Map<
+    string,
+    { uuid: string; allowed: boolean; hasEntitlement: boolean }
+  > = new Map();
   /** Keyed by org UUID (`resourceId`), for `GET /billing/entitlements`. */
   private readonly privateProjectsEntitlements: Map<string, boolean> = new Map();
   private validToken?: string;
@@ -290,10 +293,15 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
-  withCagEntitlement(orgKey: string, options: { uuid?: string; allowed?: boolean } = {}): this {
+  withCagEntitlement(
+    orgKey: string,
+    options: { uuid?: string; allowed?: boolean; hasEntitlement?: boolean } = {},
+  ): this {
+    const allowed = options.allowed ?? true;
     this.cagEntitlementOrgs.set(orgKey, {
       uuid: options.uuid ?? `${orgKey}-uuid-v4`,
-      allowed: options.allowed ?? true,
+      allowed,
+      hasEntitlement: options.hasEntitlement ?? allowed,
     });
     return this;
   }
@@ -825,6 +833,7 @@ export class FakeSonarQubeServerBuilder {
           return new Response(
             JSON.stringify({
               allowed: entitlement.allowed,
+              hasEntitlement: entitlement.hasEntitlement,
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );

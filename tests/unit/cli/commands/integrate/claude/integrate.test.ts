@@ -95,7 +95,7 @@ describe('integrateCommand', () => {
     hasSqaaEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasSqaaEntitlement');
     hasSqaaEntitlementSpy.mockResolvedValue('not_enabled');
     hasCagEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasCagEntitlement');
-    hasCagEntitlementSpy.mockResolvedValue('allowed');
+    hasCagEntitlementSpy.mockResolvedValue('entitled');
     resolveContextAugmentationSetupSpy = spyOn(
       contextAugmentation,
       'resolveContextAugmentationSetup',
