@@ -23,6 +23,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { CLI_COMMAND } from '../../../../src/lib/config-constants.js';
+import {
+  expectAgentPromptHint,
+  expectNoAgentPromptHint,
+} from '../../../_common/agent-hint-assertions.js';
 import { normalizePath, TestHarness } from '../../harness';
 import {
   CopilotHookEntry,
@@ -870,6 +874,37 @@ describe('integrate copilot', () => {
         expect(findCopilotFeature(harness, 'prompt-secrets-instructions')).toBeDefined();
         expect(findCopilotFeature(harness, 'mcp-server')).toBeDefined();
         expect(findCopilotFeature(harness, 'sqaa-instructions')).toBeUndefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it.each([
+      [true, true, true],
+      [true, false, false],
+      [false, true, false],
+      [false, false, false],
+    ])(
+      'prints a non-interactive hint with --non-interactive plus -p/-g examples only for a detected AI agent without --non-interactive (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
+      async (isAgent, isInteractive, expectedShownPrompt) => {
+        const result = await harness.run(
+          `integrate copilot${isInteractive ? '' : ' --non-interactive'}`,
+          {
+            ...(isInteractive ? { stdinChunks: ['\r', '\r', '\r', '\r'] } : {}),
+            extraEnv: isAgent ? { COPILOT_CLI: '1' } : {},
+          },
+        );
+
+        expect(result.exitCode).toBe(0);
+        if (expectedShownPrompt) {
+          expectAgentPromptHint(
+            result.stdout,
+            'sonar integrate copilot --non-interactive',
+            'sonar integrate copilot --non-interactive -g',
+          );
+          expect(result.stdout).not.toContain('sonar integrate copilot-cli');
+        } else {
+          expectNoAgentPromptHint(result.stdout);
+        }
       },
       { timeout: 30000 },
     );

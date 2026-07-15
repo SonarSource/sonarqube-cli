@@ -25,6 +25,7 @@ import { homedir } from 'node:os';
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { OBSOLETE_A3S_MARKER, removeObsoleteHookArtifacts } from '../../../../lib/migration';
 import type { IntegrationStateAttribute } from '../../../../lib/state';
+import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint';
 import {
   displayAgentIntegratePrelude,
   resolveIntegrateInstallTarget,
@@ -54,6 +55,13 @@ export async function integrateClaude(
   options: IntegrateAgentOptions,
   auth: ResolvedAuth,
 ): Promise<void> {
+  if (!options.nonInteractive) {
+    printAgentNonInteractiveAlternativeHint(
+      'sonar integrate claude --non-interactive',
+      'sonar integrate claude --non-interactive -g',
+    );
+  }
+
   const ctx = await displayAgentIntegratePrelude('Claude Code', 'claude', options, auth);
 
   const config = toConfigurationData(ctx);
