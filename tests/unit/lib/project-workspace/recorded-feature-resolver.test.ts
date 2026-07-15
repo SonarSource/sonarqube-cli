@@ -112,6 +112,22 @@ describe('selectFeatureForLookupPaths', () => {
     expect(selectFeatureForLookupPaths(candidates, [`${MAIN}/deep/sub`])).toBe('root');
   });
 
+  it('treats a directory whose name starts with ".." as inside, not a parent traversal', () => {
+    const candidates = [candidate('root', { targetRoot: MAIN })];
+
+    // `..config` is a real child of MAIN, not a `../` escape: as a canonical path
+    // it stays under MAIN (`.../main/..config` starts with `.../main/`) and must
+    // not be mistaken for a leading `..` segment.
+    expect(selectFeatureForLookupPaths(candidates, [`${MAIN}/..config`])).toBe('root');
+  });
+
+  it('returns undefined when a candidate is a sibling whose name starts with ".."', () => {
+    const candidates = [candidate('main', { targetRoot: MAIN })];
+
+    // `${BASE}/..evil` is a sibling of MAIN, not under it, so it must not match.
+    expect(selectFeatureForLookupPaths(candidates, [`${BASE}/..evil`])).toBeUndefined();
+  });
+
   it('returns undefined when no candidate contains the directory', () => {
     const candidates = [candidate('main', { targetRoot: MAIN, repoRoot: MAIN })];
 

@@ -24,7 +24,7 @@
 // directory to the recorded feature that governs it, so they share this single
 // selection policy to guarantee identical behavior.
 
-import { isAbsolute, relative } from 'node:path';
+import { sep } from 'node:path';
 
 import { pathComparisonKey } from '../fs-utils';
 import { resolveWorktreeEquivalentPaths } from './git-worktree';
@@ -61,15 +61,20 @@ function updatedAtMillis(iso: string | undefined): number {
 
 /**
  * True when `parent` equals or is an ancestor of `child`. Both arguments must
- * already be comparison keys (see `pathComparisonKey`) so the string and
- * `relative` checks are case- and canonicalization-consistent.
+ * already be canonical comparison keys (see `pathComparisonKey`): absolute,
+ * `..`-free, and case-folded consistently. That invariant is what makes a plain
+ * boundary-aware prefix check correct and robust:
+ *  - canonicalization has already collapsed any real `..` traversal, so there is
+ *    no relative-path string to misread — a child literally named `..config`
+ *    stays inside `parent` (`/a/..config` starts with `/a/`);
+ *  - appending the separator keeps `/a` from matching a sibling `/ab`.
  */
 function isPathInside(parent: string, child: string): boolean {
   if (parent === child) {
     return true;
   }
-  const rel = relative(parent, child);
-  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+  const boundary = parent.endsWith(sep) ? parent : parent + sep;
+  return child.startsWith(boundary);
 }
 
 /**
