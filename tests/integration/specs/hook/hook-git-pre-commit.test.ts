@@ -27,8 +27,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets';
 import {
+  HOOK_INACTIVE_UNAUTHENTICATED,
   SECRETS_INACTIVE_BINARY_MISSING,
-  SECRETS_INACTIVE_UNAUTHENTICATED,
 } from '../../../../src/cli/commands/hook/hook-dependencies';
 import { detectPlatform } from '../../../../src/lib/platform-detector';
 import { TestHarness } from '../../harness';
@@ -96,7 +96,7 @@ describe('sonar hook git-pre-commit', () => {
       const result = await harness.run('hook git-pre-commit');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain(SECRETS_INACTIVE_UNAUTHENTICATED);
+      expect(result.stderr).toContain(HOOK_INACTIVE_UNAUTHENTICATED);
     },
     { timeout: 15000 },
   );
@@ -206,7 +206,7 @@ describe('sonar hook git-pre-commit', () => {
 
         const result = await harness.run('hook git-pre-commit -p demo --dependency-risks');
         expect(result.exitCode).toBe(1);
-        expect(result.stderr).toContain(SECRETS_INACTIVE_UNAUTHENTICATED);
+        expect(result.stderr).toContain(HOOK_INACTIVE_UNAUTHENTICATED);
       },
       { timeout: 15000 },
     );

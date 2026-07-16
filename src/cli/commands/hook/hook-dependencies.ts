@@ -42,6 +42,8 @@ export const SECRETS_INACTIVE_UNAUTHENTICATED =
   "SonarQube secret scanning is inactive: not authenticated. Run 'sonar auth login'.";
 export const SECRETS_INACTIVE_BINARY_MISSING =
   "SonarQube secret scanning is inactive: analyzer not installed. Re-run 'sonar integrate'.";
+export const HOOK_INACTIVE_UNAUTHENTICATED =
+  "SonarQube code scanning is inactive: not authenticated. Run 'sonar auth login'.";
 
 export class MissingDependenciesError extends Error {
   constructor(message: string) {

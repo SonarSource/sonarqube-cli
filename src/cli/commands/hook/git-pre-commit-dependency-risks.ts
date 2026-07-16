@@ -67,6 +67,7 @@ export interface DepRisksStageOptions {
 export async function runDepRisksStage(options: DepRisksStageOptions): Promise<void> {
   const binaryPath = resolveScaScannerBinaryPath();
   if (!binaryPath) {
+    logger.warn('Dependency-risks hook: sca-scanner binary not installed, skipping.');
     warn(
       "Dependency-risks scan skipped: sca-scanner binary not installed; commit not blocked. Re-run 'sonar integrate git --dependency-risks -p <project>' to restore it.",
     );

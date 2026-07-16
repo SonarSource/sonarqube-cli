@@ -39,6 +39,18 @@ interface PreToolUsePayload {
   tool_input?: { file_path?: string };
 }
 
+function denyToolUse(reason: string): void {
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason: reason,
+      },
+    }) + '\n',
+  );
+}
+
 export async function claudePreToolUse(): Promise<void> {
   let payload: PreToolUsePayload;
   try {
@@ -57,15 +69,7 @@ export async function claudePreToolUse(): Promise<void> {
     deps = await resolveAuthAndSecrets();
   } catch (err) {
     if (err instanceof MissingDependenciesError) {
-      process.stdout.write(
-        JSON.stringify({
-          hookSpecificOutput: {
-            hookEventName: 'PreToolUse',
-            permissionDecision: 'deny',
-            permissionDecisionReason: err.message,
-          },
-        }) + '\n',
-      );
+      denyToolUse(err.message);
       return;
     }
     throw err;
@@ -78,15 +82,7 @@ export async function claudePreToolUse(): Promise<void> {
       filePath,
     );
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
-      process.stdout.write(
-        JSON.stringify({
-          hookSpecificOutput: {
-            hookEventName: 'PreToolUse',
-            permissionDecision: 'deny',
-            permissionDecisionReason: `Sonar detected secrets in file: ${filePath}`,
-          },
-        }) + '\n',
-      );
+      denyToolUse(`Sonar detected secrets in file: ${filePath}`);
     }
   } catch (err) {
     logger.debug(`PreToolUse secrets scan failed: ${(err as Error).message}`);

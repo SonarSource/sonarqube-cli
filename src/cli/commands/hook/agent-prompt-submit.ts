@@ -36,6 +36,10 @@ interface PromptSubmitPayload {
   prompt?: string;
 }
 
+function denyPrompt(reason: string): void {
+  process.stdout.write(JSON.stringify({ decision: 'block', reason }) + '\n');
+}
+
 export async function agentPromptSubmit(): Promise<void> {
   let payload: PromptSubmitPayload;
   try {
@@ -53,7 +57,7 @@ export async function agentPromptSubmit(): Promise<void> {
     deps = await resolveAuthAndSecrets();
   } catch (err) {
     if (err instanceof MissingDependenciesError) {
-      process.stdout.write(JSON.stringify({ decision: 'block', reason: err.message }) + '\n');
+      denyPrompt(err.message);
       return;
     }
     throw err;
@@ -66,9 +70,7 @@ export async function agentPromptSubmit(): Promise<void> {
       prompt,
     );
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
-      process.stdout.write(
-        JSON.stringify({ decision: 'block', reason: 'Sonar detected secrets in prompt' }) + '\n',
-      );
+      denyPrompt('Sonar detected secrets in prompt');
     }
   } catch (err) {
     logger.debug(`UserPromptSubmit secrets scan failed: ${(err as Error).message}`);

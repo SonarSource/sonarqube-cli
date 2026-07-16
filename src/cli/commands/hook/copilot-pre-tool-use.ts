@@ -54,6 +54,12 @@ interface CopilotViewToolArgs {
   path?: string;
 }
 
+function denyToolUse(reason: string): void {
+  process.stdout.write(
+    JSON.stringify({ permissionDecision: 'deny', permissionDecisionReason: reason }) + '\n',
+  );
+}
+
 export async function copilotPreToolUse(): Promise<void> {
   let payload: CopilotPreToolUsePayload;
   try {
@@ -73,10 +79,7 @@ export async function copilotPreToolUse(): Promise<void> {
     deps = await resolveAuthAndSecrets();
   } catch (err) {
     if (err instanceof MissingDependenciesError) {
-      process.stdout.write(
-        JSON.stringify({ permissionDecision: 'deny', permissionDecisionReason: err.message }) +
-          '\n',
-      );
+      denyToolUse(err.message);
       return;
     }
     throw err;
@@ -89,12 +92,7 @@ export async function copilotPreToolUse(): Promise<void> {
       filePath,
     );
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
-      process.stdout.write(
-        JSON.stringify({
-          permissionDecision: 'deny',
-          permissionDecisionReason: `Sonar detected secrets in file: ${filePath}`,
-        }) + '\n',
-      );
+      denyToolUse(`Sonar detected secrets in file: ${filePath}`);
     }
   } catch (err) {
     logger.debug(`Copilot PreToolUse secrets scan failed: ${(err as Error).message}`);

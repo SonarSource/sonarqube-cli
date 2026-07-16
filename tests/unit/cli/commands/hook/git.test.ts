@@ -26,6 +26,7 @@ import * as analyzeSecrets from '../../../../../src/cli/commands/analyze/secrets
 import { gitPreCommit } from '../../../../../src/cli/commands/hook/git-pre-commit';
 import { gitPrePush } from '../../../../../src/cli/commands/hook/git-pre-push';
 import {
+  HOOK_INACTIVE_UNAUTHENTICATED,
   MissingDependenciesError,
   SECRETS_INACTIVE_BINARY_MISSING,
   SECRETS_INACTIVE_UNAUTHENTICATED,
@@ -115,7 +116,7 @@ describe('gitPreCommit', () => {
       thrown = e;
     }
     expect(thrown).toBeInstanceOf(MissingDependenciesError);
-    expect((thrown as MissingDependenciesError).message).toBe(SECRETS_INACTIVE_UNAUTHENTICATED);
+    expect((thrown as MissingDependenciesError).message).toBe(HOOK_INACTIVE_UNAUTHENTICATED);
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });
 

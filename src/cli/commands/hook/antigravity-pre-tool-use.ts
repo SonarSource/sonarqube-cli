@@ -50,6 +50,10 @@ interface AntigravityPreToolUsePayload {
   };
 }
 
+function denyToolUse(reason: string): void {
+  process.stdout.write(JSON.stringify({ decision: 'deny', reason }) + '\n');
+}
+
 export async function antigravityPreToolUse(): Promise<void> {
   let payload: AntigravityPreToolUsePayload;
   try {
@@ -68,7 +72,7 @@ export async function antigravityPreToolUse(): Promise<void> {
     deps = await resolveAuthAndSecrets();
   } catch (err) {
     if (err instanceof MissingDependenciesError) {
-      process.stdout.write(JSON.stringify({ decision: 'deny', reason: err.message }) + '\n');
+      denyToolUse(err.message);
       return;
     }
     throw err;
@@ -81,12 +85,7 @@ export async function antigravityPreToolUse(): Promise<void> {
       filePath,
     );
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
-      process.stdout.write(
-        JSON.stringify({
-          decision: 'deny',
-          reason: `Sonar detected secrets in file: ${filePath}`,
-        }) + '\n',
-      );
+      denyToolUse(`Sonar detected secrets in file: ${filePath}`);
     }
   } catch (err) {
     logger.debug(`Antigravity PreToolUse secrets scan failed: ${(err as Error).message}`);

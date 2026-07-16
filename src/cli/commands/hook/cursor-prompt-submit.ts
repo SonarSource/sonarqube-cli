@@ -41,6 +41,10 @@ interface CursorPromptSubmitPayload {
   prompt?: string;
 }
 
+function denyPrompt(message: string): void {
+  process.stdout.write(JSON.stringify({ continue: false, user_message: message }) + '\n');
+}
+
 export async function cursorPromptSubmit(): Promise<void> {
   let payload: CursorPromptSubmitPayload;
   try {
@@ -58,7 +62,7 @@ export async function cursorPromptSubmit(): Promise<void> {
     deps = await resolveAuthAndSecrets();
   } catch (err) {
     if (err instanceof MissingDependenciesError) {
-      process.stdout.write(JSON.stringify({ continue: false, user_message: err.message }) + '\n');
+      denyPrompt(err.message);
       return;
     }
     throw err;
@@ -71,10 +75,7 @@ export async function cursorPromptSubmit(): Promise<void> {
       prompt,
     );
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
-      process.stdout.write(
-        JSON.stringify({ continue: false, user_message: 'Sonar detected secrets in prompt' }) +
-          '\n',
-      );
+      denyPrompt('Sonar detected secrets in prompt');
     }
   } catch (err) {
     logger.debug(`beforeSubmitPrompt secrets scan failed: ${(err as Error).message}`);
