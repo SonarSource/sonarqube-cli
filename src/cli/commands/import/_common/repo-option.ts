@@ -18,9 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-export interface ImportOptions {
-  org?: string;
-  repo?: string[];
-  all?: boolean;
-  nonInteractive?: boolean;
+// Parse repeatable, comma-separated `--repo` arguments for `sonar import`.
+
+/** Commander collector for repeatable `--repo <slug>` options; each value may also be comma-separated. */
+export function collectRepoOption(value: string, previous: string[] = []): string[] {
+  const parts = value
+    .split(',')
+    .map((slug) => slug.trim())
+    .filter((slug) => slug.length > 0);
+  return [...new Set([...previous, ...parts])];
 }

@@ -83,6 +83,7 @@ import { cursorPromptSubmit } from './commands/hook/cursor-prompt-submit';
 import { gitPreCommit, type GitPreCommitOptions } from './commands/hook/git-pre-commit';
 import { gitPrePush } from './commands/hook/git-pre-push';
 import { importHandler, type ImportOptions } from './commands/import';
+import { collectRepoOption } from './commands/import/_common/repo-option';
 import type { IntegrateAgentOptions } from './commands/integrate/_common/types';
 import { integrateAntigravity } from './commands/integrate/antigravity';
 import { integrateClaude } from './commands/integrate/claude';
@@ -219,9 +220,18 @@ list
 
 // Import repositories from DevOps platforms into SonarQube (hidden while in development)
 COMMAND_TREE.command('import', { hidden: true })
-  .description('Import a repository from a connected DevOps platform into SonarQube')
+  .description('Import repositories from a connected DevOps platform into SonarQube')
   .option('--org <key>', 'SonarQube organization key')
-  .option('--repo <slug>', 'DevOps platform repository slug (e.g. my-org/my-repo)')
+  .option(
+    '--repo <slug>',
+    'DevOps platform repository slug (e.g. my-org/my-repo). Repeatable and/or comma-separated to import multiple repositories.',
+    collectRepoOption,
+    [],
+  )
+  .option(
+    '--all',
+    'Import every eligible repository in the organization (not already imported, and allowed by its project visibility settings). Cannot be combined with --repo.',
+  )
   .option('--non-interactive', 'Skip all prompts; require explicit flags')
   .authenticatedAction((auth, options: ImportOptions) => importHandler(options, auth));
 
