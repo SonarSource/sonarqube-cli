@@ -26,12 +26,29 @@ import { existsSync } from 'node:fs';
 import logger from '../../../lib/logger';
 import { SECRETS_CALLER_COMMANDS } from '../../../telemetry/secrets-analysis-telemetry.js';
 import { EXIT_CODE_SECRETS_FOUND } from '../analyze/secrets';
-import { resolveAuthAndSecrets, runAndEmitFileSecretsScan } from './hook-dependencies';
+import {
+  type HookDependencies,
+  MissingDependenciesError,
+  resolveAuthAndSecrets,
+  runAndEmitFileSecretsScan,
+} from './hook-dependencies';
 import { readStdinJson } from './stdin';
 
 interface PreToolUsePayload {
   tool_name?: string;
   tool_input?: { file_path?: string };
+}
+
+function denyToolUse(reason: string): void {
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason: reason,
+      },
+    }) + '\n',
+  );
 }
 
 export async function claudePreToolUse(): Promise<void> {
@@ -47,8 +64,16 @@ export async function claudePreToolUse(): Promise<void> {
   const filePath = payload.tool_input?.file_path;
   if (!filePath || !existsSync(filePath)) return;
 
-  const deps = await resolveAuthAndSecrets();
-  if (!deps) return;
+  let deps: HookDependencies;
+  try {
+    deps = await resolveAuthAndSecrets();
+  } catch (err) {
+    if (err instanceof MissingDependenciesError) {
+      denyToolUse(err.message);
+      return;
+    }
+    throw err;
+  }
 
   try {
     const exitCode = await runAndEmitFileSecretsScan(
@@ -57,15 +82,7 @@ export async function claudePreToolUse(): Promise<void> {
       filePath,
     );
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
-      process.stdout.write(
-        JSON.stringify({
-          hookSpecificOutput: {
-            hookEventName: 'PreToolUse',
-            permissionDecision: 'deny',
-            permissionDecisionReason: `Sonar detected secrets in file: ${filePath}`,
-          },
-        }) + '\n',
-      );
+      denyToolUse(`Sonar detected secrets in file: ${filePath}`);
     }
   } catch (err) {
     logger.debug(`PreToolUse secrets scan failed: ${(err as Error).message}`);

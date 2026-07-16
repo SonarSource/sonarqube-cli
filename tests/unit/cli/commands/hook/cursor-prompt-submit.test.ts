@@ -27,6 +27,10 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as installSecrets from '../../../../../src/cli/commands/_common/install/secrets';
 import * as analyzeSecrets from '../../../../../src/cli/commands/analyze/secrets';
 import { cursorPromptSubmit } from '../../../../../src/cli/commands/hook/cursor-prompt-submit';
+import {
+  SECRETS_INACTIVE_BINARY_MISSING,
+  SECRETS_INACTIVE_UNAUTHENTICATED,
+} from '../../../../../src/cli/commands/hook/hook-dependencies';
 import * as stdinModule from '../../../../../src/cli/commands/hook/stdin';
 import * as authResolver from '../../../../../src/lib/auth-resolver';
 
@@ -95,5 +99,33 @@ describe('cursorPromptSubmit (unit — impractical-via-e2e paths)', () => {
     await cursorPromptSubmit();
 
     expect(stdoutSpy).not.toHaveBeenCalled();
+  });
+
+  it('blocks with the unauthenticated message when auth is unavailable', async () => {
+    resolveAuthSpy.mockResolvedValue(null);
+
+    await cursorPromptSubmit();
+
+    expect(runSecretsBinaryOnTextSpy).not.toHaveBeenCalled();
+    const payload = JSON.parse(String((stdoutSpy.mock.calls[0] as unknown[])[0])) as {
+      continue: boolean;
+      user_message: string;
+    };
+    expect(payload.continue).toBe(false);
+    expect(payload.user_message).toBe(SECRETS_INACTIVE_UNAUTHENTICATED);
+  });
+
+  it('blocks with the binary-missing message when the analyzer is not installed', async () => {
+    resolveSecretsBinaryPathSpy.mockReturnValue(null);
+
+    await cursorPromptSubmit();
+
+    expect(runSecretsBinaryOnTextSpy).not.toHaveBeenCalled();
+    const payload = JSON.parse(String((stdoutSpy.mock.calls[0] as unknown[])[0])) as {
+      continue: boolean;
+      user_message: string;
+    };
+    expect(payload.continue).toBe(false);
+    expect(payload.user_message).toBe(SECRETS_INACTIVE_BINARY_MISSING);
   });
 });

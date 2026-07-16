@@ -26,6 +26,10 @@ import { chmodSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets';
+import {
+  HOOK_INACTIVE_UNAUTHENTICATED,
+  SECRETS_INACTIVE_BINARY_MISSING,
+} from '../../../../src/cli/commands/hook/hook-dependencies';
 import { detectPlatform } from '../../../../src/lib/platform-detector';
 import { TestHarness } from '../../harness';
 import { initGitRepo, stageFile } from './git-test-helpers';
@@ -82,33 +86,33 @@ describe('sonar hook git-pre-commit', () => {
   );
 
   it(
-    'exits 0 when not authenticated (graceful skip, even with a secret staged)',
+    'exits 1 with the unauthenticated message when not authenticated (fails closed)',
     async () => {
       initGitRepo(harness.cwd.path);
       harness.state().withSecretsBinaryInstalled();
-      // Stage a file with a secret — if the auth guard were missing the scan would run and exit 1
       stageFile(harness.cwd.path, 'secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
       // No auth configured
 
       const result = await harness.run('hook git-pre-commit');
 
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(HOOK_INACTIVE_UNAUTHENTICATED);
     },
     { timeout: 15000 },
   );
 
   it(
-    'exits 0 when binary is not installed (graceful skip, even with a secret staged)',
+    'exits 1 with the binary-missing message when binary is not installed (fails closed)',
     async () => {
       initGitRepo(harness.cwd.path);
       harness.withAuth(FAKE_SERVER, VALID_TOKEN);
-      // Stage a file with a secret — if the binary guard were missing the scan attempt would fail
       stageFile(harness.cwd.path, 'secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
       // No binary installed
 
       const result = await harness.run('hook git-pre-commit');
 
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(SECRETS_INACTIVE_BINARY_MISSING);
     },
     { timeout: 15000 },
   );
@@ -194,14 +198,15 @@ describe('sonar hook git-pre-commit', () => {
 
   describe('with --dependency-risks', () => {
     it(
-      'exits 0 when not authenticated (graceful skip)',
+      'exits 1 with the unauthenticated message when not authenticated (fails closed)',
       async () => {
         initGitRepo(harness.cwd.path);
         harness.state().withScaScannerBinaryInstalled();
         stageFile(harness.cwd.path, 'package.json', PACKAGE_JSON_CONTENT);
 
         const result = await harness.run('hook git-pre-commit -p demo --dependency-risks');
-        expect(result.exitCode).toBe(0);
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain(HOOK_INACTIVE_UNAUTHENTICATED);
       },
       { timeout: 15000 },
     );
@@ -210,11 +215,13 @@ describe('sonar hook git-pre-commit', () => {
       'exits 0 when sca-scanner binary is not installed (graceful skip)',
       async () => {
         initGitRepo(harness.cwd.path);
+        harness.state().withSecretsBinaryInstalled();
         harness.withAuth(FAKE_SERVER, VALID_TOKEN, TEST_ORG);
         stageFile(harness.cwd.path, 'package.json', PACKAGE_JSON_CONTENT);
 
         const result = await harness.run('hook git-pre-commit -p demo --dependency-risks');
         expect(result.exitCode).toBe(0);
+        expect(result.stderr).toContain('sca-scanner binary not installed');
       },
       { timeout: 15000 },
     );
@@ -223,6 +230,7 @@ describe('sonar hook git-pre-commit', () => {
       'exits 0 when staged files contain no dependency manifests',
       async () => {
         initGitRepo(harness.cwd.path);
+        harness.state().withSecretsBinaryInstalled();
         harness.state().withScaScannerBinaryInstalled();
         harness.withAuth(FAKE_SERVER, VALID_TOKEN, TEST_ORG);
         stageFile(harness.cwd.path, 'index.ts', CLEAN_CONTENT);

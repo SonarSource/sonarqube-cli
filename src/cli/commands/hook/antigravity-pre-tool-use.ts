@@ -33,7 +33,12 @@ import { existsSync } from 'node:fs';
 import logger from '../../../lib/logger';
 import { SECRETS_CALLER_COMMANDS } from '../../../telemetry/secrets-analysis-telemetry.js';
 import { EXIT_CODE_SECRETS_FOUND } from '../analyze/secrets';
-import { resolveAuthAndSecrets, runAndEmitFileSecretsScan } from './hook-dependencies';
+import {
+  type HookDependencies,
+  MissingDependenciesError,
+  resolveAuthAndSecrets,
+  runAndEmitFileSecretsScan,
+} from './hook-dependencies';
 import { readStdinJson } from './stdin';
 
 interface AntigravityPreToolUsePayload {
@@ -43,6 +48,10 @@ interface AntigravityPreToolUsePayload {
       AbsolutePath?: string;
     };
   };
+}
+
+function denyToolUse(reason: string): void {
+  process.stdout.write(JSON.stringify({ decision: 'deny', reason }) + '\n');
 }
 
 export async function antigravityPreToolUse(): Promise<void> {
@@ -58,8 +67,16 @@ export async function antigravityPreToolUse(): Promise<void> {
   const filePath = payload.toolCall.args?.AbsolutePath;
   if (!filePath || !existsSync(filePath)) return;
 
-  const deps = await resolveAuthAndSecrets();
-  if (!deps) return;
+  let deps: HookDependencies;
+  try {
+    deps = await resolveAuthAndSecrets();
+  } catch (err) {
+    if (err instanceof MissingDependenciesError) {
+      denyToolUse(err.message);
+      return;
+    }
+    throw err;
+  }
 
   try {
     const exitCode = await runAndEmitFileSecretsScan(
@@ -68,12 +85,7 @@ export async function antigravityPreToolUse(): Promise<void> {
       filePath,
     );
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
-      process.stdout.write(
-        JSON.stringify({
-          decision: 'deny',
-          reason: `Sonar detected secrets in file: ${filePath}`,
-        }) + '\n',
-      );
+      denyToolUse(`Sonar detected secrets in file: ${filePath}`);
     }
   } catch (err) {
     logger.debug(`Antigravity PreToolUse secrets scan failed: ${(err as Error).message}`);

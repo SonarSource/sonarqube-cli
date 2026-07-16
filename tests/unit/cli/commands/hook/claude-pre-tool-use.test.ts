@@ -25,6 +25,10 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as installSecrets from '../../../../../src/cli/commands/_common/install/secrets';
 import * as analyzeSecrets from '../../../../../src/cli/commands/analyze/secrets';
 import { claudePreToolUse } from '../../../../../src/cli/commands/hook/claude-pre-tool-use';
+import {
+  SECRETS_INACTIVE_BINARY_MISSING,
+  SECRETS_INACTIVE_UNAUTHENTICATED,
+} from '../../../../../src/cli/commands/hook/hook-dependencies';
 import * as stdinModule from '../../../../../src/cli/commands/hook/stdin';
 import * as authResolver from '../../../../../src/lib/auth-resolver';
 
@@ -105,22 +109,32 @@ describe('claudePreToolUse', () => {
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
 
-  it('returns without output when auth is unavailable', async () => {
+  it('denies with the unauthenticated message when auth is unavailable', async () => {
     resolveAuthSpy.mockResolvedValue(null);
 
     await claudePreToolUse();
 
     expect(scanFilesSpy).not.toHaveBeenCalled();
-    expect(stdoutSpy).not.toHaveBeenCalled();
+    expect(stdoutSpy).toHaveBeenCalledTimes(1);
+    const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
+    expect(output.hookSpecificOutput.permissionDecision).toBe('deny');
+    expect(output.hookSpecificOutput.permissionDecisionReason).toBe(
+      SECRETS_INACTIVE_UNAUTHENTICATED,
+    );
   });
 
-  it('returns without output when binary is not installed', async () => {
+  it('denies with the binary-missing message when binary is not installed', async () => {
     resolveSecretsBinaryPathSpy.mockReturnValue(null);
 
     await claudePreToolUse();
 
     expect(scanFilesSpy).not.toHaveBeenCalled();
-    expect(stdoutSpy).not.toHaveBeenCalled();
+    expect(stdoutSpy).toHaveBeenCalledTimes(1);
+    const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
+    expect(output.hookSpecificOutput.permissionDecision).toBe('deny');
+    expect(output.hookSpecificOutput.permissionDecisionReason).toBe(
+      SECRETS_INACTIVE_BINARY_MISSING,
+    );
   });
 
   it('returns without output when file does not exist', async () => {
