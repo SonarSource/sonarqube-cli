@@ -136,20 +136,12 @@ export interface MultiSelectPromptOptions<T> {
   /** True while more options can be revealed (e.g. a paginated collection's `hasMore`). */
   hasMore?: () => boolean;
   /**
-   * Reveal more options, returning the full updated list (existing options plus newly
-   * revealed ones). Synchronous by design: options are expected to already be fully loaded
-   * locally (see `RepositoryCollection`/`OrganizationCollection`), so paging never needs to
-   * make a network call — keeping this synchronous also avoids having to reconcile prompt
-   * state against an in-flight async load.
+   * Reveal more options, returning (or resolving to) the full updated list (existing options
+   * plus newly revealed ones). May return a `Promise` when revealing more requires a network
+   * call (e.g. `RepositoryCollection.loadMore`) — the "Load more" row shows a loading indicator
+   * while it's in flight.
    */
-  onLoadMore?: () => MultiSelectOption<T>[];
-  /**
-   * Enables the 'a' keybinding to select/deselect every option at once. Called lazily (only
-   * when 'a' is pressed) so callers paginating lazily can reveal every remaining page first
-   * (e.g. via `onLoadMore`'s underlying collection) before returning the complete option list.
-   * Pressing 'a' again when everything is already selected clears the selection.
-   */
-  selectAll?: () => MultiSelectOption<T>[];
+  onLoadMore?: () => MultiSelectOption<T>[] | Promise<MultiSelectOption<T>[]>;
   /** Max number of selections. Defaults to 20; pass `Infinity` for no cap. */
   maxSelected?: number;
   /**
@@ -187,15 +179,17 @@ export function toggleSelected<T>(selected: T[], val: T, max: number): void {
 }
 
 /** Selection hint line shown while the multi-select prompt is active (not submitted/cancelled). */
-function buildSelectHint(countLabel: string, atCap: boolean, selectAllEnabled: boolean): string {
+function buildSelectHint(countLabel: string, atCap: boolean): string {
   if (atCap) {
     return dim(`(${countLabel} - at max, deselect to choose others)`);
   }
-  const selectAllHint = selectAllEnabled ? ', a to select all' : '';
-  return dim(`(${countLabel} - space to toggle, enter to confirm${selectAllHint}, q to quit)`);
+  return dim(`(${countLabel} - space to toggle, enter to confirm, q to quit)`);
 }
 
-function renderLoadMoreRow(isCursor: boolean): string {
+function renderLoadMoreRow(isCursor: boolean, loading: boolean): string {
+  if (loading) {
+    return `    ${dim('…')}    ${dim('Loading...')}`;
+  }
   const arrow = isCursor ? cyan('❯') : ' ';
   const label = 'Load more...';
   return `    ${arrow}    ${isCursor ? label : dim(label)}`;
@@ -215,27 +209,6 @@ function renderOptionRow(
 }
 
 /**
- * 'a' (select-all) toggle result: everything `selectAll()` returned, or nothing if every
- * selectable slot (capped by `maxSelected`) is already selected.
- */
-function computeSelectAllToggle<T>(
-  allOptions: MultiSelectOption<T>[],
-  currentlySelected: T[],
-  maxSelected: number,
-): T[] {
-  const selectableCount = Math.min(allOptions.length, maxSelected);
-  const allSelected = selectableCount > 0 && currentlySelected.length >= selectableCount;
-  if (allSelected) return [];
-
-  const next: T[] = [];
-  for (const opt of allOptions) {
-    if (next.length >= maxSelected) break;
-    next.push(opt.value);
-  }
-  return next;
-}
-
-/**
  * Multi-select prompt. Space to toggle, Enter to confirm. Max 20 selections by default
  * (override via `loadMoreOpts.maxSelected`).
  * Returns the selected values array (may be empty) or null if cancelled (Ctrl+C or q).
@@ -245,10 +218,8 @@ function computeSelectAllToggle<T>(
  * `hasMore()` is true; pressing Enter on that row calls `onLoadMore()` instead of submitting.
  * Selections are preserved across a load-more because they're tracked by value identity
  * (`===`) rather than by index — callers must return `===`-stable values for options that
- * were already present before the reload.
- *
- * When `loadMoreOpts.selectAll` is given, pressing 'a' selects every option it returns (or
- * clears the selection if everything is already selected).
+ * were already present before the reload. When `onLoadMore` returns a `Promise`, the row shows
+ * a loading indicator until it resolves; Enter is ignored on every other row while it's pending.
  */
 export async function multiSelectPrompt<T>(
   message: string,
@@ -264,10 +235,10 @@ export async function multiSelectPrompt<T>(
   let options = initialOptions;
   const selected: T[] = [];
   let cursor = 0;
+  let loadingMore = false;
   const maxSelected = loadMoreOpts?.maxSelected ?? MULTISELECT_MAX_SELECTED;
 
   const onLoadMore = loadMoreOpts?.onLoadMore;
-  const selectAll = loadMoreOpts?.selectAll;
   const hasMore = (): boolean => onLoadMore !== undefined && (loadMoreOpts?.hasMore?.() ?? false);
   const isOnLoadMoreRow = (): boolean => hasMore() && cursor === options.length;
   const getTotal = (): number => loadMoreOpts?.total?.() ?? options.length;
@@ -281,6 +252,16 @@ export async function multiSelectPrompt<T>(
   class MultiSelectLoadMorePrompt extends Prompt<T[]> {
     protected override _shouldSubmit(): boolean {
       return !pendingLoadMoreSubmitBlock;
+    }
+
+    /**
+     * Forces a redraw outside of a keypress (needed once an async `onLoadMore()` resolves).
+     * `render` is private on the base class, but `output` is protected and the base
+     * constructor already wires `output.on('resize', this.render)` for terminal resizes —
+     * reusing that plumbing to trigger a render is simpler than re-implementing it.
+     */
+    refresh(): void {
+      this.output.emit('resize');
     }
   }
 
@@ -297,9 +278,9 @@ export async function multiSelectPrompt<T>(
 
         const atCap = selected.length >= maxSelected;
         const countLabel = `${selected.length}/${getTotal()} selected`;
-        const hint = buildSelectHint(countLabel, atCap, selectAll !== undefined);
+        const hint = buildSelectHint(countLabel, atCap);
 
-        const loadMoreRowVisible = hasMore();
+        const loadMoreRowVisible = hasMore() || loadingMore;
         const total = options.length + (loadMoreRowVisible ? 1 : 0);
         const { start, end } = calculateViewport(cursor, total, MULTISELECT_VIEWPORT_SIZE);
 
@@ -314,7 +295,7 @@ export async function multiSelectPrompt<T>(
           const isCursor = i === cursor;
 
           if (loadMoreRowVisible && i === options.length) {
-            lines.push(renderLoadMoreRow(isCursor));
+            lines.push(renderLoadMoreRow(isCursor, loadingMore));
             continue;
           }
 
@@ -346,21 +327,26 @@ export async function multiSelectPrompt<T>(
 
   prompt.on('key', (_key, s) => {
     if (s.name === 'return') {
-      pendingLoadMoreSubmitBlock = isOnLoadMoreRow() && onLoadMore !== undefined;
-      if (pendingLoadMoreSubmitBlock && onLoadMore) {
-        options = onLoadMore();
+      if (loadingMore) {
+        // A load is already in flight — ignore Enter entirely rather than letting it submit
+        // (or start a second overlapping load) while `options` is about to be replaced.
+        pendingLoadMoreSubmitBlock = true;
         return;
       }
+      if (isOnLoadMoreRow() && onLoadMore) {
+        pendingLoadMoreSubmitBlock = true;
+        loadingMore = true;
+        void Promise.resolve(onLoadMore()).then((loaded) => {
+          options = loaded;
+          loadingMore = false;
+          prompt.refresh();
+        });
+        return;
+      }
+      pendingLoadMoreSubmitBlock = false;
       prompt.value = [...selected];
     } else if (s.name === 'q') {
       prompt.state = 'cancel';
-    } else if (s.name === 'a' && selectAll) {
-      const allOptions = selectAll();
-      options = allOptions;
-      const next = computeSelectAllToggle(allOptions, selected, maxSelected);
-      selected.length = 0;
-      selected.push(...next);
-      cursor = Math.min(cursor, options.length + (hasMore() ? 1 : 0) - 1);
     }
   });
 

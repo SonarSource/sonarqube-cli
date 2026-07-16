@@ -29,15 +29,17 @@ import {
 } from '../../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { OrganizationCollection } from './organization-collection';
-import { isAlreadyImported, RepositoryCollection } from './repository-collection';
+import {
+  type FetchPage,
+  isAlreadyImported,
+  iterateRepoPages,
+  type OnlyPrivateProjects,
+  RepositoryCollection,
+  type SkippedRepo,
+} from './repository-collection';
 
 /** ALM key used by GitHub-bound organizations, per `Organization.alm.key`. */
 const GITHUB_ALM_KEY = 'github';
-
-export interface OnlyPrivateProjects {
-  enabled: boolean;
-  available: boolean;
-}
 
 export interface ResolvedOrg {
   key: string;
@@ -60,40 +62,27 @@ export interface ResolvedRepo {
   installationKey: string;
 }
 
-export interface SkippedRepo {
-  slug: string;
-  reason: string;
-}
-
-export interface ResolvedRepos {
-  repos: ResolvedRepo[];
-  /** Repos deliberately excluded by `--all`'s eligibility filtering, with a reason each. */
-  skipped: SkippedRepo[];
-}
+/**
+ * Outcome of resolving which repositories to import:
+ * - `streaming` — `--all`/"Recommended" hand back the live `RepositoryCollection` itself so the
+ *   caller can run the fetch-a-page/import-a-page job (see `runBulkImportJob` in `index.ts`)
+ *   instead of a fully materialized list.
+ * - `batch` — manual selection and `--repo` already know their (small, explicit) final list, so
+ *   they resolve to it directly and the caller runs one single-batch import.
+ */
+export type RepoResolution =
+  | { kind: 'streaming'; collection: RepositoryCollection }
+  | { kind: 'batch'; repos: ResolvedRepo[]; skipped: SkippedRepo[] };
 
 /**
  * Format a DOP repository's unique identifier the way `provision_projects` expects it:
  * `<slug>|<id>` for GitHub, plain `id` for every other DevOps platform.
  */
-function computeInstallationKey(
+export function computeInstallationKey(
   repo: { id: string; slug: string },
   almKey: string | undefined,
 ): string {
   return almKey === GITHUB_ALM_KEY ? `${repo.slug}|${repo.id}` : repo.id;
-}
-
-/**
- * Whether a repo's visibility is selectable under the org's `onlyPrivateProjects` setting.
- * Unavailable means public-only, available+enabled means private-only, available+disabled
- * allows both.
- */
-function isRepoSelectable(
-  repo: { private: boolean },
-  onlyPrivateProjects: OnlyPrivateProjects,
-): boolean {
-  if (!onlyPrivateProjects.available) return !repo.private;
-  if (onlyPrivateProjects.enabled) return repo.private;
-  return true;
 }
 
 /** e.g. `my-org/repo - private`. */
@@ -207,7 +196,7 @@ export async function resolveRepos(
   almKey: string | undefined,
   onlyPrivateProjects: OnlyPrivateProjects,
   opts: { org?: string; repo?: string[]; all?: boolean; nonInteractive?: boolean },
-): Promise<ResolvedRepos | typeof BACK> {
+): Promise<RepoResolution | typeof BACK> {
   if (opts.all && opts.repo?.length) {
     throw new InvalidOptionError(
       '--all cannot be combined with --repo',
@@ -230,7 +219,7 @@ export async function resolveRepos(
   }
 
   if (opts.all) {
-    return resolveAllRepos(client, organizationId, almKey, onlyPrivateProjects);
+    return resolveAllRepos(client, organizationId, onlyPrivateProjects);
   }
 
   if (opts.repo?.length) {
@@ -241,7 +230,7 @@ export async function resolveRepos(
       onlyPrivateProjects,
       opts.repo,
     );
-    return { repos, skipped: [] };
+    return { kind: 'batch', repos, skipped: [] };
   }
 
   // "← Back" only makes sense when the org itself was chosen interactively — an org pinned
@@ -252,13 +241,76 @@ export async function resolveRepos(
 }
 
 /**
+ * Load pages of an org's repositories (via `RepositoryCollection.create`, which stops once it
+ * finds at least one eligible repo or the org is exhausted) and throw a `CommandFailedError` on
+ * a fetch failure or an org with no repositories at all.
+ */
+async function createRepositoryCollectionOrThrow(
+  client: SonarQubeClient,
+  organizationId: string,
+  onlyPrivateProjects: OnlyPrivateProjects,
+): Promise<RepositoryCollection> {
+  let collection: RepositoryCollection;
+  try {
+    collection = await withSpinner('Loading repositories...', () =>
+      RepositoryCollection.create(
+        (pageIndex, pageSize) =>
+          client.fetchDopRepositoriesPage(organizationId, pageIndex, pageSize),
+        onlyPrivateProjects,
+      ),
+    );
+  } catch (err) {
+    throw new CommandFailedError(
+      `Failed to load repositories: ${err instanceof Error ? err.message : String(err)}`,
+      { remediationHint: 'Check your network connection and authentication, then retry.' },
+    );
+  }
+
+  if (collection.total === 0) {
+    throw new CommandFailedError('No repositories found for the selected organization.', {
+      remediationHint:
+        'The organization may have no repositories visible to its connected DevOps platform, or the platform connection may need to be reconfigured.',
+    });
+  }
+
+  return collection;
+}
+
+/**
+ * Throws with a specific reason when an org has nothing importable — offering to go back to
+ * organization selection first when that's a valid escape hatch (an org pinned via `--org` has
+ * nowhere to go back to). `RepositoryCollection.create` only stops early once it finds an
+ * eligible repo, so this is only called once every fetched page has been fully scanned.
+ */
+async function handleNoEligibleRepos(
+  collection: RepositoryCollection,
+  allowBack: boolean,
+): Promise<typeof BACK> {
+  const reason = collection.skippedRepos.every((repo) => repo.reason === 'already imported')
+    ? 'All repositories for the selected organization have already been imported into SonarQube.'
+    : "No repositories match this organization's project visibility settings.";
+
+  if (!allowBack) {
+    throw new CommandFailedError(reason);
+  }
+
+  warn(reason);
+  const goBack = await confirmPrompt('Go back and choose a different organization?', true);
+  if (!goBack) {
+    throw new CommandFailedError(reason);
+  }
+  return BACK;
+}
+
+/**
  * Ask how the user wants to pick repositories to import: bulk-import everything eligible
  * (mirrors `--all`), choose specific ones interactively, or go back to organization selection.
  *
- * Eligibility is computed once up front (before the prompt is even shown) so an org with
- * nothing importable fails immediately with a specific reason, the same way it always has —
- * asking "recommended or manual?" would be pointless (and both branches would hit the same
- * dead end) when there's nothing to import either way.
+ * The collection is loaded just far enough to know whether anything is eligible before the
+ * prompt is even shown, so an org with nothing importable fails immediately with a specific
+ * reason — asking "recommended or manual?" would be pointless (and both branches would hit the
+ * same dead end) when there's nothing to import either way. Whichever mode is chosen continues
+ * fetching from this same collection rather than starting over from page one.
  */
 async function resolveOnboardingMode(
   client: SonarQubeClient,
@@ -266,25 +318,15 @@ async function resolveOnboardingMode(
   almKey: string | undefined,
   onlyPrivateProjects: OnlyPrivateProjects,
   opts: { allowBack: boolean },
-): Promise<ResolvedRepos | typeof BACK> {
-  const allRepos = await fetchAllReposOrThrow(client, organizationId);
-  const { eligible, skipped } = categorizeRepos(allRepos, onlyPrivateProjects);
+): Promise<RepoResolution | typeof BACK> {
+  const collection = await createRepositoryCollectionOrThrow(
+    client,
+    organizationId,
+    onlyPrivateProjects,
+  );
 
-  if (eligible.length === 0) {
-    const reason = allRepos.every((repo) => isAlreadyImported(repo))
-      ? 'All repositories for the selected organization have already been imported into SonarQube.'
-      : "No repositories match this organization's project visibility settings.";
-
-    if (!opts.allowBack) {
-      throw new CommandFailedError(reason);
-    }
-
-    warn(reason);
-    const goBack = await confirmPrompt('Go back and choose a different organization?', true);
-    if (!goBack) {
-      throw new CommandFailedError(reason);
-    }
-    return BACK;
+  if (collection.eligibleRepos.length === 0) {
+    return handleNoEligibleRepos(collection, opts.allowBack);
   }
 
   const RECOMMENDED = Symbol('recommended');
@@ -299,26 +341,28 @@ async function resolveOnboardingMode(
     options.push({ value: BACK, label: '← Back' });
   }
 
-  const choice = await selectPrompt('How do you want to import repositories?', options);
+  // Cancelling the "Manual" picker (below) re-shows this same menu instead of ending the
+  // command, so the user can pick a different mode (or go back further) rather than starting
+  // `sonar import` over from scratch.
+  for (;;) {
+    const choice = await selectPrompt('How do you want to import repositories?', options);
 
-  if (choice === null) {
-    throw new CommandFailedError('Repository selection cancelled');
-  }
-  if (choice === BACK) {
-    return BACK;
-  }
-  if (choice === RECOMMENDED) {
-    return {
-      repos: eligible.map((repo) => ({
-        slug: repo.slug,
-        installationKey: computeInstallationKey(repo, almKey),
-      })),
-      skipped,
-    };
-  }
+    if (choice === null) {
+      throw new CommandFailedError('Repository selection cancelled');
+    }
+    if (choice === BACK) {
+      return BACK;
+    }
+    if (choice === RECOMMENDED) {
+      return { kind: 'streaming', collection };
+    }
 
-  const repos = await promptForReposFromCollection(new RepositoryCollection(eligible), almKey);
-  return { repos, skipped: [] };
+    const repos = await promptForReposFromCollection(collection, almKey);
+    if (repos === BACK) {
+      continue;
+    }
+    return { kind: 'batch', repos, skipped: [] };
+  }
 }
 
 async function resolveReposBySlug(
@@ -328,13 +372,32 @@ async function resolveReposBySlug(
   onlyPrivateProjects: OnlyPrivateProjects,
   slugs: string[],
 ): Promise<ResolvedRepo[]> {
-  const matches = await findReposBySlugs(client, organizationId, slugs);
+  const matches = await findReposBySlugs(
+    (pageIndex, pageSize) => client.fetchDopRepositoriesPage(organizationId, pageIndex, pageSize),
+    slugs,
+  );
 
   const notFound = slugs.filter((slug) => !matches.has(slug));
   if (notFound.length > 0) {
     throw new CommandFailedError(
       `Repositor${notFound.length === 1 ? 'y' : 'ies'} not found in the selected organization's DevOps platform: ${notFound.join(', ')}`,
       { remediationHint: 'Check that the repository slug(s) are correct and visible to the org.' },
+    );
+  }
+
+  const alreadyImported = slugs
+    .map((slug) => matches.get(slug))
+    .filter((repo): repo is DopRepository => repo !== undefined && isAlreadyImported(repo));
+  if (alreadyImported.length === 1) {
+    throw new CommandFailedError(
+      `Repository '${alreadyImported[0].slug}' has already been imported into SonarQube.`,
+    );
+  }
+  if (alreadyImported.length > 1) {
+    throw new CommandFailedError(
+      `Repositories have already been imported into SonarQube: ${alreadyImported
+        .map((repo) => repo.slug)
+        .join(', ')}`,
     );
   }
 
@@ -368,127 +431,81 @@ async function resolveReposBySlug(
 }
 
 /**
- * Fetch every repository for an org (across all server pages), throwing a `CommandFailedError`
- * on a fetch failure or an org with no repositories at all.
+ * Whether a repo's visibility is selectable under the org's `onlyPrivateProjects` setting.
+ * Unavailable means public-only, available+enabled means private-only, available+disabled
+ * allows both. Duplicated in spirit from `RepositoryCollection`'s internal categorization —
+ * `--repo` resolution needs this on a handful of explicitly-named repos, not on every page.
  */
-async function fetchAllReposOrThrow(
-  client: SonarQubeClient,
-  organizationId: string,
-): Promise<DopRepository[]> {
-  let allRepos: DopRepository[];
-  try {
-    allRepos = await withSpinner('Loading repositories...', () =>
-      RepositoryCollection.fetchAll((pageIndex, pageSize) =>
-        client.fetchDopRepositoriesPage(organizationId, pageIndex, pageSize),
-      ),
-    );
-  } catch (err) {
-    throw new CommandFailedError(
-      `Failed to load repositories: ${err instanceof Error ? err.message : String(err)}`,
-      { remediationHint: 'Check your network connection and authentication, then retry.' },
-    );
-  }
-
-  if (allRepos.length === 0) {
-    throw new CommandFailedError('No repositories found for the selected organization.', {
-      remediationHint:
-        'The organization may have no repositories visible to its connected DevOps platform, or the platform connection may need to be reconfigured.',
-    });
-  }
-
-  return allRepos;
-}
-
-/**
- * Split repos into those eligible for import — not already imported (see `isAlreadyImported`)
- * and allowed by the org's project visibility settings — and those skipped, with a reason each.
- */
-function categorizeRepos(
-  allRepos: DopRepository[],
+function isRepoSelectable(
+  repo: { private: boolean },
   onlyPrivateProjects: OnlyPrivateProjects,
-): { eligible: DopRepository[]; skipped: SkippedRepo[] } {
-  const eligible: DopRepository[] = [];
-  const skipped: SkippedRepo[] = [];
-
-  for (const repo of allRepos) {
-    if (isAlreadyImported(repo)) {
-      skipped.push({ slug: repo.slug, reason: 'already imported' });
-      continue;
-    }
-    if (!isRepoSelectable(repo, onlyPrivateProjects)) {
-      skipped.push({
-        slug: repo.slug,
-        reason: `${repo.private ? 'private' : 'public'} repos aren't allowed by this organization's project visibility settings`,
-      });
-      continue;
-    }
-    eligible.push(repo);
-  }
-
-  return { eligible, skipped };
+): boolean {
+  if (!onlyPrivateProjects.available) return !repo.private;
+  if (onlyPrivateProjects.enabled) return repo.private;
+  return true;
 }
 
 /**
- * Resolve every eligible repository in the org for `--all`. Ineligible repos are reported back
- * with a reason instead of causing the whole command to fail, since a mixed batch (some
- * eligible, some not) is the normal case for a whole-org import.
+ * Resolve every eligible repository in the org for `--all` as a live streaming job: the caller
+ * (`runBulkImportJob`) imports each page's eligible repos as soon as it's fetched instead of
+ * waiting for the whole org to be scanned first.
  */
 async function resolveAllRepos(
   client: SonarQubeClient,
   organizationId: string,
-  almKey: string | undefined,
   onlyPrivateProjects: OnlyPrivateProjects,
-): Promise<ResolvedRepos> {
-  const allRepos = await fetchAllReposOrThrow(client, organizationId);
-  const { eligible, skipped } = categorizeRepos(allRepos, onlyPrivateProjects);
+): Promise<RepoResolution> {
+  const collection = await createRepositoryCollectionOrThrow(
+    client,
+    organizationId,
+    onlyPrivateProjects,
+  );
 
-  if (eligible.length === 0) {
+  if (collection.eligibleRepos.length === 0) {
     throw new CommandFailedError(
-      `No repositories are eligible for import (${skipped.length} skipped: already imported, or excluded by project visibility settings).`,
+      `No repositories are eligible for import (${collection.skippedRepos.length} skipped: already imported, or excluded by project visibility settings).`,
     );
   }
 
-  return {
-    repos: eligible.map((repo) => ({
-      slug: repo.slug,
-      installationKey: computeInstallationKey(repo, almKey),
-    })),
-    skipped,
-  };
+  return { kind: 'streaming', collection };
 }
 
 /**
- * Fetch every repository for an org (across all server pages) and resolve a set of slugs
- * against it in one pass — avoids N full scans for N `--repo` flags.
+ * Fetch an org's repositories page by page, stopping as soon as every requested slug has been
+ * matched instead of always scanning the whole org.
  */
 async function findReposBySlugs(
-  client: SonarQubeClient,
-  organizationId: string,
+  fetchPage: FetchPage,
   slugs: string[],
 ): Promise<Map<string, DopRepository>> {
   const remaining = new Set(slugs);
   const found = new Map<string, DopRepository>();
 
-  const allRepos = await RepositoryCollection.fetchAll((pageIndex, pageSize) =>
-    client.fetchDopRepositoriesPage(organizationId, pageIndex, pageSize),
-  );
-
-  for (const repo of allRepos) {
-    if (remaining.has(repo.slug)) found.set(repo.slug, repo);
+  for await (const { repositories } of iterateRepoPages(fetchPage)) {
+    for (const repo of repositories) {
+      if (remaining.has(repo.slug)) {
+        found.set(repo.slug, repo);
+        remaining.delete(repo.slug);
+      }
+    }
+    if (remaining.size === 0) break;
   }
 
   return found;
 }
 
+/** Max number of repos selectable at once in the "Manual" picker. */
+const MANUAL_SELECT_MAX_REPOS = 25;
+
 /**
- * Interactive multi-select over an already-fetched, already-filtered collection of eligible
- * repos (see `resolveOnboardingMode`, which computes eligibility once up front for both the
- * "Recommended" and "Manual" branches).
+ * Interactive multi-select over a live, lazily-paginated `RepositoryCollection`: "Load more"
+ * fetches and categorizes the next server page on demand. There's no "select all" here — the
+ * full set is never known up front, so there is nothing safe to bulk-select.
  */
 async function promptForReposFromCollection(
-  repos: RepositoryCollection,
+  collection: RepositoryCollection,
   almKey: string | undefined,
-): Promise<ResolvedRepo[]> {
+): Promise<ResolvedRepo[] | typeof BACK> {
   // `multiSelectPrompt` tracks selections by `===` identity, so the same `DopRepository`
   // must always map to the same `ResolvedRepo` object across a "Load more" reload, or
   // previously toggled selections would be silently dropped.
@@ -504,29 +521,24 @@ async function promptForReposFromCollection(
 
   const result = await multiSelectPrompt(
     'Select repositories to import',
-    repos.visible.map(toOption),
+    collection.eligibleRepos.map(toOption),
     {
-      hasMore: () => repos.hasMore,
-      onLoadMore: () => {
-        repos.loadMore();
-        return repos.visible.map(toOption);
+      hasMore: () => collection.hasMore,
+      onLoadMore: async () => {
+        await collection.loadMore();
+        return collection.eligibleRepos.map(toOption);
       },
-      // 'a' bulk-selects every eligible repo, not just the currently-paged-in ones — reveal
-      // every remaining page first so the rendered list and the selection stay consistent.
-      selectAll: () => {
-        while (repos.hasMore) repos.loadMore();
-        return repos.visible.map(toOption);
-      },
-      // No business reason to cap a repo import batch (unlike `sonar remediate`'s
-      // MULTISELECT_MAX_SELECTED default, which mirrors a remediation-agent capacity limit).
-      maxSelected: Number.POSITIVE_INFINITY,
-      // The true eligible count, not just what's paginated into view yet.
-      total: () => repos.length,
+      maxSelected: MANUAL_SELECT_MAX_REPOS,
+      // Only what's been paginated into view so far — the true total isn't known until every
+      // page has been fetched, which is exactly why there's no "select all" for this picker.
+      total: () => collection.eligibleRepos.length,
     },
   );
 
+  // Cancelling (q / Ctrl+C) goes back to the Recommended/Manual/← Back menu that led here,
+  // rather than ending the whole command — the caller (`resolveOnboardingMode`) re-shows it.
   if (result === null) {
-    throw new CommandFailedError('Repository selection cancelled');
+    return BACK;
   }
   if (result.length === 0) {
     throw new CommandFailedError('No repositories selected.');

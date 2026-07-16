@@ -62,20 +62,61 @@ function toPhaseStatus(status: ImportRepoStatus | undefined): 'done' | 'failed' 
  * queue at all, so every repo simply stays visible throughout).
  */
 export class ImportProgress {
-  private readonly order: string[];
-  private readonly repos: Map<string, RepoState>;
+  private readonly order: string[] = [];
+  private readonly repos = new Map<string, RepoState>();
   private readonly isTTY: boolean;
-  private readonly visible: string[];
-  private readonly queue: string[];
+  private readonly visible: string[] = [];
+  private readonly queue: string[] = [];
+  private readonly maxVisible: number;
+  private total = 0;
+  private skippedResolved = 0;
   private linesRendered = 0;
 
-  constructor(opts: { repos: string[]; isTTY?: boolean; maxVisible?: number }) {
-    this.order = opts.repos;
-    this.repos = new Map(opts.repos.map((slug) => [slug, { status: 'pending' as const }]));
+  constructor(opts: { isTTY?: boolean; maxVisible?: number }) {
     this.isTTY = opts.isTTY ?? process.stdout.isTTY;
-    const maxVisible = opts.maxVisible ?? DEFAULT_MAX_VISIBLE;
-    this.visible = opts.repos.slice(0, maxVisible);
-    this.queue = opts.repos.slice(maxVisible);
+    this.maxVisible = opts.maxVisible ?? DEFAULT_MAX_VISIBLE;
+  }
+
+  /** Sets the progress bar's denominator. Call once, before `start()`. */
+  setTotal(total: number): void {
+    this.total = total;
+  }
+
+  /** Registers newly discovered repos to track/render, appending to the visible or queued set. */
+  addRepos(slugs: string[]): void {
+    for (const slug of slugs) {
+      this.repos.set(slug, { status: 'pending' });
+      this.order.push(slug);
+      if (this.visible.length < this.maxVisible) {
+        this.visible.push(slug);
+      } else {
+        this.queue.push(slug);
+      }
+    }
+    if (isMockActive()) {
+      recordCall('importProgress.addRepos', slugs);
+      return;
+    }
+    if (this.isTTY) {
+      this.render();
+    }
+  }
+
+  /**
+   * Advances the progress bar for repos resolved without a provisioning call (e.g. already
+   * imported) — no row is added for them, they only count toward the bar's resolved fraction, or
+   * a streaming job's bar could never reach 100% while skipped repos keep turning up.
+   */
+  recordSkipped(count: number): void {
+    if (count <= 0) return;
+    this.skippedResolved += count;
+    if (isMockActive()) {
+      recordCall('importProgress.recordSkipped', count);
+      return;
+    }
+    if (this.isTTY) {
+      this.render();
+    }
   }
 
   start(): void {
@@ -162,7 +203,8 @@ export class ImportProgress {
     // Computed from every repo (not just the currently visible ones) so column alignment
     // stays stable as rows are swapped out — otherwise the bar/label columns would jitter
     // depending on which slugs happen to be in the window at a given moment.
-    const maxLabelWidth = Math.max(...this.order.map((slug) => visibleLength(slug)));
+    const maxLabelWidth =
+      this.order.length === 0 ? 0 : Math.max(...this.order.map((slug) => visibleLength(slug)));
     const rows = this.visible.map((slug) => this.formatRow(slug, maxLabelWidth));
     return [...rows, '', this.formatBar()];
   }
@@ -186,10 +228,10 @@ export class ImportProgress {
   }
 
   private formatBar(): string {
-    const total = this.order.length;
-    const resolved = [...this.repos.values()].filter(
-      (s) => s.status === 'done' || s.status === 'failed',
-    ).length;
+    const total = this.total;
+    const resolved =
+      [...this.repos.values()].filter((s) => s.status === 'done' || s.status === 'failed').length +
+      this.skippedResolved;
     const pct = total === 0 ? 100 : Math.round((resolved / total) * 100);
     const filled = Math.round((pct / 100) * BAR_WIDTH);
     const bar = green(BAR_FILLED.repeat(filled)) + dim(BAR_EMPTY.repeat(BAR_WIDTH - filled));

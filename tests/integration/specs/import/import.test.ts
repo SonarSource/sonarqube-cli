@@ -489,6 +489,44 @@ describe('sonar import', () => {
     );
 
     it(
+      'cancelling the Manual picker returns to the Recommended/Manual/Back menu',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withDopRepositories('my-org', [
+            { id: 'repo-1', name: 'repo-1', slug: 'my-org/repo-1' },
+            { id: 'repo-2', name: 'repo-2', slug: 'my-org/repo-2' },
+          ])
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token');
+
+        // down+enter → Manual mode; 'q' → cancel the picker, back to the mode menu; enter →
+        // Recommended this time (the re-shown menu's default, first option).
+        const result = await harness.run('import --org my-org', {
+          stdinChunks: ['\x1b[B\r', 'q', '\r'],
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(0);
+        // The picker is cancelled (not treated as an error) and the mode menu re-appears,
+        // this time resolving to Recommended instead of Manual.
+        expect(result.stdout).toContain('✗  Select repositories to import');
+        expect(result.stdout).toContain(
+          '✓  How do you want to import repositories? Recommended — import all eligible repositories automatically',
+        );
+        expect(result.stdout).toContain('Imported 2 repositories');
+        const recorded = server.getRecordedRequests();
+        const provisionRequests = recorded.filter(
+          (r) => r.path === '/api/alm_integration/provision_projects',
+        );
+        expect(provisionRequests).toHaveLength(2);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
       'offers to go back when the interactively-picked org has nothing eligible to import',
       async () => {
         const server = await harness
@@ -650,6 +688,40 @@ describe('sonar import', () => {
     );
 
     it(
+      'paginates --repo resolution until every slug is found, across multiple server pages',
+      async () => {
+        // 60 repos exceeds the 50-item server page cap: repo-1 is on the first page, repo-51
+        // only appears on the second — resolving both requires exactly 2 pages, proving
+        // pagination continues until every requested slug is matched.
+        const manyRepos = Array.from({ length: 60 }, (_, i) => ({
+          id: `repo-${i + 1}`,
+          name: `repo-${i + 1}`,
+          slug: `my-org/repo-${i + 1}`,
+        }));
+
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withDopRepositories('my-org', manyRepos)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token');
+
+        const result = await harness.run(
+          'import --non-interactive --org my-org --repo my-org/repo-1,my-org/repo-51',
+          { extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl } },
+        );
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('Imported 2 repositories');
+        const recorded = server.getRecordedRequests();
+        const repoRequests = recorded.filter((r) => r.path === '/dop-translation/dop-repositories');
+        expect(repoRequests).toHaveLength(2);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
       'exits with code 2 when --non-interactive is set without --repo or --all',
       async () => {
         const server = await harness.newFakeServer().withAuthToken('test-token').start();
@@ -736,9 +808,12 @@ describe('sonar import', () => {
     );
 
     it(
-      'shows a "Load more..." option when more than 10 repos exist and advances when selected',
+      'shows a "Load more..." option after a full first page and fetches the next page when selected',
       async () => {
-        const manyRepos = Array.from({ length: 11 }, (_, i) => ({
+        // 51 repos exceeds the 50-item server page cap, so the first page is fetched (and
+        // shown) without ever touching the 51st repo — "Load more" only fetches page two when
+        // actually selected.
+        const manyRepos = Array.from({ length: 51 }, (_, i) => ({
           id: `repo-${i + 1}`,
           name: `repo-${String(i + 1).padStart(2, '0')}`,
           slug: `kevinmlsilva/repo-${String(i + 1).padStart(2, '0')}`,
@@ -752,27 +827,30 @@ describe('sonar import', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token');
 
-        // down arrow+enter → Manual mode, then navigate to "Load more...", select it (cursor
-        // carries over onto the newly revealed 11th repo, since the multi-select prompt never
-        // resets its cursor), then toggle and confirm it. Repos are all fetched up front, so
-        // "Load more" is a synchronous local pagination step with no reload delay to account for.
+        // down arrow+enter → Manual mode, then navigate to "Load more..." (50 repos precede it
+        // on the first page), select it — which fetches page two — then toggle and confirm the
+        // newly revealed 51st repo (cursor carries over onto it, since the multi-select prompt
+        // never resets its cursor).
         const result = await harness.run('import --org my-org', {
-          stdinChunks: ['\x1b[B\r', '\x1b[B'.repeat(10) + '\r', ' \r'],
+          stdinChunks: ['\x1b[B\r', '\x1b[B'.repeat(50) + '\r', ' \r'],
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+          timeoutMs: 20000,
         });
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('kevinmlsilva/repo-11');
+        expect(result.stdout).toContain('kevinmlsilva/repo-51');
+        const recorded = server.getRecordedRequests();
+        const repoRequests = recorded.filter((r) => r.path === '/dop-translation/dop-repositories');
+        expect(repoRequests).toHaveLength(2);
       },
-      { timeout: 15000 },
+      { timeout: 20000 },
     );
 
     it(
-      'fetches every server page up front before showing the repo prompt',
+      'does not fetch further server pages until "Load more" is actually selected',
       async () => {
-        // 60 repos exceeds the 50-item server page cap, so fetching everything up front
-        // (mirroring org selection) needs exactly 2 requests, made before the prompt is
-        // ever shown — regardless of which repo the user ends up picking.
+        // 60 repos exceeds the 50-item server page cap, but picking a repo from the first page
+        // should never trigger a second page fetch.
         const manyRepos = Array.from({ length: 60 }, (_, i) => ({
           id: `repo-${i + 1}`,
           name: `repo-${String(i + 1).padStart(2, '0')}`,
@@ -797,18 +875,17 @@ describe('sonar import', () => {
         expect(result.stdout).toContain('kevinmlsilva/repo-01');
         const recorded = server.getRecordedRequests();
         const repoRequests = recorded.filter((r) => r.path === '/dop-translation/dop-repositories');
-        expect(repoRequests).toHaveLength(2);
+        expect(repoRequests).toHaveLength(1);
       },
       { timeout: 15000 },
     );
 
     it(
-      'shows a full page of selectable repos in one go despite interleaved exclusions',
+      'shows every selectable repo from a single server page despite interleaved exclusions',
       async () => {
-        // 15 raw repos; 5 of the first 10 are already imported. If filtering happened on
-        // a lazily-fetched 10-item window, the first page would show only 5 selectable
-        // repos (with "Load more" for the rest). Fetching everything up front and
-        // filtering before pagination shows a full page of 10 selectable repos instead.
+        // 15 raw repos easily fit in one 50-item server page; 5 of the first 10 are already
+        // imported. Filtering happens per fetched page, so all 10 selectable repos from this
+        // one page show up together, with no "Load more" needed.
         const manyRepos = Array.from({ length: 15 }, (_, i) => ({
           id: `repo-${i + 1}`,
           name: `repo-${String(i + 1).padStart(2, '0')}`,
@@ -850,6 +927,48 @@ describe('sonar import', () => {
         expect(result.stdout).toContain('Imported 1 repository');
       },
       { timeout: 15000 },
+    );
+
+    it(
+      'caps Manual selection at 25 repos',
+      async () => {
+        const manyRepos = Array.from({ length: 26 }, (_, i) => ({
+          id: `repo-${i + 1}`,
+          name: `repo-${i + 1}`,
+          slug: `my-org/repo-${i + 1}`,
+        }));
+
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withDopRepositories('my-org', manyRepos)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token');
+
+        // down arrow+enter → Manual mode; toggle the first repo, then (down+toggle) 25 more
+        // times — 26 toggle attempts across 26 repos. The 26th is rejected since selection is
+        // capped at 25, so only the first 25 end up selected.
+        const result = await harness.run('import --org my-org', {
+          stdinChunks: ['\x1b[B\r', ' ' + '\x1b[B '.repeat(25) + '\r'],
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+          timeoutMs: 20000,
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('25 of 26 selected');
+        expect(result.stdout).toContain('Imported 25 repositories');
+        const recorded = server.getRecordedRequests();
+        const provisionRequests = recorded.filter(
+          (r) => r.path === '/api/alm_integration/provision_projects',
+        );
+        expect(provisionRequests).toHaveLength(25);
+        const installationKeys = provisionRequests.map((r) =>
+          new URLSearchParams(r.body ?? '').get('installationKeys'),
+        );
+        expect(installationKeys).not.toContain('repo-26');
+      },
+      { timeout: 20000 },
     );
   });
 
@@ -1331,101 +1450,6 @@ describe('sonar import', () => {
     );
 
     it(
-      "selects every repo when pressing 'a' in the interactive picker",
-      async () => {
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('test-token')
-          .withDopRepositories('my-org', BATCH_REPOS)
-          .start();
-        const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
-
-        // down arrow+enter → Manual mode, 'a' → select all, enter → confirm
-        const result = await harness.run('import --org my-org', {
-          stdinChunks: ['\x1b[B\r', 'a\r'],
-          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
-        });
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('Imported 3 repositories');
-        const recorded = server.getRecordedRequests();
-        const provisionRequests = recorded.filter(
-          (r) => r.path === '/api/alm_integration/provision_projects',
-        );
-        expect(provisionRequests).toHaveLength(3);
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      "toggling 'a' twice clears the select-all, allowing a manual pick afterwards",
-      async () => {
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('test-token')
-          .withDopRepositories('my-org', BATCH_REPOS)
-          .start();
-        const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
-
-        // down arrow+enter → Manual mode, 'a' → select all, 'a' → deselect all,
-        // down, space (toggle repo-b), enter
-        const result = await harness.run('import --org my-org', {
-          stdinChunks: ['\x1b[B\r', 'aa\x1b[B \r'],
-          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
-        });
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('Imported 1 repository');
-        const recorded = server.getRecordedRequests();
-        const provisionRequests = recorded.filter(
-          (r) => r.path === '/api/alm_integration/provision_projects',
-        );
-        expect(provisionRequests).toHaveLength(1);
-        expect(new URLSearchParams(provisionRequests[0].body ?? '').get('installationKeys')).toBe(
-          'repo-b-id',
-        );
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      "selecting all with 'a' is not capped at 20 repos",
-      async () => {
-        const manyRepos = Array.from({ length: 25 }, (_, i) => ({
-          id: `repo-${i + 1}`,
-          name: `repo-${i + 1}`,
-          slug: `my-org/repo-${i + 1}`,
-        }));
-
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('test-token')
-          .withDopRepositories('my-org', manyRepos)
-          .start();
-        const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
-
-        const result = await harness.run('import --org my-org', {
-          // down arrow+enter → Manual mode, 'a' → select all, enter → confirm
-          stdinChunks: ['\x1b[B\r', 'a\r'],
-          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
-          timeoutMs: 20000,
-        });
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('Imported 25 repositories');
-        const recorded = server.getRecordedRequests();
-        const provisionRequests = recorded.filter(
-          (r) => r.path === '/api/alm_integration/provision_projects',
-        );
-        expect(provisionRequests).toHaveLength(25);
-      },
-      { timeout: 20000 },
-    );
-
-    it(
       'reports a partial failure summary when some repos fail to provision',
       async () => {
         const server = await harness
@@ -1488,6 +1512,75 @@ describe('sonar import', () => {
     );
 
     it(
+      'fails fast without provisioning any repo when a single --repo slug is already imported',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withDopRepositories('my-org', [
+            ...BATCH_REPOS.map((repo) =>
+              repo.slug === 'my-org/repo-a' ? { ...repo, importedInCurrentOrg: true } : repo,
+            ),
+          ])
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token');
+
+        const result = await harness.run(
+          'import --non-interactive --org my-org --repo my-org/repo-a,my-org/repo-b',
+          { extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl } },
+        );
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('my-org/repo-a');
+        expect(output).toContain('has already been imported into SonarQube');
+        const recorded = server.getRecordedRequests();
+        const provisionRequests = recorded.filter(
+          (r) => r.path === '/api/alm_integration/provision_projects',
+        );
+        expect(provisionRequests).toHaveLength(0);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'fails fast listing every already-imported repo when multiple --repo slugs are already imported',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withDopRepositories('my-org', [
+            ...BATCH_REPOS.map((repo) =>
+              repo.slug === 'my-org/repo-a' || repo.slug === 'my-org/repo-b'
+                ? { ...repo, importedInCurrentOrg: true }
+                : repo,
+            ),
+          ])
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token');
+
+        const result = await harness.run(
+          'import --non-interactive --org my-org --repo my-org/repo-a,my-org/repo-b,my-org/repo-c',
+          { extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl } },
+        );
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('Repositories have already been imported into SonarQube');
+        expect(output).toContain('my-org/repo-a');
+        expect(output).toContain('my-org/repo-b');
+        const recorded = server.getRecordedRequests();
+        const provisionRequests = recorded.filter(
+          (r) => r.path === '/api/alm_integration/provision_projects',
+        );
+        expect(provisionRequests).toHaveLength(0);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
       'caps concurrent provisioning requests at 10',
       async () => {
         const manyRepos = Array.from({ length: 15 }, (_, i) => ({
@@ -1526,6 +1619,51 @@ describe('sonar import', () => {
   });
 
   describe('bulk import (--all)', () => {
+    it(
+      'imports each server page as it is fetched instead of resolving the whole org first',
+      async () => {
+        // 60 repos exceeds the 50-item server page cap, so `--all` must fetch page one (50
+        // repos), import all of them, then fetch page two (10 repos) and import those too.
+        const manyRepos = Array.from({ length: 60 }, (_, i) => ({
+          id: `repo-${i + 1}`,
+          name: `repo-${i + 1}`,
+          slug: `my-org/repo-${i + 1}`,
+        }));
+
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withDopRepositories('my-org', manyRepos)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token');
+
+        const result = await harness.run('import --non-interactive --org my-org --all', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+          timeoutMs: 30000,
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('Imported 60 repositories');
+
+        const recorded = server.getRecordedRequests();
+        const repoPageRequests = recorded.filter(
+          (r) => r.path === '/dop-translation/dop-repositories',
+        );
+        expect(repoPageRequests).toHaveLength(2);
+
+        // Every repo from page one must have been provisioned before page two was ever
+        // fetched — proving the job streams page-by-page rather than fetching everything
+        // up front and importing it all at the end.
+        const secondPageIndex = recorded.indexOf(repoPageRequests[1]);
+        const provisionsBeforeSecondPage = recorded
+          .slice(0, secondPageIndex)
+          .filter((r) => r.path === '/api/alm_integration/provision_projects').length;
+        expect(provisionsBeforeSecondPage).toBe(50);
+      },
+      { timeout: 30000 },
+    );
+
     it(
       'imports every eligible repo and reports skipped counts grouped by reason',
       async () => {
