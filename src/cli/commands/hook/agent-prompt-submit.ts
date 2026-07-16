@@ -24,11 +24,20 @@
 import logger from '../../../lib/logger';
 import { SECRETS_CALLER_COMMANDS } from '../../../telemetry/secrets-analysis-telemetry.js';
 import { EXIT_CODE_SECRETS_FOUND } from '../analyze/secrets';
-import { resolveAuthAndSecrets, runAndEmitTextSecretsScan } from './hook-dependencies';
+import {
+  type HookDependencies,
+  MissingDependenciesError,
+  resolveAuthAndSecrets,
+  runAndEmitTextSecretsScan,
+} from './hook-dependencies';
 import { readStdinJson } from './stdin';
 
 interface PromptSubmitPayload {
   prompt?: string;
+}
+
+function denyPrompt(reason: string): void {
+  process.stdout.write(JSON.stringify({ decision: 'block', reason }) + '\n');
 }
 
 export async function agentPromptSubmit(): Promise<void> {
@@ -43,8 +52,16 @@ export async function agentPromptSubmit(): Promise<void> {
   const prompt = payload.prompt;
   if (!prompt) return;
 
-  const deps = await resolveAuthAndSecrets();
-  if (!deps) return;
+  let deps: HookDependencies;
+  try {
+    deps = await resolveAuthAndSecrets();
+  } catch (err) {
+    if (err instanceof MissingDependenciesError) {
+      denyPrompt(err.message);
+      return;
+    }
+    throw err;
+  }
 
   try {
     const exitCode = await runAndEmitTextSecretsScan(
@@ -53,9 +70,7 @@ export async function agentPromptSubmit(): Promise<void> {
       prompt,
     );
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
-      process.stdout.write(
-        JSON.stringify({ decision: 'block', reason: 'Sonar detected secrets in prompt' }) + '\n',
-      );
+      denyPrompt('Sonar detected secrets in prompt');
     }
   } catch (err) {
     logger.debug(`UserPromptSubmit secrets scan failed: ${(err as Error).message}`);

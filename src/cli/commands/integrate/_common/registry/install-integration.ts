@@ -18,7 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { version as VERSION } from '../../../../../../package.json';
 import type { ResolvedAuth } from '../../../../../lib/auth-resolver';
 import logger from '../../../../../lib/logger';
 import { findGitRoot } from '../../../../../lib/project-workspace/project-info';
@@ -29,7 +28,6 @@ import type {
   IntegrationScope,
   IntegrationStateAttribute,
 } from '../../../../../lib/state';
-import { getDefaultState } from '../../../../../lib/state';
 import { emitIntegrationConfiguredTelemetry } from '../../../../../telemetry/integrate-telemetry';
 import { text, warn } from '../../../../../ui';
 import { CommandFailedError } from '../../../_common/error';
@@ -73,7 +71,7 @@ export async function installIntegration<TOptions>({
   isFromRouter,
 }: InstallIntegrationOptions<TOptions>): Promise<InstalledIntegrationFeature[]> {
   const integration = getIntegrationDeclaration<TOptions>(registry, integrationId);
-  const state = loadStateForInstallation();
+  const state = loadState();
   const invocation: IntegrationInvocation<TOptions> = {
     options,
     targetRoot,
@@ -223,15 +221,4 @@ function getIntegrationDeclaration<TOptions>(
     throw new CommandFailedError(`Integration declaration is not registered: ${integrationId}`);
   }
   return integration as IntegrationDeclaration<TOptions>;
-}
-
-function loadStateForInstallation(): CliState {
-  try {
-    return loadState();
-  } catch (err) {
-    const msg = (err as Error).message;
-    warn(`Failed to read configuration state: ${msg}`);
-    logger.warn(`Failed to read configuration state: ${msg}`);
-    return getDefaultState(VERSION);
-  }
 }

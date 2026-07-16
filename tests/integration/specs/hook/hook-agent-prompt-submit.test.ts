@@ -29,6 +29,10 @@ import { chmodSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets.js';
+import {
+  SECRETS_INACTIVE_BINARY_MISSING,
+  SECRETS_INACTIVE_UNAUTHENTICATED,
+} from '../../../../src/cli/commands/hook/hook-dependencies.js';
 import { detectPlatform } from '../../../../src/lib/platform-detector.js';
 import { TestHarness } from '../../harness';
 
@@ -122,7 +126,7 @@ describe('sonar hook claude-prompt-submit', () => {
   );
 
   it(
-    'exits 0 and outputs nothing when not authenticated',
+    'exits 0 and blocks with the unauthenticated message when not authenticated',
     async () => {
       harness.state().withSecretsBinaryInstalled();
       // no withAuth — no active connection
@@ -132,13 +136,15 @@ describe('sonar hook claude-prompt-submit', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).not.toContain('"block"');
+      const payload = JSON.parse(result.stdout.trim()) as { decision: string; reason: string };
+      expect(payload.decision).toBe('block');
+      expect(payload.reason).toBe(SECRETS_INACTIVE_UNAUTHENTICATED);
     },
     { timeout: 15000 },
   );
 
   it(
-    'exits 0 and outputs nothing when secrets binary is not installed',
+    'exits 0 and blocks with the binary-missing message when secrets binary is not installed',
     async () => {
       harness.withAuth(FAKE_SERVER, 'fake-token');
 
@@ -147,7 +153,9 @@ describe('sonar hook claude-prompt-submit', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).not.toContain('"block"');
+      const payload = JSON.parse(result.stdout.trim()) as { decision: string; reason: string };
+      expect(payload.decision).toBe('block');
+      expect(payload.reason).toBe(SECRETS_INACTIVE_BINARY_MISSING);
     },
     { timeout: 15000 },
   );

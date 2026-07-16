@@ -25,6 +25,12 @@ import * as installSecrets from '../../../../../src/cli/commands/_common/install
 import * as analyzeSecrets from '../../../../../src/cli/commands/analyze/secrets';
 import { gitPreCommit } from '../../../../../src/cli/commands/hook/git-pre-commit';
 import { gitPrePush } from '../../../../../src/cli/commands/hook/git-pre-push';
+import {
+  HOOK_INACTIVE_UNAUTHENTICATED,
+  MissingDependenciesError,
+  SECRETS_INACTIVE_BINARY_MISSING,
+  SECRETS_INACTIVE_UNAUTHENTICATED,
+} from '../../../../../src/cli/commands/hook/hook-dependencies';
 import * as stdinModule from '../../../../../src/cli/commands/hook/stdin';
 import * as authResolver from '../../../../../src/lib/auth-resolver';
 import * as processLib from '../../../../../src/lib/process';
@@ -100,19 +106,31 @@ describe('gitPreCommit', () => {
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });
 
-  it('skips scan when auth is unavailable', async () => {
+  it('throws MissingDependenciesError when auth is unavailable', async () => {
     resolveAuthSpy.mockResolvedValue(null);
 
-    await gitPreCommit();
-
+    let thrown: unknown;
+    try {
+      await gitPreCommit();
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeInstanceOf(MissingDependenciesError);
+    expect((thrown as MissingDependenciesError).message).toBe(HOOK_INACTIVE_UNAUTHENTICATED);
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });
 
-  it('skips scan when binary is not installed', async () => {
+  it('throws MissingDependenciesError when binary is not installed', async () => {
     resolveSecretsBinaryPathSpy.mockReturnValue(null);
 
-    await gitPreCommit();
-
+    let thrown: unknown;
+    try {
+      await gitPreCommit();
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeInstanceOf(MissingDependenciesError);
+    expect((thrown as MissingDependenciesError).message).toBe(SECRETS_INACTIVE_BINARY_MISSING);
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });
 
@@ -223,19 +241,31 @@ describe('gitPrePush', () => {
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });
 
-  it('skips scan when auth is unavailable', async () => {
+  it('throws MissingDependenciesError when auth is unavailable', async () => {
     resolveAuthSpy.mockResolvedValue(null);
 
-    await gitPrePush();
-
+    let thrown: unknown;
+    try {
+      await gitPrePush();
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeInstanceOf(MissingDependenciesError);
+    expect((thrown as MissingDependenciesError).message).toBe(SECRETS_INACTIVE_UNAUTHENTICATED);
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });
 
-  it('skips scan when binary is not installed', async () => {
+  it('throws MissingDependenciesError when binary is not installed', async () => {
     resolveSecretsBinaryPathSpy.mockReturnValue(null);
 
-    await gitPrePush();
-
+    let thrown: unknown;
+    try {
+      await gitPrePush();
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeInstanceOf(MissingDependenciesError);
+    expect((thrown as MissingDependenciesError).message).toBe(SECRETS_INACTIVE_BINARY_MISSING);
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });
 

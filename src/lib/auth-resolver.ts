@@ -108,18 +108,14 @@ export function isEnvBasedAuth(): boolean {
 }
 
 export async function resolveFromState(): Promise<ResolvedAuth | null> {
-  let connection: { serverUrl: string; orgKey?: string; type: 'cloud' | 'on-premise' };
-  try {
-    const state = loadState();
-    const active = getActiveConnection(state);
-    if (!active) {
-      return null;
-    }
-    connection = { serverUrl: active.serverUrl, orgKey: active.orgKey, type: active.type };
-  } catch (err) {
-    logger.debug(`Failed to load state: ${(err as Error).message}`);
+  // Let a corrupt-state read throw here so the user sees the real error
+  // instead of a misleading "not authenticated".
+  const state = loadState();
+  const active = getActiveConnection(state);
+  if (!active) {
     return null;
   }
+  const connection = { serverUrl: active.serverUrl, orgKey: active.orgKey, type: active.type };
 
   const serverUrl = connection.serverUrl;
   if (!serverUrl) {

@@ -24,17 +24,20 @@
 import { resolveAuth } from '../../../lib/auth-resolver';
 import { spawnProcess } from '../../../lib/process';
 import { runSecretsStage } from './git-pre-push-secrets.ts';
+import { MissingDependenciesError, SECRETS_INACTIVE_UNAUTHENTICATED } from './hook-dependencies.ts';
 import type { PushRef } from './stdin';
 import { readGitPushRefs } from './stdin';
 
 export const GIT_NULL_OID = '0000000000000000000000000000000000000000';
 
 export async function gitPrePush(files: string[] = []): Promise<void> {
-  const auth = await resolveAuth().catch(() => null);
-  if (!auth) return;
-
   const fileGroups = await getFileGroupsToScan(files);
   if (fileGroups === null) return;
+
+  const auth = await resolveAuth().catch(() => null);
+  if (!auth) {
+    throw new MissingDependenciesError(SECRETS_INACTIVE_UNAUTHENTICATED);
+  }
 
   for (const group of fileGroups) {
     await runSecretsStage(group, auth);

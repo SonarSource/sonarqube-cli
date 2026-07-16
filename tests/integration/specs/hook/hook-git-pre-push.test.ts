@@ -26,6 +26,10 @@ import { chmodSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets';
+import {
+  SECRETS_INACTIVE_BINARY_MISSING,
+  SECRETS_INACTIVE_UNAUTHENTICATED,
+} from '../../../../src/cli/commands/hook/hook-dependencies';
 import { detectPlatform } from '../../../../src/lib/platform-detector';
 import { TestHarness } from '../../harness';
 import { commitFile, initGitRepo } from './git-test-helpers';
@@ -87,22 +91,45 @@ describe('sonar hook git-pre-push', () => {
   );
 
   it(
-    'exits 0 when not authenticated (graceful skip)',
+    'exits 1 with the unauthenticated message when not authenticated (fails closed)',
     async () => {
+      initGitRepo(harness.cwd.path);
+      const sha = commitFile(harness.cwd.path, 'clean.js', CLEAN_CONTENT);
       harness.state().withSecretsBinaryInstalled();
-      const sha = 'abc1234abc1234abc1234abc1234abc1234abc123';
+      // No auth configured
+
       const result = await harness.run('hook git-pre-push', {
         stdin: pushRefLine(sha, GIT_NULL_OID),
       });
-      expect(result.exitCode).toBe(0);
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(SECRETS_INACTIVE_UNAUTHENTICATED);
     },
-    { timeout: 15000 },
+    { timeout: 30000 },
   );
 
   it(
-    'exits 0 when binary is not installed (graceful skip)',
+    'exits 1 with the binary-missing message when binary is not installed (fails closed)',
     async () => {
+      initGitRepo(harness.cwd.path);
+      const sha = commitFile(harness.cwd.path, 'clean.js', CLEAN_CONTENT);
       harness.withAuth(FAKE_SERVER, VALID_TOKEN);
+      // No binary installed
+
+      const result = await harness.run('hook git-pre-push', {
+        stdin: pushRefLine(sha, GIT_NULL_OID),
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(SECRETS_INACTIVE_BINARY_MISSING);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'exits 0 when the push has no files to scan, even when unauthenticated',
+    async () => {
+      harness.state().withSecretsBinaryInstalled();
       const sha = 'abc1234abc1234abc1234abc1234abc1234abc123';
       const result = await harness.run('hook git-pre-push', {
         stdin: pushRefLine(sha, GIT_NULL_OID),
@@ -248,23 +275,25 @@ describe('sonar hook git-pre-push', () => {
     );
 
     it(
-      'exits 0 when not authenticated (graceful skip)',
+      'exits 1 with the unauthenticated message when not authenticated (fails closed)',
       async () => {
         harness.state().withSecretsBinaryInstalled();
         harness.cwd.writeFile('clean.js', CLEAN_CONTENT);
         const result = await harness.run('hook git-pre-push clean.js');
-        expect(result.exitCode).toBe(0);
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain(SECRETS_INACTIVE_UNAUTHENTICATED);
       },
       { timeout: 15000 },
     );
 
     it(
-      'exits 0 when binary is not installed (graceful skip)',
+      'exits 1 with the binary-missing message when binary is not installed (fails closed)',
       async () => {
         harness.withAuth(FAKE_SERVER, VALID_TOKEN);
         harness.cwd.writeFile('clean.js', CLEAN_CONTENT);
         const result = await harness.run('hook git-pre-push clean.js');
-        expect(result.exitCode).toBe(0);
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain(SECRETS_INACTIVE_BINARY_MISSING);
       },
       { timeout: 15000 },
     );
