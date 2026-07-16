@@ -139,16 +139,6 @@ describe('runPostUpdateActions', () => {
     expect(saveStateSpy).not.toHaveBeenCalled();
   });
 
-  it('quits quietly when state cannot be read (CLI-834)', async () => {
-    tryLoadStateSpy.mockReturnValue(null);
-
-    const actual = await runPostUpdateActions();
-
-    expect(actual).toBeUndefined();
-    expect(isNewerVersionSpy).not.toHaveBeenCalled();
-    expect(saveStateSpy).not.toHaveBeenCalled();
-  });
-
   it('does nothing when version is already up to date', async () => {
     isNewerVersionSpy.mockReturnValue(false);
 

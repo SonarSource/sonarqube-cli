@@ -181,16 +181,6 @@ describe('loadState: filesystem I/O', () => {
     expect(state.auth.isAuthenticated).toBe(false);
   });
 
-  it('throws and leaves the file untouched when it contains invalid JSON (CLI-834)', () => {
-    mkdirSync(testCliDir, { recursive: true });
-    writeFileSync(testStateFile, 'not-valid-json', 'utf-8');
-
-    expect(() => loadState('0.2.0')).toThrow(/Failed to read state/);
-
-    // The corrupt file must not be overwritten with default state.
-    expect(readFileSync(testStateFile, 'utf-8')).toBe('not-valid-json');
-  });
-
   it('returns parsed state when valid state file exists', () => {
     const initial = getDefaultState('0.3.0');
     initial.auth.isAuthenticated = true;

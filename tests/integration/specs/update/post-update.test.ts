@@ -44,6 +44,22 @@ describe('post-update migration', () => {
   });
 
   it(
+    'quits quietly when state cannot be read',
+    async () => {
+      // runPostUpdateActions() runs on every invocation and reads
+      // state via tryLoadState(). A corrupt file must make it a silent no-op
+      // rather than crash the CLI or overwrite the file.
+      harness.state().withRawState('not-valid-json');
+
+      const result = await harness.run('--version');
+
+      expect(result.exitCode).toBe(0);
+      expect(harness.stateJsonFile.asText()).toBe('not-valid-json');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'removes sonar-a3s entries from state.json on CLI upgrade',
     async () => {
       const staleState = {
