@@ -20,7 +20,7 @@
 
 // TestHarness — main entry point for integration tests
 
-import { chmodSync, copyFileSync, existsSync, mkdirSync, realpathSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -29,6 +29,7 @@ import {
   ENV_DO_NOT_TRACK,
   ENV_SQAA_RETRY_BASE_DELAY_MS,
 } from '../../../src/lib/config-constants.js';
+import { canonicalizePath } from '../../../src/lib/fs-utils.js';
 import { ISOLATED_CLI_SPAWN_ENV } from '../../_common/isolated-cli-env.js';
 import { getCliBinaryPath, runCli } from './cli-runner.js';
 import { Dir } from './dir';
@@ -47,6 +48,7 @@ export type { CliResult, RecordedRequest } from './types.js';
 export class TestHarness {
   public readonly cwd: Dir;
   public readonly userHome: Dir;
+  public readonly sonarUserHome: Dir;
   public readonly cliHome: Dir;
   public readonly stateJsonFile: File;
   public readonly keychainJsonFile: string;
@@ -61,7 +63,8 @@ export class TestHarness {
     this.tempDir = new Dir(tempDir);
     this.cwd = this.tempDir.dir('cwd');
     this.userHome = this.tempDir.dir('home');
-    this.cliHome = this.userHome.dir('.sonar', 'sonarqube-cli');
+    this.sonarUserHome = this.userHome.dir('.sonar');
+    this.cliHome = this.sonarUserHome.dir('sonarqube-cli');
     this.stateJsonFile = this.cliHome.file('state.json');
     this.keychainJsonFile = join(this.cliHome.path, 'keychain.json');
     for (const key of ['PATH', 'PATHEXT', 'HOME', 'TMPDIR', 'USER', 'LOGNAME', 'SHELL', 'TERM']) {
@@ -73,12 +76,15 @@ export class TestHarness {
   static create(): Promise<TestHarness> {
     const rawDir = join(tmpdir(), `sonar-cli-harness-${Date.now()}-${crypto.randomUUID()}`);
     mkdirSync(rawDir, { recursive: true });
-    // Resolve symlinks (macOS exposes $TMPDIR as `/var/folders/...` which is a
-    // symlink to `/private/var/folders/...`). The CLI canonicalises project
-    // roots via project-workspace::canonicalizePath, so state recordings use
-    // the resolved path; matching that here keeps test assertions stable on
-    // macOS local runs.
-    const tempDir = realpathSync(rawDir);
+    // Canonicalize with the same helper the CLI uses (canonicalizePath →
+    // realpathSync.native), so the harness's paths match what production records
+    // and resolves. This matters on two fronts:
+    //   - macOS exposes $TMPDIR as `/var/folders/...`, a symlink to
+    //     `/private/var/folders/...`, which realpath resolves.
+    //   - Windows CI temp dirs contain an 8.3 short component (e.g. `RUNNER~1`);
+    //     `.native` expands it to the long form (`runneradmin`) that `git` and
+    //     `process.cwd()` report, so seeded/expected paths match the CLI's.
+    const tempDir = canonicalizePath(rawDir);
     return Promise.resolve(new TestHarness(tempDir));
   }
 
@@ -259,7 +265,7 @@ export class TestHarness {
     const spawnEnv = { ...composed, ...ISOLATED_CLI_SPAWN_ENV };
     // ISOLATED_CLI_SPAWN_ENV force-disables telemetry (DO_NOT_TRACK=1) for every spawn.
     // Tests that opted into telemetry via withTelemetryEnabled() need it re-enabled so the
-    // findings.ndjson sink is written; pair with __SQ_CLI_TELEMETRY_FLUSH__=1 to avoid posting.
+    // telemetry-events.ndjson sink is written; pair with __SQ_CLI_TELEMETRY_FLUSH__=1 to avoid posting.
     if (this._envBuilder?.telemetryEnabled) {
       spawnEnv[ENV_DO_NOT_TRACK] = '0';
     }

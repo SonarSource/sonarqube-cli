@@ -27,6 +27,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets.js';
 import { detectPlatform } from '../../../../src/lib/platform-detector.js';
+import { readAnalysisEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
 
 // Hardcoded test token — intentional fixture for secret detection, not a real credential
@@ -262,47 +263,30 @@ describe('analyze secrets', () => {
   );
 
   it(
-    'writes a single CliAnalysisCompleted with populated details to findings.ndjson from a real scan',
+    'writes a single CliAnalysisCompleted with populated details to telemetry-events.ndjson from a real scan',
     async () => {
       harness.state().withSecretsBinaryInstalled().withTelemetryEnabled();
       harness.withAuth(FAKE_SERVER, 'fake-token');
       // Run in flush-worker mode so storeEvent() never spawns the detached flush worker:
-      // findings.ndjson is written but nothing is POSTed to the telemetry endpoint.
+      // telemetry-events.ndjson is written but nothing is POSTed to the telemetry endpoint.
       harness.withExtraEnv({ __SQ_CLI_TELEMETRY_FLUSH__: '1' });
       harness.cwd.writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
 
       const result = await harness.run('analyze secrets secrets.js');
       expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
 
-      const findingsFile = harness.cliHome.file('telemetry', 'findings.ndjson');
-      expect(findingsFile.exists()).toBe(true);
-
-      interface AnalysisEvent {
-        metadata: { event_type: string };
-        event_payload: Record<string, unknown>;
-      }
-      const events = findingsFile
-        .asText()
-        .trim()
-        .split('\n')
-        .filter(Boolean)
-        .map((line) => JSON.parse(line) as AnalysisEvent);
+      const events = readAnalysisEvents(harness.sonarUserHome.path);
 
       // Exactly one completed event, carrying the details blob when findings are present.
       expect(events).toHaveLength(1);
-      const completed = events.find(
-        (e) => e.metadata.event_type === 'Analytics.Cli.CliAnalysisCompleted',
-      );
-      expect(completed).toBeDefined();
-      if (!completed) throw new Error('expected a CliAnalysisCompleted event');
-
+      const [completed] = events;
       expect(completed.event_payload.analyzer).toBe('sonar-secrets');
       expect(completed.event_payload.caller_command).toBe('analyze secrets');
       expect(completed.event_payload.failures_count).toBe(0);
       expect(completed.event_payload.exit_code).toBe(EXIT_CODE_SECRETS_FOUND);
-      expect(completed.event_payload.findings_count as number).toBeGreaterThanOrEqual(1);
+      expect(completed.event_payload.findings_count).toBeGreaterThanOrEqual(1);
 
-      const details = JSON.parse(completed.event_payload.details as string) as {
+      const details = JSON.parse(completed.event_payload.details) as {
         counts_by_rule: Record<string, number>;
         files_with_findings_count: number;
         source: string;

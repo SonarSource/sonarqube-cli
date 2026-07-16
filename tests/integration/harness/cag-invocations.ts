@@ -33,6 +33,7 @@ export interface CagInvocation {
     SONAR_CONTEXT_TOKEN?: string;
     SONAR_CONTEXT_URL?: string;
     SONAR_CONTEXT_INVOCATION_ID?: string;
+    SONAR_CONTEXT_WORKSPACE_ROOT?: string;
   };
 }
 

@@ -29,6 +29,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { codexIntegration } from '../../../../src/cli/commands/integrate/codex/declaration';
 import {
+  expectAgentPromptHint,
+  expectNoAgentPromptHint,
+} from '../../../_common/agent-hint-assertions.js';
+import {
   hookScriptName,
   hookScriptPath,
   IS_WINDOWS,
@@ -681,6 +685,36 @@ describe('integrate codex', () => {
         expect(findCodexFeature(harness, 'secrets-instructions')).toBeDefined();
         expect(findCodexFeature(harness, 'mcp-server')).toBeDefined();
         expect(findCodexFeature(harness, 'sonar-sqaa-hook')).toBeUndefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it.each([
+      [true, true, true],
+      [true, false, false],
+      [false, true, false],
+      [false, false, false],
+    ])(
+      'prints a non-interactive hint with --non-interactive plus -p/-g examples only for a detected AI agent without --non-interactive (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
+      async (isAgent, isInteractive, expectedShownPrompt) => {
+        const result = await harness.run(
+          `integrate codex${isInteractive ? '' : ' --non-interactive'}`,
+          {
+            ...(isInteractive ? { stdinChunks: ['\r', '\r', '\r', '\r'] } : {}),
+            extraEnv: isAgent ? { CODEX_SANDBOX_NETWORK_DISABLED: '1' } : {},
+          },
+        );
+
+        expect(result.exitCode).toBe(0);
+        if (expectedShownPrompt) {
+          expectAgentPromptHint(
+            result.stdout,
+            'sonar integrate codex --non-interactive',
+            'sonar integrate codex --non-interactive -g',
+          );
+        } else {
+          expectNoAgentPromptHint(result.stdout);
+        }
       },
       { timeout: 30000 },
     );

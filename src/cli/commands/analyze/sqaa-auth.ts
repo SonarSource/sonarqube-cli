@@ -20,17 +20,24 @@
 
 // Auth and project-key resolution for SQAA commands.
 
-import { resolve } from 'node:path';
-
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
-import { spawnProcess } from '../../../lib/process';
+import { selectRecordedFeatureForDir } from '../../../lib/project-workspace/recorded-feature-resolver';
 import { loadState } from '../../../lib/repository/state-repository';
-import { canonicalProjectRoot } from '../../../lib/state-manager';
+import type { IntegrationStateAttribute } from '../../../lib/state';
 import { blank, confirmPrompt, text, warn } from '../../../ui';
+import { printAgentNonInteractiveAlternativeHint } from '../_common/agent-prompt-hint';
 import { CommandFailedError } from '../_common/error.js';
 import { SQAA_HOOK_FEATURE_ID } from '../integrate/_common/sqaa-entitlement';
 import { CLAUDE_INTEGRATION_ID } from '../integrate/claude/declaration';
+
+function getOptionalStringAttr(
+  attrs: Record<string, IntegrationStateAttribute> | undefined,
+  key: string,
+): string | undefined {
+  const value = attrs?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
 
 const LARGE_CHANGESET_HINT =
   'For faster feedback, try targeting your changes:\n' +
@@ -110,29 +117,30 @@ export function resolveCloudAuth(
  * Look up the project key for the current project from the declarative
  * integration state (`integrations.installed`).
  *
- * The SQAA hook feature is recorded per install target root (the directory
- * passed to `sonar integrate claude`), so when the user runs SQAA from a
- * subdirectory we resolve the git repository top-level first — otherwise
- * `process.cwd()` is a non-match against the recorded root and we incorrectly
- * skip with "no project configured".
- *
- * Falls back to `process.cwd()` when not inside a git repository so the
- * single-file path still works outside git.
+ * Delegates the worktree-aware matching to the shared resolver (see
+ * `selectRecordedFeatureForDir`): the current directory is mapped to its working
+ * tree — and, from a linked worktree, to the main working tree — then matched
+ * against the recorded Claude SQAA hook features, preferring a `targetRoot`
+ * (physical install dir) match over a `repoRoot`-only one. Falls back to
+ * `process.cwd()` when no `projectRoot` is given so the single-file path still
+ * works, including from a subdirectory or outside git.
  */
 export async function resolveSqaaProjectKey(projectRoot?: string): Promise<string | null> {
   try {
-    const root = canonicalProjectRoot(projectRoot ?? (await tryResolveRepoRoot(process.cwd())));
-    const state = loadState();
-
-    const claude = state.integrations.installed.find(
+    const claude = loadState().integrations.installed.find(
       (integration) => integration.integrationId === CLAUDE_INTEGRATION_ID,
     );
-    const sqaaFeature = claude?.features.find(
-      (feature) =>
-        feature.featureId === SQAA_HOOK_FEATURE_ID &&
-        feature.scope === 'project' &&
-        canonicalProjectRoot(feature.targetRoot) === root,
-    );
+    const candidates = (claude?.features ?? [])
+      .filter(
+        (feature) => feature.featureId === SQAA_HOOK_FEATURE_ID && feature.scope === 'project',
+      )
+      .map((feature) => ({
+        feature,
+        targetRoot: feature.targetRoot,
+        repoRoot: getOptionalStringAttr(feature.attrs, 'repoRoot'),
+        updatedAt: feature.updatedAt,
+      }));
+    const sqaaFeature = await selectRecordedFeatureForDir(projectRoot ?? process.cwd(), candidates);
 
     const projectKey = sqaaFeature?.attrs?.projectKey;
     if (typeof projectKey !== 'string' || projectKey.length === 0) {
@@ -148,22 +156,6 @@ export async function resolveSqaaProjectKey(projectRoot?: string): Promise<strin
 }
 
 /**
- * Resolve the git repository top-level for `cwd`, falling back to `cwd` itself
- * when not inside a git repository (so non-git workflows still work).
- */
-async function tryResolveRepoRoot(cwd: string): Promise<string> {
-  try {
-    const result = await spawnProcess('git', ['rev-parse', '--show-toplevel'], { cwd });
-    if (result.exitCode === 0) {
-      return resolve(result.stdout.trim());
-    }
-  } catch {
-    // git not installed or otherwise unavailable — fall through to cwd.
-  }
-  return cwd;
-}
-
-/**
  * Warn about a large change set and ask the user to confirm.
  * In non-interactive contexts (no stdin TTY — e.g. CI/agent runs), prints a
  * warning and auto-proceeds. Returns false only when the user explicitly declines in an interactive terminal.
@@ -174,11 +166,12 @@ export async function confirmLargeChangeset(fileCount: number): Promise<boolean>
     `You are about to analyze a large number of files (${fileCount}). This may take longer to process.\n${LARGE_CHANGESET_HINT}`,
   );
 
-  if (!process.stdin.isTTY) {
+  if (!process.stdin.isTTY && !process.env.SONARQUBE_CLI_MOCK_TTY) {
     return true;
   }
 
   blank();
+  printAgentNonInteractiveAlternativeHint('sonar analyze --force');
   const confirmed = await confirmPrompt('Do you wish to proceed?', true);
   if (!confirmed) {
     blank();

@@ -175,7 +175,7 @@ jobs:
             local binary="$1"
             local archive="/tmp/$(basename "$binary").zip"
 
-            codesign --sign "Developer ID Application: SonarSource SA ($APPLE_TEAM_ID)" --identifier sonarqube-cli --options runtime --timestamp "$binary"
+            codesign --sign "Developer ID Application: SonarSource Sarl ($APPLE_TEAM_ID)" --identifier sonarqube-cli --options runtime --timestamp "$binary"
             codesign --verify --verbose "$binary"
 
             zip "$archive" "$binary"

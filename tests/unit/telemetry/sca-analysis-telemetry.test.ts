@@ -18,7 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -36,8 +35,6 @@ import type {
 import type { ResolvedAuth } from '../../../src/lib/auth-resolver.js';
 import { ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
 import * as stateRepository from '../../../src/lib/repository/state-repository.js';
-import type { StoredAnalysisCompletedEvent } from '../../../src/lib/state.js';
-import { getDefaultState } from '../../../src/lib/state.js';
 import * as stateManager from '../../../src/lib/state-manager.js';
 import {
   emitScaAnalysisTelemetry,
@@ -45,6 +42,7 @@ import {
   summarizeScaFindings,
 } from '../../../src/telemetry/sca-analysis-telemetry.js';
 import * as userModule from '../../../src/telemetry/user.js';
+import { makeTelemetryState, readAnalysisEvents } from '../../_common/telemetry-helpers.js';
 
 const AUTH: ResolvedAuth = {
   connectionType: 'cloud',
@@ -100,26 +98,6 @@ function makeError(
   code: AnalysisErrorResource['code'] = 'NO_DEPENDENCIES_FOUND',
 ): AnalysisErrorResource {
   return { id: `err-${code}`, code, path: null, message: 'error' };
-}
-
-function findingsPath(sonarUserHome: string): string {
-  return join(sonarUserHome, 'sonarqube-cli', 'telemetry', 'findings.ndjson');
-}
-
-function readEvents(sonarUserHome: string): StoredAnalysisCompletedEvent[] {
-  const path = findingsPath(sonarUserHome);
-  if (!existsSync(path)) return [];
-  return readFileSync(path, 'utf-8')
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as StoredAnalysisCompletedEvent);
-}
-
-function makeTelemetryState(enabled = true) {
-  const state = getDefaultState('1.0.0');
-  state.telemetry.enabled = enabled;
-  state.telemetry.installationId = 'install-id';
-  return state;
 }
 
 let testSonarUserHome: string;
@@ -221,7 +199,7 @@ describe('emitScaAnalysisTelemetry()', () => {
       0,
     );
 
-    const events = readEvents(testSonarUserHome);
+    const events = readAnalysisEvents(testSonarUserHome);
     expect(events).toHaveLength(1);
     const completed = events[0];
     expect(completed.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
@@ -250,7 +228,7 @@ describe('emitScaAnalysisTelemetry()', () => {
       51,
     );
 
-    const events = readEvents(testSonarUserHome);
+    const events = readAnalysisEvents(testSonarUserHome);
     expect(events).toHaveLength(1);
     const completed = events[0];
     expect(completed.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
@@ -267,7 +245,7 @@ describe('emitScaAnalysisTelemetry()', () => {
   it('records a failed-to-run scan (response null) as failures_count 1 with details ""', async () => {
     await emitScaAnalysisTelemetry(SCA_CALLER_COMMANDS.gitPreCommit, AUTH, null, 77, null);
 
-    const events = readEvents(testSonarUserHome);
+    const events = readAnalysisEvents(testSonarUserHome);
     expect(events).toHaveLength(1);
     const completed = events[0];
     expect(completed.event_payload.caller_command).toBe('git-pre-commit');
@@ -285,7 +263,7 @@ describe('emitScaAnalysisTelemetry()', () => {
 
     await emitScaAnalysisTelemetry(SCA_CALLER_COMMANDS.gitPreCommit, AUTH, response, 10, null);
 
-    const events = readEvents(testSonarUserHome);
+    const events = readAnalysisEvents(testSonarUserHome);
     expect(events).toHaveLength(1);
     const completed = events[0];
     expect(completed.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
@@ -306,7 +284,7 @@ describe('emitScaAnalysisTelemetry()', () => {
       51,
     );
 
-    expect(readEvents(testSonarUserHome)).toHaveLength(0);
+    expect(readAnalysisEvents(testSonarUserHome)).toHaveLength(0);
   });
 
   it('does not write when installationId is absent', async () => {
@@ -322,7 +300,7 @@ describe('emitScaAnalysisTelemetry()', () => {
       null,
     );
 
-    expect(readEvents(testSonarUserHome)).toHaveLength(0);
+    expect(readAnalysisEvents(testSonarUserHome)).toHaveLength(0);
   });
 
   it('never throws when identity resolution fails (strictly fire-and-forget)', async () => {
@@ -341,6 +319,6 @@ describe('emitScaAnalysisTelemetry()', () => {
       51,
     );
 
-    expect(readEvents(testSonarUserHome)).toHaveLength(0);
+    expect(readAnalysisEvents(testSonarUserHome)).toHaveLength(0);
   });
 });

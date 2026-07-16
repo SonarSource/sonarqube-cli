@@ -18,12 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { FixVersionVM } from './fix-version.ts';
+// Parse repeatable, comma-separated `--repo` arguments for `sonar import`.
 
-export type RecommendationAction =
-  'REMOVE_PACKAGE' | 'REVIEW_LICENSE' | 'UPGRADE_PACKAGE' | 'NO_FIX_AVAILABLE';
-
-export interface RecommendationVM {
-  action: RecommendationAction;
-  fixVersions: FixVersionVM[];
+/** Commander collector for repeatable `--repo <slug>` options; each value may also be comma-separated. */
+export function collectRepoOption(value: string, previous: string[] = []): string[] {
+  const parts = value
+    .split(',')
+    .map((slug) => slug.trim())
+    .filter((slug) => slug.length > 0);
+  return [...new Set([...previous, ...parts])];
 }

@@ -35,6 +35,8 @@ import {
 } from '../cli/commands/integrate/_common/registry';
 import { CLAUDE_INTEGRATION_ID } from '../cli/commands/integrate/claude/declaration';
 import { installHooks } from '../cli/commands/integrate/claude/hooks.js';
+import { appendTelemetryEvent } from '../telemetry/telemetry-events.js';
+import { getTelemetryDir } from './config-constants.js';
 import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from './install-types.js';
 import logger from './logger';
 import {
@@ -84,10 +86,64 @@ export async function runPostUpdateActions(): Promise<void> {
 }
 
 async function runActions(_previousVersion: string, _currentVersion: string): Promise<void> {
+  migrateLegacyTelemetryEvents();
   await migrateDeclarativeIntegrations();
   await migrateClaudeCodeHooks();
   await updateSecretsBinaryIfNeeded();
   await updateScaScannerBinaryIfNeeded();
+}
+
+/** Migrates legacy telemetry events to the new pipeline (telemetry-events.ndjson). */
+export function migrateLegacyTelemetryEvents(): void {
+  migrateSinkFile();
+  migrateStateQueue();
+}
+
+/** Moves any events left in `state.telemetry.events` to `telemetry-events.ndjson`. */
+function migrateStateQueue(): void {
+  const state = loadState();
+  const legacyEvents = state.telemetry.events ?? [];
+  if (legacyEvents.length === 0) {
+    return;
+  }
+
+  // Clear the queue first, then drain: a crash mid-way loses a rare
+  // best-effort event instead of re-appending duplicates on the next launch.
+  delete state.telemetry.events;
+  saveState(state);
+
+  for (const event of legacyEvents) {
+    appendTelemetryEvent(event);
+  }
+
+  logger.debug(
+    `Migrated ${legacyEvents.length} legacy telemetry event(s) to telemetry-events.ndjson`,
+  );
+}
+
+/** Migrates the previous telemetry file `findings.ndjson` to `telemetry-events.ndjson`. */
+function migrateSinkFile(): void {
+  const telemetryDir = getTelemetryDir();
+  const oldPath = join(telemetryDir, 'findings.ndjson');
+  const newPath = join(telemetryDir, 'telemetry-events.ndjson');
+  if (!fs.existsSync(oldPath)) {
+    return;
+  }
+
+  try {
+    if (fs.existsSync(newPath)) {
+      // Remove the old sink first, then append: a crash mid-way loses a rare
+      // best-effort event instead of re-appending duplicates on the next launch.
+      const oldContents = fs.readFileSync(oldPath, 'utf-8');
+      fs.rmSync(oldPath);
+      fs.appendFileSync(newPath, oldContents);
+    } else {
+      fs.renameSync(oldPath, newPath);
+    }
+    logger.debug('Migrated telemetry file findings.ndjson to telemetry-events.ndjson');
+  } catch (error) {
+    logger.debug(`Failed to migrate telemetry sink file: ${(error as Error).message}`);
+  }
 }
 
 export async function migrateDeclarativeIntegrations(

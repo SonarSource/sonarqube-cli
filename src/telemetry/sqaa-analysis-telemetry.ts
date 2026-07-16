@@ -24,7 +24,7 @@ import type { FileResult, RunTally } from '../cli/commands/analyze/sqaa-analysis
 import type { SqaaJsonReport } from '../cli/commands/analyze/sqaa-display-json.js';
 import type { ResolvedAuth } from '../lib/auth-resolver.js';
 import type { SqaaIssue } from '../sonarqube/client.js';
-import { emitAnalysisCompleted } from './findings.js';
+import { emitAnalysisCompleted } from './telemetry-events.js';
 
 export const SQAA_ANALYZE_CALLER_COMMAND = 'analyze';
 

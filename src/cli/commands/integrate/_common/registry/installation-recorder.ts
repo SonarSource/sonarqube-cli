@@ -95,15 +95,13 @@ export function recordInstalledFeature<TOptions>(
     ),
     attrs: context.attrs,
     subfeatures: activeSubfeatures
-      ? activeSubfeatures.map(
-          (sub): InstalledSubfeature => ({
-            featureId: sub.id,
-            dependencies: upsertDependencyReferences(
-              existing?.subfeatures?.find((s) => s.featureId === sub.id)?.dependencies ?? [],
-              new Set((sub.dependencies ?? []).map((d) => d.id)),
-            ),
-          }),
-        )
+      ? activeSubfeatures.map((sub): InstalledSubfeature => ({
+          featureId: sub.id,
+          dependencies: upsertDependencyReferences(
+            existing?.subfeatures?.find((s) => s.featureId === sub.id)?.dependencies ?? [],
+            new Set((sub.dependencies ?? []).map((d) => d.id)),
+          ),
+        }))
       : existing?.subfeatures,
   };
 

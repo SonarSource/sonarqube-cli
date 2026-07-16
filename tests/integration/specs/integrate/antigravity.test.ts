@@ -26,6 +26,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { SQAA_GLOBAL_SKIP_MESSAGE } from '../../../../src/cli/commands/integrate/_common/sqaa-entitlement';
 import { CLI_COMMAND } from '../../../../src/lib/config-constants';
+import {
+  expectAgentPromptHint,
+  expectNoAgentPromptHint,
+} from '../../../_common/agent-hint-assertions.js';
 import { IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
 import {
   type AntigravityHooksJson,
@@ -178,6 +182,40 @@ describe('integrate antigravity', () => {
         expect(result.stdout + result.stderr).toContain(
           'Skipping Vortex context augmentation (--skip-context)',
         );
+      },
+      { timeout: 30000 },
+    );
+
+    it.each([
+      [true, true, true],
+      [true, false, false],
+      [false, true, false],
+      [false, false, false],
+    ])(
+      'prints a non-interactive hint with --non-interactive plus -p/-g examples only for a detected AI agent without --non-interactive (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
+      async (isAgent, isInteractive, expectedShownPrompt) => {
+        // -p skips the scope prompt; three features ask by default (secrets
+        // hooks, MCP server, prompt-secrets project rules) — SQAA is skipped
+        // silently (not entitled) and prompt-secrets global rules are
+        // skipped (project scope). --non-interactive skips those asks too.
+        const result = await harness.run(
+          `integrate antigravity --project ${TEST_PROJECT}${isInteractive ? '' : ' --non-interactive'}`,
+          {
+            ...(isInteractive ? { stdinChunks: ['\r', '\r', '\r'] } : {}),
+            extraEnv: isAgent ? { ANTIGRAVITY_AGENT: '1' } : {},
+          },
+        );
+
+        expect(result.exitCode).toBe(0);
+        if (expectedShownPrompt) {
+          expectAgentPromptHint(
+            result.stdout,
+            'sonar integrate antigravity --non-interactive',
+            'sonar integrate antigravity --non-interactive -g',
+          );
+        } else {
+          expectNoAgentPromptHint(result.stdout);
+        }
       },
       { timeout: 30000 },
     );

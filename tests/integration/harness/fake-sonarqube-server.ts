@@ -101,10 +101,21 @@ export class ProjectBuilder {
 export class FakeSonarQubeServer {
   private readonly server: ReturnType<typeof Bun.serve>;
   private readonly requests: RecordedRequest[];
+  private readonly provisionConcurrency: { current: number; peak: number };
 
-  constructor(server: ReturnType<typeof Bun.serve>, requests: RecordedRequest[]) {
+  constructor(
+    server: ReturnType<typeof Bun.serve>,
+    requests: RecordedRequest[],
+    provisionConcurrency: { current: number; peak: number },
+  ) {
     this.server = server;
     this.requests = requests;
+    this.provisionConcurrency = provisionConcurrency;
+  }
+
+  /** Peak number of concurrent `provision_projects` requests observed in flight. */
+  getPeakConcurrentProvisionRequests(): number {
+    return this.provisionConcurrency.peak;
   }
 
   baseUrl(): string {
@@ -160,6 +171,8 @@ export class FakeSonarQubeServerBuilder {
   private serverMode: 'MQR' | 'STANDARD' = 'STANDARD';
   private provisionProjectsStatusCode?: number;
   private provisionProjectsStatusBody?: string;
+  private provisionProjectsFailingInstallationKey?: string;
+  private provisionProjectsDelayMs?: number;
 
   withMode(mode: 'MQR' | 'STANDARD'): this {
     this.serverMode = mode;
@@ -321,10 +334,27 @@ export class FakeSonarQubeServerBuilder {
   /**
    * Force POST /api/alm_integration/provision_projects to fail with the given HTTP status
    * code, simulating a provisioning error (e.g. repo already imported, permission denied).
+   * When `onlyForInstallationKey` is set, only requests for that exact `installationKeys`
+   * value fail — every other request succeeds normally, simulating a mixed-outcome batch.
    */
-  withProvisionProjectsError(statusCode: number, body?: string): this {
+  withProvisionProjectsError(
+    statusCode: number,
+    body?: string,
+    opts?: { onlyForInstallationKey?: string },
+  ): this {
     this.provisionProjectsStatusCode = statusCode;
     this.provisionProjectsStatusBody = body;
+    this.provisionProjectsFailingInstallationKey = opts?.onlyForInstallationKey;
+    return this;
+  }
+
+  /**
+   * Add an artificial delay (ms) before responding to POST
+   * /api/alm_integration/provision_projects, so tests can observe genuinely concurrent
+   * in-flight requests via `getPeakConcurrentProvisionRequests()`.
+   */
+  withProvisionProjectsDelay(ms: number): this {
+    this.provisionProjectsDelayMs = ms;
     return this;
   }
 
@@ -381,9 +411,12 @@ export class FakeSonarQubeServerBuilder {
       organizationsSearchErrorCode,
       provisionProjectsStatusCode,
       provisionProjectsStatusBody,
+      provisionProjectsFailingInstallationKey,
+      provisionProjectsDelayMs,
     } = this;
     const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
+    const provisionConcurrency = { current: 0, peak: 0 };
 
     const server = Bun.serve({
       port: 0,
@@ -738,23 +771,45 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/api/alm_integration/provision_projects' && req.method === 'POST') {
-          if (provisionProjectsStatusCode !== undefined) {
-            return new Response(
-              provisionProjectsStatusBody ??
-                JSON.stringify({ errors: [{ msg: 'Provisioning failed' }] }),
-              {
-                status: provisionProjectsStatusCode,
-                headers: { 'Content-Type': 'application/json' },
-              },
+          provisionConcurrency.current++;
+          provisionConcurrency.peak = Math.max(
+            provisionConcurrency.peak,
+            provisionConcurrency.current,
+          );
+          try {
+            if (provisionProjectsDelayMs) {
+              await new Promise((resolve) => setTimeout(resolve, provisionProjectsDelayMs));
+            }
+
+            const params = new URLSearchParams(body ?? '');
+            const installationKeys = params.get('installationKeys') ?? '';
+            const shouldFail =
+              provisionProjectsStatusCode !== undefined &&
+              (provisionProjectsFailingInstallationKey === undefined ||
+                provisionProjectsFailingInstallationKey === installationKeys);
+
+            if (shouldFail) {
+              return new Response(
+                provisionProjectsStatusBody ??
+                  JSON.stringify({ errors: [{ msg: 'Provisioning failed' }] }),
+                {
+                  status: provisionProjectsStatusCode,
+                  headers: { 'Content-Type': 'application/json' },
+                },
+              );
+            }
+
+            const organization = params.get('organization') ?? '';
+            const projectKey = `${organization}_${installationKeys}`.replace(
+              /[^a-zA-Z0-9_-]/g,
+              '_',
             );
+            return new Response(JSON.stringify({ projects: [{ projectKey }] }), {
+              headers: { 'Content-Type': 'application/json' },
+            });
+          } finally {
+            provisionConcurrency.current--;
           }
-          const params = new URLSearchParams(body ?? '');
-          const organization = params.get('organization') ?? '';
-          const installationKeys = params.get('installationKeys') ?? '';
-          const projectKey = `${organization}_${installationKeys}`.replace(/[^a-zA-Z0-9_-]/g, '_');
-          return new Response(JSON.stringify({ projects: [{ projectKey }] }), {
-            headers: { 'Content-Type': 'application/json' },
-          });
         }
 
         if (path === '/api/settings/values' && req.method === 'GET') {
@@ -957,6 +1012,6 @@ export class FakeSonarQubeServerBuilder {
       },
     });
 
-    return Promise.resolve(new FakeSonarQubeServer(server, requests));
+    return Promise.resolve(new FakeSonarQubeServer(server, requests, provisionConcurrency));
   }
 }

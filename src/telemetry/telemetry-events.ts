@@ -30,46 +30,57 @@ import { buildFetchInit, fetchGuarded } from '../lib/fetch-guarded.js';
 import { INVOCATION_ID } from '../lib/invocation-id.js';
 import type {
   AnalysisCompletedEventPayload,
-  AnalysisEventIdentityPayload,
+  AuthConnection,
+  CommandExecutedEventPayload,
   IntegrationConfiguredEventPayload,
-  StoredAnalysisEvent,
+  StoredTelemetryEvent,
+  TelemetryConnectionType,
+  TelemetryEventIdentityPayload,
 } from '../lib/state.js';
 import { getActiveConnection, loadState } from '../lib/state-manager.js';
 import { isTelemetryEnabled } from './enabled.js';
-import { resolveCommandTelemetryIdentity } from './identity.js';
+import {
+  resolveCommandTelemetryIdentity,
+  resolveStoreEventTelemetryIdentitySafely,
+  type TelemetryIdentity,
+} from './identity.js';
 import { getOrCreateUserId } from './user.js';
 
-const FINDINGS_FILENAME = 'findings.ndjson';
-const FINDINGS_RETENTION_DAYS = 7;
-const FINDINGS_RETENTION_MS = FINDINGS_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+const TELEMETRY_EVENTS_FILENAME = 'telemetry-events.ndjson';
+const TELEMETRY_EVENTS_RETENTION_DAYS = 7;
+const TELEMETRY_EVENTS_RETENTION_MS = TELEMETRY_EVENTS_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
-function getFindingsPath(): string {
-  return join(getTelemetryDir(), FINDINGS_FILENAME);
+function getTelemetryEventsPath(): string {
+  return join(getTelemetryDir(), TELEMETRY_EVENTS_FILENAME);
 }
 
-function appendAnalysisEvent(event: StoredAnalysisEvent): void {
+export function appendTelemetryEvent(event: StoredTelemetryEvent): void {
   try {
     mkdirSync(getTelemetryDir(), { recursive: true });
-    appendFileSync(getFindingsPath(), JSON.stringify(event) + '\n');
+    appendFileSync(getTelemetryEventsPath(), JSON.stringify(event) + '\n');
   } catch {
     // fire-and-forget
   }
 }
 
+type IdentityResolver = (
+  conn: AuthConnection | undefined,
+) => Promise<{ connectionType: TelemetryConnectionType; identity: TelemetryIdentity }>;
+
 /**
- * Resolves shared identity fields for analysis telemetry events.
+ * Resolves shared identity fields for telemetry events.
  * Returns null when telemetry is disabled or installationId is absent.
  */
-export async function buildAnalysisIdentityBase(
-  auth: ResolvedAuth,
-): Promise<AnalysisEventIdentityPayload | null> {
+async function buildIdentityBase(
+  resolve: IdentityResolver,
+): Promise<TelemetryEventIdentityPayload | null> {
   const state = loadState();
   if (!isTelemetryEnabled(state)) return null;
   const installationId = state.telemetry.installationId;
   if (!installationId) return null;
 
   const conn = getActiveConnection(state);
-  const { connectionType, identity } = await resolveCommandTelemetryIdentity(conn, auth);
+  const { connectionType, identity } = await resolve(conn);
 
   return {
     cli_installation_id: installationId,
@@ -87,12 +98,17 @@ export async function buildAnalysisIdentityBase(
 
 export type AnalysisCompletedFields = Omit<
   AnalysisCompletedEventPayload,
-  keyof AnalysisEventIdentityPayload
+  keyof TelemetryEventIdentityPayload
 >;
 
 export type IntegrationConfiguredFields = Omit<
   IntegrationConfiguredEventPayload,
-  keyof AnalysisEventIdentityPayload
+  keyof TelemetryEventIdentityPayload
+>;
+
+export type CommandExecutedFields = Omit<
+  CommandExecutedEventPayload,
+  keyof TelemetryEventIdentityPayload
 >;
 
 /**
@@ -103,9 +119,9 @@ export async function emitAnalysisCompleted(
   auth: ResolvedAuth,
   fields: AnalysisCompletedFields,
 ): Promise<void> {
-  const base = await buildAnalysisIdentityBase(auth);
+  const base = await buildIdentityBase((conn) => resolveCommandTelemetryIdentity(conn, auth));
   if (!base) return;
-  appendAnalysisEvent({
+  appendTelemetryEvent({
     metadata: {
       event_id: randomUUID(),
       source: { domain: 'CLI' },
@@ -124,9 +140,9 @@ export async function emitIntegrationConfigured(
   auth: ResolvedAuth,
   fields: IntegrationConfiguredFields,
 ): Promise<void> {
-  const base = await buildAnalysisIdentityBase(auth);
+  const base = await buildIdentityBase((conn) => resolveCommandTelemetryIdentity(conn, auth));
   if (!base) return;
-  appendAnalysisEvent({
+  appendTelemetryEvent({
     metadata: {
       event_id: randomUUID(),
       source: { domain: 'CLI' },
@@ -137,14 +153,32 @@ export async function emitIntegrationConfigured(
   });
 }
 
-function parseValidEvents(content: string, now: number): StoredAnalysisEvent[] {
-  const events: StoredAnalysisEvent[] = [];
+/**
+ * Emits one CliCommandExecuted event when telemetry is enabled.
+ * Resolves identity from the active connection; no-ops on opt-out or missing installationId.
+ */
+export async function emitCommandExecuted(fields: CommandExecutedFields): Promise<void> {
+  const base = await buildIdentityBase(resolveStoreEventTelemetryIdentitySafely);
+  if (!base) return;
+  appendTelemetryEvent({
+    metadata: {
+      event_id: randomUUID(),
+      source: { domain: 'CLI' },
+      event_type: 'Analytics.Cli.CliCommandExecuted',
+      event_timestamp: String(Date.now()),
+    },
+    event_payload: { ...base, ...fields },
+  });
+}
+
+function parseValidEvents(content: string, now: number): StoredTelemetryEvent[] {
+  const events: StoredTelemetryEvent[] = [];
   for (const line of content.split('\n')) {
     if (!line.trim()) continue;
     try {
-      const event = JSON.parse(line) as StoredAnalysisEvent;
+      const event = JSON.parse(line) as StoredTelemetryEvent;
       const ts = Number(event.metadata.event_timestamp);
-      if (!Number.isNaN(ts) && now - ts <= FINDINGS_RETENTION_MS) {
+      if (!Number.isNaN(ts) && now - ts <= TELEMETRY_EVENTS_RETENTION_MS) {
         events.push(event);
       }
     } catch {
@@ -155,27 +189,27 @@ function parseValidEvents(content: string, now: number): StoredAnalysisEvent[] {
 }
 
 /**
- * Atomically drains findings.ndjson: renames it to a UUID-suffixed .sending file so
+ * Atomically drains telemetry-events.ndjson: renames it to a UUID-suffixed .sending file so
  * concurrent flush workers each get their own slice, parses valid lines, discards
  * events older than 7 days, then POSTs each remaining event to the telemetry backend.
- * Unsent events (deadline reached or send error) are re-appended to findings.ndjson
+ * Unsent events (deadline reached or send error) are re-appended to telemetry-events.ndjson
  * for the next flush attempt. The .sending file is deleted in all cases.
  */
-export async function flushFindings(deadline: number): Promise<void> {
-  const findingsPath = getFindingsPath();
-  if (!existsSync(findingsPath)) return;
+export async function flushTelemetryEvents(deadline: number): Promise<void> {
+  const eventsPath = getTelemetryEventsPath();
+  if (!existsSync(eventsPath)) return;
 
-  const sendingPath = join(getTelemetryDir(), `findings.${randomUUID()}.sending`);
+  const sendingPath = join(getTelemetryDir(), `telemetry-events.${randomUUID()}.sending`);
   try {
-    renameSync(findingsPath, sendingPath);
+    renameSync(eventsPath, sendingPath);
   } catch {
     // ENOENT: another flush worker won the rename race — nothing to drain.
-    // Any other error is also swallowed: flushFindings only runs in the detached
+    // Any other error is also swallowed: flushTelemetryEvents only runs in the detached
     // flush-telemetry worker, so failures here never surface to the user.
     return;
   }
 
-  const unsent: StoredAnalysisEvent[] = [];
+  const unsent: StoredTelemetryEvent[] = [];
 
   try {
     const events = parseValidEvents(readFileSync(sendingPath, 'utf-8'), Date.now());
@@ -204,7 +238,10 @@ export async function flushFindings(deadline: number): Promise<void> {
   } finally {
     if (unsent.length > 0) {
       try {
-        appendFileSync(getFindingsPath(), unsent.map((e) => JSON.stringify(e)).join('\n') + '\n');
+        appendFileSync(
+          getTelemetryEventsPath(),
+          unsent.map((e) => JSON.stringify(e)).join('\n') + '\n',
+        );
       } catch {
         // fire-and-forget
       }

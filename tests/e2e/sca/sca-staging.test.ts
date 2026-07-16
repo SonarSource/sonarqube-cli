@@ -42,6 +42,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { readAnalysisEvents } from '../../_common/telemetry-helpers';
 import { TestHarness } from '../../integration/harness';
 import {
   createProject,
@@ -191,13 +192,13 @@ for (const region of STAGING_REGIONS) {
       );
 
       it(
-        'writes a single CliAnalysisCompleted with populated details to findings.ndjson',
+        'writes a single CliAnalysisCompleted with populated details to telemetry-events.ndjson',
         async () => {
           harness.state().withTelemetryEnabled();
 
           const result = await harness.run(
             `analyze dependency-risks --project ${projectKey} --format json`,
-            // __SQ_CLI_TELEMETRY_FLUSH__=1 writes the findings.ndjson sink without POSTing.
+            // __SQ_CLI_TELEMETRY_FLUSH__=1 writes the telemetry-events.ndjson sink without POSTing.
             {
               extraEnv: { ...cfg.cliEnv, __SQ_CLI_TELEMETRY_FLUSH__: '1' },
               timeoutMs: SCAN_TIMEOUT_MS,
@@ -209,27 +210,12 @@ for (const region of STAGING_REGIONS) {
             `expected exit ${EXIT_UNRESOLVED_RISKS} (unresolved risks found)\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
           ).toBe(EXIT_UNRESOLVED_RISKS);
 
-          const findingsFile = harness.cliHome.file('telemetry', 'findings.ndjson');
-          expect(findingsFile.exists()).toBe(true);
-
-          interface AnalysisEvent {
-            metadata: { event_type: string };
-            event_payload: Record<string, unknown>;
-          }
-          const events = findingsFile
-            .asText()
-            .trim()
-            .split('\n')
-            .filter(Boolean)
-            .map((line) => JSON.parse(line) as AnalysisEvent);
+          const events = readAnalysisEvents(harness.sonarUserHome.path);
+          expect(events.length).toBeGreaterThan(0);
 
           // The command also runs the secrets pre-scan, which emits its own sonar-secrets
           // event into the same file — select the SCA one by analyzer.
-          const completed = events.find(
-            (e) =>
-              e.metadata.event_type === 'Analytics.Cli.CliAnalysisCompleted' &&
-              e.event_payload.analyzer === 'sca-scanner-cli',
-          );
+          const completed = events.find((e) => e.event_payload.analyzer === 'sca-scanner-cli');
           expect(completed).toBeDefined();
           if (!completed) throw new Error('expected a SCA CliAnalysisCompleted event');
 
@@ -237,9 +223,9 @@ for (const region of STAGING_REGIONS) {
           expect(completed.event_payload.caller_command).toBe('analyze dependency-risks');
           expect(completed.event_payload.failures_count).toBe(0);
           expect(completed.event_payload.exit_code).toBe(EXIT_UNRESOLVED_RISKS);
-          expect(completed.event_payload.findings_count as number).toBeGreaterThanOrEqual(1);
+          expect(completed.event_payload.findings_count).toBeGreaterThanOrEqual(1);
 
-          const details = JSON.parse(completed.event_payload.details as string) as {
+          const details = JSON.parse(completed.event_payload.details) as {
             counts_by_rule: Record<string, number>;
           };
           const ruleKeys = Object.keys(details.counts_by_rule);

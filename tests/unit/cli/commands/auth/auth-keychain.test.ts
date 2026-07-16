@@ -35,7 +35,7 @@ it('keychain: save and get token for SonarCloud with org', async () => {
 });
 
 it('keychain: get non-existent token returns null', async () => {
-  expect(await getToken('https://nonexistent.io', 'no-org')).toBe(null);
+  expect(await getToken('https://nonexistent.io', 'no-org')).toBeNull();
 });
 
 it('keychain: normalize server URLs with trailing slashes', async () => {
@@ -61,7 +61,7 @@ it('keychain: deleting one org token does not affect others', async () => {
 
   await deleteToken('https://sonarcloud.io', 'org1');
 
-  expect(await getToken('https://sonarcloud.io', 'org1')).toBe(null);
+  expect(await getToken('https://sonarcloud.io', 'org1')).toBeNull();
   expect(await getToken('https://sonarcloud.io', 'org2')).toBe('token-org2');
 });
 

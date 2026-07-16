@@ -18,12 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { FixVersionVM } from './fix-version.ts';
+import { detectCallerAgent } from '../../../lib/agent-detector';
+import { info, print } from '../../../ui';
 
-export type RecommendationAction =
-  'REMOVE_PACKAGE' | 'REVIEW_LICENSE' | 'UPGRADE_PACKAGE' | 'NO_FIX_AVAILABLE';
-
-export interface RecommendationVM {
-  action: RecommendationAction;
-  fixVersions: FixVersionVM[];
+export function printAgentNonInteractiveAlternativeHint(...nonInteractiveExamples: string[]): void {
+  if (detectCallerAgent() === null) {
+    return;
+  }
+  info('Agent environment detected. To run non-interactively:');
+  for (const example of nonInteractiveExamples) {
+    print(`   → ${example}`);
+  }
 }
