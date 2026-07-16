@@ -186,12 +186,12 @@ function buildSelectHint(countLabel: string, atCap: boolean): string {
   return dim(`(${countLabel} - space to toggle, enter to confirm, q to quit)`);
 }
 
-function renderLoadMoreRow(isCursor: boolean, loading: boolean): string {
+function renderLoadMoreRow(isCursor: boolean, loading: boolean, error: string | null): string {
   if (loading) {
     return `    ${dim('…')}    ${dim('Loading...')}`;
   }
   const arrow = isCursor ? cyan('❯') : ' ';
-  const label = 'Load more...';
+  const label = error ? `Load more... ${dim(`(${error} - press enter to retry)`)}` : 'Load more...';
   return `    ${arrow}    ${isCursor ? label : dim(label)}`;
 }
 
@@ -236,6 +236,7 @@ export async function multiSelectPrompt<T>(
   const selected: T[] = [];
   let cursor = 0;
   let loadingMore = false;
+  let loadMoreError: string | null = null;
   const maxSelected = loadMoreOpts?.maxSelected ?? MULTISELECT_MAX_SELECTED;
 
   const onLoadMore = loadMoreOpts?.onLoadMore;
@@ -295,7 +296,7 @@ export async function multiSelectPrompt<T>(
           const isCursor = i === cursor;
 
           if (loadMoreRowVisible && i === options.length) {
-            lines.push(renderLoadMoreRow(isCursor, loadingMore));
+            lines.push(renderLoadMoreRow(isCursor, loadingMore, loadMoreError));
             continue;
           }
 
@@ -336,11 +337,19 @@ export async function multiSelectPrompt<T>(
       if (isOnLoadMoreRow() && onLoadMore) {
         pendingLoadMoreSubmitBlock = true;
         loadingMore = true;
-        void Promise.resolve(onLoadMore()).then((loaded) => {
-          options = loaded;
-          loadingMore = false;
-          prompt.refresh();
-        });
+        loadMoreError = null;
+        void Promise.resolve(onLoadMore())
+          .then((loaded) => {
+            options = loaded;
+          })
+          .catch((err: unknown) => {
+            // Leave `options`/`hasMore()` untouched so the row reappears and Enter retries.
+            loadMoreError = err instanceof Error ? err.message : String(err);
+          })
+          .finally(() => {
+            loadingMore = false;
+            prompt.refresh();
+          });
         return;
       }
       pendingLoadMoreSubmitBlock = false;

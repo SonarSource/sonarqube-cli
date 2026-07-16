@@ -145,7 +145,18 @@ async function runBulkImportJob(
   await importPage(collection.eligibleRepos);
 
   while (collection.hasMore) {
-    const page = await collection.loadMore();
+    let page;
+    try {
+      page = await collection.loadMore();
+    } catch (err) {
+      // A later page's fetch failure still leaves earlier pages' provisioning results behind —
+      // finish the display so they're reported, same as any other partial-failure exit.
+      progress.finish();
+      throw new CommandFailedError(
+        `Failed to load repositories: ${err instanceof Error ? err.message : String(err)}`,
+        { remediationHint: 'Check your network connection and authentication, then retry.' },
+      );
+    }
     progress.recordSkipped(page.skipped.length);
     await importPage(page.eligible);
   }

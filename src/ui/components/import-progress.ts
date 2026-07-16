@@ -232,8 +232,11 @@ export class ImportProgress {
     const resolved =
       [...this.repos.values()].filter((s) => s.status === 'done' || s.status === 'failed').length +
       this.skippedResolved;
-    const pct = total === 0 ? 100 : Math.round((resolved / total) * 100);
-    const filled = Math.round((pct / 100) * BAR_WIDTH);
+    // Clamped because `total` is the server-reported count, which loop termination
+    // deliberately distrusts (see `iterateRepoPages`) and so can be stale/inconsistent with
+    // the number of repos actually resolved.
+    const pct = total === 0 ? 100 : Math.min(100, Math.round((resolved / total) * 100));
+    const filled = Math.min(BAR_WIDTH, Math.round((pct / 100) * BAR_WIDTH));
     const bar = green(BAR_FILLED.repeat(filled)) + dim(BAR_EMPTY.repeat(BAR_WIDTH - filled));
     const pctLabel = bold(`${pct}%`);
     const fractionLabel = dim(`${resolved}/${total}`);
