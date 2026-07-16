@@ -641,16 +641,39 @@ describe('generic integration installer', () => {
     expect(hasUiCall('text', '       - Subfeature Two')).toBe(false);
   });
 
-  it('warns and continues when reading or writing state fails', async () => {
-    const state = getDefaultState('test');
+  it('throws and does not persist state when reading state fails', async () => {
     loadStateSpy.mockImplementationOnce(() => {
       throw new Error('read failed');
     });
+    const integration = registerIntegration(registry, 'installer-state-read-failure', [
+      {
+        id: 'feature',
+        displayName: 'Feature',
+        operations: [{ id: 'operation', apply: () => undefined }],
+      },
+    ]);
+
+    const error = await catchError(() =>
+      installIntegration({
+        registry,
+        integrationId: integration.id,
+        options: {},
+        targetRoot: tempDir,
+        scope: 'project',
+      }),
+    );
+
+    expect(error?.message).toContain('read failed');
+    expect(saveStateSpy).not.toHaveBeenCalled();
+  });
+
+  it('warns and continues when writing state fails', async () => {
+    const state = getDefaultState('test');
     loadStateSpy.mockReturnValue(state);
     saveStateSpy.mockImplementation(() => {
       throw new Error('write failed');
     });
-    const integration = registerIntegration(registry, 'installer-state-failures', [
+    const integration = registerIntegration(registry, 'installer-state-write-failure', [
       {
         id: 'feature',
         displayName: 'Feature',
@@ -667,7 +690,6 @@ describe('generic integration installer', () => {
     });
 
     expect(installed).toEqual([]);
-    expect(hasUiCall('warn', 'Failed to read configuration state: read failed')).toBe(true);
     expect(hasUiCall('warn', 'Failed to update configuration state: write failed')).toBe(true);
   });
 });

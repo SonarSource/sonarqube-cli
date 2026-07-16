@@ -45,7 +45,7 @@ import {
   OBSOLETE_A3S_MARKER,
   removeObsoleteHookArtifacts,
 } from './migration.js';
-import { loadState, saveState, stateFileExists } from './repository/state-repository';
+import { loadState, saveState, stateFileExists, tryLoadState } from './repository/state-repository';
 import type { CliState, HookExtension, InstalledIntegrationFeature } from './state.js';
 import { isNewerVersion } from './version';
 
@@ -63,7 +63,11 @@ export async function runPostUpdateActions(): Promise<void> {
     return;
   }
 
-  const previousVersion = loadState().config.cliVersion;
+  const previousState = tryLoadState();
+  if (!previousState) {
+    return;
+  }
+  const previousVersion = previousState.config.cliVersion;
 
   if (!isNewerVersion(previousVersion, CURRENT_VERSION)) {
     return;

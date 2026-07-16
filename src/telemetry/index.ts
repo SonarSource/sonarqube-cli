@@ -21,7 +21,7 @@
 import { type Command } from 'commander';
 
 import { DISTRIBUTION } from '../lib/distribution.js';
-import { loadState } from '../lib/state-manager.js';
+import { tryLoadState } from '../lib/state-manager.js';
 import { isTelemetryEnabled } from './enabled.js';
 import { emitCommandExecuted, flushTelemetryEvents } from './telemetry-events.js';
 
@@ -45,7 +45,8 @@ export function setPassthroughSubcommand(command: Command, subcommand: string | 
  */
 export async function storeEvent(command: Command, success: boolean): Promise<void> {
   if (process.env[TELEMETRY_FLUSH_MODE_ENV]) return;
-  if (!isTelemetryEnabled(loadState())) return;
+  const state = tryLoadState();
+  if (!state || !isTelemetryEnabled(state)) return;
 
   const commandNames: string[] = [];
   let current: Command = command;
@@ -98,7 +99,8 @@ const FLUSH_TIMEOUT_MS = 60_000;
  * Called by the hidden `sonar flush-telemetry` command.
  */
 export async function flushTelemetry(): Promise<void> {
-  if (!isTelemetryEnabled(loadState())) {
+  const state = tryLoadState();
+  if (!state || !isTelemetryEnabled(state)) {
     return;
   }
 

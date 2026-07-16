@@ -32,6 +32,7 @@ import logger from './logger';
 import { loadState, saveState } from './repository/state-repository.js';
 
 export { loadState, saveState };
+export { tryLoadState } from './repository/state-repository.js';
 
 import { type AuthConnection, type CliState, type CloudRegion } from './state.js';
 

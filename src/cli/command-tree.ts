@@ -22,7 +22,7 @@ import { type Command, Help, InvalidArgumentError, Option } from 'commander';
 
 import { version as VERSION } from '../../package.json';
 import { CURRENT_DISTRIBUTION } from '../lib/distribution';
-import { loadState } from '../lib/repository/state-repository';
+import { tryLoadState } from '../lib/repository/state-repository';
 import { initSentry } from '../lib/sentry';
 import { maybeNotifyUpdateAvailable } from '../lib/update-notification';
 import { GENERIC_HTTP_METHODS } from '../sonarqube/client';
@@ -726,7 +726,8 @@ let sentryInitialized = false;
 COMMAND_TREE.hook('preAction', () => {
   if (sentryInitialized) return;
   sentryInitialized = true;
-  initSentry(loadState());
+  const state = tryLoadState();
+  if (state) initSentry(state);
 });
 
 // Collect a telemetry event after every command action.

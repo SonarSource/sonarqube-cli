@@ -130,6 +130,7 @@ Error subclasses extend the abstract `CliError` and carry their own `exitCode`, 
 ## State and auth
 
 - Persistent state (server URL, org, project) is managed via `src/lib/state-manager.ts`.
+- `loadState()` returns defaults only when `state.json` is absent; if an existing file fails to read/parse it retries then throws (so `saveState()` can't wipe a corrupt file — CLI-834). Best-effort callers (Sentry init, `storeEvent`/`flushTelemetry`, `runPostUpdateActions`) use `tryLoadState()`, which returns `null` on failure.
 - Declarative integration installs are tracked as integration entries in the top-level `integrations.installed` state registry, with installed feature targets nested under each integration. Shared declarative dependencies (for example SonarSource binaries required by multiple features) are recorded separately in `dependencies.installed` and referenced from features by id. This is the generic state surface for Git, Claude, Codex, Copilot, Antigravity, and future integrations; legacy `agents` and `agentExtensions` remain for compatibility.
 - Tokens are stored in the system keychain via `src/lib/keychain.ts` — never store tokens in plain files.
 - All path and URL constants live in `src/lib/config-constants.ts` — import from there instead of hardcoding.

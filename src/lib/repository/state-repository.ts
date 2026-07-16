@@ -28,6 +28,7 @@ import fs from 'node:fs';
 import { join } from 'node:path';
 
 import { version as VERSION } from '../../../package.json';
+import { CommandFailedError } from '../../cli/commands/_common/error.js';
 import { getCliDir as resolveCliDir } from '../config-constants.js';
 import logger from '../logger.js';
 import { type CliState, getDefaultState } from '../state.js';
@@ -77,8 +78,23 @@ function migrateState(raw: Record<string, unknown>): CliState {
   return raw as unknown as CliState;
 }
 
+export const STATE_READ_MAX_ATTEMPTS = 5;
+const STATE_READ_RETRY_DELAY_MS = 100;
+
+let cachedReadFailure: { fingerprint: string; error: CommandFailedError } | null = null;
+
+function stateFileFingerprint(): string | null {
+  try {
+    const stats = fs.statSync(getStateFile());
+    return `${stats.mtimeMs}:${stats.size}`;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Load state from file, or return default if not exists.
+ * If an existing file fails to read, retry then throw, so saveState() can't wipe the state. CLI-834.
  */
 export function loadState(cliVersion?: string): CliState {
   ensureStateDir();
@@ -87,13 +103,44 @@ export function loadState(cliVersion?: string): CliState {
     return getDefaultState(cliVersion ?? VERSION);
   }
 
+  if (cachedReadFailure !== null && cachedReadFailure.fingerprint === stateFileFingerprint()) {
+    throw cachedReadFailure.error;
+  }
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt < STATE_READ_MAX_ATTEMPTS; attempt++) {
+    try {
+      const content = fs.readFileSync(getStateFile(), 'utf-8');
+      const raw = JSON.parse(content) as Record<string, unknown>;
+      cachedReadFailure = null;
+      return migrateState(raw);
+    } catch (error) {
+      lastError = error;
+      if (attempt + 1 < STATE_READ_MAX_ATTEMPTS) {
+        Bun.sleepSync(STATE_READ_RETRY_DELAY_MS);
+      }
+    }
+  }
+
+  logger.error(`Failed to load state from ${getStateFile()}: ${(lastError as Error).message}`);
+  const failure = new CommandFailedError(`Failed to read state: ${(lastError as Error).message}`, {
+    cause: lastError,
+    remediationHint: `The state file may be corrupted. Inspect or remove it at ${getStateFile()}, then try again.`,
+  });
+  const fingerprint = stateFileFingerprint();
+  if (fingerprint !== null) {
+    cachedReadFailure = { fingerprint, error: failure };
+  }
+  throw failure;
+}
+
+/** Best-effort variant of loadState() for paths that must never crash. */
+export function tryLoadState(cliVersion?: string): CliState | null {
   try {
-    const content = fs.readFileSync(getStateFile(), 'utf-8');
-    const raw = JSON.parse(content) as Record<string, unknown>;
-    return migrateState(raw);
+    return loadState(cliVersion);
   } catch (error) {
-    logger.debug(`Failed to load state from ${getStateFile()}: ${(error as Error).message}`);
-    return getDefaultState(cliVersion ?? VERSION);
+    logger.debug(`tryLoadState: ignoring state load failure: ${(error as Error).message}`);
+    return null;
   }
 }
 
