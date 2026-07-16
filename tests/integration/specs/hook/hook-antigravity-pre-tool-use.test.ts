@@ -34,6 +34,10 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets.js';
+import {
+  SECRETS_INACTIVE_BINARY_MISSING,
+  SECRETS_INACTIVE_UNAUTHENTICATED,
+} from '../../../../src/cli/commands/hook/hook-dependencies.js';
 import { detectPlatform } from '../../../../src/lib/platform-detector.js';
 import { TestHarness } from '../../harness';
 
@@ -136,7 +140,7 @@ describe('sonar hook antigravity-pre-tool-use', () => {
   );
 
   it(
-    'exits 0 and allows when not authenticated (graceful skip)',
+    'exits 0 and denies with the unauthenticated message when not authenticated',
     async () => {
       harness.state().withSecretsBinaryInstalled();
       harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
@@ -147,13 +151,15 @@ describe('sonar hook antigravity-pre-tool-use', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).not.toContain('"deny"');
+      const output = JSON.parse(result.stdout.trim());
+      expect(output.decision).toBe('deny');
+      expect(output.reason).toBe(SECRETS_INACTIVE_UNAUTHENTICATED);
     },
     { timeout: 15000 },
   );
 
   it(
-    'exits 0 and allows when binary is not installed (graceful skip)',
+    'exits 0 and denies with the binary-missing message when binary is not installed',
     async () => {
       harness.withAuth(FAKE_SERVER, VALID_TOKEN);
       harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
@@ -164,7 +170,9 @@ describe('sonar hook antigravity-pre-tool-use', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).not.toContain('"deny"');
+      const output = JSON.parse(result.stdout.trim());
+      expect(output.decision).toBe('deny');
+      expect(output.reason).toBe(SECRETS_INACTIVE_BINARY_MISSING);
     },
     { timeout: 15000 },
   );

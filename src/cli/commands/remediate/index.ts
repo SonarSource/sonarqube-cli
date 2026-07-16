@@ -34,6 +34,7 @@ import { IssuesClient } from '../../../sonarqube/issues';
 import { MAX_PAGE_SIZE } from '../../../sonarqube/projects';
 import { blank, info, multiSelectPrompt, print, success, withSpinner } from '../../../ui';
 import { cyan, dim, red, yellow } from '../../../ui/colors';
+import { printAgentNonInteractiveAlternativeHint } from '../_common/agent-prompt-hint';
 import { CommandFailedError, InvalidOptionError } from '../_common/error';
 
 export interface RemediateOptions {
@@ -60,42 +61,66 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
   const suppliedIssueKeys =
     options.issues === undefined ? undefined : parseIssueKeys(options.issues);
 
-  if (auth.connectionType !== 'cloud') {
-    throw new CommandFailedError('sonar remediate requires a SonarQube Cloud connection.', {
-      remediationHint: "Authenticate against SonarQube Cloud with 'sonar auth login' and retry.",
-    });
+  if (suppliedIssueKeys === undefined) {
+    printAgentNonInteractiveAlternativeHint('sonar remediate --issues <issue-key-1>,<issue-key-2>');
   }
 
-  if (
-    !process.stdin.isTTY &&
-    !process.env.SONARQUBE_CLI_MOCK_TTY &&
-    suppliedIssueKeys === undefined
-  ) {
-    throw new CommandFailedError('Non-interactive mode requires --issues <issueIds>.', {
-      remediationHint:
-        "Run 'sonar list issues --project <key>' to find issue keys, then pass them with --issues.",
-    });
-  }
+  assertCloudConnection(auth);
+  assertInteractiveOrIssuesSupplied(suppliedIssueKeys);
 
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
-
   // resolveAuth guarantees orgKey is set for cloud connections (see auth-resolver.ts);
   // narrow once and reuse throughout this function.
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   const orgKey = auth.orgKey!;
 
+  if (!(await confirmEntitlement(client, orgKey))) return;
+
+  const projectKey = await resolveProjectKey(options, auth);
+  const selectedKeys =
+    suppliedIssueKeys ?? (await selectIssuesInteractively(client, orgKey, projectKey));
+  if (selectedKeys === null) return;
+
+  const projectId = await resolveProjectId(client, projectKey);
+  const taskId = await submitRemediationJob(client, projectId, selectedKeys, orgKey);
+  reportSubmissionSuccess(auth, projectKey, selectedKeys, taskId);
+}
+
+function assertCloudConnection(auth: ResolvedAuth): void {
+  if (auth.connectionType !== 'cloud') {
+    throw new CommandFailedError('sonar remediate requires a SonarQube Cloud connection.', {
+      remediationHint: "Authenticate against SonarQube Cloud with 'sonar auth login' and retry.",
+    });
+  }
+}
+
+function assertInteractiveOrIssuesSupplied(suppliedIssueKeys: string[] | undefined): void {
+  const canPrompt = process.stdin.isTTY || Boolean(process.env.SONARQUBE_CLI_MOCK_TTY);
+  if (!canPrompt && suppliedIssueKeys === undefined) {
+    throw new CommandFailedError('Non-interactive mode requires --issues <issueIds>.', {
+      remediationHint:
+        "Run 'sonar list issues --project <key>' to find issue keys, then pass them with --issues.",
+    });
+  }
+}
+
+/**
+ * Prints the applicable message and returns false when remediation is not
+ * available for this organisation. Throws when entitlement could not be verified.
+ */
+async function confirmEntitlement(client: SonarQubeClient, orgKey: string): Promise<boolean> {
   const { status: entitlement } = await client.checkAiRemediationEntitlement(orgKey);
   if (entitlement === 'not_eligible') {
     blank();
     info(`The Remediation Agent is not available for your organisation. See ${AGENTIC_PACK_URL}`);
-    return;
+    return false;
   }
   if (entitlement === 'not_enabled') {
     blank();
     info(
       `The Remediation Agent is not enabled for your organisation. Contact your admin to enable it.`,
     );
-    return;
+    return false;
   }
   if (entitlement === 'unknown') {
     throw new CommandFailedError('Remediation Agent unavailable.', {
@@ -103,41 +128,43 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
         'Could not verify Remediation Agent entitlement. Retry later, and report to https://github.com/SonarSource/sonarqube-cli/issues if the problem persists.',
     });
   }
+  return true;
+}
 
-  let projectKey = options.project;
-  if (!projectKey) {
-    const discovered = await discoverProject(process.cwd(), false, { auth });
-    projectKey = discovered.projectKey;
+async function resolveProjectKey(options: RemediateOptions, auth: ResolvedAuth): Promise<string> {
+  if (options.project) {
+    return options.project;
   }
-  if (!projectKey) {
+  const discovered = await discoverProject(process.cwd(), false, { auth });
+  if (!discovered.projectKey) {
     throw new CommandFailedError('Could not determine project key.', {
       remediationHint: 'Use --project <key> to specify it.',
     });
   }
+  return discovered.projectKey;
+}
 
-  let selectedKeys: string[];
-  if (suppliedIssueKeys === undefined) {
-    const interactive = await selectIssuesInteractively(client, orgKey, projectKey);
-    if (interactive === null) return;
-    selectedKeys = interactive;
-  } else {
-    selectedKeys = suppliedIssueKeys;
-  }
-
-  // The AI agent API requires the project's legacy component ID, not its key.
+// The AI agent API requires the project's legacy component ID, not its key.
+async function resolveProjectId(client: SonarQubeClient, projectKey: string): Promise<string> {
   const resolvedId = await client.getComponentId(projectKey);
   logger.debug(`getComponentId(${projectKey}) => ${resolvedId ?? 'null (falling back to key)'}`);
-  const projectId = resolvedId ?? projectKey;
+  return resolvedId ?? projectKey;
+}
 
+async function submitRemediationJob(
+  client: SonarQubeClient,
+  projectId: string,
+  issueKeys: string[],
+  orgKey: string,
+): Promise<string> {
   blank();
-  const jobRequest = { projectId, issueKeys: selectedKeys, triggerSource: 'CLI' as const };
+  const jobRequest = { projectId, issueKeys, triggerSource: 'CLI' as const };
   logger.debug(`scheduleAgentJob request: ${JSON.stringify(jobRequest)}`);
-  let taskId: string;
   try {
     const response = await withSpinner('Submitting remediation job', () =>
       client.scheduleAgentJob(jobRequest),
     );
-    taskId = response.taskId;
+    return response.taskId;
   } catch (err) {
     logger.error(`scheduleAgentJob failed: ${(err as Error).message}`);
     throw new CommandFailedError('Remediation job submission failed.', {
@@ -145,7 +172,14 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
       remediationHint: mapSubmissionFailureHint((err as Error).message, orgKey),
     });
   }
+}
 
+function reportSubmissionSuccess(
+  auth: ResolvedAuth,
+  projectKey: string,
+  selectedKeys: string[],
+  taskId: string,
+): void {
   const issueWord = selectedKeys.length === 1 ? 'issue' : 'issues';
   blank();
   success(`Submitted ${selectedKeys.length} ${issueWord} for remediation\nJob: job/${taskId}`);

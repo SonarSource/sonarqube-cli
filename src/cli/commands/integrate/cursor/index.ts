@@ -22,6 +22,7 @@
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { warn } from '../../../../ui';
+import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint';
 import { finalizeAgentInstall } from '../_common/agent-integrate-postlude';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude';
 import { resolveSqaaSetup } from '../_common/sqaa-entitlement';
@@ -32,6 +33,13 @@ export async function integrateCursor(
   options: IntegrateAgentOptions,
   auth: ResolvedAuth,
 ): Promise<void> {
+  if (!options.nonInteractive) {
+    printAgentNonInteractiveAlternativeHint(
+      'sonar integrate cursor --non-interactive',
+      'sonar integrate cursor --non-interactive -g',
+    );
+  }
+
   const ctx = await displayAgentIntegratePrelude('Cursor', 'cursor', options, auth);
 
   if (ctx.isGlobal) {

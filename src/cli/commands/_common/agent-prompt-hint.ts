@@ -18,9 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-export interface ImportOptions {
-  org?: string;
-  repo?: string[];
-  all?: boolean;
-  nonInteractive?: boolean;
+import { detectCallerAgent } from '../../../lib/agent-detector';
+import { info, print } from '../../../ui';
+
+export function printAgentNonInteractiveAlternativeHint(...nonInteractiveExamples: string[]): void {
+  if (detectCallerAgent() === null) {
+    return;
+  }
+  info('Agent environment detected. To run non-interactively:');
+  for (const example of nonInteractiveExamples) {
+    print(`   → ${example}`);
+  }
 }

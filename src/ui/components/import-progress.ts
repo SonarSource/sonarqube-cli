@@ -1,0 +1,201 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+// Live progress display for `sonar import` provisioning.
+
+import * as readline from 'node:readline';
+
+import { bold, dim, green, red, STATUS_COLORS, STATUS_ICONS, visibleLength } from '../colors.js';
+import { isMockActive, recordCall } from '../mock.js';
+import { phase, phaseItem } from './phase.js';
+
+/** Subset of `StepStatus` relevant to a repo's provisioning lifecycle. */
+export type ImportRepoStatus = 'pending' | 'running' | 'done' | 'failed';
+
+const BAR_WIDTH = 24;
+const BAR_FILLED = '█';
+const BAR_EMPTY = '░';
+const DEFAULT_MAX_VISIBLE = 10;
+
+interface RepoState {
+  status: ImportRepoStatus;
+  detail?: string;
+  ref?: string;
+}
+
+/** Maps a repo's live status to the static `phase()` component's non-TTY-fallback vocabulary. */
+function toPhaseStatus(status: ImportRepoStatus | undefined): 'done' | 'failed' | 'skipped' {
+  if (status === 'done') return 'done';
+  if (status === 'failed') return 'failed';
+  return 'skipped';
+}
+
+/**
+ * Live progress renderer for `sonar import`'s concurrent provisioning phase: one row per repo
+ * (status icon, slug, colored detail, dim reference) plus a progress bar, redrawn in place as
+ * `update()` is called. TTY-only — non-TTY output (including every integration test, which runs
+ * the binary through a piped process) falls back to the existing static `phase()` component, so
+ * CI/piped output is unaffected by this purely interactive enhancement.
+ *
+ * Shows at most `maxVisible` rows at once — mirroring the provisioning concurrency cap, since
+ * showing every repo (possibly far more than can ever be in flight at once) as idle 'pending'
+ * rows isn't useful. As a visible repo finishes (done/failed), if there's a queued repo waiting
+ * to start it takes over that same row; otherwise the finished row is left as-is, showing its
+ * done/failed state (this is the common case: batches no larger than `maxVisible` never have a
+ * queue at all, so every repo simply stays visible throughout).
+ */
+export class ImportProgress {
+  private readonly order: string[];
+  private readonly repos: Map<string, RepoState>;
+  private readonly isTTY: boolean;
+  private readonly visible: string[];
+  private readonly queue: string[];
+  private linesRendered = 0;
+
+  constructor(opts: { repos: string[]; isTTY?: boolean; maxVisible?: number }) {
+    this.order = opts.repos;
+    this.repos = new Map(opts.repos.map((slug) => [slug, { status: 'pending' as const }]));
+    this.isTTY = opts.isTTY ?? process.stdout.isTTY;
+    const maxVisible = opts.maxVisible ?? DEFAULT_MAX_VISIBLE;
+    this.visible = opts.repos.slice(0, maxVisible);
+    this.queue = opts.repos.slice(maxVisible);
+  }
+
+  start(): void {
+    if (isMockActive()) {
+      recordCall('importProgress.start');
+      return;
+    }
+    if (this.isTTY) {
+      this.render();
+    }
+  }
+
+  update(slug: string, status: ImportRepoStatus, detail?: string, ref?: string): void {
+    this.repos.set(slug, { status, detail, ref });
+    if (status === 'done' || status === 'failed') {
+      this.promoteNext(slug);
+    }
+    if (isMockActive()) {
+      recordCall('importProgress.update', slug, status, detail, ref);
+      return;
+    }
+    if (this.isTTY) {
+      this.render();
+    }
+  }
+
+  /** On a visible repo's completion, swap in the next queued repo to the same row, if any. */
+  private promoteNext(finishedSlug: string): void {
+    const slot = this.visible.indexOf(finishedSlug);
+    if (slot === -1) return;
+    const next = this.queue.shift();
+    if (next !== undefined) {
+      this.visible[slot] = next;
+    }
+  }
+
+  /** Finalizes the display and returns aggregate counts. */
+  finish(): { succeeded: number; failed: number } {
+    const states = [...this.repos.values()];
+    const succeeded = states.filter((s) => s.status === 'done').length;
+    const failed = states.filter((s) => s.status === 'failed').length;
+
+    if (isMockActive()) {
+      recordCall('importProgress.finish');
+      return { succeeded, failed };
+    }
+
+    if (this.isTTY) {
+      this.render();
+      this.printResult(succeeded, failed);
+    } else {
+      const items = this.order.map((slug) => {
+        const state = this.repos.get(slug);
+        return phaseItem(slug, toPhaseStatus(state?.status), state?.detail);
+      });
+      phase('Import results', items);
+    }
+
+    return { succeeded, failed };
+  }
+
+  private printResult(succeeded: number, failed: number): void {
+    process.stdout.write(`\n  ${bold('Result')}\n`);
+    process.stdout.write(`    ${green('✓')}  Succeeded: ${succeeded}\n`);
+    process.stdout.write(`    ${red('✗')}  Failed: ${failed}\n`);
+  }
+
+  private render(): void {
+    this.erase();
+    const lines = this.buildLines();
+    process.stdout.write(lines.join('\n') + '\n');
+    this.linesRendered = lines.length;
+  }
+
+  private erase(): void {
+    if (this.linesRendered === 0) return;
+    readline.moveCursor(process.stdout, 0, -this.linesRendered);
+    readline.cursorTo(process.stdout, 0);
+    readline.clearScreenDown(process.stdout);
+    this.linesRendered = 0;
+  }
+
+  private buildLines(): string[] {
+    // Computed from every repo (not just the currently visible ones) so column alignment
+    // stays stable as rows are swapped out — otherwise the bar/label columns would jitter
+    // depending on which slugs happen to be in the window at a given moment.
+    const maxLabelWidth = Math.max(...this.order.map((slug) => visibleLength(slug)));
+    const rows = this.visible.map((slug) => this.formatRow(slug, maxLabelWidth));
+    return [...rows, '', this.formatBar()];
+  }
+
+  private formatRow(slug: string, labelWidth: number): string {
+    const state = this.repos.get(slug) ?? { status: 'pending' as const };
+    const status: 'pending' | 'running' | 'done' | 'failed' = state.status;
+    const icon = STATUS_ICONS[status];
+    const iconColor = STATUS_COLORS[status];
+
+    const slashIndex = slug.indexOf('/');
+    const org = slashIndex === -1 ? '' : slug.slice(0, slashIndex + 1);
+    const name = slashIndex === -1 ? slug : slug.slice(slashIndex + 1);
+    const label = `${dim(org)}${bold(name)}`;
+    const padding = ' '.repeat(Math.max(0, labelWidth - visibleLength(slug)));
+
+    const detail = state.detail ? STATUS_COLORS[status](state.detail) : '';
+    const ref = state.ref ? dim(state.ref) : '';
+
+    return `    ${iconColor(icon)}  ${label}${padding}  ${detail}  ${ref}`.trimEnd();
+  }
+
+  private formatBar(): string {
+    const total = this.order.length;
+    const resolved = [...this.repos.values()].filter(
+      (s) => s.status === 'done' || s.status === 'failed',
+    ).length;
+    const pct = total === 0 ? 100 : Math.round((resolved / total) * 100);
+    const filled = Math.round((pct / 100) * BAR_WIDTH);
+    const bar = green(BAR_FILLED.repeat(filled)) + dim(BAR_EMPTY.repeat(BAR_WIDTH - filled));
+    const pctLabel = bold(`${pct}%`);
+    const fractionLabel = dim(`${resolved}/${total}`);
+
+    return `    ${bar}  ${pctLabel} ${fractionLabel}`;
+  }
+}

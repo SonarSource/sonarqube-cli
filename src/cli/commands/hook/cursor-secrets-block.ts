@@ -45,16 +45,10 @@ export function secretsFoundInScan(result: { exitCode: number | null }): boolean
   return (result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND;
 }
 
-export async function denyCursorFileAccess(filePath: string | undefined): Promise<never> {
-  const ignored = filePath === undefined ? false : appendToCursorIgnore(filePath);
-  let message: string;
-  if (filePath === undefined) {
-    message = `${SECRETS_IN_FILE_MESSAGE}.`;
-  } else if (ignored) {
-    message = `${SECRETS_IN_FILE_MESSAGE}: ${filePath}. File added to .cursorignore — do not attempt alternate read methods.`;
-  } else {
-    message = `${SECRETS_IN_FILE_MESSAGE}: ${filePath}.`;
-  }
+/**
+ * Deny a Cursor file-read/tool-use event with `message`, then exit.
+ */
+export async function denyCursor(message: string): Promise<never> {
   // process.stdout.write() is buffered and async on pipes; calling process.exit() immediately
   // after can truncate the deny JSON before Cursor reads it. Awaiting the write callback
   // guarantees the payload is fully flushed before the process terminates.
@@ -67,4 +61,18 @@ export async function denyCursorFileAccess(filePath: string | undefined): Promis
     );
   });
   process.exit(CURSOR_BLOCK_EXIT_CODE);
+}
+
+/** Deny access because secrets were found in `filePath`, adding it to `.cursorignore`. */
+export async function denyCursorFileAccess(filePath: string | undefined): Promise<never> {
+  const ignored = filePath === undefined ? false : appendToCursorIgnore(filePath);
+  let message: string;
+  if (filePath === undefined) {
+    message = `${SECRETS_IN_FILE_MESSAGE}.`;
+  } else if (ignored) {
+    message = `${SECRETS_IN_FILE_MESSAGE}: ${filePath}. File added to .cursorignore — do not attempt alternate read methods.`;
+  } else {
+    message = `${SECRETS_IN_FILE_MESSAGE}: ${filePath}.`;
+  }
+  return denyCursor(message);
 }

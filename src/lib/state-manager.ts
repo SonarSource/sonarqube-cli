@@ -24,15 +24,15 @@
  */
 
 import crypto from 'node:crypto';
-import { realpathSync } from 'node:fs';
-import { resolve } from 'node:path';
 
 import { version as VERSION } from '../../package.json';
 import { warn } from '../ui';
+import { pathComparisonKey } from './fs-utils';
 import logger from './logger';
 import { loadState, saveState } from './repository/state-repository.js';
 
 export { loadState, saveState };
+export { tryLoadState } from './repository/state-repository.js';
 
 import { type AuthConnection, type CliState, type CloudRegion } from './state.js';
 
@@ -47,13 +47,7 @@ export function getActiveConnection(state: CliState): AuthConnection | undefined
 }
 
 export function canonicalProjectRoot(projectRoot: string): string {
-  let canonical: string;
-  try {
-    canonical = realpathSync.native(projectRoot);
-  } catch {
-    canonical = resolve(projectRoot);
-  }
-  return process.platform === 'win32' ? canonical.toLowerCase() : canonical;
+  return pathComparisonKey(projectRoot);
 }
 
 /**

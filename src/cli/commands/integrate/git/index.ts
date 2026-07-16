@@ -29,6 +29,7 @@ import { normalizePath } from '../../../../lib/fs-utils';
 import { discoverProject, findGitRoot } from '../../../../lib/project-workspace';
 import { blank, confirmPrompt, info, intro, phase, phaseItem, text, warn } from '../../../../ui';
 import { yellow } from '../../../../ui/colors.js';
+import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo';
 import { resolveIntegrateScope } from '../_common/integrate-scope';
@@ -143,6 +144,10 @@ export async function integrateGit(
 
   if (options.global && (options.dependencyRisks || options.project)) {
     throw new InvalidOptionError('--dependency-risks and -p are not supported with --global.');
+  }
+
+  if (!options.nonInteractive) {
+    printAgentNonInteractiveAlternativeHint('sonar integrate git --non-interactive');
   }
 
   intro('SonarQube Git Integration (source code scanning)');

@@ -18,9 +18,21 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-export interface ImportOptions {
-  org?: string;
-  repo?: string[];
-  all?: boolean;
-  nonInteractive?: boolean;
+// Shared assertions for `printAgentNonInteractiveAlternativeHint` output
+// (src/cli/commands/_common/agent-prompt-hint.ts). Callers only supply the
+// non-interactive example(s), mirroring the real function's own signature.
+
+import { expect } from 'bun:test';
+
+/** Asserts the hint was printed, with one line per example. */
+export function expectAgentPromptHint(output: string, ...examples: string[]): void {
+  expect(output).toContain('Agent environment detected. To run non-interactively:');
+  for (const example of examples) {
+    expect(output).toContain(`   → ${example}`);
+  }
+}
+
+/** Asserts the hint was not printed at all (e.g. human/non-agent caller). */
+export function expectNoAgentPromptHint(output: string): void {
+  expect(output).not.toContain('To run non-interactively');
 }

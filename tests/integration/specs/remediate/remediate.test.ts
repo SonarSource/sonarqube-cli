@@ -22,6 +22,10 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import {
+  expectAgentPromptHint,
+  expectNoAgentPromptHint,
+} from '../../../_common/agent-hint-assertions.js';
 import { TestHarness } from '../../harness';
 
 const VALID_TOKEN = 'integration-test-token';
@@ -249,6 +253,44 @@ describe('sonar remediate', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('No issues selected');
+    },
+    { timeout: 15000 },
+  );
+
+  it.each([
+    [true, true, true],
+    [true, false, false],
+    [false, true, false],
+    [false, false, false],
+  ])(
+    'prints a non-interactive hint before the issue-selection prompt only for a detected AI agent without --issues (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
+    async (isAgent, isInteractive, expectedShownPrompt) => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withProject(TEST_PROJECT, (p) => {
+          p.withIssue({ ruleKey: 'java:S100', message: 'Fixable issue', fixableByAgent: true });
+        })
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      const command = isInteractive
+        ? `remediate --project ${TEST_PROJECT}`
+        : `remediate --project ${TEST_PROJECT} --issues PROJ-1,PROJ-2`;
+      const result = await harness.run(command, {
+        ...(isInteractive ? { stdinChunks: ['\r'] } : {}),
+        extraEnv: isAgent ? { CLAUDECODE: '1' } : {},
+      });
+
+      expect(result.exitCode).toBe(0);
+      if (expectedShownPrompt) {
+        expectAgentPromptHint(
+          result.stdout,
+          'sonar remediate --issues <issue-key-1>,<issue-key-2>',
+        );
+      } else {
+        expectNoAgentPromptHint(result.stdout);
+      }
     },
     { timeout: 15000 },
   );

@@ -28,12 +28,39 @@ import { join } from 'node:path';
 // Resolve git binary once at module load — avoids PATH reliance in execFileSync calls.
 export const GIT_BIN = Bun.which('git') ?? '/usr/bin/git';
 
+/**
+ * Windows CI intermittently fails git commands against a freshly-created repo
+ * with ERROR_ACCESS_DENIED (exit status 5) or a busy/locked file (EBUSY/EPERM/
+ * EACCES) when the virus scanner or search indexer briefly holds a handle on a
+ * file under the new `.git` directory. These are transient and clear on a short
+ * retry; anything else (real git errors, non-Windows failures) is rethrown
+ * immediately so genuine problems still surface.
+ */
+function isTransientWindowsGitError(error: unknown): boolean {
+  if (process.platform !== 'win32') {
+    return false;
+  }
+  const { status, code } = error as { status?: number; code?: string };
+  return status === 5 || code === 'EBUSY' || code === 'EPERM' || code === 'EACCES';
+}
+
 export function git(args: string[], cwd: string): string {
-  return execFileSync(GIT_BIN, args, {
-    cwd,
-    encoding: 'utf-8',
-    stdio: ['ignore', 'pipe', 'ignore'],
-  }).trim();
+  const maxAttempts = process.platform === 'win32' ? 5 : 1;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      // stderr is piped (not ignored) so a real failure carries git's message.
+      return execFileSync(GIT_BIN, args, {
+        cwd,
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }).trim();
+    } catch (error) {
+      if (attempt >= maxAttempts || !isTransientWindowsGitError(error)) {
+        throw error;
+      }
+      Bun.sleepSync(50 * attempt);
+    }
+  }
 }
 
 /** Initialise a new git repo in cwd (creates the directory if needed). */

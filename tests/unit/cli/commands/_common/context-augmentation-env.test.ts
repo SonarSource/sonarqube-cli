@@ -29,6 +29,7 @@ const KEYS = [
   'SONAR_CONTEXT_PROJECT',
   'SONAR_CONTEXT_TOKEN',
   'SONAR_CONTEXT_URL',
+  'SONAR_CONTEXT_WORKSPACE_ROOT',
 ] as const;
 
 describe('buildContextAugmentationEnv', () => {
@@ -65,12 +66,14 @@ describe('buildContextAugmentationEnv', () => {
       projectKey: 'my-project',
       serverUrl: 'https://sonar.example',
       token: 'tok',
+      workspaceDir: '/repo/main',
     });
 
     expect(env.SONAR_CONTEXT_ORGANIZATION).toBe('my-org');
     expect(env.SONAR_CONTEXT_PROJECT).toBe('my-project');
     expect(env.SONAR_CONTEXT_URL).toBe('https://sonar.example');
     expect(env.SONAR_CONTEXT_TOKEN).toBe('tok');
+    expect(env.SONAR_CONTEXT_WORKSPACE_ROOT).toBe('/repo/main');
   });
 
   it('deletes each SONAR_CONTEXT_* key when its context field is undefined', () => {
@@ -87,6 +90,7 @@ describe('buildContextAugmentationEnv', () => {
       projectKey: '',
       serverUrl: '',
       token: '',
+      workspaceDir: '',
     });
 
     for (const key of KEYS) {

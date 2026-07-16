@@ -23,16 +23,19 @@
  * SONAR_USER_HOME env var redirects state paths to a temporary directory.
  */
 
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import fs from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterAll, afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterAll, afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import {
   loadState,
   saveState,
+  STATE_READ_MAX_ATTEMPTS,
   stateFileExists,
+  tryLoadState,
 } from '../../../src/lib/repository/state-repository.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 import {
@@ -178,19 +181,112 @@ describe('loadState: filesystem I/O', () => {
     expect(state.auth.isAuthenticated).toBe(false);
   });
 
-  it('returns default state when file contains invalid JSON', () => {
-    mkdirSync(testCliDir, { recursive: true });
-    writeFileSync(testStateFile, 'not-valid-json', 'utf-8');
-    const state = loadState('0.2.0');
-    expect(state.config.cliVersion).toBe('0.2.0');
-  });
-
   it('returns parsed state when valid state file exists', () => {
     const initial = getDefaultState('0.3.0');
     initial.auth.isAuthenticated = true;
     mkdirSync(testCliDir, { recursive: true });
     writeFileSync(testStateFile, JSON.stringify(initial), 'utf-8');
     const state = loadState('0.3.0');
+    expect(state.auth.isAuthenticated).toBe(true);
+  });
+});
+
+describe('tryLoadState', () => {
+  beforeEach(cleanup);
+  afterEach(cleanup);
+
+  it('returns parsed state for a valid file', () => {
+    const initial = getDefaultState('0.3.0');
+    initial.auth.isAuthenticated = true;
+    mkdirSync(testCliDir, { recursive: true });
+    writeFileSync(testStateFile, JSON.stringify(initial), 'utf-8');
+
+    const state = tryLoadState('0.3.0');
+
+    expect(state?.auth.isAuthenticated).toBe(true);
+  });
+
+  it('returns null for a corrupt file', () => {
+    mkdirSync(testCliDir, { recursive: true });
+    writeFileSync(testStateFile, 'not-valid-json', 'utf-8');
+
+    expect(tryLoadState('0.2.0')).toBeNull();
+    // And the corrupt file remains untouched.
+    expect(readFileSync(testStateFile, 'utf-8')).toBe('not-valid-json');
+  });
+});
+
+describe('loadState: retry on transient read failure', () => {
+  beforeEach(cleanup);
+  afterEach(cleanup);
+
+  it('recovers when an early read fails transiently, then succeeds', () => {
+    const initial = getDefaultState('0.4.0');
+    initial.auth.isAuthenticated = true;
+    const content = JSON.stringify(initial);
+    mkdirSync(testCliDir, { recursive: true });
+    writeFileSync(testStateFile, content, 'utf-8');
+
+    // Fail the first read, then return the real file contents.
+    const readSpy = spyOn(fs, 'readFileSync')
+      .mockImplementationOnce(() => {
+        throw new Error('read failed');
+      })
+      .mockReturnValue(content);
+
+    try {
+      const state = loadState('0.4.0');
+      expect(state.auth.isAuthenticated).toBe(true);
+      expect(readSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      readSpy.mockRestore();
+    }
+  });
+
+  it('retries exactly STATE_READ_MAX_ATTEMPTS times before throwing', () => {
+    mkdirSync(testCliDir, { recursive: true });
+    writeFileSync(testStateFile, JSON.stringify(getDefaultState('0.4.0')), 'utf-8');
+
+    const readSpy = spyOn(fs, 'readFileSync').mockImplementation(() => {
+      throw new Error('read failed');
+    });
+
+    try {
+      expect(() => loadState('0.4.0')).toThrow(/Failed to read state/);
+      expect(readSpy).toHaveBeenCalledTimes(STATE_READ_MAX_ATTEMPTS);
+    } finally {
+      readSpy.mockRestore();
+    }
+  });
+
+  it('memoizes the failure so a persistently corrupt file is only retried once per process (CLI-834)', () => {
+    mkdirSync(testCliDir, { recursive: true });
+    writeFileSync(testStateFile, 'not-valid-json', 'utf-8');
+
+    const readSpy = spyOn(fs, 'readFileSync');
+
+    try {
+      expect(() => loadState('0.4.0')).toThrow(/Failed to read state/);
+      // Second call at another call site must reuse the cached failure, not retry.
+      expect(() => loadState('0.4.0')).toThrow(/Failed to read state/);
+      expect(readSpy).toHaveBeenCalledTimes(STATE_READ_MAX_ATTEMPTS);
+    } finally {
+      readSpy.mockRestore();
+    }
+  });
+
+  it('retries fresh once the file is rewritten (fingerprint changes)', () => {
+    mkdirSync(testCliDir, { recursive: true });
+    writeFileSync(testStateFile, 'not-valid-json', 'utf-8');
+
+    expect(() => loadState('0.4.0')).toThrow(/Failed to read state/);
+
+    // Overwrite with a valid file: a later read must not reuse the cached failure.
+    const recovered = getDefaultState('0.4.0');
+    recovered.auth.isAuthenticated = true;
+    writeFileSync(testStateFile, JSON.stringify(recovered), 'utf-8');
+
+    const state = loadState('0.4.0');
     expect(state.auth.isAuthenticated).toBe(true);
   });
 });

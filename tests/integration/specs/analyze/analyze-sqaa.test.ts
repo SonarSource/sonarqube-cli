@@ -21,7 +21,7 @@
 // Integration tests for `analyze agentic` and `verify` commands.
 
 import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -32,6 +32,10 @@ import {
   SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
   SQAA_ANALYZE_CALLER_COMMAND,
 } from '../../../../src/telemetry/sqaa-analysis-telemetry.js';
+import {
+  expectAgentPromptHint,
+  expectNoAgentPromptHint,
+} from '../../../_common/agent-hint-assertions.js';
 import { readAnalysisEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
 import { commitFile, git, initGitRepo, stageFile } from '../hook/git-test-helpers';
@@ -694,6 +698,121 @@ describe('analyze agentic', () => {
   );
 
   it(
+    'resolves the project key from a linked git worktree using the main checkout registry entry',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      // Record the SQAA feature against the main checkout, as `sonar integrate` would.
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      // Make the main checkout a git repo and add a linked worktree beside it.
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'README.md', '# test\n');
+      const worktreePath = join(dirname(harness.cwd.path), 'linked-worktree');
+      git(['worktree', 'add', worktreePath, '-b', 'feature/x'], harness.cwd.path);
+      writeFileSync(join(worktreePath, 'index.ts'), 'const x = 1;');
+
+      // Run from the worktree, whose repo root never matches the registered projectRoot.
+      const result = await harness.run('analyze agentic --file index.ts', { cwd: worktreePath });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('No issues found');
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+      expect(parseSqaaRequestBody(sqaaCalls[0].body).projectKey).toBe(TEST_PROJECT);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'resolves the project key from the main checkout when SQAA was integrated in a linked worktree',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'README.md', '# test\n');
+      const worktreePath = join(dirname(harness.cwd.path), 'linked-worktree');
+      git(['worktree', 'add', worktreePath, '-b', 'feature/y'], harness.cwd.path);
+
+      // Record SQAA as if integrate ran inside the linked worktree.
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl(), {
+          targetRoot: worktreePath,
+          repoRoot: harness.cwd.path,
+        });
+
+      writeFileSync(join(harness.cwd.path, 'index.ts'), 'const x = 1;');
+      const result = await harness.run('analyze agentic --file index.ts');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('No issues found');
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+      expect(parseSqaaRequestBody(sqaaCalls[0].body).projectKey).toBe(TEST_PROJECT);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'prefers the current worktree SQAA feature when multiple worktrees registered different project keys',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'README.md', '# test\n');
+      const worktreePath = join(dirname(harness.cwd.path), 'linked-worktree');
+      git(['worktree', 'add', worktreePath, '-b', 'feature/z'], harness.cwd.path);
+
+      const linkedProject = 'linked-worktree-project';
+      const mainProject = 'main-checkout-project';
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, mainProject, TEST_ORG, server.baseUrl(), {
+          targetRoot: harness.cwd.path,
+          repoRoot: harness.cwd.path,
+        })
+        .withSqaaFeature(harness.cwd.path, linkedProject, TEST_ORG, server.baseUrl(), {
+          targetRoot: worktreePath,
+          repoRoot: harness.cwd.path,
+        });
+
+      writeFileSync(join(worktreePath, 'index.ts'), 'const x = 1;');
+      const result = await harness.run('analyze agentic --file index.ts', { cwd: worktreePath });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('No issues found');
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+      expect(parseSqaaRequestBody(sqaaCalls[0].body).projectKey).toBe(linkedProject);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'sends one multi-file DEEP request when multiple --file paths are given',
     async () => {
       const server = await harness
@@ -1322,6 +1441,72 @@ describe('analyze agentic — change-set mode (no --file)', () => {
         .filter((r) => r.path === '/a3s-analysis/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(totalSqaaFilesSent(sqaaCalls)).toBe(51);
+    },
+    { timeout: 30000 },
+  );
+
+  it.each([
+    [true, true, true],
+    [true, false, false],
+    [false, true, false],
+    [false, false, false],
+  ])(
+    'prints a non-interactive hint before the large change set confirmation only for a detected AI agent without --force (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
+    async (isAgent, isInteractive, expectedShownPrompt) => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      commitFile(harness.cwd.path, 'README.md', 'hello');
+      for (let i = 1; i <= 51; i++) {
+        harness.cwd.writeFile(`file${i}.ts`, `const x${i} = ${i};`);
+      }
+
+      const result = await harness.run(`analyze agentic${isInteractive ? '' : ' --force'}`, {
+        ...(isInteractive ? { stdinChunks: ['\r'] } : {}),
+        extraEnv: {
+          SONARQUBE_CLI_MOCK_TTY: '1',
+          ...(isAgent ? { CLAUDECODE: '1' } : {}),
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      if (expectedShownPrompt) {
+        expectAgentPromptHint(result.stdout, 'sonar analyze --force');
+      } else {
+        expectNoAgentPromptHint(result.stdout);
+      }
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'does not print a non-interactive hint for a detected AI agent when the change set is below the large-set threshold',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      commitFile(harness.cwd.path, 'README.md', 'hello');
+
+      const result = await harness.run('analyze agentic', {
+        extraEnv: { SONARQUBE_CLI_MOCK_TTY: '1', CLAUDECODE: '1' },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expectNoAgentPromptHint(result.stdout);
     },
     { timeout: 30000 },
   );

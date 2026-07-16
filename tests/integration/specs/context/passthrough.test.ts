@@ -21,17 +21,22 @@
 // Integration tests for `sonar context <action>` — the passthrough wrapper to
 // the locally-installed sonar-context-augmentation binary.
 
+import { mkdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/cli/commands/integrate/_common/features/context-augmentation-feature';
 import { CLAUDE_INTEGRATION_ID } from '../../../../src/cli/commands/integrate/claude/declaration';
 import { COPILOT_INTEGRATION_ID } from '../../../../src/cli/commands/integrate/copilot/declaration';
+import { canonicalizePath } from '../../../../src/lib/fs-utils';
 import type { CliState, InstalledIntegrationFeature } from '../../../../src/lib/state.js';
 import { TestHarness } from '../../harness';
 import {
   type CagInvocation,
   readCagInvocations as readInvocations,
 } from '../../harness/cag-invocations';
+import { commitFile, git, initGitRepo } from '../hook/git-test-helpers';
 
 // CAG stub spawn + temp-dir teardown on Windows can exceed Bun's default hook timeout.
 setDefaultTimeout(30_000);
@@ -55,6 +60,7 @@ function appendRecordedCagFeature(
     projectKey: string;
     orgKey: string;
     serverUrl: string;
+    repoRoot?: string;
   },
 ): void {
   let integration = state.integrations.installed.find(
@@ -89,6 +95,7 @@ function appendRecordedCagFeature(
       projectKey: args.projectKey,
       scaEnabled: false,
       serverUrl: args.serverUrl,
+      ...(args.repoRoot ? { repoRoot: args.repoRoot } : {}),
     },
   };
   integration.features.push(feature);
@@ -165,6 +172,173 @@ describe('sonar context passthrough', () => {
       expect(invocation.env.SONAR_CONTEXT_URL).toBe(serverUrl);
       expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe(ORG_KEY);
       expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe(PROJECT_KEY);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'resolves the recorded project CAG connection from inside a linked git worktree',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'project-token', ORG_KEY);
+      // Record the CAG feature against the main checkout, as `sonar integrate` would.
+      harness
+        .state()
+        .withContextAugmentationBinaryInstalled()
+        .withContextAugmentationSkill(harness.cwd.path, PROJECT_KEY, ORG_KEY, serverUrl);
+
+      // Make the main checkout a git repo and add a linked worktree beside it.
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'README.md', '# test\n');
+      const worktreePath = join(dirname(harness.cwd.path), 'linked-worktree');
+      git(['worktree', 'add', worktreePath, '-b', 'feature/x'], harness.cwd.path);
+
+      // Run from the worktree, whose path never matches the recorded targetRoot.
+      const result = await harness.run('context status', { cwd: worktreePath });
+
+      expect(result.exitCode).toBe(0);
+      const invocation = findInvocation(readInvocations(harness), ['status']);
+      expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe(PROJECT_KEY);
+      expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe(ORG_KEY);
+      expect(invocation.env.SONAR_CONTEXT_URL).toBe(serverUrl);
+      expect(invocation.env.SONAR_CONTEXT_TOKEN).toBe('project-token');
+      // Workspace dir is the invocation worktree, not the main checkout where state is keyed.
+      expect(invocation.env.SONAR_CONTEXT_WORKSPACE_ROOT).toBe(canonicalizePath(worktreePath));
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'sets SONAR_CONTEXT_WORKSPACE_ROOT to the integrated folder from a subdirectory of a non-git project',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'project-token', ORG_KEY);
+      // Integrated at the project root; no git repo is initialised here.
+      harness
+        .state()
+        .withContextAugmentationBinaryInstalled()
+        .withContextAugmentationSkill(harness.cwd.path, PROJECT_KEY, ORG_KEY, serverUrl);
+
+      const subdir = join(harness.cwd.path, 'packages', 'app');
+      mkdirSync(subdir, { recursive: true });
+
+      const result = await harness.run('context status', { cwd: subdir });
+
+      expect(result.exitCode).toBe(0);
+      const invocation = findInvocation(readInvocations(harness), ['status']);
+      expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe(PROJECT_KEY);
+      expect(invocation.env.SONAR_CONTEXT_WORKSPACE_ROOT).toBe(canonicalizePath(harness.cwd.path));
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'sets SONAR_CONTEXT_WORKSPACE_ROOT to the worktree root from a subdirectory of a linked git worktree',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'project-token', ORG_KEY);
+      harness
+        .state()
+        .withContextAugmentationBinaryInstalled()
+        .withContextAugmentationSkill(harness.cwd.path, PROJECT_KEY, ORG_KEY, serverUrl);
+
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'README.md', '# test\n');
+      const worktreePath = join(dirname(harness.cwd.path), 'linked-worktree');
+      git(['worktree', 'add', worktreePath, '-b', 'feature/subdir'], harness.cwd.path);
+      const subdir = join(worktreePath, 'packages', 'app');
+      mkdirSync(subdir, { recursive: true });
+
+      const result = await harness.run('context status', { cwd: subdir });
+
+      expect(result.exitCode).toBe(0);
+      const invocation = findInvocation(readInvocations(harness), ['status']);
+      expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe(PROJECT_KEY);
+      expect(invocation.env.SONAR_CONTEXT_WORKSPACE_ROOT).toBe(canonicalizePath(worktreePath));
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'matches on the recorded repoRoot when targetRoot points at a different worktree',
+    async () => {
+      // Simulates integrate having run inside worktree-A (targetRoot = that worktree),
+      // while repoRoot records the stable main working tree. Running from the main
+      // tree must still resolve via repoRoot even though cwd is not inside targetRoot.
+      const server = await harness.newFakeServer().start();
+      const serverUrl = server.baseUrl();
+      const stateBuilder = harness
+        .state()
+        .withAuth(serverUrl, 'main-token', ORG_KEY)
+        .withContextAugmentationBinaryInstalled();
+      const state = stateBuilder.build();
+      appendRecordedCagFeature(state, {
+        integrationId: CLAUDE_INTEGRATION_ID,
+        targetRoot: join(dirname(harness.cwd.path), 'some-other-worktree'),
+        repoRoot: harness.cwd.path,
+        updatedAt: '2026-03-01T00:00:00.000Z',
+        projectKey: PROJECT_KEY,
+        orgKey: ORG_KEY,
+        serverUrl,
+      });
+      stateBuilder.withRawState(JSON.stringify(state, null, 2));
+
+      const result = await harness.run('context status');
+
+      expect(result.exitCode).toBe(0);
+      const invocation = findInvocation(readInvocations(harness), ['status']);
+      expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe(PROJECT_KEY);
+      expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe(ORG_KEY);
+      expect(invocation.env.SONAR_CONTEXT_URL).toBe(serverUrl);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'prefers a targetRoot match over a more recent repoRoot-only match',
+    async () => {
+      // Two worktrees integrated with different project keys, both recording the
+      // same main working tree as repoRoot. Running from the main tree, the
+      // feature whose targetRoot IS the main tree must win over a sibling that
+      // only shares the repoRoot — even though the sibling was updated later, so
+      // recency alone would pick the wrong one.
+      const server = await harness.newFakeServer().start();
+      const serverUrl = server.baseUrl();
+      const stateBuilder = harness
+        .state()
+        .withAuth(serverUrl, 'main-token', ORG_KEY)
+        .withContextAugmentationBinaryInstalled();
+      const state = stateBuilder.build();
+      // repoRoot-only match, integrated in a sibling worktree, updated LATER.
+      appendRecordedCagFeature(state, {
+        integrationId: CLAUDE_INTEGRATION_ID,
+        targetRoot: join(dirname(harness.cwd.path), 'some-other-worktree'),
+        repoRoot: harness.cwd.path,
+        updatedAt: '2026-02-01T00:00:00.000Z',
+        projectKey: 'wrong-worktree-project',
+        orgKey: ORG_KEY,
+        serverUrl,
+      });
+      // Exact targetRoot match for the current directory, updated EARLIER.
+      appendRecordedCagFeature(state, {
+        integrationId: COPILOT_INTEGRATION_ID,
+        targetRoot: harness.cwd.path,
+        repoRoot: harness.cwd.path,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        projectKey: 'right-here-project',
+        orgKey: ORG_KEY,
+        serverUrl,
+      });
+      stateBuilder.withRawState(JSON.stringify(state, null, 2));
+
+      const result = await harness.run('context status');
+
+      expect(result.exitCode).toBe(0);
+      const invocation = findInvocation(readInvocations(harness), ['status']);
+      expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe('right-here-project');
     },
     { timeout: 30000 },
   );
@@ -267,6 +441,7 @@ describe('sonar context passthrough', () => {
           SONAR_CONTEXT_PROJECT: 'caller-project',
           SONAR_CONTEXT_TOKEN: 'caller-token',
           SONAR_CONTEXT_URL: 'https://caller.example',
+          SONAR_CONTEXT_WORKSPACE_ROOT: '/caller/workspace',
         },
       });
 
@@ -276,6 +451,9 @@ describe('sonar context passthrough', () => {
       expect(invocation.env.SONAR_CONTEXT_URL).toBe(serverUrl);
       expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe('auth-org');
       expect(invocation.env.SONAR_CONTEXT_PROJECT).toBeUndefined();
+      // No recorded integration matched → workspace dir is not set, and a stray
+      // caller-provided value is not inherited.
+      expect(invocation.env.SONAR_CONTEXT_WORKSPACE_ROOT).toBeUndefined();
       expect(invocation.env.SONAR_CONTEXT_INVOCATION_ID).toMatch(UUID_V4_RE);
     },
     { timeout: 30000 },

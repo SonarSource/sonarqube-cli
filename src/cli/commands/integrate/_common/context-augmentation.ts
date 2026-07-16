@@ -24,6 +24,7 @@ import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { isSonarQubeCloud } from '../../../../lib/auth-resolver';
 import { SONAR_CONTEXT_INVOCATION } from '../../../../lib/config-constants';
 import logger from '../../../../lib/logger';
+import { resolveRecordedRepoRoot } from '../../../../lib/project-workspace/git-worktree';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../lib/signatures';
 import type { IntegrationStateAttribute } from '../../../../lib/state';
 import { SonarQubeClient } from '../../../../sonarqube/client';
@@ -48,6 +49,7 @@ export interface ResolvedContextAugmentationSetup {
   scaEnabled: boolean;
 }
 
+/** Context-Augmentation-specific persisted attrs (connection + SCA flag). */
 export function buildContextAugmentationAttrs(
   serverUrl: string,
   orgKey: string | undefined,
@@ -57,6 +59,35 @@ export function buildContextAugmentationAttrs(
     orgKey: orgKey ?? null,
     scaEnabled,
     serverUrl,
+  };
+}
+
+/**
+ * Assemble the attrs persisted on an agent integration's features, shared by
+ * every agent handler. Records the repository's main working tree as `repoRoot`
+ * (resolved once from `projectRoot`) so `sonar analyze`/`sonar context` can match
+ * the integration from any linked worktree — including ones created after
+ * integrate ran; falls back to `projectRoot` outside a git repo. Layers the
+ * agent's `baseAttrs` first, then the Context Augmentation connection attrs when
+ * CAG was set up.
+ */
+export async function buildRecordedIntegrationAttrs(params: {
+  baseAttrs: Record<string, IntegrationStateAttribute>;
+  projectRoot: string;
+  serverUrl: string;
+  orgKey: string | undefined;
+  contextAugmentation: ResolvedContextAugmentationSetup | null;
+}): Promise<Record<string, IntegrationStateAttribute>> {
+  return {
+    ...params.baseAttrs,
+    repoRoot: await resolveRecordedRepoRoot(params.projectRoot),
+    ...(params.contextAugmentation
+      ? buildContextAugmentationAttrs(
+          params.serverUrl,
+          params.orgKey,
+          params.contextAugmentation.scaEnabled,
+        )
+      : {}),
   };
 }
 
@@ -158,6 +189,7 @@ export async function runToolIntegrateCommand(
     projectKey: p.projectKey,
     serverUrl: p.auth.serverUrl,
     token: p.auth.token,
+    workspaceDir: p.projectRoot,
   });
 
   await runCagStepOrThrow(
