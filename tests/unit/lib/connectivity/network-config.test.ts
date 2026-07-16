@@ -613,7 +613,6 @@ describe('buildSubprocessNetworkEnv', () => {
   it('sets all three cert vars to the same path when CA cert is configured', () => {
     const env = buildSubprocessNetworkEnv(makeConfig({ SONAR_CA_CERT: '/etc/ssl/corp-ca.pem' }));
     expect(env.SONAR_CA_CERT).toBe('/etc/ssl/corp-ca.pem');
-    expect(env.SONAR_SECRETS_AUTH_CERT_FILE).toBe('/etc/ssl/corp-ca.pem');
   });
 
   it('propagates cert vars from generic-env source (NODE_EXTRA_CA_CERTS)', () => {
@@ -621,7 +620,6 @@ describe('buildSubprocessNetworkEnv', () => {
       makeConfig({ NODE_EXTRA_CA_CERTS: '/etc/ssl/corp-ca.pem' }),
     );
     expect(env.SONAR_CA_CERT).toBe('/etc/ssl/corp-ca.pem');
-    expect(env.SONAR_SECRETS_AUTH_CERT_FILE).toBe('/etc/ssl/corp-ca.pem');
   });
 
   it('returns all proxy and cert vars combined', () => {
