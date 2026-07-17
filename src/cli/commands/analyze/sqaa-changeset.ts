@@ -90,11 +90,16 @@ export async function resolveChangeSet(
 export async function resolveSqaaBranch(
   explicitBranch: string | undefined,
   contextPath: string = process.cwd(),
-  knownRepoRoot?: string,
 ): Promise<string | undefined> {
-  if (explicitBranch) return explicitBranch;
-  if (knownRepoRoot) return resolveGitBranchAtRepoRoot(knownRepoRoot);
-  return resolveCurrentGitBranch(contextPath);
+  return explicitBranch ?? (await resolveCurrentGitBranch(contextPath));
+}
+
+/** Same as {@link resolveSqaaBranch}, but for an already-resolved repository root. */
+export async function resolveSqaaBranchAtRepoRoot(
+  explicitBranch: string | undefined,
+  repoRoot: string,
+): Promise<string | undefined> {
+  return explicitBranch ?? (await resolveGitBranchAtRepoRoot(repoRoot));
 }
 
 /**

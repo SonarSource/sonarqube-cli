@@ -20,7 +20,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { resolveSqaaBranch } from '../../../../../src/cli/commands/analyze/sqaa-changeset';
+import {
+  resolveSqaaBranch,
+  resolveSqaaBranchAtRepoRoot,
+} from '../../../../../src/cli/commands/analyze/sqaa-changeset';
 import * as processLib from '../../../../../src/lib/process.js';
 
 let spawnProcessSpy: ReturnType<typeof spyOn>;
@@ -77,11 +80,24 @@ describe('resolveSqaaBranch', () => {
       'branch --show-current': 'feature/change-set\n',
     });
 
-    expect(await resolveSqaaBranch(undefined, '/ignored/context', '/path/to/repo')).toBe(
+    expect(await resolveSqaaBranchAtRepoRoot(undefined, '/path/to/repo')).toBe(
       'feature/change-set',
     );
     expect(
       spawnProcessSpy.mock.calls.some(([, args]: [string, string[]]) => args[0] === 'rev-parse'),
+    ).toBe(false);
+  });
+
+  it('resolveSqaaBranchAtRepoRoot: explicit branch wins without calling git', async () => {
+    mockGitResponses({
+      'branch --show-current': 'feature/change-set\n',
+    });
+
+    expect(await resolveSqaaBranchAtRepoRoot('override-branch', '/path/to/repo')).toBe(
+      'override-branch',
+    );
+    expect(
+      spawnProcessSpy.mock.calls.some(([, args]: [string, string[]]) => args[0] === 'branch'),
     ).toBe(false);
   });
 });

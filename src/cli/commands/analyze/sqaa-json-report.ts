@@ -23,7 +23,11 @@ import { timed } from '../../../lib/timed.js';
 import type { SqaaAnalysisDepth } from '../../../sonarqube/client.js';
 import { readSqaaFileContent, toRelativePosixPath } from './sqaa-api.js';
 import { resolveCloudAuthAndProject } from './sqaa-auth.js';
-import { resolveChangeSet, resolveSqaaBranch } from './sqaa-changeset.js';
+import {
+  resolveChangeSet,
+  resolveSqaaBranch,
+  resolveSqaaBranchAtRepoRoot,
+} from './sqaa-changeset.js';
 import {
   confirmLargeRunIfNeeded,
   resolveDepthForMode,
@@ -100,7 +104,7 @@ async function buildSqaaJsonReportFromChangeSet(
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'change-set', forcedDepth);
 
   const changeSet = await resolveChangeSet(process.cwd(), { staged, base });
-  const resolvedBranch = await resolveSqaaBranch(branch, changeSet.repoRoot, changeSet.repoRoot);
+  const resolvedBranch = await resolveSqaaBranchAtRepoRoot(branch, changeSet.repoRoot);
   if (changeSet.files.length === 0) {
     return makeReport(
       [],

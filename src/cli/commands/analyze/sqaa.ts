@@ -23,7 +23,7 @@ import type { SqaaAnalysisDepth } from '../../../sonarqube/client';
 import { text } from '../../../ui';
 import { InvalidOptionError } from '../_common/error.js';
 import { resolveCloudAuthAndProject } from './sqaa-auth';
-import { resolveChangeSet, resolveSqaaBranch } from './sqaa-changeset';
+import { resolveChangeSet, resolveSqaaBranch, resolveSqaaBranchAtRepoRoot } from './sqaa-changeset';
 import { confirmLargeRunIfNeeded, resolveDepthForMode, resolveSqaaContext } from './sqaa-context';
 import { resolveSqaaFileArgs } from './sqaa-file-arg';
 import {
@@ -187,7 +187,7 @@ async function analyzeSqaaChangeSet(params: {
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'change-set', forcedDepth);
 
   const changeSet = await resolveChangeSet(process.cwd(), { staged, base });
-  const resolvedBranch = await resolveSqaaBranch(branch, changeSet.repoRoot, changeSet.repoRoot);
+  const resolvedBranch = await resolveSqaaBranchAtRepoRoot(branch, changeSet.repoRoot);
 
   if (changeSet.files.length === 0 && changeSet.ignored.length === 0) {
     text('Vortex agentic analysis: no files in the change set to analyze.');
