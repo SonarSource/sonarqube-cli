@@ -191,7 +191,11 @@ function renderLoadMoreRow(isCursor: boolean, loading: boolean, error: string | 
     return `    ${dim('…')}    ${dim('Loading...')}`;
   }
   const arrow = isCursor ? cyan('❯') : ' ';
-  const label = error ? `Load more... ${dim(`(${error} - press enter to retry)`)}` : 'Load more...';
+  let label = 'Load more...';
+  if (error) {
+    const retryHint = dim(`(${error} - press enter to retry)`);
+    label = `Load more... ${retryHint}`;
+  }
   return `    ${arrow}    ${isCursor ? label : dim(label)}`;
 }
 
