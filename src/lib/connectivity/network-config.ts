@@ -250,7 +250,6 @@ export function buildSubprocessNetworkEnv(
 
   if (config.caCert) {
     env.SONAR_CA_CERT = config.caCert.path;
-    env.SONAR_SECRETS_AUTH_CERT_FILE = config.caCert.path; // sonar-secrets
   }
 
   if (config.clientCert) {

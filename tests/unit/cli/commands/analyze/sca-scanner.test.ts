@@ -299,7 +299,6 @@ describe('ScaScannerRunner — network env propagation', () => {
     const [, , env] = spawn.mock.calls[0];
     expect(env).toMatchObject({
       SONAR_CA_CERT: CERT_PATH,
-      SONAR_SECRETS_AUTH_CERT_FILE: CERT_PATH,
     });
   });
 

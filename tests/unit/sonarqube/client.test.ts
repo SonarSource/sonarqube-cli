@@ -699,7 +699,7 @@ describe('SonarQubeClient', () => {
       expect(await cloudClient.hasSqaaEntitlement('my-org')).toBe('check_failed');
     });
 
-    it("returns 'enabled' when org UUID is resolved and entitlement is enabled and eligible", async () => {
+    it("returns 'enabled' when org UUID is resolved and entitlement is allowed", async () => {
       fetchSpy = spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({
           ok: true,
@@ -709,13 +709,13 @@ describe('SonarQubeClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: () => Promise.resolve({ id: 'org-uuid', enabled: true, eligible: true }),
+          json: () => Promise.resolve({ id: 'org-uuid', allowed: true, hasEntitlement: true }),
         } as Response);
 
       expect(await cloudClient.hasSqaaEntitlement('my-org')).toBe('enabled');
     });
 
-    it("returns 'not_enabled' when entitlement is enabled but not eligible", async () => {
+    it("returns 'not_enabled' when the org is not entitled at all", async () => {
       fetchSpy = spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({
           ok: true,
@@ -725,13 +725,13 @@ describe('SonarQubeClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: () => Promise.resolve({ id: 'org-uuid', enabled: true, eligible: false }),
+          json: () => Promise.resolve({ id: 'org-uuid', allowed: false, hasEntitlement: false }),
         } as Response);
 
       expect(await cloudClient.hasSqaaEntitlement('my-org')).toBe('not_enabled');
     });
 
-    it("returns 'not_enabled' when entitlement is eligible but not enabled", async () => {
+    it("returns 'over_consumption' when the org is entitled but over its usage limit", async () => {
       fetchSpy = spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({
           ok: true,
@@ -741,10 +741,10 @@ describe('SonarQubeClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: () => Promise.resolve({ id: 'org-uuid', enabled: false, eligible: true }),
+          json: () => Promise.resolve({ id: 'org-uuid', allowed: false, hasEntitlement: true }),
         } as Response);
 
-      expect(await cloudClient.hasSqaaEntitlement('my-org')).toBe('not_enabled');
+      expect(await cloudClient.hasSqaaEntitlement('my-org')).toBe('over_consumption');
     });
 
     it("returns 'check_failed' when the entitlement check fails with an API error", async () => {
@@ -775,13 +775,13 @@ describe('SonarQubeClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: () => Promise.resolve({ id: targetUuid, enabled: true, eligible: true }),
+          json: () => Promise.resolve({ id: targetUuid, allowed: true, hasEntitlement: true }),
         } as Response);
 
       await cloudClient.hasSqaaEntitlement('my-org');
 
       const entitlementUrl = new URL((fetchSpy.mock.calls[1][0] as URL).toString());
-      expect(entitlementUrl.pathname).toBe(`/a3s-analysis/org-config/${targetUuid}`);
+      expect(entitlementUrl.pathname).toBe(`/a3s-analysis/org-entitlement/${targetUuid}`);
     });
 
     it("returns 'enabled' for SonarQube Cloud US and hits US API", async () => {
@@ -795,7 +795,7 @@ describe('SonarQubeClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: () => Promise.resolve({ id: 'org-uuid', enabled: true, eligible: true }),
+          json: () => Promise.resolve({ id: 'org-uuid', allowed: true, hasEntitlement: true }),
         } as Response);
 
       expect(await usClient.hasSqaaEntitlement('my-org')).toBe('enabled');
@@ -818,22 +818,22 @@ describe('SonarQubeClient', () => {
       cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
     });
 
-    it('returns not_allowed when organizationKey is not provided', async () => {
+    it('returns not_entitled when organizationKey is not provided', async () => {
       fetchSpy = mockFetch({});
-      expect(await cloudClient.hasCagEntitlement(undefined)).toBe('not_allowed');
+      expect(await cloudClient.hasCagEntitlement(undefined)).toBe('not_entitled');
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
-    it('returns not_allowed when organizationKey is empty string', async () => {
+    it('returns not_entitled when organizationKey is empty string', async () => {
       fetchSpy = mockFetch({});
-      expect(await cloudClient.hasCagEntitlement('')).toBe('not_allowed');
+      expect(await cloudClient.hasCagEntitlement('')).toBe('not_entitled');
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
-    it('returns not_allowed when server is not SonarQube Cloud', async () => {
+    it('returns not_entitled when server is not SonarQube Cloud', async () => {
       const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
       fetchSpy = mockFetch({});
-      expect(await serverClient.hasCagEntitlement('my-org')).toBe('not_allowed');
+      expect(await serverClient.hasCagEntitlement('my-org')).toBe('not_entitled');
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
@@ -842,7 +842,7 @@ describe('SonarQubeClient', () => {
       expect(await cloudClient.hasCagEntitlement('unknown-org')).toBe('check_failed');
     });
 
-    it('returns allowed when org UUID is resolved and entitlement is allowed', async () => {
+    it('returns entitled when hasEntitlement is true', async () => {
       fetchSpy = spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({
           ok: true,
@@ -852,13 +852,13 @@ describe('SonarQubeClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: () => Promise.resolve({ allowed: true }),
+          json: () => Promise.resolve({ hasEntitlement: true }),
         } as Response);
 
-      expect(await cloudClient.hasCagEntitlement('my-org')).toBe('allowed');
+      expect(await cloudClient.hasCagEntitlement('my-org')).toBe('entitled');
     });
 
-    it('returns not_allowed when the organization is not allowed', async () => {
+    it('returns entitled when hasEntitlement is true even if consumption is exhausted', async () => {
       fetchSpy = spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({
           ok: true,
@@ -868,13 +868,17 @@ describe('SonarQubeClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: () => Promise.resolve({ allowed: false }),
+          json: () =>
+            Promise.resolve({
+              hasEntitlement: true,
+              consumption: { consumed: 100, limit: 100 },
+            }),
         } as Response);
 
-      expect(await cloudClient.hasCagEntitlement('my-org')).toBe('not_allowed');
+      expect(await cloudClient.hasCagEntitlement('my-org')).toBe('entitled');
     });
 
-    it('ignores consumption data when mapping an allowed response', async () => {
+    it('returns not_entitled when hasEntitlement is false', async () => {
       fetchSpy = spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({
           ok: true,
@@ -884,10 +888,26 @@ describe('SonarQubeClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: () => Promise.resolve({ allowed: true, consumption: { consumed: 10, limit: 100 } }),
+          json: () => Promise.resolve({ hasEntitlement: false }),
         } as Response);
 
-      expect(await cloudClient.hasCagEntitlement('my-org')).toBe('allowed');
+      expect(await cloudClient.hasCagEntitlement('my-org')).toBe('not_entitled');
+    });
+
+    it('returns not_entitled when hasEntitlement is absent', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve([{ id: 'str-id', uuidV4: 'org-uuid' }]),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({}),
+        } as Response);
+
+      expect(await cloudClient.hasCagEntitlement('my-org')).toBe('not_entitled');
     });
 
     it('returns check_failed when the entitlement check fails with an API error', async () => {
@@ -918,7 +938,7 @@ describe('SonarQubeClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: () => Promise.resolve({ allowed: true }),
+          json: () => Promise.resolve({ hasEntitlement: true }),
         } as Response);
 
       await cloudClient.hasCagEntitlement('my-org');

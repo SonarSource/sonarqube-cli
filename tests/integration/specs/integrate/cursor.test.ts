@@ -477,7 +477,7 @@ describe('integrate cursor', () => {
     // org, swap the harness auth to a cloud connection, and return env vars that
     // point the CLI's hard-coded SonarCloud URL constants at the fake server.
     async function setupCloudWithEntitlement(
-      options: { eligible?: boolean; enabled?: boolean } = {},
+      options: { allowed?: boolean; hasEntitlement?: boolean } = {},
     ): Promise<{ extraEnv: Record<string, string> }> {
       const server = await harness
         .newFakeServer()
@@ -613,7 +613,10 @@ describe('integrate cursor', () => {
     it(
       'skips SQAA and shows the promotion message when the org is not entitled',
       async () => {
-        const { extraEnv } = await setupCloudWithEntitlement({ enabled: false });
+        const { extraEnv } = await setupCloudWithEntitlement({
+          allowed: false,
+          hasEntitlement: false,
+        });
 
         const result = await harness.run(
           `integrate cursor --project ${TEST_PROJECT} --non-interactive`,

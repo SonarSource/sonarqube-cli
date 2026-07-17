@@ -164,7 +164,6 @@ describe('buildContextAugmentationEnv — network env propagation', () => {
     const env = buildContextAugmentationEnv();
 
     expect(env.SONAR_CA_CERT).toBe(CERT_PATH);
-    expect(env.SONAR_SECRETS_AUTH_CERT_FILE).toBe(CERT_PATH);
     expect(env.SONAR_HTTPS_PROXY_URL).toBe(PROXY_URL);
   });
 });

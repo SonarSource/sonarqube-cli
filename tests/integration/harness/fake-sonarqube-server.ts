@@ -141,9 +141,12 @@ export class FakeSonarQubeServerBuilder {
   private readonly systemStatus: 'UP' | 'DOWN' = 'UP';
   private readonly sqaaEntitlementOrgs: Map<
     string,
-    { uuid: string; eligible: boolean; enabled: boolean }
+    { uuid: string; allowed: boolean; hasEntitlement: boolean }
   > = new Map();
-  private readonly cagEntitlementOrgs: Map<string, { uuid: string; allowed: boolean }> = new Map();
+  private readonly cagEntitlementOrgs: Map<
+    string,
+    { uuid: string; allowed: boolean; hasEntitlement: boolean }
+  > = new Map();
   /** Keyed by org UUID (`resourceId`), for `GET /billing/entitlements`. */
   private readonly privateProjectsEntitlements: Map<string, boolean> = new Map();
   private validToken?: string;
@@ -293,20 +296,27 @@ export class FakeSonarQubeServerBuilder {
   withSqaaEntitlement(
     orgKey: string,
     uuid: string,
-    options: { eligible?: boolean; enabled?: boolean } = {},
+    options: { allowed?: boolean; hasEntitlement?: boolean } = {},
   ): this {
+    const allowed = options.allowed ?? true;
     this.sqaaEntitlementOrgs.set(orgKey, {
       uuid,
-      eligible: options.eligible ?? true,
-      enabled: options.enabled ?? true,
+      allowed,
+      // An allowed org is necessarily entitled; default undefined to that.
+      hasEntitlement: options.hasEntitlement ?? allowed,
     });
     return this;
   }
 
-  withCagEntitlement(orgKey: string, options: { uuid?: string; allowed?: boolean } = {}): this {
+  withCagEntitlement(
+    orgKey: string,
+    options: { uuid?: string; allowed?: boolean; hasEntitlement?: boolean } = {},
+  ): this {
+    const allowed = options.allowed ?? true;
     this.cagEntitlementOrgs.set(orgKey, {
       uuid: options.uuid ?? `${orgKey}-uuid-v4`,
-      allowed: options.allowed ?? true,
+      allowed,
+      hasEntitlement: options.hasEntitlement ?? allowed,
     });
     return this;
   }
@@ -838,9 +848,9 @@ export class FakeSonarQubeServerBuilder {
           });
         }
 
-        const orgConfigMatch = /^\/a3s-analysis\/org-config\/(.+)$/.exec(path);
-        if (orgConfigMatch) {
-          const uuid = orgConfigMatch[1];
+        const orgEntitlementMatch = /^\/a3s-analysis\/org-entitlement\/(.+)$/.exec(path);
+        if (orgEntitlementMatch) {
+          const uuid = orgEntitlementMatch[1];
           const entitlement = [...sqaaEntitlementOrgs.values()].find((e) => e.uuid === uuid);
           if (!entitlement) {
             return new Response(JSON.stringify({ errors: [{ msg: 'Not found' }] }), {
@@ -851,8 +861,8 @@ export class FakeSonarQubeServerBuilder {
           return new Response(
             JSON.stringify({
               id: uuid,
-              eligible: entitlement.eligible,
-              enabled: entitlement.enabled,
+              allowed: entitlement.allowed,
+              hasEntitlement: entitlement.hasEntitlement,
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );
@@ -880,6 +890,7 @@ export class FakeSonarQubeServerBuilder {
           return new Response(
             JSON.stringify({
               allowed: entitlement.allowed,
+              hasEntitlement: entitlement.hasEntitlement,
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );
