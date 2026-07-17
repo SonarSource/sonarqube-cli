@@ -433,7 +433,7 @@ uxDescribe('SonarQube Cloud — Happy Path', () => {
           severity: 'BLOCKER',
         });
       })
-      .withSqaaEntitlement(ORG, ORG_UUID, { eligible: true, enabled: true })
+      .withSqaaEntitlement(ORG, ORG_UUID, { allowed: true, hasEntitlement: true })
       .withSqaaResponse({
         issues: [{ rule: 'java:S100', message: 'Method name does not match regex', startLine: 3 }],
       })
