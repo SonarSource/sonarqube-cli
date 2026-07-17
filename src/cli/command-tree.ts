@@ -499,9 +499,7 @@ ${projectKeyExtraHelp}`;
 
 analyze
   .command('dependency-risks')
-  .description(
-    'Analyze project dependencies for security and license risks (beta: subject to change)',
-  )
+  .description('Analyze project dependencies for security and license risks')
   .option('-p, --project <project>', 'Project key (auto-detected when omitted)')
   .addOption(dependencyRisksFormatOption)
   .addOption(dependencyRisksStatusFilterOption)
