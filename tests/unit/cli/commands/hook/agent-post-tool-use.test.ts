@@ -27,6 +27,7 @@ import { agentPostToolUse } from '../../../../../src/cli/commands/hook/agent-pos
 import * as hookOutput from '../../../../../src/cli/commands/hook/format-sqaa-hook-context';
 import * as stdinModule from '../../../../../src/cli/commands/hook/stdin';
 import * as authResolver from '../../../../../src/lib/auth-resolver';
+import * as processLib from '../../../../../src/lib/process';
 import * as clientModule from '../../../../../src/sonarqube/client';
 import * as sqaaTelemetry from '../../../../../src/telemetry/sqaa-analysis-telemetry.js';
 import {
@@ -45,8 +46,21 @@ describe('agentPostToolUse', () => {
   let readFileSyncSpy: ReturnType<typeof spyOn>;
   let createAnalysisSpy: ReturnType<typeof spyOn>;
   let emitSqaaAnalysisTelemetrySpy: ReturnType<typeof spyOn>;
+  let spawnProcessSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
+    // Deterministic git branch auto-detection (hook resolves branch from the edited file).
+    spawnProcessSpy = spyOn(processLib, 'spawnProcess').mockImplementation(
+      (_cmd: string, args: string[]) => {
+        if (args[0] === 'rev-parse' && args[1] === '--show-toplevel') {
+          return Promise.resolve({ exitCode: 0, stdout: `${process.cwd()}\n`, stderr: '' });
+        }
+        if (args[0] === 'branch' && args[1] === '--show-current') {
+          return Promise.resolve({ exitCode: 0, stdout: 'feature/hook-branch\n', stderr: '' });
+        }
+        return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+      },
+    );
     stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
     resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue({
       token: 'tok',
@@ -78,6 +92,7 @@ describe('agentPostToolUse', () => {
     readFileSyncSpy.mockRestore();
     createAnalysisSpy.mockRestore();
     emitSqaaAnalysisTelemetrySpy.mockRestore();
+    spawnProcessSpy.mockRestore();
   });
 
   it('emits SQAA analysis telemetry after a successful PostToolUse analysis', async () => {
@@ -136,7 +151,29 @@ describe('agentPostToolUse', () => {
     expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('calls createAnalysis with files[] and no analysisDepth', async () => {
+  it('calls createAnalysis with files[], auto-detected branchName, and no analysisDepth', async () => {
+    await agentPostToolUse({ project: 'my-project' });
+
+    expect(createAnalysisSpy).toHaveBeenCalledWith({
+      organizationKey: 'myorg',
+      projectKey: 'my-project',
+      files: [{ path: 'src/index.ts', content: 'const x = 1;' }],
+      branchName: 'feature/hook-branch',
+    });
+  });
+
+  it('omits branchName when git branch auto-detection yields no branch (detached HEAD)', async () => {
+    spawnProcessSpy.mockImplementation((_cmd: string, args: string[]) => {
+      if (args[0] === 'rev-parse' && args[1] === '--show-toplevel') {
+        return Promise.resolve({ exitCode: 0, stdout: `${process.cwd()}\n`, stderr: '' });
+      }
+      // Detached HEAD: show-current is empty, abbrev-ref returns HEAD.
+      if (args[0] === 'branch' && args[1] === '--show-current') {
+        return Promise.resolve({ exitCode: 0, stdout: '\n', stderr: '' });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: 'HEAD\n', stderr: '' });
+    });
+
     await agentPostToolUse({ project: 'my-project' });
 
     expect(createAnalysisSpy).toHaveBeenCalledWith({

@@ -23,7 +23,11 @@ import { timed } from '../../../lib/timed.js';
 import type { SqaaAnalysisDepth } from '../../../sonarqube/client.js';
 import { readSqaaFileContent, toRelativePosixPath } from './sqaa-api.js';
 import { resolveCloudAuthAndProject } from './sqaa-auth.js';
-import { resolveChangeSet } from './sqaa-changeset.js';
+import {
+  resolveChangeSet,
+  resolveSqaaBranch,
+  resolveSqaaBranchAtRepoRoot,
+} from './sqaa-changeset.js';
 import {
   confirmLargeRunIfNeeded,
   resolveDepthForMode,
@@ -100,6 +104,7 @@ async function buildSqaaJsonReportFromChangeSet(
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'change-set', forcedDepth);
 
   const changeSet = await resolveChangeSet(process.cwd(), { staged, base });
+  const resolvedBranch = await resolveSqaaBranchAtRepoRoot(branch, changeSet.repoRoot);
   if (changeSet.files.length === 0) {
     return makeReport(
       [],
@@ -123,7 +128,7 @@ async function buildSqaaJsonReportFromChangeSet(
       files,
       allPaths,
       resolved,
-      branch,
+      resolvedBranch,
       wireDepth,
       displayDepth,
       runOptions.propagateForbiddenError,
@@ -148,6 +153,7 @@ export async function buildSqaaJsonReport(
 
   if (rawFiles?.length) {
     const entries = resolveSqaaFileArgs(rawFiles);
+    const resolvedBranch = await resolveSqaaBranch(branch, entries[0].absolutePath);
     const resolution = await resolveCloudAuthAndProject(auth, project);
     const resolved = resolveSqaaContext(resolution, { requireProject: false });
     if (!resolved) return null;
@@ -158,7 +164,7 @@ export async function buildSqaaJsonReport(
         entries,
         resolved,
         auth,
-        branch,
+        resolvedBranch,
         wireDepth,
         displayDepth,
         runOptions,
@@ -174,7 +180,7 @@ export async function buildSqaaJsonReport(
       entries,
       resolved,
       auth,
-      branch,
+      resolvedBranch,
       wireDepth,
       displayDepth,
       runOptions,

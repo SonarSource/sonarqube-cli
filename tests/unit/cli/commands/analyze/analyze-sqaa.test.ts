@@ -120,15 +120,18 @@ beforeEach(() => {
     errors: null,
   });
 
-  // Mock the git-based repo-root resolver so unit tests don't shell out to git.
-  // Without this, parallel Bun test workers each spawn `git rev-parse --show-toplevel`
-  // and the OS-level contention causes intermittent flakes. We return process.cwd()
-  // so the registered extension's projectRoot still matches the lookup key.
-  spawnProcessSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
-    exitCode: 0,
-    stdout: process.cwd() + '\n',
-    stderr: '',
-  });
+  // Mock git subprocess calls so unit tests don't shell out to git.
+  spawnProcessSpy = spyOn(processLib, 'spawnProcess').mockImplementation(
+    (_cmd: string, args: string[]) => {
+      if (args[0] === 'rev-parse' && args[1] === '--show-toplevel') {
+        return Promise.resolve({ exitCode: 0, stdout: `${process.cwd()}\n`, stderr: '' });
+      }
+      if (args[0] === 'branch' && args[1] === '--show-current') {
+        return Promise.resolve({ exitCode: 0, stdout: '\n', stderr: '' });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: `${process.cwd()}\n`, stderr: '' });
+    },
+  );
 });
 
 afterEach(() => {
@@ -266,12 +269,29 @@ describe('analyzeSqaa: API call and result display', () => {
     expect(request.analysisDepth).toBeUndefined();
   });
 
-  it('does not send branchName in request when no branch is provided', async () => {
+  it('does not send branchName in request when no branch is provided and git has no current branch', async () => {
     await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTH);
 
     const request = createAnalysisSpy.mock.calls[0][0];
     // branchName: null causes a 400 from the real API — must be omitted entirely
     expect(request.branchName).toBeUndefined();
+  });
+
+  it('auto-detects branchName from git when --branch is omitted', async () => {
+    spawnProcessSpy.mockImplementation((_cmd: string, args: string[]) => {
+      if (args[0] === 'rev-parse' && args[1] === '--show-toplevel') {
+        return Promise.resolve({ exitCode: 0, stdout: `${process.cwd()}\n`, stderr: '' });
+      }
+      if (args[0] === 'branch' && args[1] === '--show-current') {
+        return Promise.resolve({ exitCode: 0, stdout: 'feature/auto-detect\n', stderr: '' });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: `${process.cwd()}\n`, stderr: '' });
+    });
+
+    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTH);
+
+    const request = createAnalysisSpy.mock.calls[0][0];
+    expect(request.branchName).toBe('feature/auto-detect');
   });
 
   it('passes branch to client when --branch option is provided', async () => {

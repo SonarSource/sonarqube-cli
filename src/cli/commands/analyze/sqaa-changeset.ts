@@ -21,10 +21,15 @@
 // Resolves the set of local files to analyze from Git, honouring .gitignore.
 
 import { closeSync, openSync, readSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 
 import { spawnProcess } from '../../../lib/process';
 import { CommandFailedError } from '../_common/error';
+import {
+  resolveCurrentGitBranch,
+  resolveGitBranchAtRepoRoot,
+  resolveGitRepoRoot,
+} from '../_common/git-worktree';
 
 /** Maximum byte size per file sent to SQAA. Files exceeding this are skipped. */
 export const SQAA_MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -81,13 +86,35 @@ export async function resolveChangeSet(
   return { files, ignored: [...binaryIgnored, ...oversizedIgnored], repoRoot };
 }
 
+/** Explicit `--branch` wins; otherwise auto-detect from git when possible. */
+export async function resolveSqaaBranch(
+  explicitBranch: string | undefined,
+  contextPath: string = process.cwd(),
+): Promise<string | undefined> {
+  return explicitBranch ?? (await resolveCurrentGitBranch(contextPath));
+}
+
+/** Same as {@link resolveSqaaBranch}, but for an already-resolved repository root. */
+export async function resolveSqaaBranchAtRepoRoot(
+  explicitBranch: string | undefined,
+  repoRoot: string,
+): Promise<string | undefined> {
+  return explicitBranch ?? (await resolveGitBranchAtRepoRoot(repoRoot));
+}
+
 /**
  * Resolve the absolute path of the repository top-level for `cwd`.
  * Throws CommandFailedError when `cwd` is not inside a Git repository.
  */
 async function resolveRepoRoot(cwd: string): Promise<string> {
-  const out = await runGit(['rev-parse', '--show-toplevel'], cwd);
-  return resolve(out.trim());
+  const root = await resolveGitRepoRoot(cwd);
+  if (!root) {
+    throw new CommandFailedError('Not inside a git repository.', {
+      remediationHint:
+        'Ensure git is installed and available on PATH, then retry from a git repository.',
+    });
+  }
+  return root;
 }
 
 async function getDiffFiles(
