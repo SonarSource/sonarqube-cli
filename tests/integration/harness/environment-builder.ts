@@ -29,15 +29,15 @@ import { version as CURRENT_CLI_VERSION } from '../../../package.json';
 import {
   type BinarySpec,
   buildLocalBinaryName,
-} from '../../../src/cli/commands/_common/install/binary';
-import { buildLocalCagBinaryName } from '../../../src/cli/commands/_common/install/context-augmentation';
-import { SCA_SCANNER_SPEC } from '../../../src/cli/commands/_common/install/sca-scanner';
-import { SECRETS_SPEC } from '../../../src/cli/commands/_common/install/secrets';
-import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../src/cli/commands/integrate/_common/features/context-augmentation-feature';
-import { recordInstalledFeature } from '../../../src/cli/commands/integrate/_common/registry/installation-recorder';
-import type { IntegrationDeclaration } from '../../../src/cli/commands/integrate/_common/registry/types';
-import { SQAA_HOOK_FEATURE_ID } from '../../../src/cli/commands/integrate/_common/sqaa-entitlement';
-import { CLAUDE_INTEGRATION_ID } from '../../../src/cli/commands/integrate/claude/declaration';
+} from '../../../src/commands/_common/install/binary';
+import { buildLocalCagBinaryName } from '../../../src/commands/_common/install/context-augmentation';
+import { SCA_SCANNER_SPEC } from '../../../src/commands/_common/install/sca-scanner';
+import { SECRETS_SPEC } from '../../../src/commands/_common/install/secrets';
+import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../src/commands/integrate/_common/features/context-augmentation-feature';
+import { recordInstalledFeature } from '../../../src/commands/integrate/_common/registry/installation-recorder.ts';
+import type { IntegrationDeclaration } from '../../../src/commands/integrate/_common/registry/types.ts';
+import { SQAA_HOOK_FEATURE_ID } from '../../../src/commands/integrate/_common/sqaa-entitlement.ts';
+import { CLAUDE_INTEGRATION_ID } from '../../../src/commands/integrate/claude/declaration';
 import { canonicalizePath } from '../../../src/lib/fs-utils';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types.js';
 import { generateKeychainAccount } from '../../../src/lib/keychain';

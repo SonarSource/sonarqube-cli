@@ -28,7 +28,7 @@ import fs from 'node:fs';
 import { join } from 'node:path';
 
 import { version as VERSION } from '../../../package.json';
-import { CommandFailedError } from '../../cli/commands/_common/error.js';
+import { CommandFailedError } from '../../commands/_common/error.ts';
 import { getCliDir as resolveCliDir } from '../config-constants.js';
 import logger from '../logger.js';
 import { type CliState, getDefaultState } from '../state.js';

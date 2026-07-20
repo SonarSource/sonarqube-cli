@@ -1,0 +1,478 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+import * as nodeFs from 'node:fs';
+import * as fsPromises from 'node:fs/promises';
+
+import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
+
+import {
+  areHooksInstalled,
+  detectGlobalSecretsHook,
+  installHooks,
+} from '../../../../../src/commands/integrate/claude/hooks.ts';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
+
+const PROJECT_ROOT = '/fake/project';
+const GLOBAL_DIR = '/fake/global';
+const PROJECT_KEY = 'my-project';
+
+/** Normalize path separators to forward slashes for cross-platform assertions. */
+const normPath = (s: string) => s.replaceAll('\\', '/');
+
+interface AgentSettings {
+  hooks?: Record<
+    string,
+    Array<{ matcher: string; hooks: Array<{ type: string; command: string }> }>
+  >;
+  [key: string]: unknown;
+}
+
+function getSettingsWriteFor(hookType: string): AgentSettings | undefined {
+  return writeFileSpy.mock.calls
+    .filter(([path]) => (path as string).includes('settings.json'))
+    .map(([, content]) => JSON.parse(content as string) as AgentSettings)
+    .find((s) => s.hooks?.[hookType]);
+}
+
+function getScriptWriteFor(nameFragment: string): string | undefined {
+  const call = writeFileSpy.mock.calls.find(([path]) => (path as string).includes(nameFragment));
+  return call ? (call[1] as string) : undefined;
+}
+
+function getScriptPathFor(nameFragment: string): string | undefined {
+  const call = writeFileSpy.mock.calls.find(([path]) => (path as string).includes(nameFragment));
+  return call ? (call[0] as string) : undefined;
+}
+
+let writeFileSpy: Mock<Extract<(typeof fsPromises)['writeFile'], (...args: any[]) => any>>;
+
+describe('detectGlobalSecretsHook', () => {
+  let existsSyncSpy: Mock<Extract<(typeof nodeFs)['existsSync'], (...args: any[]) => any>>;
+  let readFileSpy: Mock<Extract<(typeof fsPromises)['readFile'], (...args: any[]) => any>>;
+
+  const SETTINGS_WITH_SECRETS = {
+    hooks: {
+      PreToolUse: [
+        {
+          matcher: 'Read',
+          hooks: [
+            { type: 'command', command: '.claude/hooks/sonar-secrets/pretool.sh', timeout: 60 },
+          ],
+        },
+      ],
+    },
+  };
+
+  beforeEach(() => {
+    setMockUi(true);
+    existsSyncSpy = spyOn(nodeFs, 'existsSync').mockReturnValue(true);
+    readFileSpy = spyOn(fsPromises, 'readFile').mockResolvedValue('{}');
+  });
+
+  afterEach(() => {
+    clearMockUiCalls();
+    setMockUi(false);
+    existsSyncSpy.mockRestore();
+    readFileSpy.mockRestore();
+  });
+
+  it('returns undefined and stays silent when settings.json does not exist (absent)', async () => {
+    existsSyncSpy.mockReturnValue(false);
+
+    expect(await detectGlobalSecretsHook(PROJECT_ROOT)).toBeUndefined();
+    const noisy = getMockUiCalls().filter((c) => c.method === 'info' || c.method === 'warn');
+    expect(noisy).toHaveLength(0);
+  });
+
+  it('returns undefined and stays silent when no PreToolUse entry references sonar-secrets (absent)', async () => {
+    readFileSpy.mockResolvedValue(JSON.stringify({ hooks: { PreToolUse: [] } }));
+
+    expect(await detectGlobalSecretsHook(PROJECT_ROOT)).toBeUndefined();
+    const noisy = getMockUiCalls().filter((c) => c.method === 'info' || c.method === 'warn');
+    expect(noisy).toHaveLength(0);
+  });
+
+  it('returns undefined and stays silent when settings.json contains malformed JSON (absent)', async () => {
+    readFileSpy.mockResolvedValue('{ invalid json !!!');
+
+    expect(await detectGlobalSecretsHook(PROJECT_ROOT)).toBeUndefined();
+    const noisy = getMockUiCalls().filter((c) => c.method === 'info' || c.method === 'warn');
+    expect(noisy).toHaveLength(0);
+  });
+
+  it('returns undefined and emits warn(...) when settings entry exists but the sonar-secrets script directory is missing (orphaned)', async () => {
+    readFileSpy.mockResolvedValue(JSON.stringify(SETTINGS_WITH_SECRETS));
+    existsSyncSpy.mockImplementation((p: nodeFs.PathLike) => {
+      const path = normPath(String(p));
+      if (path.endsWith('.claude/hooks/sonar-secrets')) return false;
+      return path.endsWith('.claude/settings.json');
+    });
+
+    const result = await detectGlobalSecretsHook(PROJECT_ROOT);
+
+    expect(result).toBeUndefined();
+    const warnCall = getMockUiCalls().find(
+      (c) =>
+        c.method === 'warn' &&
+        String(c.args[0]).includes(
+          'WARNING: Global hook configuration detected, but the source files are missing',
+        ),
+    );
+    expect(warnCall).toBeDefined();
+  });
+
+  it('returns the hook dir silently when both settings entry and sonar-secrets script directory are present (installed)', async () => {
+    readFileSpy.mockResolvedValue(JSON.stringify(SETTINGS_WITH_SECRETS));
+    existsSyncSpy.mockImplementation((p: nodeFs.PathLike) => {
+      const path = normPath(String(p));
+      return path.endsWith('.claude/settings.json') || path.endsWith('.claude/hooks/sonar-secrets');
+    });
+
+    const result = await detectGlobalSecretsHook(PROJECT_ROOT);
+
+    expect(result).toBeDefined();
+    expect(normPath(result ?? '')).toEndWith('.claude/hooks/sonar-secrets');
+    const infoCall = getMockUiCalls().find((c) => c.method === 'info');
+    expect(infoCall).toBeUndefined();
+  });
+});
+
+describe('areHooksInstalled', () => {
+  let existsSyncSpy: Mock<Extract<(typeof nodeFs)['existsSync'], (...args: any[]) => any>>;
+  let readFileSpy: Mock<Extract<(typeof fsPromises)['readFile'], (...args: any[]) => any>>;
+
+  beforeEach(() => {
+    existsSyncSpy = spyOn(nodeFs, 'existsSync').mockReturnValue(true);
+    readFileSpy = spyOn(fsPromises, 'readFile').mockResolvedValue('{}');
+  });
+
+  afterEach(() => {
+    existsSyncSpy.mockRestore();
+    readFileSpy.mockRestore();
+  });
+
+  it('returns true when a sonar-secrets hook installation is detected', async () => {
+    const settings = {
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: 'Read',
+            hooks: [
+              { type: 'command', command: '.claude/hooks/sonar-secrets/pretool.sh', timeout: 60 },
+            ],
+          },
+        ],
+      },
+    };
+    readFileSpy.mockResolvedValue(JSON.stringify(settings));
+    existsSyncSpy.mockImplementation((p: nodeFs.PathLike) => {
+      const path = normPath(String(p));
+      return path.endsWith('.claude/settings.json') || path.endsWith('.claude/hooks/sonar-secrets');
+    });
+
+    expect(await areHooksInstalled(PROJECT_ROOT)).toBe(true);
+  });
+
+  it('returns false when no installation is detected', async () => {
+    existsSyncSpy.mockReturnValue(false);
+
+    expect(await areHooksInstalled(PROJECT_ROOT)).toBe(false);
+  });
+});
+
+describe('installHooks', () => {
+  // The production code reads `process.platform` directly,
+  // so platform-specific assertions branch on the real
+  // host platform.
+  const IS_WINDOWS = process.platform === 'win32';
+  // On Windows the registered command is `powershell -NoProfile -ExecutionPolicy Bypass -File ".claude/..."`
+  // (forward slashes via replaceAll, path double-quoted); on Unix it is the single-quoted `'.claude/...'` path.
+  const isProjectScopedCommand = (command: string): boolean =>
+    IS_WINDOWS
+      ? command.includes('powershell -NoProfile -ExecutionPolicy Bypass -File ".claude/')
+      : command.startsWith("'.claude/");
+
+  let existsSyncSpy: Mock<Extract<(typeof nodeFs)['existsSync'], (...args: any[]) => any>>;
+  let mkdirSyncSpy: Mock<Extract<(typeof nodeFs)['mkdirSync'], (...args: any[]) => any>>;
+  let readFileSpy: Mock<Extract<(typeof fsPromises)['readFile'], (...args: any[]) => any>>;
+
+  beforeEach(() => {
+    existsSyncSpy = spyOn(nodeFs, 'existsSync').mockReturnValue(false);
+    mkdirSyncSpy = spyOn(nodeFs, 'mkdirSync').mockReturnValue(undefined);
+    readFileSpy = spyOn(fsPromises, 'readFile').mockResolvedValue('{"hooks":{}}');
+    writeFileSpy = spyOn(fsPromises, 'writeFile').mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    existsSyncSpy.mockRestore();
+    mkdirSyncSpy.mockRestore();
+    readFileSpy.mockRestore();
+    writeFileSpy.mockRestore();
+  });
+
+  it('writes the pretool-secrets script file', async () => {
+    await installHooks(PROJECT_ROOT);
+
+    expect(getScriptPathFor('pretool-secrets')).toBeDefined();
+  });
+
+  it('writes the prompt-secrets script file', async () => {
+    await installHooks(PROJECT_ROOT);
+
+    expect(getScriptPathFor('prompt-secrets')).toBeDefined();
+  });
+
+  it('does not write the posttool-sqaa script when installSqaa is false', async () => {
+    await installHooks(PROJECT_ROOT, undefined, false);
+
+    expect(getScriptPathFor('posttool-sqaa')).toBeUndefined();
+  });
+
+  it('does not write the posttool-sqaa script when projectKey is not provided', async () => {
+    await installHooks(PROJECT_ROOT, undefined, true);
+
+    expect(getScriptPathFor('posttool-sqaa')).toBeUndefined();
+  });
+
+  it('writes the posttool-sqaa script when installSqaa is true and projectKey is provided', async () => {
+    await installHooks(PROJECT_ROOT, undefined, true, PROJECT_KEY);
+
+    expect(getScriptPathFor('posttool-sqaa')).toBeDefined();
+  });
+
+  it('installs secrets scripts to globalDir when globalDir is provided', async () => {
+    await installHooks(PROJECT_ROOT, GLOBAL_DIR);
+
+    expect(normPath(getScriptPathFor('pretool-secrets') ?? '')).toContain(GLOBAL_DIR);
+  });
+
+  it('installs secrets scripts to projectRoot when globalDir is not provided', async () => {
+    await installHooks(PROJECT_ROOT);
+
+    expect(normPath(getScriptPathFor('pretool-secrets') ?? '')).toContain(PROJECT_ROOT);
+  });
+
+  it('installs SQAA script to projectRoot even when globalDir is set', async () => {
+    await installHooks(PROJECT_ROOT, GLOBAL_DIR, true, PROJECT_KEY);
+
+    const sqaaPath = normPath(getScriptPathFor('posttool-sqaa') ?? '');
+    expect(sqaaPath).toContain(PROJECT_ROOT);
+    expect(sqaaPath).not.toContain(GLOBAL_DIR);
+  });
+
+  it('writes a PreToolUse hook entry with Read matcher', async () => {
+    await installHooks(PROJECT_ROOT);
+
+    const settings = getSettingsWriteFor('PreToolUse');
+    expect(settings?.hooks?.PreToolUse?.[0]?.matcher).toBe('Read');
+  });
+
+  it('writes a UserPromptSubmit hook entry with wildcard matcher', async () => {
+    await installHooks(PROJECT_ROOT);
+
+    const settings = getSettingsWriteFor('UserPromptSubmit');
+    expect(settings?.hooks?.UserPromptSubmit?.[0]?.matcher).toBe('*');
+  });
+
+  it('writes a PostToolUse hook entry with Edit|Write matcher when SQAA is enabled', async () => {
+    await installHooks(PROJECT_ROOT, undefined, true, PROJECT_KEY);
+
+    const settings = getSettingsWriteFor('PostToolUse');
+    expect(settings?.hooks?.PostToolUse?.[0]?.matcher).toBe('Edit|Write');
+  });
+
+  it('uses a relative command path for project scope (no globalDir)', async () => {
+    await installHooks(PROJECT_ROOT);
+
+    const settings = getSettingsWriteFor('PreToolUse');
+    const command = settings?.hooks?.PreToolUse?.[0]?.hooks?.[0]?.command;
+    expect(isProjectScopedCommand(String(command))).toBe(true);
+  });
+
+  it('uses an absolute command path for global scope (with globalDir)', async () => {
+    await installHooks(PROJECT_ROOT, GLOBAL_DIR);
+
+    const settings = getSettingsWriteFor('PreToolUse');
+    const command = settings?.hooks?.PreToolUse?.[0]?.hooks?.[0]?.command;
+    expect(normPath(String(command))).toContain(GLOBAL_DIR);
+  });
+
+  it('quotes a global command path containing a space so the shell keeps it one argument', async () => {
+    await installHooks(PROJECT_ROOT, '/fake/global dir');
+
+    const command = String(
+      getSettingsWriteFor('PreToolUse')?.hooks?.PreToolUse?.[0]?.hooks?.[0]?.command,
+    );
+    if (IS_WINDOWS) {
+      expect(command).toContain('powershell -NoProfile -ExecutionPolicy Bypass -File "');
+      expect(normPath(command)).toContain('/fake/global dir/');
+      expect(command.endsWith('.ps1"')).toBe(true);
+    } else {
+      expect(command).toBe(
+        "'/fake/global dir/.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh'",
+      );
+    }
+    // Marker preserved so re-running still finds and replaces the entry.
+    expect(command).toContain('sonar-secrets');
+  });
+
+  it.skipIf(IS_WINDOWS)(
+    'escapes an embedded apostrophe in a global command path (Unix)',
+    async () => {
+      await installHooks(PROJECT_ROOT, "/fake/o'brien");
+
+      const command = String(
+        getSettingsWriteFor('PreToolUse')?.hooks?.PreToolUse?.[0]?.hooks?.[0]?.command,
+      );
+      expect(command).toBe(
+        "'/fake/o'\\''brien/.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh'",
+      );
+    },
+  );
+
+  it('uses a relative command path for the SQAA hook regardless of globalDir', async () => {
+    await installHooks(PROJECT_ROOT, GLOBAL_DIR, true, PROJECT_KEY);
+
+    const settings = getSettingsWriteFor('PostToolUse');
+    const command = settings?.hooks?.PostToolUse?.[0]?.hooks?.[0]?.command;
+    expect(isProjectScopedCommand(String(command))).toBe(true);
+  });
+
+  it('preserves existing unrelated settings when settings.json already exists', async () => {
+    existsSyncSpy.mockReturnValue(true);
+    readFileSpy.mockResolvedValue(JSON.stringify({ theme: 'dark', hooks: {} }));
+
+    await installHooks(PROJECT_ROOT);
+
+    const allWrites = (writeFileSpy.mock.calls as Array<[unknown, unknown]>)
+      .filter(([path]) => String(path).includes('settings.json'))
+      .map(([, content]) => JSON.parse(String(content)) as AgentSettings);
+    expect(allWrites.every((s) => (s as { theme?: string }).theme === 'dark')).toBe(true);
+  });
+
+  it('replaces existing sonar-secrets hook entry rather than appending', async () => {
+    existsSyncSpy.mockReturnValue(true);
+    const existing = {
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: 'Read',
+            hooks: [
+              { type: 'command', command: '.claude/hooks/sonar-secrets/old.sh', timeout: 60 },
+            ],
+          },
+        ],
+      },
+    };
+    readFileSpy.mockResolvedValue(JSON.stringify(existing));
+
+    await installHooks(PROJECT_ROOT);
+
+    const settings = getSettingsWriteFor('PreToolUse');
+    expect(settings?.hooks?.PreToolUse).toHaveLength(1);
+  });
+
+  it('preserves existing non-sonar PostToolUse entries when adding SQAA hook', async () => {
+    existsSyncSpy.mockReturnValue(true);
+    const existing = {
+      hooks: {
+        PostToolUse: [
+          { matcher: 'Bash', hooks: [{ type: 'command', command: 'echo ran', timeout: 60 }] },
+        ],
+      },
+    };
+    readFileSpy.mockResolvedValue(JSON.stringify(existing));
+
+    await installHooks(PROJECT_ROOT, undefined, true, PROJECT_KEY);
+
+    const settings = getSettingsWriteFor('PostToolUse');
+    const bashEntry = settings?.hooks?.PostToolUse?.find((e) => e.matcher === 'Bash');
+    expect(bashEntry).toBeDefined();
+  });
+
+  it('pretool-secrets script delegates to sonar hook claude-pre-tool-use', async () => {
+    await installHooks(PROJECT_ROOT);
+
+    expect(getScriptWriteFor('pretool-secrets')).toContain('sonar hook claude-pre-tool-use');
+  });
+
+  it('posttool-sqaa script contains the projectKey', async () => {
+    await installHooks(PROJECT_ROOT, undefined, true, PROJECT_KEY);
+
+    expect(getScriptWriteFor('posttool-sqaa')).toContain(PROJECT_KEY);
+  });
+
+  it('writes a script with the platform-appropriate extension', async () => {
+    await installHooks(PROJECT_ROOT);
+
+    const scriptExt = IS_WINDOWS ? '.ps1' : '.sh';
+    expect(getScriptPathFor('pretool-secrets')).toContain(scriptExt);
+  });
+
+  it('does not throw when a file system error occurs', async () => {
+    writeFileSpy.mockRejectedValue(new Error('ENOENT: no such file'));
+
+    const actual = await installHooks(PROJECT_ROOT);
+
+    expect(actual).toBeUndefined();
+  });
+
+  describe('skipSecretsHooks option', () => {
+    it('does not write the pretool-secrets script when skipSecretsHooks is true', async () => {
+      await installHooks(PROJECT_ROOT, undefined, false, undefined, { skipSecretsHooks: true });
+
+      expect(getScriptPathFor('pretool-secrets')).toBeUndefined();
+    });
+
+    it('does not write the prompt-secrets script when skipSecretsHooks is true', async () => {
+      await installHooks(PROJECT_ROOT, undefined, false, undefined, { skipSecretsHooks: true });
+
+      expect(getScriptPathFor('prompt-secrets')).toBeUndefined();
+    });
+
+    it('does not write any sonar-secrets entries to settings.json when skipSecretsHooks is true', async () => {
+      await installHooks(PROJECT_ROOT, undefined, false, undefined, { skipSecretsHooks: true });
+
+      expect(getSettingsWriteFor('PreToolUse')).toBeUndefined();
+      expect(getSettingsWriteFor('UserPromptSubmit')).toBeUndefined();
+    });
+
+    it('still writes the posttool-sqaa script when skipSecretsHooks is true and SQAA is enabled', async () => {
+      await installHooks(PROJECT_ROOT, undefined, true, PROJECT_KEY, { skipSecretsHooks: true });
+
+      expect(getScriptPathFor('posttool-sqaa')).toBeDefined();
+    });
+
+    it('still writes the PostToolUse SQAA settings entry when skipSecretsHooks is true and SQAA is enabled', async () => {
+      await installHooks(PROJECT_ROOT, undefined, true, PROJECT_KEY, { skipSecretsHooks: true });
+
+      const settings = getSettingsWriteFor('PostToolUse');
+      expect(settings?.hooks?.PostToolUse?.[0]?.matcher).toBe('Edit|Write');
+    });
+
+    it('writes secrets scripts when skipSecretsHooks is false (default behaviour unchanged)', async () => {
+      await installHooks(PROJECT_ROOT, undefined, false, undefined, { skipSecretsHooks: false });
+
+      expect(getScriptPathFor('pretool-secrets')).toBeDefined();
+      expect(getScriptPathFor('prompt-secrets')).toBeDefined();
+    });
+  });
+});

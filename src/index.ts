@@ -22,7 +22,7 @@
 
 // Main CLI entry point
 
-import { COMMAND_TREE } from './cli/command-tree';
+import { COMMAND_TREE } from './commands/command-tree.ts';
 import * as postUpdate from './lib/post-update';
 import { flushSentry } from './lib/sentry';
 import { setFormattedOutputMode } from './ui';

@@ -23,18 +23,18 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { version as CURRENT_VERSION } from '../../package.json';
-import { installScaScannerBinary } from '../cli/commands/_common/install/sca-scanner';
-import { installSecretsBinary } from '../cli/commands/_common/install/secrets';
-import { supportedIntegrations } from '../cli/commands/integrate';
+import { installScaScannerBinary } from '../commands/_common/install/sca-scanner';
+import { installSecretsBinary } from '../commands/_common/install/secrets';
+import { supportedIntegrations } from '../commands/integrate';
 import {
   type FeatureDeclaration,
   findInstalledIntegration,
   integrationInstaller,
   type IntegrationRegistry,
   isFeatureContainer,
-} from '../cli/commands/integrate/_common/registry';
-import { CLAUDE_INTEGRATION_ID } from '../cli/commands/integrate/claude/declaration';
-import { installHooks } from '../cli/commands/integrate/claude/hooks.js';
+} from '../commands/integrate/_common/registry';
+import { CLAUDE_INTEGRATION_ID } from '../commands/integrate/claude/declaration';
+import { installHooks } from '../commands/integrate/claude/hooks.js';
 import { appendTelemetryEvent } from '../telemetry/telemetry-events.js';
 import { getTelemetryDir } from './config-constants.js';
 import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from './install-types.js';

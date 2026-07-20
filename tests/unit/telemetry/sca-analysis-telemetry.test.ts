@@ -31,7 +31,7 @@ import type {
   AnalyzeProjectResponse,
   ScaIssueType,
   Severity,
-} from '../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.js';
+} from '../../../src/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import type { ResolvedAuth } from '../../../src/lib/auth-resolver.js';
 import { ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
 import * as stateRepository from '../../../src/lib/repository/state-repository.js';

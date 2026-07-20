@@ -31,8 +31,8 @@ import { fileURLToPath } from 'node:url';
 import type { Option } from 'commander';
 
 import { version } from '../../package.json';
-import { COMMAND_TREE } from '../../src/cli/command-tree';
-import type { SonarCommand } from '../../src/cli/commands/_common/sonar-command';
+import type { SonarCommand } from '../../src/commands/_common/sonar-command.ts';
+import { COMMAND_TREE } from '../../src/commands/command-tree.ts';
 import { EXAMPLES } from './examples';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

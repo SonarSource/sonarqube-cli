@@ -36,8 +36,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { nativeGitIntegration } from '../../../../src/cli/commands/integrate/git/tools/native';
-import { preCommitIntegration } from '../../../../src/cli/commands/integrate/git/tools/pre-commit';
+import { nativeGitIntegration } from '../../../../src/commands/integrate/git/tools/native';
+import { preCommitIntegration } from '../../../../src/commands/integrate/git/tools/pre-commit';
 import { CLI_TMP_DIR, SCA_SCANNER_CACHE_DIR } from '../../../../src/lib/config-constants';
 import { generateKeychainAccount } from '../../../../src/lib/keychain';
 import { hookScriptName, TestHarness } from '../../harness';

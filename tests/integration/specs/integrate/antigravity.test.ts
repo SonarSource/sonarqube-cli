@@ -24,7 +24,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { SQAA_GLOBAL_SKIP_MESSAGE } from '../../../../src/cli/commands/integrate/_common/sqaa-entitlement';
+import { SQAA_GLOBAL_SKIP_MESSAGE } from '../../../../src/commands/integrate/_common/sqaa-entitlement.ts';
 import { CLI_COMMAND } from '../../../../src/lib/config-constants';
 import {
   expectAgentPromptHint,

@@ -20,7 +20,7 @@
 
 import { randomUUID } from 'node:crypto';
 
-import type { AnalyzeProjectResponse } from '../cli/commands/analyze/dependency-risk-helpers/sca-scanner.js';
+import type { AnalyzeProjectResponse } from '../commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import type { ResolvedAuth } from '../lib/auth-resolver.js';
 import { emitAnalysisCompleted } from './telemetry-events.js';
 

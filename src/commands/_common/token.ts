@@ -1,0 +1,279 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+// Auth module - OAuth flow and token management
+
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import * as readline from 'node:readline';
+
+import { isSonarQubeCloud } from '../../lib/auth-resolver.ts';
+import { openBrowser } from '../../lib/browser.ts';
+import logger from '../../lib/logger.ts';
+import { startLoopbackServer } from '../../lib/loopback-server.ts';
+import { fetchServerVersion, isAtLeast } from '../../lib/server-info.ts';
+import { SonarQubeClient } from '../../sonarqube/client.ts';
+import { isMockActive, pressEnterKeyPrompt, print, warn } from '../../ui';
+import { blue } from '../../ui/colors.ts';
+
+const HTTP_STATUS_OK = 200;
+const HTTP_STATUS_METHOD_NOT_ALLOWED = 405;
+const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
+const MAX_POST_BODY_BYTES = 4096;
+
+export type TokenStatus = 'valid' | 'invalid' | 'unreachable';
+
+export interface TokenCheckResult {
+  status: TokenStatus;
+  errorMessage?: string;
+}
+
+export interface BrowserAuthResult {
+  token: string;
+  tokenName?: string;
+}
+
+export async function checkTokenStatus(
+  serverURL: string,
+  token: string,
+): Promise<TokenCheckResult> {
+  try {
+    const client = new SonarQubeClient(serverURL, token);
+    const status = await client.checkTokenValidity();
+    return { status };
+  } catch (err) {
+    // checkTokenValidity() lets HTTP errors propagate — any non-200 response or
+    // network failure is treated as a connectivity issue rather than an auth failure,
+    // because /api/authentication/validate always returns HTTP 200 per the SonarQube API contract.
+    const errorMessage = (err as Error).message;
+    logger.debug(`Token validation failed for ${serverURL}: ${errorMessage}`);
+    return { status: 'unreachable', errorMessage };
+  }
+}
+
+/**
+ * Parse the JSON body sent by the browser OAuth callback.
+ * Returns the token and, when present, the server-generated token name.
+ */
+export function parseBrowserAuthCallback(body: string): BrowserAuthResult | undefined {
+  try {
+    const data = JSON.parse(body) as Record<string, unknown>;
+    const token = data.token;
+    if (typeof token !== 'string' || token.length === 0) {
+      return undefined;
+    }
+
+    const name = data.name;
+    return {
+      token,
+      tokenName: typeof name === 'string' && name.length > 0 ? name : undefined,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Build authentication URL from server URL and port
+ */
+export function buildAuthURL(serverURL: string, port: number, serverVersion?: string): string {
+  const cleanServerURL = serverURL.replace(/\/$/, '');
+  if (isSonarQubeCloud(serverURL) || isAtLeast(serverVersion, '26.2')) {
+    return `${cleanServerURL}/auth?product=cli&port=${port}`;
+  }
+
+  return `${cleanServerURL}/sonarlint/auth?ideName=sonarqube-cli&port=${port}`;
+}
+
+/**
+ * Open browser, with fallback message if it fails.
+ * Skipped when CI=true — token must be delivered directly to the loopback server.
+ */
+export async function openBrowserWithFallback(authURL: string): Promise<void> {
+  if (process.env.CI === 'true') {
+    return;
+  }
+  try {
+    await openBrowser(authURL);
+  } catch (error) {
+    warn(`Failed to open browser automatically: ${String(error)}`);
+    print('Copy the URL above and open it manually');
+  }
+}
+
+/**
+ * Send success response to HTTP client
+ */
+export function sendSuccessResponse(
+  res: ServerResponse,
+  extractedAuthResult?: BrowserAuthResult,
+  onToken?: (token: string, tokenName?: string) => void,
+): void {
+  res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/plain' });
+  res.end('OK');
+  if (extractedAuthResult && onToken) {
+    onToken(extractedAuthResult.token, extractedAuthResult.tokenName);
+  }
+}
+
+/**
+ * Handle POST request - read body and extract token
+ */
+export function handlePostRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  onToken: (token: string, tokenName?: string) => void,
+): void {
+  let body = '';
+  let bodySize = 0;
+  req.on('data', (chunk: Buffer) => {
+    bodySize += chunk.length;
+    if (bodySize > MAX_POST_BODY_BYTES) {
+      logger.warn(`POST body exceeds ${MAX_POST_BODY_BYTES} bytes limit, rejecting`);
+      res.writeHead(HTTP_STATUS_PAYLOAD_TOO_LARGE);
+      res.end('Payload Too Large');
+      req.destroy();
+      return;
+    }
+    body += chunk.toString();
+  });
+  req.on('end', () => {
+    if (bodySize > MAX_POST_BODY_BYTES) {
+      return;
+    }
+    const extractedAuthResult = parseBrowserAuthCallback(body);
+    sendSuccessResponse(res, extractedAuthResult, onToken);
+  });
+}
+
+/**
+ * Create request handler for loopback server
+ */
+export function createRequestHandler(onToken: (token: string, tokenName?: string) => void) {
+  return (req: IncomingMessage, res: ServerResponse) => {
+    if (req.method === 'POST') {
+      handlePostRequest(req, res, onToken);
+    } else {
+      res.writeHead(HTTP_STATUS_METHOD_NOT_ALLOWED);
+      res.end('Method Not Allowed');
+    }
+  };
+}
+
+/**
+ * Interactive wait: resolves when the loopback server delivers the token
+ * OR the user manually pastes one and presses Enter.
+ * Rejects on Ctrl+C cancellation.
+ * Uses readline (not TextPrompt) so that when the server delivers the token we can
+ * close the interface and release stdin, avoiding the prompt staying open and
+ * blocking the next prompt (e.g. org key) on Windows.
+ */
+export async function waitForTokenInteractive(
+  serverTokenPromise: Promise<BrowserAuthResult>,
+): Promise<BrowserAuthResult> {
+  return new Promise<BrowserAuthResult>((resolve, reject) => {
+    let settled = false;
+    /** Only call rl.close() once; skip when we're already inside the 'close' handler (e.g. Ctrl+C). */
+    let rlClosed = false;
+
+    function settle(result?: BrowserAuthResult, err?: Error): void {
+      if (settled) return;
+      settled = true;
+      if (!rlClosed) {
+        rlClosed = true;
+        rl.close();
+        process.stdin.resume(); // so next prompt (e.g. org key) receives keypresses on Windows
+      }
+      if (err) reject(err);
+      else resolve(result ?? { token: '' });
+    }
+
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+
+    rl.on('close', () => {
+      if (!settled) settle(undefined, new Error('Authentication cancelled'));
+    });
+
+    serverTokenPromise
+      .then((token) => {
+        settle(token);
+      })
+      .catch(() => undefined);
+
+    print('  ⏳  Waiting for authorization... or paste token and press Enter:');
+    rl.question('', (line) => {
+      if (settled) return;
+      const userToken = line.trim();
+      if (userToken.length > 0) settle({ token: userToken });
+    });
+  });
+}
+
+/**
+ * Generate token via browser OAuth flow
+ */
+export async function generateTokenViaBrowser(
+  serverURL: string,
+  openBrowserFn: (url: string) => Promise<void> = openBrowserWithFallback,
+): Promise<BrowserAuthResult> {
+  let resolveToken: ((result: BrowserAuthResult) => void) | null = null;
+
+  const tokenPromise = new Promise<BrowserAuthResult>((resolve) => {
+    resolveToken = resolve;
+  });
+
+  const serverVersion = isSonarQubeCloud(serverURL)
+    ? undefined
+    : await fetchServerVersion(serverURL).catch(() => undefined);
+
+  // Allow the Sonar server origin so the OAuth callback POST is not blocked by DNS rebinding protection
+  const serverOrigin = new URL(serverURL).origin;
+  const server = await startLoopbackServer(
+    createRequestHandler((token: string, tokenName?: string) => {
+      if (resolveToken) {
+        resolveToken({ token, tokenName });
+      }
+    }),
+    { allowedOrigins: [serverOrigin] },
+  );
+
+  const authURL = buildAuthURL(serverURL, server.port, serverVersion);
+
+  print('🔑 Obtaining access token from SonarQube...');
+  print(`URL: ${blue(authURL)}`);
+  await pressEnterKeyPrompt('Press Enter to open the browser');
+  await openBrowserFn(authURL);
+
+  let authResult: BrowserAuthResult | undefined;
+  try {
+    if (isMockActive() || process.env.CI === 'true') {
+      // Non-interactive: wait for server token
+      authResult = await tokenPromise;
+    } else {
+      // Interactive: race between browser delivery and manual paste
+      authResult = await waitForTokenInteractive(tokenPromise);
+    }
+  } finally {
+    await server.close().catch((err: unknown) => {
+      logger.warn(`Auth server shutdown error: ${(err as Error).message}`);
+    });
+  }
+
+  return authResult;
+}

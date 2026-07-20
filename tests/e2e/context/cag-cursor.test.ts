@@ -30,7 +30,7 @@ import { dirname, join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
-import { CURSOR_INTEGRATION_ID } from '../../../src/cli/commands/integrate/cursor/declaration';
+import { CURSOR_INTEGRATION_ID } from '../../../src/commands/integrate/cursor/declaration';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../src/lib/signatures';
 import type { CliState } from '../../../src/lib/state';
 import { TestHarness } from '../../integration/harness';

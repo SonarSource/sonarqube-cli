@@ -30,11 +30,11 @@ import {
   CONTEXT_AUGMENTATION_FEATURE_ID,
   CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
   CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID,
-} from '../../../src/cli/commands/integrate/_common/features/context-augmentation-feature';
-import { CLAUDE_INTEGRATION_ID } from '../../../src/cli/commands/integrate/claude/declaration';
-import { CODEX_INTEGRATION_ID } from '../../../src/cli/commands/integrate/codex/declaration';
-import { COPILOT_INTEGRATION_ID } from '../../../src/cli/commands/integrate/copilot/declaration';
-import { CURSOR_INTEGRATION_ID } from '../../../src/cli/commands/integrate/cursor/declaration';
+} from '../../../src/commands/integrate/_common/features/context-augmentation-feature';
+import { CLAUDE_INTEGRATION_ID } from '../../../src/commands/integrate/claude/declaration';
+import { CODEX_INTEGRATION_ID } from '../../../src/commands/integrate/codex/declaration';
+import { COPILOT_INTEGRATION_ID } from '../../../src/commands/integrate/copilot/declaration';
+import { CURSOR_INTEGRATION_ID } from '../../../src/commands/integrate/cursor/declaration';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types';
 import type {
   CliState,
