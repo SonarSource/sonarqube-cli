@@ -192,79 +192,76 @@ describe('loadSonarLintConfig', () => {
     }
   });
 
-  it('on Unix: broken symlink to connectedMode.json is skipped; Backup.json wins', async () => {
-    if (process.platform === 'win32') {
-      return;
-    }
+  it.skipIf(process.platform === 'win32')(
+    'on Unix: broken symlink to connectedMode.json is skipped; Backup.json wins',
+    async () => {
+      const root = tempProject('symlink');
+      const sl = join(root, '.sonarlint');
+      mkdirSync(sl, { recursive: true });
+      symlinkSync(join(sl, '__missing__.json'), join(sl, 'connectedMode.json'));
+      writeFileSync(
+        join(sl, 'Backup.json'),
+        JSON.stringify({ sonarCloudOrganization: 'acme', projectKey: 'from_backup' }),
+      );
 
-    const root = tempProject('symlink');
-    const sl = join(root, '.sonarlint');
-    mkdirSync(sl, { recursive: true });
-    symlinkSync(join(sl, '__missing__.json'), join(sl, 'connectedMode.json'));
-    writeFileSync(
-      join(sl, 'Backup.json'),
-      JSON.stringify({ sonarCloudOrganization: 'acme', projectKey: 'from_backup' }),
-    );
-
-    try {
-      const loaded = await loadSonarLintConfig(root);
-      expect(loaded?.relativePath).toBe(join('.sonarlint', 'Backup.json'));
-      expect(loaded?.config.projectKey).toBe('from_backup');
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-
-  it('on Unix: rejects when .sonarlint is a file', async () => {
-    if (process.platform === 'win32') {
-      return;
-    }
-
-    const root = tempProject('file');
-    mkdirSync(root, { recursive: true });
-    writeFileSync(join(root, '.sonarlint'), 'x');
-
-    try {
-      let caught: unknown;
       try {
-        await loadSonarLintConfig(root);
-      } catch (e) {
-        caught = e;
+        const loaded = await loadSonarLintConfig(root);
+        expect(loaded?.relativePath).toBe(join('.sonarlint', 'Backup.json'));
+        expect(loaded?.config.projectKey).toBe('from_backup');
+      } finally {
+        rmSync(root, { recursive: true, force: true });
       }
-      expect(caught).toMatchObject({ code: 'ENOTDIR' });
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
+    },
+  );
 
-  it('on Unix: non-ENOENT read failure propagates', async () => {
-    if (process.platform === 'win32') {
-      return;
-    }
+  it.skipIf(process.platform === 'win32')(
+    'on Unix: rejects when .sonarlint is a file',
+    async () => {
+      const root = tempProject('file');
+      mkdirSync(root, { recursive: true });
+      writeFileSync(join(root, '.sonarlint'), 'x');
 
-    const root = tempProject('chmod');
-    const sl = join(root, '.sonarlint');
-    mkdirSync(sl, { recursive: true });
-    const f = join(sl, 'connectedMode.json');
-    writeFileSync(f, JSON.stringify({ sonarCloudOrganization: 'o', projectKey: 'k' }));
-    chmodSync(f, 0o000);
-
-    try {
-      let caught: unknown;
       try {
-        await loadSonarLintConfig(root);
-      } catch (e) {
-        caught = e;
+        let caught: unknown;
+        try {
+          await loadSonarLintConfig(root);
+        } catch (e) {
+          caught = e;
+        }
+        expect(caught).toMatchObject({ code: 'ENOTDIR' });
+      } finally {
+        rmSync(root, { recursive: true, force: true });
       }
-      const code = (caught as NodeJS.ErrnoException | undefined)?.code;
-      expect(code === 'EACCES' || code === 'EPERM').toBe(true);
-    } finally {
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'on Unix: non-ENOENT read failure propagates',
+    async () => {
+      const root = tempProject('chmod');
+      const sl = join(root, '.sonarlint');
+      mkdirSync(sl, { recursive: true });
+      const f = join(sl, 'connectedMode.json');
+      writeFileSync(f, JSON.stringify({ sonarCloudOrganization: 'o', projectKey: 'k' }));
+      chmodSync(f, 0o000);
+
       try {
-        chmodSync(f, 0o644);
-      } catch {
-        /* ignore */
+        let caught: unknown;
+        try {
+          await loadSonarLintConfig(root);
+        } catch (e) {
+          caught = e;
+        }
+        const code = (caught as NodeJS.ErrnoException | undefined)?.code;
+        expect(code === 'EACCES' || code === 'EPERM').toBe(true);
+      } finally {
+        try {
+          chmodSync(f, 0o644);
+        } catch {
+          /* ignore */
+        }
+        rmSync(root, { recursive: true, force: true });
       }
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
+    },
+  );
 });
