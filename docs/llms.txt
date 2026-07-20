@@ -2,7 +2,7 @@
 
 > Code quality and security in your terminal. Scan, integrate, and fix issues — locally or with AI.
 
-- Version: 1.3.0
+- Version: 1.4.0
 - Install (Linux/macOS): curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash
 - Install (Windows): irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
 - Machine-readable schema: https://sonarsource.com/sonarqube/cli/data/commands.json
@@ -137,7 +137,7 @@ Options:
   --skip-context   Skip the sonar-context-augmentation install/init/skill step
 
 ### sonar integrate copilot *
-Setup SonarQube integration for Copilot. This will install secrets scanning hooks, configure Vortex agentic analysis and MCP Server.
+Setup SonarQube integration for GitHub Copilot CLI. This will install secrets scanning hooks, configure Vortex agentic analysis and MCP Server.
 Usage: sonar integrate copilot [--global] [-p <value>] [--non-interactive] [--skip-context]
 
 Options:
@@ -196,7 +196,7 @@ Examples:
   cat .env | sonar analyze secrets --stdin
 
 ### sonar analyze dependency-risks *
-Analyze project dependencies for security and license risks (beta: subject to change)
+Analyze project dependencies for security and license risks
 Usage: sonar analyze dependency-risks [-p <value>] [--format <value>] [--statuses <value>] [--min-severity <value>]
 
 Options:
@@ -273,9 +273,9 @@ Usage: sonar system reset [--force]
 Options:
   --force   Skip the interactive confirmation prompt (required for non-interactive use)
 
-### sonar self-update
+### sonar update
 Update SonarQube CLI to the latest version
-Usage: sonar self-update [--status] [--force]
+Usage: sonar update [--status] [--force]
 
 Options:
   --status   Check for a newer version without installing

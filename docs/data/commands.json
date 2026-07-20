@@ -1,5 +1,5 @@
 {
-  "version": "1.3.0",
+  "version": "1.4.0",
   "commands": [
     {
       "id": "sonar",
@@ -24,7 +24,7 @@
         "sonar-remediate",
         "sonar-config",
         "sonar-system",
-        "sonar-self-update"
+        "sonar-update"
       ]
     },
     {
@@ -537,7 +537,7 @@
       "id": "sonar-integrate-copilot",
       "name": "copilot",
       "fullName": "sonar integrate copilot",
-      "description": "Setup SonarQube integration for Copilot. This will install secrets scanning hooks, configure Vortex agentic analysis and MCP Server.",
+      "description": "Setup SonarQube integration for GitHub Copilot CLI. This will install secrets scanning hooks, configure Vortex agentic analysis and MCP Server.",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
@@ -871,7 +871,7 @@
       "id": "sonar-analyze-dependency-risks",
       "name": "dependency-risks",
       "fullName": "sonar analyze dependency-risks",
-      "description": "Analyze project dependencies for security and license risks (beta: subject to change)",
+      "description": "Analyze project dependencies for security and license risks",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
@@ -1153,9 +1153,9 @@
       "children": []
     },
     {
-      "id": "sonar-self-update",
-      "name": "self-update",
-      "fullName": "sonar self-update",
+      "id": "sonar-update",
+      "name": "update",
+      "fullName": "sonar update",
       "description": "Update SonarQube CLI to the latest version",
       "isGroup": false,
       "isRoot": false,
