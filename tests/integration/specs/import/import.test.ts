@@ -930,7 +930,7 @@ describe('sonar import', () => {
     );
 
     it(
-      'caps Manual selection at 25 repos',
+      'does not cap Manual selection — every eligible repo on the page can be selected',
       async () => {
         const manyRepos = Array.from({ length: 26 }, (_, i) => ({
           id: `repo-${i + 1}`,
@@ -947,8 +947,7 @@ describe('sonar import', () => {
         harness.withAuth(serverUrl, 'test-token');
 
         // down arrow+enter → Manual mode; toggle the first repo, then (down+toggle) 25 more
-        // times — 26 toggle attempts across 26 repos. The 26th is rejected since selection is
-        // capped at 25, so only the first 25 end up selected.
+        // times — 26 toggle attempts across all 26 repos, all of which must be accepted.
         const result = await harness.run('import --org my-org', {
           stdinChunks: ['\x1b[B\r', ' ' + '\x1b[B '.repeat(25) + '\r'],
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
@@ -956,17 +955,17 @@ describe('sonar import', () => {
         });
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('25 of 26 selected');
-        expect(result.stdout).toContain('Imported 25 repositories');
+        expect(result.stdout).toContain('26 of 26 selected');
+        expect(result.stdout).toContain('Imported 26 repositories');
         const recorded = server.getRecordedRequests();
         const provisionRequests = recorded.filter(
           (r) => r.path === '/api/alm_integration/provision_projects',
         );
-        expect(provisionRequests).toHaveLength(25);
+        expect(provisionRequests).toHaveLength(26);
         const installationKeys = provisionRequests.map((r) =>
           new URLSearchParams(r.body ?? '').get('installationKeys'),
         );
-        expect(installationKeys).not.toContain('repo-26');
+        expect(installationKeys).toContain('repo-26');
       },
       { timeout: 20000 },
     );

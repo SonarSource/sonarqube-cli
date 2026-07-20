@@ -494,9 +494,6 @@ async function findReposBySlugs(
   return found;
 }
 
-/** Max number of repos selectable at once in the "Manual" picker. */
-const MANUAL_SELECT_MAX_REPOS = 25;
-
 /**
  * Interactive multi-select over a live, lazily-paginated `RepositoryCollection`: "Load more"
  * fetches and categorizes the next server page on demand. There's no "select all" here — the
@@ -528,7 +525,8 @@ async function promptForReposFromCollection(
         await collection.loadMore();
         return collection.eligibleRepos.map(toOption);
       },
-      maxSelected: MANUAL_SELECT_MAX_REPOS,
+      // No cap on Manual selection — every eligible repo paginated into view can be selected.
+      maxSelected: Infinity,
       // Only what's been paginated into view so far — the true total isn't known until every
       // page has been fetched, which is exactly why there's no "select all" for this picker.
       total: () => collection.eligibleRepos.length,
