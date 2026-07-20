@@ -113,15 +113,16 @@ export async function* iterateRepoPages(
  * triggers a genuine network request.
  */
 export class RepositoryCollection {
-  private readonly iterator: AsyncGenerator<{ repositories: DopRepository[]; total: number }, void>;
+  private readonly fetchPage: FetchPage;
   private readonly onlyPrivateProjects: OnlyPrivateProjects;
   private readonly eligible: DopRepository[] = [];
   private readonly skipped: SkippedRepo[] = [];
   private exhausted = false;
   private serverTotal = 0;
+  private nextPageIndex = 1;
 
   private constructor(fetchPage: FetchPage, onlyPrivateProjects: OnlyPrivateProjects) {
-    this.iterator = iterateRepoPages(fetchPage);
+    this.fetchPage = fetchPage;
     this.onlyPrivateProjects = onlyPrivateProjects;
   }
 
@@ -165,22 +166,28 @@ export class RepositoryCollection {
    * Fetch exactly one more server page, categorize it, append to the running totals, and return
    * just this page's delta (callers tracking the running totals themselves, like the manual
    * picker, can ignore the return value).
+   *
+   * Calls `fetchPage` directly (rather than driving a shared `AsyncGenerator`) so a failed fetch
+   * can be retried: the page index is only advanced after a successful fetch, so a rejected call
+   * leaves the collection pointed at the same page and `exhausted` unset, and the next `loadMore`
+   * re-fetches it instead of silently behaving as if the org had no further pages (per-instance
+   * generators become permanently done once they throw, which would break retry).
    */
   async loadMore(): Promise<{ eligible: DopRepository[]; skipped: SkippedRepo[] }> {
     if (this.exhausted) return { eligible: [], skipped: [] };
 
-    const { value, done } = await this.iterator.next();
-    if (done) {
+    const page = await this.fetchPage(
+      this.nextPageIndex,
+      SonarQubeClient.DOP_REPOSITORIES_MAX_PAGE_SIZE,
+    );
+    this.nextPageIndex++;
+
+    this.serverTotal = page.total;
+    if (page.repositories.length < SonarQubeClient.DOP_REPOSITORIES_MAX_PAGE_SIZE) {
       this.exhausted = true;
-      return { eligible: [], skipped: [] };
     }
 
-    this.serverTotal = value.total;
-    if (value.repositories.length < SonarQubeClient.DOP_REPOSITORIES_MAX_PAGE_SIZE) {
-      this.exhausted = true;
-    }
-
-    const { eligible, skipped } = categorizeRepos(value.repositories, this.onlyPrivateProjects);
+    const { eligible, skipped } = categorizeRepos(page.repositories, this.onlyPrivateProjects);
     this.eligible.push(...eligible);
     this.skipped.push(...skipped);
     return { eligible, skipped };
