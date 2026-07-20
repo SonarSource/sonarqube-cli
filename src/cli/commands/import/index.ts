@@ -101,7 +101,7 @@ function createProvisionTask(
         );
       }
       const project = result.projects[0];
-      progress.update(repo.slug, 'done', 'Project created', project.projectKey);
+      progress.update(repo.slug, 'done');
       return project;
     } catch (err) {
       progress.update(repo.slug, 'failed', err instanceof Error ? err.message : String(err));

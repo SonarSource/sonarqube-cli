@@ -189,6 +189,36 @@ describe('ImportProgress — TTY', () => {
     expect(afterPage2).toContain('repo-5');
   });
 
+  it('a later page takes over rows already finished by an earlier page, instead of stalling in the queue', () => {
+    // maxVisible (mirrors the real IMPORT_PROVISION_CONCURRENCY_LIMIT) is smaller than a page,
+    // so page 1 fills every visible row and finishes all of them before page 2 is fetched —
+    // exactly the streaming `--all` shape (page size 50, maxVisible 10).
+    const progress = new ImportProgress({ isTTY: true, maxVisible: 2 });
+    progress.setTotal(4);
+    progress.start();
+
+    captureStdout(() => {
+      progress.addRepos(['org/repo-1', 'org/repo-2']);
+      progress.update('org/repo-1', 'done', 'Project created');
+      progress.update('org/repo-2', 'done', 'Project created');
+    });
+
+    // Page 2 arrives after page 1's rows are already terminal — repo-3/4 must take over those
+    // rows immediately rather than sitting in the queue forever (nothing will ever finish again
+    // to trigger `promoteNext`).
+    const afterPage2 = captureStdout(() => progress.addRepos(['org/repo-3', 'org/repo-4']));
+    expect(afterPage2).toContain('repo-3');
+    expect(afterPage2).toContain('repo-4');
+    expect(afterPage2).not.toContain('repo-1');
+    expect(afterPage2).not.toContain('repo-2');
+    expect(afterPage2).not.toContain('Project created');
+
+    const afterThird = captureStdout(() =>
+      progress.update('org/repo-3', 'done', 'Project created'),
+    );
+    expect(afterThird).toContain('Project created');
+  });
+
   it('recordSkipped advances the bar without adding a row', () => {
     const progress = new ImportProgress({ isTTY: true });
     progress.setTotal(3);

@@ -87,11 +87,7 @@ export class ImportProgress {
     for (const slug of slugs) {
       this.repos.set(slug, { status: 'pending' });
       this.order.push(slug);
-      if (this.visible.length < this.maxVisible) {
-        this.visible.push(slug);
-      } else {
-        this.queue.push(slug);
-      }
+      this.admit(slug);
     }
     if (isMockActive()) {
       recordCall('importProgress.addRepos', slugs);
@@ -151,6 +147,31 @@ export class ImportProgress {
     if (next !== undefined) {
       this.visible[slot] = next;
     }
+  }
+
+  /**
+   * Places a newly discovered repo into the first available row: an empty slot if `visible`
+   * hasn't filled up yet, otherwise a slot already showing a finished (done/failed) repo from an
+   * earlier batch — that row's own completion already fired `promoteNext`, so nothing will ever
+   * swap it out again on its own. Falls back to the queue only when every visible slot is still
+   * pending/running, to be promoted later via `promoteNext`.
+   */
+  private admit(slug: string): void {
+    if (this.visible.length < this.maxVisible) {
+      this.visible.push(slug);
+      return;
+    }
+    const staleSlot = this.visible.findIndex((visibleSlug) => this.isTerminal(visibleSlug));
+    if (staleSlot !== -1) {
+      this.visible[staleSlot] = slug;
+      return;
+    }
+    this.queue.push(slug);
+  }
+
+  private isTerminal(slug: string): boolean {
+    const status = this.repos.get(slug)?.status;
+    return status === 'done' || status === 'failed';
   }
 
   /** Finalizes the display and returns aggregate counts. */
