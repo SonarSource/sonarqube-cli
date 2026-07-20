@@ -85,10 +85,14 @@ export function computeInstallationKey(
   return almKey === GITHUB_ALM_KEY ? `${repo.slug}|${repo.id}` : repo.id;
 }
 
-/** e.g. `my-org/repo - private`. */
-function formatRepoLabel(repo: { slug: string; private: boolean }): string {
+/** e.g. `my-org/repo - private`, or `my-org/repo - private (already imported)`. */
+function formatRepoLabel(
+  repo: { slug: string; private: boolean },
+  alreadyImported = false,
+): string {
   const visibility = repo.private ? 'private' : 'public';
-  return `${repo.slug} - ${visibility}`;
+  const suffix = alreadyImported ? ' (already imported)' : '';
+  return `${repo.slug} - ${visibility}${suffix}`;
 }
 
 export async function resolveOrg(
@@ -507,31 +511,40 @@ async function promptForReposFromCollection(
   // must always map to the same `ResolvedRepo` object across a "Load more" reload, or
   // previously toggled selections would be silently dropped.
   const resolvedByRepo = new WeakMap<DopRepository, ResolvedRepo>();
-  const toOption = (repo: DopRepository): MultiSelectOption<ResolvedRepo> => {
+  const toOption = (
+    repo: DopRepository,
+    alreadyImported = false,
+  ): MultiSelectOption<ResolvedRepo> => {
     let resolved = resolvedByRepo.get(repo);
     if (!resolved) {
       resolved = { slug: repo.slug, installationKey: computeInstallationKey(repo, almKey) };
       resolvedByRepo.set(repo, resolved);
     }
-    return { value: resolved, label: formatRepoLabel(repo) };
+    return {
+      value: resolved,
+      label: formatRepoLabel(repo, alreadyImported),
+      disabled: alreadyImported,
+    };
   };
+  // Already-imported repos are listed too (dimmed, non-toggleable) so the picker shows every
+  // repo the org has, not just the ones still importable.
+  const buildOptions = (): MultiSelectOption<ResolvedRepo>[] => [
+    ...collection.eligibleRepos.map((repo) => toOption(repo)),
+    ...collection.alreadyImportedRepos.map((repo) => toOption(repo, true)),
+  ];
 
-  const result = await multiSelectPrompt(
-    'Select repositories to import',
-    collection.eligibleRepos.map(toOption),
-    {
-      hasMore: () => collection.hasMore,
-      onLoadMore: async () => {
-        await collection.loadMore();
-        return collection.eligibleRepos.map(toOption);
-      },
-      // No cap on Manual selection — every eligible repo paginated into view can be selected.
-      maxSelected: Infinity,
-      // Only what's been paginated into view so far — the true total isn't known until every
-      // page has been fetched, which is exactly why there's no "select all" for this picker.
-      total: () => collection.eligibleRepos.length,
+  const result = await multiSelectPrompt('Select repositories to import', buildOptions(), {
+    hasMore: () => collection.hasMore,
+    onLoadMore: async () => {
+      await collection.loadMore();
+      return buildOptions();
     },
-  );
+    // No cap on Manual selection — every eligible repo paginated into view can be selected.
+    maxSelected: Infinity,
+    // Only what's been paginated into view so far — the true total isn't known until every
+    // page has been fetched, which is exactly why there's no "select all" for this picker.
+    total: () => collection.eligibleRepos.length,
+  });
 
   // Cancelling (q / Ctrl+C) goes back to the Recommended/Manual/← Back menu that led here,
   // rather than ending the whole command — the caller (`resolveOnboardingMode`) re-shows it.

@@ -758,7 +758,7 @@ describe('sonar import', () => {
     );
 
     it(
-      'excludes repos already imported into the current org from the select list',
+      'lists repos already imported into the current org as non-toggleable in the select list',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -772,13 +772,29 @@ describe('sonar import', () => {
         harness.withAuth(serverUrl, 'test-token');
 
         const result = await harness.run('import --org my-org', {
-          stdinChunks: ['\x1b[B\r', ' \r'], // down arrow+enter → Manual mode, space+enter → toggles and confirms the only repo
+          stdinChunks: [
+            '\x1b[B\r', // down arrow+enter → Manual mode
+            // toggle the eligible repo (cursor starts on it), move down to the already-imported
+            // row, attempt to toggle it too (must be a no-op), then confirm.
+            ' \x1b[B \r',
+          ],
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).not.toContain('kevinmlsilva/repo -');
+        // The already-imported repo is listed (dimmed/non-toggleable), not hidden.
+        expect(result.stdout).toContain('kevinmlsilva/repo - public (already imported)');
         expect(result.stdout).toContain('kevinmlsilva/other-repo - public');
+        expect(result.stdout).toContain('1 of 1 selected');
+        expect(result.stdout).toContain('Imported 1 repository');
+
+        const provisionRequests = server
+          .getRecordedRequests()
+          .filter((r) => r.path === '/api/alm_integration/provision_projects');
+        expect(provisionRequests).toHaveLength(1);
+        expect(new URLSearchParams(provisionRequests[0].body ?? '').get('installationKeys')).toBe(
+          'repo-2',
+        );
       },
       { timeout: 15000 },
     );
@@ -881,16 +897,17 @@ describe('sonar import', () => {
     );
 
     it(
-      'shows every selectable repo from a single server page despite interleaved exclusions',
+      'shows every selectable repo from a single server page alongside interleaved already-imported ones',
       async () => {
         // 15 raw repos easily fit in one 50-item server page; 5 of the first 10 are already
         // imported. Filtering happens per fetched page, so all 10 selectable repos from this
-        // one page show up together, with no "Load more" needed.
+        // one page show up together, with no "Load more" needed. The already-imported ones are
+        // still listed (non-toggleable), not hidden.
         const manyRepos = Array.from({ length: 15 }, (_, i) => ({
           id: `repo-${i + 1}`,
           name: `repo-${String(i + 1).padStart(2, '0')}`,
           slug: `kevinmlsilva/repo-${String(i + 1).padStart(2, '0')}`,
-          importedInCurrentOrg: i < 10 && i % 2 === 0, // repo-01,03,05,07,09 excluded
+          importedInCurrentOrg: i < 10 && i % 2 === 0, // repo-01,03,05,07,09 already imported
         }));
 
         const server = await harness
@@ -923,6 +940,7 @@ describe('sonar import', () => {
         ]) {
           expect(result.stdout).toContain(slug);
         }
+        expect(result.stdout).toContain('kevinmlsilva/repo-01 - public (already imported)');
         expect(result.stdout).not.toContain('Load more');
         expect(result.stdout).toContain('Imported 1 repository');
       },

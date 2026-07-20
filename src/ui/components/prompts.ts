@@ -130,6 +130,8 @@ export async function selectPrompt<T>(
 export interface MultiSelectOption<T> {
   value: T;
   label: string;
+  /** Shown but not toggleable (e.g. a repo that's already imported) — rendered like an at-cap row. */
+  disabled?: boolean;
 }
 
 export interface MultiSelectPromptOptions<T> {
@@ -204,8 +206,9 @@ function renderOptionRow(
   isCursor: boolean,
   isSelected: boolean,
   atCap: boolean,
+  disabled: boolean,
 ): string {
-  const unavailable = atCap && !isSelected;
+  const unavailable = disabled || (atCap && !isSelected);
   const checkbox = checkboxComponent(isSelected, unavailable);
   const arrow = isCursor ? cyan('❯') : ' ';
   const displayLabel = isCursor && !unavailable ? label : dim(label);
@@ -214,7 +217,8 @@ function renderOptionRow(
 
 /**
  * Multi-select prompt. Space to toggle, Enter to confirm. Max 20 selections by default
- * (override via `loadMoreOpts.maxSelected`).
+ * (override via `loadMoreOpts.maxSelected`). Options with `disabled: true` are shown (dimmed,
+ * like an at-cap row) but the cursor can't toggle them.
  * Returns the selected values array (may be empty) or null if cancelled (Ctrl+C or q).
  * Renders a scrolling viewport when the option list exceeds MULTISELECT_VIEWPORT_SIZE.
  *
@@ -306,7 +310,9 @@ export async function multiSelectPrompt<T>(
 
           const opt = options[i];
           const isSelected = selected.includes(opt.value);
-          lines.push(renderOptionRow(opt.label, isCursor, isSelected, atCap));
+          lines.push(
+            renderOptionRow(opt.label, isCursor, isSelected, atCap, opt.disabled ?? false),
+          );
         }
 
         const more = `↓ ${total - end} more`;
@@ -324,7 +330,7 @@ export async function multiSelectPrompt<T>(
     else if (dir === 'down') cursor = Math.min(total - 1, cursor + 1);
     else if (dir === 'space') {
       const val = options[cursor]?.value;
-      if (val !== undefined) {
+      if (val !== undefined && !options[cursor]?.disabled) {
         toggleSelected(selected, val, maxSelected);
       }
     }

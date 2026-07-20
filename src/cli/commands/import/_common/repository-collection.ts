@@ -59,17 +59,21 @@ function isRepoSelectable(
 
 /**
  * Split repos into those eligible for import — not already imported (see `isAlreadyImported`)
- * and allowed by the org's project visibility settings — and those skipped, with a reason each.
+ * and allowed by the org's project visibility settings — those already imported (kept as full
+ * repos, not just a `SkippedRepo` reason, so the manual picker can list them), and those skipped
+ * for visibility reasons.
  */
 function categorizeRepos(
   repos: DopRepository[],
   onlyPrivateProjects: OnlyPrivateProjects,
-): { eligible: DopRepository[]; skipped: SkippedRepo[] } {
+): { eligible: DopRepository[]; alreadyImported: DopRepository[]; skipped: SkippedRepo[] } {
   const eligible: DopRepository[] = [];
+  const alreadyImported: DopRepository[] = [];
   const skipped: SkippedRepo[] = [];
 
   for (const repo of repos) {
     if (isAlreadyImported(repo)) {
+      alreadyImported.push(repo);
       skipped.push({ slug: repo.slug, reason: 'already imported' });
       continue;
     }
@@ -83,7 +87,7 @@ function categorizeRepos(
     eligible.push(repo);
   }
 
-  return { eligible, skipped };
+  return { eligible, alreadyImported, skipped };
 }
 
 /**
@@ -116,6 +120,7 @@ export class RepositoryCollection {
   private readonly fetchPage: FetchPage;
   private readonly onlyPrivateProjects: OnlyPrivateProjects;
   private readonly eligible: DopRepository[] = [];
+  private readonly alreadyImported: DopRepository[] = [];
   private readonly skipped: SkippedRepo[] = [];
   private exhausted = false;
   private serverTotal = 0;
@@ -147,6 +152,11 @@ export class RepositoryCollection {
     return this.eligible;
   }
 
+  /** Repos already imported (into this org or another) across every page fetched so far. */
+  get alreadyImportedRepos(): readonly DopRepository[] {
+    return this.alreadyImported;
+  }
+
   /** Repos found ineligible (with a reason) across every page fetched so far. */
   get skippedRepos(): readonly SkippedRepo[] {
     return this.skipped;
@@ -173,8 +183,12 @@ export class RepositoryCollection {
    * re-fetches it instead of silently behaving as if the org had no further pages (per-instance
    * generators become permanently done once they throw, which would break retry).
    */
-  async loadMore(): Promise<{ eligible: DopRepository[]; skipped: SkippedRepo[] }> {
-    if (this.exhausted) return { eligible: [], skipped: [] };
+  async loadMore(): Promise<{
+    eligible: DopRepository[];
+    alreadyImported: DopRepository[];
+    skipped: SkippedRepo[];
+  }> {
+    if (this.exhausted) return { eligible: [], alreadyImported: [], skipped: [] };
 
     const page = await this.fetchPage(
       this.nextPageIndex,
@@ -187,9 +201,13 @@ export class RepositoryCollection {
       this.exhausted = true;
     }
 
-    const { eligible, skipped } = categorizeRepos(page.repositories, this.onlyPrivateProjects);
+    const { eligible, alreadyImported, skipped } = categorizeRepos(
+      page.repositories,
+      this.onlyPrivateProjects,
+    );
     this.eligible.push(...eligible);
+    this.alreadyImported.push(...alreadyImported);
     this.skipped.push(...skipped);
-    return { eligible, skipped };
+    return { eligible, alreadyImported, skipped };
   }
 }
