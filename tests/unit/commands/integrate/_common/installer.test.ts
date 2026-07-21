@@ -35,9 +35,9 @@ import {
   IntegrationRegistry,
   wholeFile,
 } from '../../../../../src/commands/integrate/_common/registry';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/core/ui';
 import * as stateRepository from '../../../../../src/lib/repository/state-repository.ts';
 import { getDefaultState } from '../../../../../src/lib/state.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 describe('generic integration installer', () => {
   let tempDir: string;

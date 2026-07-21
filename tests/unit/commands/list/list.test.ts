@@ -25,6 +25,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import { listIssues } from '../../../../src/commands/list/issues.ts';
+import { setMockUi } from '../../../../src/core/ui';
 import type { ResolvedAuth } from '../../../../src/lib/auth-resolver.ts';
 import type {
   IssuesSearchResponse,
@@ -34,7 +35,6 @@ import type {
 import { SonarQubeClient } from '../../../../src/sonarqube/client.ts';
 import { IssuesClient } from '../../../../src/sonarqube/issues.ts';
 import { MAX_PAGE_SIZE, ProjectsClient } from '../../../../src/sonarqube/projects.ts';
-import { setMockUi } from '../../../../src/ui';
 
 // Test constants
 const DEFAULT_PAGE_SIZE = 500;

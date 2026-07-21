@@ -26,11 +26,11 @@ import {
   printAgentPreflightSummary,
   printGitPreflightSummary,
 } from '../../../../../src/commands/integrate/_common/preflight-summary.ts';
+import type { PhaseItem } from '../../../../../src/core/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/core/ui';
 import * as processLib from '../../../../../src/lib/process.ts';
 import type { DiscoveredProject } from '../../../../../src/lib/project-workspace';
 import { SonarQubeClient } from '../../../../../src/sonarqube/client.ts';
-import type { PhaseItem } from '../../../../../src/ui';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 const BASE_PROJECT: DiscoveredProject = {
   rootDir: '/workspace/app',

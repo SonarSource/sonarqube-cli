@@ -20,10 +20,10 @@
 
 // Spinner — animated indicator for long-running async operations
 
-import { cyan, green, red } from '../colors.js';
-import { channelStream } from '../messages.js';
-import { isMockActive, recordCall } from '../mock.js';
-import type { OutputChannel } from '../types.js';
+import { cyan, green, red } from '../colors.ts';
+import { channelStream } from '../messages.ts';
+import { isMockActive, recordCall } from '../mock.ts';
+import type { OutputChannel } from '../types.ts';
 
 const FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 const INTERVAL_MS = 80;

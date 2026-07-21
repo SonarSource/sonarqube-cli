@@ -23,7 +23,7 @@
 
 import { describe, expect, it, spyOn } from 'bun:test';
 
-void mock.module('../../../src/ui/colors.js', () => ({
+void mock.module('@/core/ui/colors.js', () => ({
   isTTY: false,
   bold: (s: string) => s,
   dim: (s: string) => s,
@@ -37,7 +37,7 @@ void mock.module('../../../src/ui/colors.js', () => ({
 
 import { mock } from 'bun:test';
 
-import { note } from '../../../src/ui';
+import { note } from '../../../../src/core/ui';
 
 describe('note: renderPlain (non-TTY)', () => {
   it('writes content to stdout without box characters', () => {

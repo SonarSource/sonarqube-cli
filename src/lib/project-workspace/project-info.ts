@@ -23,7 +23,7 @@
 import { existsSync, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 
-import { print } from '../../ui';
+import { print } from '../../core/ui';
 import type { ResolvedAuth } from '../auth-resolver';
 import { resolveAuth } from '../auth-resolver';
 import { canonicalizePath } from '../fs-utils';

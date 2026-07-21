@@ -29,8 +29,13 @@ import type {
 } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import { ScaWatchPatternsRunner } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-watch-patterns.ts';
 import { runDepRisksStage } from '../../../../src/commands/hook/git-pre-commit-dependency-risks.ts';
+import {
+  clearMockUiCalls,
+  findMockUiCall,
+  getMockUiCalls,
+  setMockUi,
+} from '../../../../src/core/ui';
 import type { ResolvedAuth } from '../../../../src/lib/auth-resolver.ts';
-import { clearMockUiCalls, findMockUiCall, getMockUiCalls, setMockUi } from '../../../../src/ui';
 
 const FAKE_AUTH: ResolvedAuth = {
   token: 'test-token',

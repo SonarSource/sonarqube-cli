@@ -27,8 +27,8 @@ import type { Command } from 'commander';
 
 import { version as CURRENT_VERSION } from '../../../package.json';
 import { COMMAND_TREE } from '../../../src/commands/command-tree.ts';
+import { setFormattedOutputMode } from '../../../src/core/ui';
 import { TELEMETRY_FLUSH_MODE_ENV } from '../../../src/telemetry/index.js';
-import { setFormattedOutputMode } from '../../../src/ui/index.js';
 
 const originalEnvForNotify = { ...process.env };
 const tempHome = mkdtempSync(join(tmpdir(), 'sonar-update-notify-'));

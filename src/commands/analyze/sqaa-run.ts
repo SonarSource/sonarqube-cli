@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { print } from '../../core/ui';
+import { SqaaProgress } from '../../core/ui/components/sqaa-progress.ts';
 import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import { timed } from '../../lib/timed.ts';
 import type { SqaaAnalysisDepth } from '../../sonarqube/client.ts';
@@ -26,8 +28,6 @@ import {
   type SqaaTelemetryCallerCommand,
   tallyFromSqaaJsonReport,
 } from '../../telemetry/sqaa-analysis-telemetry.ts';
-import { print } from '../../ui';
-import { SqaaProgress } from '../../ui/components/sqaa-progress.ts';
 import type { RunContext, RunTally } from './sqaa-analysis.ts';
 import { runAnalyses } from './sqaa-analysis.ts';
 import { fetchWithRetry, readSqaaFileContent, toRelativePosixPath } from './sqaa-api.ts';

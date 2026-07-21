@@ -34,8 +34,8 @@ import {
   success,
   text,
   warn,
-} from '../../../src/ui';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../src/ui';
+} from '../../../../src/core/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/core/ui';
 
 // ─── Mock mode ────────────────────────────────────────────────────────────────
 

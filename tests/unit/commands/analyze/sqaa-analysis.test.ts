@@ -30,8 +30,8 @@ import * as sqaaApi from '../../../../src/commands/analyze/sqaa-api.ts';
 import type { CloudAuth } from '../../../../src/commands/analyze/sqaa-auth.ts';
 import type { SqaaChunkFile } from '../../../../src/commands/analyze/sqaa-chunking.ts';
 import { payloadTooLargeCommandError } from '../../../../src/commands/analyze/sqaa-errors.ts';
+import { SqaaProgress } from '../../../../src/core/ui/components/sqaa-progress.ts';
 import { RequestPayloadTooLargeError } from '../../../../src/sonarqube/errors.ts';
-import { SqaaProgress } from '../../../../src/ui/components/sqaa-progress.ts';
 
 describe('distributeChunkResponse', () => {
   it('attaches chunk-level errors only to the first file', () => {

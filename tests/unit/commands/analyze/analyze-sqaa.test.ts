@@ -30,12 +30,12 @@ import { analyzeSqaa, buildSqaaJsonReport } from '../../../../src/commands/analy
 import * as changesetModule from '../../../../src/commands/analyze/sqaa-changeset.ts';
 import { SQAA_HOOK_FEATURE_ID } from '../../../../src/commands/integrate/_common/sqaa-entitlement.ts';
 import { CLAUDE_INTEGRATION_ID } from '../../../../src/commands/integrate/claude/declaration.ts';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/core/ui';
 import * as processLib from '../../../../src/lib/process.ts';
 import * as stateRepository from '../../../../src/lib/repository/state-repository.ts';
 import { CliState, getDefaultState } from '../../../../src/lib/state.ts';
 import * as stateManager from '../../../../src/lib/state-manager.ts';
 import { SonarQubeClient } from '../../../../src/sonarqube/client.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/ui';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const TEST_ORG = 'test-org';

@@ -20,8 +20,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../src/ui';
-import { ImportProgress } from '../../../src/ui/components/import-progress.js';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/core/ui';
+import { ImportProgress } from '../../../../src/core/ui/components/import-progress.ts';
 
 const REPOS = ['my-org/api-gateway', 'my-org/auth-service', 'my-org/billing'];
 

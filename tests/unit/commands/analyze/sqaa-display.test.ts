@@ -31,8 +31,8 @@ import {
   renderFailureDetailLines,
   SQAA_COLLAPSE_CLEAN_THRESHOLD,
 } from '../../../../src/commands/analyze/sqaa-display.ts';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/core/ui';
 import type { SqaaIssue } from '../../../../src/sonarqube/client.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/ui';
 
 const ANSI_ESCAPE_CODES = /\x1b\[[0-9;]*m/g;
 

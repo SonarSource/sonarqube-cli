@@ -22,14 +22,14 @@
 
 import { encode as encodeToToon } from '@toon-format/toon';
 
-import { formatCSV } from '../../formatter/csv.ts';
-import { formatTable } from '../../formatter/table.ts';
+import { print } from '../../core/ui';
+import { formatCSV } from '../../core/ui/formatter/csv.ts';
+import { formatTable } from '../../core/ui/formatter/table.ts';
 import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import type { IssuesSearchParams } from '../../lib/types.ts';
 import { SonarQubeClient } from '../../sonarqube/client.ts';
 import { IssuesClient } from '../../sonarqube/issues.ts';
 import { MAX_PAGE_SIZE } from '../../sonarqube/projects.ts';
-import { print } from '../../ui';
 import { InvalidOptionError } from '../_common/error.ts';
 
 export const VALID_FORMATS = ['json', 'toon', 'table', 'csv'];

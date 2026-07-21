@@ -22,9 +22,9 @@
 
 import { getColumns } from '@clack/core';
 
-import { bold, dim, isTTY, stripAnsi, visibleLength } from '../colors.js';
-import { isMockActive, recordCall } from '../mock.js';
-import type { ColorFn, NoteOptions } from '../types.js';
+import { bold, dim, isTTY, stripAnsi, visibleLength } from '../colors.ts';
+import { isMockActive, recordCall } from '../mock.ts';
+import type { ColorFn, NoteOptions } from '../types.ts';
 
 const MIN_WIDTH = 40;
 const MAX_WIDTH = 80;

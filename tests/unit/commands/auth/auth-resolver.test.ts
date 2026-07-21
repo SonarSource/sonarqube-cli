@@ -22,6 +22,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/core/ui';
 import {
   cloudRegionFromUrl,
   ENV_SERVER,
@@ -32,7 +33,6 @@ import {
 } from '../../../../src/lib/auth-resolver.ts';
 import * as stateRepository from '../../../../src/lib/repository/state-repository.ts';
 import { getDefaultState } from '../../../../src/lib/state.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/ui';
 import { createKeychainTestHandle } from '../../keychain/keychain-test-handle.ts';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';

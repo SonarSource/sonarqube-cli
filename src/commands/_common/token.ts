@@ -23,14 +23,14 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as readline from 'node:readline';
 
+import { isMockActive, pressEnterKeyPrompt, print, warn } from '../../core/ui';
+import { blue } from '../../core/ui/colors.ts';
 import { isSonarQubeCloud } from '../../lib/auth-resolver.ts';
 import { openBrowser } from '../../lib/browser.ts';
 import logger from '../../lib/logger.ts';
 import { startLoopbackServer } from '../../lib/loopback-server.ts';
 import { fetchServerVersion, isAtLeast } from '../../lib/server-info.ts';
 import { SonarQubeClient } from '../../sonarqube/client.ts';
-import { isMockActive, pressEnterKeyPrompt, print, warn } from '../../ui';
-import { blue } from '../../ui/colors.ts';
 
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_METHOD_NOT_ALLOWED = 405;

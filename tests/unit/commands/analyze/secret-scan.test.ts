@@ -33,11 +33,11 @@ import {
   analyzeSecrets,
   runSecretsBinaryOnText,
 } from '../../../../src/commands/analyze/secrets.ts';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/core/ui';
 import type { ResolvedAuth } from '../../../../src/lib/auth-resolver.ts';
 import * as processLib from '../../../../src/lib/process.ts';
 import * as stateRepository from '../../../../src/lib/repository/state-repository.ts';
 import { getDefaultState } from '../../../../src/lib/state.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/ui';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const TEST_ORG = 'test-org';

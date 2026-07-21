@@ -20,7 +20,7 @@
 
 // CSV formatter
 
-import type { SonarQubeIssue } from '../lib/types.js';
+import type { SonarQubeIssue } from '../../../lib/types.ts';
 
 function escapeCSV(value: string | number | undefined): string {
   if (value === undefined) {

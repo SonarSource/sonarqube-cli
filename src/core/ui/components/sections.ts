@@ -20,8 +20,8 @@
 
 // Structural markers — intro, outro
 
-import { bold, green, isTTY, red } from '../colors.js';
-import { isMockActive, recordCall } from '../mock.js';
+import { bold, green, isTTY, red } from '../colors.ts';
+import { isMockActive, recordCall } from '../mock.ts';
 
 const DIVIDER_BASE_WIDTH = 40;
 const DIVIDER_WIDTH = DIVIDER_BASE_WIDTH + 2; // + 2 for indent alignment

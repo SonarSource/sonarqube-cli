@@ -19,10 +19,10 @@
  */
 
 import { version as VERSION } from '../../../package.json';
+import type { PhaseItem } from '../../core/ui';
+import { info, phase, print, success, text, textPrompt, warn } from '../../core/ui';
 import { loadState, saveState } from '../../lib/repository/state-repository.ts';
 import { type CliState, getDefaultState, type InstalledIntegration } from '../../lib/state.ts';
-import type { PhaseItem } from '../../ui';
-import { info, phase, print, success, text, textPrompt, warn } from '../../ui';
 import { printAgentNonInteractiveAlternativeHint } from '../_common/agent-prompt-hint.ts';
 import { supportedIntegrations } from '../integrate';
 import { purgeAuth } from './reset-auth.ts';

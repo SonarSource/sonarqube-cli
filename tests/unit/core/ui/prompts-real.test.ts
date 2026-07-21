@@ -24,7 +24,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-import { confirmPrompt, pressEnterKeyPrompt, selectPrompt, textPrompt } from '../../../src/ui';
+import {
+  confirmPrompt,
+  pressEnterKeyPrompt,
+  selectPrompt,
+  textPrompt,
+} from '../../../../src/core/ui';
 
 // Mutable state for controlling what each prompt returns
 let mockTextResult: string | symbol = 'default';

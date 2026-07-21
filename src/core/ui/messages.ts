@@ -20,9 +20,9 @@
 
 // Inline terminal output — non-interactive, static messages
 
-import { cyan, green, isTTY, red, yellow } from './colors.js';
-import { isMockActive, recordCall } from './mock.js';
-import type { ColorFn, OutputChannel } from './types.js';
+import { cyan, green, isTTY, red, yellow } from './colors.ts';
+import { isMockActive, recordCall } from './mock.ts';
+import type { ColorFn, OutputChannel } from './types.ts';
 
 let _formattedOutputMode = false;
 const _collectedMessages: string[] = [];

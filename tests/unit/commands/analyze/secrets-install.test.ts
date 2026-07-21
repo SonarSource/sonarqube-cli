@@ -27,12 +27,12 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import { buildLocalBinaryName } from '../../../../src/commands/_common/install/secrets.ts';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/core/ui';
 import { detectPlatform } from '../../../../src/lib/platform-detector.ts';
 import * as processLib from '../../../../src/lib/process.ts';
 import * as stateRepository from '../../../../src/lib/repository/state-repository.ts';
 import { SONAR_SECRETS_VERSION } from '../../../../src/lib/signatures.ts';
 import { getDefaultState } from '../../../../src/lib/state.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/ui';
 
 // Import the real module first, then register it as a mock with the same object.
 // Because mock.module returns a plain mutable object (not a frozen ES namespace),

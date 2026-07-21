@@ -28,6 +28,8 @@ import * as contextAugmentation from '../../../../../src/commands/integrate/_com
 import * as registry from '../../../../../src/commands/integrate/_common/registry';
 import { integrateClaude } from '../../../../../src/commands/integrate/claude';
 import * as hooks from '../../../../../src/commands/integrate/claude/hooks.ts';
+import type { PhaseItem } from '../../../../../src/core/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/core/ui';
 import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.ts';
 import type { DiscoveredProject } from '../../../../../src/lib/project-workspace';
 import * as discovery from '../../../../../src/lib/project-workspace';
@@ -35,8 +37,6 @@ import * as gitWorktree from '../../../../../src/lib/project-workspace/git-workt
 import * as stateRepository from '../../../../../src/lib/repository/state-repository.ts';
 import { getDefaultState } from '../../../../../src/lib/state.ts';
 import { SonarQubeClient } from '../../../../../src/sonarqube/client.ts';
-import type { PhaseItem } from '../../../../../src/ui';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 const SERVER_AUTH: ResolvedAuth = {
   token: 'test-token',

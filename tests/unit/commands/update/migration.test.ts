@@ -24,6 +24,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { setMockUi } from '../../../../src/core/ui';
 import {
   cleanObsoleteFromState,
   migrateHookScripts,
@@ -32,7 +33,6 @@ import {
 } from '../../../../src/lib/migration.ts';
 import type { AgentExtension, CliState, HookExtension } from '../../../../src/lib/state.ts';
 import { getDefaultState } from '../../../../src/lib/state.ts';
-import { setMockUi } from '../../../../src/ui';
 
 const OLD_VERSION = '0.4.0';
 

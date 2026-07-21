@@ -21,6 +21,7 @@
 // SonarQube API HTTP client
 
 import { version as VERSION } from '../../package.json';
+import { print } from '../core/ui';
 import {
   isSonarQubeCloud,
   normalizeCloudV2Endpoint,
@@ -29,7 +30,6 @@ import {
 import { buildFetchNetworkOptions } from '../lib/connectivity/network-config.js';
 import { buildFetchInit, fetchGuarded } from '../lib/fetch-guarded.js';
 import logger from '../lib/logger';
-import { print } from '../ui';
 import {
   BadRequestError,
   ForbiddenApiError,

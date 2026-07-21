@@ -5,11 +5,11 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { listProjects, ListProjectsOptions } from '../../../../src/commands/list/projects.ts';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/core/ui';
 import type { ResolvedAuth } from '../../../../src/lib/auth-resolver.ts';
 import type { ProjectsSearchResponse } from '../../../../src/lib/types.ts';
 import { SonarQubeClient } from '../../../../src/sonarqube/client.ts';
 import { MAX_PAGE_SIZE } from '../../../../src/sonarqube/projects.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/ui';
 
 const DEFAULT_OPTIONS: ListProjectsOptions = {
   page: 1,

@@ -28,7 +28,7 @@ import {
   detectGlobalSecretsHook,
   installHooks,
 } from '../../../../../src/commands/integrate/claude/hooks.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/core/ui';
 
 const PROJECT_ROOT = '/fake/project';
 const GLOBAL_DIR = '/fake/global';

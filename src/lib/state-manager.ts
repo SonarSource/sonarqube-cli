@@ -26,7 +26,7 @@
 import crypto from 'node:crypto';
 
 import { version as VERSION } from '../../package.json';
-import { warn } from '../ui';
+import { warn } from '../core/ui';
 import { pathComparisonKey } from './fs-utils';
 import logger from './logger';
 import { loadState, saveState } from './repository/state-repository.js';

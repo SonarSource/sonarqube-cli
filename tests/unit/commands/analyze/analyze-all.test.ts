@@ -28,9 +28,9 @@ import * as installSecrets from '../../../../src/commands/_common/install/secret
 import { analyzeAll } from '../../../../src/commands/analyze/analyze-all.ts';
 import * as sqaaModule from '../../../../src/commands/analyze/sqaa.ts';
 import * as sqaaFileArg from '../../../../src/commands/analyze/sqaa-file-arg.ts';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/core/ui';
 import type { ResolvedAuth } from '../../../../src/lib/auth-resolver.ts';
 import * as processLib from '../../../../src/lib/process.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/ui';
 
 const FAKE_AUTH: ResolvedAuth = {
   token: 'tok',

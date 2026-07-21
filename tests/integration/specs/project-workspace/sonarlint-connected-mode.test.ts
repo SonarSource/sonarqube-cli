@@ -23,6 +23,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/core/ui';
 import { SONARCLOUD_URL } from '../../../../src/lib/config-constants';
 import {
   discoverOrganization,
@@ -30,7 +31,6 @@ import {
   discoverProjectInfo,
   discoverServer,
 } from '../../../../src/lib/project-workspace';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/ui';
 import { TestHarness } from '../../harness';
 
 async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {

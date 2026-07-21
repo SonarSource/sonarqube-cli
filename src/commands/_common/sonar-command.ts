@@ -22,10 +22,10 @@
 
 import { Command } from 'commander';
 
+import { blank, error, print } from '../../core/ui';
 import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import { resolveAuth } from '../../lib/auth-resolver.ts';
 import logger from '../../lib/logger.ts';
-import { blank, error, print } from '../../ui';
 import { CliError, CommandFailedError, remediationHintFor } from './error.ts';
 
 export const COMMAND_CATEGORIES = ['core', 'data', 'integrate', 'cli-management'] as const;

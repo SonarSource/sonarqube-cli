@@ -22,9 +22,9 @@
 
 import * as readline from 'node:readline';
 
-import { bold, dim, green, red, STATUS_COLORS, STATUS_ICONS, visibleLength } from '../colors.js';
-import { isMockActive, recordCall } from '../mock.js';
-import { phase, phaseItem } from './phase.js';
+import { bold, dim, green, red, STATUS_COLORS, STATUS_ICONS, visibleLength } from '../colors.ts';
+import { isMockActive, recordCall } from '../mock.ts';
+import { phase, phaseItem } from './phase.ts';
 
 /** Subset of `StepStatus` relevant to a repo's provisioning lifecycle. */
 export type ImportRepoStatus = 'pending' | 'running' | 'done' | 'failed';

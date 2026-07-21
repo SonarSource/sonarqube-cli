@@ -32,7 +32,7 @@ import {
   getMockUiCalls,
   queueMockResponse,
   setMockUi,
-} from '../../../../../src/ui';
+} from '../../../../../src/core/ui';
 
 describe('resolveIntegrateScope', () => {
   beforeEach(() => setMockUi(true));

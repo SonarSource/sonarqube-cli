@@ -24,11 +24,11 @@ import * as token from '../../../../../src/commands/_common/token.ts';
 import * as contextAugmentation from '../../../../../src/commands/integrate/_common/context-augmentation.ts';
 import * as registry from '../../../../../src/commands/integrate/_common/registry';
 import { integrateCodex } from '../../../../../src/commands/integrate/codex';
+import { clearMockUiCalls, setMockUi } from '../../../../../src/core/ui';
 import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.ts';
 import type { DiscoveredProject } from '../../../../../src/lib/project-workspace';
 import * as discovery from '../../../../../src/lib/project-workspace';
 import { SonarQubeClient } from '../../../../../src/sonarqube/client.ts';
-import { clearMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 const SERVER_AUTH: ResolvedAuth = {
   token: 'test-token',

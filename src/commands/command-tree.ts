@@ -21,6 +21,7 @@
 import { type Command, Help, InvalidArgumentError, Option } from 'commander';
 
 import { version as VERSION } from '../../package.json';
+import { blank, error, warn } from '../core/ui';
 import { CURRENT_DISTRIBUTION } from '../lib/distribution.ts';
 import { tryLoadState } from '../lib/repository/state-repository.ts';
 import { initSentry } from '../lib/sentry.ts';
@@ -37,7 +38,6 @@ import {
   SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
   SQAA_VERIFY_CALLER_COMMAND,
 } from '../telemetry/sqaa-analysis-telemetry.ts';
-import { blank, error, warn } from '../ui';
 import { CommandFailedError } from './_common/error.ts';
 import { parseInteger } from './_common/parsing.ts';
 import { SonarCommand } from './_common/sonar-command.ts';

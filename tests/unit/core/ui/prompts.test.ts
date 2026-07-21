@@ -32,19 +32,19 @@ import {
   pressEnterKeyPrompt,
   promptUntilValid,
   textPrompt,
-} from '../../../src/ui';
+} from '../../../../src/core/ui';
 import {
   clearMockResponses,
   clearMockUiCalls,
   getMockUiCalls,
   queueMockResponse,
   setMockUi,
-} from '../../../src/ui';
+} from '../../../../src/core/ui';
 import {
   calculateViewport,
   checkboxComponent,
   toggleSelected,
-} from '../../../src/ui/components/prompts';
+} from '../../../../src/core/ui/components/prompts.ts';
 
 // ─── textPrompt ───────────────────────────────────────────────────────────────
 

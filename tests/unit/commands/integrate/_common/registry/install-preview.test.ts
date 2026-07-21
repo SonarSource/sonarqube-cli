@@ -45,7 +45,7 @@ import type {
   FeatureContainer,
   FeatureDeclaration,
 } from '../../../../../../src/commands/integrate/_common/registry/types.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/core/ui';
 
 function application(feature: FeatureDeclaration): FeatureApplication {
   return { feature, targetRoot: '/repo', scope: 'project' };

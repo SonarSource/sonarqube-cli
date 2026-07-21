@@ -22,7 +22,7 @@
 
 import pc from 'picocolors';
 
-import type { ColorFn, NoteOptions, StepStatus } from './types.js';
+import type { ColorFn, NoteOptions, StepStatus } from './types.ts';
 
 // When stdout is not a TTY (piped), all color functions become identity
 export const isTTY = process.stdout.isTTY;

@@ -21,7 +21,7 @@
 // Framework-rendered "What will be installed" preview shared by every
 // `sonar integrate` command.
 
-import { bold, dim, note, pressEnterKeyPrompt, wrapText } from '../../../../ui';
+import { bold, dim, note, pressEnterKeyPrompt, wrapText } from '../../../../core/ui';
 import { isFeatureContainer } from './selection.ts';
 import type { FeatureApplication, FeatureDeclaration } from './types.ts';
 

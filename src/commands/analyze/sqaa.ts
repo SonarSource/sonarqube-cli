@@ -18,9 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { text } from '../../core/ui';
 import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import type { SqaaAnalysisDepth } from '../../sonarqube/client.ts';
-import { text } from '../../ui';
 import { InvalidOptionError } from '../_common/error.ts';
 import { resolveCloudAuthAndProject } from './sqaa-auth.ts';
 import {

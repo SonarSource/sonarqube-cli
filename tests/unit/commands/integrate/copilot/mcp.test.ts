@@ -24,8 +24,8 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { setupMcpServer } from '../../../../../src/commands/integrate/copilot/mcp.ts';
+import { getMockUiCalls, setMockUi } from '../../../../../src/core/ui';
 import { DiscoveredProject } from '../../../../../src/lib/project-workspace';
-import { getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 const FAKE_PROJECT: DiscoveredProject = {
   rootDir: '/fake/project',

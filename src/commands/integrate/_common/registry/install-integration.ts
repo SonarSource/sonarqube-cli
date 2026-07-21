@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { text, warn } from '../../../../core/ui';
 import type { ResolvedAuth } from '../../../../lib/auth-resolver.ts';
 import logger from '../../../../lib/logger.ts';
 import { findGitRoot } from '../../../../lib/project-workspace/project-info.ts';
@@ -29,7 +30,6 @@ import type {
   IntegrationStateAttribute,
 } from '../../../../lib/state.ts';
 import { emitIntegrationConfiguredTelemetry } from '../../../../telemetry/integrate-telemetry.ts';
-import { text, warn } from '../../../../ui';
 import { CommandFailedError } from '../../../_common/error.ts';
 import { renderCompletionSummary } from './completion-summary.ts';
 import type { IntegrationRegistry } from './core.ts';

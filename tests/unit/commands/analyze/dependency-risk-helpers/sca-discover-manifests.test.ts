@@ -30,8 +30,8 @@ import type { ScaScannerInstaller } from '../../../../../src/commands/_common/in
 import { ScaDiscoverManifestsRunner } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-discover-manifests.ts';
 import type { ScaScannerInvocation } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner-runner-base.ts';
 import type { ScaScannerSpawner } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner-spawner.ts';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/core/ui';
 import type { SpawnResult } from '../../../../../src/lib/process.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 import { makeScaInvocation as makeInvocation, okScaInstaller as okInstaller } from './_helpers.ts';
 
 function spawnerReturning(result: SpawnResult): ScaScannerSpawner {

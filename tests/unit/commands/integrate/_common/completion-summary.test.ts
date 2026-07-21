@@ -27,9 +27,9 @@ import {
   type IntegrationDeclaration,
   renderCompletionSummary,
 } from '../../../../../src/commands/integrate/_common/registry';
+import type { PhaseItem } from '../../../../../src/core/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/core/ui';
 import type { InstalledIntegrationFeature } from '../../../../../src/lib/state.ts';
-import type { PhaseItem } from '../../../../../src/ui';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 function installedFeature(
   featureId: string,
