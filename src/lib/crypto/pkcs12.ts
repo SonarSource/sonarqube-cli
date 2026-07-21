@@ -86,6 +86,49 @@ function serializeToPem(certBags: forge.pkcs12.Bag[], keyBag: forge.pkcs12.Bag):
   return { cert, key: forge.pki.privateKeyToPem(keyBag.key) };
 }
 
+function isEncryptedKeyPem(pem: string): boolean {
+  return (
+    pem.includes('BEGIN ENCRYPTED PRIVATE KEY') ||
+    (pem.includes('BEGIN RSA PRIVATE KEY') && pem.includes('Proc-Type: 4,ENCRYPTED'))
+  );
+}
+
+// Parses unencrypted, traditionally-encrypted RSA (PKCS#1), or encrypted PKCS#8 private key PEM.
+function parsePrivateKeyPem(
+  keyPem: string,
+  passphrase: string | undefined,
+): forge.pki.rsa.PrivateKey {
+  if (!isEncryptedKeyPem(keyPem)) {
+    return forge.pki.privateKeyFromPem(keyPem);
+  }
+  if (!passphrase) {
+    throw new CryptographicError('Private key is encrypted: provide a passphrase to decrypt it');
+  }
+  const key = forge.pki.decryptRsaPrivateKey(keyPem, passphrase) as forge.pki.rsa.PrivateKey | null;
+  if (!key) {
+    throw new CryptographicError(
+      'Failed to decrypt private key: check that the passphrase is correct',
+    );
+  }
+  return key;
+}
+
+export function pemToPkcs12(certPem: string, keyPem: string, passphrase?: string): Buffer {
+  try {
+    const cert = forge.pki.certificateFromPem(certPem);
+    const key = parsePrivateKeyPem(keyPem, passphrase);
+    const p12Asn1 = forge.pkcs12.toPkcs12Asn1(key, [cert], '', {
+      generateLocalKeyId: true,
+    });
+    return Buffer.from(forge.asn1.toDer(p12Asn1).getBytes(), 'binary');
+  } catch (err) {
+    throw new CryptographicError(
+      err instanceof Error ? err.message : 'Failed to create PKCS12 from PEM files',
+      { cause: err },
+    );
+  }
+}
+
 export function isPkcs12Path(filePath: string): boolean {
   const lower = filePath.toLowerCase();
   return lower.endsWith('.p12') || lower.endsWith('.pfx');

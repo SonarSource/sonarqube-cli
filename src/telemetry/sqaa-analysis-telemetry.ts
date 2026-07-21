@@ -20,8 +20,8 @@
 
 import { randomUUID } from 'node:crypto';
 
-import type { FileResult, RunTally } from '../cli/commands/analyze/sqaa-analysis.js';
-import type { SqaaJsonReport } from '../cli/commands/analyze/sqaa-display-json.js';
+import type { FileResult, RunTally } from '../commands/analyze/sqaa-analysis.ts';
+import type { SqaaJsonReport } from '../commands/analyze/sqaa-display-json.ts';
 import type { ResolvedAuth } from '../lib/auth-resolver.js';
 import type { SqaaIssue } from '../sonarqube/client.js';
 import { emitAnalysisCompleted } from './telemetry-events.js';

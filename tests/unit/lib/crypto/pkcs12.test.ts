@@ -24,7 +24,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'bun:test';
 import forge from 'node-forge';
 
-import { isPkcs12Path, pkcs12ToPem } from '../../../../src/lib/crypto/pkcs12';
+import { isPkcs12Path, pemToPkcs12, pkcs12ToPem } from '../../../../src/lib/crypto/pkcs12';
 import { CryptographicError } from '../../../../src/lib/errors';
 
 const FIXTURE_DIR = join(import.meta.dir, '../../../fixtures/client-cert');
@@ -32,6 +32,8 @@ const P12_PATH = join(FIXTURE_DIR, 'client-cert.p12');
 const P12_UNENCRYPTED_KEY_PATH = join(FIXTURE_DIR, 'client-cert-unencrypted-key.p12');
 const CERT_PEM_PATH = join(FIXTURE_DIR, 'client-cert.pem');
 const KEY_PEM_PATH = join(FIXTURE_DIR, 'client-key.pem');
+const ENCRYPTED_KEY_PEM_PATH = join(FIXTURE_DIR, 'client-key-encrypted.pem');
+const ENCRYPTED_KEY_PKCS8_PEM_PATH = join(FIXTURE_DIR, 'client-key-encrypted-pkcs8.pem');
 
 describe('isPkcs12Path', () => {
   it('returns true for .p12', () => {
@@ -59,12 +61,12 @@ describe('isPkcs12Path', () => {
   });
 });
 
-describe('pkcs12ToPem', () => {
-  // forge outputs CRLF; fixtures use LF
-  const normalizePem = (pem: string) => pem.replace(/\r\n/g, '\n');
-  // fixture is PKCS#8; forge outputs PKCS#1 RSA
-  const normalizeKey = (pem: string) => forge.pki.privateKeyToPem(forge.pki.privateKeyFromPem(pem));
+// forge outputs CRLF; fixtures use LF
+const normalizePem = (pem: string) => pem.replace(/\r\n/g, '\n');
+// fixture is PKCS#8; forge outputs PKCS#1 RSA
+const normalizeKey = (pem: string) => forge.pki.privateKeyToPem(forge.pki.privateKeyFromPem(pem));
 
+describe('pkcs12ToPem', () => {
   it('extracts cert and key matching the fixture files', () => {
     const p12 = readFileSync(P12_PATH);
     const { cert, key } = pkcs12ToPem(p12, 'testpassword');
@@ -89,5 +91,79 @@ describe('pkcs12ToPem', () => {
 
     expect(normalizePem(cert)).toBe(readFileSync(CERT_PEM_PATH, 'utf-8'));
     expect(normalizePem(key)).toBe(normalizePem(normalizeKey(readFileSync(KEY_PEM_PATH, 'utf-8'))));
+  });
+});
+
+describe('pemToPkcs12', () => {
+  it('produces a parseable PKCS12 buffer from fixture PEM files (round-trip)', () => {
+    const certPem = readFileSync(CERT_PEM_PATH, 'utf-8');
+    const keyPem = readFileSync(KEY_PEM_PATH, 'utf-8');
+
+    const p12Buffer = pemToPkcs12(certPem, keyPem);
+    const { cert, key } = pkcs12ToPem(p12Buffer, undefined);
+
+    expect(normalizePem(cert)).toBe(certPem);
+    expect(normalizePem(key)).toBe(normalizePem(normalizeKey(keyPem)));
+  });
+
+  it('decrypts an encrypted private key when passphrase is provided (round-trip)', () => {
+    const certPem = readFileSync(CERT_PEM_PATH, 'utf-8');
+    const encryptedKeyPem = readFileSync(ENCRYPTED_KEY_PEM_PATH, 'utf-8');
+
+    const p12Buffer = pemToPkcs12(certPem, encryptedKeyPem, 'testpassword');
+    const { cert, key } = pkcs12ToPem(p12Buffer, undefined);
+
+    expect(normalizePem(cert)).toBe(certPem);
+    expect(normalizePem(key)).toBe(normalizePem(normalizeKey(readFileSync(KEY_PEM_PATH, 'utf-8'))));
+  });
+
+  it('decrypts a PKCS#8 encrypted private key when passphrase is provided (round-trip)', () => {
+    const certPem = readFileSync(CERT_PEM_PATH, 'utf-8');
+    const encryptedKeyPem = readFileSync(ENCRYPTED_KEY_PKCS8_PEM_PATH, 'utf-8');
+
+    const p12Buffer = pemToPkcs12(certPem, encryptedKeyPem, 'testpassword');
+    const { cert, key } = pkcs12ToPem(p12Buffer, undefined);
+
+    expect(normalizePem(cert)).toBe(certPem);
+    expect(normalizePem(key)).toBe(normalizePem(normalizeKey(readFileSync(KEY_PEM_PATH, 'utf-8'))));
+  });
+
+  it('throws CryptographicError when key is encrypted but no passphrase is given', () => {
+    const certPem = readFileSync(CERT_PEM_PATH, 'utf-8');
+    const encryptedKeyPem = readFileSync(ENCRYPTED_KEY_PEM_PATH, 'utf-8');
+
+    expect(() => pemToPkcs12(certPem, encryptedKeyPem)).toThrow(CryptographicError);
+  });
+
+  it('throws CryptographicError when key is encrypted and wrong passphrase is given', () => {
+    const certPem = readFileSync(CERT_PEM_PATH, 'utf-8');
+    const encryptedKeyPem = readFileSync(ENCRYPTED_KEY_PEM_PATH, 'utf-8');
+
+    expect(() => pemToPkcs12(certPem, encryptedKeyPem, 'wrongpassword')).toThrow(
+      CryptographicError,
+    );
+  });
+
+  it('throws CryptographicError on invalid cert PEM', () => {
+    const keyPem = readFileSync(KEY_PEM_PATH, 'utf-8');
+    expect(() => pemToPkcs12('not a cert', keyPem)).toThrow(CryptographicError);
+  });
+
+  it('throws CryptographicError on invalid key PEM', () => {
+    const certPem = readFileSync(CERT_PEM_PATH, 'utf-8');
+    expect(() => pemToPkcs12(certPem, 'not a key')).toThrow(CryptographicError);
+  });
+
+  it('throws CryptographicError when cert and key arguments are swapped', () => {
+    const certPem = readFileSync(CERT_PEM_PATH, 'utf-8');
+    const keyPem = readFileSync(KEY_PEM_PATH, 'utf-8');
+    expect(() => pemToPkcs12(keyPem, certPem)).toThrow(CryptographicError);
+  });
+
+  it('generates output that cannot be parsed with a non-empty passphrase', () => {
+    const certPem = readFileSync(CERT_PEM_PATH, 'utf-8');
+    const keyPem = readFileSync(KEY_PEM_PATH, 'utf-8');
+    const p12Buffer = pemToPkcs12(certPem, keyPem);
+    expect(() => pkcs12ToPem(p12Buffer, 'wrongpassword')).toThrow(CryptographicError);
   });
 });

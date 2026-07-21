@@ -36,9 +36,9 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { nativeGitIntegration } from '../../../../src/cli/commands/integrate/git/tools/native';
-import { preCommitIntegration } from '../../../../src/cli/commands/integrate/git/tools/pre-commit';
-import { SCA_SCANNER_CACHE_DIR } from '../../../../src/lib/config-constants';
+import { nativeGitIntegration } from '../../../../src/commands/integrate/git/tools/native';
+import { preCommitIntegration } from '../../../../src/commands/integrate/git/tools/pre-commit';
+import { CLI_TMP_DIR, SCA_SCANNER_CACHE_DIR } from '../../../../src/lib/config-constants';
 import { generateKeychainAccount } from '../../../../src/lib/keychain';
 import { hookScriptName, TestHarness } from '../../harness';
 import { runCli } from '../../harness/cli-runner.js';
@@ -420,6 +420,23 @@ describe('system reset --force', () => {
       expect(existsSync(logDir)).toBe(false);
       expect(existsSync(cacheDir)).toBe(false);
       expect(SCA_SCANNER_CACHE_DIR).toContain('sca-scanner-cache');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'clears the cli-tmp directory',
+    async () => {
+      const tmpDir = join(harness.cliHome.path, 'cli-tmp');
+      mkdirSync(tmpDir, { recursive: true });
+      writeFileSync(join(tmpDir, 'mcp-client-cert.p12'), Buffer.from('fake pkcs12'));
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Filesystem:.*Cleared CLI cache and logs/);
+      expect(existsSync(tmpDir)).toBe(false);
+      expect(CLI_TMP_DIR).toContain('cli-tmp');
     },
     { timeout: 15000 },
   );

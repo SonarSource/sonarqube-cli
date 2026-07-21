@@ -22,7 +22,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 
-import { CommandFailedError } from '../cli/commands/_common/error.js';
+import { CommandFailedError } from '../commands/_common/error.ts';
 import { APP_NAME } from './config-constants.js';
 
 function getServiceName(): string {

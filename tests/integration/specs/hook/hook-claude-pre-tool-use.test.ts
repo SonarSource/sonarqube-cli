@@ -34,7 +34,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   SECRETS_INACTIVE_BINARY_MISSING,
   SECRETS_INACTIVE_UNAUTHENTICATED,
-} from '../../../../src/cli/commands/hook/hook-dependencies.js';
+} from '../../../../src/commands/hook/hook-dependencies.js';
 import { TestHarness } from '../../harness';
 
 // Hardcoded test token — intentional fixture for secret detection, not a real credential

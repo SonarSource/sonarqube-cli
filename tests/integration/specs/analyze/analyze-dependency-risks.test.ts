@@ -26,7 +26,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/sca-scanner.js';
+import { buildLocalBinaryName } from '../../../../src/commands/_common/install/sca-scanner.js';
 import { detectPlatform } from '../../../../src/lib/platform-detector.js';
 import { TestHarness } from '../../harness';
 

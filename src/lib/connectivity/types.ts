@@ -45,6 +45,7 @@ export interface FetchNetworkOptions {
 export interface ClientCertConfig {
   readonly source: ConfigSource;
   readonly explicit: boolean;
+  readonly format: 'pkcs12' | 'pem';
   readonly certPath: string;
   readonly keyPath: string | null;
   readonly passphrase: string | undefined;

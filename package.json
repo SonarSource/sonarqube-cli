@@ -1,7 +1,7 @@
 {
   "name": "sonarqube-cli",
   "type": "module",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "SonarQube CLI",
   "bin": {
     "sonar": "./dist/index.js"
@@ -74,7 +74,7 @@
       ]
     },
     "sonar-context-augmentation": {
-      "version": "0.17.0.2614",
+      "version": "0.18.0.2833",
       "binaryPath": "Distribution/sonar-context-augmentation",
       "archive": "tar.gz",
       "platformNaming": "x64",
@@ -129,7 +129,7 @@
     "istanbul-lib-report": "3.0.1",
     "istanbul-reports": "3.2.0",
     "lint-staged": "16.4.0",
-    "prettier": "3.9.4",
+    "prettier": "3.9.5",
     "typescript": "6.0.3",
     "typescript-eslint": "8.63.0"
   },

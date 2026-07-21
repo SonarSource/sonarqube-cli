@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -26,9 +27,14 @@ import { dirname, join } from 'node:path';
 import type { ResolvedAuth } from '../auth-resolver';
 import {
   ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
+  CLI_TMP_DIR,
   SONARQUBE_MCP_DOCKER_IMAGE_NAME,
 } from '../config-constants';
+import { getNetworkConfig } from '../connectivity/network-config';
+import type { ClientCertConfig, ProxyGroup, ResolvedNetworkConfig } from '../connectivity/types';
+import { pemToPkcs12 } from '../crypto/pkcs12';
 import { normalizePath } from '../fs-utils';
+import type { RedactedUrl } from '../redacted-url';
 import type { ContainerRuntime, ContainerRuntimeDetection } from '../tool-detector';
 
 export interface McpServerConfig {
@@ -81,16 +87,118 @@ export function getMcpConfig(
   return { command: cliPath, args };
 }
 
+// Path where update-ca-certificates picks up custom CA certs inside the MCP container (Debian/Alpine convention).
+export const MCP_CONTAINER_CA_CERT_PATH = '/usr/local/share/ca-certificates/sonar-ca.crt';
+
+// Fixed mount path for the client certificate PKCS12 keystore inside the MCP container.
+export const MCP_CONTAINER_CLIENT_CERT_PATH = '/etc/ssl/mcp/client.p12';
+
 // All MCP toolsets supported by the server, excluding 'cag' which is available directly via the CLI.
 // Passed explicitly to avoid relying on MCP-side defaults.
 export const MCP_DEFAULT_TOOLSETS =
   'analysis,issues,projects,quality-gates,rules,duplications,measures,security-hotspots,dependency-risks,coverage';
 
+function toJavaNonProxyHosts(noProxy: string): string {
+  return noProxy
+    .split(/[,\s]+/)
+    .filter((entry) => entry.length > 0)
+    .map((entry) => (entry.startsWith('.') ? `*${entry}` : entry))
+    .join('|');
+}
+
+function proxyJavaProps(proxyUrl: RedactedUrl, scheme: 'http' | 'https'): string[] {
+  const url = new URL(proxyUrl.getUrlWithCredentials());
+  const parts = [`-D${scheme}.proxyHost=${url.hostname}`];
+  if (url.port) {
+    parts.push(`-D${scheme}.proxyPort=${url.port}`);
+  }
+  if (url.username) {
+    parts.push(`-D${scheme}.proxyUser=${decodeURIComponent(url.username)}`);
+  }
+  if (url.password) {
+    parts.push(`-D${scheme}.proxyPassword=${decodeURIComponent(url.password)}`);
+  }
+  return parts;
+}
+
+function collectProxyJavaOpts(proxy: ProxyGroup): string[] {
+  const parts: string[] = [];
+
+  if (proxy.proxyHttps) {
+    parts.push(...proxyJavaProps(proxy.proxyHttps, 'https'));
+  }
+
+  if (proxy.proxyHttp) {
+    parts.push(...proxyJavaProps(proxy.proxyHttp, 'http'));
+  }
+
+  if (proxy.noProxy) {
+    // Java uses it for both HTTP and HTTPS.
+    parts.push(`-Dhttp.nonProxyHosts=${toJavaNonProxyHosts(proxy.noProxy)}`);
+  }
+
+  return parts;
+}
+
+interface ClientCertMount {
+  hostCertPath: string;
+  keystorePassphrase: string | undefined;
+}
+
+export function clientCertCachePath(clientCert: ClientCertConfig): string {
+  const certHash = createHash('sha256')
+    .update(clientCert.resolvedCertPem)
+    .digest('hex')
+    .slice(0, 16);
+  return join(CLI_TMP_DIR, `mcp-client-cert-${certHash}.p12`);
+}
+
+const DOCKER_READABLE = 0o644;
+const NON_TRAVERSABLE = 0o700;
+
+function resolveClientCertMount(clientCert: ClientCertConfig): ClientCertMount {
+  if (clientCert.format === 'pkcs12') {
+    return {
+      hostCertPath: normalizePath(clientCert.certPath),
+      keystorePassphrase: clientCert.passphrase,
+    };
+  }
+  const cachedPath = clientCertCachePath(clientCert);
+  const cacheDir = dirname(cachedPath);
+  mkdirSync(cacheDir, { recursive: true, mode: NON_TRAVERSABLE }); // make the directory non-traversable
+  if (!existsSync(cachedPath)) {
+    const pkcs12Buffer = pemToPkcs12(
+      clientCert.resolvedCertPem,
+      clientCert.resolvedKeyPem,
+      clientCert.passphrase,
+    );
+    writeFileSync(cachedPath, pkcs12Buffer);
+    chmodSync(cachedPath, DOCKER_READABLE); // ensure Docker container (different UID) can read the file
+  }
+  return {
+    hostCertPath: normalizePath(cachedPath),
+    keystorePassphrase: undefined,
+  };
+}
+
+function collectClientCertJavaOpts(passphrase: string | undefined): string[] {
+  const parts = [
+    `-Djavax.net.ssl.keyStore=${MCP_CONTAINER_CLIENT_CERT_PATH}`,
+    '-Djavax.net.ssl.keyStoreType=PKCS12',
+  ];
+  if (passphrase) {
+    parts.push(`-Djavax.net.ssl.keyStorePassword=${passphrase}`);
+  }
+  return parts;
+}
+
 function buildDockerRunArgsAndEnv(
   auth: ResolvedAuth,
   context: McpServerContext,
-  options: McpServerOptions,
   mountSource: string | undefined,
+  options: McpServerOptions = {},
+  network: ResolvedNetworkConfig = getNetworkConfig(),
+  certMountSources: { caCert?: string; clientCert?: string } = {},
 ): { args: string[]; env: Record<string, string> } {
   const { token, orgKey: org, serverUrl } = auth;
 
@@ -135,6 +243,29 @@ function buildDockerRunArgsAndEnv(
   args.push('-e', 'SONARQUBE_TOOLSETS');
   env.SONARQUBE_TOOLSETS = toolsets;
 
+  const javaOpts: string[] = [];
+
+  if (network.proxy) {
+    javaOpts.push(...collectProxyJavaOpts(network.proxy));
+  }
+
+  if (network.caCert) {
+    const hostPath = certMountSources.caCert ?? normalizePath(network.caCert.path);
+    args.push('-v', `${hostPath}:${MCP_CONTAINER_CA_CERT_PATH}:ro`);
+  }
+
+  if (network.clientCert) {
+    const { hostCertPath, keystorePassphrase } = resolveClientCertMount(network.clientCert);
+    const mountPath = certMountSources.clientCert ?? hostCertPath;
+    args.push('-v', `${mountPath}:${MCP_CONTAINER_CLIENT_CERT_PATH}:ro`);
+    javaOpts.push(...collectClientCertJavaOpts(keystorePassphrase));
+  }
+
+  if (javaOpts.length > 0) {
+    args.push('-e', 'JAVA_OPTS');
+    env.JAVA_OPTS = javaOpts.join(' ');
+  }
+
   args.push(SONARQUBE_MCP_DOCKER_IMAGE_NAME);
 
   return { args, env };
@@ -145,28 +276,66 @@ export function getMcpContainerCommand(
   runtime: ContainerRuntime,
   context: McpServerContext,
   options: McpServerOptions = {},
+  network: ResolvedNetworkConfig = getNetworkConfig(),
 ): McpContainerCommand {
   const mountSource = context.withFsMount ? normalizePath(context.projectRoot) : undefined;
-  const { args, env } = buildDockerRunArgsAndEnv(auth, context, options, mountSource);
+  const { args, env } = buildDockerRunArgsAndEnv(auth, context, mountSource, options, network);
   return { command: runtime, args, env };
 }
 
 const WSL_HOST_PATH_ENV_VAR = 'SONARQUBE_MCP_HOST_PATH';
+const WSL_CA_PATH_ENV_VAR = 'SONARQUBE_MCP_CA_PATH';
+const WSL_CLIENT_CERT_PATH_ENV_VAR = 'SONARQUBE_MCP_CLIENT_CERT_PATH';
 
 function getMcpWslContainerCommand(
   auth: ResolvedAuth,
   runtime: ContainerRuntime,
   context: McpServerContext,
   options: McpServerOptions = {},
+  network: ResolvedNetworkConfig = getNetworkConfig(),
 ): McpContainerCommand {
   const mountSource = context.withFsMount ? `"$${WSL_HOST_PATH_ENV_VAR}"` : undefined;
-  const { args, env } = buildDockerRunArgsAndEnv(auth, context, options, mountSource);
+
+  // Cert host paths must be routed through WSLENV /p-translated env vars so WSL can
+  // convert Windows paths (C:/...) to WSL mount paths (/mnt/c/...) before Docker sees them.
+  // Mirroring the workspace mount pattern: store the Windows path in an env var and reference
+  // it as "$VAR" (quoted to handle spaces) in the docker run args.
+  const certMountSources: { caCert?: string; clientCert?: string } = {};
+  const wslPathEnv: Record<string, string> = {};
+
+  if (network.caCert) {
+    certMountSources.caCert = `"$${WSL_CA_PATH_ENV_VAR}"`;
+    wslPathEnv[WSL_CA_PATH_ENV_VAR] = normalizePath(network.caCert.path);
+  }
+
+  if (network.clientCert) {
+    const hostPath =
+      network.clientCert.format === 'pkcs12'
+        ? normalizePath(network.clientCert.certPath)
+        : normalizePath(clientCertCachePath(network.clientCert));
+    certMountSources.clientCert = `"$${WSL_CLIENT_CERT_PATH_ENV_VAR}"`;
+    wslPathEnv[WSL_CLIENT_CERT_PATH_ENV_VAR] = hostPath;
+  }
+
+  const { args, env } = buildDockerRunArgsAndEnv(
+    auth,
+    context,
+    mountSource,
+    options,
+    network,
+    certMountSources,
+  );
 
   const wslenv = Object.keys(env).map((name) => `${name}/u`);
 
   if (context.withFsMount) {
     env[WSL_HOST_PATH_ENV_VAR] = context.projectRoot;
     wslenv.push(`${WSL_HOST_PATH_ENV_VAR}/p`);
+  }
+
+  for (const [key, value] of Object.entries(wslPathEnv)) {
+    env[key] = value;
+    wslenv.push(`${key}/p`);
   }
 
   env.WSLENV = wslenv.join(':');
@@ -179,13 +348,14 @@ export function resolveMcpContainerCommand(
   detection: ContainerRuntimeDetection,
   context: McpServerContext,
   options: McpServerOptions = {},
+  network: ResolvedNetworkConfig = getNetworkConfig(),
 ): McpContainerCommand {
   if (!detection.runtime) {
     throw new Error('resolveMcpContainerCommand requires a detected container runtime');
   }
   return detection.viaWsl
-    ? getMcpWslContainerCommand(auth, detection.runtime, context, options)
-    : getMcpContainerCommand(auth, detection.runtime, context, options);
+    ? getMcpWslContainerCommand(auth, detection.runtime, context, options, network)
+    : getMcpContainerCommand(auth, detection.runtime, context, options, network);
 }
 
 export async function writeMcpServerEntry(filePath: string, serverConfig: object): Promise<void> {

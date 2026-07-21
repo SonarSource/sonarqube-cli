@@ -130,26 +130,20 @@ export async function selectPrompt<T>(
 export interface MultiSelectOption<T> {
   value: T;
   label: string;
+  /** Shown but not toggleable (e.g. a repo that's already imported) — rendered like an at-cap row. */
+  disabled?: boolean;
 }
 
 export interface MultiSelectPromptOptions<T> {
   /** True while more options can be revealed (e.g. a paginated collection's `hasMore`). */
   hasMore?: () => boolean;
   /**
-   * Reveal more options, returning the full updated list (existing options plus newly
-   * revealed ones). Synchronous by design: options are expected to already be fully loaded
-   * locally (see `RepositoryCollection`/`OrganizationCollection`), so paging never needs to
-   * make a network call — keeping this synchronous also avoids having to reconcile prompt
-   * state against an in-flight async load.
+   * Reveal more options, returning (or resolving to) the full updated list (existing options
+   * plus newly revealed ones). May return a `Promise` when revealing more requires a network
+   * call (e.g. `RepositoryCollection.loadMore`) — the "Load more" row shows a loading indicator
+   * while it's in flight.
    */
-  onLoadMore?: () => MultiSelectOption<T>[];
-  /**
-   * Enables the 'a' keybinding to select/deselect every option at once. Called lazily (only
-   * when 'a' is pressed) so callers paginating lazily can reveal every remaining page first
-   * (e.g. via `onLoadMore`'s underlying collection) before returning the complete option list.
-   * Pressing 'a' again when everything is already selected clears the selection.
-   */
-  selectAll?: () => MultiSelectOption<T>[];
+  onLoadMore?: () => MultiSelectOption<T>[] | Promise<MultiSelectOption<T>[]>;
   /** Max number of selections. Defaults to 20; pass `Infinity` for no cap. */
   maxSelected?: number;
   /**
@@ -187,17 +181,23 @@ export function toggleSelected<T>(selected: T[], val: T, max: number): void {
 }
 
 /** Selection hint line shown while the multi-select prompt is active (not submitted/cancelled). */
-function buildSelectHint(countLabel: string, atCap: boolean, selectAllEnabled: boolean): string {
+function buildSelectHint(countLabel: string, atCap: boolean): string {
   if (atCap) {
     return dim(`(${countLabel} - at max, deselect to choose others)`);
   }
-  const selectAllHint = selectAllEnabled ? ', a to select all' : '';
-  return dim(`(${countLabel} - space to toggle, enter to confirm${selectAllHint}, q to quit)`);
+  return dim(`(${countLabel} - space to toggle, enter to confirm, q to quit)`);
 }
 
-function renderLoadMoreRow(isCursor: boolean): string {
+function renderLoadMoreRow(isCursor: boolean, loading: boolean, error: string | null): string {
+  if (loading) {
+    return `    ${dim('…')}    ${dim('Loading...')}`;
+  }
   const arrow = isCursor ? cyan('❯') : ' ';
-  const label = 'Load more...';
+  let label = 'Load more...';
+  if (error) {
+    const retryHint = dim(`(${error} - press enter to retry)`);
+    label = `Load more... ${retryHint}`;
+  }
   return `    ${arrow}    ${isCursor ? label : dim(label)}`;
 }
 
@@ -206,8 +206,9 @@ function renderOptionRow(
   isCursor: boolean,
   isSelected: boolean,
   atCap: boolean,
+  disabled: boolean,
 ): string {
-  const unavailable = atCap && !isSelected;
+  const unavailable = disabled || (atCap && !isSelected);
   const checkbox = checkboxComponent(isSelected, unavailable);
   const arrow = isCursor ? cyan('❯') : ' ';
   const displayLabel = isCursor && !unavailable ? label : dim(label);
@@ -215,29 +216,9 @@ function renderOptionRow(
 }
 
 /**
- * 'a' (select-all) toggle result: everything `selectAll()` returned, or nothing if every
- * selectable slot (capped by `maxSelected`) is already selected.
- */
-function computeSelectAllToggle<T>(
-  allOptions: MultiSelectOption<T>[],
-  currentlySelected: T[],
-  maxSelected: number,
-): T[] {
-  const selectableCount = Math.min(allOptions.length, maxSelected);
-  const allSelected = selectableCount > 0 && currentlySelected.length >= selectableCount;
-  if (allSelected) return [];
-
-  const next: T[] = [];
-  for (const opt of allOptions) {
-    if (next.length >= maxSelected) break;
-    next.push(opt.value);
-  }
-  return next;
-}
-
-/**
  * Multi-select prompt. Space to toggle, Enter to confirm. Max 20 selections by default
- * (override via `loadMoreOpts.maxSelected`).
+ * (override via `loadMoreOpts.maxSelected`). Options with `disabled: true` are shown (dimmed,
+ * like an at-cap row) but the cursor can't toggle them.
  * Returns the selected values array (may be empty) or null if cancelled (Ctrl+C or q).
  * Renders a scrolling viewport when the option list exceeds MULTISELECT_VIEWPORT_SIZE.
  *
@@ -245,10 +226,8 @@ function computeSelectAllToggle<T>(
  * `hasMore()` is true; pressing Enter on that row calls `onLoadMore()` instead of submitting.
  * Selections are preserved across a load-more because they're tracked by value identity
  * (`===`) rather than by index — callers must return `===`-stable values for options that
- * were already present before the reload.
- *
- * When `loadMoreOpts.selectAll` is given, pressing 'a' selects every option it returns (or
- * clears the selection if everything is already selected).
+ * were already present before the reload. When `onLoadMore` returns a `Promise`, the row shows
+ * a loading indicator until it resolves; Enter is ignored on every other row while it's pending.
  */
 export async function multiSelectPrompt<T>(
   message: string,
@@ -264,10 +243,11 @@ export async function multiSelectPrompt<T>(
   let options = initialOptions;
   const selected: T[] = [];
   let cursor = 0;
+  let loadingMore = false;
+  let loadMoreError: string | null = null;
   const maxSelected = loadMoreOpts?.maxSelected ?? MULTISELECT_MAX_SELECTED;
 
   const onLoadMore = loadMoreOpts?.onLoadMore;
-  const selectAll = loadMoreOpts?.selectAll;
   const hasMore = (): boolean => onLoadMore !== undefined && (loadMoreOpts?.hasMore?.() ?? false);
   const isOnLoadMoreRow = (): boolean => hasMore() && cursor === options.length;
   const getTotal = (): number => loadMoreOpts?.total?.() ?? options.length;
@@ -281,6 +261,16 @@ export async function multiSelectPrompt<T>(
   class MultiSelectLoadMorePrompt extends Prompt<T[]> {
     protected override _shouldSubmit(): boolean {
       return !pendingLoadMoreSubmitBlock;
+    }
+
+    /**
+     * Forces a redraw outside of a keypress (needed once an async `onLoadMore()` resolves).
+     * `render` is private on the base class, but `output` is protected and the base
+     * constructor already wires `output.on('resize', this.render)` for terminal resizes —
+     * reusing that plumbing to trigger a render is simpler than re-implementing it.
+     */
+    refresh(): void {
+      this.output.emit('resize');
     }
   }
 
@@ -297,9 +287,9 @@ export async function multiSelectPrompt<T>(
 
         const atCap = selected.length >= maxSelected;
         const countLabel = `${selected.length}/${getTotal()} selected`;
-        const hint = buildSelectHint(countLabel, atCap, selectAll !== undefined);
+        const hint = buildSelectHint(countLabel, atCap);
 
-        const loadMoreRowVisible = hasMore();
+        const loadMoreRowVisible = hasMore() || loadingMore;
         const total = options.length + (loadMoreRowVisible ? 1 : 0);
         const { start, end } = calculateViewport(cursor, total, MULTISELECT_VIEWPORT_SIZE);
 
@@ -314,13 +304,15 @@ export async function multiSelectPrompt<T>(
           const isCursor = i === cursor;
 
           if (loadMoreRowVisible && i === options.length) {
-            lines.push(renderLoadMoreRow(isCursor));
+            lines.push(renderLoadMoreRow(isCursor, loadingMore, loadMoreError));
             continue;
           }
 
           const opt = options[i];
           const isSelected = selected.includes(opt.value);
-          lines.push(renderOptionRow(opt.label, isCursor, isSelected, atCap));
+          lines.push(
+            renderOptionRow(opt.label, isCursor, isSelected, atCap, opt.disabled ?? false),
+          );
         }
 
         const more = `↓ ${total - end} more`;
@@ -338,7 +330,7 @@ export async function multiSelectPrompt<T>(
     else if (dir === 'down') cursor = Math.min(total - 1, cursor + 1);
     else if (dir === 'space') {
       const val = options[cursor]?.value;
-      if (val !== undefined) {
+      if (val !== undefined && !options[cursor]?.disabled) {
         toggleSelected(selected, val, maxSelected);
       }
     }
@@ -346,21 +338,34 @@ export async function multiSelectPrompt<T>(
 
   prompt.on('key', (_key, s) => {
     if (s.name === 'return') {
-      pendingLoadMoreSubmitBlock = isOnLoadMoreRow() && onLoadMore !== undefined;
-      if (pendingLoadMoreSubmitBlock && onLoadMore) {
-        options = onLoadMore();
+      if (loadingMore) {
+        // A load is already in flight — ignore Enter entirely rather than letting it submit
+        // (or start a second overlapping load) while `options` is about to be replaced.
+        pendingLoadMoreSubmitBlock = true;
         return;
       }
+      if (isOnLoadMoreRow() && onLoadMore) {
+        pendingLoadMoreSubmitBlock = true;
+        loadingMore = true;
+        loadMoreError = null;
+        void Promise.resolve(onLoadMore())
+          .then((loaded) => {
+            options = loaded;
+          })
+          .catch((err: unknown) => {
+            // Leave `options`/`hasMore()` untouched so the row reappears and Enter retries.
+            loadMoreError = err instanceof Error ? err.message : String(err);
+          })
+          .finally(() => {
+            loadingMore = false;
+            prompt.refresh();
+          });
+        return;
+      }
+      pendingLoadMoreSubmitBlock = false;
       prompt.value = [...selected];
     } else if (s.name === 'q') {
       prompt.state = 'cancel';
-    } else if (s.name === 'a' && selectAll) {
-      const allOptions = selectAll();
-      options = allOptions;
-      const next = computeSelectAllToggle(allOptions, selected, maxSelected);
-      selected.length = 0;
-      selected.push(...next);
-      cursor = Math.min(cursor, options.length + (hasMore() ? 1 : 0) - 1);
     }
   });
 

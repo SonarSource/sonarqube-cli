@@ -31,7 +31,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { scanAndEmitSecrets } from '../../../src/cli/commands/analyze/secrets.js';
+import { scanAndEmitSecrets } from '../../../src/commands/analyze/secrets.ts';
 import * as agentDetector from '../../../src/lib/agent-detector.js';
 import type { ResolvedAuth } from '../../../src/lib/auth-resolver.js';
 import { ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
