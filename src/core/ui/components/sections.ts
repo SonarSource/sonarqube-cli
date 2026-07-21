@@ -20,7 +20,7 @@
 
 // Structural markers — intro, outro
 
-import { bold, green, isTTY, red } from '../colors.ts';
+import { bold, dim, green, isTTY, red } from '../colors.ts';
 import { isMockActive, recordCall } from '../mock.ts';
 
 const DIVIDER_BASE_WIDTH = 40;
@@ -44,9 +44,13 @@ export function intro(title: string, subtitle?: string): void {
   }
 }
 
-export function outro(message: string, status: 'success' | 'error' = 'success'): void {
+export function outro(
+  message: string,
+  status: 'success' | 'error' = 'success',
+  detail?: string,
+): void {
   if (isMockActive()) {
-    recordCall('outro', message, status);
+    recordCall('outro', message, status, detail);
     return;
   }
 
@@ -56,8 +60,11 @@ export function outro(message: string, status: 'success' | 'error' = 'success'):
   if (isTTY) {
     process.stdout.write(`\n  ${DIVIDER}\n`);
     process.stdout.write(`  ${icon}  ${bold(colorFn(message))}\n`);
+    if (detail) process.stdout.write(`   ${dim(detail)}\n`);
     process.stdout.write(`  ${DIVIDER}\n\n`);
   } else {
-    process.stdout.write(`\n=== ${message} ===\n\n`);
+    process.stdout.write(`\n=== ${message} ===\n`);
+    if (detail) process.stdout.write(`${detail}\n`);
+    process.stdout.write('\n');
   }
 }

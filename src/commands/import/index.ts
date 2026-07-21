@@ -203,8 +203,11 @@ function reportOutcome(
   }
 
   const succeededNoun = succeeded === 1 ? 'repository' : 'repositories';
-  info(`Dashboard: ${dashboardUrl}`);
-  outro(`Imported ${succeeded} ${succeededNoun}${skippedSuffix}`, 'success');
+  outro(
+    `Imported ${succeeded} ${succeededNoun}${skippedSuffix}`,
+    'success',
+    `Dashboard: ${dashboardUrl}`,
+  );
 }
 
 export async function importHandler(options: ImportOptions, auth: ResolvedAuth): Promise<void> {
