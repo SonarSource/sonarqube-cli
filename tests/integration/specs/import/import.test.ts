@@ -1344,6 +1344,106 @@ describe('sonar import', () => {
     );
   });
 
+  describe('autoscan eligibility', () => {
+    // Mirrors the fake server's deterministic provisioned-project-key derivation (see
+    // fake-sonarqube-server.ts's /api/alm_integration/provision_projects handler) so
+    // assertions stay correct even if the fixtures below change.
+    function expectedProjectKey(organization: string, installationKey: string): string {
+      return `${organization}_${installationKey}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+    }
+
+    it(
+      'requests autoscan eligibility for a GitHub-bound organization',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: GITHUB_ALM, actions: ADMIN_ACTIONS },
+          ])
+          .withDopRepositories('my-org', SAMPLE_REPOS)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token');
+
+        const result = await harness.run('import --org my-org --repo kevinmlsilva/repo', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(0);
+        const recorded = server.getRecordedRequests();
+        const autoscanRequest = recorded.find((r) => r.path === '/api/autoscan/eligibility');
+        expect(autoscanRequest).toBeDefined();
+        expect(autoscanRequest?.query).toEqual({
+          autoEnable: 'true',
+          ignoreCache: 'false',
+          projectKey: expectedProjectKey('my-org', 'kevinmlsilva/repo|repo-1'),
+        });
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      "requests autoscan eligibility regardless of the org's connected DevOps platform",
+      async () => {
+        // GitLab is deliberately not an Autoscan-eligible platform — proves the request fires
+        // unconditionally rather than being gated on the org's connected ALM.
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: GITLAB_ALM, actions: ADMIN_ACTIONS },
+          ])
+          .withDopRepositories('my-org', SAMPLE_REPOS)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token');
+
+        const result = await harness.run('import --org my-org --repo kevinmlsilva/repo', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(0);
+        const recorded = server.getRecordedRequests();
+        const autoscanRequest = recorded.find((r) => r.path === '/api/autoscan/eligibility');
+        expect(autoscanRequest).toBeDefined();
+        expect(autoscanRequest?.query).toEqual({
+          autoEnable: 'true',
+          ignoreCache: 'false',
+          projectKey: expectedProjectKey('my-org', 'repo-1'),
+        });
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'does not fail the import when the autoscan eligibility request fails',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: GITHUB_ALM, actions: ADMIN_ACTIONS },
+          ])
+          .withDopRepositories('my-org', SAMPLE_REPOS)
+          .withAutoscanEligibilityError(500)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token');
+
+        const result = await harness.run('import --org my-org --repo kevinmlsilva/repo', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('Imported 1 repository');
+        const recorded = server.getRecordedRequests();
+        expect(recorded.some((r) => r.path === '/api/autoscan/eligibility')).toBe(true);
+      },
+      { timeout: 15000 },
+    );
+  });
+
   describe('batch import', () => {
     const BATCH_REPOS = [
       { id: 'repo-a-id', name: 'repo-a', slug: 'my-org/repo-a' },
@@ -1682,6 +1782,31 @@ describe('sonar import', () => {
         expect(provisionsBeforeSecondPage).toBe(50);
       },
       { timeout: 30000 },
+    );
+
+    it(
+      'requests autoscan eligibility once per repository provisioned via --all',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: GITHUB_ALM, actions: ADMIN_ACTIONS },
+          ])
+          .withDopRepositories('my-org', SAMPLE_REPOS)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token');
+
+        const result = await harness.run('import --non-interactive --org my-org --all', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(0);
+        const recorded = server.getRecordedRequests();
+        expect(recorded.filter((r) => r.path === '/api/autoscan/eligibility')).toHaveLength(1);
+      },
+      { timeout: 15000 },
     );
 
     it(

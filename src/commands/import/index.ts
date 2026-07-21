@@ -102,6 +102,7 @@ function createProvisionTask(
         );
       }
       const project = result.projects[0];
+      await client.requestAutoscanEligibility(project.projectKey);
       progress.update(repo.slug, 'done');
       return project;
     } catch (err) {
