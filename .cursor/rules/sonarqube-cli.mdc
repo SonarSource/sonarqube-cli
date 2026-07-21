@@ -9,7 +9,7 @@ alwaysApply: true
 See @CLAUDE.md for the full project guide. Key rules to enforce:
 
 ## Never edit `src/index.ts` directly
-The entry point is generated. To add or change commands, edit `src/cli/command-tree.ts` and add the implementation in `src/cli/commands/`.
+The entry point is generated. To add or change commands, edit `src/commands/command-tree.ts` and add the implementation in `src/commands/`.
 
 ## Always use `runCommand()` for command handlers
 Every command action must be wrapped in `runCommand()` from `src/lib/run-command.ts`. Never catch or handle errors manually in command handlers.
