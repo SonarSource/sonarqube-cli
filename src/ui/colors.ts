@@ -43,7 +43,7 @@ function c(fn: (s: string) => string): ColorFn {
   return (s: string) => (isTTY ? fn(s) : s);
 }
 
-const SOFT_BLUE = 153; // #8FCAEA
+const SOFT_BLUE = 69; // #5F87FF
 
 function ansi256(n: number): ColorFn {
   return (s: string) => (isTTY ? `\x1b[38;5;${n}m${s}\x1b[0m` : s);
