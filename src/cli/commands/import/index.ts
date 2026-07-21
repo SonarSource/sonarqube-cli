@@ -20,15 +20,24 @@
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import { runWithConcurrencyLimit } from '../../../lib/concurrency-pool';
-import { SonarQubeClient } from '../../../sonarqube/client';
+import {
+  type DopRepository,
+  type ProvisionedProject,
+  SonarQubeClient,
+} from '../../../sonarqube/client';
 import { info, intro, outro } from '../../../ui';
 import { ImportProgress } from '../../../ui/components/import-progress.js';
 import { CommandFailedError } from '../_common/error';
+import type {
+  OnlyPrivateProjects,
+  RepositoryCollection,
+  SkippedRepo,
+} from './_common/repository-collection';
 import {
   BACK,
-  type OnlyPrivateProjects,
+  computeInstallationKey,
+  type RepoResolution,
   type ResolvedRepo,
-  type ResolvedRepos,
   resolveOrg,
   resolveRepos,
 } from './_common/resolve-options';
@@ -47,7 +56,7 @@ const IMPORT_PROVISION_CONCURRENCY_LIMIT = 10;
 async function resolveOrgAndRepos(
   client: SonarQubeClient,
   options: ImportOptions,
-): Promise<{ orgKey: string } & ResolvedRepos> {
+): Promise<{ orgKey: string; almKey: string | undefined } & RepoResolution> {
   for (;;) {
     const {
       key: orgKey,
@@ -71,67 +80,112 @@ async function resolveOrgAndRepos(
       continue;
     }
 
-    return { orgKey, ...outcome };
+    return { orgKey, almKey, ...outcome };
   }
 }
 
-export async function importHandler(options: ImportOptions, auth: ResolvedAuth): Promise<void> {
-  const client = new SonarQubeClient(auth.serverUrl, auth.token);
-
-  intro('Import repositories', 'SonarQube');
-
-  const { orgKey, repos, skipped } = await resolveOrgAndRepos(client, options);
-
-  info(`Repositories to import: ${repos.length}`);
-  if (skipped.length > 0) {
-    info(`Repositories skipped: ${skipped.length}`);
-    const countsByReason = new Map<string, number>();
-    for (const s of skipped) {
-      countsByReason.set(s.reason, (countsByReason.get(s.reason) ?? 0) + 1);
+/** Builds the `runWithConcurrencyLimit` task that provisions one repo and updates `progress`. */
+function createProvisionTask(
+  client: SonarQubeClient,
+  orgKey: string,
+  progress: ImportProgress,
+): (repo: ResolvedRepo) => Promise<ProvisionedProject> {
+  return async (repo) => {
+    progress.update(repo.slug, 'running');
+    try {
+      const result = await client.provisionProject(orgKey, repo.installationKey);
+      if (result.projects.length === 0) {
+        throw new Error(
+          'provision_projects returned no project — the repository may already be bound, or ' +
+            'the installation key was rejected by the server.',
+        );
+      }
+      const project = result.projects[0];
+      progress.update(repo.slug, 'done');
+      return project;
+    } catch (err) {
+      progress.update(repo.slug, 'failed', err instanceof Error ? err.message : String(err));
+      throw err;
     }
-    for (const [reason, count] of countsByReason) {
-      info(`  - ${reason}: ${count}`);
-    }
-  }
+  };
+}
 
-  const progress = new ImportProgress({
-    repos: repos.map((repo) => repo.slug),
-    maxVisible: IMPORT_PROVISION_CONCURRENCY_LIMIT,
-  });
+/**
+ * Runs `--all`/"Recommended" as a streaming job: import each server page's eligible repos as
+ * soon as it's fetched, then fetch the next page — rather than resolving the whole org's repo
+ * list before provisioning anything.
+ */
+async function runBulkImportJob(
+  client: SonarQubeClient,
+  orgKey: string,
+  almKey: string | undefined,
+  collection: RepositoryCollection,
+): Promise<{ succeeded: number; failed: number; skipped: readonly SkippedRepo[] }> {
+  const progress = new ImportProgress({ maxVisible: IMPORT_PROVISION_CONCURRENCY_LIMIT });
+  progress.setTotal(collection.total);
   progress.start();
 
-  await runWithConcurrencyLimit(
-    repos,
-    IMPORT_PROVISION_CONCURRENCY_LIMIT,
-    async (repo: ResolvedRepo) => {
-      progress.update(repo.slug, 'running');
-      try {
-        const result = await client.provisionProject(orgKey, repo.installationKey);
-        if (result.projects.length === 0) {
-          throw new Error(
-            'provision_projects returned no project — the repository may already be bound, or ' +
-              'the installation key was rejected by the server.',
-          );
-        }
-        const project = result.projects[0];
-        progress.update(repo.slug, 'done', 'Project created', project.projectKey);
-        return project;
-      } catch (err) {
-        progress.update(repo.slug, 'failed', err instanceof Error ? err.message : String(err));
-        throw err;
-      }
-    },
-  );
+  const importPage = async (eligible: readonly DopRepository[]): Promise<void> => {
+    if (eligible.length === 0) return;
+    const repos: ResolvedRepo[] = eligible.map((repo) => ({
+      slug: repo.slug,
+      installationKey: computeInstallationKey(repo, almKey),
+    }));
+    progress.addRepos(repos.map((repo) => repo.slug));
+    await runWithConcurrencyLimit(
+      repos,
+      IMPORT_PROVISION_CONCURRENCY_LIMIT,
+      createProvisionTask(client, orgKey, progress),
+    );
+  };
+
+  // `RepositoryCollection.create` already loaded the first eligible-or-exhausted window before
+  // handing the collection here — import it before fetching any further pages.
+  progress.recordSkipped(collection.skippedRepos.length);
+  await importPage(collection.eligibleRepos);
+
+  while (collection.hasMore) {
+    let page;
+    try {
+      page = await collection.loadMore();
+    } catch (err) {
+      // A later page's fetch failure still leaves earlier pages' provisioning results behind —
+      // finish the display so they're reported, same as any other partial-failure exit.
+      progress.finish();
+      throw new CommandFailedError(
+        `Failed to load repositories: ${err instanceof Error ? err.message : String(err)}`,
+        { remediationHint: 'Check your network connection and authentication, then retry.' },
+      );
+    }
+    progress.recordSkipped(page.skipped.length);
+    await importPage(page.eligible);
+  }
 
   const { succeeded, failed } = progress.finish();
-  const skippedSuffix = skipped.length > 0 ? ` (${skipped.length} skipped)` : '';
+  return { succeeded, failed, skipped: collection.skippedRepos };
+}
+
+function reportSkipped(skipped: readonly SkippedRepo[]): void {
+  if (skipped.length === 0) return;
+  info(`Repositories skipped: ${skipped.length}`);
+  const countsByReason = new Map<string, number>();
+  for (const s of skipped) {
+    countsByReason.set(s.reason, (countsByReason.get(s.reason) ?? 0) + 1);
+  }
+  for (const [reason, count] of countsByReason) {
+    info(`  - ${reason}: ${count}`);
+  }
+}
+
+function reportOutcome(succeeded: number, failed: number, skippedCount: number): void {
+  const skippedSuffix = skippedCount > 0 ? ` (${skippedCount} skipped)` : '';
 
   if (failed > 0) {
     const failedNoun = failed === 1 ? 'repository' : 'repositories';
     const message =
       succeeded === 0
         ? `Failed to import ${failed} ${failedNoun}.`
-        : `Imported ${succeeded} of ${repos.length} repositories (${failed} failed)${skippedSuffix}.`;
+        : `Imported ${succeeded} of ${succeeded + failed} repositories (${failed} failed)${skippedSuffix}.`;
     throw new CommandFailedError(message, {
       remediationHint: 'See the per-repository errors above for details.',
     });
@@ -139,4 +193,43 @@ export async function importHandler(options: ImportOptions, auth: ResolvedAuth):
 
   const succeededNoun = succeeded === 1 ? 'repository' : 'repositories';
   outro(`Imported ${succeeded} ${succeededNoun}${skippedSuffix}`, 'success');
+}
+
+export async function importHandler(options: ImportOptions, auth: ResolvedAuth): Promise<void> {
+  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+
+  intro('Import repositories', 'SonarQube');
+
+  const resolution = await resolveOrgAndRepos(client, options);
+
+  if (resolution.kind === 'streaming') {
+    const { succeeded, failed, skipped } = await runBulkImportJob(
+      client,
+      resolution.orgKey,
+      resolution.almKey,
+      resolution.collection,
+    );
+    reportSkipped(skipped);
+    reportOutcome(succeeded, failed, skipped.length);
+    return;
+  }
+
+  const { repos, skipped } = resolution;
+
+  info(`Repositories to import: ${repos.length}`);
+  reportSkipped(skipped);
+
+  const progress = new ImportProgress({ maxVisible: IMPORT_PROVISION_CONCURRENCY_LIMIT });
+  progress.setTotal(repos.length);
+  progress.addRepos(repos.map((repo) => repo.slug));
+  progress.start();
+
+  await runWithConcurrencyLimit(
+    repos,
+    IMPORT_PROVISION_CONCURRENCY_LIMIT,
+    createProvisionTask(client, resolution.orgKey, progress),
+  );
+
+  const { succeeded, failed } = progress.finish();
+  reportOutcome(succeeded, failed, skipped.length);
 }
