@@ -27,7 +27,7 @@ import { isAbsolute } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { codexIntegration } from '../../../../src/cli/commands/integrate/codex/declaration';
+import { codexIntegration } from '../../../../src/commands/integrate/codex/declaration';
 import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,

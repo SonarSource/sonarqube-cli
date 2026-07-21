@@ -25,11 +25,11 @@ import { chmodSync } from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets';
+import { buildLocalBinaryName } from '../../../../src/commands/_common/install/secrets';
 import {
   HOOK_INACTIVE_UNAUTHENTICATED,
   SECRETS_INACTIVE_BINARY_MISSING,
-} from '../../../../src/cli/commands/hook/hook-dependencies';
+} from '../../../../src/commands/hook/hook-dependencies';
 import { detectPlatform } from '../../../../src/lib/platform-detector';
 import { TestHarness } from '../../harness';
 import { initGitRepo, stageFile } from './git-test-helpers';

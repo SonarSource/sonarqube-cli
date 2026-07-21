@@ -25,7 +25,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets.js';
+import { buildLocalBinaryName } from '../../../../src/commands/_common/install/secrets.js';
 import { detectPlatform } from '../../../../src/lib/platform-detector.js';
 import { readAnalysisEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';

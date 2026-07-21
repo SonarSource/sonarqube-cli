@@ -35,11 +35,11 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets.js';
+import { buildLocalBinaryName } from '../../../../src/commands/_common/install/secrets.js';
 import {
   SECRETS_INACTIVE_BINARY_MISSING,
   SECRETS_INACTIVE_UNAUTHENTICATED,
-} from '../../../../src/cli/commands/hook/hook-dependencies.js';
+} from '../../../../src/commands/hook/hook-dependencies.js';
 import { detectPlatform } from '../../../../src/lib/platform-detector.js';
 import { TestHarness } from '../../harness';
 

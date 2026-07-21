@@ -25,8 +25,8 @@ import { isAbsolute } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets.js';
-import { claudeIntegration } from '../../../../src/cli/commands/integrate/claude/declaration.js';
+import { buildLocalBinaryName } from '../../../../src/commands/_common/install/secrets.js';
+import { claudeIntegration } from '../../../../src/commands/integrate/claude/declaration.js';
 import { detectPlatform } from '../../../../src/lib/platform-detector.js';
 import {
   expectAgentPromptHint,

@@ -34,9 +34,9 @@ import { existsSync, mkdirSync, statSync } from 'node:fs';
 import { chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { BinarySpec } from '../src/cli/commands/_common/install/binary.js';
-import { SCA_SCANNER_SPEC } from '../src/cli/commands/_common/install/sca-scanner.js';
-import { SECRETS_SPEC } from '../src/cli/commands/_common/install/secrets.js';
+import type { BinarySpec } from '../src/commands/_common/install/binary.js';
+import { SCA_SCANNER_SPEC } from '../src/commands/_common/install/sca-scanner.js';
+import { SECRETS_SPEC } from '../src/commands/_common/install/secrets.js';
 import { detectPlatform } from '../src/lib/platform-detector.js';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../src/lib/signatures.js';
 import {

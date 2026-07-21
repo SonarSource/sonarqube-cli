@@ -27,7 +27,7 @@ import { isAbsolute } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { cursorIntegration } from '../../../../src/cli/commands/integrate/cursor/declaration';
+import { cursorIntegration } from '../../../../src/commands/integrate/cursor/declaration';
 import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,

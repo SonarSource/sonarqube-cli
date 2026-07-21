@@ -24,12 +24,12 @@ import { version as CURRENT_VERSION } from '../../package.json';
 import {
   SonarCommand,
   type UpdateNotificationCondition,
-} from '../cli/commands/_common/sonar-command.js';
-import { Version } from '../cli/commands/_common/version.js';
+} from '../commands/_common/sonar-command.ts';
+import { Version } from '../commands/_common/version.ts';
 import {
   BACKGROUND_UPDATE_CHECK_TIMEOUT_MS,
   fetchLatestVersion,
-} from '../cli/commands/update/update-check.js';
+} from '../commands/update/update-check.js';
 import { TELEMETRY_FLUSH_MODE_ENV } from '../telemetry/index.js';
 import { cyan } from '../ui/colors.js';
 import { isFormattedOutputMode, text } from '../ui/index.js';

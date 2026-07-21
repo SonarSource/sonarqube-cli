@@ -26,9 +26,9 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
-import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/cli/commands/integrate/_common/features/context-augmentation-feature';
-import { CLAUDE_INTEGRATION_ID } from '../../../../src/cli/commands/integrate/claude/declaration';
-import { COPILOT_INTEGRATION_ID } from '../../../../src/cli/commands/integrate/copilot/declaration';
+import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/commands/integrate/_common/features/context-augmentation-feature';
+import { CLAUDE_INTEGRATION_ID } from '../../../../src/commands/integrate/claude/declaration';
+import { COPILOT_INTEGRATION_ID } from '../../../../src/commands/integrate/copilot/declaration';
 import { canonicalizePath } from '../../../../src/lib/fs-utils';
 import type { CliState, InstalledIntegrationFeature } from '../../../../src/lib/state.js';
 import { TestHarness } from '../../harness';

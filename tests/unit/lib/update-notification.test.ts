@@ -26,7 +26,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { Command } from 'commander';
 
 import { version as CURRENT_VERSION } from '../../../package.json';
-import { COMMAND_TREE } from '../../../src/cli/command-tree.js';
+import { COMMAND_TREE } from '../../../src/commands/command-tree.ts';
 import { TELEMETRY_FLUSH_MODE_ENV } from '../../../src/telemetry/index.js';
 import { setFormattedOutputMode } from '../../../src/ui/index.js';
 

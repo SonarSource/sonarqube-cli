@@ -25,8 +25,8 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
-import { buildLocalCagBinaryName } from '../../../../src/cli/commands/_common/install/context-augmentation';
-import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/cli/commands/integrate/_common/features/context-augmentation-feature';
+import { buildLocalCagBinaryName } from '../../../../src/commands/_common/install/context-augmentation';
+import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/commands/integrate/_common/features/context-augmentation-feature';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../../src/lib/install-types';
 import { detectPlatform } from '../../../../src/lib/platform-detector';
 import { hookScriptName, IS_WINDOWS, TestHarness } from '../../harness';

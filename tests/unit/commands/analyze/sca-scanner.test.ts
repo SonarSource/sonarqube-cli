@@ -1,0 +1,316 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+
+import { CommandFailedError } from '../../../../src/commands/_common/error.ts';
+import { ScaScannerInstaller } from '../../../../src/commands/_common/install/sca-scanner.ts';
+import {
+  type AnalyzeProjectResponse,
+  ScaScannerRunner,
+} from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
+import { ScaScannerInvocation } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner-runner-base.ts';
+import { ScaScannerSpawner } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner-spawner.ts';
+import { LOG_FILE } from '../../../../src/lib/config-constants.ts';
+import { clearNetworkConfigCache } from '../../../../src/lib/connectivity/network-config.ts';
+import type { SpawnResult } from '../../../../src/lib/process.ts';
+
+const okInstaller: ScaScannerInstaller = { install: () => Promise.resolve('/bin/sca') };
+const noopSpawner: ScaScannerSpawner = {
+  spawn: () => Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }),
+};
+
+function spawnerReturning(result: SpawnResult): ScaScannerSpawner {
+  return { spawn: () => Promise.resolve(result) };
+}
+
+function spawnerThrowing(err: Error): ScaScannerSpawner {
+  return { spawn: () => Promise.reject(err) };
+}
+
+const EMPTY_SUCCESS: SpawnResult = {
+  exitCode: 0,
+  stdout: JSON.stringify({ releases: [], parsedFiles: [], errors: [] }),
+  stderr: '',
+};
+
+function makeInvocation(overrides: Partial<ScaScannerInvocation> = {}): ScaScannerInvocation {
+  return {
+    baseDir: '/repo',
+    apiBaseUrl: 'https://api.sonarcloud.io',
+    downloadBaseUrl: 'https://download.sonarcloud.io/tidelift-cli',
+    sonarToken: 'tok',
+    projectKey: 'my-project',
+    cacheDir: '/cache',
+    workDir: '/work',
+    scannerProperties: {},
+    excludedPaths: [],
+    includeGitIgnoredPaths: false,
+    debug: false,
+    ...overrides,
+  };
+}
+
+function analyzeProjectArgs(invocation: ScaScannerInvocation): string[] {
+  return new ScaScannerRunner(okInstaller, noopSpawner).buildArgs(invocation);
+}
+
+async function expectCommandFailedError(
+  promise: Promise<unknown>,
+  messagePattern: RegExp,
+  remediationHint: string,
+): Promise<void> {
+  let caught: unknown;
+  try {
+    await promise;
+  } catch (err) {
+    caught = err;
+  }
+
+  expect(caught).toBeInstanceOf(CommandFailedError);
+  const commandError = caught as CommandFailedError;
+  expect(commandError.message).toMatch(messagePattern);
+  expect(commandError.remediationHint).toBe(remediationHint);
+}
+
+describe('ScaScannerRunner.run', () => {
+  it('propagates the installer error when install fails', () => {
+    const failingInstaller: ScaScannerInstaller = {
+      install: () => Promise.reject(new Error('not installed')),
+    };
+    expect(
+      new ScaScannerRunner(failingInstaller, noopSpawner).run(makeInvocation()),
+    ).rejects.toThrow(/not installed/);
+  });
+
+  it('returns the parsed result on exit 0 with valid JSON', async () => {
+    const stdout = JSON.stringify({
+      releases: [
+        {
+          key: 'release-lodash-4.17.21',
+          packageUrl: 'pkg:npm/lodash@4.17.21',
+          packageManager: 'npm',
+          packageName: 'lodash',
+          version: '4.17.21',
+          licenseExpression: 'MIT',
+          known: true,
+          knownPackage: true,
+          newlyIntroduced: false,
+          issues: [],
+          dependencyFilePaths: ['package-lock.json'],
+          dependencyChains: [['pkg:npm/lodash@4.17.21']],
+        },
+      ],
+      parsedFiles: ['package-lock.json'],
+      errors: [],
+    });
+    const runner = new ScaScannerRunner(
+      okInstaller,
+      spawnerReturning({ exitCode: 0, stdout, stderr: '' }),
+    );
+    const result = await runner.run(makeInvocation());
+    expect(result.releases).toHaveLength(1);
+    expect(result.releases[0].packageUrl).toBe('pkg:npm/lodash@4.17.21');
+    expect(result.releases[0].packageName).toBe('lodash');
+    expect(result.releases[0].version).toBe('4.17.21');
+    expect(result.releases[0].licenseExpression).toBe('MIT');
+    expect(result.releases[0].dependencyFilePaths).toEqual(['package-lock.json']);
+    expect(result.releases[0].dependencyChains).toEqual([['pkg:npm/lodash@4.17.21']]);
+    expect(result.parsedFiles).toEqual(['package-lock.json']);
+    expect(result.errors).toEqual([]);
+  });
+
+  it('throws CommandFailedError with a remediation hint on exit 0 with non-JSON stdout', async () => {
+    const runner = new ScaScannerRunner(
+      okInstaller,
+      spawnerReturning({ exitCode: 0, stdout: 'not json', stderr: '' }),
+    );
+    await expectCommandFailedError(
+      runner.run(makeInvocation()),
+      /failed to parse output/,
+      `Inspect ${LOG_FILE} for the raw sca-scanner output, then retry.`,
+    );
+  });
+
+  it('throws CommandFailedError with a remediation hint on non-zero exit', async () => {
+    const runner = new ScaScannerRunner(
+      okInstaller,
+      spawnerReturning({ exitCode: 2, stdout: '', stderr: 'boom' }),
+    );
+    await expectCommandFailedError(
+      runner.run(makeInvocation()),
+      /sca-scanner exited with code 2\./,
+      `Inspect ${LOG_FILE} for the underlying sca-scanner error, fix the reported issue, then retry.`,
+    );
+  });
+
+  it('wraps a spawner rejection into CommandFailedError with a remediation hint', async () => {
+    const runner = new ScaScannerRunner(okInstaller, spawnerThrowing(new Error('spawn EACCES')));
+    await expectCommandFailedError(
+      runner.run(makeInvocation()),
+      /Dependency risk analysis error: spawn EACCES/,
+      'Verify that the SCA scanner is installed and can run on this machine, then retry.',
+    );
+  });
+
+  it('returns the parsed non-empty result from spawner stdout intact', async () => {
+    const payload = {
+      releases: [{ key: 'release-1', packageName: 'lodash', version: '4.17.21' }],
+      parsedFiles: ['package-lock.json'],
+      errors: [{ id: 'err-1', code: 'INEXACT_VERSIONS', path: null, message: 'inexact' }],
+    } as unknown as AnalyzeProjectResponse;
+    const spawn = mock(() =>
+      Promise.resolve({ exitCode: 0, stdout: JSON.stringify(payload), stderr: '' }),
+    );
+
+    const result = await new ScaScannerRunner(okInstaller, { spawn }).run(makeInvocation());
+
+    expect(result).toEqual(payload);
+  });
+
+  it('forwards the installer-resolved binary path and buildArgs output to spawner.spawn', async () => {
+    const installer: ScaScannerInstaller = {
+      install: () => Promise.resolve('/bin/sca-from-installer'),
+    };
+    const spawn = mock((_binaryPath: string, _args: string[], _env?: Record<string, string>) =>
+      Promise.resolve(EMPTY_SUCCESS),
+    );
+    const invocation = makeInvocation({
+      excludedPaths: ['**/test/**'],
+      includeGitIgnoredPaths: true,
+      debug: true,
+      scannerProperties: { 'sonar.sca.foo': 'bar', 'sonar.sca.baz': '1,2' },
+    });
+    const runner = new ScaScannerRunner(installer, { spawn });
+
+    await runner.run(invocation);
+
+    expect(spawn).toHaveBeenCalledTimes(1);
+    expect(spawn).toHaveBeenCalledWith(
+      '/bin/sca-from-installer',
+      analyzeProjectArgs(invocation),
+      expect.objectContaining({ SONAR_TOKEN: invocation.sonarToken }),
+    );
+  });
+
+  it('passes the sonar token via the SONAR_TOKEN env and never in argv', async () => {
+    const spawn = mock((_binaryPath: string, _args: string[], _env?: Record<string, string>) =>
+      Promise.resolve(EMPTY_SUCCESS),
+    );
+    const invocation = makeInvocation({ sonarToken: 'super-secret' });
+
+    await new ScaScannerRunner(okInstaller, { spawn }).run(invocation);
+
+    const [, args, env] = spawn.mock.calls[0];
+    expect(args.some((arg) => arg.includes('super-secret') || arg.includes('--sonar-token'))).toBe(
+      false,
+    );
+    expect(env).toMatchObject({ SONAR_TOKEN: 'super-secret' });
+  });
+});
+
+describe('ScaScannerRunner.buildArgs', () => {
+  it('emits the fixed args in declared order', () => {
+    expect(analyzeProjectArgs(makeInvocation({ workDir: '/work' }))).toEqual([
+      'analyze-project',
+      '--base-dir=/repo',
+      '--api-base-url=https://api.sonarcloud.io',
+      '--download-base-url=https://download.sonarcloud.io/tidelift-cli',
+      '--cache-dir=/cache',
+      '--work-dir=/work',
+      '--project-key=my-project',
+    ]);
+  });
+
+  it('repeats --scanner-property=name=value for each entry', () => {
+    const args = analyzeProjectArgs(
+      makeInvocation({ scannerProperties: { 'sonar.sca.foo': 'bar', 'sonar.sca.baz': '1,2' } }),
+    );
+
+    expect(args.filter((a) => a.startsWith('--scanner-property='))).toEqual([
+      '--scanner-property=sonar.sca.foo=bar',
+      '--scanner-property=sonar.sca.baz=1,2',
+    ]);
+  });
+
+  it('repeats --excluded-path for each exclusion in input order', () => {
+    const args = analyzeProjectArgs(
+      makeInvocation({ excludedPaths: ['**/test/**', '**/dist/**'] }),
+    );
+
+    expect(args.filter((a) => a.startsWith('--excluded-path='))).toEqual([
+      '--excluded-path=**/test/**',
+      '--excluded-path=**/dist/**',
+    ]);
+  });
+
+  it('emits --include-gitignored-paths only when the flag is true', () => {
+    expect(analyzeProjectArgs(makeInvocation({ includeGitIgnoredPaths: false }))).not.toContain(
+      '--include-gitignored-paths',
+    );
+    expect(analyzeProjectArgs(makeInvocation({ includeGitIgnoredPaths: true }))).toContain(
+      '--include-gitignored-paths',
+    );
+  });
+
+  it('emits --debug only when the flag is true', () => {
+    expect(analyzeProjectArgs(makeInvocation({ debug: false }))).not.toContain('--debug');
+    expect(analyzeProjectArgs(makeInvocation({ debug: true }))).toContain('--debug');
+  });
+});
+
+describe('ScaScannerRunner — network env propagation', () => {
+  const CERT_PATH = '/etc/ssl/corp-ca.pem';
+
+  beforeEach(() => {
+    process.env.SONAR_CA_CERT = CERT_PATH;
+    clearNetworkConfigCache();
+  });
+
+  afterEach(() => {
+    delete process.env.SONAR_CA_CERT;
+    clearNetworkConfigCache();
+  });
+
+  it('injects all cert env vars into the spawn call', async () => {
+    const spawn = mock((_path: string, _args: string[], _env?: Record<string, string>) =>
+      Promise.resolve({ exitCode: 0, stdout: '{}', stderr: '' }),
+    );
+    const runner = new ScaScannerRunner({ install: () => Promise.resolve('/bin/sca') }, { spawn });
+    await runner.run(makeInvocation());
+
+    const [, , env] = spawn.mock.calls[0];
+    expect(env).toMatchObject({
+      SONAR_CA_CERT: CERT_PATH,
+    });
+  });
+
+  it('does not override SONAR_TOKEN with network env vars', async () => {
+    const spawn = mock((_path: string, _args: string[], _env?: Record<string, string>) =>
+      Promise.resolve({ exitCode: 0, stdout: '{}', stderr: '' }),
+    );
+    const invocation = makeInvocation({ sonarToken: 'my-token' });
+    const runner = new ScaScannerRunner({ install: () => Promise.resolve('/bin/sca') }, { spawn });
+    await runner.run(invocation);
+
+    const [, , env] = spawn.mock.calls[0];
+    expect(env).toMatchObject({ SONAR_TOKEN: 'my-token' });
+  });
+});

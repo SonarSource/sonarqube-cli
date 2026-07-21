@@ -1,0 +1,299 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+// Unit tests for the centralized auth resolver
+
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+
+import {
+  cloudRegionFromUrl,
+  ENV_SERVER,
+  ENV_TOKEN,
+  normalizeCloudV2Endpoint,
+  resolveAuth,
+  resolveFromEndpoint,
+} from '../../../../src/lib/auth-resolver.ts';
+import * as stateRepository from '../../../../src/lib/repository/state-repository.ts';
+import { getDefaultState } from '../../../../src/lib/state.ts';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/ui';
+import { createKeychainTestHandle } from '../../keychain/keychain-test-handle.ts';
+
+const SONARCLOUD_URL = 'https://sonarcloud.io';
+const FAKE_TOKEN = 'squ_test_token_abc123';
+const FAKE_TOKEN_ENV = 'squ_env_token_xyz789';
+
+const handle = createKeychainTestHandle();
+
+describe('resolveAuth', () => {
+  beforeEach(() => {
+    handle.setup();
+    setMockUi(true);
+    clearMockUiCalls();
+    // Ensure env vars are clean
+    delete process.env[ENV_TOKEN];
+    delete process.env[ENV_SERVER];
+  });
+
+  afterEach(() => {
+    handle.teardown();
+    setMockUi(false);
+    delete process.env[ENV_TOKEN];
+    delete process.env[ENV_SERVER];
+  });
+
+  // ─── Env var: both set ──────────────────────────────────────────────────
+
+  describe('when both env vars are set', () => {
+    beforeEach(() => {
+      process.env[ENV_TOKEN] = FAKE_TOKEN_ENV;
+      process.env[ENV_SERVER] = SONARCLOUD_URL;
+    });
+
+    it('returns env token and server immediately', async () => {
+      const result = await resolveAuth();
+
+      expect(result).not.toBeNull();
+      expect(result!.token).toBe(FAKE_TOKEN_ENV);
+      expect(result!.serverUrl).toBe(SONARCLOUD_URL);
+    });
+
+    it('skips keychain lookup entirely', async () => {
+      const loadStateSpy = spyOn(stateRepository, 'loadState');
+      try {
+        await resolveAuth();
+        expect(loadStateSpy).not.toHaveBeenCalled();
+      } finally {
+        loadStateSpy.mockRestore();
+      }
+    });
+  });
+
+  // ─── Env var: partial ──────────────────────────────────────────────────
+
+  describe('when only one env var is set', () => {
+    it('warns when only ENV_TOKEN is set and falls back', async () => {
+      process.env[ENV_TOKEN] = FAKE_TOKEN_ENV;
+      const state = getDefaultState('test');
+      state.auth.connections = [
+        {
+          id: 'conn-1',
+          type: 'cloud',
+          serverUrl: SONARCLOUD_URL,
+          orgKey: 'my-org',
+          authenticatedAt: new Date().toISOString(),
+        },
+      ];
+      state.auth.activeConnectionId = 'conn-1';
+      state.auth.isAuthenticated = true;
+
+      const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(state);
+      await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
+
+      try {
+        const result = await resolveAuth();
+        expect(result).toMatchObject({
+          token: FAKE_TOKEN,
+          serverUrl: SONARCLOUD_URL,
+        });
+        const warnings = getMockUiCalls().filter((c) => c.method === 'warn');
+        expect(warnings.some((c) => String(c.args[0]).includes(ENV_TOKEN))).toBe(true);
+      } finally {
+        loadStateSpy.mockRestore();
+      }
+    });
+
+    it('warns when only ENV_SERVER is set and falls back', async () => {
+      process.env[ENV_SERVER] = SONARCLOUD_URL;
+      const state = getDefaultState('test');
+      state.auth.connections = [
+        {
+          id: 'conn-1',
+          type: 'cloud',
+          serverUrl: SONARCLOUD_URL,
+          orgKey: 'my-org',
+          authenticatedAt: new Date().toISOString(),
+        },
+      ];
+      state.auth.activeConnectionId = 'conn-1';
+      state.auth.isAuthenticated = true;
+
+      const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(state);
+      await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
+
+      try {
+        const result = await resolveAuth();
+        expect(result).toMatchObject({
+          token: FAKE_TOKEN,
+          serverUrl: SONARCLOUD_URL,
+        });
+        const warnings = getMockUiCalls().filter((c) => c.method === 'warn');
+        expect(warnings.some((c) => String(c.args[0]).includes(ENV_SERVER))).toBe(true);
+      } finally {
+        loadStateSpy.mockRestore();
+      }
+    });
+  });
+
+  // ─── Active connection in state ────────────────────────────────────────
+
+  describe('when active connection exists in state', () => {
+    it('resolves server + token from state + keychain', async () => {
+      const state = getDefaultState('test');
+      state.auth.connections = [
+        {
+          id: 'conn-1',
+          type: 'cloud',
+          serverUrl: SONARCLOUD_URL,
+          orgKey: 'my-org',
+          authenticatedAt: new Date().toISOString(),
+        },
+      ];
+      state.auth.activeConnectionId = 'conn-1';
+      state.auth.isAuthenticated = true;
+
+      const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(state);
+
+      await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
+
+      try {
+        const result = await resolveAuth();
+        expect(result).not.toBeNull();
+        expect(result!.token).toBe(FAKE_TOKEN);
+        expect(result!.serverUrl).toBe(SONARCLOUD_URL);
+        expect(result!.orgKey).toBe('my-org');
+      } finally {
+        loadStateSpy.mockRestore();
+      }
+    });
+  });
+
+  // ─── No auth found ─────────────────────────────────────────────────────
+
+  describe('when no auth is available', () => {
+    it('returns null when no server can be resolved', async () => {
+      const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(
+        getDefaultState('test'),
+      );
+
+      try {
+        const result = await resolveAuth();
+        expect(result).toBeNull();
+      } finally {
+        loadStateSpy.mockRestore();
+      }
+    });
+  });
+
+  // ─── ENV_TOKEN / ENV_SERVER constants ─────────────────────────────────
+
+  it('exports ENV_TOKEN constant', () => {
+    expect(ENV_TOKEN).toBe('SONARQUBE_CLI_TOKEN');
+  });
+
+  it('exports ENV_SERVER constant', () => {
+    expect(ENV_SERVER).toBe('SONARQUBE_CLI_SERVER');
+  });
+});
+
+describe('resolveBaseUrl', () => {
+  it('returns the SonarCloud URL for /api endpoints', () => {
+    const result = resolveFromEndpoint('https://sonarcloud.io', '/api/system/status');
+    expect(result).toBe('https://sonarcloud.io');
+  });
+
+  it('returns the SonarCloud API URL for non-/api endpoints', () => {
+    const result = resolveFromEndpoint('https://sonarcloud.io', '/organizations/search');
+    expect(result).toBe('https://api.sonarcloud.io');
+  });
+
+  it('returns the SonarCloud URL for /api/v2 endpoints', () => {
+    const result = resolveFromEndpoint('https://sonarcloud.io', '/api/v2/issues/search');
+    expect(result).toBe('https://sonarcloud.io');
+  });
+
+  it('strips trailing slash from server URL', () => {
+    const result = resolveFromEndpoint('https://sonarcloud.io/', '/api/system/status');
+    expect(result).toBe('https://sonarcloud.io');
+  });
+
+  it('returns the normalized URL for non-SonarCloud servers', () => {
+    const result = resolveFromEndpoint('https://my-sonarqube.example.com/', '/api/system/status');
+    expect(result).toBe('https://my-sonarqube.example.com');
+  });
+
+  it('returns the server URL as-is for self-hosted instances', () => {
+    const result = resolveFromEndpoint('https://sonar.mycompany.com', '/api/issues/search');
+    expect(result).toBe('https://sonar.mycompany.com');
+  });
+
+  it('returns the input as-is when the URL is not parseable', () => {
+    const result = resolveFromEndpoint('not-a-valid-url', '/api/system/status');
+    expect(result).toBe('not-a-valid-url');
+  });
+
+  it('returns the SonarCloud US URL for /api endpoints', () => {
+    const result = resolveFromEndpoint('https://sonarqube.us', '/api/system/status');
+    expect(result).toBe('https://sonarqube.us');
+  });
+
+  it('returns the SonarCloud US API URL for non-/api endpoints', () => {
+    const result = resolveFromEndpoint('https://sonarqube.us', '/organizations/search');
+    expect(result).toBe('https://api.sonarqube.us');
+  });
+});
+
+describe('normalizeCloudV2Endpoint', () => {
+  it('strips the /api/v2 prefix for SonarCloud EU', () => {
+    const result = normalizeCloudV2Endpoint('https://sonarcloud.io', '/api/v2/sca/issues-releases');
+    expect(result).toBe('/sca/issues-releases');
+  });
+
+  it('strips the /api/v2 prefix for SonarCloud US', () => {
+    const result = normalizeCloudV2Endpoint('https://sonarqube.us', '/api/v2/sca/issues-releases');
+    expect(result).toBe('/sca/issues-releases');
+  });
+
+  it('leaves non-/api/v2 endpoints unchanged on SonarCloud', () => {
+    const result = normalizeCloudV2Endpoint('https://sonarcloud.io', '/api/system/status');
+    expect(result).toBe('/api/system/status');
+  });
+
+  it('leaves /api/v2 endpoints unchanged on self-hosted servers', () => {
+    const result = normalizeCloudV2Endpoint(
+      'https://sonar.mycompany.com',
+      '/api/v2/sca/issues-releases',
+    );
+    expect(result).toBe('/api/v2/sca/issues-releases');
+  });
+});
+
+describe('cloudRegionFromUrl', () => {
+  it("returns 'eu' for SonarCloud EU", () => {
+    expect(cloudRegionFromUrl('https://sonarcloud.io')).toBe('eu');
+  });
+
+  it("returns 'us' for SonarCloud US", () => {
+    expect(cloudRegionFromUrl('https://sonarqube.us')).toBe('us');
+  });
+
+  it('returns undefined for a self-hosted SonarQube Server', () => {
+    expect(cloudRegionFromUrl('https://sonar.mycompany.com')).toBeUndefined();
+  });
+});

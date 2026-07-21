@@ -24,8 +24,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import type { RunTally } from '../../../src/cli/commands/analyze/sqaa-analysis.js';
-import type { SqaaJsonReport } from '../../../src/cli/commands/analyze/sqaa-display-json.js';
+import type { RunTally } from '../../../src/commands/analyze/sqaa-analysis.ts';
+import type { SqaaJsonReport } from '../../../src/commands/analyze/sqaa-display-json.ts';
 import type { ResolvedAuth } from '../../../src/lib/auth-resolver.js';
 import { ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
 import * as stateRepository from '../../../src/lib/repository/state-repository.js';
