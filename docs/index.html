@@ -68,12 +68,15 @@
       <span class="brand-mark brand-mark--sonar" aria-hidden="true"></span>
     </a>
     <span class="brand-separator" aria-hidden="true"></span>
-    <a href="https://www.sonarsource.com/" class="brand-home-link brand-home-link--cli" title="SonarQube CLI on SonarSource" aria-label="SonarQube CLI on SonarSource">
+    <a href="index.html" class="brand-home-link brand-home-link--cli" title="SonarQube CLI home" aria-label="SonarQube CLI home">
       <span class="brand-mark brand-mark--cli" aria-hidden="true"></span>
       <span class="version brand-version" id="nav-version">v1.4.0</span>
     </a>
   </div>
-  <div class="nav-links">
+  <button class="nav-hamburger" id="navHamburger" aria-label="Toggle menu" aria-expanded="false" aria-controls="nav-links">
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path fill="currentColor" d="M2 5h16v2H2zm0 4h16v2H2zm0 4h16v2H2z"/></svg>
+  </button>
+  <div class="nav-links" id="nav-links">
     <a href="index.html" class="nav-link active">Home</a>
     <a href="commands.html" class="nav-link">Commands</a>
     <a href="https://docs.sonarsource.com/sonarqube-cli" class="nav-link nav-link-secondary" target="_blank" rel="noopener">Docs</a>
@@ -95,63 +98,25 @@
 
   <div class="hero-install">
     <div class="hero-install-header">
-      <div class="hero-install-tabs">
-        <span class="hero-install-label">Install:</span>
-        <div class="tab-group">
-          <button class="tab-btn active" data-tab-target-group="hero-install-os" data-tab-name="posix">Linux / macOS</button>
-          <button class="tab-btn" data-tab-target-group="hero-install-os" data-tab-name="windows">Windows</button>
-        </div>
-      </div>
       <a href="https://github.com/SonarSource/sonarqube-cli?tab=readme-ov-file#sonarqube-cli" class="hero-install-link" target="_blank" rel="noopener">View installation instructions ↗</a>
     </div>
-    <div class="tab-panel active" data-tab-panel-group="hero-install-os" data-tab-name="posix">
-      <div class="install-channel-tabs">
-        <span class="install-channel-label">Channel:</span>
-        <div class="tab-group">
-          <button class="tab-btn active" data-tab-target-group="hero-posix-channel" data-tab-name="homebrew">Homebrew</button>
-          <button class="tab-btn" data-tab-target-group="hero-posix-channel" data-tab-name="mise">Mise</button>
-          <button class="tab-btn" data-tab-target-group="hero-posix-channel" data-tab-name="script">Install script</button>
-        </div>
+    <div class="install-picker" id="install-picker">
+      <button type="button" class="install-picker-trigger" aria-haspopup="listbox" aria-expanded="false">
+        <span class="install-picker-label">Install with <span data-install-picker-selection>Homebrew (macOS)</span></span>
+        <svg class="install-picker-caret" aria-hidden="true" viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z"/></svg>
+      </button>
+      <div class="install-picker-command">
+        <pre><code data-install-picker-command>brew install sonarqube-cli</code></pre>
       </div>
-      <div class="tab-panel active" data-tab-panel-group="hero-posix-channel" data-tab-name="homebrew">
-        <div class="code-block">
-          <pre><code>brew install sonarqube-cli</code></pre>
-          <button class="copy-btn" data-copy-install>Copy</button>
-        </div>
-      </div>
-      <div class="tab-panel" data-tab-panel-group="hero-posix-channel" data-tab-name="mise">
-        <div class="code-block">
-          <pre><code>mise use -g sonarqube-cli@latest</code></pre>
-          <button class="copy-btn" data-copy-install>Copy</button>
-        </div>
-      </div>
-      <div class="tab-panel" data-tab-panel-group="hero-posix-channel" data-tab-name="script">
-        <div class="code-block">
-          <pre><code>curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash</code></pre>
-          <button class="copy-btn" data-copy-install>Copy</button>
-        </div>
-      </div>
-    </div>
-    <div class="tab-panel" data-tab-panel-group="hero-install-os" data-tab-name="windows">
-      <div class="install-channel-tabs">
-        <span class="install-channel-label">Channel:</span>
-        <div class="tab-group">
-          <button class="tab-btn active" data-tab-target-group="hero-windows-channel" data-tab-name="mise">Mise</button>
-          <button class="tab-btn" data-tab-target-group="hero-windows-channel" data-tab-name="script">Install script</button>
-        </div>
-      </div>
-      <div class="tab-panel active" data-tab-panel-group="hero-windows-channel" data-tab-name="mise">
-        <div class="code-block">
-          <pre><code>mise use -g sonarqube-cli@latest</code></pre>
-          <button class="copy-btn" data-copy-install>Copy</button>
-        </div>
-      </div>
-      <div class="tab-panel" data-tab-panel-group="hero-windows-channel" data-tab-name="script">
-        <div class="code-block">
-          <pre><code>irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex</code></pre>
-          <button class="copy-btn" data-copy-install>Copy</button>
-        </div>
-      </div>
+      <button type="button" class="copy-btn install-picker-copy" data-copy-install>Copy</button>
+      <ul class="install-picker-menu" role="listbox" hidden>
+        <li role="option" class="install-picker-option is-selected" data-os="mac" data-tool="Homebrew" data-os-label="macOS" data-command="brew install sonarqube-cli">macOS — Homebrew</li>
+        <li role="option" class="install-picker-option" data-os="mac" data-tool="Install script" data-os-label="macOS" data-command="curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash">macOS — Install script</li>
+        <li role="option" class="install-picker-option install-picker-option-divider" data-os="windows" data-tool="Install script" data-os-label="Windows" data-command="irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex">Windows — Install script</li>
+        <li role="option" class="install-picker-option install-picker-option-divider" data-os="linux" data-tool="Homebrew" data-os-label="Linux" data-command="brew install sonarqube-cli">Linux — Homebrew</li>
+        <li role="option" class="install-picker-option" data-os="linux" data-tool="Install script" data-os-label="Linux" data-command="curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash">Linux — Install script</li>
+        <li role="option" class="install-picker-option install-picker-option-divider" data-os="any" data-tool="Mise" data-os-label="all platforms" data-command="mise use -g sonarqube-cli@latest">All platforms — Mise</li>
+      </ul>
     </div>
   </div>
 
@@ -252,8 +217,10 @@
   <p class="section-sub">What do you want to do?</p>
 
   <div class="jtbd-layout">
+    <select class="jtbd-select" id="jtbd-select" aria-label="Choose task"></select>
     <div class="jtbd-pills" id="jtbd-pills">
       <button class="jtbd-pill" data-jtbd="issues">List issues in my project</button>
+      <button class="jtbd-pill" data-jtbd="pr-issues">Review issues in a pull request</button>
       <button class="jtbd-pill" data-jtbd="analyze">Analyze a file for issues</button>
       <button class="jtbd-pill" data-jtbd="secrets-scan">Scan a file for secrets</button>
       <button class="jtbd-pill" data-jtbd="hooks">Block bad commits with git hooks</button>
@@ -261,8 +228,8 @@
       <button class="jtbd-pill" data-jtbd="agentic">Run Agentic Analysis</button>
       <button class="jtbd-pill" data-jtbd="remediate">Remediate issues with AI</button>
       <button class="jtbd-pill" data-jtbd="dependency-risks">Scan for dependency risks</button>
-      <button class="jtbd-pill" data-jtbd="pr-issues" style="display:none">Review issues in a pull request</button>
       <button class="jtbd-pill" data-jtbd="install">Update the CLI</button>
+      <button class="jtbd-pill" data-jtbd="troubleshoot">Troubleshoot the CLI</button>
     </div>
     <div class="jtbd-recipe" id="jtbd-recipe"></div>
   </div>
@@ -348,6 +315,26 @@
 </div>
 
 <script>
+  // Nav hamburger
+  (function() {
+    const nav = document.querySelector('nav.nav');
+    const btn = document.getElementById('navHamburger');
+    if (!nav || !btn) return;
+    function setOpen(open) {
+      nav.classList.toggle('nav-menu-open', open);
+      btn.setAttribute('aria-expanded', String(open));
+    }
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setOpen(!nav.classList.contains('nav-menu-open'));
+    });
+    document.addEventListener('click', (e) => {
+      if (!nav.contains(e.target)) setOpen(false);
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setOpen(false); });
+    nav.querySelectorAll('.nav-links a').forEach((a) => a.addEventListener('click', () => setOpen(false)));
+  })();
+
   // Theme toggle
   (function() {
     const btn = document.getElementById('themeToggle');
@@ -559,9 +546,9 @@
       const body = document.getElementById('terminal-body');
       if (!body) return;
 
-      // Persistent banner
+      // Persistent banner (temporarily hidden — remove display:none to restore)
       const bannerEl = document.createElement('div');
-      bannerEl.style.cssText = 'line-height:1.1;margin-bottom:1em;';
+      bannerEl.style.cssText = 'line-height:1.1;margin-bottom:1em;display:none;';
       const bannerText = document.createElement('div');
       bannerText.style.cssText = 'white-space:pre;font:inherit;color:#D4D4D4;';
       bannerText.textContent = BANNER_LINES.join('\n');
@@ -644,9 +631,8 @@
 
   const JTBD_RECIPES = {
     'ai-agent': [
-      { title: 'Authenticate',          cmd: 'sonar auth login',           desc: 'Connect to SonarQube Cloud or your self-hosted server.' },
-      { title: 'Integrate Claude Code', cmd: 'sonar integrate claude',     desc: 'Installs hooks and MCP server for Claude Code.' },
-      { title: 'Integrate Copilot',     cmd: 'sonar integrate copilot',    desc: 'Installs hooks and project instructions for GitHub Copilot.' },
+      { title: 'Authenticate',        cmd: 'sonar auth login',    desc: 'Connect to SonarQube Cloud or your self-hosted server.' },
+      { title: 'Pick your agent',     cmd: 'sonar integrate',     desc: 'Interactive picker for <strong>Claude Code</strong>, <strong>Copilot</strong>, <strong>Codex</strong>, <strong>Cursor</strong>, or <strong>Antigravity</strong>. Installs secrets hooks, agentic analysis instructions, and the Context Augmentation skill so your agent can query SonarQube directly. Or run <code>sonar integrate &lt;agent&gt;</code> to skip the prompt.' },
     ],
     'secrets-scan': [
       { title: 'Authenticate',        cmd: 'sonar auth login',                               desc: 'Connect to SonarQube Cloud or your self-hosted server.' },
@@ -662,8 +648,9 @@
       { title: 'Analyze',             cmd: 'sonar analyze --file <file> --project <key>',                 desc: 'Runs server-side static analysis on a file (SonarQube Cloud only).' },
     ],
     hooks: [
-      { title: 'Authenticate',        cmd: 'sonar auth login',                           desc: 'Connect to SonarQube.' },
-      { title: 'Install hook',        cmd: 'sonar integrate git',                        desc: 'Runs a secrets scan before every git commit or push.' },
+      { title: 'Authenticate',        cmd: 'sonar auth login',                                        desc: 'Connect to SonarQube.' },
+      { title: 'Install hook',        cmd: 'sonar integrate git',                                     desc: 'Runs a secrets scan before every git commit or push.' },
+      { title: 'Add SCA scan',        cmd: 'sonar integrate git --dependency-risks -p <key>',         desc: 'Optional: also scan dependency manifests for security &amp; license risks on every commit.' },
     ],
     'pr-issues': [
       { title: 'Authenticate',        cmd: 'sonar auth login',                                                              desc: 'Connect to SonarQube.' },
@@ -671,8 +658,8 @@
       { title: 'Format as table',     cmd: 'sonar list issues --project <key> --pull-request <number> --format table', desc: 'Human-readable table output.' },
     ],
     agentic: [
-      { title: 'Authenticate',        cmd: 'sonar auth login',                    desc: 'Connect to SonarQube Cloud (required for Agentic Analysis).' },
-      { title: 'Analyze',             cmd: 'sonar analyze agentic --staged',      desc: 'Runs server-side agentic analysis on your staged changes. Use <code>--file &lt;file&gt;</code> to target a single file, or <code>--base main</code> to diff against a branch.' },
+      { title: 'Authenticate',        cmd: 'sonar auth login',                                desc: 'Connect to SonarQube Cloud (required for Agentic Analysis).' },
+      { title: 'Analyze',             cmd: 'sonar analyze agentic --staged --depth DEEP',     desc: 'Runs server-side agentic analysis on your staged changes with cross-file (DEEP) analysis. Use <code>--file &lt;file&gt;</code> to target a single file, or <code>--base main</code> to diff against a branch.' },
     ],
     remediate: [
       { title: 'Authenticate',        cmd: 'sonar auth login',                    desc: 'Connect to SonarQube Cloud (required for AI remediation).' },
@@ -683,8 +670,12 @@
       { title: 'Scan',                cmd: 'sonar analyze dependency-risks -p <key>',        desc: 'Detects security and license risks in your project dependencies.' },
     ],
     install: [
-      { title: 'Check for updates',   cmd: 'sonar self-update --status',      desc: 'Check if a newer version is available without installing.' },
-      { title: 'Update',              cmd: 'sonar self-update',               desc: 'Install the latest version of the CLI.' },
+      { title: 'Check for updates',   cmd: 'sonar update --status',      desc: 'Check if a newer version is available without installing.' },
+      { title: 'Update',              cmd: 'sonar update',               desc: 'Install the latest version of the CLI.' },
+    ],
+    troubleshoot: [
+      { title: 'Check status',        cmd: 'sonar system status',        desc: 'Prints authentication state, installed binaries and available updates, configured integrations, and MCP server status. Add <code>--json</code> for machine-readable output.' },
+      { title: 'Factory reset',       cmd: 'sonar system reset',         desc: 'Last resort: returns the CLI to a factory-like state — removes integrations, cleans up managed binaries, and clears auth. Works even when auth is broken.' },
     ],
   };
 
@@ -745,12 +736,35 @@
     if (activePill) activePill.classList.add('active');
     box.innerHTML = buildStepsHtml(steps);
     box.classList.add('visible');
+    const sel = document.getElementById('jtbd-select');
+    if (sel && sel.value !== key) sel.value = key;
+  }
+
+  // Populate mobile <select> from pills
+  (function() {
+    const sel = document.getElementById('jtbd-select');
+    if (!sel) return;
+    document.querySelectorAll('.jtbd-pill').forEach((pill) => {
+      if (pill.style.display === 'none') return;
+      const opt = document.createElement('option');
+      opt.value = pill.dataset.jtbd;
+      opt.textContent = pill.textContent.trim();
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', () => showJtbd(sel.value));
+  })();
+
+  function syncJtbdSelect(key) {
+    const sel = document.getElementById('jtbd-select');
+    if (sel && key && sel.value !== key) sel.value = key;
   }
 
   showJtbd('issues');
+  syncJtbdSelect('issues');
 
   function copyInstall(btn) {
-    const text = btn.closest('.code-block').querySelector('code').textContent;
+    const scope = btn.closest('.code-block') || btn.closest('.install-picker');
+    const text = scope.querySelector('code').textContent;
     copyText(text, () => {
       btn.textContent = 'Copied!';
       btn.classList.add('copied');
@@ -765,6 +779,69 @@
   document.querySelectorAll('[data-copy-install]').forEach((btn) => {
     btn.addEventListener('click', () => copyInstall(btn));
   });
+
+  // ─── Install picker (GitHub-CLI style dropdown) ─────────────
+  (function() {
+    const picker = document.getElementById('install-picker');
+    if (!picker) return;
+    const trigger = picker.querySelector('.install-picker-trigger');
+    const menu = picker.querySelector('.install-picker-menu');
+    const selectionEl = picker.querySelector('[data-install-picker-selection]');
+    const commandEl = picker.querySelector('[data-install-picker-command]');
+    const options = picker.querySelectorAll('.install-picker-option');
+
+    function setOpen(open) {
+      trigger.setAttribute('aria-expanded', String(open));
+      menu.hidden = !open;
+      picker.classList.toggle('is-open', open);
+    }
+
+    function selectOption(opt) {
+      if (!opt) return;
+      options.forEach((o) => o.classList.remove('is-selected'));
+      opt.classList.add('is-selected');
+      const tool = opt.dataset.tool || opt.textContent.trim();
+      const osLabel = opt.dataset.osLabel;
+      selectionEl.textContent = osLabel ? `${tool} (${osLabel})` : tool;
+      commandEl.textContent = opt.dataset.command;
+    }
+
+    function detectOs() {
+      const uaData = navigator.userAgentData;
+      const platform = (uaData && uaData.platform) || navigator.platform || '';
+      const ua = navigator.userAgent || '';
+      const s = (platform + ' ' + ua).toLowerCase();
+      if (s.includes('mac')) return 'mac';
+      if (s.includes('win')) return 'windows';
+      if (s.includes('linux') || s.includes('x11')) return 'linux';
+      return null;
+    }
+
+    const detected = detectOs();
+    if (detected) {
+      const match = picker.querySelector(`.install-picker-option[data-os="${detected}"]`);
+      if (match) selectOption(match);
+    }
+
+    trigger.addEventListener('click', (event) => {
+      event.stopPropagation();
+      setOpen(menu.hidden);
+    });
+
+    options.forEach((opt) => {
+      opt.addEventListener('click', () => {
+        selectOption(opt);
+        setOpen(false);
+      });
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!picker.contains(event.target)) setOpen(false);
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') setOpen(false);
+    });
+  })();
 
   document.querySelectorAll('.jtbd-pill[data-jtbd]').forEach((btn) => {
     btn.addEventListener('click', () => showJtbd(btn.dataset.jtbd, btn));
