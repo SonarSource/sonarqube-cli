@@ -16,11 +16,10 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "sourceMap": true,
-    "types": ["node", "bun", "js-yaml"]
+    "types": ["node", "bun", "js-yaml"],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   },
-  "include": [
-    "src/**/*",
-    "tests/**/*",
-    "build-scripts/**/*.ts"
-  ]
+  "include": ["src/**/*", "tests/**/*", "build-scripts/**/*.ts"]
 }
