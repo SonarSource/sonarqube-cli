@@ -22,10 +22,10 @@
 
 // Main CLI entry point
 
-import { COMMAND_TREE } from './commands/command-tree.ts';
-import * as postUpdate from './lib/post-update';
-import { flushSentry } from './lib/sentry';
-import { setFormattedOutputMode } from './ui';
+import { COMMAND_TREE } from '@/commands/command-tree.ts';
+import * as postUpdate from '@/lib/post-update';
+import { flushSentry } from '@/lib/sentry';
+import { setFormattedOutputMode } from '@/ui';
 
 // Activate formatted output mode early so startup messages are collected
 // rather than printed to stdout when the command will produce JSON output.

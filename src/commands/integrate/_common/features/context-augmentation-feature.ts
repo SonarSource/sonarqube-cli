@@ -18,9 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../../lib/install-types.ts';
-import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../lib/signatures.ts';
-import { CommandFailedError } from '../../../_common/error.ts';
+import { CommandFailedError } from '@/commands/_common/error.ts';
+import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/lib/install-types.ts';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/lib/signatures.ts';
+
 import { getOptionalStringAttr } from '../attrs.ts';
 import { printContextAugmentationSkill, runToolIntegrateCommand } from '../context-augmentation.ts';
 import {
@@ -64,6 +65,7 @@ export function createContextAugmentationFeature<
             binaryPath: resolveContextAugmentationBinaryPath(context),
             projectRoot: context.targetRoot,
             scaEnabled: context.attrs?.scaEnabled === true,
+            orgKey: getOptionalStringAttr(context, 'orgKey'),
           }),
       }),
       ...(options.resources ?? []),

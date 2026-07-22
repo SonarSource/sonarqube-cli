@@ -20,17 +20,17 @@
 
 import { spawn } from 'node:child_process';
 
-import type { ResolvedAuth } from '../../../lib/auth-resolver.ts';
-import { isSonarQubeCloud } from '../../../lib/auth-resolver.ts';
-import { SONAR_CONTEXT_INVOCATION } from '../../../lib/config-constants.ts';
-import logger from '../../../lib/logger.ts';
-import { resolveRecordedRepoRoot } from '../../../lib/project-workspace/git-worktree.ts';
-import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../lib/signatures.ts';
-import type { IntegrationStateAttribute } from '../../../lib/state.ts';
-import { SonarQubeClient } from '../../../sonarqube/client.ts';
-import { discreetSuccess, type OutputChannel, print, text, warn, withSpinner } from '../../../ui';
-import { buildContextAugmentationEnv } from '../../_common/context-augmentation-env.ts';
-import { CommandFailedError } from '../../_common/error.ts';
+import { buildContextAugmentationEnv } from '@/commands/_common/context-augmentation-env.ts';
+import { CommandFailedError } from '@/commands/_common/error.ts';
+import type { ResolvedAuth } from '@/lib/auth-resolver.ts';
+import { isSonarQubeCloud } from '@/lib/auth-resolver.ts';
+import { SONAR_CONTEXT_INVOCATION } from '@/lib/config-constants.ts';
+import logger from '@/lib/logger.ts';
+import { resolveRecordedRepoRoot } from '@/lib/project-workspace/git-worktree.ts';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/lib/signatures.ts';
+import type { IntegrationStateAttribute } from '@/lib/state.ts';
+import { SonarQubeClient } from '@/sonarqube/client.ts';
+import { discreetSuccess, type OutputChannel, print, text, warn, withSpinner } from '@/ui';
 
 export interface ResolveContextAugmentationSetupParams {
   auth: ResolvedAuth;
@@ -96,6 +96,14 @@ export interface PrintContextAugmentationSkillParams {
   binaryPath: string;
   projectRoot: string;
   scaEnabled: boolean;
+  /**
+   * Organization key forwarded to `tool print-skill` as SONAR_CONTEXT_ORGANIZATION.
+   * CAG gates internal-only "dogfooding" tools in the rendered skill on the org
+   * (offline allowlist), so this must be set for those tools to appear in
+   * SKILL.md. Optional: when absent the skill still renders, just without the
+   * dogfooding tools section.
+   */
+  orgKey?: string;
 }
 
 export interface CagSubprocessResult {
@@ -200,6 +208,7 @@ export async function printContextAugmentationSkill({
   binaryPath,
   projectRoot,
   scaEnabled,
+  orgKey,
 }: PrintContextAugmentationSkillParams): Promise<string> {
   const result = await runCagSubprocess(
     binaryPath,
@@ -212,7 +221,11 @@ export async function printContextAugmentationSkill({
     ],
     {
       projectRoot,
-      env: buildContextAugmentationEnv({}),
+      // Forward only the org: CAG's dogfooding-tools gating reads
+      // SONAR_CONTEXT_ORGANIZATION (offline allowlist) to decide whether to render
+      // internal-only tools into the skill. It needs no token/project/url, so this
+      // stays exempt from identity enforcement.
+      env: buildContextAugmentationEnv({ organization: orgKey }),
     },
   );
   if (!result.ok) {

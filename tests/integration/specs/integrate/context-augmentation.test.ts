@@ -26,15 +26,16 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { buildLocalCagBinaryName } from '../../../../src/commands/_common/install/context-augmentation.js';
-import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/commands/integrate/_common/features/context-augmentation-feature.js';
-import { CLAUDE_INTEGRATION_ID } from '../../../../src/commands/integrate/claude/declaration.js';
-import { CODEX_INTEGRATION_ID } from '../../../../src/commands/integrate/codex/declaration.js';
-import { COPILOT_INTEGRATION_ID } from '../../../../src/commands/integrate/copilot/declaration.js';
-import { pathComparisonKey } from '../../../../src/lib/fs-utils.js';
-import { detectPlatform } from '../../../../src/lib/platform-detector.js';
-import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../src/lib/signatures.js';
-import type { CliState, InstalledIntegrationFeature } from '../../../../src/lib/state.js';
+import { buildLocalCagBinaryName } from '@/commands/_common/install/context-augmentation.js';
+import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.js';
+import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.js';
+import { CODEX_INTEGRATION_ID } from '@/commands/integrate/codex/declaration.js';
+import { COPILOT_INTEGRATION_ID } from '@/commands/integrate/copilot/declaration.js';
+import { pathComparisonKey } from '@/lib/fs-utils.js';
+import { detectPlatform } from '@/lib/platform-detector.js';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/lib/signatures.js';
+import type { CliState, InstalledIntegrationFeature } from '@/lib/state.js';
+
 import { hookScriptName, TestHarness } from '../../harness';
 import {
   type CagInvocation,
@@ -115,8 +116,12 @@ function expectContextEnv(invocation: CagInvocation, serverUrl: string): void {
   expect(invocation.env.SONAR_CONTEXT_INVOCATION_ID).toMatch(UUID_V4_RE);
 }
 
-function expectNoContextEnv(invocation: CagInvocation): void {
-  expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBeUndefined();
+function expectPrintSkillContextEnv(invocation: CagInvocation): void {
+  // print-skill receives only the recorded organization (drives CAG's
+  // dogfooding-tools gating in the rendered skill); project/url/token are
+  // intentionally omitted, and the caller's SONAR_CONTEXT_* env must not leak
+  // into the render.
+  expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe(ORG_KEY);
   expect(invocation.env.SONAR_CONTEXT_PROJECT).toBeUndefined();
   expect(invocation.env.SONAR_CONTEXT_TOKEN).toBeUndefined();
   expect(invocation.env.SONAR_CONTEXT_URL).toBeUndefined();
@@ -212,6 +217,12 @@ function markHarnessCwdAsGitRoot(harness: TestHarness): void {
 const PROJECT_KEY = 'my-project';
 const ORG_KEY = 'my-org';
 const TOKEN = 'cloud-token';
+// Internal "dogfooding" tools are gated on an offline org allowlist in CAG; the
+// CAG stub mirrors it (see tests/integration/resources/cag-stub.ts) so the
+// rendered skill only contains the dogfooding tools section for an allowlisted
+// organization.
+const ALLOWLISTED_ORG = 'sonarsource';
+const DOGFOODING_SKILL_MARKER = '## Dogfooding Tools';
 const CLAUDE_SKILL_PATH = '.claude/skills/sonar-context-augmentation/SKILL.md';
 const COPILOT_SKILL_PATH = '.github/skills/sonar-context-augmentation/SKILL.md';
 const CODEX_SKILL_PATH = '.agents/skills/sonar-context-augmentation/SKILL.md';
@@ -278,7 +289,7 @@ describe('integrate claude — Context Augmentation', () => {
         'sonar context',
         '--sca-enabled=true',
       ]);
-      expectNoContextEnv(printSkill);
+      expectPrintSkillContextEnv(printSkill);
       expect(integrate.argv).toEqual(['tool', 'integrate', '--invocation-prefix', 'sonar context']);
       expectContextEnv(integrate, serverUrl);
       // Both CAG spawns within one CLI run share the same SONAR_CONTEXT_INVOCATION_ID.
@@ -291,6 +302,8 @@ describe('integrate claude — Context Augmentation', () => {
       );
       expectSkillFile(harness, CLAUDE_SKILL_PATH, true);
       expectClaudeCagHookInstalled(harness);
+      // A non-allowlisted org yields no dogfooding tools section in the rendered skill.
+      expect(harness.cwd.file(CLAUDE_SKILL_PATH).asText()).not.toContain(DOGFOODING_SKILL_MARKER);
 
       // State records the declarative feature.
       const state = loadState(harness);
@@ -394,6 +407,45 @@ describe('integrate claude — Context Augmentation', () => {
       expect(claudeCagHookEntries(settings, 'PreToolUse')).toHaveLength(1);
       expect(claudeCagPostToolEntries(settings)).toHaveLength(1);
       expect(claudeCagHookEntries(settings, 'PostToolUseFailure')).toHaveLength(1);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'renders internal dogfooding tools in the skill for an allowlisted organization',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(PROJECT_KEY)
+        .withCagEntitlement(ALLOWLISTED_ORG)
+        .withScaEnabled(false)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ALLOWLISTED_ORG);
+      harness.state().withContextAugmentationBinaryInstalled();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [
+          `sonar.host.url=${serverUrl}`,
+          `sonar.projectKey=${PROJECT_KEY}`,
+          `sonar.organization=${ALLOWLISTED_ORG}`,
+        ].join('\n'),
+      );
+
+      const result = await harness.run('integrate claude --non-interactive', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      // print-skill received the recorded (allowlisted) org, so the rendered
+      // skill includes the internal dogfooding tools section.
+      const printSkill = findToolInvocation(readInvocations(harness), 'print-skill');
+      expect(printSkill.env.SONAR_CONTEXT_ORGANIZATION).toBe(ALLOWLISTED_ORG);
+      expect(harness.cwd.file(CLAUDE_SKILL_PATH).asText()).toContain(DOGFOODING_SKILL_MARKER);
     },
     { timeout: 30000 },
   );
@@ -974,7 +1026,7 @@ describe('integrate copilot — Context Augmentation', () => {
         'sonar context',
         '--sca-enabled=false',
       ]);
-      expectNoContextEnv(printSkill);
+      expectPrintSkillContextEnv(printSkill);
       expect(integrate.argv).toEqual(['tool', 'integrate', '--invocation-prefix', 'sonar context']);
       expectContextEnv(integrate, serverUrl);
       expect(result.stdout).not.toContain('Running: sonar-context-augmentation');
@@ -1047,7 +1099,7 @@ describe('integrate codex — Context Augmentation', () => {
         'sonar context',
         '--sca-enabled=false',
       ]);
-      expectNoContextEnv(printSkill);
+      expectPrintSkillContextEnv(printSkill);
       expect(integrate.argv).toEqual(['tool', 'integrate', '--invocation-prefix', 'sonar context']);
       expectContextEnv(integrate, serverUrl);
       expect(result.stdout).not.toContain('Running: sonar-context-augmentation');
