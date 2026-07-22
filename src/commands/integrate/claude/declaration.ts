@@ -52,8 +52,8 @@ import { askUser, jsonPatch, skip, textSnippet, wholeFile } from '../_common/reg
 import { SQAA_HOOK_FEATURE_ID } from '../_common/sqaa-entitlement.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import {
-  getContextAugmentationPostToolTemplateUnix,
-  getContextAugmentationPostToolTemplateWindows,
+  getContextAugmentationHookTemplateUnix,
+  getContextAugmentationHookTemplateWindows,
   getSecretPreToolTemplateUnix,
   getSecretPreToolTemplateWindows,
   getSecretPromptTemplateUnix,
@@ -67,8 +67,8 @@ const SETTINGS_FILE = 'settings.json';
 const CLAUDE_MD_FILE = 'CLAUDE.md';
 const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pretool-secrets';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
-const CONTEXT_POSTTOOL_SCRIPT_REL =
-  'sonar-context-augmentation/build-scripts/posttool-context-augmentation';
+const CONTEXT_HOOK_SCRIPT_REL =
+  'sonar-context-augmentation/build-scripts/context-augmentation-hook';
 const CONTEXT_TOOL_MATCHER = 'Bash|PowerShell|Monitor|Read';
 
 export const CLAUDE_INTEGRATION_ID = 'claude-code';
@@ -228,13 +228,13 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       targetPath: resolveClaudeSkillPath,
       resources: [
         wholeFile({
-          id: 'posttool-context-augmentation-script',
+          id: 'context-augmentation-hook-script',
           displayName: 'Claude Context Augmentation hook script',
           targetPath: (context) =>
-            resolveAgentHookScriptPath(context, CLAUDE_CONFIG_DIR, CONTEXT_POSTTOOL_SCRIPT_REL),
+            resolveAgentHookScriptPath(context, CLAUDE_CONFIG_DIR, CONTEXT_HOOK_SCRIPT_REL),
           content: {
-            unix: getContextAugmentationPostToolTemplateUnix(),
-            windows: getContextAugmentationPostToolTemplateWindows(),
+            unix: getContextAugmentationHookTemplateUnix(),
+            windows: getContextAugmentationHookTemplateWindows(),
           },
           executable: true,
         }),
@@ -251,7 +251,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
                 'PreToolUse',
                 CONTEXT_TOOL_MATCHER,
                 'sonar-context-augmentation',
-                CONTEXT_POSTTOOL_SCRIPT_REL,
+                CONTEXT_HOOK_SCRIPT_REL,
               ),
               createAgentHookEntry(
                 context,
@@ -259,7 +259,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
                 'PostToolUse',
                 CONTEXT_TOOL_MATCHER,
                 'sonar-context-augmentation',
-                CONTEXT_POSTTOOL_SCRIPT_REL,
+                CONTEXT_HOOK_SCRIPT_REL,
               ),
               createAgentHookEntry(
                 context,
@@ -267,7 +267,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
                 'PostToolUseFailure',
                 CONTEXT_TOOL_MATCHER,
                 'sonar-context-augmentation',
-                CONTEXT_POSTTOOL_SCRIPT_REL,
+                CONTEXT_HOOK_SCRIPT_REL,
               ),
             ]),
           removePatch: (document) => removeAgentHooks(document, ['sonar-context-augmentation']),

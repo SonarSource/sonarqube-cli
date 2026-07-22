@@ -184,7 +184,7 @@ function claudeSqaaPostToolEntries(settings: ClaudeSettings | undefined): Claude
 }
 
 function expectClaudeCagHookInstalled(harness: TestHarness): void {
-  const script = harness.cwd.file(CLAUDE_CAG_POSTTOOL_SCRIPT_PATH);
+  const script = harness.cwd.file(CLAUDE_CAG_HOOK_SCRIPT_PATH);
   expect(script.exists()).toBe(true);
   expect(script.asText()).toContain('sonar context __hook Claude');
   expect(script.asText()).not.toContain('ClaudePostToolUse');
@@ -193,7 +193,7 @@ function expectClaudeCagHookInstalled(harness: TestHarness): void {
   for (const eventType of CLAUDE_CAG_EVENT_TYPES) {
     const entries = claudeCagHookEntries(settings, eventType);
     expect(entries).toHaveLength(1);
-    expect(entries[0]?.matcher).toBe(CLAUDE_CAG_POSTTOOL_MATCHER);
+    expect(entries[0]?.matcher).toBe(CLAUDE_CAG_HOOK_MATCHER);
     expect(entries[0]?.hooks?.[0]?.type).toBe('command');
     expect(entries[0]?.hooks?.[0]?.command).toContain(CLAUDE_CAG_HOOK_MARKER);
     expect(entries[0]?.hooks?.[0]?.timeout).toBe(60);
@@ -202,7 +202,7 @@ function expectClaudeCagHookInstalled(harness: TestHarness): void {
 
 function expectClaudeCagHookAbsent(harness: TestHarness): void {
   for (const root of ['cwd', 'userHome'] as const) {
-    expect(harness[root].file(CLAUDE_CAG_POSTTOOL_SCRIPT_PATH).exists()).toBe(false);
+    expect(harness[root].file(CLAUDE_CAG_HOOK_SCRIPT_PATH).exists()).toBe(false);
     const settings = readClaudeSettings(harness, root);
     for (const eventType of CLAUDE_CAG_EVENT_TYPES) {
       expect(claudeCagHookEntries(settings, eventType)).toHaveLength(0);
@@ -227,8 +227,8 @@ const CLAUDE_SKILL_PATH = '.claude/skills/sonar-context-augmentation/SKILL.md';
 const COPILOT_SKILL_PATH = '.github/skills/sonar-context-augmentation/SKILL.md';
 const CODEX_SKILL_PATH = '.agents/skills/sonar-context-augmentation/SKILL.md';
 const CLAUDE_CAG_HOOK_MARKER = 'sonar-context-augmentation';
-const CLAUDE_CAG_POSTTOOL_MATCHER = 'Bash|PowerShell|Monitor|Read';
-const CLAUDE_CAG_POSTTOOL_SCRIPT_PATH = `.claude/hooks/sonar-context-augmentation/build-scripts/${hookScriptName('posttool-context-augmentation')}`;
+const CLAUDE_CAG_HOOK_MATCHER = 'Bash|PowerShell|Monitor|Read';
+const CLAUDE_CAG_HOOK_SCRIPT_PATH = `.claude/hooks/sonar-context-augmentation/build-scripts/${hookScriptName('context-augmentation-hook')}`;
 const CLAUDE_CAG_EVENT_TYPES = ['PreToolUse', 'PostToolUse', 'PostToolUseFailure'] as const;
 const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 

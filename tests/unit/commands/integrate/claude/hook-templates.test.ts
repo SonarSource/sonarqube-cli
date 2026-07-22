@@ -27,8 +27,8 @@ import {
   WINDOWS_SONAR_COMMAND_GUARD,
 } from '../../../../../src/commands/integrate/_common/hooks.ts';
 import {
-  getContextAugmentationPostToolTemplateUnix,
-  getContextAugmentationPostToolTemplateWindows,
+  getContextAugmentationHookTemplateUnix,
+  getContextAugmentationHookTemplateWindows,
   getSecretPreToolTemplateUnix,
   getSecretPreToolTemplateWindows,
   getSecretPromptTemplateUnix,
@@ -84,9 +84,9 @@ describe('Secret Scanning Hook Templates', () => {
   });
 });
 
-describe('Context Augmentation PostToolUse Hook Templates', () => {
-  it('PostTool Unix hook: bash shebang, delegates to sonar context hook', () => {
-    const template = getContextAugmentationPostToolTemplateUnix();
+describe('Context Augmentation Hook Templates', () => {
+  it('Unix hook: bash shebang, delegates to sonar context hook', () => {
+    const template = getContextAugmentationHookTemplateUnix();
 
     expect(template.startsWith('#!/bin/bash')).toBe(true);
     expect(template.includes('sonar context __hook Claude')).toBe(true);
@@ -94,8 +94,8 @@ describe('Context Augmentation PostToolUse Hook Templates', () => {
     expect(template.includes(UNIX_SONAR_COMMAND_GUARD)).toBe(true);
   });
 
-  it('PostTool Windows hook: delegates to sonar context hook', () => {
-    const template = getContextAugmentationPostToolTemplateWindows();
+  it('Windows hook: delegates to sonar context hook', () => {
+    const template = getContextAugmentationHookTemplateWindows();
 
     expect(template.includes('sonar context __hook Claude')).toBe(true);
     expect(template.includes('ClaudePostToolUse')).toBe(false);
@@ -144,8 +144,8 @@ describe('Template Integrity', () => {
       getSecretPreToolTemplateWindows(),
       getSecretPromptTemplateUnix(),
       getSecretPromptTemplateWindows(),
-      getContextAugmentationPostToolTemplateUnix(),
-      getContextAugmentationPostToolTemplateWindows(),
+      getContextAugmentationHookTemplateUnix(),
+      getContextAugmentationHookTemplateWindows(),
       getSqaaPostToolTemplateUnix('proj'),
       getSqaaPostToolTemplateWindows('proj'),
     ];
@@ -167,8 +167,8 @@ describe('Template Integrity', () => {
       getSecretPreToolTemplateWindows(),
       getSecretPromptTemplateUnix(),
       getSecretPromptTemplateWindows(),
-      getContextAugmentationPostToolTemplateUnix(),
-      getContextAugmentationPostToolTemplateWindows(),
+      getContextAugmentationHookTemplateUnix(),
+      getContextAugmentationHookTemplateWindows(),
       getSqaaPostToolTemplateUnix('proj'),
       getSqaaPostToolTemplateWindows('proj'),
     ];
@@ -184,17 +184,13 @@ describe('Template Integrity', () => {
 
     expect(getSecretPreToolTemplateUnix().includes('claude-post-tool-use')).toBe(false);
     expect(getSecretPromptTemplateUnix().includes('claude-post-tool-use')).toBe(false);
-    expect(getContextAugmentationPostToolTemplateUnix().includes('claude-post-tool-use')).toBe(
-      false,
-    );
+    expect(getContextAugmentationHookTemplateUnix().includes('claude-post-tool-use')).toBe(false);
   });
 
   it('Context Augmentation template routes to the double-underscore CAG hook', () => {
-    expect(
-      getContextAugmentationPostToolTemplateUnix().includes('sonar context __hook Claude'),
-    ).toBe(true);
-    expect(getContextAugmentationPostToolTemplateUnix().includes('sonar context _hook')).toBe(
-      false,
+    expect(getContextAugmentationHookTemplateUnix().includes('sonar context __hook Claude')).toBe(
+      true,
     );
+    expect(getContextAugmentationHookTemplateUnix().includes('sonar context _hook')).toBe(false);
   });
 });
