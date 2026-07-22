@@ -25,7 +25,7 @@ import * as fs from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockTty, setMockUi } from '@/core/ui';
 
 import { CommandFailedError, InvalidOptionError } from '../../../../src/commands/_common/error.ts';
 import { analyzeSqaa, buildSqaaJsonReport } from '../../../../src/commands/analyze/sqaa.ts';
@@ -103,6 +103,7 @@ function makeCloudState() {
 
 beforeEach(() => {
   setMockUi(true);
+  setMockTty(false);
   clearMockUiCalls();
 
   loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeCloudState());

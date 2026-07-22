@@ -18,25 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-// Force color functions to identity so preview-line assertions are independent
-// of whether the test process is attached to a TTY.
-void mock.module('../../../../../../../src/ui/colors.js', () => ({
-  isTTY: false,
-  bold: (s: string) => s,
-  dim: (s: string) => s,
-  green: (s: string) => s,
-  red: (s: string) => s,
-  yellow: (s: string) => s,
-  cyan: (s: string) => s,
-  gray: (s: string) => s,
-  white: (s: string) => s,
-  stripAnsi: (s: string) => s,
-  visibleLength: (s: string) => s.length,
-}));
-
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockTty, setMockUi } from '@/core/ui';
 
 import {
   buildInstallPreviewLines,
@@ -54,6 +38,15 @@ function application(feature: FeatureDeclaration): FeatureApplication {
 
 describe('install preview', () => {
   describe('buildInstallPreviewLines', () => {
+    beforeEach(() => {
+      setMockUi(true);
+      setMockTty(false);
+    });
+
+    afterEach(() => {
+      setMockUi(false);
+    });
+
     it('renders name lines with indented descriptions, separates features with a blank line, and omits missing descriptions', () => {
       const lines = buildInstallPreviewLines([
         application({ id: 'a', displayName: 'Feature A' }),
@@ -126,6 +119,7 @@ describe('install preview', () => {
   describe('renderInstallPreviewAndConfirm', () => {
     beforeEach(() => {
       setMockUi(true);
+      setMockTty(false);
       clearMockUiCalls();
     });
 

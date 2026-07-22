@@ -20,7 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockTty, setMockUi } from '@/core/ui';
 
 import { ScaScanOrchestrator } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
 import type { AnalyzeProjectResponse } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
@@ -239,6 +239,7 @@ describe('analyzeDependencyRisks - output format', () => {
 
   beforeEach(() => {
     setMockUi(true);
+    setMockTty(false);
     runSpy = spyOn(ScaScanOrchestrator.prototype, 'run').mockResolvedValue({
       response: SCAN_RESULT_STUB,
       scanDurationMs: 0,
