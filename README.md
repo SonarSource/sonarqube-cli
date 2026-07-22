@@ -616,7 +616,7 @@ mise uninstall --all sonarqube-cli
 
 The SonarQube CLI collects anonymous usage data and error reports to help improve the product.
 
-**Telemetry:** Anonymous command usage statistics are sent to SonarSource.
+**Telemetry:** Anonymous command usage statistics are sent to SonarSource. See [telemetry-sample.md](telemetry-sample.md) for a sample of the data that is collected.
 
 **Error reporting:** Unhandled exceptions are reported to [Sentry](https://sentry.io) to help us identify and fix crashes.
 
