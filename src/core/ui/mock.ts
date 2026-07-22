@@ -29,6 +29,7 @@ export type UiMethod =
   'blank' | 'discreetSuccess' | 'error' | 'info' | 'print' | 'success' | 'text' | 'warn';
 
 let mockActive = false;
+let mockIsTTY = false;
 const calls: UiCall[] = [];
 const responseQueue: unknown[] = [];
 
@@ -37,11 +38,22 @@ export function setMockUi(active: boolean): void {
   if (!active) {
     calls.length = 0;
     responseQueue.length = 0;
+    mockIsTTY = false;
   }
 }
 
 export function isMockActive(): boolean {
   return mockActive;
+}
+
+/** TTY value colors.ts reads while the UI mock is active. Defaults to false (no colors). */
+export function getMockIsTTY(): boolean {
+  return mockIsTTY;
+}
+
+/** Set the TTY value colors.ts reads while the UI mock is active. */
+export function setMockTty(value: boolean): void {
+  mockIsTTY = value;
 }
 
 export function recordCall(method: string, ...args: unknown[]): void {

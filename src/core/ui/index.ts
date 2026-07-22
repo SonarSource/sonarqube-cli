@@ -61,6 +61,7 @@ export {
   getMockUiCalls,
   isMockActive,
   queueMockResponse,
+  setMockTty,
   setMockUi,
 } from './mock.ts';
 export type { ColorFn, LogOptions, NoteOptions, OutputChannel, PhaseOptions } from './types.ts';
