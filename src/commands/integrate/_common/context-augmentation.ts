@@ -20,7 +20,7 @@
 
 import { spawn } from 'node:child_process';
 
-import {buildContextAugmentationEnv } from '@/commands/_common/context-augmentation-env.ts';
+import { buildContextAugmentationEnv } from '@/commands/_common/context-augmentation-env.ts';
 import { CommandFailedError } from '@/commands/_common/error.ts';
 import { discreetSuccess, type OutputChannel, print, text, warn, withSpinner } from '@/core/ui';
 import type { ResolvedAuth } from '@/lib/auth-resolver.ts';
