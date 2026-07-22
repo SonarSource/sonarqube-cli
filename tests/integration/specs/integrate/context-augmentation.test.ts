@@ -26,15 +26,16 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { buildLocalCagBinaryName } from '../../../../src/commands/_common/install/context-augmentation.js';
-import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/commands/integrate/_common/features/context-augmentation-feature.js';
-import { CLAUDE_INTEGRATION_ID } from '../../../../src/commands/integrate/claude/declaration.js';
-import { CODEX_INTEGRATION_ID } from '../../../../src/commands/integrate/codex/declaration.js';
-import { COPILOT_INTEGRATION_ID } from '../../../../src/commands/integrate/copilot/declaration.js';
-import { pathComparisonKey } from '../../../../src/lib/fs-utils.js';
-import { detectPlatform } from '../../../../src/lib/platform-detector.js';
-import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../src/lib/signatures.js';
-import type { CliState, InstalledIntegrationFeature } from '../../../../src/lib/state.js';
+import { buildLocalCagBinaryName } from '@/commands/_common/install/context-augmentation.js';
+import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.js';
+import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.js';
+import { CODEX_INTEGRATION_ID } from '@/commands/integrate/codex/declaration.js';
+import { COPILOT_INTEGRATION_ID } from '@/commands/integrate/copilot/declaration.js';
+import { pathComparisonKey } from '@/lib/fs-utils.js';
+import { detectPlatform } from '@/lib/platform-detector.js';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/lib/signatures.js';
+import type { CliState, InstalledIntegrationFeature } from '@/lib/state.js';
+
 import { TestHarness } from '../../harness';
 import {
   type CagInvocation,
