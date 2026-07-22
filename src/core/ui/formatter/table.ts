@@ -20,7 +20,7 @@
 
 // Table formatter for terminal output
 
-import type { SonarQubeIssue } from '../lib/types.js';
+import type { SonarQubeIssue } from '../../../lib/types.ts';
 
 const MIN_RULE_WIDTH = 15;
 const MIN_MESSAGE_WIDTH = 50;

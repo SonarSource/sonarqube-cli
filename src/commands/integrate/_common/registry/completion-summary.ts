@@ -27,8 +27,9 @@
 import { homedir } from 'node:os';
 import { sep } from 'node:path';
 
+import { info, note, outro, phase, phaseItem, text } from '@/core/ui';
+
 import type { InstalledIntegrationFeature } from '../../../../lib/state.ts';
-import { info, note, outro, phase, phaseItem, text } from '../../../../ui';
 import type { FeatureDeclaration, IntegrationDeclaration, PostInstallExample } from './types.ts';
 
 export function renderCompletionSummary<TOptions>(

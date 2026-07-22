@@ -20,6 +20,9 @@
 
 // Remediate command - triggers AI agent remediation for eligible issues
 
+import { blank, info, multiSelectPrompt, print, success, withSpinner } from '@/core/ui';
+import { cyan, dim, red, yellow } from '@/core/ui/colors.ts';
+
 import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import {
   AGENT_ACTIVITY_PATH,
@@ -32,8 +35,6 @@ import type { SonarQubeIssue } from '../../lib/types.ts';
 import { SonarQubeClient } from '../../sonarqube/client.ts';
 import { IssuesClient } from '../../sonarqube/issues.ts';
 import { MAX_PAGE_SIZE } from '../../sonarqube/projects.ts';
-import { blank, info, multiSelectPrompt, print, success, withSpinner } from '../../ui';
-import { cyan, dim, red, yellow } from '../../ui/colors.ts';
 import { printAgentNonInteractiveAlternativeHint } from '../_common/agent-prompt-hint.ts';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.ts';
 
@@ -52,7 +53,7 @@ const SEVERITY_COLORS: Record<string, (s: string) => string> = {
   INFO: dim,
 };
 
-// Mirrors MULTISELECT_MAX_SELECTED in src/ui/components/prompts.ts. Kept local
+// Mirrors MULTISELECT_MAX_SELECTED in src/core/ui/components/prompts.ts. Kept local
 // to avoid coupling the command surface to a UI implementation constant.
 const MAX_REMEDIATION_ISSUES = 20;
 

@@ -24,6 +24,8 @@ import { join, resolve } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '../../../../src/lib/config-constants';
 import { canonicalizePath } from '../../../../src/lib/fs-utils';
 import logger from '../../../../src/lib/logger';
@@ -37,7 +39,6 @@ import {
   GIT_REMOTE_BINDING_SOURCE,
 } from '../../../../src/lib/project-workspace';
 import * as discoverByRemote from '../../../../src/lib/project-workspace/discover-project-by-remote';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/ui';
 
 async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
   const prev = process.cwd();

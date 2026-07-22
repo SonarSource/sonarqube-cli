@@ -20,19 +20,20 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { CommandFailedError } from '../../../../../src/commands/_common/error.ts';
-import {
-  buildProjectScopeLabel,
-  isGlobalIntegrateScope,
-  resolveIntegrateScope,
-} from '../../../../../src/commands/integrate/_common/integrate-scope.ts';
 import {
   clearMockUiCalls,
   findMockUiCall,
   getMockUiCalls,
   queueMockResponse,
   setMockUi,
-} from '../../../../../src/ui';
+} from '@/core/ui';
+
+import { CommandFailedError } from '../../../../../src/commands/_common/error.ts';
+import {
+  buildProjectScopeLabel,
+  isGlobalIntegrateScope,
+  resolveIntegrateScope,
+} from '../../../../../src/commands/integrate/_common/integrate-scope.ts';
 
 describe('resolveIntegrateScope', () => {
   beforeEach(() => setMockUi(true));

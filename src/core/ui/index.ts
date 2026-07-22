@@ -20,15 +20,15 @@
 
 // Public API for the UI module
 
-export { bold, dim, stripAnsi, visibleLength } from './colors.js';
-export { note } from './components/note.js';
-export type { PhaseItem, StepStatus } from './components/phase.js';
-export { phase, phaseItem } from './components/phase.js';
+export { bold, dim, stripAnsi, visibleLength } from './colors.ts';
+export { note } from './components/note.ts';
+export type { PhaseItem, StepStatus } from './components/phase.ts';
+export { phase, phaseItem } from './components/phase.ts';
 export type {
   MultiSelectOption,
   MultiSelectPromptOptions,
   SelectOption,
-} from './components/prompts.js';
+} from './components/prompts.ts';
 export {
   confirmPrompt,
   multiSelectPrompt,
@@ -36,9 +36,9 @@ export {
   promptUntilValid,
   selectPrompt,
   textPrompt,
-} from './components/prompts.js';
-export { intro, outro } from './components/sections.js';
-export { withSpinner } from './components/spinner.js';
+} from './components/prompts.ts';
+export { intro, outro } from './components/sections.ts';
+export { withSpinner } from './components/spinner.ts';
 export {
   blank,
   discreetSuccess,
@@ -52,8 +52,8 @@ export {
   text,
   warn,
   wrapText,
-} from './messages.js';
-export type { UiCall, UiMethod } from './mock.js';
+} from './messages.ts';
+export type { UiCall, UiMethod } from './mock.ts';
 export {
   clearMockResponses,
   clearMockUiCalls,
@@ -61,6 +61,7 @@ export {
   getMockUiCalls,
   isMockActive,
   queueMockResponse,
+  setMockTty,
   setMockUi,
-} from './mock.js';
-export type { ColorFn, LogOptions, NoteOptions, OutputChannel, PhaseOptions } from './types.js';
+} from './mock.ts';
+export type { ColorFn, LogOptions, NoteOptions, OutputChannel, PhaseOptions } from './types.ts';

@@ -20,7 +20,7 @@
 
 /**
  * File-only logger — writes all levels to ~/.sonar/sonarqube-cli/logs/sonarqube-cli.log
- * No stdout/stderr output; terminal output is handled by src/ui/
+ * No stdout/stderr output; terminal output is handled by src/core/ui/
  */
 
 import { appendFileSync, mkdirSync } from 'node:fs';

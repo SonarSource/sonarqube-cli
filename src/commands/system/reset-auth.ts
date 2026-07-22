@@ -18,10 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { PhaseItem } from '@/core/ui';
+import { phaseItem } from '@/core/ui';
+
 import { deleteToken, getToken } from '../../lib/keychain.ts';
 import type { AuthConnection, CliState } from '../../lib/state.ts';
-import type { PhaseItem } from '../../ui';
-import { phaseItem } from '../../ui';
 import {
   reportRevokeServerTokenOutcome,
   revokeServerTokenIfPossible,

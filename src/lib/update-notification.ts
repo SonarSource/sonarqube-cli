@@ -20,6 +20,9 @@
 
 import type { Command } from 'commander';
 
+import { isFormattedOutputMode, text } from '@/core/ui';
+import { cyan } from '@/core/ui/colors.ts';
+
 import { version as CURRENT_VERSION } from '../../package.json';
 import {
   SonarCommand,
@@ -31,8 +34,6 @@ import {
   fetchLatestVersion,
 } from '../commands/update/update-check.js';
 import { TELEMETRY_FLUSH_MODE_ENV } from '../telemetry/index.js';
-import { cyan } from '../ui/colors.js';
-import { isFormattedOutputMode, text } from '../ui/index.js';
 import type { CliUpdateCheckState } from './state.js';
 import { loadState, saveState } from './state-manager.js';
 

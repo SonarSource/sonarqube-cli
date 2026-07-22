@@ -22,9 +22,9 @@
 
 import * as readline from 'node:readline';
 
-import { cyan, yellow } from '../colors.js';
-import { warn } from '../messages.js';
-import { isMockActive, recordCall } from '../mock.js';
+import { cyan, yellow } from '../colors.ts';
+import { warn } from '../messages.ts';
+import { isMockActive, recordCall } from '../mock.ts';
 
 export type FileStatus = 'waiting' | 'analyzing' | 'done' | 'failed' | 'skipped' | 'ignored';
 

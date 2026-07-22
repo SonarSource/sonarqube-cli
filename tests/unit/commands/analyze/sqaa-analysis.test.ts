@@ -20,6 +20,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { SqaaProgress } from '@/core/ui/components/sqaa-progress.ts';
+
 import { CommandFailedError } from '../../../../src/commands/_common/error.ts';
 import {
   distributeChunkResponse,
@@ -31,7 +33,6 @@ import type { CloudAuth } from '../../../../src/commands/analyze/sqaa-auth.ts';
 import type { SqaaChunkFile } from '../../../../src/commands/analyze/sqaa-chunking.ts';
 import { payloadTooLargeCommandError } from '../../../../src/commands/analyze/sqaa-errors.ts';
 import { RequestPayloadTooLargeError } from '../../../../src/sonarqube/errors.ts';
-import { SqaaProgress } from '../../../../src/ui/components/sqaa-progress.ts';
 
 describe('distributeChunkResponse', () => {
   it('attaches chunk-level errors only to the first file', () => {

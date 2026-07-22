@@ -23,7 +23,7 @@
 
 import { describe, expect, it, spyOn } from 'bun:test';
 
-import { withSpinner } from '../../../src/ui';
+import { withSpinner } from '@/core/ui';
 
 async function withTTY(fn: () => Promise<void>): Promise<void> {
   const original = process.stdout.isTTY;

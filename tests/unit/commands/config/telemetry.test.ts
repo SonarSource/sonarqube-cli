@@ -20,11 +20,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { clearMockUiCalls, findMockUiCall, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import { configureTelemetry } from '../../../../src/commands/config/telemetry.ts';
 import { ENV_DO_NOT_TRACK } from '../../../../src/lib/config-constants.ts';
 import * as stateRepository from '../../../../src/lib/repository/state-repository.ts';
 import { getDefaultState } from '../../../../src/lib/state.ts';
-import { clearMockUiCalls, findMockUiCall, getMockUiCalls, setMockUi } from '../../../../src/ui';
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
 
 let loadStateSpy: ReturnType<typeof spyOn>;

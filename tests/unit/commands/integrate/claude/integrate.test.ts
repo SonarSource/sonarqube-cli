@@ -22,6 +22,9 @@ import { homedir } from 'node:os';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
+import type { PhaseItem } from '@/core/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import { CommandFailedError } from '../../../../../src/commands/_common/error.ts';
 import * as token from '../../../../../src/commands/_common/token.ts';
 import * as contextAugmentation from '../../../../../src/commands/integrate/_common/context-augmentation.ts';
@@ -35,8 +38,6 @@ import * as gitWorktree from '../../../../../src/lib/project-workspace/git-workt
 import * as stateRepository from '../../../../../src/lib/repository/state-repository.ts';
 import { getDefaultState } from '../../../../../src/lib/state.ts';
 import { SonarQubeClient } from '../../../../../src/sonarqube/client.ts';
-import type { PhaseItem } from '../../../../../src/ui';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 const SERVER_AUTH: ResolvedAuth = {
   token: 'test-token',

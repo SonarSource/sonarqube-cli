@@ -21,10 +21,11 @@
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 
+import { withSpinner } from '@/core/ui';
+
 import type { ResolvedAuth } from '../../../lib/auth-resolver.ts';
 import logger from '../../../lib/logger.ts';
 import { SECRETS_CALLER_COMMANDS } from '../../../telemetry/secrets-analysis-telemetry.ts';
-import { withSpinner } from '../../../ui';
 import { CommandFailedError } from '../../_common/error.ts';
 import { formatSpawnOutput } from '../../_common/install/install-utils.ts';
 import type { ScaScannerInstaller } from '../../_common/install/sca-scanner.ts';

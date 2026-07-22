@@ -20,8 +20,9 @@
 
 import type { Help, Option } from 'commander';
 
+import { softBlue, underline } from '@/core/ui/colors.ts';
+
 import { version as VERSION } from '../../package.json';
-import { softBlue, underline } from '../ui/colors.ts';
 import {
   COMMAND_CATEGORIES,
   type CommandCategory,

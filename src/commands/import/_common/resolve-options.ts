@@ -18,7 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { type DopRepository, type SonarQubeClient } from '../../../sonarqube/client';
 import {
   confirmPrompt,
   type MultiSelectOption,
@@ -26,7 +25,9 @@ import {
   selectPrompt,
   warn,
   withSpinner,
-} from '../../../ui';
+} from '@/core/ui';
+
+import { type DopRepository, type SonarQubeClient } from '../../../sonarqube/client';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { OrganizationCollection } from './organization-collection';
 import {

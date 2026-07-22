@@ -20,6 +20,9 @@
 
 import { existsSync, rmSync } from 'node:fs';
 
+import type { PhaseItem } from '@/core/ui';
+import { phaseItem } from '@/core/ui';
+
 import {
   CLI_DIR,
   CLI_TMP_DIR,
@@ -27,8 +30,6 @@ import {
   LOG_DIR,
   SCA_SCANNER_CACHE_DIR,
 } from '../../lib/config-constants.ts';
-import type { PhaseItem } from '../../ui';
-import { phaseItem } from '../../ui';
 import { directorySizeBytes, formatByteSize } from './dir-size.ts';
 import { resolveSafePath } from './safe-path.ts';
 

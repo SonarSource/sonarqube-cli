@@ -20,6 +20,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import { version as VERSION } from '../../../package.json';
 import {
   SONARCLOUD_API_URL,
@@ -30,7 +32,6 @@ import {
 import { fetchGuarded } from '../../../src/lib/fetch-guarded.js';
 import { SonarQubeClient } from '../../../src/sonarqube/client.js';
 import { ForbiddenApiError } from '../../../src/sonarqube/errors.js';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../src/ui';
 
 // ---------------------------------------------------------------------------
 // Helpers

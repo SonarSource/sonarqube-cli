@@ -22,7 +22,8 @@
 
 import pc from 'picocolors';
 
-import type { ColorFn, NoteOptions, StepStatus } from './types.js';
+import { getMockIsTTY, isMockActive } from './mock.ts';
+import type { ColorFn, NoteOptions, StepStatus } from './types.ts';
 
 // When stdout is not a TTY (piped), all color functions become identity
 export const isTTY = process.stdout.isTTY;
@@ -39,14 +40,21 @@ export function visibleLength(s: string): number {
   return stripAnsi(s).length;
 }
 
+// While the UI mock is active, the TTY value comes from the mock (always
+// non-colored) instead of the real terminal — so tests asserting on recorded
+// UI calls (setMockUi(true)) never have to care about real isTTY.
+function currentIsTTY(): boolean {
+  return isMockActive() ? getMockIsTTY() : isTTY;
+}
+
 function c(fn: (s: string) => string): ColorFn {
-  return (s: string) => (isTTY ? fn(s) : s);
+  return (s: string) => (currentIsTTY() ? fn(s) : s);
 }
 
 const SOFT_BLUE = 69; // #5F87FF
 
 function ansi256(n: number): ColorFn {
-  return (s: string) => (isTTY ? `\x1b[38;5;${n}m${s}\x1b[0m` : s);
+  return (s: string) => (currentIsTTY() ? `\x1b[38;5;${n}m${s}\x1b[0m` : s);
 }
 
 export const green = c(pc.green);

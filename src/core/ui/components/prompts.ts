@@ -22,9 +22,9 @@
 
 import { ConfirmPrompt, isCancel, Prompt, SelectPrompt, TextPrompt } from '@clack/core';
 
-import { cyan, dim, green, red } from '../colors.js';
-import { print } from '../messages.js';
-import { dequeueMockResponse, isMockActive, recordCall } from '../mock.js';
+import { cyan, dim, green, red } from '../colors.ts';
+import { print } from '../messages.ts';
+import { dequeueMockResponse, isMockActive, recordCall } from '../mock.ts';
 
 const CTRL_C = 0x03;
 const ENTER_CR = 0x0d;

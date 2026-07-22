@@ -24,7 +24,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-void mock.module('../../../src/ui/colors.js', () => ({
+void mock.module('@/core/ui/colors.js', () => ({
   isTTY: false,
   bold: (s: string) => s,
   dim: (s: string) => s,
@@ -62,10 +62,10 @@ void mock.module('../../../src/ui/colors.js', () => ({
 
 import { mock } from 'bun:test';
 
-import { phase, phaseItem } from '../../../src/ui';
-import { intro, outro } from '../../../src/ui';
-import { withSpinner } from '../../../src/ui';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../src/ui';
+import { phase, phaseItem } from '@/core/ui';
+import { intro, outro } from '@/core/ui';
+import { withSpinner } from '@/core/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 // ─── phaseItem helper ─────────────────────────────────────────────────────────
 

@@ -22,7 +22,8 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { warn } from '../../../ui';
+import { warn } from '@/core/ui';
+
 import { readOrInitJson, SONAR_SECRETS_MARKER } from '../_common/hooks.ts';
 
 export const SCRIPT_REL_DIR = join(SONAR_SECRETS_MARKER, 'build-scripts');
