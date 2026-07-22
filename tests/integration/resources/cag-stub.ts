@@ -68,7 +68,14 @@ if (args[0] === 'tool' && args[1] === 'print-skill') {
   const exitCode = Number.parseInt(process.env.CAG_STUB_PRINT_SKILL_EXIT ?? '0', RADIX);
   if (exitCode === 0 && process.env.CAG_STUB_PRINT_SKILL_EMPTY !== '1') {
     const scaEnabledArg = args.find((arg) => arg.startsWith('--sca-enabled='));
-    process.stdout.write(`# Generated CAG skill\n${scaEnabledArg ?? '--sca-enabled=false'}\n`);
+    // Mirror CAG's dogfooding-tools gating: internal-only tools are rendered into
+    // the skill only when SONAR_CONTEXT_ORGANIZATION is on the (offline) allowlist.
+    // Kept in sync with the org allowlist in the sonar-context-augmentation repo.
+    const org = (process.env.SONAR_CONTEXT_ORGANIZATION ?? '').toLowerCase();
+    const dogfoodingSection = org === 'sonarsource' ? '## Dogfooding Tools\nget_directives\n' : '';
+    process.stdout.write(
+      `# Generated CAG skill\n${scaEnabledArg ?? '--sca-enabled=false'}\n${dogfoodingSection}`,
+    );
   }
   process.exit(exitCode);
 }
