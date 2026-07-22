@@ -63,6 +63,7 @@ export function createContextAugmentationFeature<
             binaryPath: resolveContextAugmentationBinaryPath(context),
             projectRoot: context.targetRoot,
             scaEnabled: context.attrs?.scaEnabled === true,
+            orgKey: getOptionalStringAttr(context, 'orgKey'),
           }),
       }),
     ],

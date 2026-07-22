@@ -96,6 +96,14 @@ export interface PrintContextAugmentationSkillParams {
   binaryPath: string;
   projectRoot: string;
   scaEnabled: boolean;
+  /**
+   * Organization key forwarded to `tool print-skill` as SONAR_CONTEXT_ORGANIZATION.
+   * CAG gates internal-only "dogfooding" tools in the rendered skill on the org
+   * (offline allowlist), so this must be set for those tools to appear in
+   * SKILL.md. Optional: when absent the skill still renders, just without the
+   * dogfooding tools section.
+   */
+  orgKey?: string;
 }
 
 export interface CagSubprocessResult {
@@ -200,6 +208,7 @@ export async function printContextAugmentationSkill({
   binaryPath,
   projectRoot,
   scaEnabled,
+  orgKey,
 }: PrintContextAugmentationSkillParams): Promise<string> {
   const result = await runCagSubprocess(
     binaryPath,
@@ -212,7 +221,11 @@ export async function printContextAugmentationSkill({
     ],
     {
       projectRoot,
-      env: buildContextAugmentationEnv({}),
+      // Forward only the org: CAG's dogfooding-tools gating reads
+      // SONAR_CONTEXT_ORGANIZATION (offline allowlist) to decide whether to render
+      // internal-only tools into the skill. It needs no token/project/url, so this
+      // stays exempt from identity enforcement.
+      env: buildContextAugmentationEnv({ organization: orgKey }),
     },
   );
   if (!result.ok) {
