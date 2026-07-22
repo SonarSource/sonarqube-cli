@@ -22,12 +22,17 @@ import { randomUUID } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { version as VERSION } from '../../package.json';
-import { detectCallerAgent } from '../lib/agent-detector.js';
-import type { ResolvedAuth } from '../lib/auth-resolver.js';
-import { getTelemetryDir, TELEMETRY_API_KEY, TELEMETRY_ENDPOINT } from '../lib/config-constants.js';
-import { buildFetchInit, fetchGuarded } from '../lib/fetch-guarded.js';
-import { INVOCATION_ID } from '../lib/invocation-id.js';
+import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
+
+import { version as VERSION } from '../../../package.json';
+import { detectCallerAgent } from '../../lib/agent-detector.ts';
+import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
+import {
+  getTelemetryDir,
+  TELEMETRY_API_KEY,
+  TELEMETRY_ENDPOINT,
+} from '../../lib/config-constants.ts';
+import { buildFetchInit, fetchGuarded } from '../../lib/fetch-guarded.ts';
 import type {
   AnalysisCompletedEventPayload,
   AuthConnection,
@@ -36,15 +41,15 @@ import type {
   StoredTelemetryEvent,
   TelemetryConnectionType,
   TelemetryEventIdentityPayload,
-} from '../lib/state.js';
-import { getActiveConnection, tryLoadState } from '../lib/state-manager.js';
-import { isTelemetryEnabled } from './enabled.js';
+} from '../../lib/state.ts';
+import { getActiveConnection, tryLoadState } from '../../lib/state-manager.ts';
+import { isTelemetryEnabled } from './enabled.ts';
 import {
   resolveCommandTelemetryIdentity,
   resolveStoreEventTelemetryIdentitySafely,
   type TelemetryIdentity,
-} from './identity.js';
-import { getOrCreateUserId } from './user.js';
+} from './identity.ts';
+import { getOrCreateUserId } from './user.ts';
 
 const TELEMETRY_EVENTS_FILENAME = 'telemetry-events.ndjson';
 const TELEMETRY_EVENTS_RETENTION_DAYS = 7;

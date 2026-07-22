@@ -31,20 +31,9 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { scanAndEmitSecrets } from '../../../src/commands/analyze/secrets.ts';
-import * as agentDetector from '../../../src/lib/agent-detector.js';
-import type { ResolvedAuth } from '../../../src/lib/auth-resolver.js';
-import { ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
-import { DISTRIBUTION } from '../../../src/lib/distribution.js';
-import type { SpawnResult } from '../../../src/lib/process.js';
-import * as stateRepository from '../../../src/lib/repository/state-repository.js';
-import type {
-  AnalysisCompletedEventPayload,
-  StoredAnalysisCompletedEvent,
-} from '../../../src/lib/state.js';
-import * as stateManager from '../../../src/lib/state-manager.js';
-import { SECRETS_CALLER_COMMANDS } from '../../../src/telemetry/secrets-analysis-telemetry.js';
-import { SQAA_ANALYZE_AGENTIC_CALLER_COMMAND } from '../../../src/telemetry/sqaa-analysis-telemetry.js';
+import { scanAndEmitSecrets } from '@/commands/analyze/secrets.ts';
+import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
+import { SQAA_ANALYZE_AGENTIC_CALLER_COMMAND } from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 import {
   type AnalysisCompletedFields,
   emitAnalysisCompleted,
@@ -52,8 +41,17 @@ import {
   emitIntegrationConfigured,
   flushTelemetryEvents,
   type IntegrationConfiguredFields,
-} from '../../../src/telemetry/telemetry-events.js';
-import * as userModule from '../../../src/telemetry/user.js';
+} from '@/core/telemetry/telemetry-events.ts';
+import * as userModule from '@/core/telemetry/user.ts';
+import * as agentDetector from '@/lib/agent-detector.ts';
+import type { ResolvedAuth } from '@/lib/auth-resolver.ts';
+import { ENV_SONAR_USER_HOME } from '@/lib/config-constants.ts';
+import { DISTRIBUTION } from '@/lib/distribution.ts';
+import type { SpawnResult } from '@/lib/process.ts';
+import * as stateRepository from '@/lib/repository/state-repository.ts';
+import type { AnalysisCompletedEventPayload, StoredAnalysisCompletedEvent } from '@/lib/state.ts';
+import * as stateManager from '@/lib/state-manager.ts';
+
 import {
   makeTelemetryState,
   readAnalysisEvents,
@@ -61,7 +59,7 @@ import {
   readIntegrationEvents,
   telemetryEventsPath,
   writeTelemetryEvent,
-} from '../../_common/telemetry-helpers.js';
+} from '../../../_common/telemetry-helpers.ts';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

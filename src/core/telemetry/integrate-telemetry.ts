@@ -20,11 +20,11 @@
 
 import { createHash } from 'node:crypto';
 
-import type { ResolvedAuth } from '../lib/auth-resolver.js';
-import { canonicalizePath } from '../lib/fs-utils.js';
-import logger from '../lib/logger.js';
-import type { InstalledIntegrationFeature, IntegrationScope } from '../lib/state.js';
-import { emitIntegrationConfigured } from './telemetry-events.js';
+import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
+import { canonicalizePath } from '../../lib/fs-utils.ts';
+import logger from '../../lib/logger.ts';
+import type { InstalledIntegrationFeature, IntegrationScope } from '../../lib/state.ts';
+import { emitIntegrationConfigured } from './telemetry-events.ts';
 
 export interface IntegrationConfiguredTelemetryParams {
   auth: ResolvedAuth;

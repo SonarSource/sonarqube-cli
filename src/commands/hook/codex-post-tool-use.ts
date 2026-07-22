@@ -20,15 +20,16 @@
 
 // PostToolUse callback handler for Codex — runs git change-set SQAA after apply_patch.
 
-import { resolveAuth } from '../../lib/auth-resolver.ts';
-import { AGENTIC_PACK_URL } from '../../lib/config-constants.ts';
-import logger from '../../lib/logger.ts';
-import { SqaaForbiddenError } from '../../sonarqube/errors.ts';
 import {
   emitSqaaHookFailureTelemetry,
   SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
   SQAA_HOOK_TELEMETRY_EXIT_CODE,
-} from '../../telemetry/sqaa-analysis-telemetry.ts';
+} from '@/core/telemetry/sqaa-analysis-telemetry.ts';
+
+import { resolveAuth } from '../../lib/auth-resolver.ts';
+import { AGENTIC_PACK_URL } from '../../lib/config-constants.ts';
+import logger from '../../lib/logger.ts';
+import { SqaaForbiddenError } from '../../sonarqube/errors.ts';
 import { buildSqaaJsonReport } from '../analyze/sqaa.ts';
 import type { SqaaJsonReport } from '../analyze/sqaa-display.ts';
 import {

@@ -23,17 +23,18 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import * as sqaaTelemetry from '@/core/telemetry/sqaa-analysis-telemetry.ts';
+import {
+  SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
+  SQAA_HOOK_TELEMETRY_EXIT_CODE,
+} from '@/core/telemetry/sqaa-analysis-telemetry.ts';
+
 import { agentPostToolUse } from '../../../../src/commands/hook/agent-post-tool-use.ts';
 import * as hookOutput from '../../../../src/commands/hook/format-sqaa-hook-context.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
 import * as authResolver from '../../../../src/lib/auth-resolver.ts';
 import * as processLib from '../../../../src/lib/process.ts';
 import * as clientModule from '../../../../src/sonarqube/client.ts';
-import * as sqaaTelemetry from '../../../../src/telemetry/sqaa-analysis-telemetry.ts';
-import {
-  SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
-  SQAA_HOOK_TELEMETRY_EXIT_CODE,
-} from '../../../../src/telemetry/sqaa-analysis-telemetry.ts';
 
 // Real path inside cwd so realpathSync resolves consistently for file and cwd.
 const TEST_FILE = join(process.cwd(), 'src/index.ts');

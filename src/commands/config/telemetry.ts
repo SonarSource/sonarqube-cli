@@ -19,10 +19,10 @@
  */
 // Configure CLI settings
 
+import { describeTelemetryStatus, isDoNotTrackRequested } from '@/core/telemetry/enabled.ts';
 import { info, success } from '@/core/ui';
 
 import { loadState, saveState } from '../../lib/repository/state-repository.ts';
-import { describeTelemetryStatus, isDoNotTrackRequested } from '../../telemetry/enabled.ts';
 import { InvalidOptionError } from '../_common/error.ts';
 
 export interface ConfigureTelemetryOptions {

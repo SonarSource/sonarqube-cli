@@ -25,6 +25,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
+import * as telemetryEvents from '@/core/telemetry/telemetry-events.ts';
+
 import { version as CURRENT_VERSION } from '../../../../package.json';
 import * as scaScannerInstall from '../../../../src/commands/_common/install/sca-scanner.ts';
 import * as secretsInstall from '../../../../src/commands/_common/install/secrets.ts';
@@ -57,7 +59,6 @@ import type {
 } from '../../../../src/lib/state.ts';
 import { getDefaultState } from '../../../../src/lib/state.ts';
 import * as versionLib from '../../../../src/lib/version.ts';
-import * as telemetryEvents from '../../../../src/telemetry/telemetry-events.ts';
 
 const FAKE_HOME = '/fake/home';
 const homedirFn = () => FAKE_HOME;

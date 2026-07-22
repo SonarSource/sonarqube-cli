@@ -20,6 +20,11 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 
+import {
+  SECRETS_CALLER_COMMANDS,
+  type SecretsCallerCommand,
+} from '@/core/telemetry/secrets-analysis-telemetry.ts';
+import { emitAnalysisCompleted } from '@/core/telemetry/telemetry-events.ts';
 import { blank, print, success, warn } from '@/core/ui';
 import { green, yellow } from '@/core/ui/colors.ts';
 
@@ -28,11 +33,6 @@ import { buildSubprocessNetworkEnv } from '../../lib/connectivity/network-config
 import logger from '../../lib/logger.ts';
 import type { SpawnResult, StdioMode } from '../../lib/process.ts';
 import { spawnProcessWithTimeout } from '../../lib/process.ts';
-import {
-  SECRETS_CALLER_COMMANDS,
-  type SecretsCallerCommand,
-} from '../../telemetry/secrets-analysis-telemetry.ts';
-import { emitAnalysisCompleted } from '../../telemetry/telemetry-events.ts';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.ts';
 import { installSecretsBinary } from '../_common/install/secrets.ts';
 

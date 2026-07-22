@@ -31,18 +31,19 @@ import type {
   AnalyzeProjectResponse,
   ScaIssueType,
   Severity,
-} from '../../../src/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
-import type { ResolvedAuth } from '../../../src/lib/auth-resolver.js';
-import { ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
-import * as stateRepository from '../../../src/lib/repository/state-repository.js';
-import * as stateManager from '../../../src/lib/state-manager.js';
+} from '@/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import {
   emitScaAnalysisTelemetry,
   SCA_CALLER_COMMANDS,
   summarizeScaFindings,
-} from '../../../src/telemetry/sca-analysis-telemetry.js';
-import * as userModule from '../../../src/telemetry/user.js';
-import { makeTelemetryState, readAnalysisEvents } from '../../_common/telemetry-helpers.js';
+} from '@/core/telemetry/sca-analysis-telemetry.ts';
+import * as userModule from '@/core/telemetry/user.ts';
+import type { ResolvedAuth } from '@/lib/auth-resolver.ts';
+import { ENV_SONAR_USER_HOME } from '@/lib/config-constants.ts';
+import * as stateRepository from '@/lib/repository/state-repository.ts';
+import * as stateManager from '@/lib/state-manager.ts';
+
+import { makeTelemetryState, readAnalysisEvents } from '../../../_common/telemetry-helpers.ts';
 
 const AUTH: ResolvedAuth = {
   connectionType: 'cloud',

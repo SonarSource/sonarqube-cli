@@ -23,8 +23,9 @@ import { homedir } from 'node:os';
 import type { ErrorEvent, EventHint } from '@sentry/bun';
 import * as Sentry from '@sentry/bun';
 
-import { isTelemetryEnabled } from '../telemetry/enabled.js';
-import { getOrCreateUserId } from '../telemetry/user.js';
+import { isTelemetryEnabled } from '@/core/telemetry/enabled.ts';
+import { getOrCreateUserId } from '@/core/telemetry/user.ts';
+
 import { SENTRY_DSN, SENTRY_FLUSH_TIMEOUT_MS } from './config-constants.js';
 import type { CliState } from './state.js';
 

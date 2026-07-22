@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { emitIntegrationConfiguredTelemetry } from '@/core/telemetry/integrate-telemetry.ts';
 import { text, warn } from '@/core/ui';
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver.ts';
@@ -30,7 +31,6 @@ import type {
   IntegrationScope,
   IntegrationStateAttribute,
 } from '../../../../lib/state.ts';
-import { emitIntegrationConfiguredTelemetry } from '../../../../telemetry/integrate-telemetry.ts';
 import { CommandFailedError } from '../../../_common/error.ts';
 import { renderCompletionSummary } from './completion-summary.ts';
 import type { IntegrationRegistry } from './core.ts';

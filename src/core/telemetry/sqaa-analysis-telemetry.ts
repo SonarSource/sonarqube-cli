@@ -20,11 +20,11 @@
 
 import { randomUUID } from 'node:crypto';
 
-import type { FileResult, RunTally } from '../commands/analyze/sqaa-analysis.ts';
-import type { SqaaJsonReport } from '../commands/analyze/sqaa-display-json.ts';
-import type { ResolvedAuth } from '../lib/auth-resolver.js';
-import type { SqaaIssue } from '../sonarqube/client.js';
-import { emitAnalysisCompleted } from './telemetry-events.js';
+import type { FileResult, RunTally } from '../../commands/analyze/sqaa-analysis.ts';
+import type { SqaaJsonReport } from '../../commands/analyze/sqaa-display-json.ts';
+import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
+import type { SqaaIssue } from '../../sonarqube/client.ts';
+import { emitAnalysisCompleted } from './telemetry-events.ts';
 
 export const SQAA_ANALYZE_CALLER_COMMAND = 'analyze';
 

@@ -20,6 +20,7 @@
 
 import type { Command } from 'commander';
 
+import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { isFormattedOutputMode, text } from '@/core/ui';
 import { cyan } from '@/core/ui/colors.ts';
 
@@ -33,7 +34,6 @@ import {
   BACKGROUND_UPDATE_CHECK_TIMEOUT_MS,
   fetchLatestVersion,
 } from '../commands/update/update-check.js';
-import { TELEMETRY_FLUSH_MODE_ENV } from '../telemetry/index.js';
 import type { CliUpdateCheckState } from './state.js';
 import { loadState, saveState } from './state-manager.js';
 
