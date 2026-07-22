@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { blank, info, selectPrompt } from '../../../core/ui';
+import { blank, info, selectPrompt } from '@/core/ui';
+
 import { normalizePath } from '../../../lib/fs-utils.ts';
 import type { IntegrationScope } from '../../../lib/state.ts';
 import { CommandFailedError } from '../../_common/error.ts';

@@ -24,8 +24,9 @@ import { join } from 'node:path';
 
 import { parse as parseToml } from 'smol-toml';
 
+import { blank, print, success, text, warn } from '@/core/ui';
+
 import { version as VERSION } from '../../../package.json';
-import { blank, print, success, text, warn } from '../../core/ui';
 import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import { resolveAuth } from '../../lib/auth-resolver.ts';
 import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '../../lib/config-constants.ts';

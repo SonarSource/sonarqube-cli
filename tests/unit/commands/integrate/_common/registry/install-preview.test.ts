@@ -36,6 +36,8 @@ void mock.module('../../../../../../../src/ui/colors.js', () => ({
   visibleLength: (s: string) => s.length,
 }));
 
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import {
   buildInstallPreviewLines,
   renderInstallPreviewAndConfirm,
@@ -45,7 +47,6 @@ import type {
   FeatureContainer,
   FeatureDeclaration,
 } from '../../../../../../src/commands/integrate/_common/registry/types.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/core/ui';
 
 function application(feature: FeatureDeclaration): FeatureApplication {
   return { feature, targetRoot: '/repo', scope: 'project' };

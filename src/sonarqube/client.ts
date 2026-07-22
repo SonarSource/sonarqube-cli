@@ -20,8 +20,9 @@
 
 // SonarQube API HTTP client
 
+import { print } from '@/core/ui';
+
 import { version as VERSION } from '../../package.json';
-import { print } from '../core/ui';
 import {
   isSonarQubeCloud,
   normalizeCloudV2Endpoint,

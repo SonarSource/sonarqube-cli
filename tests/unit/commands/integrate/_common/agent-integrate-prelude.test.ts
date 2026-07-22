@@ -20,12 +20,13 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import {
   assertSonarCloudOrganization,
   buildAgentIntegrateContext,
   warnMissingIntegrateProjectKey,
 } from '../../../../../src/commands/integrate/_common/agent-integrate-prelude.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/core/ui';
 import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.ts';
 import type { DiscoveredProject } from '../../../../../src/lib/project-workspace';
 

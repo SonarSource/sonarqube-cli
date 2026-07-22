@@ -18,8 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { PhaseItem } from '../../core/ui';
-import { phaseItem } from '../../core/ui';
+import type { PhaseItem } from '@/core/ui';
+import { phaseItem } from '@/core/ui';
+
 import type {
   CliState,
   InstalledIntegration,

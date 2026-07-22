@@ -22,9 +22,10 @@
 
 import { encode as encodeToToon } from '@toon-format/toon';
 
-import { print } from '../../core/ui';
-import { formatCSV } from '../../core/ui/formatter/csv.ts';
-import { formatTable } from '../../core/ui/formatter/table.ts';
+import { print } from '@/core/ui';
+import { formatCSV } from '@/core/ui/formatter/csv.ts';
+import { formatTable } from '@/core/ui/formatter/table.ts';
+
 import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import type { IssuesSearchParams } from '../../lib/types.ts';
 import { SonarQubeClient } from '../../sonarqube/client.ts';

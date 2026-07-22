@@ -20,8 +20,9 @@
 
 // Remediate command - triggers AI agent remediation for eligible issues
 
-import { blank, info, multiSelectPrompt, print, success, withSpinner } from '../../core/ui';
-import { cyan, dim, red, yellow } from '../../core/ui/colors.ts';
+import { blank, info, multiSelectPrompt, print, success, withSpinner } from '@/core/ui';
+import { cyan, dim, red, yellow } from '@/core/ui/colors.ts';
+
 import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import {
   AGENT_ACTIVITY_PATH,

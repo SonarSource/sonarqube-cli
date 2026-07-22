@@ -18,8 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { confirmPrompt, discreetSuccess, info, text } from '../../../../core/ui';
-import { red } from '../../../../core/ui/colors.ts';
+import { confirmPrompt, discreetSuccess, info, text } from '@/core/ui';
+import { red } from '@/core/ui/colors.ts';
+
 import { CommandFailedError } from '../../../_common/error.ts';
 import { findInstalledFeature } from './installation-recorder.ts';
 import type {

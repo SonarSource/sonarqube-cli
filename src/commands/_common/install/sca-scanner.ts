@@ -20,7 +20,8 @@
 
 // sca-scanner-cli install: thin wrapper over the generic binary install pipeline.
 
-import { discreetSuccess } from '../../../core/ui';
+import { discreetSuccess } from '@/core/ui';
+
 import { SCA_SCANNER_CLI_DIST_PREFIX } from '../../../lib/config-constants.ts';
 import { type PlatformInfo, SCA_SCANNER_BINARY_NAME } from '../../../lib/install-types.ts';
 import {

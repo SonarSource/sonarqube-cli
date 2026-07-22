@@ -24,7 +24,8 @@ import {
   print,
   setFormattedOutputMode,
   text,
-} from '../../core/ui';
+} from '@/core/ui';
+
 import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import { SECRETS_CALLER_COMMANDS } from '../../telemetry/secrets-analysis-telemetry.ts';
 import { SQAA_ANALYZE_CALLER_COMMAND } from '../../telemetry/sqaa-analysis-telemetry.ts';

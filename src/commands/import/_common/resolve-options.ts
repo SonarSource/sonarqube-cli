@@ -25,7 +25,8 @@ import {
   selectPrompt,
   warn,
   withSpinner,
-} from '../../../core/ui';
+} from '@/core/ui';
+
 import { type DopRepository, type SonarQubeClient } from '../../../sonarqube/client';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { OrganizationCollection } from './organization-collection';

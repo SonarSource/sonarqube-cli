@@ -24,7 +24,8 @@ import * as nodeFs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 
-import { warn } from '../../../core/ui';
+import { warn } from '@/core/ui';
+
 import logger from '../../../lib/logger.ts';
 import {
   readOrInitJson,

@@ -23,7 +23,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/core/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import { SONARCLOUD_URL } from '../../../../src/lib/config-constants';
 import {
   discoverOrganization,

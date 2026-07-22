@@ -20,6 +20,8 @@
 
 import { afterEach, describe, expect, it } from 'bun:test';
 
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import { CommandFailedError } from '../../../../src/commands/_common/error.ts';
 import type { FileResult, RunTally } from '../../../../src/commands/analyze/sqaa-analysis.ts';
 import {
@@ -31,7 +33,6 @@ import {
   renderFailureDetailLines,
   SQAA_COLLAPSE_CLEAN_THRESHOLD,
 } from '../../../../src/commands/analyze/sqaa-display.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/core/ui';
 import type { SqaaIssue } from '../../../../src/sonarqube/client.ts';
 
 const ANSI_ESCAPE_CODES = /\x1b\[[0-9;]*m/g;

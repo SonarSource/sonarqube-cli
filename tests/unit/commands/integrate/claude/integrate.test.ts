@@ -22,14 +22,15 @@ import { homedir } from 'node:os';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
+import type { PhaseItem } from '@/core/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import { CommandFailedError } from '../../../../../src/commands/_common/error.ts';
 import * as token from '../../../../../src/commands/_common/token.ts';
 import * as contextAugmentation from '../../../../../src/commands/integrate/_common/context-augmentation.ts';
 import * as registry from '../../../../../src/commands/integrate/_common/registry';
 import { integrateClaude } from '../../../../../src/commands/integrate/claude';
 import * as hooks from '../../../../../src/commands/integrate/claude/hooks.ts';
-import type { PhaseItem } from '../../../../../src/core/ui';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/core/ui';
 import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.ts';
 import type { DiscoveredProject } from '../../../../../src/lib/project-workspace';
 import * as discovery from '../../../../../src/lib/project-workspace';

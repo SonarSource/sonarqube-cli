@@ -21,7 +21,8 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { warn } from '../../../core/ui';
+import { warn } from '@/core/ui';
+
 import {
   ANTIGRAVITY_GLOBAL_HOOKS_JSON,
   ANTIGRAVITY_GLOBAL_SONAR_HOOKS_DIR,

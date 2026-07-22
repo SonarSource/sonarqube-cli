@@ -20,8 +20,9 @@
 
 import { existsSync, rmSync } from 'node:fs';
 
-import type { PhaseItem } from '../../core/ui';
-import { phaseItem } from '../../core/ui';
+import type { PhaseItem } from '@/core/ui';
+import { phaseItem } from '@/core/ui';
+
 import {
   CLI_DIR,
   CLI_TMP_DIR,

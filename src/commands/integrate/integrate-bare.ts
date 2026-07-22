@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { selectPrompt } from '../../core/ui';
+import { selectPrompt } from '@/core/ui';
+
 import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import { CommandFailedError } from '../_common/error.ts';
 import { assertIntegrateScopeOptions } from './_common/agent-integrate-prelude.ts';

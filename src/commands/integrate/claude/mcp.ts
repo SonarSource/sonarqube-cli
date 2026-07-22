@@ -17,7 +17,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-import { discreetSuccess, info, warn } from '../../../core/ui';
+import { discreetSuccess, info, warn } from '@/core/ui';
+
 import { setupMcpServerForAgent } from '../../../lib/mcp/mcp-helper.ts';
 import { type DiscoveredProject } from '../../../lib/project-workspace';
 

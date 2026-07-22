@@ -18,9 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { PhaseItem } from '@/core/ui';
+import { info, phase, print, success, text, textPrompt, warn } from '@/core/ui';
+
 import { version as VERSION } from '../../../package.json';
-import type { PhaseItem } from '../../core/ui';
-import { info, phase, print, success, text, textPrompt, warn } from '../../core/ui';
 import { loadState, saveState } from '../../lib/repository/state-repository.ts';
 import { type CliState, getDefaultState, type InstalledIntegration } from '../../lib/state.ts';
 import { printAgentNonInteractiveAlternativeHint } from '../_common/agent-prompt-hint.ts';

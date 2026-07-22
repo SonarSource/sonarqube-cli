@@ -27,7 +27,8 @@
 import { homedir } from 'node:os';
 import { sep } from 'node:path';
 
-import { info, note, outro, phase, phaseItem, text } from '../../../../core/ui';
+import { info, note, outro, phase, phaseItem, text } from '@/core/ui';
+
 import type { InstalledIntegrationFeature } from '../../../../lib/state.ts';
 import type { FeatureDeclaration, IntegrationDeclaration, PostInstallExample } from './types.ts';
 

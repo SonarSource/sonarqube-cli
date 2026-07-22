@@ -18,8 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { blank, note, print, withSpinner } from '../../core/ui';
-import { NOTE_STYLES } from '../../core/ui/colors.ts';
+import { blank, note, print, withSpinner } from '@/core/ui';
+import { NOTE_STYLES } from '@/core/ui/colors.ts';
+
 import { ENV_ORG, ENV_SERVER, ENV_TOKEN, resolveFromEnv } from '../../lib/auth-resolver.ts';
 import { getToken as getKeystoreToken } from '../../lib/keychain.ts';
 import { loadState } from '../../lib/repository/state-repository.ts';

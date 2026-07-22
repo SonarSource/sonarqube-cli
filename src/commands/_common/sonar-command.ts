@@ -22,7 +22,8 @@
 
 import { Command } from 'commander';
 
-import { blank, error, print } from '../../core/ui';
+import { blank, error, print } from '@/core/ui';
+
 import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import { resolveAuth } from '../../lib/auth-resolver.ts';
 import logger from '../../lib/logger.ts';

@@ -24,7 +24,8 @@ import { join, resolve } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/core/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '../../../../src/lib/config-constants';
 import { canonicalizePath } from '../../../../src/lib/fs-utils';
 import logger from '../../../../src/lib/logger';

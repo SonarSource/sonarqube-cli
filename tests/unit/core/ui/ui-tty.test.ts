@@ -55,9 +55,9 @@ void mock.module('@/core/ui/colors.js', () => ({
 
 import { mock } from 'bun:test';
 
-import { phase, phaseItem } from '../../../../src/core/ui';
-import { intro, outro } from '../../../../src/core/ui';
-import { blank } from '../../../../src/core/ui';
+import { phase, phaseItem } from '@/core/ui';
+import { intro, outro } from '@/core/ui';
+import { blank } from '@/core/ui';
 
 // ─── phase: TTY rendering ─────────────────────────────────────────────────────
 

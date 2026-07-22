@@ -41,13 +41,7 @@ void mock.module('@/core/ui/colors.js', () => ({
   visibleLength: (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '').length,
 }));
 
-import {
-  clearMockUiCalls,
-  getMockUiCalls,
-  note,
-  setMockUi,
-  stripAnsi,
-} from '../../../../src/core/ui';
+import { clearMockUiCalls, getMockUiCalls, note, setMockUi, stripAnsi } from '@/core/ui';
 
 // ─── Mock mode ────────────────────────────────────────────────────────────────
 

@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { print } from '../../core/ui';
+import { print } from '@/core/ui';
+
 import { type ResolvedAuth } from '../../lib/auth-resolver.ts';
 import { CLOUD_API_DOCS_URL, SERVER_API_DOCS_URL } from '../../lib/config-constants.ts';
 import {

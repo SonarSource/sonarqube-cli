@@ -22,8 +22,9 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { formatCSV } from '../../../../../src/core/ui/formatter/csv.ts';
-import { formatTable } from '../../../../../src/core/ui/formatter/table.ts';
+import { formatCSV } from '@/core/ui/formatter/csv.ts';
+import { formatTable } from '@/core/ui/formatter/table.ts';
+
 import type { SonarQubeIssue } from '../../../../../src/lib/types.ts';
 
 function makeIssue(overrides: Partial<SonarQubeIssue> = {}): SonarQubeIssue {

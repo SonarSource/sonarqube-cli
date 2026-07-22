@@ -20,7 +20,8 @@
 
 // Issues command - search for SonarQube issues
 
-import { print } from '../../core/ui';
+import { print } from '@/core/ui';
+
 import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import { SonarQubeClient } from '../../sonarqube/client.ts';
 import { MAX_PAGE_SIZE, ProjectsClient } from '../../sonarqube/projects.ts';

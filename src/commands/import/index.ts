@@ -18,8 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { info, intro, outro } from '../../core/ui';
-import { ImportProgress } from '../../core/ui/components/import-progress.ts';
+import { info, intro, outro } from '@/core/ui';
+import { ImportProgress } from '@/core/ui/components/import-progress.ts';
+
 import type { ResolvedAuth } from '../../lib/auth-resolver';
 import { runWithConcurrencyLimit } from '../../lib/concurrency-pool';
 import {

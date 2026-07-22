@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { dim, green, red, STATUS_ICONS } from '../../../../core/ui/colors.ts';
+import { dim, green, red, STATUS_ICONS } from '@/core/ui/colors.ts';
+
 import { pluralize } from '../pluralize.ts';
 import type { RiskFilterDescription } from '../risk-filter.ts';
 import {

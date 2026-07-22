@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { info, warn } from '../../../core/ui';
+import { info, warn } from '@/core/ui';
+
 import { AGENTIC_ANALYSIS_DOCS_URL } from '../../../lib/config-constants.ts';
 import { SonarQubeClient, type SqaaEntitlementStatus } from '../../../sonarqube/client.ts';
 

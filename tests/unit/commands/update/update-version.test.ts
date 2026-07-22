@@ -22,7 +22,8 @@ import { EventEmitter } from 'node:events';
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/core/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import { clearNetworkConfigCache } from '../../../../src/lib/connectivity/network-config.ts';
 
 // Mock node:child_process before importing self-update so that the named

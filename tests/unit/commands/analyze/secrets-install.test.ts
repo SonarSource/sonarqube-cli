@@ -26,8 +26,9 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import { buildLocalBinaryName } from '../../../../src/commands/_common/install/secrets.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/core/ui';
 import { detectPlatform } from '../../../../src/lib/platform-detector.ts';
 import * as processLib from '../../../../src/lib/process.ts';
 import * as stateRepository from '../../../../src/lib/repository/state-repository.ts';

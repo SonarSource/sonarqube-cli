@@ -20,8 +20,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/core/ui';
-import { SqaaProgress } from '../../../../src/core/ui/components/sqaa-progress.ts';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+import { SqaaProgress } from '@/core/ui/components/sqaa-progress.ts';
 
 const FILES = ['src/a.ts', 'src/b.ts', 'src/c.ts'];
 

@@ -20,6 +20,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { clearMockUiCalls, findMockUiCall, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import { CommandFailedError } from '../../../../src/commands/_common/error.ts';
 import * as scaInstall from '../../../../src/commands/_common/install/sca-scanner.ts';
 import { ScaScanOrchestrator } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
@@ -29,12 +31,6 @@ import type {
 } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import { ScaWatchPatternsRunner } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-watch-patterns.ts';
 import { runDepRisksStage } from '../../../../src/commands/hook/git-pre-commit-dependency-risks.ts';
-import {
-  clearMockUiCalls,
-  findMockUiCall,
-  getMockUiCalls,
-  setMockUi,
-} from '../../../../src/core/ui';
 import type { ResolvedAuth } from '../../../../src/lib/auth-resolver.ts';
 
 const FAKE_AUTH: ResolvedAuth = {

@@ -27,13 +27,14 @@ import * as fs from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import { CommandFailedError, InvalidOptionError } from '../../../../src/commands/_common/error.ts';
 import * as installSecrets from '../../../../src/commands/_common/install/secrets.ts';
 import {
   analyzeSecrets,
   runSecretsBinaryOnText,
 } from '../../../../src/commands/analyze/secrets.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/core/ui';
 import type { ResolvedAuth } from '../../../../src/lib/auth-resolver.ts';
 import * as processLib from '../../../../src/lib/process.ts';
 import * as stateRepository from '../../../../src/lib/repository/state-repository.ts';

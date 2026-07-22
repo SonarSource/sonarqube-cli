@@ -27,7 +27,8 @@ import {
   success,
   textPrompt,
   warn,
-} from '../../core/ui';
+} from '@/core/ui';
+
 import { cloudRegionFromUrl, isSonarQubeCloud } from '../../lib/auth-resolver.ts';
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '../../lib/config-constants.ts';
 import { deleteStaleTokens, getToken as getKeystoreToken, saveToken } from '../../lib/keychain.ts';

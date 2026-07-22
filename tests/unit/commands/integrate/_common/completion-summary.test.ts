@@ -23,12 +23,13 @@ import { join, sep } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import type { PhaseItem } from '@/core/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import {
   type IntegrationDeclaration,
   renderCompletionSummary,
 } from '../../../../../src/commands/integrate/_common/registry';
-import type { PhaseItem } from '../../../../../src/core/ui';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/core/ui';
 import type { InstalledIntegrationFeature } from '../../../../../src/lib/state.ts';
 
 function installedFeature(

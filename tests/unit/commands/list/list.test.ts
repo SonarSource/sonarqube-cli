@@ -24,8 +24,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
+import { setMockUi } from '@/core/ui';
+
 import { listIssues } from '../../../../src/commands/list/issues.ts';
-import { setMockUi } from '../../../../src/core/ui';
 import type { ResolvedAuth } from '../../../../src/lib/auth-resolver.ts';
 import type {
   IssuesSearchResponse,

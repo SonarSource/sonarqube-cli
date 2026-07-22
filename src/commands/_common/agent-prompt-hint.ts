@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { info, print } from '../../core/ui';
+import { info, print } from '@/core/ui';
+
 import { detectCallerAgent } from '../../lib/agent-detector.ts';
 
 export function printAgentNonInteractiveAlternativeHint(...nonInteractiveExamples: string[]): void {

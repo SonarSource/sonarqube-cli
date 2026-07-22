@@ -20,8 +20,9 @@
 
 // Preflight summaries shown at the start of integrate commands, before install.
 
-import type { PhaseItem, StepStatus } from '../../../core/ui';
-import { info, outro, phase, phaseItem, text } from '../../../core/ui';
+import type { PhaseItem, StepStatus } from '@/core/ui';
+import { info, outro, phase, phaseItem, text } from '@/core/ui';
+
 import type { DiscoveredProject } from '../../../lib/project-workspace';
 import { SonarQubeClient } from '../../../sonarqube/client.ts';
 import { CommandFailedError } from '../../_common/error.ts';

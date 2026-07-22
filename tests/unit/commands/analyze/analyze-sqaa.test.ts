@@ -25,12 +25,13 @@ import * as fs from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import { CommandFailedError, InvalidOptionError } from '../../../../src/commands/_common/error.ts';
 import { analyzeSqaa, buildSqaaJsonReport } from '../../../../src/commands/analyze/sqaa.ts';
 import * as changesetModule from '../../../../src/commands/analyze/sqaa-changeset.ts';
 import { SQAA_HOOK_FEATURE_ID } from '../../../../src/commands/integrate/_common/sqaa-entitlement.ts';
 import { CLAUDE_INTEGRATION_ID } from '../../../../src/commands/integrate/claude/declaration.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/core/ui';
 import * as processLib from '../../../../src/lib/process.ts';
 import * as stateRepository from '../../../../src/lib/repository/state-repository.ts';
 import { CliState, getDefaultState } from '../../../../src/lib/state.ts';

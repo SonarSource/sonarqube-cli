@@ -21,7 +21,8 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { withSpinner } from '../../../core/ui';
+import { withSpinner } from '@/core/ui';
+
 import type { ResolvedAuth } from '../../../lib/auth-resolver.ts';
 import { SCA_SCANNER_CACHE_DIR } from '../../../lib/config-constants.ts';
 import logger, { getLogLevelConfig } from '../../../lib/logger.ts';

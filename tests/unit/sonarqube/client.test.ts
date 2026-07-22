@@ -20,8 +20,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import { version as VERSION } from '../../../package.json';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../src/core/ui';
 import {
   SONARCLOUD_API_URL,
   SONARCLOUD_URL,

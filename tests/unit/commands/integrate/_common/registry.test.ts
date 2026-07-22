@@ -72,8 +72,7 @@ async function selectForInvocation<TOptions>(
   return selectFeaturesForInvocation(integration, invocation, applications);
 }
 
-const { findMockUiCall, getMockUiCalls, queueMockResponse, setMockUi } =
-  await import('../../../../../src/core/ui');
+const { findMockUiCall, getMockUiCalls, queueMockResponse, setMockUi } = await import('@/core/ui');
 
 describe('declarative integration framework', () => {
   const installer = new IntegrationInstaller();

@@ -20,12 +20,13 @@
 
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
 
+import { clearMockUiCalls, setMockUi } from '@/core/ui';
+
 import * as token from '../../../../../src/commands/_common/token.ts';
 import * as contextAugmentation from '../../../../../src/commands/integrate/_common/context-augmentation.ts';
 import * as registry from '../../../../../src/commands/integrate/_common/registry';
 import { integrateCopilot } from '../../../../../src/commands/integrate/copilot';
 import * as hooks from '../../../../../src/commands/integrate/copilot/hooks.ts';
-import { clearMockUiCalls, setMockUi } from '../../../../../src/core/ui';
 import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.ts';
 import type { DiscoveredProject } from '../../../../../src/lib/project-workspace';
 import * as discovery from '../../../../../src/lib/project-workspace';

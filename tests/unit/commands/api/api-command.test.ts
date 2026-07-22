@@ -20,8 +20,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import { apiCommand } from '../../../../src/commands/api/api.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/core/ui';
 import type { ResolvedAuth } from '../../../../src/lib/auth-resolver.ts';
 import { SonarQubeClient } from '../../../../src/sonarqube/client.ts';
 

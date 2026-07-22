@@ -31,7 +31,8 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { Command } from 'commander';
 
-import * as ui from '../../../src/core/ui';
+import * as ui from '@/core/ui';
+
 import * as agentDetector from '../../../src/lib/agent-detector.js';
 import * as authResolver from '../../../src/lib/auth-resolver.js';
 import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '../../../src/lib/auth-resolver.js';

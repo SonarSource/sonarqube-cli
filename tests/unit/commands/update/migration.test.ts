@@ -24,7 +24,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { setMockUi } from '../../../../src/core/ui';
+import { setMockUi } from '@/core/ui';
+
 import {
   cleanObsoleteFromState,
   migrateHookScripts,

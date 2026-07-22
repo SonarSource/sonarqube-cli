@@ -24,7 +24,8 @@ import { spawn } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 
-import { warn } from '../../core/ui';
+import { warn } from '@/core/ui';
+
 import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import { getNetworkConfigOrThrow } from '../../lib/connectivity/network-config.ts';
 import type { ResolvedNetworkConfig } from '../../lib/connectivity/types.ts';

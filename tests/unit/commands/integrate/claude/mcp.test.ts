@@ -25,8 +25,9 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { getMockUiCalls, setMockUi } from '@/core/ui';
+
 import { setupMcpServer } from '../../../../../src/commands/integrate/claude/mcp.ts';
-import { getMockUiCalls, setMockUi } from '../../../../../src/core/ui';
 import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.ts';
 import {
   CLI_TMP_DIR,

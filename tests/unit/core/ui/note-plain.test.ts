@@ -37,7 +37,7 @@ void mock.module('@/core/ui/colors.js', () => ({
 
 import { mock } from 'bun:test';
 
-import { note } from '../../../../src/core/ui';
+import { note } from '@/core/ui';
 
 describe('note: renderPlain (non-TTY)', () => {
   it('writes content to stdout without box characters', () => {

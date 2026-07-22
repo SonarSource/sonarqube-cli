@@ -18,8 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { print } from '../../core/ui';
-import { SqaaProgress } from '../../core/ui/components/sqaa-progress.ts';
+import { print } from '@/core/ui';
+import { SqaaProgress } from '@/core/ui/components/sqaa-progress.ts';
+
 import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import { timed } from '../../lib/timed.ts';
 import type { SqaaAnalysisDepth } from '../../sonarqube/client.ts';

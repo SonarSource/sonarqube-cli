@@ -20,8 +20,9 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 
-import { blank, print, success, warn } from '../../core/ui';
-import { green, yellow } from '../../core/ui/colors.ts';
+import { blank, print, success, warn } from '@/core/ui';
+import { green, yellow } from '@/core/ui/colors.ts';
+
 import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import { buildSubprocessNetworkEnv } from '../../lib/connectivity/network-config.ts';
 import logger from '../../lib/logger.ts';

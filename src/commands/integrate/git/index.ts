@@ -23,8 +23,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { blank, confirmPrompt, info, intro, phase, phaseItem, text, warn } from '../../../core/ui';
-import { yellow } from '../../../core/ui/colors.ts';
+import { blank, confirmPrompt, info, intro, phase, phaseItem, text, warn } from '@/core/ui';
+import { yellow } from '@/core/ui/colors.ts';
+
 import type { ResolvedAuth } from '../../../lib/auth-resolver.ts';
 import { GLOBAL_HOOKS_DIR } from '../../../lib/config-constants.ts';
 import { normalizePath } from '../../../lib/fs-utils.ts';

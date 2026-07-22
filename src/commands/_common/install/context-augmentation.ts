@@ -21,7 +21,8 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { text, withSpinner } from '../../../core/ui';
+import { text, withSpinner } from '@/core/ui';
+
 import { BIN_DIR } from '../../../lib/config-constants.ts';
 import {
   buildCagPlatformSuffix,

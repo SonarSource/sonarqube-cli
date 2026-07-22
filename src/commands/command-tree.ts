@@ -20,8 +20,9 @@
 
 import { type Command, Help, InvalidArgumentError, Option } from 'commander';
 
+import { blank, error, warn } from '@/core/ui';
+
 import { version as VERSION } from '../../package.json';
-import { blank, error, warn } from '../core/ui';
 import { CURRENT_DISTRIBUTION } from '../lib/distribution.ts';
 import { tryLoadState } from '../lib/repository/state-repository.ts';
 import { initSentry } from '../lib/sentry.ts';

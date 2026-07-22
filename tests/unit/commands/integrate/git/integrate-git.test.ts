@@ -23,6 +23,8 @@ import { isAbsolute, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { clearMockUiCalls, getMockUiCalls, queueMockResponse, setMockUi } from '@/core/ui';
+
 import {
   CommandFailedError,
   InvalidOptionError,
@@ -43,12 +45,6 @@ import {
 } from '../../../../../src/commands/integrate/git/tools/native';
 import { PRE_COMMIT_CONFIG_FILE } from '../../../../../src/commands/integrate/git/tools/pre-commit';
 import { LEGACY_HOOK_MARKER } from '../../../../../src/commands/integrate/git/tools/shared.ts';
-import {
-  clearMockUiCalls,
-  getMockUiCalls,
-  queueMockResponse,
-  setMockUi,
-} from '../../../../../src/core/ui';
 import { GLOBAL_HOOKS_DIR } from '../../../../../src/lib/config-constants.ts';
 import * as processLib from '../../../../../src/lib/process.ts';
 import * as discovery from '../../../../../src/lib/project-workspace';

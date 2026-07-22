@@ -20,7 +20,8 @@
 
 import { rmSync } from 'node:fs';
 
-import { warn, withSpinner } from '../../../core/ui';
+import { warn, withSpinner } from '@/core/ui';
+
 import { LOG_FILE } from '../../../lib/config-constants.ts';
 import { buildSubprocessNetworkEnv } from '../../../lib/connectivity/network-config.ts';
 import logger from '../../../lib/logger.ts';

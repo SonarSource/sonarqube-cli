@@ -23,8 +23,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as readline from 'node:readline';
 
-import { isMockActive, pressEnterKeyPrompt, print, warn } from '../../core/ui';
-import { blue } from '../../core/ui/colors.ts';
+import { isMockActive, pressEnterKeyPrompt, print, warn } from '@/core/ui';
+import { blue } from '@/core/ui/colors.ts';
+
 import { isSonarQubeCloud } from '../../lib/auth-resolver.ts';
 import { openBrowser } from '../../lib/browser.ts';
 import logger from '../../lib/logger.ts';

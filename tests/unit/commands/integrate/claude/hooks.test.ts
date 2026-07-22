@@ -23,12 +23,13 @@ import * as fsPromises from 'node:fs/promises';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import {
   areHooksInstalled,
   detectGlobalSecretsHook,
   installHooks,
 } from '../../../../../src/commands/integrate/claude/hooks.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/core/ui';
 
 const PROJECT_ROOT = '/fake/project';
 const GLOBAL_DIR = '/fake/global';

@@ -25,9 +25,10 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { Command } from 'commander';
 
+import { setFormattedOutputMode } from '@/core/ui';
+
 import { version as CURRENT_VERSION } from '../../../package.json';
 import { COMMAND_TREE } from '../../../src/commands/command-tree.ts';
-import { setFormattedOutputMode } from '../../../src/core/ui';
 import { TELEMETRY_FLUSH_MODE_ENV } from '../../../src/telemetry/index.js';
 
 const originalEnvForNotify = { ...process.env };
