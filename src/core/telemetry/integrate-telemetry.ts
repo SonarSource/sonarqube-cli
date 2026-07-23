@@ -23,8 +23,8 @@ import { createHash } from 'node:crypto';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 
 import { canonicalizePath } from '../../lib/fs-utils.ts';
-import logger from '../../lib/logger.ts';
 import type { InstalledIntegrationFeature, IntegrationScope } from '../../lib/state.ts';
+import logger from '../observability/logger.ts';
 import { emitIntegrationConfigured } from './telemetry-events.ts';
 
 export interface IntegrationConfiguredTelemetryParams {

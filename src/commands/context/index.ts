@@ -22,12 +22,12 @@ import { spawn } from 'node:child_process';
 
 import { resolveAuth, type ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { getToken } from '@/core/host/keychain.ts';
+import logger from '@/core/observability/logger.ts';
 
 import { resolveContextWorkspaceRoot } from '../../core/host/git-worktree.ts';
 import { selectRecordedFeatureForDir } from '../../core/host/recorded-feature-resolver.ts';
 import { SONAR_CONTEXT_INVOCATION } from '../../lib/config-constants.ts';
 import { canonicalizePath } from '../../lib/fs-utils.ts';
-import logger from '../../lib/logger.ts';
 import type { InstalledIntegrationFeature, IntegrationStateAttribute } from '../../lib/state.ts';
 import { loadState } from '../../lib/state-manager.ts';
 import { buildContextAugmentationEnv } from '../_common/context-augmentation-env.ts';

@@ -38,7 +38,6 @@ import { appendTelemetryEvent } from '@/core/telemetry/telemetry-events.ts';
 
 import { version as CURRENT_VERSION } from '../../../package.json';
 import { getTelemetryDir } from '../../lib/config-constants.ts';
-import logger from '../../lib/logger.ts';
 import {
   loadState,
   saveState,
@@ -46,6 +45,7 @@ import {
   tryLoadState,
 } from '../../lib/repository/state-repository.ts';
 import type { CliState, HookExtension, InstalledIntegrationFeature } from '../../lib/state.ts';
+import logger from '../observability/logger.ts';
 import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from './install-types.ts';
 import {
   cleanObsoleteFromState,

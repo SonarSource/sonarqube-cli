@@ -22,6 +22,7 @@ import { type Command, Help, InvalidArgumentError, Option } from 'commander';
 
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import { maybeNotifyUpdateAvailable } from '@/core/host/update-notification.ts';
+import { initSentry } from '@/core/observability/sentry.ts';
 import { GENERIC_HTTP_METHODS } from '@/core/server/client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import {
@@ -35,10 +36,9 @@ import {
   SQAA_VERIFY_CALLER_COMMAND,
 } from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 import { blank, error, warn } from '@/core/ui';
+import { tryLoadState } from '@/lib/repository/state-repository.ts';
 
 import { version as VERSION } from '../../package.json';
-import { tryLoadState } from '../lib/repository/state-repository.ts';
-import { initSentry } from '../lib/sentry.ts';
 import { CommandFailedError } from './_common/error.ts';
 import { parseInteger } from './_common/parsing.ts';
 import { SonarCommand } from './_common/sonar-command.ts';

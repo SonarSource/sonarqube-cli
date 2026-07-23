@@ -21,10 +21,10 @@
 import { rmSync } from 'node:fs';
 
 import { buildSubprocessNetworkEnv } from '@/core/host/connectivity/network-config.ts';
+import logger from '@/core/observability/logger.ts';
 import { warn, withSpinner } from '@/core/ui';
 
 import { LOG_FILE } from '../../../lib/config-constants.ts';
-import logger from '../../../lib/logger.ts';
 import type { SpawnResult } from '../../../lib/process.ts';
 import { CommandFailedError } from '../../_common/error.ts';
 import { type ScaScannerInstaller } from '../../_common/install/sca-scanner.ts';

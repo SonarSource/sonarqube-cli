@@ -26,10 +26,10 @@ import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { isSonarQubeCloud } from '@/core/host/auth-resolver.ts';
 import { resolveRecordedRepoRoot } from '@/core/host/git-worktree.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
+import logger from '@/core/observability/logger.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { discreetSuccess, type OutputChannel, print, text, warn, withSpinner } from '@/core/ui';
 import { SONAR_CONTEXT_INVOCATION } from '@/lib/config-constants.ts';
-import logger from '@/lib/logger.ts';
 import type { IntegrationStateAttribute } from '@/lib/state.ts';
 
 export interface ResolveContextAugmentationSetupParams {

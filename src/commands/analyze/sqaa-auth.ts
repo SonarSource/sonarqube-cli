@@ -21,10 +21,10 @@
 // Auth and project-key resolution for SQAA commands.
 
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { selectRecordedFeatureForDir } from '@/core/host/recorded-feature-resolver.ts';
+import logger from '@/core/observability/logger.ts';
 import { blank, confirmPrompt, text, warn } from '@/core/ui';
 
-import { selectRecordedFeatureForDir } from '../../core/host/recorded-feature-resolver.ts';
-import logger from '../../lib/logger.ts';
 import { loadState } from '../../lib/repository/state-repository.ts';
 import type { IntegrationStateAttribute } from '../../lib/state.ts';
 import { printAgentNonInteractiveAlternativeHint } from '../_common/agent-prompt-hint.ts';

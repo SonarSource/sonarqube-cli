@@ -20,7 +20,8 @@
 
 import picomatch from 'picomatch';
 
-import logger from '../../../lib/logger.ts';
+import logger from '@/core/observability/logger.ts';
+
 import type { ScaScannerInstaller } from '../../_common/install/sca-scanner.ts';
 import type { ScaScannerSpawner } from './sca-scanner-spawner.ts';
 

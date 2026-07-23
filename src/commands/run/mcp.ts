@@ -33,11 +33,11 @@ import {
   resolveMcpContainerCommand,
 } from '@/core/host/mcp/mcp-helper.ts';
 import { detectContainerRuntime } from '@/core/host/tool-detector.ts';
+import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { warn } from '@/core/ui';
 
 import { canonicalizePath } from '../../lib/fs-utils.ts';
-import logger from '../../lib/logger.ts';
 import { CommandFailedError } from '../_common/error.ts';
 
 export interface McpRunOptions {

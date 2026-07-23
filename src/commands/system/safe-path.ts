@@ -21,7 +21,7 @@
 import { existsSync, realpathSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
-import logger from '../../lib/logger.ts';
+import logger from '@/core/observability/logger.ts';
 
 /**
  * Resolve symlinks on the deepest existing prefix, then re-append any missing
