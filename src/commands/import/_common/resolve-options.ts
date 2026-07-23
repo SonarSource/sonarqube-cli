@@ -19,17 +19,9 @@
  */
 
 import { type DopRepository, type SonarQubeClient } from '@/core/server/client.ts';
-import {
-  confirmPrompt,
-  type MultiSelectOption,
-  multiSelectPrompt,
-  selectPrompt,
-  warn,
-  withSpinner,
-} from '@/core/ui';
+import { type MultiSelectOption, multiSelectPrompt, selectPrompt, withSpinner } from '@/core/ui';
 
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
-import { OrganizationCollection } from './organization-collection';
 import {
   type FetchPage,
   isAlreadyImported,
@@ -44,12 +36,12 @@ const GITHUB_ALM_KEY = 'github';
 
 export interface ResolvedOrg {
   key: string;
-  /** Undefined if no org matches `key`, or the org has no DevOps platform connected. */
+  /** Undefined if the org has no DevOps platform connected. */
   almKey?: string;
   /**
-   * `Organization.onlyPrivateProjects.enabled`. Undefined if no org matches `key` — a
-   * network/API failure resolving the org is NOT folded into this, it throws instead (see
-   * `resolveOrg`'s `--org` branch), so callers can safely default this to `false` (no
+   * `Organization.onlyPrivateProjects.enabled`. Undefined only when the org itself has it
+   * unset — a network/API failure or a missing/non-admin org is NOT folded into this, it
+   * throws instead (see `resolveOrgByKey`), so callers can safely default this to `false` (no
    * restriction) without silently disabling visibility enforcement on a transient error. The
    * `available` half of `OnlyPrivateProjects` comes from a separate billing entitlement
    * check, not from here.
@@ -96,9 +88,14 @@ function formatRepoLabel(
   return `${repo.slug} - ${visibility}${suffix}`;
 }
 
+/**
+ * Resolve the organization to import into: always the one already tied to the active
+ * connection (`auth.orgKey`), never chosen interactively. Still verifies the org exists and
+ * that the caller is an admin of it before proceeding.
+ */
 export async function resolveOrg(
   client: SonarQubeClient,
-  opts: { org?: string; nonInteractive?: boolean },
+  orgKey: string | undefined,
 ): Promise<ResolvedOrg> {
   if (!client.isCloud) {
     throw new CommandFailedError('sonar import is only supported on SonarQube Cloud.', {
@@ -106,18 +103,13 @@ export async function resolveOrg(
     });
   }
 
-  if (opts.org) {
-    return resolveOrgByKey(client, opts.org);
+  if (!orgKey) {
+    throw new CommandFailedError('No SonarQube Cloud organization is configured.', {
+      remediationHint: "Run 'sonar auth login' and connect to an organization, then retry.",
+    });
   }
 
-  if (opts.nonInteractive) {
-    throw new InvalidOptionError(
-      '--org is required in non-interactive mode',
-      'Pass --org <key> to specify an organization key directly.',
-    );
-  }
-
-  return promptForOrg(client);
+  return resolveOrgByKey(client, orgKey);
 }
 
 async function resolveOrgByKey(client: SonarQubeClient, orgKey: string): Promise<ResolvedOrg> {
@@ -130,78 +122,41 @@ async function resolveOrgByKey(client: SonarQubeClient, orgKey: string): Promise
       { remediationHint: 'Check your network connection and authentication, then retry.' },
     );
   }
-  return {
-    key: orgKey,
-    almKey: org?.alm?.key,
-    onlyPrivateProjectsEnabled: org?.onlyPrivateProjects?.enabled,
-  };
-}
 
-async function promptForOrg(client: SonarQubeClient): Promise<ResolvedOrg> {
-  let orgs: OrganizationCollection;
-  try {
-    orgs = new OrganizationCollection(
-      await withSpinner('Loading organizations...', () => client.fetchAllUserOrganizations()),
-    );
-  } catch (err) {
-    throw new CommandFailedError(
-      `Failed to load organizations: ${err instanceof Error ? err.message : String(err)}`,
-      { remediationHint: 'Check your network connection and authentication, then retry.' },
-    );
-  }
-
-  const eligible = orgs.withAdmin().withAlm();
-
-  if (eligible.length === 0) {
-    throw new CommandFailedError('No eligible organizations found.', {
-      remediationHint:
-        'You must be an admin of an organization that has a DevOps platform (GitHub, GitLab, Azure DevOps, or Bitbucket) connected.',
+  if (!org) {
+    throw new CommandFailedError(`Organization '${orgKey}' not found.`, {
+      remediationHint: 'Check that the organization key is correct and that you have access to it.',
     });
   }
 
-  const LOAD_MORE = Symbol('load-more');
-
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  while (true) {
-    const options: Array<{ value: ResolvedOrg | typeof LOAD_MORE; label: string }> =
-      eligible.visible.map((org) => ({
-        value: {
-          key: org.key,
-          almKey: org.alm?.key,
-          onlyPrivateProjectsEnabled: org.onlyPrivateProjects?.enabled,
-        },
-        label: `${org.name} (${org.key})`,
-      }));
-
-    if (eligible.hasMore) {
-      options.push({ value: LOAD_MORE, label: 'Load more...' });
-    }
-
-    const choice = await selectPrompt('Select an organization', options);
-
-    if (choice === null) {
-      throw new CommandFailedError('Organization selection cancelled');
-    }
-
-    if (choice === LOAD_MORE) {
-      eligible.loadMore();
-      continue;
-    }
-
-    return choice;
+  if (org.actions?.admin !== true) {
+    throw new CommandFailedError(
+      `You must be an administrator of organization '${orgKey}' to import repositories.`,
+      { remediationHint: 'Ask an administrator of this organization to run the import instead.' },
+    );
   }
+
+  return {
+    key: orgKey,
+    almKey: org.alm?.key,
+    onlyPrivateProjectsEnabled: org.onlyPrivateProjects?.enabled,
+  };
 }
 
-/** Returned by `resolveRepos` when the user chooses "← Back" from the onboarding-mode prompt. */
-export const BACK = Symbol('back');
+/**
+ * Internal-only signal: returned by `promptForReposFromCollection` when its picker is
+ * cancelled, so `resolveOnboardingMode`'s loop can redisplay the mode menu. Never escapes
+ * `resolveOnboardingMode`.
+ */
+const BACK = Symbol('back');
 
 export async function resolveRepos(
   client: SonarQubeClient,
   orgKey: string,
   almKey: string | undefined,
   onlyPrivateProjects: OnlyPrivateProjects,
-  opts: { org?: string; repo?: string[]; all?: boolean; nonInteractive?: boolean },
-): Promise<RepoResolution | typeof BACK> {
+  opts: { repo?: string[]; all?: boolean; nonInteractive?: boolean },
+): Promise<RepoResolution> {
   if (opts.all && opts.repo?.length) {
     throw new InvalidOptionError(
       '--all cannot be combined with --repo',
@@ -238,11 +193,7 @@ export async function resolveRepos(
     return { kind: 'batch', repos, skipped: [] };
   }
 
-  // "← Back" only makes sense when the org itself was chosen interactively — an org pinned
-  // via `--org` has nowhere to go back to, so re-prompting for it would just loop forever.
-  return resolveOnboardingMode(client, organizationId, almKey, onlyPrivateProjects, {
-    allowBack: !opts.org,
-  });
+  return resolveOnboardingMode(client, organizationId, almKey, onlyPrivateProjects);
 }
 
 /**
@@ -282,34 +233,20 @@ async function createRepositoryCollectionOrThrow(
 }
 
 /**
- * Throws with a specific reason when an org has nothing importable — offering to go back to
- * organization selection first when that's a valid escape hatch (an org pinned via `--org` has
- * nowhere to go back to). `RepositoryCollection.create` only stops early once it finds an
- * eligible repo, so this is only called once every fetched page has been fully scanned.
+ * Throws with a specific reason when an org has nothing importable. `RepositoryCollection.create`
+ * only stops early once it finds an eligible repo, so this is only called once every fetched page
+ * has been fully scanned.
  */
-async function handleNoEligibleRepos(
-  collection: RepositoryCollection,
-  allowBack: boolean,
-): Promise<typeof BACK> {
+function handleNoEligibleRepos(collection: RepositoryCollection): never {
   const reason = collection.skippedRepos.every((repo) => repo.reason === 'already imported')
     ? 'All repositories for the selected organization have already been imported into SonarQube.'
     : "No repositories match this organization's project visibility settings.";
-
-  if (!allowBack) {
-    throw new CommandFailedError(reason);
-  }
-
-  warn(reason);
-  const goBack = await confirmPrompt('Go back and choose a different organization?', true);
-  if (!goBack) {
-    throw new CommandFailedError(reason);
-  }
-  return BACK;
+  throw new CommandFailedError(reason);
 }
 
 /**
  * Ask how the user wants to pick repositories to import: bulk-import everything eligible
- * (mirrors `--all`), choose specific ones interactively, or go back to organization selection.
+ * (mirrors `--all`) or choose specific ones interactively.
  *
  * The collection is loaded just far enough to know whether anything is eligible before the
  * prompt is even shown, so an org with nothing importable fails immediately with a specific
@@ -322,8 +259,7 @@ async function resolveOnboardingMode(
   organizationId: string,
   almKey: string | undefined,
   onlyPrivateProjects: OnlyPrivateProjects,
-  opts: { allowBack: boolean },
-): Promise<RepoResolution | typeof BACK> {
+): Promise<RepoResolution> {
   const collection = await createRepositoryCollectionOrThrow(
     client,
     organizationId,
@@ -331,32 +267,25 @@ async function resolveOnboardingMode(
   );
 
   if (collection.eligibleRepos.length === 0) {
-    return handleNoEligibleRepos(collection, opts.allowBack);
+    handleNoEligibleRepos(collection);
   }
 
   const RECOMMENDED = Symbol('recommended');
   const MANUAL = Symbol('manual');
 
-  const options: Array<{ value: typeof RECOMMENDED | typeof MANUAL | typeof BACK; label: string }> =
-    [
-      { value: RECOMMENDED, label: 'Recommended — import all eligible repositories automatically' },
-      { value: MANUAL, label: 'Manual — choose repositories yourself' },
-    ];
-  if (opts.allowBack) {
-    options.push({ value: BACK, label: '← Back' });
-  }
+  const options: Array<{ value: typeof RECOMMENDED | typeof MANUAL; label: string }> = [
+    { value: RECOMMENDED, label: 'Recommended — import all eligible repositories automatically' },
+    { value: MANUAL, label: 'Manual — choose repositories yourself' },
+  ];
 
   // Cancelling the "Manual" picker (below) re-shows this same menu instead of ending the
-  // command, so the user can pick a different mode (or go back further) rather than starting
-  // `sonar import` over from scratch.
+  // command, so the user can pick a different mode rather than starting `sonar import` over
+  // from scratch.
   for (;;) {
     const choice = await selectPrompt('How do you want to import repositories?', options);
 
     if (choice === null) {
       throw new CommandFailedError('Repository selection cancelled');
-    }
-    if (choice === BACK) {
-      return BACK;
     }
     if (choice === RECOMMENDED) {
       return { kind: 'streaming', collection };
@@ -547,8 +476,8 @@ async function promptForReposFromCollection(
     total: () => collection.eligibleRepos.length,
   });
 
-  // Cancelling (q / Ctrl+C) goes back to the Recommended/Manual/← Back menu that led here,
-  // rather than ending the whole command — the caller (`resolveOnboardingMode`) re-shows it.
+  // Cancelling (q / Ctrl+C) goes back to the Recommended/Manual menu that led here, rather
+  // than ending the whole command — the caller (`resolveOnboardingMode`) re-shows it.
   if (result === null) {
     return BACK;
   }

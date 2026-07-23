@@ -80,100 +80,14 @@ describe('sonar import', () => {
     { timeout: 15000 },
   );
 
-  describe('organization selection', () => {
+  describe('organization resolution', () => {
     it(
-      'prompts to select org even when only one eligible org exists',
+      'never lists member organizations, resolving only the org tied to the active connection',
       async () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
           .withOrganizations([
-            { key: 'my-org', name: 'My Organization', alm: GITHUB_ALM, actions: ADMIN_ACTIONS },
-          ])
-          .withDopRepositories('my-org', SAMPLE_REPOS)
-          .start();
-        const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
-
-        const result = await harness.run('import', {
-          stdinChunks: ['\r', ' \r'], // enter → selects the only org, space+enter → toggles and confirms the only repo
-          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
-        });
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('my-org');
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      'filters out orgs with no DevOps platform and prompts with the remaining one',
-      async () => {
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('test-token')
-          .withOrganizations([
-            {
-              key: 'org-configured',
-              name: 'Configured Org',
-              alm: GITHUB_ALM,
-              actions: ADMIN_ACTIONS,
-            },
-            { key: 'org-empty', name: 'Empty Org' },
-          ])
-          .withDopRepositories('org-configured', SAMPLE_REPOS)
-          .start();
-        const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
-
-        const result = await harness.run('import', {
-          stdinChunks: ['\r', ' \r'], // enter → selects the only eligible org, space+enter → toggles and confirms the only repo
-          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
-        });
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('org-configured');
-        // org-empty is filtered out of the select prompt's options, even though it still
-        // appears in the raw `/api/organizations/search` response the debug trace logs.
-        expect(result.stdout).not.toContain('Empty Org (org-empty)');
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      'prompts to select org when multiple orgs have a DevOps platform configured',
-      async () => {
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('test-token')
-          .withOrganizations([
-            { key: 'org-one', name: 'Organization One', alm: GITHUB_ALM, actions: ADMIN_ACTIONS },
-            { key: 'org-two', name: 'Organization Two', alm: GITHUB_ALM, actions: ADMIN_ACTIONS },
-          ])
-          .withDopRepositories('org-two', SAMPLE_REPOS)
-          .start();
-        const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
-
-        const result = await harness.run('import', {
-          stdinChunks: ['\x1b[B\r', ' \r'], // down arrow + enter → selects second org, space+enter → toggles and confirms the only repo
-          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
-        });
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('org-two');
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      'uses --org flag and skips listing all member organizations',
-      async () => {
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('test-token')
-          .withOrganizations([
-            { key: 'org-one', name: 'Organization One', alm: GITHUB_ALM, actions: ADMIN_ACTIONS },
             { key: 'org-two', name: 'Organization Two', alm: GITHUB_ALM, actions: ADMIN_ACTIONS },
           ])
           .withDopRepositories('org-two', [
@@ -181,17 +95,15 @@ describe('sonar import', () => {
           ])
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'org-two');
 
-        const result = await harness.run('import --org org-two --repo org-two/some-repo', {
+        const result = await harness.run('import --repo org-two/some-repo', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('org-two');
         const recorded = server.getRecordedRequests();
-        // --org still resolves the single org's alm/visibility settings via a targeted
-        // lookup, but must never list every organization the user is a member of.
         expect(
           recorded.some((r) => r.path === '/api/organizations/search' && r.query.member === 'true'),
         ).toBe(false);
@@ -205,142 +117,7 @@ describe('sonar import', () => {
     );
 
     it(
-      'exits with code 2 when --non-interactive is set without --org',
-      async () => {
-        const server = await harness.newFakeServer().withAuthToken('test-token').start();
-        const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
-
-        const result = await harness.run('import --non-interactive', {
-          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
-        });
-
-        expect(result.exitCode).toBe(2);
-        const output = result.stdout + result.stderr;
-        expect(output).toContain('--org is required in non-interactive mode');
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      'succeeds with --non-interactive when --org and --repo are provided',
-      async () => {
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('test-token')
-          .withDopRepositories('my-org', [
-            { id: 'repo-1', name: 'some-repo', slug: 'my-org/some-repo' },
-          ])
-          .start();
-        const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
-
-        const result = await harness.run(
-          'import --non-interactive --org my-org --repo my-org/some-repo',
-          { extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl } },
-        );
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('my-org');
-        expect(result.stdout).toContain('my-org/some-repo');
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      'exits with code 1 when no organizations have a DevOps platform configured',
-      async () => {
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization' }])
-          .start();
-        const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
-
-        const result = await harness.run('import', {
-          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
-        });
-
-        expect(result.exitCode).toBe(1);
-        const output = result.stdout + result.stderr;
-        expect(output).toContain('No eligible organizations found');
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      'shows a "Load more..." option when more than 10 eligible orgs exist and advances when selected',
-      async () => {
-        const manyOrgs = Array.from({ length: 11 }, (_, i) => ({
-          key: `org-${String(i + 1).padStart(2, '0')}`,
-          name: `Organization ${i + 1}`,
-          alm: GITHUB_ALM,
-          actions: ADMIN_ACTIONS,
-        }));
-
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('test-token')
-          .withOrganizations(manyOrgs)
-          .withDopRepositories('org-11', SAMPLE_REPOS)
-          .start();
-        const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
-
-        // navigate to "Load more...", select it, pick the 11th org, then select the only repo
-        const result = await harness.run('import', {
-          stdinChunks: ['\x1b[B'.repeat(10) + '\r', '\x1b[B'.repeat(10) + '\r', ' \r'],
-          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
-        });
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('org-11');
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      'selects an org whose key collides with the load-more sentinel string',
-      async () => {
-        const manyOrgs = [
-          {
-            key: '__load_more__',
-            name: 'Sentinel-named Org',
-            alm: GITHUB_ALM,
-            actions: ADMIN_ACTIONS,
-          },
-          ...Array.from({ length: 10 }, (_, i) => ({
-            key: `org-${String(i + 1).padStart(2, '0')}`,
-            name: `Organization ${i + 1}`,
-            alm: GITHUB_ALM,
-            actions: ADMIN_ACTIONS,
-          })),
-        ];
-
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('test-token')
-          .withOrganizations(manyOrgs)
-          .withDopRepositories('__load_more__', SAMPLE_REPOS)
-          .start();
-        const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
-
-        // first visible option is the org whose key equals the internal sentinel string
-        const result = await harness.run('import', {
-          stdinChunks: ['\r', ' \r'], // enter → selects the sentinel-keyed org, space+enter → toggles and confirms the only repo
-          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
-        });
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('__load_more__');
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      'exits with code 1 when the user is not an admin of any bound organization',
+      'exits with code 1 when the user is not an admin of the organization',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -350,7 +127,7 @@ describe('sonar import', () => {
           ])
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
         const result = await harness.run('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
@@ -358,13 +135,31 @@ describe('sonar import', () => {
 
         expect(result.exitCode).toBe(1);
         const output = result.stdout + result.stderr;
-        expect(output).toContain('No eligible organizations found');
+        expect(output).toContain("You must be an administrator of organization 'my-org'");
       },
       { timeout: 15000 },
     );
 
     it(
-      'exits with code 1 rather than silently disabling visibility rules when the --org lookup fails',
+      'exits with code 1 when the organization is not found',
+      async () => {
+        const server = await harness.newFakeServer().withAuthToken('test-token').start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        const result = await harness.run('import', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain("Organization 'my-org' not found.");
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'exits with code 1 rather than silently disabling visibility rules when the org lookup fails',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -372,9 +167,9 @@ describe('sonar import', () => {
           .withOrganizationsSearchError(500)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --org my-org', {
+        const result = await harness.run('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
@@ -388,20 +183,21 @@ describe('sonar import', () => {
 
   describe('onboarding mode selection', () => {
     it(
-      'offers Recommended, Manual, and Back, importing everything eligible when Recommended is chosen',
+      'offers Recommended and Manual, importing everything eligible when Recommended is chosen',
       async () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', [
             { id: 'repo-1', name: 'repo-1', slug: 'my-org/repo-1' },
             { id: 'repo-2', name: 'repo-2', slug: 'my-org/repo-2' },
           ])
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --org my-org', {
+        const result = await harness.run('import', {
           stdin: '\r', // enter → Recommended (the default, first option)
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
@@ -412,6 +208,7 @@ describe('sonar import', () => {
           'Recommended — import all eligible repositories automatically',
         );
         expect(result.stdout).toContain('Manual — choose repositories yourself');
+        expect(result.stdout).not.toContain('← Back');
         expect(result.stdout).toContain('Imported 2 repositories');
         expect(result.stdout).toContain(
           `Dashboard: ${serverUrl}/organizations/my-org/onboarding-dashboard`,
@@ -426,88 +223,23 @@ describe('sonar import', () => {
     );
 
     it(
-      'omits "← Back" when --org pins the organization',
+      'cancelling the Manual picker returns to the Recommended/Manual menu',
       async () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withDopRepositories('my-org', [{ id: 'repo-1', name: 'repo-1', slug: 'my-org/repo-1' }])
-          .start();
-        const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
-
-        const result = await harness.run('import --org my-org', {
-          stdin: '\r',
-          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
-        });
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).not.toContain('← Back');
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      '"← Back" returns to organization selection and re-resolves the newly chosen org',
-      async () => {
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('test-token')
-          .withOrganizations([
-            { key: 'org-one', name: 'Organization One', alm: GITHUB_ALM, actions: ADMIN_ACTIONS },
-            { key: 'org-two', name: 'Organization Two', alm: GITHUB_ALM, actions: ADMIN_ACTIONS },
-          ])
-          .withDopRepositories('org-one', [
-            { id: 'repo-1', name: 'repo-one', slug: 'org-one/repo-one' },
-          ])
-          .withDopRepositories('org-two', [
-            { id: 'repo-2', name: 'repo-two', slug: 'org-two/repo-two' },
-          ])
-          .start();
-        const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
-
-        // enter → picks org-one; down+down+enter → "← Back" (3rd option after
-        // Recommended/Manual); down+enter → picks org-two this time; enter → Recommended
-        // mode for org-two (its only repo is eligible either way).
-        const result = await harness.run('import', {
-          stdinChunks: ['\r', '\x1b[B\x1b[B\r', '\x1b[B\r', '\r'],
-          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
-        });
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('org-two');
-        expect(result.stdout).toContain('org-two/repo-two');
-        expect(result.stdout).not.toContain('org-one/repo-one');
-        const recorded = server.getRecordedRequests();
-        const provisionRequests = recorded.filter(
-          (r) => r.path === '/api/alm_integration/provision_projects',
-        );
-        expect(provisionRequests).toHaveLength(1);
-        expect(new URLSearchParams(provisionRequests[0].body ?? '').get('installationKeys')).toBe(
-          'org-two/repo-two|repo-2',
-        );
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      'cancelling the Manual picker returns to the Recommended/Manual/Back menu',
-      async () => {
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', [
             { id: 'repo-1', name: 'repo-1', slug: 'my-org/repo-1' },
             { id: 'repo-2', name: 'repo-2', slug: 'my-org/repo-2' },
           ])
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
         // down+enter → Manual mode; 'q' → cancel the picker, back to the mode menu; enter →
         // Recommended this time (the re-shown menu's default, first option).
-        const result = await harness.run('import --org my-org', {
+        const result = await harness.run('import', {
           stdinChunks: ['\x1b[B\r', 'q', '\r'],
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
@@ -530,55 +262,7 @@ describe('sonar import', () => {
     );
 
     it(
-      'offers to go back when the interactively-picked org has nothing eligible to import',
-      async () => {
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('test-token')
-          .withOrganizations([
-            { key: 'org-one', name: 'Organization One', alm: GITHUB_ALM, actions: ADMIN_ACTIONS },
-            { key: 'org-two', name: 'Organization Two', alm: GITHUB_ALM, actions: ADMIN_ACTIONS },
-          ])
-          .withDopRepositories('org-one', [
-            {
-              id: 'repo-1',
-              name: 'repo-one',
-              slug: 'org-one/repo-one',
-              importedInCurrentOrg: true,
-            },
-          ])
-          .withDopRepositories('org-two', [
-            { id: 'repo-2', name: 'repo-two', slug: 'org-two/repo-two' },
-          ])
-          .start();
-        const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
-
-        // enter → picks org-one (nothing eligible); enter → accepts the default "Yes, go
-        // back"; down+enter → picks org-two this time; enter → Recommended mode for org-two.
-        const result = await harness.run('import', {
-          stdinChunks: ['\r', '\r', '\x1b[B\r', '\r'],
-          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
-        });
-
-        expect(result.exitCode).toBe(0);
-        const output = result.stdout + result.stderr;
-        expect(output).toContain(
-          'All repositories for the selected organization have already been imported into SonarQube.',
-        );
-        expect(output).toContain('Go back and choose a different organization?');
-        expect(result.stdout).toContain('org-two/repo-two');
-        const recorded = server.getRecordedRequests();
-        const provisionRequests = recorded.filter(
-          (r) => r.path === '/api/alm_integration/provision_projects',
-        );
-        expect(provisionRequests).toHaveLength(1);
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      'exits with code 1 when declining to go back after nothing is eligible',
+      'exits with code 1 when nothing is eligible to import',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -596,11 +280,9 @@ describe('sonar import', () => {
           ])
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'org-one');
 
-        // enter → picks the only org; 'n' → declines going back
         const result = await harness.run('import', {
-          stdinChunks: ['\r', 'n'],
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
@@ -621,12 +303,13 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', SAMPLE_REPOS)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --org my-org', {
+        const result = await harness.run('import', {
           stdinChunks: ['\x1b[B\r', ' \r'], // down arrow+enter → Manual mode, space+enter → toggles and confirms the only repo
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
@@ -643,15 +326,16 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', [
             { id: 'repo-1', name: 'repo-one', slug: 'kevinmlsilva/repo-one' },
             { id: 'repo-2', name: 'repo-two', slug: 'kevinmlsilva/repo-two' },
           ])
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --org my-org', {
+        const result = await harness.run('import', {
           // down arrow+enter → Manual mode, down arrow+space+enter → toggles and confirms second repo
           stdinChunks: ['\x1b[B\r', '\x1b[B \r'],
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
@@ -669,15 +353,16 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', [
             ...SAMPLE_REPOS,
             { id: 'repo-2', name: 'other-repo', slug: 'kevinmlsilva/other-repo' },
           ])
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --org my-org --repo kevinmlsilva/other-repo', {
+        const result = await harness.run('import --repo kevinmlsilva/other-repo', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
@@ -705,13 +390,14 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', manyRepos)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
         const result = await harness.run(
-          'import --non-interactive --org my-org --repo my-org/repo-1,my-org/repo-51',
+          'import --non-interactive --repo my-org/repo-1,my-org/repo-51',
           { extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl } },
         );
 
@@ -727,11 +413,15 @@ describe('sonar import', () => {
     it(
       'exits with code 2 when --non-interactive is set without --repo or --all',
       async () => {
-        const server = await harness.newFakeServer().withAuthToken('test-token').start();
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --non-interactive --org my-org', {
+        const result = await harness.run('import --non-interactive', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
@@ -745,11 +435,15 @@ describe('sonar import', () => {
     it(
       'exits with code 1 when no repositories are found for the selected organization',
       async () => {
-        const server = await harness.newFakeServer().withAuthToken('test-token').start();
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --org my-org', {
+        const result = await harness.run('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
@@ -766,15 +460,16 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', [
             { id: 'repo-1', name: 'repo', slug: 'kevinmlsilva/repo', importedInCurrentOrg: true },
             { id: 'repo-2', name: 'other-repo', slug: 'kevinmlsilva/other-repo' },
           ])
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --org my-org', {
+        const result = await harness.run('import', {
           stdinChunks: [
             '\x1b[B\r', // down arrow+enter → Manual mode
             // toggle the eligible repo (cursor starts on it), move down to the already-imported
@@ -808,14 +503,15 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', [
             { id: 'repo-1', name: 'repo', slug: 'kevinmlsilva/repo', importedInCurrentOrg: true },
           ])
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --org my-org', {
+        const result = await harness.run('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
@@ -841,16 +537,17 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', manyRepos)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
         // down arrow+enter → Manual mode, then navigate to "Load more..." (50 repos precede it
         // on the first page), select it — which fetches page two — then toggle and confirm the
         // newly revealed 51st repo (cursor carries over onto it, since the multi-select prompt
         // never resets its cursor).
-        const result = await harness.run('import --org my-org', {
+        const result = await harness.run('import', {
           stdinChunks: ['\x1b[B\r', '\x1b[B'.repeat(50) + '\r', ' \r'],
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
           timeoutMs: 20000,
@@ -879,12 +576,13 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', manyRepos)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --org my-org', {
+        const result = await harness.run('import', {
           // down arrow+enter → Manual mode, space+enter → toggles and confirms the first repo
           stdinChunks: ['\x1b[B\r', ' \r'],
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
@@ -916,12 +614,13 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', manyRepos)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --org my-org', {
+        const result = await harness.run('import', {
           // down arrow+enter → Manual mode, space+enter → toggles and confirms the first selectable repo
           stdinChunks: ['\x1b[B\r', ' \r'],
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
@@ -962,14 +661,15 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', manyRepos)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
         // down arrow+enter → Manual mode; toggle the first repo, then (down+toggle) 25 more
         // times — 26 toggle attempts across all 26 repos, all of which must be accepted.
-        const result = await harness.run('import --org my-org', {
+        const result = await harness.run('import', {
           stdinChunks: ['\x1b[B\r', ' ' + '\x1b[B '.repeat(25) + '\r'],
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
           timeoutMs: 20000,
@@ -994,7 +694,7 @@ describe('sonar import', () => {
 
   describe('project provisioning', () => {
     it(
-      'creates the project and prints its key after selecting org and repo interactively',
+      'creates the project and prints its key after choosing a repo interactively',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -1005,12 +705,11 @@ describe('sonar import', () => {
           .withDopRepositories('my-org', SAMPLE_REPOS)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
         const result = await harness.run('import', {
-          // enter → selects the only org, down arrow+enter → Manual mode,
-          // space+enter → toggles and confirms the only repo
-          stdinChunks: ['\r', '\x1b[B\r', ' \r'],
+          // down arrow+enter → Manual mode, space+enter → toggles and confirms the only repo
+          stdinChunks: ['\x1b[B\r', ' \r'],
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
@@ -1040,10 +739,10 @@ describe('sonar import', () => {
           .withDopRepositories('my-org', SAMPLE_REPOS)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
         const result = await harness.run('import', {
-          stdinChunks: ['\r', '\x1b[B\r', ' \r'],
+          stdinChunks: ['\x1b[B\r', ' \r'],
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
@@ -1059,7 +758,7 @@ describe('sonar import', () => {
     );
 
     it(
-      'resolves the ALM type from the targeted org lookup when --org is passed directly',
+      'resolves the ALM type from the targeted org lookup',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -1070,9 +769,9 @@ describe('sonar import', () => {
           .withDopRepositories('my-org', SAMPLE_REPOS)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --org my-org', {
+        const result = await harness.run('import', {
           // down arrow+enter → Manual mode, space+enter → toggles and confirms the only repo
           stdinChunks: ['\x1b[B\r', ' \r'],
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
@@ -1080,7 +779,7 @@ describe('sonar import', () => {
 
         expect(result.exitCode).toBe(0);
         const recorded = server.getRecordedRequests();
-        // The org's alm.key comes back on the targeted `--org` lookup itself, so the
+        // The org's alm.key comes back on the targeted org lookup itself, so the
         // organization-bindings fallback (used when the alm key isn't already known)
         // should never be hit.
         expect(recorded.some((r) => r.path === '/dop-translation/organization-bindings')).toBe(
@@ -1101,6 +800,7 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', SAMPLE_REPOS)
           .withProvisionProjectsError(
             400,
@@ -1108,9 +808,9 @@ describe('sonar import', () => {
           )
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --org my-org', {
+        const result = await harness.run('import', {
           stdinChunks: ['\x1b[B\r', ' \r'], // down arrow+enter → Manual mode, space+enter → toggles and confirms the only repo
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
@@ -1128,12 +828,13 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', SAMPLE_REPOS)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --org my-org --repo kevinmlsilva/does-not-exist', {
+        const result = await harness.run('import --repo kevinmlsilva/does-not-exist', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
@@ -1164,10 +865,9 @@ describe('sonar import', () => {
           ])
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
         const result = await harness.run('import --repo kevinmlsilva/repo', {
-          stdin: '\r', // enter → selects the only org
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
@@ -1201,10 +901,9 @@ describe('sonar import', () => {
           ])
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
         const result = await harness.run('import --repo kevinmlsilva/repo', {
-          stdin: '\r', // enter → selects the only org
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
@@ -1215,7 +914,7 @@ describe('sonar import', () => {
     );
 
     it(
-      'enforces onlyPrivateProjects for a public repo even when --org skips interactive org selection',
+      'enforces onlyPrivateProjects for a public repo',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -1235,11 +934,9 @@ describe('sonar import', () => {
           ])
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        // --org my-org resolves the org's onlyPrivateProjects setting via a targeted lookup
-        // rather than the interactive listing, and that setting must still be enforced.
-        const result = await harness.run('import --org my-org --repo kevinmlsilva/repo', {
+        const result = await harness.run('import --repo kevinmlsilva/repo', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
@@ -1258,15 +955,16 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withPrivateProjectsEntitlement('my-org', true)
           .withDopRepositories('my-org', [
             { id: 'repo-1', name: 'repo', slug: 'kevinmlsilva/repo', private: true },
           ])
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --org my-org', {
+        const result = await harness.run('import', {
           // down arrow+enter → Manual mode, space+enter → toggles and confirms the only repo
           stdinChunks: ['\x1b[B\r', ' \r'],
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
@@ -1284,6 +982,7 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', [
             {
               id: 'repo-1',
@@ -1295,11 +994,11 @@ describe('sonar import', () => {
           ])
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
         // No private-projects entitlement configured → org is public-only, so the private
         // repo must be dropped from the list rather than merely shown as disabled.
-        const result = await harness.run('import --org my-org', {
+        const result = await harness.run('import', {
           // down arrow+enter → Manual mode, space+enter → toggles and confirms the only remaining (public) repo
           stdinChunks: ['\x1b[B\r', ' \r'],
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
@@ -1318,6 +1017,7 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', [
             {
               id: 'repo-1',
@@ -1328,9 +1028,9 @@ describe('sonar import', () => {
           ])
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --org my-org', {
+        const result = await harness.run('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
@@ -1364,9 +1064,9 @@ describe('sonar import', () => {
           .withDopRepositories('my-org', SAMPLE_REPOS)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --org my-org --repo kevinmlsilva/repo', {
+        const result = await harness.run('import --repo kevinmlsilva/repo', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
@@ -1397,9 +1097,9 @@ describe('sonar import', () => {
           .withDopRepositories('my-org', SAMPLE_REPOS)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --org my-org --repo kevinmlsilva/repo', {
+        const result = await harness.run('import --repo kevinmlsilva/repo', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
@@ -1429,9 +1129,9 @@ describe('sonar import', () => {
           .withAutoscanEligibilityError(500)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --org my-org --repo kevinmlsilva/repo', {
+        const result = await harness.run('import --repo kevinmlsilva/repo', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
@@ -1457,13 +1157,14 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', BATCH_REPOS)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
         const result = await harness.run(
-          'import --non-interactive --org my-org --repo my-org/repo-a --repo my-org/repo-b',
+          'import --non-interactive --repo my-org/repo-a --repo my-org/repo-b',
           { extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl } },
         );
 
@@ -1488,13 +1189,14 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', BATCH_REPOS)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
         const result = await harness.run(
-          'import --non-interactive --org my-org --repo my-org/repo-a,my-org/repo-b',
+          'import --non-interactive --repo my-org/repo-a,my-org/repo-b',
           { extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl } },
         );
 
@@ -1515,13 +1217,14 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', BATCH_REPOS)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
         const result = await harness.run(
-          'import --non-interactive --org my-org --repo my-org/repo-a,my-org/repo-b --repo my-org/repo-a',
+          'import --non-interactive --repo my-org/repo-a,my-org/repo-b --repo my-org/repo-a',
           { extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl } },
         );
 
@@ -1542,14 +1245,15 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', BATCH_REPOS)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
         // down arrow+enter → Manual mode, space (toggle repo-a), down, down,
         // space (toggle repo-c), enter (confirm)
-        const result = await harness.run('import --org my-org', {
+        const result = await harness.run('import', {
           stdinChunks: ['\x1b[B\r', ' \x1b[B\x1b[B \r'],
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
@@ -1575,6 +1279,7 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', BATCH_REPOS)
           .withProvisionProjectsError(
             400,
@@ -1583,10 +1288,10 @@ describe('sonar import', () => {
           )
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
         const result = await harness.run(
-          'import --non-interactive --org my-org --repo my-org/repo-a,my-org/repo-b,my-org/repo-c',
+          'import --non-interactive --repo my-org/repo-a,my-org/repo-b,my-org/repo-c',
           { extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl } },
         );
 
@@ -1607,13 +1312,14 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', BATCH_REPOS)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
         const result = await harness.run(
-          'import --non-interactive --org my-org --repo my-org/repo-a,my-org/does-not-exist,my-org/repo-c',
+          'import --non-interactive --repo my-org/repo-a,my-org/does-not-exist,my-org/repo-c',
           { extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl } },
         );
 
@@ -1637,6 +1343,7 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', [
             ...BATCH_REPOS.map((repo) =>
               repo.slug === 'my-org/repo-a' ? { ...repo, importedInCurrentOrg: true } : repo,
@@ -1644,10 +1351,10 @@ describe('sonar import', () => {
           ])
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
         const result = await harness.run(
-          'import --non-interactive --org my-org --repo my-org/repo-a,my-org/repo-b',
+          'import --non-interactive --repo my-org/repo-a,my-org/repo-b',
           { extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl } },
         );
 
@@ -1670,6 +1377,7 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', [
             ...BATCH_REPOS.map((repo) =>
               repo.slug === 'my-org/repo-a' || repo.slug === 'my-org/repo-b'
@@ -1679,10 +1387,10 @@ describe('sonar import', () => {
           ])
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
         const result = await harness.run(
-          'import --non-interactive --org my-org --repo my-org/repo-a,my-org/repo-b,my-org/repo-c',
+          'import --non-interactive --repo my-org/repo-a,my-org/repo-b,my-org/repo-c',
           { extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl } },
         );
 
@@ -1712,17 +1420,18 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', manyRepos)
           .withProvisionProjectsDelay(50)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
         const repoFlag = manyRepos.map((r) => r.slug).join(',');
-        const result = await harness.run(
-          `import --non-interactive --org my-org --repo ${repoFlag}`,
-          { extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl }, timeoutMs: 30000 },
-        );
+        const result = await harness.run(`import --non-interactive --repo ${repoFlag}`, {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+          timeoutMs: 30000,
+        });
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('Imported 15 repositories');
@@ -1753,12 +1462,13 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', manyRepos)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --non-interactive --org my-org --all', {
+        const result = await harness.run('import --non-interactive --all', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
           timeoutMs: 30000,
         });
@@ -1796,9 +1506,9 @@ describe('sonar import', () => {
           .withDopRepositories('my-org', SAMPLE_REPOS)
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --non-interactive --org my-org --all', {
+        const result = await harness.run('import --non-interactive --all', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
@@ -1815,6 +1525,7 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', [
             {
               id: 'repo-1',
@@ -1834,9 +1545,9 @@ describe('sonar import', () => {
           ])
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --non-interactive --org my-org --all', {
+        const result = await harness.run('import --non-interactive --all', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
@@ -1872,12 +1583,13 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', [{ id: 'repo-1', name: 'repo-1', slug: 'my-org/repo-1' }])
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --org my-org --all --repo my-org/repo-1', {
+        const result = await harness.run('import --all --repo my-org/repo-1', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
@@ -1891,11 +1603,15 @@ describe('sonar import', () => {
     it(
       'satisfies --non-interactive without needing --repo',
       async () => {
-        const server = await harness.newFakeServer().withAuthToken('test-token').start();
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --non-interactive --org my-org --all', {
+        const result = await harness.run('import --non-interactive --all', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
@@ -1915,15 +1631,16 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
           .withDopRepositories('my-org', [
             { id: 'repo-1', name: 'repo-1', slug: 'my-org/repo-1', importedInCurrentOrg: true },
             { id: 'repo-2', name: 'repo-2', slug: 'my-org/repo-2', private: true },
           ])
           .start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --non-interactive --org my-org --all', {
+        const result = await harness.run('import --non-interactive --all', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
