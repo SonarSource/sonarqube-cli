@@ -25,7 +25,7 @@ import * as process from '@/lib/process.ts';
 // Mock platform-detector so both Windows and non-Windows branches are reachable on any OS.
 const platformDetector = await import('@/core/host/platform-detector.ts');
 const isWindowsMock = mock(() => false);
-void mock.module('../../../src/lib/platform-detector', () => ({
+void mock.module('@/core/host/platform-detector.ts', () => ({
   ...platformDetector,
   isWindows: isWindowsMock,
 }));
