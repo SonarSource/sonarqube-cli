@@ -21,7 +21,7 @@
 /**
  * Build-time script: download and verify .asc signature files for all
  * external binaries at the pinned version, then embed them
- * into src/lib/signatures.ts so they compile into the binary.
+ * into src/core/host/signatures.ts so they compile into the binary.
  *
  * Run after bumping the version in package.json#externalBinaries:
  *   bun run fetch:signatures
