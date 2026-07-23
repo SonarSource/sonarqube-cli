@@ -22,10 +22,10 @@
 
 import { Command } from 'commander';
 
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { resolveAuth } from '@/core/host/auth-resolver.ts';
 import { blank, error, print } from '@/core/ui';
 
-import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
-import { resolveAuth } from '../../lib/auth-resolver.ts';
 import logger from '../../lib/logger.ts';
 import { CliError, CommandFailedError, remediationHintFor } from './error.ts';
 

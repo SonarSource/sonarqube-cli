@@ -18,11 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { ENV_ORG, ENV_SERVER, ENV_TOKEN, resolveFromEnv } from '@/core/host/auth-resolver.ts';
 import { getToken as getKeystoreToken } from '@/core/host/keychain.ts';
 import { blank, note, print, withSpinner } from '@/core/ui';
 import { NOTE_STYLES } from '@/core/ui/colors.ts';
 
-import { ENV_ORG, ENV_SERVER, ENV_TOKEN, resolveFromEnv } from '../../lib/auth-resolver.ts';
 import { loadState } from '../../lib/repository/state-repository.ts';
 import { CommandFailedError } from '../_common/error.ts';
 import type { TokenCheckResult } from '../_common/token.ts';

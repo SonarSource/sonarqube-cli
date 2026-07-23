@@ -17,13 +17,12 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
+import { type SonarQubeClient } from './client.ts';
+import type { ProjectsSearchParams, ProjectsSearchResponse } from './types.ts';
 
-// SonarQube Issues API wrapper
+export const MAX_PAGE_SIZE = 500;
 
-import type { IssuesSearchParams, IssuesSearchResponse } from '../lib/types.js';
-import { type SonarQubeClient } from './client.js';
-
-export class IssuesClient {
+export class ProjectsClient {
   private readonly client: SonarQubeClient;
 
   constructor(client: SonarQubeClient) {
@@ -31,22 +30,29 @@ export class IssuesClient {
   }
 
   /**
-   * Search issues with filters
+   * Search projects with optional query and pagination
    */
-  async searchIssues(params: IssuesSearchParams): Promise<IssuesSearchResponse> {
-    const queryParams: Record<string, string | number | boolean> = {};
+  async searchProjects(params: ProjectsSearchParams): Promise<ProjectsSearchResponse> {
+    const queryParams: Record<string, string | number> = {};
 
-    Object.entries(params).forEach(([key, value]) => {
-      if (key === 'projects' && value) {
-        const projectParamKey = this.client.isCloud ? 'projects' : 'components';
-        queryParams[projectParamKey] = value as string;
-      } else if (key === 'resolved' && value !== undefined) {
-        queryParams.resolved = value as boolean;
-      } else if (value) {
-        queryParams[key] = value as string | number | boolean;
-      }
-    });
+    if (params.organization) {
+      queryParams.organization = params.organization;
+    } else {
+      queryParams.qualifiers = 'TRK';
+    }
 
-    return await this.client.get<IssuesSearchResponse>('/api/issues/search', queryParams);
+    if (params.q) {
+      queryParams.q = params.q;
+    }
+
+    if (params.ps) {
+      queryParams.ps = params.ps;
+    }
+
+    if (params.p) {
+      queryParams.p = params.p;
+    }
+
+    return await this.client.get<ProjectsSearchResponse>('/api/components/search', queryParams);
   }
 }

@@ -20,7 +20,8 @@
 
 // Pre-flight validation for SQAA analysis requests (before POST).
 
-import type { SqaaAnalysisDepth, SqaaAnalysisFile, SqaaFileScope } from '../../sonarqube/client.ts';
+import type { SqaaAnalysisDepth, SqaaAnalysisFile, SqaaFileScope } from '@/core/server/client.ts';
+
 import type { CommandFailedError } from '../_common/error.ts';
 import { sqaaCommandFailedError } from './sqaa-errors.ts';
 

@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { type DopRepository, SonarQubeClient } from '../../../sonarqube/client.ts';
+import { type DopRepository, SonarQubeClient } from '@/core/server/client.ts';
 
 export type FetchPage = (
   pageIndex: number,

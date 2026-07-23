@@ -22,6 +22,8 @@ import { type Command, Help, InvalidArgumentError, Option } from 'commander';
 
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import { maybeNotifyUpdateAvailable } from '@/core/host/update-notification.ts';
+import { GENERIC_HTTP_METHODS } from '@/core/server/client.ts';
+import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import {
   flushTelemetry,
   setPassthroughSubcommand,
@@ -37,8 +39,6 @@ import { blank, error, warn } from '@/core/ui';
 import { version as VERSION } from '../../package.json';
 import { tryLoadState } from '../lib/repository/state-repository.ts';
 import { initSentry } from '../lib/sentry.ts';
-import { GENERIC_HTTP_METHODS } from '../sonarqube/client.ts';
-import { MAX_PAGE_SIZE } from '../sonarqube/projects.ts';
 import { CommandFailedError } from './_common/error.ts';
 import { parseInteger } from './_common/parsing.ts';
 import { SonarCommand } from './_common/sonar-command.ts';

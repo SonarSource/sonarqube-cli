@@ -20,11 +20,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { SonarQubeClient } from '@/core/server/client.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { apiCommand } from '../../../../src/commands/api/api.ts';
-import type { ResolvedAuth } from '../../../../src/lib/auth-resolver.ts';
-import { SonarQubeClient } from '../../../../src/sonarqube/client.ts';
 
 const TEST_SERVER = 'https://sonar.example.com';
 const TEST_ORG = 'test-org';

@@ -25,10 +25,9 @@ import * as Sentry from '@sentry/bun';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import * as userModule from '@/core/telemetry/user.ts';
-
-import { ENV_DO_NOT_TRACK } from '../../../src/lib/config-constants.js';
-import { flushSentry, initSentry } from '../../../src/lib/sentry.js';
-import { getDefaultState } from '../../../src/lib/state.js';
+import { ENV_DO_NOT_TRACK } from '@/lib/config-constants.ts';
+import { flushSentry, initSentry } from '@/lib/sentry.ts';
+import { getDefaultState } from '@/lib/state.ts';
 
 function makeErrorEvent(
   filenames: (string | undefined)[][],

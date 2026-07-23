@@ -20,14 +20,15 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { SonarQubeClient } from '@/core/server/client.ts';
+
 import { InvalidOptionError } from '../../../../../src/commands/_common/error.ts';
 import type { IntegrateGitOptions } from '../../../../../src/commands/integrate/git/options.ts';
 import {
   createDepRisksSubfeature,
   createSecretsSubfeature,
 } from '../../../../../src/commands/integrate/git/tools/git-integration-subfeatures.ts';
-import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.ts';
-import { SonarQubeClient } from '../../../../../src/sonarqube/client.ts';
 
 type PartialInvocation = {
   options?: Partial<IntegrateGitOptions>;

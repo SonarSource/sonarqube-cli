@@ -30,6 +30,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { CommandFailedError } from '@/commands/_common/error.ts';
 import { runMcp } from '@/commands/run/mcp.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import type { ProxyGroup, ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
 import type { ClientCertConfig } from '@/core/host/connectivity/types.ts';
 import * as pkcs12Module from '@/core/host/crypto/pkcs12.ts';
@@ -42,11 +43,10 @@ import {
 } from '@/core/host/mcp/mcp-helper.ts';
 import { createRedactedUrl } from '@/core/host/redacted-url.ts';
 import * as toolDetector from '@/core/host/tool-detector.ts';
+import * as projectInfo from '@/core/project-info.ts';
 
-import type { ResolvedAuth } from '../../../../src/lib/auth-resolver.ts';
 import { SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '../../../../src/lib/config-constants.ts';
 import { normalizePath } from '../../../../src/lib/fs-utils.ts';
-import * as projectInfo from '../../../../src/lib/project-workspace/project-info.ts';
 
 const FAKE_AUTH: ResolvedAuth = {
   token: 'test-token',

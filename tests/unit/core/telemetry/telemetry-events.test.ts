@@ -33,6 +33,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { scanAndEmitSecrets } from '@/commands/analyze/secrets.ts';
 import * as agentDetector from '@/core/host/agent-detector.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { DISTRIBUTION } from '@/core/host/distribution.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 import { SQAA_ANALYZE_AGENTIC_CALLER_COMMAND } from '@/core/telemetry/sqaa-analysis-telemetry.ts';
@@ -45,7 +46,6 @@ import {
   type IntegrationConfiguredFields,
 } from '@/core/telemetry/telemetry-events.ts';
 import * as userModule from '@/core/telemetry/user.ts';
-import type { ResolvedAuth } from '@/lib/auth-resolver.ts';
 import { ENV_SONAR_USER_HOME } from '@/lib/config-constants.ts';
 import type { SpawnResult } from '@/lib/process.ts';
 import * as stateRepository from '@/lib/repository/state-repository.ts';

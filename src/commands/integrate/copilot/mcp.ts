@@ -18,9 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 import { setupMcpServerForAgent } from '@/core/host/mcp/mcp-helper.ts';
+import { type DiscoveredProject } from '@/core/project-info.ts';
 import { discreetSuccess, info, warn } from '@/core/ui';
-
-import { type DiscoveredProject } from '../../../lib/project-workspace';
 
 export async function setupMcpServer(
   project: DiscoveredProject,

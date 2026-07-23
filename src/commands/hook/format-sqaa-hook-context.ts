@@ -20,7 +20,8 @@
 
 // Text formatting for PostToolUse hook additionalContext (Claude + Codex).
 
-import type { SqaaIssue } from '../../sonarqube/client.ts';
+import type { SqaaIssue } from '@/core/server/client.ts';
+
 import {
   formatPlainCleanCollapsedRow,
   formatPlainSkippedOrIgnoredRow,

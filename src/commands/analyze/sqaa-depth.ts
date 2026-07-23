@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { SqaaAnalysisDepth } from '../../sonarqube/client.ts';
+import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
+
 import { InvalidOptionError } from '../_common/error.ts';
 
 export const SQAA_DEPTH_CHOICES = ['STANDARD', 'DEEP'] as const;

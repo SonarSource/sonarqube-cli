@@ -20,9 +20,10 @@
 
 import { describe, expect, it } from 'bun:test';
 
+import { RateLimitError, ServiceUnavailableError } from '@/core/server/errors.ts';
+
 import { CommandFailedError, remediationHintFor } from '../../../../src/commands/_common/error.ts';
 import { NetworkConfigError } from '../../../../src/lib/errors.ts';
-import { RateLimitError, ServiceUnavailableError } from '../../../../src/sonarqube/errors.ts';
 
 describe('remediationHintFor', () => {
   it('returns the remediationHint from a CliError when one is set', () => {
