@@ -28,24 +28,25 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { CommandFailedError } from '../../../../src/commands/_common/error.ts';
-import { runMcp } from '../../../../src/commands/run/mcp.ts';
-import type { ResolvedAuth } from '../../../../src/lib/auth-resolver.ts';
-import { SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '../../../../src/lib/config-constants.ts';
-import type { ProxyGroup, ResolvedNetworkConfig } from '../../../../src/lib/connectivity/types.ts';
-import type { ClientCertConfig } from '../../../../src/lib/connectivity/types.ts';
-import * as pkcs12Module from '../../../../src/lib/crypto/pkcs12.ts';
-import { normalizePath } from '../../../../src/lib/fs-utils.ts';
+import { CommandFailedError } from '@/commands/_common/error.ts';
+import { runMcp } from '@/commands/run/mcp.ts';
+import type { ProxyGroup, ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
+import type { ClientCertConfig } from '@/core/host/connectivity/types.ts';
+import * as pkcs12Module from '@/core/host/crypto/pkcs12.ts';
 import {
   clientCertCachePath,
   getMcpContainerCommand,
   MCP_CONTAINER_CA_CERT_PATH,
   MCP_CONTAINER_CLIENT_CERT_PATH,
   resolveMcpContainerCommand,
-} from '../../../../src/lib/mcp/mcp-helper.ts';
+} from '@/core/host/mcp/mcp-helper.ts';
+import { createRedactedUrl } from '@/core/host/redacted-url.ts';
+import * as toolDetector from '@/core/host/tool-detector.ts';
+
+import type { ResolvedAuth } from '../../../../src/lib/auth-resolver.ts';
+import { SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '../../../../src/lib/config-constants.ts';
+import { normalizePath } from '../../../../src/lib/fs-utils.ts';
 import * as projectInfo from '../../../../src/lib/project-workspace/project-info.ts';
-import { createRedactedUrl } from '../../../../src/lib/redacted-url.ts';
-import * as toolDetector from '../../../../src/lib/tool-detector.ts';
 
 const FAKE_AUTH: ResolvedAuth = {
   token: 'test-token',

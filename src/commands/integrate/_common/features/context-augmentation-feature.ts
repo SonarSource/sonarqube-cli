@@ -19,8 +19,8 @@
  */
 
 import { CommandFailedError } from '@/commands/_common/error.ts';
-import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/lib/install-types.ts';
-import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/lib/signatures.ts';
+import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
 
 import { getOptionalStringAttr } from '../attrs.ts';
 import { printContextAugmentationSkill, runToolIntegrateCommand } from '../context-augmentation.ts';

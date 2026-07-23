@@ -25,11 +25,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
-import * as telemetryEvents from '@/core/telemetry/telemetry-events.ts';
-
-import { version as CURRENT_VERSION } from '../../../../package.json';
-import * as scaScannerInstall from '../../../../src/commands/_common/install/sca-scanner.ts';
-import * as secretsInstall from '../../../../src/commands/_common/install/secrets.ts';
+import * as scaScannerInstall from '@/commands/_common/install/sca-scanner.ts';
+import * as secretsInstall from '@/commands/_common/install/secrets.ts';
 import {
   type ContainerIntegrationContext,
   type DependencyDeclaration,
@@ -37,12 +34,11 @@ import {
   type IntegrationContext,
   IntegrationRegistry,
   wholeFile,
-} from '../../../../src/commands/integrate/_common/registry';
-import * as hooks from '../../../../src/commands/integrate/claude/hooks.ts';
-import * as configConstants from '../../../../src/lib/config-constants.ts';
-import { DISTRIBUTION } from '../../../../src/lib/distribution.ts';
-import { SCA_SCANNER_BINARY_NAME } from '../../../../src/lib/install-types.ts';
-import * as migration from '../../../../src/lib/migration.ts';
+} from '@/commands/integrate/_common/registry';
+import * as hooks from '@/commands/integrate/claude/hooks.ts';
+import { DISTRIBUTION } from '@/core/host/distribution.ts';
+import { SCA_SCANNER_BINARY_NAME } from '@/core/host/install-types.ts';
+import * as migration from '@/core/host/migration.ts';
 import {
   migrateClaudeCodeHooks,
   migrateDeclarativeIntegrations,
@@ -50,7 +46,12 @@ import {
   runPostUpdateActions,
   updateScaScannerBinaryIfNeeded,
   updateSecretsBinaryIfNeeded,
-} from '../../../../src/lib/post-update.ts';
+} from '@/core/host/post-update.ts';
+import * as versionLib from '@/core/host/version.ts';
+import * as telemetryEvents from '@/core/telemetry/telemetry-events.ts';
+
+import { version as CURRENT_VERSION } from '../../../../package.json';
+import * as configConstants from '../../../../src/lib/config-constants.ts';
 import * as stateRepository from '../../../../src/lib/repository/state-repository.ts';
 import type {
   CliState,
@@ -58,7 +59,6 @@ import type {
   StoredCommandExecutedEvent,
 } from '../../../../src/lib/state.ts';
 import { getDefaultState } from '../../../../src/lib/state.ts';
-import * as versionLib from '../../../../src/lib/version.ts';
 
 const FAKE_HOME = '/fake/home';
 const homedirFn = () => FAKE_HOME;

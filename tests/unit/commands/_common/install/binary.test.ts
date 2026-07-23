@@ -28,8 +28,8 @@ import {
   type BinarySpec,
   buildLocalBinaryName,
   removeBinary,
-} from '../../../../../src/commands/_common/install/binary.ts';
-import { detectPlatform } from '../../../../../src/lib/platform-detector.ts';
+} from '@/commands/_common/install/binary.ts';
+import { detectPlatform } from '@/core/host/platform-detector.ts';
 
 const baseSpec: Omit<BinarySpec, 'name' | 'version'> = {
   distPrefix: 'CommercialDistribution/whatever',

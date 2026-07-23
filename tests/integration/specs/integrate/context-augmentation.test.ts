@@ -31,9 +31,9 @@ import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/fe
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.js';
 import { CODEX_INTEGRATION_ID } from '@/commands/integrate/codex/declaration.js';
 import { COPILOT_INTEGRATION_ID } from '@/commands/integrate/copilot/declaration.js';
+import { detectPlatform } from '@/core/host/platform-detector.ts';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
 import { pathComparisonKey } from '@/lib/fs-utils.js';
-import { detectPlatform } from '@/lib/platform-detector.js';
-import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/lib/signatures.js';
 import type { CliState, InstalledIntegrationFeature } from '@/lib/state.js';
 
 import { hookScriptName, TestHarness } from '../../harness';

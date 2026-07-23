@@ -22,10 +22,10 @@ import { randomUUID } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { detectCallerAgent } from '@/core/host/agent-detector.ts';
 import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
 
 import { version as VERSION } from '../../../package.json';
-import { detectCallerAgent } from '../../lib/agent-detector.ts';
 import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import {
   getTelemetryDir,

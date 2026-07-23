@@ -20,6 +20,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 
+import { buildSubprocessNetworkEnv } from '@/core/host/connectivity/network-config.ts';
 import {
   SECRETS_CALLER_COMMANDS,
   type SecretsCallerCommand,
@@ -29,7 +30,6 @@ import { blank, print, success, warn } from '@/core/ui';
 import { green, yellow } from '@/core/ui/colors.ts';
 
 import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
-import { buildSubprocessNetworkEnv } from '../../lib/connectivity/network-config.ts';
 import logger from '../../lib/logger.ts';
 import type { SpawnResult, StdioMode } from '../../lib/process.ts';
 import { spawnProcessWithTimeout } from '../../lib/process.ts';

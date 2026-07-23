@@ -20,8 +20,8 @@
 
 import { type Command } from 'commander';
 
-import { DISTRIBUTION } from '../../lib/distribution.ts';
 import { tryLoadState } from '../../lib/state-manager.ts';
+import { DISTRIBUTION } from '../host/distribution.ts';
 import { isTelemetryEnabled } from './enabled.ts';
 import { emitCommandExecuted, flushTelemetryEvents } from './telemetry-events.ts';
 

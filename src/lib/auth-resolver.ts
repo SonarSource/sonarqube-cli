@@ -20,6 +20,7 @@
 
 // Centralized auth resolver - resolves token + serverUrl from env vars, state, or keychain
 
+import { getToken } from '@/core/host/keychain.ts';
 import { warn } from '@/core/ui';
 
 import {
@@ -30,7 +31,6 @@ import {
   SONARCLOUD_US_HOSTNAME,
   SONARCLOUD_US_URL,
 } from './config-constants';
-import { getToken } from './keychain.js';
 import logger from './logger.js';
 import { loadState } from './repository/state-repository.js';
 import type { CloudRegion } from './state.js';

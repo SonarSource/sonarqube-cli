@@ -32,7 +32,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
-import { generateKeychainAccount } from '../../src/lib/keychain';
+import { generateKeychainAccount } from '@/core/host/keychain.ts';
+
 import { getDefaultState } from '../../src/lib/state';
 import { addOrUpdateConnection } from '../../src/lib/state-manager';
 import { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from '../integration/harness';

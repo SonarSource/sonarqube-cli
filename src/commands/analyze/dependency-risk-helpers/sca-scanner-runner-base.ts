@@ -20,10 +20,10 @@
 
 import { rmSync } from 'node:fs';
 
+import { buildSubprocessNetworkEnv } from '@/core/host/connectivity/network-config.ts';
 import { warn, withSpinner } from '@/core/ui';
 
 import { LOG_FILE } from '../../../lib/config-constants.ts';
-import { buildSubprocessNetworkEnv } from '../../../lib/connectivity/network-config.ts';
 import logger from '../../../lib/logger.ts';
 import type { SpawnResult } from '../../../lib/process.ts';
 import { CommandFailedError } from '../../_common/error.ts';

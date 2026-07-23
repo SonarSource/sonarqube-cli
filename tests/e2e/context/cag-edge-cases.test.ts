@@ -29,12 +29,13 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
+import { buildLocalCagBinaryName } from '@/commands/_common/install/context-augmentation.ts';
+import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
+import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
+import { detectPlatform } from '@/core/host/platform-detector.ts';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
+
 import { version as CURRENT_CLI_VERSION } from '../../../package.json';
-import { buildLocalCagBinaryName } from '../../../src/commands/_common/install/context-augmentation';
-import { CLAUDE_INTEGRATION_ID } from '../../../src/commands/integrate/claude/declaration';
-import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types';
-import { detectPlatform } from '../../../src/lib/platform-detector';
-import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../src/lib/signatures';
 import type { CliState } from '../../../src/lib/state';
 import { TestHarness } from '../../integration/harness';
 import {

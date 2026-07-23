@@ -53,7 +53,7 @@ mock.module('node:readline', () => ({
 
 const mockOpenBrowser = mock((_url: string) => Promise.resolve());
 // eslint-disable-next-line @typescript-eslint/no-floating-promises
-mock.module('../../../../src/lib/browser.js', () => ({
+mock.module('@/core/host/browser.ts', () => ({
   openBrowser: mockOpenBrowser,
 }));
 
@@ -61,7 +61,7 @@ import {
   type BrowserAuthResult,
   openBrowserWithFallback,
   waitForTokenInteractive,
-} from '../../../../src/commands/_common/token.ts';
+} from '@/commands/_common/token.ts';
 
 // ─── Shared setup ─────────────────────────────────────────────────────────────
 

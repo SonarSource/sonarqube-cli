@@ -26,8 +26,9 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { buildLocalBinaryName } from '../../../../src/commands/_common/install/sca-scanner.js';
-import { detectPlatform } from '../../../../src/lib/platform-detector.js';
+import { buildLocalBinaryName } from '@/commands/_common/install/sca-scanner.ts';
+import { detectPlatform } from '@/core/host/platform-detector.ts';
+
 import { TestHarness } from '../../harness';
 
 const VALID_TOKEN = 'integration-test-token';

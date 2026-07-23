@@ -24,16 +24,16 @@
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { type OutputChannel, print, text, withSpinner } from '@/core/ui';
-
-import { BIN_DIR } from '../../../lib/config-constants.ts';
-import { buildPlatformSuffix, type PlatformInfo } from '../../../lib/install-types.ts';
-import { detectPlatform } from '../../../lib/platform-detector.ts';
+import { buildPlatformSuffix, type PlatformInfo } from '@/core/host/install-types.ts';
+import { detectPlatform } from '@/core/host/platform-detector.ts';
 import {
   buildDownloadUrl,
   downloadBinary,
   verifyBinarySignature,
-} from '../../../lib/sonarsource-releases.ts';
+} from '@/core/host/sonarsource-releases.ts';
+import { type OutputChannel, print, text, withSpinner } from '@/core/ui';
+
+import { BIN_DIR } from '../../../lib/config-constants.ts';
 import { recordInstallationInState } from '../../../lib/state-manager.ts';
 import {
   cleanupOldVersionBinaries,

@@ -34,7 +34,7 @@ import {
 } from '../../../../src/lib/auth-resolver.ts';
 import * as stateRepository from '../../../../src/lib/repository/state-repository.ts';
 import { getDefaultState } from '../../../../src/lib/state.ts';
-import { createKeychainTestHandle } from '../../keychain/keychain-test-handle.ts';
+import { createKeychainTestHandle } from '../../core/host/keychain-test-handle.ts';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const FAKE_TOKEN = 'squ_test_token_abc123';

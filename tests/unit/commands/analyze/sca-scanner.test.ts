@@ -20,16 +20,17 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 
-import { CommandFailedError } from '../../../../src/commands/_common/error.ts';
-import { ScaScannerInstaller } from '../../../../src/commands/_common/install/sca-scanner.ts';
+import { CommandFailedError } from '@/commands/_common/error.ts';
+import { ScaScannerInstaller } from '@/commands/_common/install/sca-scanner.ts';
 import {
   type AnalyzeProjectResponse,
   ScaScannerRunner,
-} from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
-import { ScaScannerInvocation } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner-runner-base.ts';
-import { ScaScannerSpawner } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner-spawner.ts';
+} from '@/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
+import { ScaScannerInvocation } from '@/commands/analyze/dependency-risk-helpers/sca-scanner-runner-base.ts';
+import { ScaScannerSpawner } from '@/commands/analyze/dependency-risk-helpers/sca-scanner-spawner.ts';
+import { clearNetworkConfigCache } from '@/core/host/connectivity/network-config.ts';
+
 import { LOG_FILE } from '../../../../src/lib/config-constants.ts';
-import { clearNetworkConfigCache } from '../../../../src/lib/connectivity/network-config.ts';
 import type { SpawnResult } from '../../../../src/lib/process.ts';
 
 const okInstaller: ScaScannerInstaller = { install: () => Promise.resolve('/bin/sca') };

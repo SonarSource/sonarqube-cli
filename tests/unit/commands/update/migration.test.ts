@@ -24,14 +24,14 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { setMockUi } from '@/core/ui';
-
 import {
   cleanObsoleteFromState,
   migrateHookScripts,
   OBSOLETE_A3S_MARKER,
   removeObsoleteHookArtifacts,
-} from '../../../../src/lib/migration.ts';
+} from '@/core/host/migration.ts';
+import { setMockUi } from '@/core/ui';
+
 import type { AgentExtension, CliState, HookExtension } from '../../../../src/lib/state.ts';
 import { getDefaultState } from '../../../../src/lib/state.ts';
 

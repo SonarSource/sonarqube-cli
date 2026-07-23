@@ -19,6 +19,11 @@
  */
 
 import {
+  deleteStaleTokens,
+  getToken as getKeystoreToken,
+  saveToken,
+} from '@/core/host/keychain.ts';
+import {
   confirmPrompt,
   discreetSuccess,
   print,
@@ -31,7 +36,6 @@ import {
 
 import { cloudRegionFromUrl, isSonarQubeCloud } from '../../lib/auth-resolver.ts';
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '../../lib/config-constants.ts';
-import { deleteStaleTokens, getToken as getKeystoreToken, saveToken } from '../../lib/keychain.ts';
 import { discoverOrganization, discoverServer } from '../../lib/project-workspace';
 import { loadState, saveState } from '../../lib/repository/state-repository.ts';
 import { addOrUpdateConnection, getActiveConnection } from '../../lib/state-manager.ts';

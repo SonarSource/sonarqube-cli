@@ -35,12 +35,13 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { buildLocalBinaryName } from '../../../../src/commands/_common/install/secrets.js';
+import { buildLocalBinaryName } from '@/commands/_common/install/secrets.ts';
 import {
   SECRETS_INACTIVE_BINARY_MISSING,
   SECRETS_INACTIVE_UNAUTHENTICATED,
-} from '../../../../src/commands/hook/hook-dependencies.js';
-import { detectPlatform } from '../../../../src/lib/platform-detector.js';
+} from '@/commands/hook/hook-dependencies.ts';
+import { detectPlatform } from '@/core/host/platform-detector.ts';
+
 import { TestHarness } from '../../harness';
 
 // sonar-ignore-next-line S6769
