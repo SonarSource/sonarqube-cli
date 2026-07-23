@@ -22,11 +22,13 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import * as authConnectionRecorder from '@/core/host/auth-connection-recorder.ts';
 import {
   cloudRegionFromUrl,
   ENV_SERVER,
   ENV_TOKEN,
   normalizeCloudV2Endpoint,
+  resetEnvAuthRecordGuard,
   resolveAuth,
   resolveFromEndpoint,
 } from '@/core/host/auth-resolver.ts';
@@ -43,6 +45,8 @@ const FAKE_TOKEN_ENV = 'squ_env_token_xyz789';
 const handle = createKeychainTestHandle();
 
 describe('resolveAuth', () => {
+  let recordConnectionSpy: ReturnType<typeof spyOn>;
+
   beforeEach(() => {
     handle.setup();
     setMockUi(true);
@@ -50,6 +54,14 @@ describe('resolveAuth', () => {
     // Ensure env vars are clean
     delete process.env[ENV_TOKEN];
     delete process.env[ENV_SERVER];
+    resetEnvAuthRecordGuard();
+    // These tests exercise resolveAuth()'s env-vs-state priority, not the state-sync
+    // side effect (covered by auth-connection-recorder.test.ts) — stub it out so env-auth
+    // tests never touch the real state.json or make a real network call.
+    recordConnectionSpy = spyOn(
+      authConnectionRecorder,
+      'recordConnectionFromAuth',
+    ).mockResolvedValue(undefined as never);
   });
 
   afterEach(() => {
@@ -57,6 +69,7 @@ describe('resolveAuth', () => {
     setMockUi(false);
     delete process.env[ENV_TOKEN];
     delete process.env[ENV_SERVER];
+    recordConnectionSpy.mockRestore();
   });
 
   // ─── Env var: both set ──────────────────────────────────────────────────
@@ -83,6 +96,31 @@ describe('resolveAuth', () => {
       } finally {
         loadStateSpy.mockRestore();
       }
+    });
+
+    it('records the connection as envOnly', async () => {
+      await resolveAuth();
+
+      expect(recordConnectionSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ token: FAKE_TOKEN_ENV }),
+        { envOnly: true },
+      );
+    });
+
+    it('only attempts recordConnectionFromAuth once across repeated calls in the same process', async () => {
+      await resolveAuth();
+      await resolveAuth();
+      await resolveAuth({ silent: true });
+
+      expect(recordConnectionSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('attempts recordConnectionFromAuth again after resetEnvAuthRecordGuard (fresh process)', async () => {
+      await resolveAuth();
+      resetEnvAuthRecordGuard();
+      await resolveAuth();
+
+      expect(recordConnectionSpy).toHaveBeenCalledTimes(2);
     });
   });
 

@@ -25,6 +25,7 @@
 
 import crypto from 'node:crypto';
 
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import logger from '@/core/observability/logger.ts';
 import { warn } from '@/core/ui';
 
@@ -36,6 +37,12 @@ export { loadState, saveState };
 export { tryLoadState } from './state-repository.ts';
 
 import { type AuthConnection, type CliState, type CloudRegion } from './state.ts';
+
+export function authMatchesConnection(auth: ResolvedAuth, conn: AuthConnection): boolean {
+  if (auth.serverUrl !== conn.serverUrl) return false;
+  if (auth.connectionType === 'cloud' && auth.orgKey !== conn.orgKey) return false;
+  return true;
+}
 
 /**
  * Get the currently active authentication connection, or undefined if none.
@@ -72,6 +79,7 @@ export function addOrUpdateConnection(
     orgKey?: string;
     region?: CloudRegion;
     tokenName?: string;
+    envOnly?: boolean;
   },
 ): AuthConnection {
   const connectionId = generateConnectionId(serverUrl, options?.orgKey);
@@ -93,6 +101,10 @@ export function addOrUpdateConnection(
 
   if (options?.tokenName) {
     connection.tokenName = options.tokenName;
+  }
+
+  if (options?.envOnly) {
+    connection.envOnly = true;
   }
 
   // Support only one connection - clear all previous and add new one

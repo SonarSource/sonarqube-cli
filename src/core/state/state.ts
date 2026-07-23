@@ -78,6 +78,8 @@ export interface AuthConnection {
   organizationUuidV4?: string | null;
   /** Installation ID of the SonarQube Server (fetched at auth time, SQS only) */
   sqsInstallationId?: string | null;
+  /** True when there is no keychain entry behind this connection. */
+  envOnly?: boolean;
 }
 
 /**

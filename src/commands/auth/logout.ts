@@ -35,7 +35,12 @@ export async function authLogout(): Promise<void> {
   const state = loadState();
   const active = getActiveConnection(state);
 
-  if (!state.auth.isAuthenticated || active === undefined || state.auth.connections.length === 0) {
+  if (
+    !state.auth.isAuthenticated ||
+    active === undefined ||
+    state.auth.connections.length === 0 ||
+    active.envOnly
+  ) {
     print('You are already logged out.');
     return;
   }

@@ -36,6 +36,7 @@ import * as agentDetector from '@/core/host/agent-detector.ts';
 import * as authResolver from '@/core/host/auth-resolver.ts';
 import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/host/auth-resolver.ts';
 import { DISTRIBUTION } from '@/core/host/distribution.ts';
+import { resolveTelemetryIdentity } from '@/core/host/identity-fetch.ts';
 import type { StoredAnalysisCompletedEvent } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
@@ -46,7 +47,6 @@ import {
   storeEvent,
   TELEMETRY_FLUSH_MODE_ENV,
 } from '@/core/telemetry';
-import { resolveTelemetryIdentity } from '@/core/telemetry/identity.ts';
 import * as userModule from '@/core/telemetry/user.ts';
 import * as ui from '@/core/ui';
 
