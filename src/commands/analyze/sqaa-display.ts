@@ -22,9 +22,10 @@
 
 import { basename, dirname } from 'node:path';
 
+import { text } from '@/core/ui';
+import { bold, dim, green, red, softBlue, yellow } from '@/core/ui/colors.ts';
+
 import type { SqaaAnalysisDepth, SqaaIssue } from '../../sonarqube/client.ts';
-import { text } from '../../ui';
-import { bold, dim, green, red, softBlue, yellow } from '../../ui/colors.ts';
 import { CliError } from '../_common/error.ts';
 import type { FileResult, FileSuccess, RunTally } from './sqaa-analysis.ts';
 import { SQAA_FAILURE_HEADING } from './sqaa-errors.ts';

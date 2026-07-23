@@ -22,6 +22,8 @@ import * as fs from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
+import { appendTelemetryEvent } from '@/core/telemetry/telemetry-events.ts';
+
 import { version as CURRENT_VERSION } from '../../package.json';
 import { installScaScannerBinary } from '../commands/_common/install/sca-scanner';
 import { installSecretsBinary } from '../commands/_common/install/secrets';
@@ -35,7 +37,6 @@ import {
 } from '../commands/integrate/_common/registry';
 import { CLAUDE_INTEGRATION_ID } from '../commands/integrate/claude/declaration';
 import { installHooks } from '../commands/integrate/claude/hooks.js';
-import { appendTelemetryEvent } from '../telemetry/telemetry-events.js';
 import { getTelemetryDir } from './config-constants.js';
 import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from './install-types.js';
 import logger from './logger';

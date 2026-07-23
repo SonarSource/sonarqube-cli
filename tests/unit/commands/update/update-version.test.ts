@@ -22,8 +22,9 @@ import { EventEmitter } from 'node:events';
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import { clearNetworkConfigCache } from '../../../../src/lib/connectivity/network-config.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/ui';
 
 // Mock node:child_process before importing self-update so that the named
 // imports (spawn, spawnSync) in self-update.ts resolve to the test doubles.

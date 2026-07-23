@@ -20,9 +20,10 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
+
 import { buildContextAugmentationEnv } from '../../../../src/commands/_common/context-augmentation-env.ts';
 import { clearNetworkConfigCache } from '../../../../src/lib/connectivity/network-config.ts';
-import { INVOCATION_ID } from '../../../../src/lib/invocation-id.ts';
 
 const KEYS = [
   'SONAR_CONTEXT_ORGANIZATION',

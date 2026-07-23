@@ -25,6 +25,8 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { getMockUiCalls, setMockUi } from '@/core/ui';
+
 import { setupMcpServer } from '../../../../../src/commands/integrate/claude/mcp.ts';
 import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.ts';
 import {
@@ -45,7 +47,6 @@ import {
   writeMcpServerEntry,
 } from '../../../../../src/lib/mcp/mcp-helper.ts';
 import { DiscoveredProject } from '../../../../../src/lib/project-workspace';
-import { getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 const ON_PREMISE_AUTH: ResolvedAuth = {
   token: 'squ_test',

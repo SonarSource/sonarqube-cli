@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { bold, red } from '../../../../ui/colors.ts';
+import { bold, red } from '@/core/ui/colors.ts';
+
 import type { VersionOptionDescriptionCode } from '../sca-scanner.ts';
 import type { FixVersionVM, RecommendationVM } from '../view-model';
 

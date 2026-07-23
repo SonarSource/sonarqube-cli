@@ -25,6 +25,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import { CommandFailedError } from '../../../../../src/commands/_common/error.ts';
 import {
   type DependencyDeclaration,
@@ -37,7 +39,6 @@ import {
 } from '../../../../../src/commands/integrate/_common/registry';
 import * as stateRepository from '../../../../../src/lib/repository/state-repository.ts';
 import { getDefaultState } from '../../../../../src/lib/state.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 describe('generic integration installer', () => {
   let tempDir: string;

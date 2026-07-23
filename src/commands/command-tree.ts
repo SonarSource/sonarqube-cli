@@ -20,6 +20,18 @@
 
 import { type Command, Help, InvalidArgumentError, Option } from 'commander';
 
+import {
+  flushTelemetry,
+  setPassthroughSubcommand,
+  storeEvent,
+  TELEMETRY_FLUSH_MODE_ENV,
+} from '@/core/telemetry';
+import {
+  SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
+  SQAA_VERIFY_CALLER_COMMAND,
+} from '@/core/telemetry/sqaa-analysis-telemetry.ts';
+import { blank, error, warn } from '@/core/ui';
+
 import { version as VERSION } from '../../package.json';
 import { CURRENT_DISTRIBUTION } from '../lib/distribution.ts';
 import { tryLoadState } from '../lib/repository/state-repository.ts';
@@ -27,17 +39,6 @@ import { initSentry } from '../lib/sentry.ts';
 import { maybeNotifyUpdateAvailable } from '../lib/update-notification.ts';
 import { GENERIC_HTTP_METHODS } from '../sonarqube/client.ts';
 import { MAX_PAGE_SIZE } from '../sonarqube/projects.ts';
-import {
-  flushTelemetry,
-  setPassthroughSubcommand,
-  storeEvent,
-  TELEMETRY_FLUSH_MODE_ENV,
-} from '../telemetry';
-import {
-  SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
-  SQAA_VERIFY_CALLER_COMMAND,
-} from '../telemetry/sqaa-analysis-telemetry.ts';
-import { blank, error, warn } from '../ui';
 import { CommandFailedError } from './_common/error.ts';
 import { parseInteger } from './_common/parsing.ts';
 import { SonarCommand } from './_common/sonar-command.ts';

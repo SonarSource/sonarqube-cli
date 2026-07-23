@@ -20,7 +20,8 @@
 
 // Centralized auth resolver - resolves token + serverUrl from env vars, state, or keychain
 
-import { warn } from '../ui';
+import { warn } from '@/core/ui';
+
 import {
   SONARCLOUD_API_URL,
   SONARCLOUD_HOSTNAME,

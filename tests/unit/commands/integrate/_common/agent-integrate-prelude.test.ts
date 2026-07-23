@@ -20,6 +20,8 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import {
   assertSonarCloudOrganization,
   buildAgentIntegrateContext,
@@ -27,7 +29,6 @@ import {
 } from '../../../../../src/commands/integrate/_common/agent-integrate-prelude.ts';
 import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.ts';
 import type { DiscoveredProject } from '../../../../../src/lib/project-workspace';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 const AUTH: ResolvedAuth = {
   token: 'token',

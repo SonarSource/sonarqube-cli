@@ -23,6 +23,8 @@ import { isAbsolute, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { clearMockUiCalls, getMockUiCalls, queueMockResponse, setMockUi } from '@/core/ui';
+
 import {
   CommandFailedError,
   InvalidOptionError,
@@ -48,12 +50,6 @@ import * as processLib from '../../../../../src/lib/process.ts';
 import * as discovery from '../../../../../src/lib/project-workspace';
 import * as stateRepository from '../../../../../src/lib/repository/state-repository.ts';
 import { type CliState, getDefaultState } from '../../../../../src/lib/state.ts';
-import {
-  clearMockUiCalls,
-  getMockUiCalls,
-  queueMockResponse,
-  setMockUi,
-} from '../../../../../src/ui';
 
 const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.integrate-git-tmp');
 

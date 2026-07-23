@@ -20,6 +20,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import type { PhaseItem } from '@/core/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import { CommandFailedError } from '../../../../../src/commands/_common/error.ts';
 import * as token from '../../../../../src/commands/_common/token.ts';
 import {
@@ -29,8 +32,6 @@ import {
 import * as processLib from '../../../../../src/lib/process.ts';
 import type { DiscoveredProject } from '../../../../../src/lib/project-workspace';
 import { SonarQubeClient } from '../../../../../src/sonarqube/client.ts';
-import type { PhaseItem } from '../../../../../src/ui';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 const BASE_PROJECT: DiscoveredProject = {
   rootDir: '/workspace/app',

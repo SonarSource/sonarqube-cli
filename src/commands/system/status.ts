@@ -24,6 +24,8 @@ import { join } from 'node:path';
 
 import { parse as parseToml } from 'smol-toml';
 
+import { blank, print, success, text, warn } from '@/core/ui';
+
 import { version as VERSION } from '../../../package.json';
 import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import { resolveAuth } from '../../lib/auth-resolver.ts';
@@ -49,7 +51,6 @@ import {
 } from '../../lib/signatures.ts';
 import type { CliState } from '../../lib/state.ts';
 import { isNewerVersion, stripBuildNumber } from '../../lib/version.ts';
-import { blank, print, success, text, warn } from '../../ui';
 import { SECRETS_SPEC } from '../_common/install/secrets.ts';
 import type { TokenCheckResult } from '../_common/token.ts';
 import { checkTokenStatus } from '../_common/token.ts';

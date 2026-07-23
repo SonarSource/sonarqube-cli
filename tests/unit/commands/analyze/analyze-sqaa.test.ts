@@ -25,6 +25,8 @@ import * as fs from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { clearMockUiCalls, getMockUiCalls, setMockTty, setMockUi } from '@/core/ui';
+
 import { CommandFailedError, InvalidOptionError } from '../../../../src/commands/_common/error.ts';
 import { analyzeSqaa, buildSqaaJsonReport } from '../../../../src/commands/analyze/sqaa.ts';
 import * as changesetModule from '../../../../src/commands/analyze/sqaa-changeset.ts';
@@ -35,7 +37,6 @@ import * as stateRepository from '../../../../src/lib/repository/state-repositor
 import { CliState, getDefaultState } from '../../../../src/lib/state.ts';
 import * as stateManager from '../../../../src/lib/state-manager.ts';
 import { SonarQubeClient } from '../../../../src/sonarqube/client.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/ui';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const TEST_ORG = 'test-org';
@@ -102,6 +103,7 @@ function makeCloudState() {
 
 beforeEach(() => {
   setMockUi(true);
+  setMockTty(false);
   clearMockUiCalls();
 
   loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeCloudState());

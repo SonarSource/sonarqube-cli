@@ -21,6 +21,8 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { text, withSpinner } from '@/core/ui';
+
 import { BIN_DIR } from '../../../lib/config-constants.ts';
 import {
   buildCagPlatformSuffix,
@@ -39,7 +41,6 @@ import {
   verifyPgpSignature,
 } from '../../../lib/sonarsource-releases.ts';
 import { recordInstallationInState } from '../../../lib/state-manager.ts';
-import { text, withSpinner } from '../../../ui';
 import { CommandFailedError } from '../error.ts';
 import {
   cleanupOldVersionBinaries,
