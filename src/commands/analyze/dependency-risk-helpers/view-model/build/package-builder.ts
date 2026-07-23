@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import logger from '../../../../../lib/logger.ts';
+import logger from '@/core/observability/logger.ts';
+
 import type { RiskFilterPredicate } from '../../risk-filter.ts';
 import type { AnalyzeProjectRelease } from '../../sca-scanner.ts';
 import { PackageIdentity, type PackageVM } from '../package.ts';

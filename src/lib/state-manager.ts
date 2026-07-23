@@ -25,11 +25,11 @@
 
 import crypto from 'node:crypto';
 
+import logger from '@/core/observability/logger.ts';
 import { warn } from '@/core/ui';
 
 import { version as VERSION } from '../../package.json';
 import { pathComparisonKey } from './fs-utils';
-import logger from './logger';
 import { loadState, saveState } from './repository/state-repository.js';
 
 export { loadState, saveState };

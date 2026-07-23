@@ -19,6 +19,7 @@
  */
 
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { timed } from '@/core/observability/timed.ts';
 import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 import {
   emitSqaaAnalysisTelemetry,
@@ -28,7 +29,6 @@ import {
 import { print } from '@/core/ui';
 import { SqaaProgress } from '@/core/ui/components/sqaa-progress.ts';
 
-import { timed } from '../../lib/timed.ts';
 import type { RunContext, RunTally } from './sqaa-analysis.ts';
 import { runAnalyses } from './sqaa-analysis.ts';
 import { fetchWithRetry, readSqaaFileContent, toRelativePosixPath } from './sqaa-api.ts';

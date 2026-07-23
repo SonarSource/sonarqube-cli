@@ -25,8 +25,8 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import logger from '../../lib/logger.ts';
 import type { CliState } from '../../lib/state.ts';
+import logger from '../observability/logger.ts';
 
 export const OBSOLETE_A3S_MARKER = 'sonar-a3s';
 const CLAUDE_CONFIG_DIR = '.claude';

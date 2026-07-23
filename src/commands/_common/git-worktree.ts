@@ -23,7 +23,8 @@
 import { statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
-import logger from '../../lib/logger.ts';
+import logger from '@/core/observability/logger.ts';
+
 import { spawnProcess } from '../../lib/process.ts';
 
 /**

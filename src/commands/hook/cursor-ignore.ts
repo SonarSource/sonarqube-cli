@@ -23,8 +23,9 @@
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
+import logger from '@/core/observability/logger.ts';
+
 import { CURSOR_CONFIG_DIR, CURSOR_IGNORE_FILE } from '../../lib/config-constants.ts';
-import logger from '../../lib/logger.ts';
 
 export const CURSOR_IGNORE_MARKER = '# sonar-secrets: auto-added after secret detection';
 

@@ -26,8 +26,9 @@
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
+import logger from '@/core/observability/logger.ts';
+
 import { BIN_DIR } from '../../../lib/config-constants.ts';
-import logger from '../../../lib/logger.ts';
 import { spawnProcess } from '../../../lib/process.ts';
 import { CommandFailedError } from '../error.ts';
 

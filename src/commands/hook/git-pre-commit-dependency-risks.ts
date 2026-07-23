@@ -25,6 +25,7 @@
 // configured filter are found.
 
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import logger from '@/core/observability/logger.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import {
   emitScaAnalysisTelemetry,
@@ -32,7 +33,6 @@ import {
 } from '@/core/telemetry/sca-analysis-telemetry.ts';
 import { discreetSuccess, success, warn } from '@/core/ui';
 
-import logger from '../../lib/logger.ts';
 import { CommandFailedError } from '../_common/error.ts';
 import {
   resolveScaScannerBinaryPath,

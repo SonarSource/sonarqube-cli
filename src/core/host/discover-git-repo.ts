@@ -24,8 +24,8 @@
 import { existsSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import logger from '../../lib/logger.ts';
 import { spawnProcess } from '../../lib/process.ts';
+import logger from '../observability/logger.ts';
 
 export function findGitRoot(startDir: string): { gitRoot: string; isGit: boolean } {
   let dir = startDir;

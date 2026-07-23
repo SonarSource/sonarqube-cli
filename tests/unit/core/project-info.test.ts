@@ -24,6 +24,7 @@ import { join, resolve } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import logger from '@/core/observability/logger.ts';
 import * as projectWorkspace from '@/core/project-info.ts';
 import {
   discoverOrganization,
@@ -36,7 +37,6 @@ import { GIT_REMOTE_BINDING_SOURCE } from '@/core/server/discover-project-by-rem
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/lib/config-constants.ts';
 import { canonicalizePath } from '@/lib/fs-utils.ts';
-import logger from '@/lib/logger.ts';
 import * as processLib from '@/lib/process.ts';
 
 async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {

@@ -20,10 +20,10 @@
 
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { findGitRoot } from '@/core/host/discover-git-repo.ts';
+import logger from '@/core/observability/logger.ts';
 import { emitIntegrationConfiguredTelemetry } from '@/core/telemetry/integrate-telemetry.ts';
 import { text, warn } from '@/core/ui';
 
-import logger from '../../../../lib/logger.ts';
 import { loadState, saveState } from '../../../../lib/repository/state-repository.ts';
 import type {
   CliState,

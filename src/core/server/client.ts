@@ -24,12 +24,12 @@ import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-confi
 import { print } from '@/core/ui';
 
 import { version as VERSION } from '../../../package.json';
-import logger from '../../lib/logger.ts';
 import {
   isSonarQubeCloud,
   normalizeCloudV2Endpoint,
   resolveFromEndpoint,
 } from '../host/auth-resolver.ts';
+import logger from '../observability/logger.ts';
 import {
   BadRequestError,
   ForbiddenApiError,

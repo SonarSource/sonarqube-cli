@@ -24,9 +24,9 @@ import type { ErrorEvent, EventHint } from '@sentry/bun';
 import * as Sentry from '@sentry/bun';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { flushSentry, initSentry } from '@/core/observability/sentry.ts';
 import * as userModule from '@/core/telemetry/user.ts';
 import { ENV_DO_NOT_TRACK } from '@/lib/config-constants.ts';
-import { flushSentry, initSentry } from '@/lib/sentry.ts';
 import { getDefaultState } from '@/lib/state.ts';
 
 function makeErrorEvent(

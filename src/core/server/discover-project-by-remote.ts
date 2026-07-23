@@ -18,8 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import logger from '../../lib/logger.ts';
 import type { ResolvedAuth } from '../host/auth-resolver.ts';
+import logger from '../observability/logger.ts';
 import { SonarQubeClient } from './client.ts';
 
 export const GIT_REMOTE_BINDING_SOURCE = 'git remote (origin)';
