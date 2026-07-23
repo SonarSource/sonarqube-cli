@@ -24,7 +24,7 @@ import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '../config-constants';
+import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '../../lib/config-constants.ts';
 
 export interface SonarLintConfig {
   serverURL: string;

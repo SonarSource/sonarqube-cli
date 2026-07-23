@@ -20,9 +20,10 @@
 
 import { describe, expect, it } from 'bun:test';
 
+import type { DopRepository } from '@/core/server/client.ts';
+import { SonarQubeClient } from '@/core/server/client.ts';
+
 import { RepositoryCollection } from '../../../../../src/commands/import/_common/repository-collection.ts';
-import type { DopRepository } from '../../../../../src/sonarqube/client.ts';
-import { SonarQubeClient } from '../../../../../src/sonarqube/client.ts';
 
 const ONLY_PRIVATE_PROJECTS = { enabled: false, available: false };
 

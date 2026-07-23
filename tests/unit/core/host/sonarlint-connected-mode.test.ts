@@ -24,8 +24,8 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'bun:test';
 
-import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '../../../../src/lib/config-constants';
-import { loadSonarLintConfig } from '../../../../src/lib/project-workspace';
+import { loadSonarLintConfig } from '@/core/host/sonarlint-connected-mode.ts';
+import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/lib/config-constants.ts';
 
 function tempProject(name: string): string {
   return join(tmpdir(), `sonarlint-ut-${name}-${Date.now()}`);

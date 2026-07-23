@@ -20,8 +20,9 @@
 
 import { describe, expect, it } from 'bun:test';
 
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+
 import { buildScaUrls } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-urls.ts';
-import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.ts';
 
 function auth(overrides: Partial<ResolvedAuth>): ResolvedAuth {
   return {

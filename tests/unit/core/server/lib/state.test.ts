@@ -24,7 +24,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { getDefaultState } from '../../../src/lib/state.js';
+import { getDefaultState } from '@/lib/state.ts';
 
 describe('State Management', () => {
   describe('getDefaultState', () => {

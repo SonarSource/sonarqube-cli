@@ -22,15 +22,16 @@
 
 import { readFileSync } from 'node:fs';
 
-import { getSqaaRetry503BaseDelayMs } from '../../lib/config-constants.ts';
-import { toRelativePosixPath as toRelativePosixPathOrNull } from '../../lib/fs-utils.ts';
-import type { SqaaAnalysisFile, SqaaIssue } from '../../sonarqube/client.ts';
-import { SonarQubeClient } from '../../sonarqube/client.ts';
+import type { SqaaAnalysisFile, SqaaIssue } from '@/core/server/client.ts';
+import { SonarQubeClient } from '@/core/server/client.ts';
 import {
   RequestPayloadTooLargeError,
   ServiceUnavailableError,
   SqaaForbiddenError,
-} from '../../sonarqube/errors.ts';
+} from '@/core/server/errors.ts';
+
+import { getSqaaRetry503BaseDelayMs } from '../../lib/config-constants.ts';
+import { toRelativePosixPath as toRelativePosixPathOrNull } from '../../lib/fs-utils.ts';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.ts';
 import type { CloudAuth } from './sqaa-auth.ts';
 import { type PackChunksLimits, packFilesIntoChunks, type SqaaChunkFile } from './sqaa-chunking.ts';

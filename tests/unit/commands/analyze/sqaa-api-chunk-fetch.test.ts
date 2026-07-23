@@ -20,17 +20,15 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { SonarQubeClient, type SqaaAnalysisRequest } from '@/core/server/client.ts';
+import { RequestPayloadTooLargeError, ServiceUnavailableError } from '@/core/server/errors.ts';
+
 import { CommandFailedError } from '../../../../src/commands/_common/error.ts';
 import { fetchChunkWith413Split } from '../../../../src/commands/analyze/sqaa-api.ts';
 import type { CloudAuth } from '../../../../src/commands/analyze/sqaa-auth.ts';
 import type { SqaaChunkFile } from '../../../../src/commands/analyze/sqaa-chunking.ts';
 import * as sqaaChunking from '../../../../src/commands/analyze/sqaa-chunking.ts';
 import { ENV_SQAA_RETRY_BASE_DELAY_MS } from '../../../../src/lib/config-constants.ts';
-import { SonarQubeClient, type SqaaAnalysisRequest } from '../../../../src/sonarqube/client.ts';
-import {
-  RequestPayloadTooLargeError,
-  ServiceUnavailableError,
-} from '../../../../src/sonarqube/errors.ts';
 
 const AUTH: CloudAuth = {
   serverUrl: 'https://sonarcloud.io',

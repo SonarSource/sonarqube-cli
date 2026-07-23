@@ -24,6 +24,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import * as authResolver from '@/core/host/auth-resolver.ts';
+
 import * as installSecrets from '../../../../src/commands/_common/install/secrets.ts';
 import * as analyzeSecrets from '../../../../src/commands/analyze/secrets.ts';
 import { cursorPromptSubmit } from '../../../../src/commands/hook/cursor-prompt-submit.ts';
@@ -32,7 +34,6 @@ import {
   SECRETS_INACTIVE_UNAUTHENTICATED,
 } from '../../../../src/commands/hook/hook-dependencies.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
-import * as authResolver from '../../../../src/lib/auth-resolver.ts';
 
 describe('cursorPromptSubmit (unit — impractical-via-e2e paths)', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;

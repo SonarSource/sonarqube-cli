@@ -20,7 +20,8 @@
 
 // Map SQAA API errors to CLI errors with remediation hints.
 
-import { BadRequestError, RequestPayloadTooLargeError } from '../../sonarqube/errors.ts';
+import { BadRequestError, RequestPayloadTooLargeError } from '@/core/server/errors.ts';
+
 import { CommandFailedError, type CommandFailedErrorOptions } from '../_common/error.ts';
 
 const GENERIC_SQAA_FAILURE_HINT =

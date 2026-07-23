@@ -20,9 +20,10 @@
 
 // Lightweight in-process mock SonarQube HTTP server (Bun.serve)
 
-import type { SonarQubeIssue } from '../../../src/lib/types.js';
-import type { Organization } from '../../../src/sonarqube/client.js';
-import type { SettingsValue } from '../../../src/sonarqube/settings-value.js';
+import type { Organization } from '@/core/server/client.ts';
+import type { SettingsValue } from '@/core/server/settings-value.ts';
+import type { SonarQubeIssue } from '@/core/server/types.ts';
+
 import type { RecordedRequest } from './types.js';
 
 const HTTP_BAD_REQUEST = 400;

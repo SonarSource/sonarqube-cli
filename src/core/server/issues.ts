@@ -17,12 +17,13 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-import type { ProjectsSearchParams, ProjectsSearchResponse } from '../lib/types.js';
-import { type SonarQubeClient } from './client.js';
 
-export const MAX_PAGE_SIZE = 500;
+// SonarQube Issues API wrapper
 
-export class ProjectsClient {
+import { type SonarQubeClient } from './client.ts';
+import type { IssuesSearchParams, IssuesSearchResponse } from './types.ts';
+
+export class IssuesClient {
   private readonly client: SonarQubeClient;
 
   constructor(client: SonarQubeClient) {
@@ -30,29 +31,22 @@ export class ProjectsClient {
   }
 
   /**
-   * Search projects with optional query and pagination
+   * Search issues with filters
    */
-  async searchProjects(params: ProjectsSearchParams): Promise<ProjectsSearchResponse> {
-    const queryParams: Record<string, string | number> = {};
+  async searchIssues(params: IssuesSearchParams): Promise<IssuesSearchResponse> {
+    const queryParams: Record<string, string | number | boolean> = {};
 
-    if (params.organization) {
-      queryParams.organization = params.organization;
-    } else {
-      queryParams.qualifiers = 'TRK';
-    }
+    Object.entries(params).forEach(([key, value]) => {
+      if (key === 'projects' && value) {
+        const projectParamKey = this.client.isCloud ? 'projects' : 'components';
+        queryParams[projectParamKey] = value as string;
+      } else if (key === 'resolved' && value !== undefined) {
+        queryParams.resolved = value as boolean;
+      } else if (value) {
+        queryParams[key] = value as string | number | boolean;
+      }
+    });
 
-    if (params.q) {
-      queryParams.q = params.q;
-    }
-
-    if (params.ps) {
-      queryParams.ps = params.ps;
-    }
-
-    if (params.p) {
-      queryParams.p = params.p;
-    }
-
-    return await this.client.get<ProjectsSearchResponse>('/api/components/search', queryParams);
+    return await this.client.get<IssuesSearchResponse>('/api/issues/search', queryParams);
   }
 }

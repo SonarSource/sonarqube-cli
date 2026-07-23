@@ -20,17 +20,16 @@
 
 // SonarQube API HTTP client
 
-import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.js';
+import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
 import { print } from '@/core/ui';
 
-import { version as VERSION } from '../../package.json';
+import { version as VERSION } from '../../../package.json';
+import logger from '../../lib/logger.ts';
 import {
   isSonarQubeCloud,
   normalizeCloudV2Endpoint,
   resolveFromEndpoint,
-} from '../lib/auth-resolver';
-import { buildFetchInit, fetchGuarded } from '../lib/fetch-guarded.js';
-import logger from '../lib/logger';
+} from '../host/auth-resolver.ts';
 import {
   BadRequestError,
   ForbiddenApiError,
@@ -39,9 +38,10 @@ import {
   type RequestPayloadTooLargeMeta,
   ServiceUnavailableError,
   SqaaForbiddenError,
-} from './errors';
-import { stripGitRemoteUrlUserinfo } from './git-remote-url';
-import type { SettingsValue } from './settings-value';
+} from './errors.ts';
+import { buildFetchInit, fetchGuarded } from './fetch-guarded.ts';
+import { stripGitRemoteUrlUserinfo } from './git-remote-url.ts';
+import type { SettingsValue } from './settings-value.ts';
 
 const GET_REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 const POST_REQUEST_TIMEOUT_MS = 60000; // 60 seconds for analysis

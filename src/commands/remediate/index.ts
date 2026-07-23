@@ -20,21 +20,21 @@
 
 // Remediate command - triggers AI agent remediation for eligible issues
 
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { discoverProject } from '@/core/project-info.ts';
+import { SonarQubeClient } from '@/core/server/client.ts';
+import { IssuesClient } from '@/core/server/issues.ts';
+import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
+import type { SonarQubeIssue } from '@/core/server/types.ts';
 import { blank, info, multiSelectPrompt, print, success, withSpinner } from '@/core/ui';
 import { cyan, dim, red, yellow } from '@/core/ui/colors.ts';
 
-import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import {
   AGENT_ACTIVITY_PATH,
   AGENTIC_PACK_URL,
   AI_REMEDIATION_DOCS_URL,
 } from '../../lib/config-constants.ts';
 import logger from '../../lib/logger.ts';
-import { discoverProject } from '../../lib/project-workspace';
-import type { SonarQubeIssue } from '../../lib/types.ts';
-import { SonarQubeClient } from '../../sonarqube/client.ts';
-import { IssuesClient } from '../../sonarqube/issues.ts';
-import { MAX_PAGE_SIZE } from '../../sonarqube/projects.ts';
 import { printAgentNonInteractiveAlternativeHint } from '../_common/agent-prompt-hint.ts';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.ts';
 

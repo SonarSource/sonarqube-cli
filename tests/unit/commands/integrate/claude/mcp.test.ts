@@ -26,6 +26,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { setupMcpServer } from '@/commands/integrate/claude/mcp.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import type { ClientCertConfig, ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
 import * as pkcs12Module from '@/core/host/crypto/pkcs12.ts';
 import {
@@ -35,15 +36,14 @@ import {
   resolveMcpContainerCommand,
   writeMcpServerEntry,
 } from '@/core/host/mcp/mcp-helper.ts';
+import { DiscoveredProject } from '@/core/project-info.ts';
 import { getMockUiCalls, setMockUi } from '@/core/ui';
 
-import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.ts';
 import {
   CLI_TMP_DIR,
   SONARQUBE_MCP_DOCKER_IMAGE_NAME,
 } from '../../../../../src/lib/config-constants.ts';
 import { normalizePath } from '../../../../../src/lib/fs-utils.ts';
-import { DiscoveredProject } from '../../../../../src/lib/project-workspace';
 
 const ON_PREMISE_AUTH: ResolvedAuth = {
   token: 'squ_test',

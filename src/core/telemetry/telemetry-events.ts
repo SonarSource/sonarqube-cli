@@ -23,16 +23,16 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync
 import { join } from 'node:path';
 
 import { detectCallerAgent } from '@/core/host/agent-detector.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { buildFetchInit, fetchGuarded } from '@/core/server/fetch-guarded.ts';
 import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
 
 import { version as VERSION } from '../../../package.json';
-import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import {
   getTelemetryDir,
   TELEMETRY_API_KEY,
   TELEMETRY_ENDPOINT,
 } from '../../lib/config-constants.ts';
-import { buildFetchInit, fetchGuarded } from '../../lib/fetch-guarded.ts';
 import type {
   AnalysisCompletedEventPayload,
   AuthConnection,

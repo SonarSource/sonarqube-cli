@@ -20,15 +20,15 @@
 
 import { describe, expect, it, mock, spyOn } from 'bun:test';
 
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import type { SonarQubeClient } from '@/core/server/client.ts';
+import type { SettingsValue } from '@/core/server/settings-value.ts';
 import * as scaTelemetry from '@/core/telemetry/sca-analysis-telemetry.ts';
 import { SCA_CALLER_COMMANDS } from '@/core/telemetry/sca-analysis-telemetry.ts';
 
 import { CommandFailedError } from '../../../../../src/commands/_common/error.ts';
 import type { SecretsInstaller } from '../../../../../src/commands/_common/install/secrets.ts';
 import { ScaScanOrchestrator } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
-import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.ts';
-import type { SonarQubeClient } from '../../../../../src/sonarqube/client.ts';
-import type { SettingsValue } from '../../../../../src/sonarqube/settings-value.ts';
 import { okScaInstaller as okInstaller } from './_helpers.ts';
 
 const CLOUD_AUTH: ResolvedAuth = {

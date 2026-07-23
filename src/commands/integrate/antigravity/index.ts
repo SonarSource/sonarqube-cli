@@ -18,9 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { info } from '@/core/ui';
 
-import type { ResolvedAuth } from '../../../lib/auth-resolver.ts';
 import type { IntegrationStateAttribute } from '../../../lib/state.ts';
 import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint.ts';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';

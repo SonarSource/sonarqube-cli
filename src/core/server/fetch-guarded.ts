@@ -20,8 +20,8 @@
 
 // Shared fetch utilities: request init builder and redirect guard.
 
-import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.js';
-import type { FetchNetworkOptions } from '@/core/host/connectivity/types';
+import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
+import type { FetchNetworkOptions } from '@/core/host/connectivity/types.ts';
 
 export function buildFetchInit(
   method: string,

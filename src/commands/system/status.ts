@@ -24,6 +24,8 @@ import { join } from 'node:path';
 
 import { parse as parseToml } from 'smol-toml';
 
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { resolveAuth } from '@/core/host/auth-resolver.ts';
 import { getNetworkConfig } from '@/core/host/connectivity/network-config.ts';
 import type {
   CaCertConfig,
@@ -46,8 +48,6 @@ import { isNewerVersion, stripBuildNumber } from '@/core/host/version.ts';
 import { blank, print, success, text, warn } from '@/core/ui';
 
 import { version as VERSION } from '../../../package.json';
-import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
-import { resolveAuth } from '../../lib/auth-resolver.ts';
 import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '../../lib/config-constants.ts';
 import { loadState } from '../../lib/repository/state-repository.ts';
 import type { CliState } from '../../lib/state.ts';

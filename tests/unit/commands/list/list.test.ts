@@ -24,18 +24,18 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-import { setMockUi } from '@/core/ui';
-
-import { listIssues } from '../../../../src/commands/list/issues.ts';
-import type { ResolvedAuth } from '../../../../src/lib/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { SonarQubeClient } from '@/core/server/client.ts';
+import { IssuesClient } from '@/core/server/issues.ts';
+import { MAX_PAGE_SIZE, ProjectsClient } from '@/core/server/projects.ts';
 import type {
   IssuesSearchResponse,
   ProjectsSearchResponse,
   SonarQubeIssue,
-} from '../../../../src/lib/types.ts';
-import { SonarQubeClient } from '../../../../src/sonarqube/client.ts';
-import { IssuesClient } from '../../../../src/sonarqube/issues.ts';
-import { MAX_PAGE_SIZE, ProjectsClient } from '../../../../src/sonarqube/projects.ts';
+} from '@/core/server/types.ts';
+import { setMockUi } from '@/core/ui';
+
+import { listIssues } from '../../../../src/commands/list/issues.ts';
 
 // Test constants
 const DEFAULT_PAGE_SIZE = 500;

@@ -24,7 +24,7 @@ import type {
   SqaaAnalysisDepth,
   SqaaAnalysisFile,
   SqaaAnalysisRequest,
-} from '../../sonarqube/client.ts';
+} from '@/core/server/client.ts';
 
 export interface SqaaChunkFile {
   /** Absolute path on disk (for reading / error reporting). */

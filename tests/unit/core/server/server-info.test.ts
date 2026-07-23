@@ -20,7 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { fetchServerVersion, isAtLeast, normalizeVersion } from '../../src/lib/server-info';
+import { fetchServerVersion, isAtLeast, normalizeVersion } from '@/core/server/server-info.ts';
 
 describe('server-info', () => {
   describe('normalizeVersion', () => {

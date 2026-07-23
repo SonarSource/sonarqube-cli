@@ -25,6 +25,7 @@ import * as fs from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { SonarQubeClient } from '@/core/server/client.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockTty, setMockUi } from '@/core/ui';
 
 import { CommandFailedError, InvalidOptionError } from '../../../../src/commands/_common/error.ts';
@@ -36,7 +37,6 @@ import * as processLib from '../../../../src/lib/process.ts';
 import * as stateRepository from '../../../../src/lib/repository/state-repository.ts';
 import { CliState, getDefaultState } from '../../../../src/lib/state.ts';
 import * as stateManager from '../../../../src/lib/state-manager.ts';
-import { SonarQubeClient } from '../../../../src/sonarqube/client.ts';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const TEST_ORG = 'test-org';
@@ -45,7 +45,7 @@ const TEST_TOKEN = 'squ_test_token';
 const FILE_CONTENT = 'const x = 1;\n';
 
 /** Fake auth for a cloud connection */
-const FAKE_AUTH: import('../../../../src/lib/auth-resolver.ts').ResolvedAuth = {
+const FAKE_AUTH: import('@/core/host/auth-resolver.ts').ResolvedAuth = {
   token: TEST_TOKEN,
   serverUrl: SONARCLOUD_URL,
   orgKey: TEST_ORG,

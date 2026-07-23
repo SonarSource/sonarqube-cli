@@ -22,8 +22,6 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
-
 import {
   cloudRegionFromUrl,
   ENV_SERVER,
@@ -31,7 +29,9 @@ import {
   normalizeCloudV2Endpoint,
   resolveAuth,
   resolveFromEndpoint,
-} from '../../../../src/lib/auth-resolver.ts';
+} from '@/core/host/auth-resolver.ts';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import * as stateRepository from '../../../../src/lib/repository/state-repository.ts';
 import { getDefaultState } from '../../../../src/lib/state.ts';
 import { createKeychainTestHandle } from '../../core/host/keychain-test-handle.ts';

@@ -29,7 +29,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   type RecordedFeatureCandidate,
   selectFeatureForLookupPaths,
-} from '../../../../src/lib/project-workspace/recorded-feature-resolver';
+} from '@/core/host/recorded-feature-resolver.ts';
 
 const BASE = '/nonexistent-sqcli-resolver-test';
 const MAIN = `${BASE}/main`;

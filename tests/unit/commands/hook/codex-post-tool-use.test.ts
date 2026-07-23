@@ -20,6 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import * as authResolver from '@/core/host/auth-resolver.ts';
 import * as sqaaTelemetry from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 import {
   SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
@@ -29,7 +30,6 @@ import {
 import * as sqaaModule from '../../../../src/commands/analyze/sqaa.ts';
 import { codexPostToolUse } from '../../../../src/commands/hook/codex-post-tool-use.ts';
 import * as hookOutput from '../../../../src/commands/hook/format-sqaa-hook-context.ts';
-import * as authResolver from '../../../../src/lib/auth-resolver.ts';
 
 describe('codexPostToolUse', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;

@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { timed } from '../../../src/lib/timed.js';
+import { timed } from '@/lib/timed.ts';
 
 describe('timed()', () => {
   it('returns the resolved value and a non-negative durationMs', async () => {
