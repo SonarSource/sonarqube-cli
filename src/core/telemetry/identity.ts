@@ -28,7 +28,7 @@ import {
   resolveFromEndpoint,
   resolveFromEnv,
   resolveFromState,
-} from '@/core/server/auth-resolver.ts';
+} from '@/core/host/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 
 import { getTelemetryDir } from '../../lib/config-constants.ts';

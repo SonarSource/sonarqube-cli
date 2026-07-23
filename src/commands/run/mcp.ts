@@ -24,6 +24,7 @@ import { spawn } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { getNetworkConfigOrThrow } from '@/core/host/connectivity/network-config.ts';
 import type { ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
 import {
@@ -33,7 +34,6 @@ import {
 } from '@/core/host/mcp/mcp-helper.ts';
 import { detectContainerRuntime } from '@/core/host/tool-detector.ts';
 import { discoverProject } from '@/core/project-info.ts';
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
 import { warn } from '@/core/ui';
 
 import { canonicalizePath } from '../../lib/fs-utils.ts';

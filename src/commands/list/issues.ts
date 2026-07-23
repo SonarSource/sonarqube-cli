@@ -22,7 +22,7 @@
 
 import { encode as encodeToToon } from '@toon-format/toon';
 
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';

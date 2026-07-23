@@ -33,8 +33,8 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { scanAndEmitSecrets } from '@/commands/analyze/secrets.ts';
 import * as agentDetector from '@/core/host/agent-detector.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { DISTRIBUTION } from '@/core/host/distribution.ts';
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 import { SQAA_ANALYZE_AGENTIC_CALLER_COMMAND } from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 import {

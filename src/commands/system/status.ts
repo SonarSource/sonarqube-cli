@@ -24,6 +24,8 @@ import { join } from 'node:path';
 
 import { parse as parseToml } from 'smol-toml';
 
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { resolveAuth } from '@/core/host/auth-resolver.ts';
 import { getNetworkConfig } from '@/core/host/connectivity/network-config.ts';
 import type {
   CaCertConfig,
@@ -43,8 +45,6 @@ import {
   SONAR_CONTEXT_AUGMENTATION_VERSION,
 } from '@/core/host/signatures.ts';
 import { isNewerVersion, stripBuildNumber } from '@/core/host/version.ts';
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
-import { resolveAuth } from '@/core/server/auth-resolver.ts';
 import { blank, print, success, text, warn } from '@/core/ui';
 
 import { version as VERSION } from '../../../package.json';

@@ -22,7 +22,7 @@
 // when --dependency-risks is set, runs a dependency-risks scan as a follow-up stage.
 // Replaces the shell logic that was previously embedded in the git hook script.
 
-import { resolveAuth } from '@/core/server/auth-resolver.ts';
+import { resolveAuth } from '@/core/host/auth-resolver.ts';
 
 import { spawnProcess } from '../../lib/process.ts';
 import { InvalidOptionError } from '../_common/error.ts';

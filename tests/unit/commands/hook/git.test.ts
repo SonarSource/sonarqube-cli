@@ -20,7 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import * as authResolver from '@/core/server/auth-resolver.ts';
+import * as authResolver from '@/core/host/auth-resolver.ts';
 
 import { CommandFailedError } from '../../../../src/commands/_common/error.ts';
 import * as installSecrets from '../../../../src/commands/_common/install/secrets.ts';

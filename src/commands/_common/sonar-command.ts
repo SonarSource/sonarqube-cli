@@ -22,8 +22,8 @@
 
 import { Command } from 'commander';
 
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
-import { resolveAuth } from '@/core/server/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { resolveAuth } from '@/core/host/auth-resolver.ts';
 import { blank, error, print } from '@/core/ui';
 
 import logger from '../../lib/logger.ts';

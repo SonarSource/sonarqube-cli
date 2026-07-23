@@ -29,7 +29,7 @@ import {
   normalizeCloudV2Endpoint,
   resolveAuth,
   resolveFromEndpoint,
-} from '@/core/server/auth-resolver.ts';
+} from '@/core/host/auth-resolver.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import * as stateRepository from '../../../../src/lib/repository/state-repository.ts';

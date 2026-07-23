@@ -20,8 +20,8 @@
 
 // Remediate command - triggers AI agent remediation for eligible issues
 
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { discoverProject } from '@/core/project-info.ts';
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';

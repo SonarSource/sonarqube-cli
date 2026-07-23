@@ -18,8 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { findGitRoot } from '@/core/host/discover-git-repo.ts';
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
 import { emitIntegrationConfiguredTelemetry } from '@/core/telemetry/integrate-telemetry.ts';
 import { text, warn } from '@/core/ui';
 

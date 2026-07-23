@@ -32,8 +32,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
-import * as authResolver from '@/core/server/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import * as authResolver from '@/core/host/auth-resolver.ts';
 import {
   authMatchesConnection,
   identityFromConnection,

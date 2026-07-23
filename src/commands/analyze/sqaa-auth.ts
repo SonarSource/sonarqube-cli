@@ -20,7 +20,7 @@
 
 // Auth and project-key resolution for SQAA commands.
 
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { blank, confirmPrompt, text, warn } from '@/core/ui';
 
 import { selectRecordedFeatureForDir } from '../../core/host/recorded-feature-resolver.ts';

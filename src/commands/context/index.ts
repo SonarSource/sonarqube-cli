@@ -20,8 +20,8 @@
 
 import { spawn } from 'node:child_process';
 
+import { resolveAuth, type ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { getToken } from '@/core/host/keychain.ts';
-import { resolveAuth, type ResolvedAuth } from '@/core/server/auth-resolver.ts';
 
 import { resolveContextWorkspaceRoot } from '../../core/host/git-worktree.ts';
 import { selectRecordedFeatureForDir } from '../../core/host/recorded-feature-resolver.ts';

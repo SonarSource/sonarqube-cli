@@ -23,7 +23,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync
 import { join } from 'node:path';
 
 import { detectCallerAgent } from '@/core/host/agent-detector.ts';
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { buildFetchInit, fetchGuarded } from '@/core/server/fetch-guarded.ts';
 import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
 

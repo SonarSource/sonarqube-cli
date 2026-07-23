@@ -29,7 +29,7 @@ import {
   isSonarQubeCloud,
   normalizeCloudV2Endpoint,
   resolveFromEndpoint,
-} from './auth-resolver.ts';
+} from '../host/auth-resolver.ts';
 import {
   BadRequestError,
   ForbiddenApiError,

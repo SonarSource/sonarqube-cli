@@ -21,7 +21,7 @@
 // git pre-push callback handler — scans files in new commits for secrets.
 // Replaces the shell logic that was previously embedded in the git hook script.
 
-import { resolveAuth } from '@/core/server/auth-resolver.ts';
+import { resolveAuth } from '@/core/host/auth-resolver.ts';
 
 import { spawnProcess } from '../../lib/process.ts';
 import { runSecretsStage } from './git-pre-push-secrets.ts';

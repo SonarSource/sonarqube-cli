@@ -28,10 +28,10 @@ import * as contextAugmentation from '@/commands/integrate/_common/context-augme
 import * as registry from '@/commands/integrate/_common/registry';
 import { integrateClaude } from '@/commands/integrate/claude';
 import * as hooks from '@/commands/integrate/claude/hooks.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import * as gitWorktree from '@/core/host/git-worktree.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import * as discovery from '@/core/project-info.ts';
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import type { PhaseItem } from '@/core/ui';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';

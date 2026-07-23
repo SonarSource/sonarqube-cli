@@ -18,13 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { cloudRegionFromUrl, isSonarQubeCloud } from '@/core/host/auth-resolver.ts';
 import {
   deleteStaleTokens,
   getToken as getKeystoreToken,
   saveToken,
 } from '@/core/host/keychain.ts';
 import { discoverOrganization, discoverServer } from '@/core/project-info.ts';
-import { cloudRegionFromUrl, isSonarQubeCloud } from '@/core/server/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import {
   confirmPrompt,

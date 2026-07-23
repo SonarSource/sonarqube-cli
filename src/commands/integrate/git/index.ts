@@ -23,9 +23,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { findGitRoot } from '@/core/host/discover-git-repo.ts';
 import { discoverProject } from '@/core/project-info.ts';
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
 import { blank, confirmPrompt, info, intro, phase, phaseItem, text, warn } from '@/core/ui';
 import { yellow } from '@/core/ui/colors.ts';
 

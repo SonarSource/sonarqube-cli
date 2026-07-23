@@ -22,8 +22,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
-import * as authResolver from '@/core/server/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import * as authResolver from '@/core/host/auth-resolver.ts';
 import { RateLimitError, ServiceUnavailableError } from '@/core/server/errors.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 

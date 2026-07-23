@@ -45,7 +45,7 @@ const TEST_TOKEN = 'squ_test_token';
 const FILE_CONTENT = 'const x = 1;\n';
 
 /** Fake auth for a cloud connection */
-const FAKE_AUTH: import('@/core/server/auth-resolver.ts').ResolvedAuth = {
+const FAKE_AUTH: import('@/core/host/auth-resolver.ts').ResolvedAuth = {
   token: TEST_TOKEN,
   serverUrl: SONARCLOUD_URL,
   orgKey: TEST_ORG,

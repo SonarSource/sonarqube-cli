@@ -20,7 +20,7 @@
 
 // Integrate command — setup SonarQube integration for Codex.
 
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 
 import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint.ts';
 import { finalizeAgentInstall } from '../_common/agent-integrate-postlude.ts';

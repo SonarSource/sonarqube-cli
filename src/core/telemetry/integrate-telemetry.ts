@@ -20,7 +20,7 @@
 
 import { createHash } from 'node:crypto';
 
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 
 import { canonicalizePath } from '../../lib/fs-utils.ts';
 import logger from '../../lib/logger.ts';

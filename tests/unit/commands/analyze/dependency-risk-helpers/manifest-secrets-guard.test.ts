@@ -23,7 +23,7 @@ import { join } from 'node:path';
 
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 
 import { CommandFailedError } from '../../../../../src/commands/_common/error.ts';
 import type { SecretsInstaller } from '../../../../../src/commands/_common/install/secrets.ts';

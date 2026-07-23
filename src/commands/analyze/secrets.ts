@@ -20,8 +20,8 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { buildSubprocessNetworkEnv } from '@/core/host/connectivity/network-config.ts';
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
 import {
   SECRETS_CALLER_COMMANDS,
   type SecretsCallerCommand,

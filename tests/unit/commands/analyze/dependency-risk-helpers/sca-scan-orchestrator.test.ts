@@ -20,7 +20,7 @@
 
 import { describe, expect, it, mock, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import type { SonarQubeClient } from '@/core/server/client.ts';
 import type { SettingsValue } from '@/core/server/settings-value.ts';
 import * as scaTelemetry from '@/core/telemetry/sca-analysis-telemetry.ts';

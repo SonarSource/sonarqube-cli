@@ -21,7 +21,7 @@
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 import { withSpinner } from '@/core/ui';
 

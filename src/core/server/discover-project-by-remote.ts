@@ -19,7 +19,7 @@
  */
 
 import logger from '../../lib/logger.ts';
-import type { ResolvedAuth } from './auth-resolver.ts';
+import type { ResolvedAuth } from '../host/auth-resolver.ts';
 import { SonarQubeClient } from './client.ts';
 
 export const GIT_REMOTE_BINDING_SOURCE = 'git remote (origin)';

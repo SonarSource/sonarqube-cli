@@ -24,6 +24,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { getNetworkConfig } from '@/core/host/connectivity/network-config.ts';
 import type {
   ClientCertConfig,
@@ -31,7 +32,6 @@ import type {
   ResolvedNetworkConfig,
 } from '@/core/host/connectivity/types.ts';
 import { pemToPkcs12 } from '@/core/host/crypto/pkcs12.ts';
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
 
 import {
   ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,

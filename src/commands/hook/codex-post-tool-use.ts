@@ -20,7 +20,7 @@
 
 // PostToolUse callback handler for Codex — runs git change-set SQAA after apply_patch.
 
-import { resolveAuth } from '@/core/server/auth-resolver.ts';
+import { resolveAuth } from '@/core/host/auth-resolver.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
 import {
   emitSqaaHookFailureTelemetry,

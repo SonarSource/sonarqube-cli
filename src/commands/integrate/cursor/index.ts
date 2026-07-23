@@ -20,7 +20,7 @@
 
 // Integrate command — setup SonarQube integration for Cursor.
 
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { warn } from '@/core/ui';
 
 import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint.ts';

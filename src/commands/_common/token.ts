@@ -23,9 +23,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as readline from 'node:readline';
 
+import { isSonarQubeCloud } from '@/core/host/auth-resolver.ts';
 import { openBrowser } from '@/core/host/browser.ts';
 import { startLoopbackServer } from '@/core/host/loopback-server.ts';
-import { isSonarQubeCloud } from '@/core/server/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { fetchServerVersion, isAtLeast } from '@/core/server/server-info.ts';
 import { isMockActive, pressEnterKeyPrompt, print, warn } from '@/core/ui';

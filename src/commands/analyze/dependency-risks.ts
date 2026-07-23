@@ -18,8 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { type ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { discoverProject } from '@/core/project-info.ts';
-import { type ResolvedAuth } from '@/core/server/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import {
   emitScaAnalysisTelemetry,

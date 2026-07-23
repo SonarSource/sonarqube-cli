@@ -25,9 +25,9 @@ import * as contextAugmentation from '@/commands/integrate/_common/context-augme
 import * as registry from '@/commands/integrate/_common/registry';
 import { integrateCopilot } from '@/commands/integrate/copilot';
 import * as hooks from '@/commands/integrate/copilot/hooks.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import * as discovery from '@/core/project-info.ts';
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { clearMockUiCalls, setMockUi } from '@/core/ui';
 

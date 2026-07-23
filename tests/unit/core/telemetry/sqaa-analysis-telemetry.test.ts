@@ -26,7 +26,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import type { RunTally } from '@/commands/analyze/sqaa-analysis.ts';
 import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display-json.ts';
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import type { SqaaIssue } from '@/core/server/client.ts';
 import {
   collectRuleCounts,

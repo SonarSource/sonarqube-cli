@@ -24,9 +24,9 @@ import * as token from '@/commands/_common/token.ts';
 import * as contextAugmentation from '@/commands/integrate/_common/context-augmentation.ts';
 import * as registry from '@/commands/integrate/_common/registry';
 import { integrateCodex } from '@/commands/integrate/codex';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import * as discovery from '@/core/project-info.ts';
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { clearMockUiCalls, setMockUi } from '@/core/ui';
 

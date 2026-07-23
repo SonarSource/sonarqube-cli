@@ -24,7 +24,7 @@
 // missing, scanner failure), and blocks the commit only when risks matching the
 // configured filter are found.
 
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import {
   emitScaAnalysisTelemetry,

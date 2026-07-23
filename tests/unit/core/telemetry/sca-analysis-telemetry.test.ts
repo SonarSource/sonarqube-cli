@@ -32,7 +32,7 @@ import type {
   ScaIssueType,
   Severity,
 } from '@/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
-import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import {
   emitScaAnalysisTelemetry,
   SCA_CALLER_COMMANDS,

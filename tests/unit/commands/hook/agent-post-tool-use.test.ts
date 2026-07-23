@@ -23,7 +23,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import * as authResolver from '@/core/server/auth-resolver.ts';
+import * as authResolver from '@/core/host/auth-resolver.ts';
 import * as clientModule from '@/core/server/client.ts';
 import * as sqaaTelemetry from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 import {

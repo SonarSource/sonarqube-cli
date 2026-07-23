@@ -22,8 +22,8 @@
 
 import { homedir } from 'node:os';
 
+import { isSonarQubeCloud, type ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { type DiscoveredProject, discoverProject } from '@/core/project-info.ts';
-import { isSonarQubeCloud, type ResolvedAuth } from '@/core/server/auth-resolver.ts';
 import { intro, warn, withSpinner } from '@/core/ui';
 
 import type { IntegrationScope } from '../../../lib/state.ts';
