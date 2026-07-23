@@ -413,6 +413,9 @@ describe('sonar import', () => {
         );
         expect(result.stdout).toContain('Manual — choose repositories yourself');
         expect(result.stdout).toContain('Imported 2 repositories');
+        expect(result.stdout).toContain(
+          `Dashboard: ${serverUrl}/organizations/my-org/onboarding-dashboard`,
+        );
         const recorded = server.getRecordedRequests();
         const provisionRequests = recorded.filter(
           (r) => r.path === '/api/alm_integration/provision_projects',

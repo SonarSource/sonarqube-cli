@@ -178,7 +178,17 @@ function reportSkipped(skipped: readonly SkippedRepo[]): void {
   }
 }
 
-function reportOutcome(succeeded: number, failed: number, skippedCount: number): void {
+/** Builds the SonarQube Cloud onboarding dashboard link for an organization. */
+function buildOnboardingDashboardUrl(serverUrl: string, orgKey: string): string {
+  return `${serverUrl.replace(/\/$/, '')}/organizations/${orgKey}/onboarding-dashboard`;
+}
+
+function reportOutcome(
+  succeeded: number,
+  failed: number,
+  skippedCount: number,
+  dashboardUrl: string,
+): void {
   const skippedSuffix = skippedCount > 0 ? ` (${skippedCount} skipped)` : '';
 
   if (failed > 0) {
@@ -193,7 +203,11 @@ function reportOutcome(succeeded: number, failed: number, skippedCount: number):
   }
 
   const succeededNoun = succeeded === 1 ? 'repository' : 'repositories';
-  outro(`Imported ${succeeded} ${succeededNoun}${skippedSuffix}`, 'success');
+  outro(
+    `Imported ${succeeded} ${succeededNoun}${skippedSuffix}`,
+    'success',
+    `Dashboard: ${dashboardUrl}`,
+  );
 }
 
 export async function importHandler(options: ImportOptions, auth: ResolvedAuth): Promise<void> {
@@ -211,7 +225,12 @@ export async function importHandler(options: ImportOptions, auth: ResolvedAuth):
       resolution.collection,
     );
     reportSkipped(skipped);
-    reportOutcome(succeeded, failed, skipped.length);
+    reportOutcome(
+      succeeded,
+      failed,
+      skipped.length,
+      buildOnboardingDashboardUrl(auth.serverUrl, resolution.orgKey),
+    );
     return;
   }
 
@@ -232,5 +251,10 @@ export async function importHandler(options: ImportOptions, auth: ResolvedAuth):
   );
 
   const { succeeded, failed } = progress.finish();
-  reportOutcome(succeeded, failed, skipped.length);
+  reportOutcome(
+    succeeded,
+    failed,
+    skipped.length,
+    buildOnboardingDashboardUrl(auth.serverUrl, resolution.orgKey),
+  );
 }
