@@ -20,12 +20,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockTty, setMockUi } from '@/core/ui';
 
 import { ScaScanOrchestrator } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
 import type { AnalyzeProjectResponse } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import { analyzeDependencyRisks } from '../../../../src/commands/analyze/dependency-risks.ts';
-import type { ResolvedAuth } from '../../../../src/lib/auth-resolver.ts';
 
 const FAKE_AUTH: ResolvedAuth = {
   token: 'test-token',

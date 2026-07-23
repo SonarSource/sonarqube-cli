@@ -43,11 +43,11 @@ import {
   SONAR_CONTEXT_AUGMENTATION_VERSION,
 } from '@/core/host/signatures.ts';
 import { isNewerVersion, stripBuildNumber } from '@/core/host/version.ts';
+import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
+import { resolveAuth } from '@/core/server/auth-resolver.ts';
 import { blank, print, success, text, warn } from '@/core/ui';
 
 import { version as VERSION } from '../../../package.json';
-import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
-import { resolveAuth } from '../../lib/auth-resolver.ts';
 import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '../../lib/config-constants.ts';
 import { loadState } from '../../lib/repository/state-repository.ts';
 import type { CliState } from '../../lib/state.ts';

@@ -18,9 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
-import { fetchServerVersion, isAtLeast } from '../../lib/server-info.ts';
-import type { SonarQubeClient } from '../../sonarqube/client.ts';
+import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
+import type { SonarQubeClient } from '@/core/server/client.ts';
+import { fetchServerVersion, isAtLeast } from '@/core/server/server-info.ts';
+
 import { CommandFailedError } from './error.ts';
 
 export const MIN_SCA_SQS_VERSION = '2026.4';

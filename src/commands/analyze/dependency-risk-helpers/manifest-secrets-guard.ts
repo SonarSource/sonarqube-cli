@@ -21,10 +21,10 @@
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 
+import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 import { withSpinner } from '@/core/ui';
 
-import type { ResolvedAuth } from '../../../lib/auth-resolver.ts';
 import logger from '../../../lib/logger.ts';
 import { CommandFailedError } from '../../_common/error.ts';
 import { formatSpawnOutput } from '../../_common/install/install-utils.ts';

@@ -20,6 +20,8 @@
 
 import { describe, expect, it } from 'bun:test';
 
+import { BadRequestError, RequestPayloadTooLargeError } from '@/core/server/errors.ts';
+
 import { CommandFailedError } from '../../../../src/commands/_common/error.ts';
 import {
   badRequestCommandError,
@@ -29,7 +31,6 @@ import {
   sqaaFailureMessage,
   toSqaaCommandError,
 } from '../../../../src/commands/analyze/sqaa-errors.ts';
-import { BadRequestError, RequestPayloadTooLargeError } from '../../../../src/sonarqube/errors.ts';
 
 describe('sqaaFailureMessage', () => {
   it('keeps heading and detail on one line for command-level errors', () => {

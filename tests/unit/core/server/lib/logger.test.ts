@@ -20,7 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import logger, { configureLogger, getLogLevelConfig, setMockLogger } from '../../../src/lib/logger';
+import logger, { configureLogger, getLogLevelConfig, setMockLogger } from '@/lib/logger.ts';
 
 describe('Logger', () => {
   let logOutput: string[];

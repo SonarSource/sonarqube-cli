@@ -21,6 +21,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 
 import { buildSubprocessNetworkEnv } from '@/core/host/connectivity/network-config.ts';
+import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
 import {
   SECRETS_CALLER_COMMANDS,
   type SecretsCallerCommand,
@@ -29,7 +30,6 @@ import { emitAnalysisCompleted } from '@/core/telemetry/telemetry-events.ts';
 import { blank, print, success, warn } from '@/core/ui';
 import { green, yellow } from '@/core/ui/colors.ts';
 
-import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import logger from '../../lib/logger.ts';
 import type { SpawnResult, StdioMode } from '../../lib/process.ts';
 import { spawnProcessWithTimeout } from '../../lib/process.ts';

@@ -33,6 +33,8 @@ import type { Command } from 'commander';
 
 import * as agentDetector from '@/core/host/agent-detector.ts';
 import { DISTRIBUTION } from '@/core/host/distribution.ts';
+import * as authResolver from '@/core/server/auth-resolver.ts';
+import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/server/auth-resolver.ts';
 import {
   flushTelemetry,
   setPassthroughSubcommand,
@@ -42,8 +44,6 @@ import {
 import { resolveTelemetryIdentity } from '@/core/telemetry/identity.ts';
 import * as userModule from '@/core/telemetry/user.ts';
 import * as ui from '@/core/ui';
-import * as authResolver from '@/lib/auth-resolver.ts';
-import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/lib/auth-resolver.ts';
 import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '@/lib/config-constants.ts';
 import * as stateRepository from '@/lib/repository/state-repository.ts';
 import type { StoredAnalysisCompletedEvent } from '@/lib/state.ts';

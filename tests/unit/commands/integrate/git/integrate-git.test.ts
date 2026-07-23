@@ -23,14 +23,9 @@ import { isAbsolute, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { clearMockUiCalls, getMockUiCalls, queueMockResponse, setMockUi } from '@/core/ui';
-
-import {
-  CommandFailedError,
-  InvalidOptionError,
-} from '../../../../../src/commands/_common/error.ts';
-import * as binaryInstall from '../../../../../src/commands/_common/install/binary.ts';
-import * as preflightSummary from '../../../../../src/commands/integrate/_common/preflight-summary.ts';
+import { CommandFailedError, InvalidOptionError } from '@/commands/_common/error.ts';
+import * as binaryInstall from '@/commands/_common/install/binary.ts';
+import * as preflightSummary from '@/commands/integrate/_common/preflight-summary.ts';
 import {
   detectSonarHookInstallation as detectHookInstallation,
   hasMarker,
@@ -38,16 +33,19 @@ import {
   type IntegrateGitOptions,
   isGitHookType,
   resolveGitHooksDir,
-} from '../../../../../src/commands/integrate/git';
+} from '@/commands/integrate/git';
 import {
   getNativeHookMarker,
   getRecognizedNativeMarkers,
-} from '../../../../../src/commands/integrate/git/tools/native';
-import { PRE_COMMIT_CONFIG_FILE } from '../../../../../src/commands/integrate/git/tools/pre-commit';
-import { LEGACY_HOOK_MARKER } from '../../../../../src/commands/integrate/git/tools/shared.ts';
-import { GLOBAL_HOOKS_DIR } from '../../../../../src/lib/config-constants.ts';
+} from '@/commands/integrate/git/tools/native';
+import { PRE_COMMIT_CONFIG_FILE } from '@/commands/integrate/git/tools/pre-commit';
+import { LEGACY_HOOK_MARKER } from '@/commands/integrate/git/tools/shared.ts';
+import * as gitDiscovery from '@/core/host/discover-git-repo.ts';
+import * as discovery from '@/core/project-info.ts';
+import { clearMockUiCalls, getMockUiCalls, queueMockResponse, setMockUi } from '@/core/ui';
+import { GLOBAL_HOOKS_DIR } from '@/lib/config-constants.ts';
+
 import * as processLib from '../../../../../src/lib/process.ts';
-import * as discovery from '../../../../../src/lib/project-workspace';
 import * as stateRepository from '../../../../../src/lib/repository/state-repository.ts';
 import { type CliState, getDefaultState } from '../../../../../src/lib/state.ts';
 
@@ -354,7 +352,7 @@ describe('integrateGit', () => {
   beforeEach(() => {
     setMockUi(true);
     clearMockUiCalls();
-    findGitRootSpy = spyOn(discovery, 'findGitRoot');
+    findGitRootSpy = spyOn(gitDiscovery, 'findGitRoot');
     discoverProjectSpy = spyOn(discovery, 'discoverProject').mockResolvedValue({
       rootDir: TEMP_DIR,
       projectKey: undefined,

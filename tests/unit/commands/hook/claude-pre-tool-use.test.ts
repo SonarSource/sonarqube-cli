@@ -22,6 +22,8 @@ import * as fs from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import * as authResolver from '@/core/server/auth-resolver.ts';
+
 import * as installSecrets from '../../../../src/commands/_common/install/secrets.ts';
 import * as analyzeSecrets from '../../../../src/commands/analyze/secrets.ts';
 import { claudePreToolUse } from '../../../../src/commands/hook/claude-pre-tool-use.ts';
@@ -30,7 +32,6 @@ import {
   SECRETS_INACTIVE_UNAUTHENTICATED,
 } from '../../../../src/commands/hook/hook-dependencies.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
-import * as authResolver from '../../../../src/lib/auth-resolver.ts';
 
 const TEST_FILE = '/sonar-test/test.ts';
 const { EXIT_CODE_SECRETS_FOUND } = analyzeSecrets;

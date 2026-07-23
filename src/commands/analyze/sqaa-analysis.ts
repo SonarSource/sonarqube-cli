@@ -20,11 +20,11 @@
 
 // Sequential chunked execution engine for SQAA change-set analysis
 
+import type { SqaaAnalysisDepth, SqaaIssue } from '@/core/server/client.ts';
+import { SqaaForbiddenError } from '@/core/server/errors.ts';
 import type { SqaaProgress } from '@/core/ui/components/sqaa-progress.ts';
 
 import { getSqaaRetry503BaseDelayMs } from '../../lib/config-constants.ts';
-import type { SqaaAnalysisDepth, SqaaIssue } from '../../sonarqube/client.ts';
-import { SqaaForbiddenError } from '../../sonarqube/errors.ts';
 import {
   fetchChunkWith413Split,
   MAX_503_RETRIES,

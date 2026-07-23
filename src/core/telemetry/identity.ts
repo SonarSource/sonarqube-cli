@@ -28,10 +28,11 @@ import {
   resolveFromEndpoint,
   resolveFromEnv,
   resolveFromState,
-} from '../../lib/auth-resolver.ts';
+} from '@/core/server/auth-resolver.ts';
+import { SonarQubeClient } from '@/core/server/client.ts';
+
 import { getTelemetryDir } from '../../lib/config-constants.ts';
 import type { AuthConnection, ServerType, TelemetryConnectionType } from '../../lib/state.ts';
-import { SonarQubeClient } from '../../sonarqube/client.ts';
 
 export interface TelemetryIdentity {
   user_uuid: string | null;

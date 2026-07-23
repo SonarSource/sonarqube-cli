@@ -23,15 +23,15 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
-
-import { SONARCLOUD_URL } from '../../../../src/lib/config-constants';
 import {
   discoverOrganization,
   discoverProject,
   discoverProjectInfo,
   discoverServer,
-} from '../../../../src/lib/project-workspace';
+} from '@/core/project-info.ts';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
+import { SONARCLOUD_URL } from '../../../../src/lib/config-constants';
 import { TestHarness } from '../../harness';
 
 async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {

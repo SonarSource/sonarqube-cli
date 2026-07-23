@@ -32,12 +32,12 @@ import {
   resolveMcpContainerCommand,
 } from '@/core/host/mcp/mcp-helper.ts';
 import { detectContainerRuntime } from '@/core/host/tool-detector.ts';
+import { discoverProject } from '@/core/project-info.ts';
+import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
 import { warn } from '@/core/ui';
 
-import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import { canonicalizePath } from '../../lib/fs-utils.ts';
 import logger from '../../lib/logger.ts';
-import { discoverProject } from '../../lib/project-workspace';
 import { CommandFailedError } from '../_common/error.ts';
 
 export interface McpRunOptions {

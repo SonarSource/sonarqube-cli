@@ -18,10 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
+import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 import type { SqaaTelemetryCallerCommand } from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 
-import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
-import type { SqaaAnalysisDepth } from '../../sonarqube/client.ts';
 import type { CloudAuth } from './sqaa-auth.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 

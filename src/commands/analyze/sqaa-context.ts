@@ -18,9 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 import { warn } from '@/core/ui';
 
-import type { SqaaAnalysisDepth } from '../../sonarqube/client.ts';
 import { CommandFailedError } from '../_common/error.ts';
 import type { SqaaAuthResolution } from './sqaa-auth.ts';
 import { confirmLargeChangeset } from './sqaa-auth.ts';

@@ -20,9 +20,9 @@
 
 // JSON report builders for SQAA results.
 
+import type { SqaaAnalysisDepth, SqaaIssue } from '@/core/server/client.ts';
 import { print } from '@/core/ui';
 
-import type { SqaaAnalysisDepth, SqaaIssue } from '../../sonarqube/client.ts';
 import type { FileFailure, FileSuccess, RunTally } from './sqaa-analysis.ts';
 import { toRelativePosixPath } from './sqaa-api.ts';
 import type { IgnoredFile } from './sqaa-changeset.ts';

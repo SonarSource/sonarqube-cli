@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { Organization } from '../../../sonarqube/client.ts';
+import type { Organization } from '@/core/server/client.ts';
 
 const ORGANIZATION_LOCAL_PAGE_SIZE = 10;
 

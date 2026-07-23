@@ -31,8 +31,8 @@ import type {
   ResolvedNetworkConfig,
 } from '@/core/host/connectivity/types.ts';
 import { pemToPkcs12 } from '@/core/host/crypto/pkcs12.ts';
+import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
 
-import type { ResolvedAuth } from '../../../lib/auth-resolver.ts';
 import {
   ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
   CLI_TMP_DIR,

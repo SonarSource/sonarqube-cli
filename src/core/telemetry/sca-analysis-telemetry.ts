@@ -20,8 +20,9 @@
 
 import { randomUUID } from 'node:crypto';
 
+import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
+
 import type { AnalyzeProjectResponse } from '../../commands/analyze/dependency-risk-helpers/sca-scanner.ts';
-import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
 import { emitAnalysisCompleted } from './telemetry-events.ts';
 
 /**

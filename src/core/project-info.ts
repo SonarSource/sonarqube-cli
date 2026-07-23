@@ -20,21 +20,21 @@
 
 // Project workspace: git root, sonar-project.properties, SonarLint connected mode
 
-import { existsSync, statSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { existsSync } from 'node:fs';
+import { basename, join } from 'node:path';
 
-import { print } from '@/core/ui';
-
-import type { ResolvedAuth } from '../auth-resolver';
-import { resolveAuth } from '../auth-resolver';
-import { canonicalizePath } from '../fs-utils';
-import logger from '../logger';
-import { spawnProcess } from '../process';
+import { findGitRoot, getGitRemote } from '@/core/host/discover-git-repo.ts';
+import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
+import { resolveAuth } from '@/core/server/auth-resolver.ts';
 import {
   discoverProjectKeyByGitRemote,
   GIT_REMOTE_BINDING_SOURCE,
-} from './discover-project-by-remote';
-import { loadSonarLintConfig, type SonarLintConfig } from './sonarlint-connected-mode';
+} from '@/core/server/discover-project-by-remote.ts';
+import { print } from '@/core/ui';
+
+import { canonicalizePath } from '../lib/fs-utils.ts';
+import logger from '../lib/logger.ts';
+import { loadSonarLintConfig, type SonarLintConfig } from './host/sonarlint-connected-mode.ts';
 
 export interface ProjectInfo {
   root: string;
@@ -249,42 +249,6 @@ function formatConfigFields(
     .join(', ');
 }
 
-export function findGitRoot(startDir: string): { gitRoot: string; isGit: boolean } {
-  let dir = startDir;
-
-  for (;;) {
-    const gitDir = join(dir, '.git');
-
-    if (existsSync(gitDir)) {
-      const stat = statSync(gitDir);
-      // Accept both directory (.git/) and file (.git worktree pointer)
-      if (stat.isDirectory() || stat.isFile()) {
-        return { gitRoot: dir, isGit: true };
-      }
-    }
-
-    const parent = dirname(dir);
-    if (parent === dir) {
-      break;
-    }
-    dir = parent;
-  }
-
-  return { gitRoot: '', isGit: false };
-}
-
-async function getGitRemote(gitRoot: string): Promise<string> {
-  try {
-    const result = await spawnProcess('git', ['remote', 'get-url', 'origin'], { cwd: gitRoot });
-    if (result.exitCode === 0) {
-      return result.stdout.trim();
-    }
-  } catch (error) {
-    logger.debug(`Failed to get git remote: ${(error as Error).message}`);
-  }
-  return '';
-}
-
 function parsePropertyLine(line: string, props: Partial<SonarProperties>): void {
   const trimmed = line.trim();
 
@@ -336,4 +300,4 @@ async function loadSonarProperties(projectRoot: string): Promise<SonarProperties
   return props as SonarProperties;
 }
 
-export { type SonarLintConfig } from './sonarlint-connected-mode';
+export { type SonarLintConfig } from './host/sonarlint-connected-mode.ts';

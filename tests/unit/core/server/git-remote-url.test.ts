@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { stripGitRemoteUrlUserinfo } from '../../../src/sonarqube/git-remote-url.js';
+import { stripGitRemoteUrlUserinfo } from '@/core/server/git-remote-url.ts';
 
 describe('stripGitRemoteUrlUserinfo', () => {
   it('removes username and password from https remotes', () => {

@@ -20,11 +20,11 @@
 
 // Preflight summaries shown at the start of integrate commands, before install.
 
+import type { DiscoveredProject } from '@/core/project-info.ts';
+import { SonarQubeClient } from '@/core/server/client.ts';
 import type { PhaseItem, StepStatus } from '@/core/ui';
 import { info, outro, phase, phaseItem, text } from '@/core/ui';
 
-import type { DiscoveredProject } from '../../../lib/project-workspace';
-import { SonarQubeClient } from '../../../sonarqube/client.ts';
 import { CommandFailedError } from '../../_common/error.ts';
 import { GitRepo } from '../../_common/git-repo.ts';
 import { checkTokenStatus, type TokenCheckResult, type TokenStatus } from '../../_common/token.ts';

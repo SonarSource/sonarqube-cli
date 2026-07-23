@@ -20,18 +20,18 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import type { PhaseItem } from '@/core/ui';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
-
-import { CommandFailedError } from '../../../../../src/commands/_common/error.ts';
-import * as token from '../../../../../src/commands/_common/token.ts';
+import { CommandFailedError } from '@/commands/_common/error.ts';
+import * as token from '@/commands/_common/token.ts';
 import {
   printAgentPreflightSummary,
   printGitPreflightSummary,
-} from '../../../../../src/commands/integrate/_common/preflight-summary.ts';
+} from '@/commands/integrate/_common/preflight-summary.ts';
+import type { DiscoveredProject } from '@/core/project-info.ts';
+import { SonarQubeClient } from '@/core/server/client.ts';
+import type { PhaseItem } from '@/core/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
 import * as processLib from '../../../../../src/lib/process.ts';
-import type { DiscoveredProject } from '../../../../../src/lib/project-workspace';
-import { SonarQubeClient } from '../../../../../src/sonarqube/client.ts';
 
 const BASE_PROJECT: DiscoveredProject = {
   rootDir: '/workspace/app',

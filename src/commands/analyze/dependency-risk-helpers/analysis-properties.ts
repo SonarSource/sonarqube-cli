@@ -22,7 +22,7 @@
 // analysis. CLI-352 will forward these to sca-scanner as
 // `--scanner-property`, `--excluded-path`, and `--include-git-ignored-paths`.
 
-import { getValueAsList, type SettingsValue } from '../../../sonarqube/settings-value.ts';
+import { getValueAsList, type SettingsValue } from '@/core/server/settings-value.ts';
 
 const SCA_KEY_PREFIX = 'sonar.sca.';
 const EXCLUSION_KEYS = new Set([

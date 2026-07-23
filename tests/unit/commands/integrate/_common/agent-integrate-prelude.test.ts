@@ -20,6 +20,8 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import type { DiscoveredProject } from '@/core/project-info.ts';
+import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import {
@@ -27,8 +29,6 @@ import {
   buildAgentIntegrateContext,
   warnMissingIntegrateProjectKey,
 } from '../../../../../src/commands/integrate/_common/agent-integrate-prelude.ts';
-import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.ts';
-import type { DiscoveredProject } from '../../../../../src/lib/project-workspace';
 
 const AUTH: ResolvedAuth = {
   token: 'token',

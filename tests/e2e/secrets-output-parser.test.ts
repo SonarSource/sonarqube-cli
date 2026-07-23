@@ -33,13 +33,14 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
+import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
+
 import { resolveSecretsBinaryPath } from '../../src/commands/_common/install/secrets';
 import {
   EXIT_CODE_SECRETS_FOUND,
   parseSecretsJson,
   runSecretsBinary,
 } from '../../src/commands/analyze/secrets.ts';
-import type { ResolvedAuth } from '../../src/lib/auth-resolver';
 import { FakeSonarQubeServerBuilder } from '../integration/harness';
 
 const TEST_TIMEOUT_MS = 30_000;

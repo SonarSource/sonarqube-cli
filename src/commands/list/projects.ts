@@ -20,11 +20,11 @@
 
 // Issues command - search for SonarQube issues
 
+import type { ResolvedAuth } from '@/core/server/auth-resolver.ts';
+import { SonarQubeClient } from '@/core/server/client.ts';
+import { MAX_PAGE_SIZE, ProjectsClient } from '@/core/server/projects.ts';
 import { print } from '@/core/ui';
 
-import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
-import { SonarQubeClient } from '../../sonarqube/client.ts';
-import { MAX_PAGE_SIZE, ProjectsClient } from '../../sonarqube/projects.ts';
 import { InvalidOptionError } from '../_common/error.ts';
 
 export interface ListProjectsOptions {

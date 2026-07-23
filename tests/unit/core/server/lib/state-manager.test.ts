@@ -36,13 +36,13 @@ import {
   STATE_READ_MAX_ATTEMPTS,
   stateFileExists,
   tryLoadState,
-} from '../../../src/lib/repository/state-repository.js';
-import { getDefaultState } from '../../../src/lib/state.js';
+} from '@/lib/repository/state-repository.ts';
+import { getDefaultState } from '@/lib/state.ts';
 import {
   addOrUpdateConnection,
   generateConnectionId,
   removeConnection,
-} from '../../../src/lib/state-manager.js';
+} from '@/lib/state-manager.ts';
 
 const testSonarUserHome = join(tmpdir(), `sonar-cli-state-test-${Date.now()}`);
 const testCliDir = join(testSonarUserHome, 'sonarqube-cli');

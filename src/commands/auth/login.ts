@@ -23,6 +23,9 @@ import {
   getToken as getKeystoreToken,
   saveToken,
 } from '@/core/host/keychain.ts';
+import { discoverOrganization, discoverServer } from '@/core/project-info.ts';
+import { cloudRegionFromUrl, isSonarQubeCloud } from '@/core/server/auth-resolver.ts';
+import { SonarQubeClient } from '@/core/server/client.ts';
 import {
   confirmPrompt,
   discreetSuccess,
@@ -34,12 +37,9 @@ import {
   warn,
 } from '@/core/ui';
 
-import { cloudRegionFromUrl, isSonarQubeCloud } from '../../lib/auth-resolver.ts';
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '../../lib/config-constants.ts';
-import { discoverOrganization, discoverServer } from '../../lib/project-workspace';
 import { loadState, saveState } from '../../lib/repository/state-repository.ts';
 import { addOrUpdateConnection, getActiveConnection } from '../../lib/state-manager.ts';
-import { SonarQubeClient } from '../../sonarqube/client.ts';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.ts';
 import { type BrowserAuthResult, generateTokenViaBrowser } from '../_common/token.ts';
 

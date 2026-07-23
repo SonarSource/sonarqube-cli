@@ -21,13 +21,13 @@
 import { spawn } from 'node:child_process';
 
 import { getToken } from '@/core/host/keychain.ts';
+import { resolveAuth, type ResolvedAuth } from '@/core/server/auth-resolver.ts';
 
-import { resolveAuth, type ResolvedAuth } from '../../lib/auth-resolver.ts';
+import { resolveContextWorkspaceRoot } from '../../core/host/git-worktree.ts';
+import { selectRecordedFeatureForDir } from '../../core/host/recorded-feature-resolver.ts';
 import { SONAR_CONTEXT_INVOCATION } from '../../lib/config-constants.ts';
 import { canonicalizePath } from '../../lib/fs-utils.ts';
 import logger from '../../lib/logger.ts';
-import { resolveContextWorkspaceRoot } from '../../lib/project-workspace/git-worktree.ts';
-import { selectRecordedFeatureForDir } from '../../lib/project-workspace/recorded-feature-resolver.ts';
 import type { InstalledIntegrationFeature, IntegrationStateAttribute } from '../../lib/state.ts';
 import { loadState } from '../../lib/state-manager.ts';
 import { buildContextAugmentationEnv } from '../_common/context-augmentation-env.ts';
