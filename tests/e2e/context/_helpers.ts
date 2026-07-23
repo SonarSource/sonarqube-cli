@@ -30,12 +30,13 @@ import {
   CONTEXT_AUGMENTATION_FEATURE_ID,
   CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
   CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID,
-} from '../../../src/commands/integrate/_common/features/context-augmentation-feature';
-import { CLAUDE_INTEGRATION_ID } from '../../../src/commands/integrate/claude/declaration';
-import { CODEX_INTEGRATION_ID } from '../../../src/commands/integrate/codex/declaration';
-import { COPILOT_INTEGRATION_ID } from '../../../src/commands/integrate/copilot/declaration';
-import { CURSOR_INTEGRATION_ID } from '../../../src/commands/integrate/cursor/declaration';
-import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types';
+} from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
+import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
+import { CODEX_INTEGRATION_ID } from '@/commands/integrate/codex/declaration.ts';
+import { COPILOT_INTEGRATION_ID } from '@/commands/integrate/copilot/declaration.ts';
+import { CURSOR_INTEGRATION_ID } from '@/commands/integrate/cursor/declaration.ts';
+import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
+
 import type {
   CliState,
   InstalledIntegrationDependency,

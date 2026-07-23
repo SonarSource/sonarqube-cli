@@ -20,10 +20,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { CommandFailedError } from '../../../../src/commands/_common/error.ts';
+import { CommandFailedError } from '@/commands/_common/error.ts';
+import { purgeAuth } from '@/commands/system/reset-auth.ts';
+import * as keychain from '@/core/host/keychain.ts';
+
 import * as revokeServerToken from '../../../../src/commands/auth/revoke-server-token.ts';
-import { purgeAuth } from '../../../../src/commands/system/reset-auth.ts';
-import * as keychain from '../../../../src/lib/keychain.ts';
 import type { CliState } from '../../../../src/lib/state.ts';
 import { getDefaultState } from '../../../../src/lib/state.ts';
 

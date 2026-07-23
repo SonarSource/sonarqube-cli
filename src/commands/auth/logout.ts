@@ -18,9 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { deleteToken, getToken } from '@/core/host/keychain.ts';
 import { print, success } from '@/core/ui';
 
-import { deleteToken, getToken } from '../../lib/keychain.ts';
 import { loadState, saveState } from '../../lib/repository/state-repository.ts';
 import { getActiveConnection, removeConnection } from '../../lib/state-manager.ts';
 import {

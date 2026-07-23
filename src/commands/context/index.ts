@@ -20,10 +20,11 @@
 
 import { spawn } from 'node:child_process';
 
+import { getToken } from '@/core/host/keychain.ts';
+
 import { resolveAuth, type ResolvedAuth } from '../../lib/auth-resolver.ts';
 import { SONAR_CONTEXT_INVOCATION } from '../../lib/config-constants.ts';
 import { canonicalizePath } from '../../lib/fs-utils.ts';
-import { getToken } from '../../lib/keychain.ts';
 import logger from '../../lib/logger.ts';
 import { resolveContextWorkspaceRoot } from '../../lib/project-workspace/git-worktree.ts';
 import { selectRecordedFeatureForDir } from '../../lib/project-workspace/recorded-feature-resolver.ts';

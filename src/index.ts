@@ -23,8 +23,8 @@
 // Main CLI entry point
 
 import { COMMAND_TREE } from '@/commands/command-tree.ts';
+import * as postUpdate from '@/core/host/post-update.ts';
 import { setFormattedOutputMode } from '@/core/ui';
-import * as postUpdate from '@/lib/post-update';
 import { flushSentry } from '@/lib/sentry';
 
 // Activate formatted output mode early so startup messages are collected

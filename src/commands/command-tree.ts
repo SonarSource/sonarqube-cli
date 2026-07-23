@@ -20,6 +20,8 @@
 
 import { type Command, Help, InvalidArgumentError, Option } from 'commander';
 
+import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
+import { maybeNotifyUpdateAvailable } from '@/core/host/update-notification.ts';
 import {
   flushTelemetry,
   setPassthroughSubcommand,
@@ -33,10 +35,8 @@ import {
 import { blank, error, warn } from '@/core/ui';
 
 import { version as VERSION } from '../../package.json';
-import { CURRENT_DISTRIBUTION } from '../lib/distribution.ts';
 import { tryLoadState } from '../lib/repository/state-repository.ts';
 import { initSentry } from '../lib/sentry.ts';
-import { maybeNotifyUpdateAvailable } from '../lib/update-notification.ts';
 import { GENERIC_HTTP_METHODS } from '../sonarqube/client.ts';
 import { MAX_PAGE_SIZE } from '../sonarqube/projects.ts';
 import { CommandFailedError } from './_common/error.ts';

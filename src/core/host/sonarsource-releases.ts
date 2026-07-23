@@ -1,0 +1,153 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+// SonarSource binaries client for downloading distributed CLI binariy dependencies
+
+import { readFileSync } from 'node:fs';
+
+import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
+
+import { version as VERSION } from '../../../package.json';
+import {
+  SONAR_CONTEXT_AUGMENTATION_DIST_PREFIX,
+  SONARSOURCE_BINARIES_URL,
+} from '../../lib/config-constants.ts';
+import logger from '../../lib/logger.ts';
+import { buildCagPlatformSuffix, type PlatformInfo } from './install-types.ts';
+
+const DOWNLOAD_TIMEOUT_MS = 60000;
+
+/**
+ * Build the CDN filename for dependency binaries installed via `buildDownloadUrl`
+ * (e.g. sonar-secrets, sca-scanner-cli). Unlike the sonarqube-cli release artifact,
+ * these always use a `.exe` suffix on binaries.sonarsource.com regardless of platform.
+ */
+function buildDownloadFilename(
+  binaryName: string,
+  version: string,
+  platformInfo: PlatformInfo,
+): string {
+  return `${binaryName}-${version}-${platformInfo.os}-${platformInfo.arch}.exe`;
+}
+
+/**
+ * Build the full download URL for a specific binary, version, and platform.
+ * `distPrefix` is the path under SONARSOURCE_BINARIES_URL (e.g.
+ * `CommercialDistribution/sonar-secrets`).
+ */
+export function buildDownloadUrl(
+  binaryName: string,
+  version: string,
+  distPrefix: string,
+  platformInfo: PlatformInfo,
+): string {
+  const filename = buildDownloadFilename(binaryName, version, platformInfo);
+  return `${SONARSOURCE_BINARIES_URL}/${distPrefix}/${filename}`;
+}
+
+/**
+ * Build the download URL for a sonar-context-augmentation .tar.gz archive.
+ *
+ * Path scheme differs from buildDownloadUrl: the platform appears in both the
+ * directory segment and the filename, and the order is `<name>-<plat>-<ver>`
+ * (instead of `<name>-<ver>-<plat>`).
+ *
+ * Example:
+ *   https://binaries.sonarsource.com/Distribution/sonar-context-augmentation-linux-x64/sonar-context-augmentation-linux-x64-0.10.0.1024.tar.gz
+ */
+export function buildCagDownloadUrl(version: string, platform: PlatformInfo): string {
+  const platSuffix = buildCagPlatformSuffix(platform);
+  const filename = `sonar-context-augmentation-${platSuffix}-${version}.tar.gz`;
+  return `${SONARSOURCE_BINARIES_URL}/${SONAR_CONTEXT_AUGMENTATION_DIST_PREFIX}-${platSuffix}/${filename}`;
+}
+
+/**
+ * Download binary from URL to destination path.
+ * The destination filename determines the local name — no .exe on Linux/macOS.
+ */
+export async function downloadBinary(url: string, destinationPath: string): Promise<void> {
+  logger.debug(`Downloading binary from: ${url}`);
+
+  const response = await fetch(url, {
+    headers: { 'User-Agent': `sonarqube-cli/${VERSION}` },
+    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+    ...buildFetchNetworkOptions(url),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+  }
+
+  const buffer = await response.arrayBuffer();
+  const fs = await import('node:fs/promises');
+  await fs.writeFile(destinationPath, Buffer.from(buffer));
+}
+
+/**
+ * Verify a binary buffer against a detached armored PGP signature and public key.
+ * Throws if the signature is invalid or was not made by the given key.
+ */
+export async function verifyPgpSignature(
+  binary: Buffer,
+  armoredSignature: string,
+  armoredPublicKey: string,
+): Promise<void> {
+  const { readKey, readSignature, createMessage, verify } = await import('openpgp');
+
+  const verificationKey = await readKey({ armoredKey: armoredPublicKey });
+  const signature = await readSignature({ armoredSignature });
+  const message = await createMessage({ binary });
+
+  const verificationResult = await verify({
+    message,
+    verificationKeys: [verificationKey],
+    signature,
+  });
+
+  const sig = verificationResult.signatures[0];
+  try {
+    await sig.verified;
+  } catch (e) {
+    throw new Error(`Binary signature verification failed: ${(e as Error).message}`);
+  }
+}
+
+/**
+ * Verify the PGP signature of a downloaded binary.
+ *
+ * Looks up the per-platform .asc signature from the provided signatures map,
+ * then verifies the binary against it using the provided public key.
+ * Throws if the platform signature is missing or does not match the binary.
+ */
+export async function verifyBinarySignature(
+  binaryPath: string,
+  platformInfo: PlatformInfo,
+  signatures: Record<string, string>,
+  armoredPublicKey: string,
+): Promise<void> {
+  const platformKey = `${platformInfo.os}-${platformInfo.arch}`;
+  const armoredSignature = signatures[platformKey];
+  if (!armoredSignature) {
+    throw new Error(`Signature not found for '${platformKey}'. Run: npm run fetch:signatures`);
+  }
+
+  const binary = readFileSync(binaryPath);
+  await verifyPgpSignature(binary, armoredSignature, armoredPublicKey);
+}

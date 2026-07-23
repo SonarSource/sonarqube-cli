@@ -20,11 +20,12 @@
 
 import { describe, expect, it } from 'bun:test';
 
+import { buildDownloadUrl } from '@/core/host/sonarsource-releases.ts';
+
 import {
   SONAR_SECRETS_DIST_PREFIX,
   SONARSOURCE_BINARIES_URL,
 } from '../../../../src/lib/config-constants.ts';
-import { buildDownloadUrl } from '../../../../src/lib/sonarsource-releases.ts';
 
 const SECRETS = 'sonar-secrets';
 

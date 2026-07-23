@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { isNewerVersion, stripBuildNumber } from '../../lib/version.ts';
+import { isNewerVersion, stripBuildNumber } from '@/core/host/version.ts';
 
 export class Version {
   constructor(readonly text: string) {}

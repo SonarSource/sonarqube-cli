@@ -22,9 +22,8 @@ import { EventEmitter } from 'node:events';
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
+import { clearNetworkConfigCache } from '@/core/host/connectivity/network-config.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
-
-import { clearNetworkConfigCache } from '../../../../src/lib/connectivity/network-config.ts';
 
 // Mock node:child_process before importing self-update so that the named
 // imports (spawn, spawnSync) in self-update.ts resolve to the test doubles.
@@ -57,24 +56,23 @@ void mock.module('node:child_process', () => ({
 }));
 
 // Mock platform-detector so both Unix and Windows branches are reachable on any OS.
-const platformDetector = await import('../../../../src/lib/platform-detector.ts');
+const platformDetector = await import('@/core/host/platform-detector.ts');
 const isWindowsMock = mock(() => false);
-void mock.module('../../../../src/lib/platform-detector.js', () => ({
+void mock.module('@/core/host/platform-detector.js', () => ({
   ...platformDetector,
   isWindows: isWindowsMock,
 }));
 
 // Mock the shared version helpers used by the CLI Version class.
 const { isNewerVersion: realIsNewerVersion, stripBuildNumber: realStripBuildNumber } =
-  await import('../../../../src/lib/version.ts');
-void mock.module('../../../../../src/lib/version', () => ({
+  await import('@/core/host/version.ts');
+void mock.module('@/core/host/version.ts', () => ({
   isNewerVersion: mock(realIsNewerVersion),
   stripBuildNumber: mock(realStripBuildNumber),
 }));
 
-const { checkForUpdate, fetchLatestVersion } =
-  await import('../../../../src/commands/update/update-check.ts');
-const { updateVersion } = await import('../../../../src/commands/update');
+const { checkForUpdate, fetchLatestVersion } = await import('@/commands/update/update-check.ts');
+const { updateVersion } = await import('@/commands/update');
 
 function stableVersionResponse(version: string) {
   return {

@@ -20,10 +20,9 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { buildContextAugmentationEnv } from '@/commands/_common/context-augmentation-env.ts';
+import { clearNetworkConfigCache } from '@/core/host/connectivity/network-config.ts';
 import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
-
-import { buildContextAugmentationEnv } from '../../../../src/commands/_common/context-augmentation-env.ts';
-import { clearNetworkConfigCache } from '../../../../src/lib/connectivity/network-config.ts';
 
 const KEYS = [
   'SONAR_CONTEXT_ORGANIZATION',

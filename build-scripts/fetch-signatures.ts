@@ -37,8 +37,9 @@ import { readFileSync, writeFileSync } from 'node:fs';
 
 import * as openpgp from 'openpgp';
 
+import { SONARSOURCE_PUBLIC_KEY } from '@/core/host/signatures.ts';
+
 import { SONARSOURCE_BINARIES_URL } from '../src/lib/config-constants.ts';
-import { SONARSOURCE_PUBLIC_KEY } from '../src/lib/signatures.ts';
 
 interface Platform {
   os: string;
@@ -71,7 +72,7 @@ interface SignatureResult {
   armoredSignature: string;
 }
 
-const SIGNATURES_TS_PATH = new URL('../src/lib/signatures.ts', import.meta.url);
+const SIGNATURES_TS_PATH = new URL('../src/core/host/signatures.ts', import.meta.url);
 const PACKAGE_JSON_PATH = new URL('../package.json', import.meta.url);
 
 async function fetchSignatures(): Promise<void> {

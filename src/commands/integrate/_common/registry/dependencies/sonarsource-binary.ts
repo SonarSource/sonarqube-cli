@@ -18,18 +18,19 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import {
-  SCA_SCANNER_CLI_DIST_PREFIX,
-  SONAR_SECRETS_DIST_PREFIX,
-} from '../../../../../lib/config-constants.ts';
-import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from '../../../../../lib/install-types.ts';
+import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from '@/core/host/install-types.ts';
 import {
   SCA_SCANNER_CLI_SIGNATURES,
   SCA_SCANNER_CLI_VERSION,
   SONAR_SECRETS_SIGNATURES,
   SONAR_SECRETS_VERSION,
   SONARSOURCE_PUBLIC_KEY,
-} from '../../../../../lib/signatures.ts';
+} from '@/core/host/signatures.ts';
+
+import {
+  SCA_SCANNER_CLI_DIST_PREFIX,
+  SONAR_SECRETS_DIST_PREFIX,
+} from '../../../../../lib/config-constants.ts';
 import {
   type BinarySpec,
   installBinary,

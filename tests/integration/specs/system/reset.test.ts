@@ -36,10 +36,11 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { nativeGitIntegration } from '../../../../src/commands/integrate/git/tools/native';
-import { preCommitIntegration } from '../../../../src/commands/integrate/git/tools/pre-commit';
+import { nativeGitIntegration } from '@/commands/integrate/git/tools/native';
+import { preCommitIntegration } from '@/commands/integrate/git/tools/pre-commit';
+import { generateKeychainAccount } from '@/core/host/keychain.ts';
+
 import { CLI_TMP_DIR, SCA_SCANNER_CACHE_DIR } from '../../../../src/lib/config-constants';
-import { generateKeychainAccount } from '../../../../src/lib/keychain';
 import { hookScriptName, TestHarness } from '../../harness';
 import { runCli } from '../../harness/cli-runner.js';
 import { buildHomeEnv, IS_WINDOWS } from '../../harness/platform';

@@ -21,25 +21,25 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { text, withSpinner } from '@/core/ui';
-
-import { BIN_DIR } from '../../../lib/config-constants.ts';
 import {
   buildCagPlatformSuffix,
   CONTEXT_AUGMENTATION_BINARY_NAME,
   type PlatformInfo,
-} from '../../../lib/install-types.ts';
-import { detectPlatform } from '../../../lib/platform-detector.ts';
+} from '@/core/host/install-types.ts';
+import { detectPlatform } from '@/core/host/platform-detector.ts';
 import {
   SONAR_CONTEXT_AUGMENTATION_SIGNATURES,
   SONAR_CONTEXT_AUGMENTATION_VERSION,
   SONARSOURCE_PUBLIC_KEY,
-} from '../../../lib/signatures.ts';
+} from '@/core/host/signatures.ts';
 import {
   buildCagDownloadUrl,
   downloadBinary,
   verifyPgpSignature,
-} from '../../../lib/sonarsource-releases.ts';
+} from '@/core/host/sonarsource-releases.ts';
+import { text, withSpinner } from '@/core/ui';
+
+import { BIN_DIR } from '../../../lib/config-constants.ts';
 import { recordInstallationInState } from '../../../lib/state-manager.ts';
 import { CommandFailedError } from '../error.ts';
 import {

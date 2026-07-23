@@ -26,20 +26,20 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
+import { buildLocalBinaryName } from '@/commands/_common/install/secrets.ts';
+import { detectPlatform } from '@/core/host/platform-detector.ts';
+import { SONAR_SECRETS_VERSION } from '@/core/host/signatures.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
-import { buildLocalBinaryName } from '../../../../src/commands/_common/install/secrets.ts';
-import { detectPlatform } from '../../../../src/lib/platform-detector.ts';
 import * as processLib from '../../../../src/lib/process.ts';
 import * as stateRepository from '../../../../src/lib/repository/state-repository.ts';
-import { SONAR_SECRETS_VERSION } from '../../../../src/lib/signatures.ts';
 import { getDefaultState } from '../../../../src/lib/state.ts';
 
 // Import the real module first, then register it as a mock with the same object.
 // Because mock.module returns a plain mutable object (not a frozen ES namespace),
 // spyOn can patch individual exports per-test and restore them in afterEach —
 // without permanently replacing any function for other test files in this process.
-const releases = await import('../../../../src/lib/sonarsource-releases.ts');
+const releases = await import('@/core/host/sonarsource-releases.ts');
 void mock.module('../../../../../src/lib/sonarsource-releases.js', () => ({
   ...releases,
 }));

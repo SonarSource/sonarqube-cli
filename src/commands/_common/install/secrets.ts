@@ -20,15 +20,15 @@
 
 // sonar-secrets install: thin wrapper over the generic binary install pipeline.
 
-import { discreetSuccess, type OutputChannel } from '@/core/ui';
-
-import { SONAR_SECRETS_DIST_PREFIX } from '../../../lib/config-constants.ts';
-import { type PlatformInfo, SECRETS_BINARY_NAME } from '../../../lib/install-types.ts';
+import { type PlatformInfo, SECRETS_BINARY_NAME } from '@/core/host/install-types.ts';
 import {
   SONAR_SECRETS_SIGNATURES,
   SONAR_SECRETS_VERSION,
   SONARSOURCE_PUBLIC_KEY,
-} from '../../../lib/signatures.ts';
+} from '@/core/host/signatures.ts';
+import { discreetSuccess, type OutputChannel } from '@/core/ui';
+
+import { SONAR_SECRETS_DIST_PREFIX } from '../../../lib/config-constants.ts';
 import {
   type BinarySpec,
   buildLocalBinaryName as buildBinaryName,

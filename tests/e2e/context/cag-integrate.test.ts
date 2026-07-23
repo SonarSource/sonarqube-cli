@@ -47,8 +47,9 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
-import { buildLocalCagBinaryName } from '../../../src/commands/_common/install/context-augmentation';
-import { detectPlatform } from '../../../src/lib/platform-detector';
+import { buildLocalCagBinaryName } from '@/commands/_common/install/context-augmentation.ts';
+import { detectPlatform } from '@/core/host/platform-detector.ts';
+
 import type { CliState } from '../../../src/lib/state';
 import { TestHarness } from '../../integration/harness';
 import { findRecordedCagFeature } from './_helpers';
