@@ -22,8 +22,9 @@
 
 import { homedir } from 'node:os';
 
+import { OBSOLETE_A3S_MARKER, removeObsoleteHookArtifacts } from '@/core/host/migration.ts';
+
 import type { ResolvedAuth } from '../../../lib/auth-resolver.ts';
-import { OBSOLETE_A3S_MARKER, removeObsoleteHookArtifacts } from '../../../lib/migration.ts';
 import type { IntegrationStateAttribute } from '../../../lib/state.ts';
 import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint.ts';
 import {

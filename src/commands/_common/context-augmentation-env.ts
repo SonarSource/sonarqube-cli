@@ -18,9 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { buildSubprocessNetworkEnv } from '@/core/host/connectivity/network-config.ts';
 import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
-
-import { buildSubprocessNetworkEnv } from '../../lib/connectivity/network-config.ts';
 
 export interface ContextAugmentationEnvContext {
   organization?: string;

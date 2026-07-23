@@ -24,20 +24,20 @@ import { spawn } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 
-import { warn } from '@/core/ui';
-
-import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
-import { getNetworkConfigOrThrow } from '../../lib/connectivity/network-config.ts';
-import type { ResolvedNetworkConfig } from '../../lib/connectivity/types.ts';
-import { canonicalizePath } from '../../lib/fs-utils.ts';
-import logger from '../../lib/logger.ts';
+import { getNetworkConfigOrThrow } from '@/core/host/connectivity/network-config.ts';
+import type { ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
 import {
   clientCertCachePath,
   type McpServerContext,
   resolveMcpContainerCommand,
-} from '../../lib/mcp/mcp-helper.ts';
+} from '@/core/host/mcp/mcp-helper.ts';
+import { detectContainerRuntime } from '@/core/host/tool-detector.ts';
+import { warn } from '@/core/ui';
+
+import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
+import { canonicalizePath } from '../../lib/fs-utils.ts';
+import logger from '../../lib/logger.ts';
 import { discoverProject } from '../../lib/project-workspace';
-import { detectContainerRuntime } from '../../lib/tool-detector.ts';
 import { CommandFailedError } from '../_common/error.ts';
 
 export interface McpRunOptions {

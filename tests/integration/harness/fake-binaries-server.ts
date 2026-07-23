@@ -27,12 +27,13 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
 import {
   CONTEXT_AUGMENTATION_BINARY_NAME,
   SCA_SCANNER_BINARY_NAME,
   SECRETS_BINARY_NAME,
-} from '../../../src/lib/install-types.js';
+} from '@/core/host/install-types.ts';
+
+import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
 import type { RecordedRequest } from './types.js';
 
 const ARTIFACT_FILENAME_PATTERN = new RegExp(

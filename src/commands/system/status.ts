@@ -24,33 +24,33 @@ import { join } from 'node:path';
 
 import { parse as parseToml } from 'smol-toml';
 
-import { blank, print, success, text, warn } from '@/core/ui';
-
-import { version as VERSION } from '../../../package.json';
-import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
-import { resolveAuth } from '../../lib/auth-resolver.ts';
-import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '../../lib/config-constants.ts';
-import { getNetworkConfig } from '../../lib/connectivity/network-config.ts';
+import { getNetworkConfig } from '@/core/host/connectivity/network-config.ts';
 import type {
   CaCertConfig,
   ClientCertConfig,
   ConfigSource,
   ProxyGroup,
   ResolvedNetworkConfig,
-} from '../../lib/connectivity/types.ts';
-import { CURRENT_DISTRIBUTION } from '../../lib/distribution.ts';
+} from '@/core/host/connectivity/types.ts';
+import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import {
   CONTEXT_AUGMENTATION_BINARY_NAME,
   SCA_SCANNER_BINARY_NAME,
-} from '../../lib/install-types.ts';
-import { getMcpConfigFilePath } from '../../lib/mcp/mcp-helper.ts';
-import { loadState } from '../../lib/repository/state-repository.ts';
+} from '@/core/host/install-types.ts';
+import { getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 import {
   SCA_SCANNER_CLI_VERSION,
   SONAR_CONTEXT_AUGMENTATION_VERSION,
-} from '../../lib/signatures.ts';
+} from '@/core/host/signatures.ts';
+import { isNewerVersion, stripBuildNumber } from '@/core/host/version.ts';
+import { blank, print, success, text, warn } from '@/core/ui';
+
+import { version as VERSION } from '../../../package.json';
+import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
+import { resolveAuth } from '../../lib/auth-resolver.ts';
+import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '../../lib/config-constants.ts';
+import { loadState } from '../../lib/repository/state-repository.ts';
 import type { CliState } from '../../lib/state.ts';
-import { isNewerVersion, stripBuildNumber } from '../../lib/version.ts';
 import { SECRETS_SPEC } from '../_common/install/secrets.ts';
 import type { TokenCheckResult } from '../_common/token.ts';
 import { checkTokenStatus } from '../_common/token.ts';

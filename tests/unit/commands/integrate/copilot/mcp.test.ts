@@ -23,9 +23,9 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { setupMcpServer } from '@/commands/integrate/copilot/mcp.ts';
 import { getMockUiCalls, setMockUi } from '@/core/ui';
 
-import { setupMcpServer } from '../../../../../src/commands/integrate/copilot/mcp.ts';
 import { DiscoveredProject } from '../../../../../src/lib/project-workspace';
 
 const FAKE_PROJECT: DiscoveredProject = {
@@ -48,7 +48,7 @@ describe('setupMcpServerForAgent (copilot)', () => {
   it('writes a sonar CLI config with the platform CLI command', async () => {
     setMockUi(true);
     writeSpy = spyOn(
-      await import('../../../../../src/lib/mcp/mcp-helper.ts'),
+      await import('@/core/host/mcp/mcp-helper.ts'),
       'writeMcpServerEntry',
     ).mockResolvedValue(undefined);
 
@@ -63,7 +63,7 @@ describe('setupMcpServerForAgent (copilot)', () => {
   it('writes to ~/.copilot/mcp-config.json for the global case', async () => {
     setMockUi(true);
     writeSpy = spyOn(
-      await import('../../../../../src/lib/mcp/mcp-helper.ts'),
+      await import('@/core/host/mcp/mcp-helper.ts'),
       'writeMcpServerEntry',
     ).mockResolvedValue(undefined);
 
@@ -76,7 +76,7 @@ describe('setupMcpServerForAgent (copilot)', () => {
   it('writes to <projectRoot>/.mcp.json for the non-global case', async () => {
     setMockUi(true);
     writeSpy = spyOn(
-      await import('../../../../../src/lib/mcp/mcp-helper.ts'),
+      await import('@/core/host/mcp/mcp-helper.ts'),
       'writeMcpServerEntry',
     ).mockResolvedValue(undefined);
 
@@ -89,7 +89,7 @@ describe('setupMcpServerForAgent (copilot)', () => {
   it('includes --project flag when a project key is provided', async () => {
     setMockUi(true);
     writeSpy = spyOn(
-      await import('../../../../../src/lib/mcp/mcp-helper.ts'),
+      await import('@/core/host/mcp/mcp-helper.ts'),
       'writeMcpServerEntry',
     ).mockResolvedValue(undefined);
 
@@ -103,7 +103,7 @@ describe('setupMcpServerForAgent (copilot)', () => {
   it('warns when writing the MCP entry fails', async () => {
     setMockUi(true);
     writeSpy = spyOn(
-      await import('../../../../../src/lib/mcp/mcp-helper.ts'),
+      await import('@/core/host/mcp/mcp-helper.ts'),
       'writeMcpServerEntry',
     ).mockRejectedValue(new Error('disk full'));
 

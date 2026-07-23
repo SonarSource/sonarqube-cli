@@ -25,27 +25,24 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { getMockUiCalls, setMockUi } from '@/core/ui';
-
-import { setupMcpServer } from '../../../../../src/commands/integrate/claude/mcp.ts';
-import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.ts';
-import {
-  CLI_TMP_DIR,
-  SONARQUBE_MCP_DOCKER_IMAGE_NAME,
-} from '../../../../../src/lib/config-constants.ts';
-import type {
-  ClientCertConfig,
-  ResolvedNetworkConfig,
-} from '../../../../../src/lib/connectivity/types.ts';
-import * as pkcs12Module from '../../../../../src/lib/crypto/pkcs12.ts';
-import { normalizePath } from '../../../../../src/lib/fs-utils.ts';
+import { setupMcpServer } from '@/commands/integrate/claude/mcp.ts';
+import type { ClientCertConfig, ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
+import * as pkcs12Module from '@/core/host/crypto/pkcs12.ts';
 import {
   getMcpConfigFilePath,
   getMcpContainerCommand,
   MCP_DEFAULT_TOOLSETS,
   resolveMcpContainerCommand,
   writeMcpServerEntry,
-} from '../../../../../src/lib/mcp/mcp-helper.ts';
+} from '@/core/host/mcp/mcp-helper.ts';
+import { getMockUiCalls, setMockUi } from '@/core/ui';
+
+import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.ts';
+import {
+  CLI_TMP_DIR,
+  SONARQUBE_MCP_DOCKER_IMAGE_NAME,
+} from '../../../../../src/lib/config-constants.ts';
+import { normalizePath } from '../../../../../src/lib/fs-utils.ts';
 import { DiscoveredProject } from '../../../../../src/lib/project-workspace';
 
 const ON_PREMISE_AUTH: ResolvedAuth = {
@@ -485,7 +482,7 @@ describe('setupMcpServerForAgent (claude)', () => {
   it('writes a sonar CLI config with the platform CLI command', async () => {
     setMockUi(true);
     writeSpy = spyOn(
-      await import('../../../../../src/lib/mcp/mcp-helper.ts'),
+      await import('@/core/host/mcp/mcp-helper.ts'),
       'writeMcpServerEntry',
     ).mockResolvedValue(undefined);
 
@@ -500,7 +497,7 @@ describe('setupMcpServerForAgent (claude)', () => {
   it('writes to ~/.claude.json for the global case', async () => {
     setMockUi(true);
     writeSpy = spyOn(
-      await import('../../../../../src/lib/mcp/mcp-helper.ts'),
+      await import('@/core/host/mcp/mcp-helper.ts'),
       'writeMcpServerEntry',
     ).mockResolvedValue(undefined);
 
@@ -513,7 +510,7 @@ describe('setupMcpServerForAgent (claude)', () => {
   it('writes to <projectRoot>/.mcp.json for the non-global case', async () => {
     setMockUi(true);
     writeSpy = spyOn(
-      await import('../../../../../src/lib/mcp/mcp-helper.ts'),
+      await import('@/core/host/mcp/mcp-helper.ts'),
       'writeMcpServerEntry',
     ).mockResolvedValue(undefined);
 
@@ -526,7 +523,7 @@ describe('setupMcpServerForAgent (claude)', () => {
   it('includes --project flag when a project key is provided', async () => {
     setMockUi(true);
     writeSpy = spyOn(
-      await import('../../../../../src/lib/mcp/mcp-helper.ts'),
+      await import('@/core/host/mcp/mcp-helper.ts'),
       'writeMcpServerEntry',
     ).mockResolvedValue(undefined);
 
@@ -540,7 +537,7 @@ describe('setupMcpServerForAgent (claude)', () => {
   it('warns when writing the MCP entry fails', async () => {
     setMockUi(true);
     writeSpy = spyOn(
-      await import('../../../../../src/lib/mcp/mcp-helper.ts'),
+      await import('@/core/host/mcp/mcp-helper.ts'),
       'writeMcpServerEntry',
     ).mockRejectedValue(new Error('disk full'));
 

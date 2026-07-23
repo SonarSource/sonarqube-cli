@@ -22,8 +22,9 @@
 
 import { afterEach, beforeEach, expect, it } from 'bun:test';
 
-import { deleteToken, getToken, saveToken } from '../../../../src/lib/keychain.ts';
-import { createKeychainTestHandle } from '../../keychain/keychain-test-handle.ts';
+import { deleteToken, getToken, saveToken } from '@/core/host/keychain.ts';
+
+import { createKeychainTestHandle } from '../../core/host/keychain-test-handle.ts';
 
 const handle = createKeychainTestHandle();
 beforeEach(() => handle.setup());

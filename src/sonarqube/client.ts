@@ -20,6 +20,7 @@
 
 // SonarQube API HTTP client
 
+import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.js';
 import { print } from '@/core/ui';
 
 import { version as VERSION } from '../../package.json';
@@ -28,7 +29,6 @@ import {
   normalizeCloudV2Endpoint,
   resolveFromEndpoint,
 } from '../lib/auth-resolver';
-import { buildFetchNetworkOptions } from '../lib/connectivity/network-config.js';
 import { buildFetchInit, fetchGuarded } from '../lib/fetch-guarded.js';
 import logger from '../lib/logger';
 import {

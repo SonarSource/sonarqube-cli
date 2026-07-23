@@ -24,14 +24,15 @@ import { rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
+import { isWindows } from '@/core/host/platform-detector.ts';
+
 import { version as CURRENT_VERSION } from '../../../package.json';
 import {
   CLI_STABLE_VERSION_PATH,
   SONARSOURCE_BINARIES_URL,
   UPDATE_SCRIPT_BASE_URL,
 } from '../../lib/config-constants.ts';
-import { buildFetchNetworkOptions } from '../../lib/connectivity/network-config.ts';
-import { isWindows } from '../../lib/platform-detector.ts';
 import { CommandFailedError } from '../_common/error.ts';
 import { Version } from '../_common/version.ts';
 

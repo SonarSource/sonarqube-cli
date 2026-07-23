@@ -1,0 +1,60 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+// Platform detection for sonar-secrets binary installation
+
+import { arch, platform } from 'node:os';
+
+import type { PlatformInfo } from './install-types.ts';
+
+const OS_MAP: Record<string, string> = {
+  darwin: 'macos',
+  linux: 'linux',
+  win32: 'windows',
+};
+
+const ARCH_MAP: Record<string, string> = {
+  x64: 'x86-64',
+  arm64: 'arm64',
+  arm: 'arm',
+  ia32: '386',
+};
+
+export function isWindows(): boolean {
+  return process.platform === 'win32';
+}
+
+/**
+ * Detect current platform (OS + architecture)
+ */
+export function detectPlatform(): PlatformInfo {
+  const osPlatform = platform();
+  const osArch = arch();
+
+  const mappedOs = OS_MAP[osPlatform] || osPlatform;
+  const mappedArch = ARCH_MAP[osArch] || osArch;
+  const extension = osPlatform === 'win32' ? '.exe' : '';
+
+  return {
+    os: mappedOs,
+    arch: mappedArch,
+    extension,
+  };
+}

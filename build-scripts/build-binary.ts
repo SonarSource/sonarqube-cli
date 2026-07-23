@@ -27,7 +27,7 @@
 
 import { join } from 'node:path';
 
-import { resolveDistribution } from '../src/lib/distribution.js';
+import { resolveDistribution } from '@/core/host/distribution.ts';
 
 const PROJECT_ROOT = join(import.meta.dir, '..');
 const DEFAULT_OUTFILE = join(PROJECT_ROOT, 'dist', 'sonarqube-cli');

@@ -28,8 +28,9 @@ import { dirname, join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
-import { CODEX_INTEGRATION_ID } from '../../../src/commands/integrate/codex/declaration';
-import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../src/lib/signatures';
+import { CODEX_INTEGRATION_ID } from '@/commands/integrate/codex/declaration.ts';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
+
 import type { CliState } from '../../../src/lib/state';
 import { TestHarness } from '../../integration/harness';
 import {

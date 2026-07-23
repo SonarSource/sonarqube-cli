@@ -23,11 +23,8 @@
 
 import { afterEach, describe, expect, it } from 'bun:test';
 
-import { createRequestHandler } from '../../../../src/commands/_common/token.ts';
-import {
-  type LoopbackServerResult,
-  startLoopbackServer,
-} from '../../../../src/lib/loopback-server.ts';
+import { createRequestHandler } from '@/commands/_common/token.ts';
+import { type LoopbackServerResult, startLoopbackServer } from '@/core/host/loopback-server.ts';
 
 const LOOPBACK_HOST = '127.0.0.1';
 const HTTP_SCHEME = 'http';

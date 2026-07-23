@@ -24,26 +24,24 @@ import { randomUUID } from 'node:crypto';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { type BinarySpec, buildLocalBinaryName } from '@/commands/_common/install/binary.ts';
+import { buildLocalCagBinaryName } from '@/commands/_common/install/context-augmentation.ts';
+import { SCA_SCANNER_SPEC } from '@/commands/_common/install/sca-scanner.ts';
+import { SECRETS_SPEC } from '@/commands/_common/install/secrets.ts';
+import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
+import type { IntegrationDeclaration } from '@/commands/integrate/_common/registry';
+import { recordInstalledFeature } from '@/commands/integrate/_common/registry/installation-recorder.ts';
+import { SQAA_HOOK_FEATURE_ID } from '@/commands/integrate/_common/sqaa-entitlement.ts';
+import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
+import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
+import { generateKeychainAccount } from '@/core/host/keychain.ts';
+import { detectPlatform } from '@/core/host/platform-detector.ts';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
+import { buildDownloadUrl } from '@/core/host/sonarsource-releases.ts';
+
 import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
 import { version as CURRENT_CLI_VERSION } from '../../../package.json';
-import {
-  type BinarySpec,
-  buildLocalBinaryName,
-} from '../../../src/commands/_common/install/binary';
-import { buildLocalCagBinaryName } from '../../../src/commands/_common/install/context-augmentation';
-import { SCA_SCANNER_SPEC } from '../../../src/commands/_common/install/sca-scanner';
-import { SECRETS_SPEC } from '../../../src/commands/_common/install/secrets';
-import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../src/commands/integrate/_common/features/context-augmentation-feature';
-import { recordInstalledFeature } from '../../../src/commands/integrate/_common/registry/installation-recorder.ts';
-import type { IntegrationDeclaration } from '../../../src/commands/integrate/_common/registry/types.ts';
-import { SQAA_HOOK_FEATURE_ID } from '../../../src/commands/integrate/_common/sqaa-entitlement.ts';
-import { CLAUDE_INTEGRATION_ID } from '../../../src/commands/integrate/claude/declaration';
 import { canonicalizePath } from '../../../src/lib/fs-utils';
-import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types.js';
-import { generateKeychainAccount } from '../../../src/lib/keychain';
-import { detectPlatform } from '../../../src/lib/platform-detector.js';
-import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../src/lib/signatures.js';
-import { buildDownloadUrl } from '../../../src/lib/sonarsource-releases.js';
 import type {
   CliState,
   InstalledIntegration,

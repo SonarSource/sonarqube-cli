@@ -27,7 +27,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, spyOn
 import {
   buildFetchNetworkOptions,
   clearNetworkConfigCache,
-} from '../../../src/lib/connectivity/network-config.js';
+} from '@/core/host/connectivity/network-config.js';
+
 import { buildFetchInit, fetchGuarded } from '../../../src/lib/fetch-guarded.js';
 
 let server: ReturnType<typeof Bun.serve>;

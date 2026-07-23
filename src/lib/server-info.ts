@@ -18,10 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.js';
+import { isNewerVersion } from '@/core/host/version.ts';
+
 import { version as VERSION } from '../../package.json';
-import { buildFetchNetworkOptions } from './connectivity/network-config.js';
 import { ApiCallError } from './errors';
-import { isNewerVersion } from './version';
 
 const FETCH_TIMEOUT_MS = 2000;
 

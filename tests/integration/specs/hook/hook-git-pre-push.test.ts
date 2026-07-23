@@ -25,12 +25,13 @@ import { chmodSync } from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { buildLocalBinaryName } from '../../../../src/commands/_common/install/secrets';
+import { buildLocalBinaryName } from '@/commands/_common/install/secrets.ts';
 import {
   SECRETS_INACTIVE_BINARY_MISSING,
   SECRETS_INACTIVE_UNAUTHENTICATED,
-} from '../../../../src/commands/hook/hook-dependencies';
-import { detectPlatform } from '../../../../src/lib/platform-detector';
+} from '@/commands/hook/hook-dependencies.ts';
+import { detectPlatform } from '@/core/host/platform-detector.ts';
+
 import { TestHarness } from '../../harness';
 import { commitFile, initGitRepo } from './git-test-helpers';
 
