@@ -25,13 +25,14 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import type { StoredAnalysisCompletedEvent } from '../../../../src/lib/state.js';
-import { TELEMETRY_FLUSH_MODE_ENV } from '../../../../src/telemetry/index.js';
-import { SECRETS_CALLER_COMMANDS } from '../../../../src/telemetry/secrets-analysis-telemetry.js';
+import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
+import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 import {
   SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
   SQAA_ANALYZE_CALLER_COMMAND,
-} from '../../../../src/telemetry/sqaa-analysis-telemetry.js';
+} from '@/core/telemetry/sqaa-analysis-telemetry.ts';
+
+import type { StoredAnalysisCompletedEvent } from '../../../../src/lib/state.js';
 import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,

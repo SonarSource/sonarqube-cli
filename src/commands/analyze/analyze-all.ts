@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
+import { SQAA_ANALYZE_CALLER_COMMAND } from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 import {
   blank,
   getMessagesForFormattedOutput,
@@ -27,8 +29,6 @@ import {
 } from '@/core/ui';
 
 import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
-import { SECRETS_CALLER_COMMANDS } from '../../telemetry/secrets-analysis-telemetry.ts';
-import { SQAA_ANALYZE_CALLER_COMMAND } from '../../telemetry/sqaa-analysis-telemetry.ts';
 import { resolveSecretsBinaryPath } from '../_common/install/secrets.ts';
 import type { SecretsJsonIssue } from './secrets.ts';
 import {

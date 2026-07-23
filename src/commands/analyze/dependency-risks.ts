@@ -18,15 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import {
+  emitScaAnalysisTelemetry,
+  SCA_CALLER_COMMANDS,
+} from '@/core/telemetry/sca-analysis-telemetry.ts';
 import { error, print, warn } from '@/core/ui';
 
 import { type ResolvedAuth } from '../../lib/auth-resolver.ts';
 import { discoverProject } from '../../lib/project-workspace';
 import { SonarQubeClient } from '../../sonarqube/client.ts';
-import {
-  emitScaAnalysisTelemetry,
-  SCA_CALLER_COMMANDS,
-} from '../../telemetry/sca-analysis-telemetry.ts';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.ts';
 import { DefaultScaScannerInstaller } from '../_common/install/sca-scanner.ts';
 import { DefaultSecretsInstaller } from '../_common/install/secrets.ts';

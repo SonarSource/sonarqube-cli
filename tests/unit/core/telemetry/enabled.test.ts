@@ -20,14 +20,15 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { ENV_DO_NOT_TRACK } from '../../../src/lib/config-constants.js';
-import { getDefaultState } from '../../../src/lib/state.js';
 import {
   describeTelemetryStatus,
   isDoNotTrackRequested,
   isTelemetryEnabled,
-} from '../../../src/telemetry/enabled.js';
-import { restoreEnv } from '../../_common/isolated-cli-env.js';
+} from '@/core/telemetry/enabled.ts';
+import { ENV_DO_NOT_TRACK } from '@/lib/config-constants.ts';
+import { getDefaultState } from '@/lib/state.ts';
+
+import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
 
 // Each test runs from an unset baseline; restore the preload's DO_NOT_TRACK afterwards
 // so we don't leak a cleared value that would re-enable telemetry for later tests.

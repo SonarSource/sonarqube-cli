@@ -20,7 +20,7 @@
 
 import { spyOn } from 'bun:test';
 
-import { SonarQubeClient } from '../../../src/sonarqube/client.js';
+import { SonarQubeClient } from '@/sonarqube/client.ts';
 
 interface ApiStep {
   ok: boolean;

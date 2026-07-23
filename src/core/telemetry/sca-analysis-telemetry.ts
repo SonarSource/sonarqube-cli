@@ -20,9 +20,9 @@
 
 import { randomUUID } from 'node:crypto';
 
-import type { AnalyzeProjectResponse } from '../commands/analyze/dependency-risk-helpers/sca-scanner.ts';
-import type { ResolvedAuth } from '../lib/auth-resolver.js';
-import { emitAnalysisCompleted } from './telemetry-events.js';
+import type { AnalyzeProjectResponse } from '../../commands/analyze/dependency-risk-helpers/sca-scanner.ts';
+import type { ResolvedAuth } from '../../lib/auth-resolver.ts';
+import { emitAnalysisCompleted } from './telemetry-events.ts';
 
 /**
  * The `caller_command` value recorded on every SCA analysis event, one per call site.

@@ -26,8 +26,9 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
+import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
+
 import logger from '../../lib/logger.ts';
-import { SECRETS_CALLER_COMMANDS } from '../../telemetry/secrets-analysis-telemetry.ts';
 import { scanAndEmitSecrets } from '../analyze/secrets.ts';
 import {
   denyCursor,

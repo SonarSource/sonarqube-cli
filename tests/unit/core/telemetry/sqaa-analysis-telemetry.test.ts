@@ -24,22 +24,23 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import type { RunTally } from '../../../src/commands/analyze/sqaa-analysis.ts';
-import type { SqaaJsonReport } from '../../../src/commands/analyze/sqaa-display-json.ts';
-import type { ResolvedAuth } from '../../../src/lib/auth-resolver.js';
-import { ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
-import * as stateRepository from '../../../src/lib/repository/state-repository.js';
-import * as stateManager from '../../../src/lib/state-manager.js';
-import type { SqaaIssue } from '../../../src/sonarqube/client.js';
+import type { RunTally } from '@/commands/analyze/sqaa-analysis.ts';
+import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display-json.ts';
 import {
   collectRuleCounts,
   emitSqaaAnalysisTelemetry,
   SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
   SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
   tallyFromSqaaJsonReport,
-} from '../../../src/telemetry/sqaa-analysis-telemetry.js';
-import * as userModule from '../../../src/telemetry/user.js';
-import { makeTelemetryState, readAnalysisEvents } from '../../_common/telemetry-helpers.js';
+} from '@/core/telemetry/sqaa-analysis-telemetry.ts';
+import * as userModule from '@/core/telemetry/user.ts';
+import type { ResolvedAuth } from '@/lib/auth-resolver.ts';
+import { ENV_SONAR_USER_HOME } from '@/lib/config-constants.ts';
+import * as stateRepository from '@/lib/repository/state-repository.ts';
+import * as stateManager from '@/lib/state-manager.ts';
+import type { SqaaIssue } from '@/sonarqube/client.ts';
+
+import { makeTelemetryState, readAnalysisEvents } from '../../../_common/telemetry-helpers.ts';
 
 const AUTH: ResolvedAuth = {
   connectionType: 'cloud',

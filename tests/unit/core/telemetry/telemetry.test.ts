@@ -31,28 +31,28 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { Command } from 'commander';
 
-import * as ui from '@/core/ui';
-
-import * as agentDetector from '../../../src/lib/agent-detector.js';
-import * as authResolver from '../../../src/lib/auth-resolver.js';
-import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '../../../src/lib/auth-resolver.js';
-import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
-import { DISTRIBUTION } from '../../../src/lib/distribution.js';
-import * as stateRepository from '../../../src/lib/repository/state-repository.js';
-import type { StoredAnalysisCompletedEvent } from '../../../src/lib/state.js';
-import { getDefaultState } from '../../../src/lib/state.js';
-import * as stateManager from '../../../src/lib/state-manager.js';
 import {
   flushTelemetry,
   setPassthroughSubcommand,
   storeEvent,
   TELEMETRY_FLUSH_MODE_ENV,
-} from '../../../src/telemetry';
-import { resolveTelemetryIdentity } from '../../../src/telemetry/identity.js';
-import * as userModule from '../../../src/telemetry/user.js';
-import { restoreEnv } from '../../_common/isolated-cli-env.js';
-import { readCommandEvents, writeTelemetryEvent } from '../../_common/telemetry-helpers.js';
-import { mockIdentityGetSafe } from './identity-api-mock.js';
+} from '@/core/telemetry';
+import { resolveTelemetryIdentity } from '@/core/telemetry/identity.ts';
+import * as userModule from '@/core/telemetry/user.ts';
+import * as ui from '@/core/ui';
+import * as agentDetector from '@/lib/agent-detector.ts';
+import * as authResolver from '@/lib/auth-resolver.ts';
+import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/lib/auth-resolver.ts';
+import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '@/lib/config-constants.ts';
+import { DISTRIBUTION } from '@/lib/distribution.ts';
+import * as stateRepository from '@/lib/repository/state-repository.ts';
+import type { StoredAnalysisCompletedEvent } from '@/lib/state.ts';
+import { getDefaultState } from '@/lib/state.ts';
+import * as stateManager from '@/lib/state-manager.ts';
+
+import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
+import { readCommandEvents, writeTelemetryEvent } from '../../../_common/telemetry-helpers.ts';
+import { mockIdentityGetSafe } from './identity-api-mock.ts';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
