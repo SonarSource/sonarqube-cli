@@ -20,6 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import {
   clearMockUiCalls,
   findMockUiCall,
@@ -28,7 +29,6 @@ import {
   setMockUi,
 } from '@/core/ui';
 
-import { CommandFailedError } from '../../../../../src/commands/_common/error.ts';
 import {
   buildProjectScopeLabel,
   isGlobalIntegrateScope,

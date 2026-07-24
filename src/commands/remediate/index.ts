@@ -20,6 +20,7 @@
 
 // Remediate command - triggers AI agent remediation for eligible issues
 
+import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import {
   AGENT_ACTIVITY_PATH,
   AGENTIC_PACK_URL,
@@ -36,7 +37,6 @@ import { blank, info, multiSelectPrompt, print, success, withSpinner } from '@/c
 import { cyan, dim, red, yellow } from '@/core/ui/colors.ts';
 
 import { printAgentNonInteractiveAlternativeHint } from '../_common/agent-prompt-hint.ts';
-import { CommandFailedError, InvalidOptionError } from '../_common/error.ts';
 
 export interface RemediateOptions {
   project?: string;

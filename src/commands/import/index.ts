@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import {
@@ -28,7 +29,6 @@ import {
 import { info, intro, outro } from '@/core/ui';
 import { ImportProgress } from '@/core/ui/components/import-progress.ts';
 
-import { CommandFailedError } from '../_common/error';
 import type {
   OnlyPrivateProjects,
   RepositoryCollection,

@@ -20,9 +20,8 @@
 
 // Map SQAA API errors to CLI errors with remediation hints.
 
+import { CommandFailedError, type CommandFailedErrorOptions } from '@/core/command-error.ts';
 import { BadRequestError, RequestPayloadTooLargeError } from '@/core/server/errors.ts';
-
-import { CommandFailedError, type CommandFailedErrorOptions } from '../_common/error.ts';
 
 const GENERIC_SQAA_FAILURE_HINT =
   'Check your SonarQube Cloud authentication, project key, and network connectivity, then retry.';

@@ -20,7 +20,8 @@
 
 import { platform } from 'node:os';
 
-import { CommandFailedError } from '../../../_common/error.ts';
+import { CommandFailedError } from '@/core/command-error.ts';
+
 import { assertSafeSonarProjectKeyForHookScript, shellQuoteBash } from '../../_common/hooks.ts';
 import type {
   InstallDecision,

@@ -23,9 +23,9 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 
-import { CommandFailedError } from '../../../../../src/commands/_common/error.ts';
 import type {
   ContainerIntegrationContext,
   ResourceDeclaration,

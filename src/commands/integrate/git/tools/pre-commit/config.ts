@@ -25,9 +25,9 @@ import { join } from 'node:path';
 
 import * as yaml from 'js-yaml';
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 
-import { CommandFailedError } from '../../../../_common/error.ts';
 import type { IntegrationContext } from '../../../_common/registry/types.ts';
 import type { GitHookType } from '../../options.ts';
 import { resolveDepRisksArgs } from '../shared.ts';

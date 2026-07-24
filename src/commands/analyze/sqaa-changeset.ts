@@ -23,9 +23,9 @@
 import { closeSync, openSync, readSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 
-import { CommandFailedError } from '../_common/error.ts';
 import {
   resolveCurrentGitBranch,
   resolveGitBranchAtRepoRoot,

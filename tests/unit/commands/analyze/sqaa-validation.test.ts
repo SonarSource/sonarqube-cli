@@ -20,7 +20,8 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { CommandFailedError } from '../../../../src/commands/_common/error.ts';
+import { CommandFailedError } from '@/core/command-error.ts';
+
 import {
   partitionSqaaAnalysisFiles,
   validateSqaaAnalysisFiles,

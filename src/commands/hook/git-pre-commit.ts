@@ -22,10 +22,10 @@
 // when --dependency-risks is set, runs a dependency-risks scan as a follow-up stage.
 // Replaces the shell logic that was previously embedded in the git hook script.
 
+import { InvalidOptionError } from '@/core/command-error.ts';
 import { resolveAuth } from '@/core/host/auth-resolver.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 
-import { InvalidOptionError } from '../_common/error.ts';
 import { runDepRisksStage } from './git-pre-commit-dependency-risks.ts';
 import { runCommitSecretsStage } from './git-pre-commit-secrets.ts';
 import { HOOK_INACTIVE_UNAUTHENTICATED, MissingDependenciesError } from './hook-dependencies.ts';

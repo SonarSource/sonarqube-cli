@@ -21,7 +21,7 @@
 import { spawn } from 'node:child_process';
 
 import { buildContextAugmentationEnv } from '@/commands/_common/context-augmentation-env.ts';
-import { CommandFailedError } from '@/commands/_common/error.ts';
+import { CommandFailedError } from '@/core/command-error.ts';
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { isSonarQubeCloud } from '@/core/host/auth-resolver.ts';

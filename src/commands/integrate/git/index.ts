@@ -23,6 +23,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { GLOBAL_HOOKS_DIR } from '@/core/config-constants.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { findGitRoot } from '@/core/host/discover-git-repo.ts';
@@ -32,7 +33,6 @@ import { blank, confirmPrompt, info, intro, phase, phaseItem, text, warn } from 
 import { yellow } from '@/core/ui/colors.ts';
 
 import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint.ts';
-import { CommandFailedError, InvalidOptionError } from '../../_common/error.ts';
 import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo.ts';
 import { resolveIntegrateScope } from '../_common/integrate-scope.ts';
 import { printGitPreflightSummary } from '../_common/preflight-summary.ts';

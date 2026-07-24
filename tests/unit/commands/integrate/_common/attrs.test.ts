@@ -20,9 +20,9 @@
 
 import { describe, expect, it } from 'bun:test';
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import { SUPPORT_URL } from '@/core/config-constants.ts';
 
-import { CommandFailedError } from '../../../../../src/commands/_common/error.ts';
 import {
   getOptionalStringAttr,
   getRequiredStringAttr,

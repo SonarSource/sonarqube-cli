@@ -20,12 +20,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { CommandFailedError } from '@/commands/_common/error.ts';
 import * as token from '@/commands/_common/token.ts';
 import {
   printAgentPreflightSummary,
   printGitPreflightSummary,
 } from '@/commands/integrate/_common/preflight-summary.ts';
+import { CommandFailedError } from '@/core/command-error.ts';
 import * as processLib from '@/core/process/process.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';

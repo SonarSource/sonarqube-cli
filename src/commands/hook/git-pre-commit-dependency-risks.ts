@@ -24,6 +24,7 @@
 // missing, scanner failure), and blocks the commit only when risks matching the
 // configured filter are found.
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import logger from '@/core/observability/logger.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
@@ -33,7 +34,6 @@ import {
 } from '@/core/telemetry/sca-analysis-telemetry.ts';
 import { discreetSuccess, success, warn } from '@/core/ui';
 
-import { CommandFailedError } from '../_common/error.ts';
 import {
   resolveScaScannerBinaryPath,
   ScaScannerNoopInstaller,

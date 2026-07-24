@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CommandFailedError } from '@/commands/_common/error.ts';
+import { CommandFailedError } from '@/core/command-error.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import type { IntegrationScope } from '@/core/state/state.ts';
 import { blank, info, selectPrompt } from '@/core/ui';

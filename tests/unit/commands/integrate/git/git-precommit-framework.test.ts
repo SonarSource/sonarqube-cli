@@ -24,10 +24,10 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as yaml from 'js-yaml';
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import * as processLib from '@/core/process/process.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 
-import { CommandFailedError } from '../../../../../src/commands/_common/error.ts';
 import type { ContainerIntegrationContext } from '../../../../../src/commands/integrate/_common/registry';
 import { IntegrationInstaller } from '../../../../../src/commands/integrate/_common/registry';
 import {

@@ -24,6 +24,7 @@ import { spawn } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { getNetworkConfigOrThrow } from '@/core/host/connectivity/network-config.ts';
 import type { ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
@@ -37,8 +38,6 @@ import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { warn } from '@/core/ui';
-
-import { CommandFailedError } from '../_common/error.ts';
 
 export interface McpRunOptions {
   debug?: boolean;

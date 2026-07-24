@@ -18,9 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import { blank, info, success, text, warn } from '@/core/ui';
 
-import { CommandFailedError } from '../_common/error.ts';
 import { checkForUpdate } from './update-check.ts';
 
 export interface UpdateVersionOptions {
