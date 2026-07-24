@@ -19,7 +19,7 @@
  */
 
 import { AGENTIC_ANALYSIS_DOCS_URL } from '@/core/config-constants.ts';
-import { SonarQubeClient, type SqaaEntitlementStatus } from '@/core/server/client.ts';
+import { SonarQubeClient, type VortexEntitlementStatus } from '@/core/server/client.ts';
 import { info, warn } from '@/core/ui';
 
 export const SQAA_HOOK_FEATURE_ID = 'sonar-sqaa-hook';
@@ -55,9 +55,9 @@ export interface ResolveSqaaSetupParams {
  * Resolve whether SonarQube Agentic Analysis (SQAA) can be installed.
  */
 export async function resolveSqaaSetup(params: ResolveSqaaSetupParams): Promise<boolean> {
-  let status: SqaaEntitlementStatus;
+  let status: VortexEntitlementStatus;
   try {
-    status = await new SonarQubeClient(params.serverURL, params.token).hasSqaaEntitlement(
+    status = await new SonarQubeClient(params.serverURL, params.token).hasVortexEntitlement(
       params.organization,
     );
   } catch {
@@ -68,7 +68,7 @@ export async function resolveSqaaSetup(params: ResolveSqaaSetupParams): Promise<
     warn('Could not determine Vortex agentic analysis entitlement — skipping.');
     return false;
   }
-  if (status === 'not_enabled') {
+  if (status === 'not_entitled') {
     info(SQAA_PROMOTION_MESSAGE);
     return false;
   }

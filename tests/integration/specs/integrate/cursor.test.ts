@@ -483,7 +483,7 @@ describe('integrate cursor', () => {
         .newFakeServer()
         .withAuthToken('cloud-token')
         .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
-        .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234', options)
+        .withVortexEntitlement(TEST_ORG, 'test-uuid-1234', options)
         .withProject(TEST_PROJECT)
         .start();
       const serverUrl = server.baseUrl();

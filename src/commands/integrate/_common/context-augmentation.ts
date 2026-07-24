@@ -139,7 +139,8 @@ export async function resolveContextAugmentationSetup(
     // that could not use CAG anyway).
     if (p.auth.orgKey) {
       const client = new SonarQubeClient(p.auth.serverUrl, p.auth.token);
-      if ((await client.hasCagEntitlement(p.auth.orgKey)) === 'entitled') {
+      const status = await client.hasVortexEntitlement(p.auth.orgKey);
+      if (status === 'enabled' || status === 'over_consumption') {
         warn(
           'Skipping Vortex context augmentation: not supported with --global. Re-run without --global from a project directory to install it there.',
         );
@@ -156,7 +157,7 @@ export async function resolveContextAugmentationSetup(
   }
 
   const client = new SonarQubeClient(p.auth.serverUrl, p.auth.token);
-  const entitlement = await client.hasCagEntitlement(p.auth.orgKey);
+  const entitlement = await client.hasVortexEntitlement(p.auth.orgKey);
   if (entitlement === 'check_failed') {
     warn(
       'Skipping Vortex context augmentation: could not verify entitlement (server unreachable or returned an error).',

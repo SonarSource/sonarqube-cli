@@ -483,7 +483,7 @@ describe('integrate antigravity', () => {
           .newFakeServer()
           .withAuthToken('cloud-token')
           .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
-          .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234')
+          .withVortexEntitlement(TEST_ORG, 'test-uuid-1234')
           .withProject(TEST_PROJECT)
           .start();
         const serverUrl = server.baseUrl();
@@ -531,7 +531,7 @@ describe('integrate antigravity', () => {
           .newFakeServer()
           .withAuthToken('cloud-token')
           .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
-          .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234')
+          .withVortexEntitlement(TEST_ORG, 'test-uuid-1234')
           .start();
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
@@ -557,7 +557,7 @@ describe('integrate antigravity', () => {
           .newFakeServer()
           .withAuthToken('cloud-token')
           .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
-          .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234')
+          .withVortexEntitlement(TEST_ORG, 'test-uuid-1234')
           .withProject(TEST_PROJECT)
           .start();
         const serverUrl = server.baseUrl();
@@ -584,7 +584,7 @@ describe('integrate antigravity', () => {
           .newFakeServer()
           .withAuthToken('cloud-token')
           .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
-          .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234')
+          .withVortexEntitlement(TEST_ORG, 'test-uuid-1234')
           .withProject(TEST_PROJECT)
           .start();
         const serverUrl = server.baseUrl();

@@ -643,7 +643,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
         .newFakeServer()
         .withAuthToken('cloud-token')
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-        .withSqaaEntitlement('my-org', 'test-uuid-1234')
+        .withVortexEntitlement('my-org', 'test-uuid-1234')
         .withProject('my-project')
         .start();
 
@@ -686,7 +686,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
         .newFakeServer()
         .withAuthToken('cloud-token')
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-        .withSqaaEntitlement('my-org', 'test-uuid-1234')
+        .withVortexEntitlement('my-org', 'test-uuid-1234')
         .withProject('my-project')
         .start();
       const serverUrl = server.baseUrl();
@@ -715,7 +715,10 @@ describe('integrate claude — SQAA entitlement guard', () => {
         .newFakeServer()
         .withAuthToken('cloud-token')
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-        .withSqaaEntitlement('my-org', 'test-uuid-1234', { allowed: false, hasEntitlement: false })
+        .withVortexEntitlement('my-org', 'test-uuid-1234', {
+          allowed: false,
+          hasEntitlement: false,
+        })
         .start();
 
       const serverUrl = server.baseUrl();
@@ -751,7 +754,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
         .newFakeServer()
         .withAuthToken('cloud-token')
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-        .withSqaaEntitlement('my-org', 'test-uuid-1234', {
+        .withVortexEntitlement('my-org', 'test-uuid-1234', {
           allowed: false,
           hasEntitlement: true,
         })
@@ -804,7 +807,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
         .newFakeServer()
         .withAuthToken('cloud-token')
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-        .withSqaaEntitlement('my-org', 'test-uuid-1234')
+        .withVortexEntitlement('my-org', 'test-uuid-1234')
         .withProject('my-project')
         .start();
       const serverUrl = server.baseUrl();
@@ -832,7 +835,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
         .newFakeServer()
         .withAuthToken('cloud-token')
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-        .withSqaaEntitlement('my-org', 'test-uuid-1234')
+        .withVortexEntitlement('my-org', 'test-uuid-1234')
         .withProject('my-project')
         .start();
       const serverUrl = server.baseUrl();
@@ -1126,7 +1129,7 @@ describe('integrate claude — file placement (local vs global)', () => {
           .newFakeServer()
           .withAuthToken('cloud-token')
           .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-          .withSqaaEntitlement('my-org', 'test-uuid-1234')
+          .withVortexEntitlement('my-org', 'test-uuid-1234')
           .withProject('proj')
           .start();
         const serverUrl = server.baseUrl();
@@ -1994,7 +1997,7 @@ describe('integrate claude — interactive feature selection', () => {
         .newFakeServer()
         .withAuthToken('cloud-token')
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-        .withSqaaEntitlement('my-org', 'test-uuid-1234')
+        .withVortexEntitlement('my-org', 'test-uuid-1234')
         .withProject('my-project')
         .start();
       const serverUrl = server.baseUrl();

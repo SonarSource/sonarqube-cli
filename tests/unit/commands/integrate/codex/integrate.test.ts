@@ -53,8 +53,11 @@ describe('integrateCodex', () => {
   let installIntegrationSpy: Mock<
     Extract<(typeof registry)['installIntegration'], (...args: never[]) => unknown>
   >;
-  let hasSqaaEntitlementSpy: Mock<
-    Extract<(typeof SonarQubeClient.prototype)['hasSqaaEntitlement'], (...args: never[]) => unknown>
+  let hasVortexEntitlementSpy: Mock<
+    Extract<
+      (typeof SonarQubeClient.prototype)['hasVortexEntitlement'],
+      (...args: never[]) => unknown
+    >
   >;
   let checkComponentSpy: Mock<
     Extract<(typeof SonarQubeClient.prototype)['checkComponent'], (...args: never[]) => unknown>
@@ -71,10 +74,10 @@ describe('integrateCodex', () => {
     checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
     discoverProjectSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(BASE_PROJECT);
     installIntegrationSpy = spyOn(registry, 'installIntegration').mockResolvedValue([]);
-    hasSqaaEntitlementSpy = spyOn(
+    hasVortexEntitlementSpy = spyOn(
       SonarQubeClient.prototype,
-      'hasSqaaEntitlement',
-    ).mockResolvedValue('not_enabled');
+      'hasVortexEntitlement',
+    ).mockResolvedValue('not_entitled');
     checkComponentSpy = spyOn(SonarQubeClient.prototype, 'checkComponent').mockResolvedValue(true);
     resolveContextAugmentationSetupSpy = spyOn(
       contextAugmentation,
@@ -88,7 +91,7 @@ describe('integrateCodex', () => {
     checkTokenStatusSpy.mockRestore();
     discoverProjectSpy.mockRestore();
     installIntegrationSpy.mockRestore();
-    hasSqaaEntitlementSpy.mockRestore();
+    hasVortexEntitlementSpy.mockRestore();
     checkComponentSpy.mockRestore();
     resolveContextAugmentationSetupSpy.mockRestore();
   });

@@ -711,7 +711,7 @@ describe('system reset --force', () => {
         .newFakeServer()
         .withAuthToken('cloud-token')
         .withOrganizations([{ key: testOrg, name: 'My Org' }])
-        .withSqaaEntitlement(testOrg, 'test-uuid-1234')
+        .withVortexEntitlement(testOrg, 'test-uuid-1234')
         .withProject(testProject)
         .start();
       const serverUrl = server.baseUrl();

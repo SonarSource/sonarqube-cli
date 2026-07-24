@@ -58,9 +58,8 @@ export const GENERIC_HTTP_METHODS = ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'] as
 export const METHODS_WITH_BODY = new Set<HttpMethod>(['POST', 'PATCH', 'PUT']);
 export type HttpMethod = (typeof GENERIC_HTTP_METHODS)[number];
 
-export type CagEntitlementStatus = 'entitled' | 'not_entitled' | 'check_failed';
-
-export type SqaaEntitlementStatus = 'enabled' | 'over_consumption' | 'not_enabled' | 'check_failed';
+export type VortexEntitlementStatus =
+  'enabled' | 'over_consumption' | 'not_entitled' | 'check_failed';
 
 export interface Organization {
   key: string;
@@ -427,10 +426,10 @@ export class SonarQubeClient {
    * - `hasEntitlement` — whether the org is entitled at all.
    *
    * Returns `'enabled'` when currently allowed, `'over_consumption'` when entitled but
-   * over its current usage limit, `'not_enabled'` when not entitled, and
+   * over its current usage limit, `'not_entitled'` when not entitled, and
    * `'check_failed'` when the API call errors out.
    */
-  async checkSqaaEntitlement(organizationUuid: string): Promise<SqaaEntitlementStatus> {
+  async checkSqaaEntitlement(organizationUuid: string): Promise<VortexEntitlementStatus> {
     try {
       const endpoint = `/a3s-analysis/org-entitlement/${organizationUuid}`;
       const result = await this.get<{ id: string; allowed: boolean; hasEntitlement: boolean }>(
@@ -441,7 +440,7 @@ export class SonarQubeClient {
       if (result.allowed) {
         return 'enabled';
       }
-      return result.hasEntitlement ? 'over_consumption' : 'not_enabled';
+      return result.hasEntitlement ? 'over_consumption' : 'not_entitled';
     } catch {
       return 'check_failed';
     }
@@ -482,36 +481,24 @@ export class SonarQubeClient {
     return (await this.getScaEnablement(connectionType, orgKey)) === 'enabled';
   }
 
-  /**
-   * Convenience: resolve org UUID then check SQAA entitlement in one call.
-   */
-  async hasSqaaEntitlement(organizationKey?: string): Promise<SqaaEntitlementStatus> {
-    if (!organizationKey || !isSonarQubeCloud(this.serverURL)) {
-      return 'not_enabled';
-    }
-
-    const uuid = await this.getOrganizationId(organizationKey);
-    if (!uuid) {
-      return 'check_failed';
-    }
-
-    return this.checkSqaaEntitlement(uuid);
-  }
-
-  async checkCagEntitlement(organizationUuid: string): Promise<CagEntitlementStatus> {
+  async checkCagEntitlement(organizationUuid: string): Promise<VortexEntitlementStatus> {
     try {
       const endpoint = `/cag/cag-entitlement/${organizationUuid}`;
       const result = await this.get<{
+        allowed?: boolean;
         hasEntitlement?: boolean;
         consumption?: object;
       }>(endpoint, undefined, resolveFromEndpoint(this.serverURL, endpoint));
-      return result.hasEntitlement ? 'entitled' : 'not_entitled';
+      if (result.allowed) {
+        return 'enabled';
+      }
+      return result.hasEntitlement ? 'over_consumption' : 'not_entitled';
     } catch {
       return 'check_failed';
     }
   }
 
-  async hasCagEntitlement(organizationKey?: string): Promise<CagEntitlementStatus> {
+  async hasVortexEntitlement(organizationKey?: string): Promise<VortexEntitlementStatus> {
     if (!organizationKey || !isSonarQubeCloud(this.serverURL)) {
       return 'not_entitled';
     }
@@ -519,7 +506,20 @@ export class SonarQubeClient {
     if (!uuid) {
       return 'check_failed';
     }
-    return this.checkCagEntitlement(uuid);
+    const [sqaa, cag] = await Promise.all([
+      this.checkSqaaEntitlement(uuid),
+      this.checkCagEntitlement(uuid),
+    ]);
+    if (sqaa === 'check_failed' || cag === 'check_failed') {
+      return 'check_failed';
+    }
+    if (sqaa === 'over_consumption' || cag === 'over_consumption') {
+      return 'over_consumption';
+    }
+    if (sqaa === 'not_entitled' || cag === 'not_entitled') {
+      return 'not_entitled';
+    }
+    return 'enabled';
   }
 
   /**

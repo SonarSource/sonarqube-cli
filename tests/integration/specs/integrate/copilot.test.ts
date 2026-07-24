@@ -634,7 +634,7 @@ describe('integrate copilot', () => {
         .newFakeServer()
         .withAuthToken('cloud-token')
         .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
-        .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234', options)
+        .withVortexEntitlement(TEST_ORG, 'test-uuid-1234', options)
         .withProject(TEST_PROJECT)
         .start();
       const serverUrl = server.baseUrl();
@@ -789,8 +789,8 @@ describe('integrate copilot', () => {
     it(
       'omits the SQAA section on on-premise (no organization on the auth)',
       async () => {
-        // Default beforeEach sets up on-premise auth (no org). hasSqaaEntitlement
-        // returns false fast without hitting the API in this case.
+        // Default beforeEach sets up on-premise auth (no org). hasVortexEntitlement
+        // returns 'not_entitled' fast without hitting the API in this case.
         const result = await harness.run(
           `integrate copilot --project ${TEST_PROJECT} --non-interactive`,
         );
