@@ -655,6 +655,23 @@ export class SonarQubeClient {
   }
 
   /**
+   * Request SonarQube Cloud Autoscan eligibility/auto-enable for a newly provisioned project.
+   * Best-effort: swallows failures so a hiccup here never fails the enclosing `sonar import` run.
+   */
+  async requestAutoscanEligibility(projectKey: string): Promise<void> {
+    try {
+      await this.get('/api/autoscan/eligibility', {
+        autoEnable: true,
+        ignoreCache: false,
+        projectKey,
+      });
+    } catch (err) {
+      logger.debug('Failed to request autoscan eligibility', err);
+      return undefined;
+    }
+  }
+
+  /**
    * ALM-type lookup via `GET /dop-translation/organization-bindings` (SonarQube Cloud only,
    * region-specific API host), keyed by the org's **legacy** id (not `uuidV4`). Used to format
    * `provision_projects`' `installationKeys` param correctly for the org's connected DevOps
