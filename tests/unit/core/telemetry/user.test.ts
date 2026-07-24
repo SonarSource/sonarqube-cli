@@ -25,8 +25,8 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import { getOrCreateUserId } from '@/core/telemetry/user.ts';
-import { ENV_SONAR_USER_HOME } from '@/lib/config-constants.ts';
 
 describe('getOrCreateUserId', () => {
   const previousSonarUserHome = process.env[ENV_SONAR_USER_HOME];

@@ -20,13 +20,14 @@
 
 import { describe, expect, it } from 'bun:test';
 
+import { SUPPORT_URL } from '@/core/config-constants.ts';
+
 import { CommandFailedError } from '../../../../../src/commands/_common/error.ts';
 import {
   getOptionalStringAttr,
   getRequiredStringAttr,
 } from '../../../../../src/commands/integrate/_common/attrs.ts';
 import type { IntegrationContext } from '../../../../../src/commands/integrate/_common/registry/types.ts';
-import { SUPPORT_URL } from '../../../../../src/lib/config-constants.ts';
 
 function makeContext(attrs?: IntegrationContext['attrs']): IntegrationContext {
   return { attrs } as IntegrationContext;

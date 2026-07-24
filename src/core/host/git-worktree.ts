@@ -25,8 +25,8 @@
 
 import { isAbsolute, join, relative, resolve } from 'node:path';
 
-import { canonicalizePath, pathComparisonKey } from '../../lib/fs-utils.ts';
-import { spawnProcess } from '../../lib/process.ts';
+import { canonicalizePath, pathComparisonKey } from '../io/fs-utils.ts';
+import { spawnProcess } from '../process/process.ts';
 
 interface WorktreeMapping {
   /** git top-level of the input path (the linked worktree root when inside one). */

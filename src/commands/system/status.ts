@@ -24,6 +24,7 @@ import { join } from 'node:path';
 
 import { parse as parseToml } from 'smol-toml';
 
+import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '@/core/config-constants.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { resolveAuth } from '@/core/host/auth-resolver.ts';
 import { getNetworkConfig } from '@/core/host/connectivity/network-config.ts';
@@ -45,12 +46,11 @@ import {
   SONAR_CONTEXT_AUGMENTATION_VERSION,
 } from '@/core/host/signatures.ts';
 import { isNewerVersion, stripBuildNumber } from '@/core/host/version.ts';
+import type { CliState } from '@/core/state/state.ts';
+import { loadState } from '@/core/state/state-repository.ts';
 import { blank, print, success, text, warn } from '@/core/ui';
 
 import { version as VERSION } from '../../../package.json';
-import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '../../lib/config-constants.ts';
-import { loadState } from '../../lib/repository/state-repository.ts';
-import type { CliState } from '../../lib/state.ts';
 import { SECRETS_SPEC } from '../_common/install/secrets.ts';
 import type { TokenCheckResult } from '../_common/token.ts';
 import { checkTokenStatus } from '../_common/token.ts';

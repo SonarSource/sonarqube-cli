@@ -30,7 +30,7 @@ import { randomUUID } from 'node:crypto';
 import { closeSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { getCliDir, getSonarUserHome } from '../../lib/config-constants.ts';
+import { getCliDir, getSonarUserHome } from '../config-constants.ts';
 
 function getSharedUserFile(): string {
   return join(getSonarUserHome(), 'user');

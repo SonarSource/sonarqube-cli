@@ -23,8 +23,9 @@
 import { existsSync, statSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 
-import { normalizePath } from '../../lib/fs-utils.ts';
-import { spawnProcess } from '../../lib/process.ts';
+import { normalizePath } from '@/core/io/fs-utils.ts';
+import { spawnProcess } from '@/core/process/process.ts';
+
 import { PRE_COMMIT_CONFIG_FILE } from '../integrate/git/tools/pre-commit';
 import { CommandFailedError } from './error.ts';
 

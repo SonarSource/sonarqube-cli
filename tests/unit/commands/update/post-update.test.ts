@@ -36,6 +36,7 @@ import {
   wholeFile,
 } from '@/commands/integrate/_common/registry';
 import * as hooks from '@/commands/integrate/claude/hooks.ts';
+import * as configConstants from '@/core/config-constants.ts';
 import { DISTRIBUTION } from '@/core/host/distribution.ts';
 import { SCA_SCANNER_BINARY_NAME } from '@/core/host/install-types.ts';
 import * as migration from '@/core/host/migration.ts';
@@ -48,17 +49,12 @@ import {
   updateSecretsBinaryIfNeeded,
 } from '@/core/host/post-update.ts';
 import * as versionLib from '@/core/host/version.ts';
+import type { CliState, HookExtension, StoredCommandExecutedEvent } from '@/core/state/state.ts';
+import { getDefaultState } from '@/core/state/state.ts';
+import * as stateRepository from '@/core/state/state-repository.ts';
 import * as telemetryEvents from '@/core/telemetry/telemetry-events.ts';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
-import * as configConstants from '../../../../src/lib/config-constants.ts';
-import * as stateRepository from '../../../../src/lib/repository/state-repository.ts';
-import type {
-  CliState,
-  HookExtension,
-  StoredCommandExecutedEvent,
-} from '../../../../src/lib/state.ts';
-import { getDefaultState } from '../../../../src/lib/state.ts';
 
 const FAKE_HOME = '/fake/home';
 const homedirFn = () => FAKE_HOME;

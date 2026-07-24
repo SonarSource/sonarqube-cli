@@ -22,7 +22,8 @@ import type {
   CliState,
   InstalledIntegrationDependency,
   InstalledIntegrationFeature,
-} from '../../../../lib/state.ts';
+} from '@/core/state/state.ts';
+
 import type { DependencyDeclaration } from './dependencies';
 import {
   findInstalledFeature,

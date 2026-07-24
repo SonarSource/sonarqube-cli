@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import {
   type DopRepository,
@@ -27,7 +28,6 @@ import {
 import { info, intro, outro } from '@/core/ui';
 import { ImportProgress } from '@/core/ui/components/import-progress.ts';
 
-import { runWithConcurrencyLimit } from '../../lib/concurrency-pool';
 import { CommandFailedError } from '../_common/error';
 import type {
   OnlyPrivateProjects,

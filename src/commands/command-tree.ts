@@ -25,6 +25,7 @@ import { maybeNotifyUpdateAvailable } from '@/core/host/update-notification.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
 import { GENERIC_HTTP_METHODS } from '@/core/server/client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
+import { tryLoadState } from '@/core/state/state-repository.ts';
 import {
   flushTelemetry,
   setPassthroughSubcommand,
@@ -36,7 +37,6 @@ import {
   SQAA_VERIFY_CALLER_COMMAND,
 } from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 import { blank, error, warn } from '@/core/ui';
-import { tryLoadState } from '@/lib/repository/state-repository.ts';
 
 import { version as VERSION } from '../../package.json';
 import { CommandFailedError } from './_common/error.ts';

@@ -25,7 +25,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '../../../../src/lib/config-constants.js';
+import { SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '@/core/config-constants.ts';
+
 import { IS_WINDOWS, TestHarness } from '../../harness';
 
 const EXECUTABLE_MODE = 0o755;

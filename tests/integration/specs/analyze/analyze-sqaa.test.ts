@@ -25,6 +25,7 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import type { StoredAnalysisCompletedEvent } from '@/core/state/state.ts';
 import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 import {
@@ -32,7 +33,6 @@ import {
   SQAA_ANALYZE_CALLER_COMMAND,
 } from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 
-import type { StoredAnalysisCompletedEvent } from '../../../../src/lib/state.js';
 import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,

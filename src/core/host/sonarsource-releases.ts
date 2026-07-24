@@ -28,7 +28,7 @@ import { version as VERSION } from '../../../package.json';
 import {
   SONAR_CONTEXT_AUGMENTATION_DIST_PREFIX,
   SONARSOURCE_BINARIES_URL,
-} from '../../lib/config-constants.ts';
+} from '../config-constants.ts';
 import logger from '../observability/logger.ts';
 import { buildCagPlatformSuffix, type PlatformInfo } from './install-types.ts';
 

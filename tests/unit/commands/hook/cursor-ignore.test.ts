@@ -24,11 +24,12 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'bun:test';
 
+import { CURSOR_IGNORE_FILE } from '@/core/config-constants.ts';
+
 import {
   appendToCursorIgnore,
   CURSOR_IGNORE_MARKER,
 } from '../../../../src/commands/hook/cursor-ignore.ts';
-import { CURSOR_IGNORE_FILE } from '../../../../src/lib/config-constants.ts';
 
 describe('appendToCursorIgnore', () => {
   let projectRoot: string;

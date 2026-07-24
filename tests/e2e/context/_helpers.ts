@@ -36,13 +36,13 @@ import { CODEX_INTEGRATION_ID } from '@/commands/integrate/codex/declaration.ts'
 import { COPILOT_INTEGRATION_ID } from '@/commands/integrate/copilot/declaration.ts';
 import { CURSOR_INTEGRATION_ID } from '@/commands/integrate/cursor/declaration.ts';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
-
 import type {
   CliState,
   InstalledIntegrationDependency,
   InstalledIntegrationFeature,
-} from '../../../src/lib/state';
-import { getDefaultState } from '../../../src/lib/state';
+} from '@/core/state/state.ts';
+import { getDefaultState } from '@/core/state/state.ts';
+
 import type { TestHarness } from '../../integration/harness';
 
 export const STALE_CLI_VERSION = '0.0.1';

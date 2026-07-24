@@ -25,6 +25,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { getDefaultState } from '@/core/state/state.ts';
+
 import { textSnippet, wholeFile } from '../../../../../src/commands/integrate/_common/registry';
 import {
   detectEol,
@@ -33,7 +35,6 @@ import {
   toEol,
 } from '../../../../../src/commands/integrate/_common/registry/resources/common.ts';
 import type { IntegrationContext } from '../../../../../src/commands/integrate/_common/registry/types.ts';
-import { getDefaultState } from '../../../../../src/lib/state.ts';
 
 describe('EOL-preserving resource writes', () => {
   let tempDir: string;

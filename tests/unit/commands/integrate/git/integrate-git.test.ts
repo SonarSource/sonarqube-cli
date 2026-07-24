@@ -40,14 +40,13 @@ import {
 } from '@/commands/integrate/git/tools/native';
 import { PRE_COMMIT_CONFIG_FILE } from '@/commands/integrate/git/tools/pre-commit';
 import { LEGACY_HOOK_MARKER } from '@/commands/integrate/git/tools/shared.ts';
+import { GLOBAL_HOOKS_DIR } from '@/core/config-constants.ts';
 import * as gitDiscovery from '@/core/host/discover-git-repo.ts';
+import * as processLib from '@/core/process/process.ts';
 import * as discovery from '@/core/project-info.ts';
+import { type CliState, getDefaultState } from '@/core/state/state.ts';
+import * as stateRepository from '@/core/state/state-repository.ts';
 import { clearMockUiCalls, getMockUiCalls, queueMockResponse, setMockUi } from '@/core/ui';
-import { GLOBAL_HOOKS_DIR } from '@/lib/config-constants.ts';
-
-import * as processLib from '../../../../../src/lib/process.ts';
-import * as stateRepository from '../../../../../src/lib/repository/state-repository.ts';
-import { type CliState, getDefaultState } from '../../../../../src/lib/state.ts';
 
 const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.integrate-git-tmp');
 

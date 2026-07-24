@@ -20,6 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { ENV_SQAA_RETRY_BASE_DELAY_MS } from '@/core/config-constants.ts';
 import { SonarQubeClient, type SqaaAnalysisRequest } from '@/core/server/client.ts';
 import { RequestPayloadTooLargeError, ServiceUnavailableError } from '@/core/server/errors.ts';
 
@@ -28,7 +29,6 @@ import { fetchChunkWith413Split } from '../../../../src/commands/analyze/sqaa-ap
 import type { CloudAuth } from '../../../../src/commands/analyze/sqaa-auth.ts';
 import type { SqaaChunkFile } from '../../../../src/commands/analyze/sqaa-chunking.ts';
 import * as sqaaChunking from '../../../../src/commands/analyze/sqaa-chunking.ts';
-import { ENV_SQAA_RETRY_BASE_DELAY_MS } from '../../../../src/lib/config-constants.ts';
 
 const AUTH: CloudAuth = {
   serverUrl: 'https://sonarcloud.io',

@@ -20,9 +20,9 @@
 
 import { join } from 'node:path';
 
+import { CLI_COMMAND, CURSOR_CONFIG_DIR } from '@/core/config-constants.ts';
 import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 
-import { CLI_COMMAND, CURSOR_CONFIG_DIR } from '../../../lib/config-constants.ts';
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs.ts';
 import {
   AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,

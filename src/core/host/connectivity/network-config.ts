@@ -23,7 +23,7 @@ import { rootCertificates } from 'node:tls';
 
 import { isPkcs12Path, pkcs12ToPem } from '@/core/host/crypto/pkcs12.ts';
 
-import { NetworkConfigError } from '../../../lib/errors.ts';
+import { NetworkConfigError } from '../../errors.ts';
 import { createRedactedUrl } from '../redacted-url.ts';
 import type {
   CaCertConfig,

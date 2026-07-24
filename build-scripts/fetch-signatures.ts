@@ -37,9 +37,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 
 import * as openpgp from 'openpgp';
 
+import { SONARSOURCE_BINARIES_URL } from '@/core/config-constants.ts';
 import { SONARSOURCE_PUBLIC_KEY } from '@/core/host/signatures.ts';
-
-import { SONARSOURCE_BINARIES_URL } from '../src/lib/config-constants.ts';
 
 interface Platform {
   os: string;

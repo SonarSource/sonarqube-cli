@@ -20,8 +20,6 @@
 
 import { join } from 'node:path';
 
-import { getMcpConfig } from '@/core/host/mcp/mcp-helper.ts';
-
 import {
   ANTIGRAVITY_GLOBAL_GEMINI_MD,
   ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
@@ -31,7 +29,9 @@ import {
   ANTIGRAVITY_PROMPT_SECRETS_RULE_FILE,
   ANTIGRAVITY_SQAA_RULE_FILE,
   CLI_COMMAND,
-} from '../../../lib/config-constants.ts';
+} from '@/core/config-constants.ts';
+import { getMcpConfig } from '@/core/host/mcp/mcp-helper.ts';
+
 import { getRequiredStringAttr } from '../_common/attrs.ts';
 import {
   AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,

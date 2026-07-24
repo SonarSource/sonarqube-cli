@@ -24,7 +24,10 @@ import { join, resolve } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
+import * as processLib from '@/core/process/process.ts';
 import * as projectWorkspace from '@/core/project-info.ts';
 import {
   discoverOrganization,
@@ -35,9 +38,6 @@ import {
 import * as discoverByRemote from '@/core/server/discover-project-by-remote.ts';
 import { GIT_REMOTE_BINDING_SOURCE } from '@/core/server/discover-project-by-remote.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
-import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/lib/config-constants.ts';
-import { canonicalizePath } from '@/lib/fs-utils.ts';
-import * as processLib from '@/lib/process.ts';
 
 async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
   const prev = process.cwd();

@@ -23,6 +23,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { getDefaultState } from '@/core/state/state.ts';
+
 import { CommandFailedError } from '../../../../../src/commands/_common/error.ts';
 import type {
   ContainerIntegrationContext,
@@ -34,7 +36,6 @@ import {
   nativeGitIntegration,
 } from '../../../../../src/commands/integrate/git/tools/native';
 import { LEGACY_HOOK_MARKER } from '../../../../../src/commands/integrate/git/tools/shared.ts';
-import { getDefaultState } from '../../../../../src/lib/state.ts';
 
 const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.git-native-resource-tmp');
 

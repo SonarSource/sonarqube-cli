@@ -31,8 +31,8 @@ import {
 } from '@/core/host/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 
-import { getTelemetryDir } from '../../lib/config-constants.ts';
-import type { AuthConnection, ServerType, TelemetryConnectionType } from '../../lib/state.ts';
+import { getTelemetryDir } from '../config-constants.ts';
+import type { AuthConnection, ServerType, TelemetryConnectionType } from '../state/state.ts';
 
 export interface TelemetryIdentity {
   user_uuid: string | null;

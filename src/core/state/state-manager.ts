@@ -28,14 +28,14 @@ import crypto from 'node:crypto';
 import logger from '@/core/observability/logger.ts';
 import { warn } from '@/core/ui';
 
-import { version as VERSION } from '../../package.json';
-import { pathComparisonKey } from './fs-utils';
-import { loadState, saveState } from './repository/state-repository.js';
+import { version as VERSION } from '../../../package.json';
+import { pathComparisonKey } from '../io/fs-utils.ts';
+import { loadState, saveState } from './state-repository.ts';
 
 export { loadState, saveState };
-export { tryLoadState } from './repository/state-repository.js';
+export { tryLoadState } from './state-repository.ts';
 
-import { type AuthConnection, type CliState, type CloudRegion } from './state.js';
+import { type AuthConnection, type CliState, type CloudRegion } from './state.ts';
 
 /**
  * Get the currently active authentication connection, or undefined if none.

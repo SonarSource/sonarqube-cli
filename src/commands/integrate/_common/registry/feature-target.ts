@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { IntegrationScope } from '../../../../lib/state.ts';
+import type { IntegrationScope } from '@/core/state/state.ts';
+
 import type { FeatureApplication, FeatureDeclaration, IntegrationInvocation } from './types.ts';
 
 /**

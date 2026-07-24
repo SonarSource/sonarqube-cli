@@ -42,8 +42,8 @@ import { buildLocalCagBinaryName } from '@/commands/_common/install/context-augm
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import { detectPlatform } from '@/core/host/platform-detector.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
+import type { CliState } from '@/core/state/state.ts';
 
-import type { CliState } from '../../../src/lib/state';
 import { TestHarness } from '../../integration/harness';
 import {
   CLAUDE_SKILL_RELATIVE_PATH,

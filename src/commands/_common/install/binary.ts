@@ -24,6 +24,7 @@
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { BIN_DIR } from '@/core/config-constants.ts';
 import { buildPlatformSuffix, type PlatformInfo } from '@/core/host/install-types.ts';
 import { detectPlatform } from '@/core/host/platform-detector.ts';
 import {
@@ -31,10 +32,9 @@ import {
   downloadBinary,
   verifyBinarySignature,
 } from '@/core/host/sonarsource-releases.ts';
+import { recordInstallationInState } from '@/core/state/state-manager.ts';
 import { type OutputChannel, print, text, withSpinner } from '@/core/ui';
 
-import { BIN_DIR } from '../../../lib/config-constants.ts';
-import { recordInstallationInState } from '../../../lib/state-manager.ts';
 import {
   cleanupOldVersionBinaries,
   ensureBinDirectory,

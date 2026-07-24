@@ -24,8 +24,7 @@ import { statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
 import logger from '@/core/observability/logger.ts';
-
-import { spawnProcess } from '../../lib/process.ts';
+import { spawnProcess } from '@/core/process/process.ts';
 
 /**
  * Returns the repository top-level for `contextPath`, or `undefined` when not in a repo

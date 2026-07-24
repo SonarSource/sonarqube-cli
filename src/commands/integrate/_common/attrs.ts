@@ -18,8 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { SUPPORT_URL } from '../../../lib/config-constants.ts';
-import { CommandFailedError } from '../../_common/error.ts';
+import { CommandFailedError } from '@/commands/_common/error.ts';
+import { SUPPORT_URL } from '@/core/config-constants.ts';
+
 import type { IntegrationContext } from './registry/types.ts';
 
 export function getOptionalStringAttr(

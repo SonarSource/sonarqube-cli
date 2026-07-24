@@ -22,12 +22,12 @@
 
 import { homedir } from 'node:os';
 
+import { CommandFailedError, InvalidOptionError } from '@/commands/_common/error.ts';
 import { isSonarQubeCloud, type ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { type DiscoveredProject, discoverProject } from '@/core/project-info.ts';
+import type { IntegrationScope } from '@/core/state/state.ts';
 import { intro, warn, withSpinner } from '@/core/ui';
 
-import type { IntegrationScope } from '../../../lib/state.ts';
-import { CommandFailedError, InvalidOptionError } from '../../_common/error.ts';
 import { isGlobalIntegrateScope, resolveIntegrateScope } from './integrate-scope.ts';
 import { printAgentPreflightSummary } from './preflight-summary.ts';
 import type { IntegrateAgentOptions } from './types.ts';

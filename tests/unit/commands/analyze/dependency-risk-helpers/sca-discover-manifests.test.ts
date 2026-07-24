@@ -25,6 +25,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it, mock, spyOn } from 'bun:test';
 
+import type { SpawnResult } from '@/core/process/process.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { CommandFailedError } from '../../../../../src/commands/_common/error.ts';
@@ -32,7 +33,6 @@ import type { ScaScannerInstaller } from '../../../../../src/commands/_common/in
 import { ScaDiscoverManifestsRunner } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-discover-manifests.ts';
 import type { ScaScannerInvocation } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner-runner-base.ts';
 import type { ScaScannerSpawner } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner-spawner.ts';
-import type { SpawnResult } from '../../../../../src/lib/process.ts';
 import { makeScaInvocation as makeInvocation, okScaInstaller as okInstaller } from './_helpers.ts';
 
 function spawnerReturning(result: SpawnResult): ScaScannerSpawner {
