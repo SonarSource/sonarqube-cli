@@ -19,7 +19,14 @@
  */
 
 import { type DopRepository, type SonarQubeClient } from '@/core/server/client.ts';
-import { type MultiSelectOption, multiSelectPrompt, selectPrompt, withSpinner } from '@/core/ui';
+import {
+  type MultiSelectOption,
+  multiSelectPrompt,
+  print,
+  selectPrompt,
+  textPrompt,
+  withSpinner,
+} from '@/core/ui';
 
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import {
@@ -57,14 +64,17 @@ export interface ResolvedRepo {
 
 /**
  * Outcome of resolving which repositories to import:
- * - `streaming` — `--all`/"Recommended" hand back the live `RepositoryCollection` itself so the
- *   caller can run the fetch-a-page/import-a-page job (see `runBulkImportJob` in `index.ts`)
- *   instead of a fully materialized list.
+ * - `streaming` — `--all`/"Recommended" and `--regex`/"By pattern" both hand back the live
+ *   `RepositoryCollection` itself so the caller can run the fetch-a-page/import-a-page job (see
+ *   `runBulkImportJob` in `index.ts`) instead of a fully materialized list. `regex` is `undefined`
+ *   for `--all`/"Recommended" (import every eligible repo) or a compiled pattern for
+ *   `--regex`/"By pattern" (import only eligible repos whose name matches); either way it's
+ *   applied by that job as a live per-page filter, not baked into the collection itself.
  * - `batch` — manual selection and `--repo` already know their (small, explicit) final list, so
  *   they resolve to it directly and the caller runs one single-batch import.
  */
 export type RepoResolution =
-  | { kind: 'streaming'; collection: RepositoryCollection }
+  | { kind: 'streaming'; collection: RepositoryCollection; regex: RegExp | undefined }
   | { kind: 'batch'; repos: ResolvedRepo[]; skipped: SkippedRepo[] };
 
 /**
@@ -144,30 +154,127 @@ async function resolveOrgByKey(client: SonarQubeClient, orgKey: string): Promise
 }
 
 /**
- * Internal-only signal: returned by `promptForReposFromCollection` when its picker is
+ * Compiles `input` as a `RegExp`. Supports the `/pattern/flags` literal syntax (e.g.
+ * `/^archived-/i`) so flags — most usefully `i` for case-insensitive matching — are expressible:
+ * JS has no inline `(?i)` modifier the way PCRE/Python do, so a bare pattern string can't
+ * otherwise carry one. Anything else is treated as a plain pattern with no flags, as before.
+ *
+ * The literal syntax is only recognized when there's a non-empty pattern between the slashes and
+ * the trailing segment consists solely of valid RegExp flag characters — both requirements are
+ * enforced by the detection regex itself via backtracking, needing no separate validation step.
+ * This avoids two ambiguities a looser match (any trailing lowercase letters, empty pattern
+ * allowed) would create: a plain pattern that merely looks like `/pattern/flags` — e.g.
+ * `/etc/passwd`, whose trailing segment "passwd" isn't a valid flag string — being rejected as
+ * an invalid regex instead of compiled as the literal pattern the user meant; and a value like
+ * `//` being read as an empty pattern, which matches (and would silently exclude) every
+ * repository name.
+ *
+ * `g`/`y` are silently dropped even when given: this regex is reused via `.test()` against a
+ * sequence of independent repository names, not repeated calls against the same string, so
+ * `lastIndex` statefulness would only produce alternating false negatives — never a meaningful
+ * "global" match — while every other flag (and the match result itself) behaves identically
+ * with or without them.
+ */
+function compileRegexInput(input: string): RegExp {
+  const literal = /^\/(.+)\/([dgimsuvy]*)$/.exec(input);
+  if (!literal) {
+    return new RegExp(input);
+  }
+  const [, pattern, flags] = literal;
+  return new RegExp(pattern, flags.replace(/[gy]/g, ''));
+}
+
+/** Like `compileRegexInput`, but returns `undefined` instead of throwing on invalid syntax. */
+function tryCompileRegex(input: string): RegExp | undefined {
+  try {
+    return compileRegexInput(input);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Validates that at most one of `--all`/`--repo`/`--regex` is given, and `--regex`'s syntax when
+ * present, eagerly regardless of interactivity — so an invalid combination or pattern fails
+ * immediately rather than only once the org is resolved. Returns the compiled `--regex` value
+ * (or `undefined` if omitted); callers use it directly for the standalone `--regex` mode, or
+ * ignore it for `--all`/`--repo`/interactive resolution.
+ */
+function validateSelectionFlags(opts: {
+  repo?: string[];
+  all?: boolean;
+  regex?: string;
+}): RegExp | undefined {
+  const given = [
+    opts.all ? '--all' : null,
+    opts.repo?.length ? '--repo' : null,
+    opts.regex ? '--regex' : null,
+  ].filter((flag): flag is string => flag !== null);
+
+  if (given.length > 1) {
+    throw new InvalidOptionError(
+      `${given.join(', ')} cannot be combined`,
+      'Pass exactly one of --all, --repo, or --regex to choose how to select repositories.',
+    );
+  }
+
+  if (!opts.regex) {
+    return undefined;
+  }
+  try {
+    return compileRegexInput(opts.regex);
+  } catch (err) {
+    throw new InvalidOptionError(
+      `--regex is not a valid regular expression: ${err instanceof Error ? err.message : String(err)}`,
+      'Pass a regular expression pattern, e.g. --regex "^archived-", or wrap it as /pattern/flags to add flags, e.g. --regex "/^archived-/i" for case-insensitive matching.',
+    );
+  }
+}
+
+/**
+ * Internal-only signal: returned by `promptForReposFromCollection` and `promptForRegex` when
  * cancelled, so `resolveOnboardingMode`'s loop can redisplay the mode menu. Never escapes
  * `resolveOnboardingMode`.
  */
 const BACK = Symbol('back');
+
+/**
+ * Prompts for a mandatory regex when the user has chosen "By pattern" from the onboarding-mode
+ * menu — unlike an optional filter, there's no "skip" here: choosing this mode means the user
+ * wants one, so blank or invalid input just re-prompts. Cancelling (Ctrl+C) returns `BACK` to the
+ * mode-select menu, consistent with cancelling the Manual picker.
+ */
+async function promptForRegex(): Promise<RegExp | typeof BACK> {
+  for (;;) {
+    const input = await textPrompt(
+      'Import repositories whose name matches (regex, e.g. /^archived-/i)',
+    );
+    if (input === null) {
+      return BACK;
+    }
+    const compiled = input.trim() === '' ? undefined : tryCompileRegex(input.trim());
+    if (compiled) {
+      return compiled;
+    }
+    print(
+      'Please enter a valid, non-empty regular expression (e.g. /pattern/i for case-insensitive).',
+    );
+  }
+}
 
 export async function resolveRepos(
   client: SonarQubeClient,
   orgKey: string,
   almKey: string | undefined,
   onlyPrivateProjects: OnlyPrivateProjects,
-  opts: { repo?: string[]; all?: boolean; nonInteractive?: boolean },
+  opts: { repo?: string[]; all?: boolean; regex?: string; nonInteractive?: boolean },
 ): Promise<RepoResolution> {
-  if (opts.all && opts.repo?.length) {
-    throw new InvalidOptionError(
-      '--all cannot be combined with --repo',
-      'Pass either --all to import every eligible repository, or --repo to choose specific ones.',
-    );
-  }
+  const regexFromFlag = validateSelectionFlags(opts);
 
-  if (opts.nonInteractive && !opts.repo?.length && !opts.all) {
+  if (opts.nonInteractive && !opts.repo?.length && !opts.all && !opts.regex) {
     throw new InvalidOptionError(
-      '--repo or --all is required in non-interactive mode',
-      'Pass --repo <slug> to specify one or more repositories directly, or --all to import every eligible one.',
+      '--repo, --all, or --regex is required in non-interactive mode',
+      'Pass --repo <slug> to specify one or more repositories directly, --all to import every eligible one, or --regex <pattern> to import only eligible repositories matching a pattern.',
     );
   }
 
@@ -179,7 +286,11 @@ export async function resolveRepos(
   }
 
   if (opts.all) {
-    return resolveAllRepos(client, organizationId, onlyPrivateProjects);
+    return resolveStreamingImport(client, organizationId, onlyPrivateProjects, undefined);
+  }
+
+  if (opts.regex) {
+    return resolveStreamingImport(client, organizationId, onlyPrivateProjects, regexFromFlag);
   }
 
   if (opts.repo?.length) {
@@ -246,13 +357,14 @@ function handleNoEligibleRepos(collection: RepositoryCollection): never {
 
 /**
  * Ask how the user wants to pick repositories to import: bulk-import everything eligible
- * (mirrors `--all`) or choose specific ones interactively.
+ * (mirrors `--all`), choose specific ones interactively, or import only those matching a pattern
+ * (mirrors `--regex`).
  *
  * The collection is loaded just far enough to know whether anything is eligible before the
  * prompt is even shown, so an org with nothing importable fails immediately with a specific
- * reason — asking "recommended or manual?" would be pointless (and both branches would hit the
- * same dead end) when there's nothing to import either way. Whichever mode is chosen continues
- * fetching from this same collection rather than starting over from page one.
+ * reason — asking which mode to use would be pointless (every branch would hit the same dead
+ * end) when there's nothing to import either way. Whichever mode is chosen continues fetching
+ * from this same collection rather than starting over from page one.
  */
 async function resolveOnboardingMode(
   client: SonarQubeClient,
@@ -272,15 +384,20 @@ async function resolveOnboardingMode(
 
   const RECOMMENDED = Symbol('recommended');
   const MANUAL = Symbol('manual');
+  const BY_PATTERN = Symbol('by-pattern');
 
-  const options: Array<{ value: typeof RECOMMENDED | typeof MANUAL; label: string }> = [
+  const options: Array<{
+    value: typeof RECOMMENDED | typeof MANUAL | typeof BY_PATTERN;
+    label: string;
+  }> = [
     { value: RECOMMENDED, label: 'Recommended — import all eligible repositories automatically' },
     { value: MANUAL, label: 'Manual — choose repositories yourself' },
+    { value: BY_PATTERN, label: 'By pattern — import repositories whose name matches a regex' },
   ];
 
-  // Cancelling the "Manual" picker (below) re-shows this same menu instead of ending the
-  // command, so the user can pick a different mode rather than starting `sonar import` over
-  // from scratch.
+  // Cancelling the "Manual" picker or the "By pattern" prompt (below) re-shows this same menu
+  // instead of ending the command, so the user can pick a different mode rather than starting
+  // `sonar import` over from scratch.
   for (;;) {
     const choice = await selectPrompt('How do you want to import repositories?', options);
 
@@ -288,7 +405,14 @@ async function resolveOnboardingMode(
       throw new CommandFailedError('Repository selection cancelled');
     }
     if (choice === RECOMMENDED) {
-      return { kind: 'streaming', collection };
+      return { kind: 'streaming', collection, regex: undefined };
+    }
+    if (choice === BY_PATTERN) {
+      const regex = await promptForRegex();
+      if (regex === BACK) {
+        continue;
+      }
+      return { kind: 'streaming', collection, regex };
     }
 
     const repos = await promptForReposFromCollection(collection, almKey);
@@ -380,14 +504,16 @@ function isRepoSelectable(
 }
 
 /**
- * Resolve every eligible repository in the org for `--all` as a live streaming job: the caller
- * (`runBulkImportJob`) imports each page's eligible repos as soon as it's fetched instead of
- * waiting for the whole org to be scanned first.
+ * Resolve a live streaming job for `--all` (`regex` undefined, import every eligible repo) or
+ * `--regex` (`regex` set, import only eligible repos whose name matches): the caller
+ * (`runBulkImportJob`) imports each page's eligible-and-matching repos as soon as it's fetched
+ * instead of waiting for the whole org to be scanned first.
  */
-async function resolveAllRepos(
+async function resolveStreamingImport(
   client: SonarQubeClient,
   organizationId: string,
   onlyPrivateProjects: OnlyPrivateProjects,
+  regex: RegExp | undefined,
 ): Promise<RepoResolution> {
   const collection = await createRepositoryCollectionOrThrow(
     client,
@@ -401,7 +527,7 @@ async function resolveAllRepos(
     );
   }
 
-  return { kind: 'streaming', collection };
+  return { kind: 'streaming', collection, regex };
 }
 
 /**
@@ -476,8 +602,8 @@ async function promptForReposFromCollection(
     total: () => collection.eligibleRepos.length,
   });
 
-  // Cancelling (q / Ctrl+C) goes back to the Recommended/Manual menu that led here, rather
-  // than ending the whole command — the caller (`resolveOnboardingMode`) re-shows it.
+  // Cancelling (q / Ctrl+C) goes back to the Recommended/Manual/By pattern menu that led here,
+  // rather than ending the whole command — the caller (`resolveOnboardingMode`) re-shows it.
   if (result === null) {
     return BACK;
   }

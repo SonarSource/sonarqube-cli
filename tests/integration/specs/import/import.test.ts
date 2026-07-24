@@ -411,7 +411,7 @@ describe('sonar import', () => {
     );
 
     it(
-      'exits with code 2 when --non-interactive is set without --repo or --all',
+      'exits with code 2 when --non-interactive is set without --repo, --all, or --regex',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -427,7 +427,7 @@ describe('sonar import', () => {
 
         expect(result.exitCode).toBe(2);
         const output = result.stdout + result.stderr;
-        expect(output).toContain('--repo or --all is required in non-interactive mode');
+        expect(output).toContain('--repo, --all, or --regex is required in non-interactive mode');
       },
       { timeout: 15000 },
     );
@@ -1595,7 +1595,7 @@ describe('sonar import', () => {
 
         expect(result.exitCode).toBe(2);
         const output = result.stdout + result.stderr;
-        expect(output).toContain('--all cannot be combined with --repo');
+        expect(output).toContain('--all, --repo cannot be combined');
       },
       { timeout: 15000 },
     );
@@ -1647,6 +1647,364 @@ describe('sonar import', () => {
         expect(result.exitCode).toBe(1);
         const output = result.stdout + result.stderr;
         expect(output).toContain('No repositories are eligible for import');
+      },
+      { timeout: 15000 },
+    );
+  });
+
+  describe('selecting repositories by pattern (--regex)', () => {
+    it(
+      'exits with code 2 when --all is combined with --regex',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        const result = await harness.run('import --all --regex "^test-"', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(2);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('--all, --regex cannot be combined');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'exits with code 2 when --repo is combined with --regex',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        const result = await harness.run('import --repo my-org/repo-1 --regex "^test-"', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(2);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('--repo, --regex cannot be combined');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'exits with code 2 when --all, --repo, and --regex are all combined',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        const result = await harness.run('import --all --repo my-org/repo-1 --regex "^test-"', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(2);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('--all, --repo, --regex cannot be combined');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'exits with code 2 when --regex is not a valid regular expression',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        const result = await harness.run('import --regex "("', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(2);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('--regex is not a valid regular expression');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'imports only repositories whose name (not slug) matches --regex, non-interactively',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withDopRepositories('my-org', [
+            // Slug deliberately does NOT match the pattern below — only `name` should be tested.
+            { id: 'repo-1', name: 'engineering-tools', slug: 'my-org/renamed-tools' },
+            { id: 'repo-2', name: 'random-notes', slug: 'my-org/random-notes' },
+          ])
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        const result = await harness.run('import --non-interactive --regex "^engineering-"', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('Imported 1 repository (1 skipped)');
+        expect(result.stdout).toContain('name does not match --regex pattern: 1');
+        expect(result.stdout).toContain('my-org/renamed-tools');
+        expect(result.stdout).not.toContain('my-org/random-notes');
+        const recorded = server.getRecordedRequests();
+        const provisionRequests = recorded.filter(
+          (r) => r.path === '/api/alm_integration/provision_projects',
+        );
+        expect(provisionRequests).toHaveLength(1);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'bypasses the mode-select menu when --regex is given interactively (like --all does)',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withDopRepositories('my-org', [
+            { id: 'repo-1', name: 'engineering-tools', slug: 'my-org/engineering-tools' },
+            { id: 'repo-2', name: 'random-notes', slug: 'my-org/random-notes' },
+          ])
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        // No stdin at all — if the mode-select menu were shown, this would hang.
+        const result = await harness.run('import --regex "^engineering-"', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).not.toContain('How do you want to import repositories?');
+        expect(result.stdout).toContain('my-org/engineering-tools');
+        expect(result.stdout).not.toContain('my-org/random-notes');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'imports only matching repositories when choosing "By pattern" interactively',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withDopRepositories('my-org', [
+            { id: 'repo-1', name: 'engineering-tools', slug: 'my-org/engineering-tools' },
+            { id: 'repo-2', name: 'random-notes', slug: 'my-org/random-notes' },
+          ])
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        // down+down+enter → "By pattern" (3rd option after Recommended/Manual); type a
+        // regex + enter → the mandatory pattern prompt shown only for this mode.
+        const result = await harness.run('import', {
+          stdinChunks: ['\x1b[B\x1b[B\r', '^engineering-\r'],
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain(
+          'By pattern — import repositories whose name matches a regex',
+        );
+        expect(result.stdout).toContain('my-org/engineering-tools');
+        expect(result.stdout).not.toContain('my-org/random-notes');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'loops on blank or invalid input at the "By pattern" prompt instead of skipping it',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withDopRepositories('my-org', [
+            { id: 'repo-1', name: 'engineering-tools', slug: 'my-org/engineering-tools' },
+          ])
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        // down+down+enter → "By pattern"; blank enter (rejected, re-prompts); invalid regex
+        // syntax (rejected, re-prompts); finally a valid pattern + enter.
+        const result = await harness.run('import', {
+          stdinChunks: ['\x1b[B\x1b[B\r', '\r', '(\r', '^engineering-\r'],
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('my-org/engineering-tools');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'cancelling the "By pattern" prompt returns to the mode-select menu',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withDopRepositories('my-org', [
+            { id: 'repo-1', name: 'repo-1', slug: 'my-org/repo-1' },
+            { id: 'repo-2', name: 'repo-2', slug: 'my-org/repo-2' },
+          ])
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        // down+down+enter → "By pattern"; Ctrl+C → cancel, back to the mode menu; enter →
+        // Recommended this time (the re-shown menu's default, first option).
+        const result = await harness.run('import', {
+          stdinChunks: ['\x1b[B\x1b[B\r', '\x03', '\r'],
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('Imported 2 repositories');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'supports /pattern/flags syntax so --regex can match case-insensitively',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withDopRepositories('my-org', [
+            { id: 'repo-1', name: 'ENGINEERING-tools', slug: 'my-org/engineering-tools' },
+            { id: 'repo-2', name: 'random-notes', slug: 'my-org/random-notes' },
+          ])
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        // A bare "^engineering-" pattern wouldn't match the mixed-case repo name above — only
+        // the /pattern/i literal's case-insensitive flag does.
+        const result = await harness.run('import --non-interactive --regex "/^engineering-/i"', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('my-org/engineering-tools');
+        expect(result.stdout).not.toContain('my-org/random-notes');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'strips g/y flags from a /pattern/flags --regex so every matching repo on a page is imported, not just alternating ones',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withDopRepositories('my-org', [
+            // The non-matching repo must come FIRST: a /pattern/g regex object's lastIndex
+            // only advances past 0 on a *match*, so two matching repos with a non-matching one
+            // between them would coincidentally "self-heal" (the failed middle test resets
+            // lastIndex to 0). Putting the two matches back-to-back is what actually exposes
+            // the statefulness bug if g isn't stripped: the first match advances lastIndex past
+            // 0, and the immediately-following match then incorrectly fails since `^` can
+            // never satisfy a non-zero lastIndex.
+            { id: 'repo-1', name: 'random-notes', slug: 'my-org/repo-1' },
+            { id: 'repo-2', name: 'engineering-one', slug: 'my-org/repo-2' },
+            { id: 'repo-3', name: 'engineering-two', slug: 'my-org/repo-3' },
+          ])
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        const result = await harness.run('import --non-interactive --regex "/^engineering-/g"', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('Imported 2 repositories (1 skipped)');
+        expect(result.stdout).toContain('my-org/repo-2');
+        expect(result.stdout).toContain('my-org/repo-3');
+        expect(result.stdout).not.toContain('my-org/repo-1');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'treats a plain pattern that merely looks like /pattern/flags as a literal pattern instead of rejecting it',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withDopRepositories('my-org', [
+            // Ends in "passwd" after a "/", which isn't a valid set of RegExp flag
+            // characters — this must NOT be misread as pattern "etc" + flags "passwd".
+            { id: 'repo-1', name: '/etc/passwd', slug: 'my-org/config-repo' },
+            { id: 'repo-2', name: 'keep-out', slug: 'my-org/keep-out' },
+          ])
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        const result = await harness.run('import --non-interactive --regex "/etc/passwd"', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('my-org/config-repo');
+        expect(result.stdout).not.toContain('my-org/keep-out');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'does not treat "//" as an empty pattern that would match (and import) every repository',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withDopRepositories('my-org', [
+            { id: 'repo-1', name: 'repo-one', slug: 'my-org/repo-one' },
+            { id: 'repo-2', name: 'repo-two', slug: 'my-org/repo-two' },
+          ])
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        const result = await harness.run('import --non-interactive --regex "//"', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).not.toContain('my-org/repo-one');
+        expect(result.stdout).not.toContain('my-org/repo-two');
+        expect(result.stdout).toContain('Imported 0 repositories (2 skipped)');
       },
       { timeout: 15000 },
     );
