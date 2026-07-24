@@ -596,22 +596,6 @@ export class SonarQubeClient {
     return { organizations: result.organizations, total: result.paging.total };
   }
 
-  async fetchAllUserOrganizations(): Promise<Organization[]> {
-    const PAGE_SIZE = 500;
-    let page = 1;
-    const all: Organization[] = [];
-
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    while (true) {
-      const { organizations, total } = await this.fetchUserOrganizationsPage(page, PAGE_SIZE);
-      all.push(...organizations);
-      if (all.length >= total || organizations.length === 0) break;
-      page++;
-    }
-
-    return all;
-  }
-
   /** Server-enforced max `pageSize` for `/dop-translation/dop-repositories`. */
   static readonly DOP_REPOSITORIES_MAX_PAGE_SIZE = 50;
 
