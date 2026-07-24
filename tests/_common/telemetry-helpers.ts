@@ -27,8 +27,8 @@ import type {
   StoredCommandExecutedEvent,
   StoredIntegrationConfiguredEvent,
   StoredTelemetryEvent,
-} from '../../src/lib/state.js';
-import { getDefaultState } from '../../src/lib/state.js';
+} from '@/core/state/state.ts';
+import { getDefaultState } from '@/core/state/state.ts';
 
 export function makeTelemetryState(enabled = true): CliState {
   const state = getDefaultState('1.0.0');

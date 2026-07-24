@@ -19,9 +19,8 @@
  */
 
 import { SonarQubeClient } from '@/core/server/client.ts';
+import type { AuthConnection } from '@/core/state/state.ts';
 import { warn } from '@/core/ui';
-
-import type { AuthConnection } from '../../lib/state.ts';
 
 export type RevokeServerTokenResult =
   | { status: 'success' }

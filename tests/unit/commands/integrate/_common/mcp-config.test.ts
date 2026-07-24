@@ -20,6 +20,8 @@
 
 import { describe, expect, it } from 'bun:test';
 
+import { getDefaultState } from '@/core/state/state.ts';
+
 import {
   removeAgentHooks,
   SONAR_SECRETS_MARKER,
@@ -37,7 +39,6 @@ import {
   removeSonarHooksFromPreCommitConfig,
   upsertSonarHook,
 } from '../../../../../src/commands/integrate/git/tools/pre-commit';
-import { getDefaultState } from '../../../../../src/lib/state.ts';
 
 function context(): ContainerIntegrationContext {
   return {

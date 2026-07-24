@@ -21,6 +21,7 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import * as authResolver from '@/core/host/auth-resolver.ts';
+import * as processLib from '@/core/process/process.ts';
 
 import { CommandFailedError } from '../../../../src/commands/_common/error.ts';
 import * as installSecrets from '../../../../src/commands/_common/install/secrets.ts';
@@ -34,7 +35,6 @@ import {
   SECRETS_INACTIVE_UNAUTHENTICATED,
 } from '../../../../src/commands/hook/hook-dependencies.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
-import * as processLib from '../../../../src/lib/process.ts';
 
 const { EXIT_CODE_SECRETS_FOUND } = analyzeSecrets;
 

@@ -20,12 +20,12 @@
 
 import { existsSync, rmSync } from 'node:fs';
 
+import { BIN_DIR } from '@/core/config-constants.ts';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
+import type { CliState } from '@/core/state/state.ts';
 import type { PhaseItem } from '@/core/ui';
 import { phaseItem } from '@/core/ui';
 
-import { BIN_DIR } from '../../lib/config-constants.ts';
-import type { CliState } from '../../lib/state.ts';
 import { stopAllContextAugmentationTools } from '../integrate/_common/context-augmentation.ts';
 import { resolveSafePath } from './safe-path.ts';
 

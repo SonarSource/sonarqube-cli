@@ -25,7 +25,8 @@ import { join } from 'node:path';
 
 import * as yaml from 'js-yaml';
 
-import { spawnProcess } from '../../../../../lib/process.ts';
+import { spawnProcess } from '@/core/process/process.ts';
+
 import { CommandFailedError } from '../../../../_common/error.ts';
 import type { IntegrationContext } from '../../../_common/registry/types.ts';
 import type { GitHookType } from '../../options.ts';

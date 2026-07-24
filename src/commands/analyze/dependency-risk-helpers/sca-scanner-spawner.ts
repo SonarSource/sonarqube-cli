@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { type SpawnResult } from '../../../lib/process.ts';
+import { type SpawnResult } from '@/core/process/process.ts';
 
 export interface ScaScannerSpawner {
   spawn(binaryPath: string, args: string[], env?: Record<string, string>): Promise<SpawnResult>;

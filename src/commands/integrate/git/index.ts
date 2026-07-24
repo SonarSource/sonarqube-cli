@@ -23,14 +23,14 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { GLOBAL_HOOKS_DIR } from '@/core/config-constants.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { findGitRoot } from '@/core/host/discover-git-repo.ts';
+import { normalizePath } from '@/core/io/fs-utils.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { blank, confirmPrompt, info, intro, phase, phaseItem, text, warn } from '@/core/ui';
 import { yellow } from '@/core/ui/colors.ts';
 
-import { GLOBAL_HOOKS_DIR } from '../../../lib/config-constants.ts';
-import { normalizePath } from '../../../lib/fs-utils.ts';
 import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint.ts';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error.ts';
 import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo.ts';

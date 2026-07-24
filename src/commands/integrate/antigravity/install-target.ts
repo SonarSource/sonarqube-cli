@@ -18,8 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { ANTIGRAVITY_GLOBAL_CONFIG_DIR } from '../../../lib/config-constants.ts';
-import type { IntegrationScope } from '../../../lib/state.ts';
+import { ANTIGRAVITY_GLOBAL_CONFIG_DIR } from '@/core/config-constants.ts';
+import type { IntegrationScope } from '@/core/state/state.ts';
 
 export function resolveAntigravityInstallTarget(
   isGlobal: boolean,

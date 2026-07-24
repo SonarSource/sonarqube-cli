@@ -18,9 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { NetworkConfigError } from '@/core/errors.ts';
 import { RateLimitError, ServiceUnavailableError } from '@/core/server/errors.ts';
-
-import { NetworkConfigError } from '../../lib/errors.ts';
 
 export function remediationHintFor(err: unknown): string | undefined {
   if (err instanceof CliError) {

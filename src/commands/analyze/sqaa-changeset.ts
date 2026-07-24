@@ -23,7 +23,8 @@
 import { closeSync, openSync, readSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { spawnProcess } from '../../lib/process.ts';
+import { spawnProcess } from '@/core/process/process.ts';
+
 import { CommandFailedError } from '../_common/error.ts';
 import {
   resolveCurrentGitBranch,

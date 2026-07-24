@@ -32,8 +32,8 @@ import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bu
 
 import { CURSOR_INTEGRATION_ID } from '@/commands/integrate/cursor/declaration.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
+import type { CliState } from '@/core/state/state.ts';
 
-import type { CliState } from '../../../src/lib/state';
 import { TestHarness } from '../../integration/harness';
 import {
   CURSOR_SKILL_RELATIVE_PATH,

@@ -20,11 +20,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import * as processLib from '@/core/process/process.ts';
+
 import {
   resolveSqaaBranch,
   resolveSqaaBranchAtRepoRoot,
 } from '../../../../src/commands/analyze/sqaa-changeset.ts';
-import * as processLib from '../../../../src/lib/process.ts';
 
 let spawnProcessSpy: ReturnType<typeof spyOn>;
 

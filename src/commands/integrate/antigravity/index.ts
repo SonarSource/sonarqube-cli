@@ -19,9 +19,9 @@
  */
 
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 import { info } from '@/core/ui';
 
-import type { IntegrationStateAttribute } from '../../../lib/state.ts';
 import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint.ts';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';
 import {

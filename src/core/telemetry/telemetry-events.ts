@@ -28,11 +28,7 @@ import { buildFetchInit, fetchGuarded } from '@/core/server/fetch-guarded.ts';
 import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
 
 import { version as VERSION } from '../../../package.json';
-import {
-  getTelemetryDir,
-  TELEMETRY_API_KEY,
-  TELEMETRY_ENDPOINT,
-} from '../../lib/config-constants.ts';
+import { getTelemetryDir, TELEMETRY_API_KEY, TELEMETRY_ENDPOINT } from '../config-constants.ts';
 import type {
   AnalysisCompletedEventPayload,
   AuthConnection,
@@ -41,8 +37,8 @@ import type {
   StoredTelemetryEvent,
   TelemetryConnectionType,
   TelemetryEventIdentityPayload,
-} from '../../lib/state.ts';
-import { getActiveConnection, tryLoadState } from '../../lib/state-manager.ts';
+} from '../state/state.ts';
+import { getActiveConnection, tryLoadState } from '../state/state-manager.ts';
 import { isTelemetryEnabled } from './enabled.ts';
 import {
   resolveCommandTelemetryIdentity,

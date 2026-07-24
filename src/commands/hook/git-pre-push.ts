@@ -22,8 +22,8 @@
 // Replaces the shell logic that was previously embedded in the git hook script.
 
 import { resolveAuth } from '@/core/host/auth-resolver.ts';
+import { spawnProcess } from '@/core/process/process.ts';
 
-import { spawnProcess } from '../../lib/process.ts';
 import { runSecretsStage } from './git-pre-push-secrets.ts';
 import { MissingDependenciesError, SECRETS_INACTIVE_UNAUTHENTICATED } from './hook-dependencies.ts';
 import type { PushRef } from './stdin.ts';

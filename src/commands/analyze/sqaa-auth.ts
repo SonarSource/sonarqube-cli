@@ -20,15 +20,15 @@
 
 // Auth and project-key resolution for SQAA commands.
 
+import { printAgentNonInteractiveAlternativeHint } from '@/commands/_common/agent-prompt-hint.ts';
+import { CommandFailedError } from '@/commands/_common/error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { selectRecordedFeatureForDir } from '@/core/host/recorded-feature-resolver.ts';
 import logger from '@/core/observability/logger.ts';
+import type { IntegrationStateAttribute } from '@/core/state/state.ts';
+import { loadState } from '@/core/state/state-repository.ts';
 import { blank, confirmPrompt, text, warn } from '@/core/ui';
 
-import { loadState } from '../../lib/repository/state-repository.ts';
-import type { IntegrationStateAttribute } from '../../lib/state.ts';
-import { printAgentNonInteractiveAlternativeHint } from '../_common/agent-prompt-hint.ts';
-import { CommandFailedError } from '../_common/error.ts';
 import { SQAA_HOOK_FEATURE_ID } from '../integrate/_common/sqaa-entitlement.ts';
 import { CLAUDE_INTEGRATION_ID } from '../integrate/claude/declaration.ts';
 

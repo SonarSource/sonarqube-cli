@@ -32,8 +32,10 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { ENV_SONAR_USER_HOME, getTelemetryDir } from '@/core/config-constants.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import * as authResolver from '@/core/host/auth-resolver.ts';
+import type { AuthConnection } from '@/core/state/state.ts';
 import {
   authMatchesConnection,
   identityFromConnection,
@@ -42,8 +44,6 @@ import {
   resolveStoreEventTelemetryIdentitySafely,
   resolveTelemetryIdentity,
 } from '@/core/telemetry/identity.ts';
-import { ENV_SONAR_USER_HOME, getTelemetryDir } from '@/lib/config-constants.ts';
-import type { AuthConnection } from '@/lib/state.ts';
 
 import { mockIdentityGetSafe } from './identity-api-mock.ts';
 

@@ -24,10 +24,10 @@ import type { ErrorEvent, EventHint } from '@sentry/bun';
 import * as Sentry from '@sentry/bun';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { ENV_DO_NOT_TRACK } from '@/core/config-constants.ts';
 import { flushSentry, initSentry } from '@/core/observability/sentry.ts';
+import { getDefaultState } from '@/core/state/state.ts';
 import * as userModule from '@/core/telemetry/user.ts';
-import { ENV_DO_NOT_TRACK } from '@/lib/config-constants.ts';
-import { getDefaultState } from '@/lib/state.ts';
 
 function makeErrorEvent(
   filenames: (string | undefined)[][],

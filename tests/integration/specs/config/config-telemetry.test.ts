@@ -22,8 +22,9 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { getDefaultState } from '@/core/state/state.ts';
+
 import { version as CURRENT_CLI_VERSION } from '../../../../package.json';
-import { getDefaultState } from '../../../../src/lib/state.js';
 import { TestHarness } from '../../harness';
 
 describe('config telemetry', () => {

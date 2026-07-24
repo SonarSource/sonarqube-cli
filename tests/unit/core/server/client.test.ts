@@ -20,16 +20,16 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { SonarQubeClient } from '@/core/server/client.ts';
-import { ForbiddenApiError } from '@/core/server/errors.ts';
-import { fetchGuarded } from '@/core/server/fetch-guarded.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 import {
   SONARCLOUD_API_URL,
   SONARCLOUD_URL,
   SONARCLOUD_US_API_URL,
   SONARCLOUD_US_URL,
-} from '@/lib/config-constants.ts';
+} from '@/core/config-constants.ts';
+import { SonarQubeClient } from '@/core/server/client.ts';
+import { ForbiddenApiError } from '@/core/server/errors.ts';
+import { fetchGuarded } from '@/core/server/fetch-guarded.ts';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { version as VERSION } from '../../../../package.json';
 

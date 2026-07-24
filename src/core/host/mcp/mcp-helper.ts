@@ -37,8 +37,8 @@ import {
   ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
   CLI_TMP_DIR,
   SONARQUBE_MCP_DOCKER_IMAGE_NAME,
-} from '../../../lib/config-constants.ts';
-import { normalizePath } from '../../../lib/fs-utils.ts';
+} from '../../config-constants.ts';
+import { normalizePath } from '../../io/fs-utils.ts';
 import type { RedactedUrl } from '../redacted-url.ts';
 import type { ContainerRuntime, ContainerRuntimeDetection } from '../tool-detector.ts';
 

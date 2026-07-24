@@ -18,20 +18,20 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { CommandFailedError } from '@/commands/_common/error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { findGitRoot } from '@/core/host/discover-git-repo.ts';
 import logger from '@/core/observability/logger.ts';
-import { emitIntegrationConfiguredTelemetry } from '@/core/telemetry/integrate-telemetry.ts';
-import { text, warn } from '@/core/ui';
-
-import { loadState, saveState } from '../../../../lib/repository/state-repository.ts';
 import type {
   CliState,
   InstalledIntegrationFeature,
   IntegrationScope,
   IntegrationStateAttribute,
-} from '../../../../lib/state.ts';
-import { CommandFailedError } from '../../../_common/error.ts';
+} from '@/core/state/state.ts';
+import { loadState, saveState } from '@/core/state/state-repository.ts';
+import { emitIntegrationConfiguredTelemetry } from '@/core/telemetry/integrate-telemetry.ts';
+import { text, warn } from '@/core/ui';
+
 import { renderCompletionSummary } from './completion-summary.ts';
 import type { IntegrationRegistry } from './core.ts';
 import { buildApplications } from './feature-target.ts';

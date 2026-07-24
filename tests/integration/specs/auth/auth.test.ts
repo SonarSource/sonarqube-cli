@@ -24,10 +24,10 @@ import { readFileSync } from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/host/auth-resolver.ts';
 import { generateKeychainAccount } from '@/core/host/keychain.ts';
 
-import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '../../../../src/lib/config-constants';
 import { TestHarness } from '../../harness';
 
 function readKeychainToken(keychainFile: string, account: string): string | undefined {

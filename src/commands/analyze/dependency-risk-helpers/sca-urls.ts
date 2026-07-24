@@ -18,9 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { SONARCLOUD_SCA_SCANNER_CDN_URL } from '@/core/config-constants.ts';
 import { type ResolvedAuth, resolveFromEndpoint } from '@/core/host/auth-resolver.ts';
-
-import { SONARCLOUD_SCA_SCANNER_CDN_URL } from '../../../lib/config-constants.ts';
 
 export interface ScaUrls {
   apiBaseUrl: string;

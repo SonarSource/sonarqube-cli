@@ -33,8 +33,8 @@ import { CODEX_INTEGRATION_ID } from '@/commands/integrate/codex/declaration.js'
 import { COPILOT_INTEGRATION_ID } from '@/commands/integrate/copilot/declaration.js';
 import { detectPlatform } from '@/core/host/platform-detector.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
-import { pathComparisonKey } from '@/lib/fs-utils.js';
-import type { CliState, InstalledIntegrationFeature } from '@/lib/state.js';
+import { pathComparisonKey } from '@/core/io/fs-utils.ts';
+import type { CliState, InstalledIntegrationFeature } from '@/core/state/state.ts';
 
 import { TestHarness } from '../../harness';
 import {

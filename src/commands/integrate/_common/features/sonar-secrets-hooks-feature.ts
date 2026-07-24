@@ -20,7 +20,8 @@
 
 import { join } from 'node:path';
 
-import type { CliState, IntegrationScope } from '../../../../lib/state.ts';
+import type { CliState, IntegrationScope } from '@/core/state/state.ts';
+
 import {
   createAgentHookEntry,
   removeAgentHooks,

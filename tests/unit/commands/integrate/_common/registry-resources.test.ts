@@ -25,12 +25,13 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
+import { getDefaultState, type InstalledIntegrationFeature } from '@/core/state/state.ts';
+
 import type {
   FeatureDeclaration,
   IntegrationContext,
   IntegrationDeclaration,
 } from '../../../../../src/commands/integrate/_common/registry';
-import { getDefaultState, type InstalledIntegrationFeature } from '../../../../../src/lib/state.ts';
 
 const binaryInstall = await import('../../../../../src/commands/_common/install/binary.ts');
 await mock.module('../../../../../src/commands/_common/install/binary.ts', () => ({

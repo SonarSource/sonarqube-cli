@@ -30,10 +30,9 @@ import {
   OBSOLETE_A3S_MARKER,
   removeObsoleteHookArtifacts,
 } from '@/core/host/migration.ts';
+import type { AgentExtension, CliState, HookExtension } from '@/core/state/state.ts';
+import { getDefaultState } from '@/core/state/state.ts';
 import { setMockUi } from '@/core/ui';
-
-import type { AgentExtension, CliState, HookExtension } from '../../../../src/lib/state.ts';
-import { getDefaultState } from '../../../../src/lib/state.ts';
 
 const OLD_VERSION = '0.4.0';
 

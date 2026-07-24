@@ -24,7 +24,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 
 import { CommandFailedError } from '@/commands/_common/error.ts';
 
-import { APP_NAME } from '../../lib/config-constants.ts';
+import { APP_NAME } from '../config-constants.ts';
 
 function getServiceName(): string {
   return process.env.SONARQUBE_CLI_KEYCHAIN_SERVICE || APP_NAME;

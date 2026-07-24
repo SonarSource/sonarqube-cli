@@ -20,7 +20,7 @@
 
 import forge from 'node-forge';
 
-import { CryptographicError } from '../../../lib/errors.ts';
+import { CryptographicError } from '../../errors.ts';
 
 export interface Pkcs12Pem {
   cert: string;

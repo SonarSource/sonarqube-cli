@@ -19,10 +19,10 @@
  */
 
 import { deleteToken, getToken } from '@/core/host/keychain.ts';
+import { getActiveConnection, removeConnection } from '@/core/state/state-manager.ts';
+import { loadState, saveState } from '@/core/state/state-repository.ts';
 import { print, success } from '@/core/ui';
 
-import { loadState, saveState } from '../../lib/repository/state-repository.ts';
-import { getActiveConnection, removeConnection } from '../../lib/state-manager.ts';
 import {
   reportRevokeServerTokenOutcome,
   revokeServerTokenIfPossible,

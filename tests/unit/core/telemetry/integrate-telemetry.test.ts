@@ -23,10 +23,10 @@ import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
+import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
 import { emitIntegrationConfiguredTelemetry } from '@/core/telemetry/integrate-telemetry.ts';
 import * as telemetryEvents from '@/core/telemetry/telemetry-events.ts';
-import { canonicalizePath } from '@/lib/fs-utils.ts';
-import type { InstalledIntegrationFeature } from '@/lib/state.ts';
 
 const AUTH: ResolvedAuth = {
   connectionType: 'cloud',

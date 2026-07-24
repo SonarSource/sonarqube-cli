@@ -22,9 +22,9 @@ import { createHash } from 'node:crypto';
 
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 
-import { canonicalizePath } from '../../lib/fs-utils.ts';
-import type { InstalledIntegrationFeature, IntegrationScope } from '../../lib/state.ts';
+import { canonicalizePath } from '../io/fs-utils.ts';
 import logger from '../observability/logger.ts';
+import type { InstalledIntegrationFeature, IntegrationScope } from '../state/state.ts';
 import { emitIntegrationConfigured } from './telemetry-events.ts';
 
 export interface IntegrationConfiguredTelemetryParams {

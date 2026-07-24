@@ -30,14 +30,13 @@ import {
   hookScriptName,
   resolveAntigravityHooksJsonPathForScope,
 } from '@/commands/integrate/antigravity/hooks.ts';
-import { getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
-
 import {
   ANTIGRAVITY_GLOBAL_HOOKS_JSON,
   ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
   ANTIGRAVITY_PROJECT_HOOKS_JSON,
   ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR_FROM_AGENTS,
-} from '../../../../../src/lib/config-constants.ts';
+} from '@/core/config-constants.ts';
+import { getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 
 describe('resolveAntigravityHooksJsonPathForScope', () => {
   it('returns project hooks.json under the target root', () => {

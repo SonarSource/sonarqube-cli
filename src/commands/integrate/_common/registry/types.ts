@@ -19,12 +19,8 @@
  */
 
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import type { CliState, IntegrationScope, IntegrationStateAttribute } from '@/core/state/state.ts';
 
-import type {
-  CliState,
-  IntegrationScope,
-  IntegrationStateAttribute,
-} from '../../../../lib/state.ts';
 import type { DependencyDeclaration } from './dependencies';
 import type { RemovableResource, ResourceDeclaration, ResourceIdentity } from './resources';
 import type { InstallDecision } from './selection.ts';

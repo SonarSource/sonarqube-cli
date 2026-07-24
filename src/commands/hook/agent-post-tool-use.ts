@@ -23,7 +23,9 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 
+import { AGENTIC_PACK_URL } from '@/core/config-constants.ts';
 import { resolveAuth } from '@/core/host/auth-resolver.ts';
+import { canonicalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import { timed } from '@/core/observability/timed.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
@@ -33,8 +35,6 @@ import {
   SQAA_HOOK_TELEMETRY_EXIT_CODE,
 } from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 
-import { AGENTIC_PACK_URL } from '../../lib/config-constants.ts';
-import { canonicalizePath, toRelativePosixPath } from '../../lib/fs-utils.ts';
 import { resolveSqaaBranch } from '../analyze/sqaa-changeset.ts';
 import { fetchSingleFileReport, finishSqaaTelemetryFromReport } from '../analyze/sqaa-run.ts';
 import { formatSqaaIssuesForHook, writePostToolUseHookOutput } from './format-sqaa-hook-context.ts';

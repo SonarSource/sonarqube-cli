@@ -38,9 +38,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { nativeGitIntegration } from '@/commands/integrate/git/tools/native';
 import { preCommitIntegration } from '@/commands/integrate/git/tools/pre-commit';
+import { CLI_TMP_DIR, SCA_SCANNER_CACHE_DIR } from '@/core/config-constants.ts';
 import { generateKeychainAccount } from '@/core/host/keychain.ts';
 
-import { CLI_TMP_DIR, SCA_SCANNER_CACHE_DIR } from '../../../../src/lib/config-constants';
 import { hookScriptName, TestHarness } from '../../harness';
 import { runCli } from '../../harness/cli-runner.js';
 import { buildHomeEnv, IS_WINDOWS } from '../../harness/platform';

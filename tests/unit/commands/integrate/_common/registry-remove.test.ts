@@ -25,11 +25,12 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { getDefaultState } from '@/core/state/state.ts';
+
 import type {
   FeatureDeclaration,
   IntegrationContext,
 } from '../../../../../src/commands/integrate/_common/registry';
-import { getDefaultState } from '../../../../../src/lib/state.ts';
 
 const { IntegrationInstaller, jsonPatch, textSnippet, tomlPatch, wholeFile, yamlPatch } =
   await import('../../../../../src/commands/integrate/_common/registry');

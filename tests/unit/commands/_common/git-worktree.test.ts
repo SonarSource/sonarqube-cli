@@ -22,11 +22,12 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import * as processLib from '@/core/process/process.ts';
+
 import {
   resolveCurrentGitBranch,
   resolveGitRepoRoot,
 } from '../../../../src/commands/_common/git-worktree.ts';
-import * as processLib from '../../../../src/lib/process.ts';
 
 let spawnProcessSpy: ReturnType<typeof spyOn>;
 

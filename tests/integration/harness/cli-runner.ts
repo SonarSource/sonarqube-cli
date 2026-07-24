@@ -23,7 +23,8 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { ENV_DO_NOT_TRACK } from '../../../src/lib/config-constants.js';
+import { ENV_DO_NOT_TRACK } from '@/core/config-constants.ts';
+
 import { ISOLATED_CLI_SPAWN_ENV } from '../../_common/isolated-cli-env.js';
 import { COVERAGE_BINARY, COVERAGE_RAW_DIR } from '../../coverage/paths.js';
 import { IS_WINDOWS } from './platform';

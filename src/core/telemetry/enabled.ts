@@ -18,8 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { ENV_DO_NOT_TRACK } from '../../lib/config-constants.ts';
-import type { CliState } from '../../lib/state.ts';
+import { ENV_DO_NOT_TRACK } from '../config-constants.ts';
+import type { CliState } from '../state/state.ts';
 
 /** True when DO_NOT_TRACK is set to 1 */
 export function isDoNotTrackRequested(): boolean {

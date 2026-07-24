@@ -24,8 +24,8 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'bun:test';
 import forge from 'node-forge';
 
+import { CryptographicError } from '@/core/errors.ts';
 import { isPkcs12Path, pemToPkcs12, pkcs12ToPem } from '@/core/host/crypto/pkcs12.ts';
-import { CryptographicError } from '@/lib/errors.ts';
 
 const FIXTURE_DIR = join(import.meta.dir, '../../../../fixtures/client-cert');
 const P12_PATH = join(FIXTURE_DIR, 'client-cert.p12');
