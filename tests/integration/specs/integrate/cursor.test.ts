@@ -502,7 +502,7 @@ describe('integrate cursor', () => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
         const result = await harness.run(
-          `integrate cursor --project ${TEST_PROJECT} --non-interactive`,
+          `integrate cursor --project ${TEST_PROJECT} --non-interactive --skip-context`,
           { extraEnv },
         );
 
@@ -528,10 +528,13 @@ describe('integrate cursor', () => {
       async () => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
-        const result = await harness.run(`integrate cursor --project ${TEST_PROJECT}`, {
-          extraEnv,
-          stdinChunks: ['\r', '\r', '\r'],
-        });
+        const result = await harness.run(
+          `integrate cursor --project ${TEST_PROJECT} --skip-context`,
+          {
+            extraEnv,
+            stdinChunks: ['\r', '\r', '\r'],
+          },
+        );
 
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;
@@ -556,7 +559,7 @@ describe('integrate cursor', () => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
         const result = await harness.run(
-          `integrate cursor --project ${TEST_PROJECT}${isInteractive ? '' : ' --non-interactive'}`,
+          `integrate cursor --project ${TEST_PROJECT}${isInteractive ? '' : ' --non-interactive'} --skip-context`,
           {
             extraEnv: isAgent ? { ...extraEnv, CURSOR_AGENT: '1' } : extraEnv,
             ...(isInteractive ? { stdinChunks: ['\r', '\r', '\r'] } : {}),
@@ -638,13 +641,14 @@ describe('integrate cursor', () => {
       async () => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
-        await harness.run(`integrate cursor --project ${TEST_PROJECT} --non-interactive`, {
-          extraEnv,
-        });
+        await harness.run(
+          `integrate cursor --project ${TEST_PROJECT} --non-interactive --skip-context`,
+          { extraEnv },
+        );
         const firstBody = harness.cwd.file(...SQAA_RULE_DIRS).asText();
 
         const result = await harness.run(
-          `integrate cursor --project ${TEST_PROJECT} --non-interactive`,
+          `integrate cursor --project ${TEST_PROJECT} --non-interactive --skip-context`,
           { extraEnv },
         );
 
@@ -660,7 +664,7 @@ describe('integrate cursor', () => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
         const integrateResult = await harness.run(
-          `integrate cursor --project ${TEST_PROJECT} --non-interactive`,
+          `integrate cursor --project ${TEST_PROJECT} --non-interactive --skip-context`,
           { extraEnv },
         );
         expect(integrateResult.exitCode).toBe(0);
