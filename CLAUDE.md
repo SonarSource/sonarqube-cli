@@ -43,9 +43,9 @@ The bare `sonar analyze` command accepts `-p, --project <project>` for the agent
 
 `sonar analyze dependency-risks` accepts an optional `-p, --project <project>`. When omitted, the project key is auto-detected via `discoverProject()`.
 
-`sonar analyze dependency-risks` pre-scans discovered manifest files for secrets (via `sonar-secrets`) before the SCA scan and aborts if any are found. In the `analyze` path the secrets binary is a hard prerequisite (install failure aborts the run); in the git pre-commit hook path the manifest secrets *scan* fails open on a scan error (skips/warns). See `dependency-risk-helpers/manifest-secrets-guard.ts`. This scan-error fail-open is distinct from the git/agent secrets-hook auth+binary gate: an unauthenticated user or a missing `sonar-secrets` binary blocks the commit/push (git hooks throw `MissingDependenciesError` → exit 1).
+`sonar analyze dependency-risks` pre-scans discovered manifest files for secrets (via `sonar-secrets`) before the SCA scan and aborts if any are found. In the `analyze` path the secrets binary is a hard prerequisite (install failure aborts the run); in the git pre-commit hook path the manifest secrets _scan_ fails open on a scan error (skips/warns). See `dependency-risk-helpers/manifest-secrets-guard.ts`. This scan-error fail-open is distinct from the git/agent secrets-hook auth+binary gate: an unauthenticated user or a missing `sonar-secrets` binary blocks the commit/push (git hooks throw `MissingDependenciesError` → exit 1).
 
-`sonar import` (hidden while in development) imports a repository from a connected DevOps platform into SonarQube by provisioning a bound project. Accepts `--org <key>` and `--repo <slug>` (prompted interactively when omitted) plus `--non-interactive`. On success it prints the organization's onboarding dashboard link (`{serverUrl}/organizations/{orgKey}/onboarding-dashboard`) before the final outro. Implementation lives in `src/commands/import/`.
+`sonar import` (hidden while in development) imports a repository from a connected DevOps platform into SonarQube by provisioning a bound project. The organization is always the one tied to the active connection (`auth.orgKey`), and the CLI verifies the caller is an admin of that org before proceeding. Accepts `--repo <slug>` (prompted interactively when omitted) plus `--non-interactive`. On success it prints the organization's onboarding dashboard link (`{serverUrl}/organizations/{orgKey}/onboarding-dashboard`) before the final outro. Implementation lives in `src/commands/import/`.
 
 Declarative integration registry helpers live in `src/commands/integrate/_common/registry/index.ts`. New integration descriptors should use that public entrypoint for dependency/resource factories, operations, and registry validation. Command handlers should keep command-specific validation, prompts, and target resolution thin, then delegate feature selection, generic install messages, dependency/resource application, and state recording to `src/commands/integrate/_common/installer.ts`.
 
@@ -181,6 +181,7 @@ The docs site is generated from the CLI source — do not edit `commands.json`, 
 Keep a fixed `<base href="/sonarqube/cli/">` in the docs HTML so production resolves relative assets and internal links under the public mount point. This is intentionally production-oriented: Netlify deploy previews served from `/` will not work with that fixed base.
 
 <!-- sonar:begin:sonarqube-agentic-analysis-protocol -->
+
 # SonarQube Agentic Analysis protocol
 
 SonarQube Agentic Analysis is the final confirmation layer at the end of every turn in which you wrote to one or more files in the workspace (create, edit, patch, format — any tool call that changed file contents on disk).
@@ -210,4 +211,5 @@ Non-negotiable rules:
 3. If SonarQube Agentic Analysis reports issues on lines you touched in this turn, fix them, then re-run SonarQube Agentic Analysis on the same scope (change set or explicit file list). Repeat until clean (or only pre-existing findings on lines you did not touch remain). Pre-existing findings on untouched lines are out of scope — do not "fix" them unless the user asked.
 4. If SonarQube Agentic Analysis is skipped (no SonarQube Cloud connection, or no project configured), state the skip reason to the user once and continue — do not retry.
 5. Do not suppress, summarize away, or omit SonarQube Agentic Analysis findings from your reply. Surface them verbatim.
+
 <!-- sonar:end:sonarqube-agentic-analysis-protocol -->

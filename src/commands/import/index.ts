@@ -35,7 +35,6 @@ import type {
   SkippedRepo,
 } from './_common/repository-collection';
 import {
-  BACK,
   computeInstallationKey,
   type RepoResolution,
   type ResolvedRepo,
@@ -49,40 +48,32 @@ export { type ImportOptions } from './_common/types';
 /** Max number of `provision_projects` calls run concurrently. */
 const IMPORT_PROVISION_CONCURRENCY_LIMIT = 10;
 
-/**
- * Resolves org + repos together so choosing "← Back" from the repo-onboarding-mode prompt can
- * loop back to organization selection — re-deriving `almKey`/`onlyPrivateProjects` for whichever
- * org ends up chosen, since those are org-specific.
- */
+/** Resolves the org tied to the active connection, then the repos to import into it. */
 async function resolveOrgAndRepos(
   client: SonarQubeClient,
+  orgKey: string | undefined,
   options: ImportOptions,
 ): Promise<{ orgKey: string; almKey: string | undefined } & RepoResolution> {
-  for (;;) {
-    const {
-      key: orgKey,
-      almKey: resolvedAlmKey,
-      onlyPrivateProjectsEnabled,
-    } = await resolveOrg(client, options);
+  const {
+    key: resolvedOrgKey,
+    almKey: resolvedAlmKey,
+    onlyPrivateProjectsEnabled,
+  } = await resolveOrg(client, orgKey);
 
-    info(`Organization: ${orgKey}`);
+  info(`Organization: ${resolvedOrgKey}`);
 
-    const [almKey, privateProjectsAvailable] = await Promise.all([
-      resolvedAlmKey ?? client.getOrganizationAlmKey(orgKey),
-      client.hasPrivateProjectsEntitlement(orgKey),
-    ]);
-    const onlyPrivateProjects: OnlyPrivateProjects = {
-      enabled: onlyPrivateProjectsEnabled ?? false,
-      available: privateProjectsAvailable,
-    };
+  const [almKey, privateProjectsAvailable] = await Promise.all([
+    resolvedAlmKey ?? client.getOrganizationAlmKey(resolvedOrgKey),
+    client.hasPrivateProjectsEntitlement(resolvedOrgKey),
+  ]);
+  const onlyPrivateProjects: OnlyPrivateProjects = {
+    enabled: onlyPrivateProjectsEnabled ?? false,
+    available: privateProjectsAvailable,
+  };
 
-    const outcome = await resolveRepos(client, orgKey, almKey, onlyPrivateProjects, options);
-    if (outcome === BACK) {
-      continue;
-    }
+  const outcome = await resolveRepos(client, resolvedOrgKey, almKey, onlyPrivateProjects, options);
 
-    return { orgKey, almKey, ...outcome };
-  }
+  return { orgKey: resolvedOrgKey, almKey, ...outcome };
 }
 
 /** Builds the `runWithConcurrencyLimit` task that provisions one repo and updates `progress`. */
@@ -216,7 +207,7 @@ export async function importHandler(options: ImportOptions, auth: ResolvedAuth):
 
   intro('Import repositories', 'SonarQube');
 
-  const resolution = await resolveOrgAndRepos(client, options);
+  const resolution = await resolveOrgAndRepos(client, auth.orgKey, options);
 
   if (resolution.kind === 'streaming') {
     const { succeeded, failed, skipped } = await runBulkImportJob(
