@@ -20,24 +20,37 @@
 
 import type { Command } from 'commander';
 
-import {
-  SonarCommand,
-  type UpdateNotificationCondition,
-} from '@/commands/_common/sonar-command.ts';
-import {
-  BACKGROUND_UPDATE_CHECK_TIMEOUT_MS,
-  fetchLatestVersion,
-} from '@/commands/update/update-check.ts';
 import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { isFormattedOutputMode, text } from '@/core/ui';
 import { cyan } from '@/core/ui/colors.ts';
 import { Version } from '@/core/version.ts';
 
-import { version as CURRENT_VERSION } from '../../../package.json';
-import type { CliUpdateCheckState } from '../state/state.ts';
-import { loadState, saveState } from '../state/state-manager.ts';
+import { version as CURRENT_VERSION } from '../../../../package.json';
+import type { CliUpdateCheckState } from '../../state/state.ts';
+import { loadState, saveState } from '../../state/state-manager.ts';
+import { BACKGROUND_UPDATE_CHECK_TIMEOUT_MS, fetchLatestVersion } from './check.ts';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+/** When to show the post-command update notice for an opted-in command. */
+export type UpdateNotificationCondition = (opts: Record<string, unknown>) => boolean;
+
+// Per-command opt-in registry, keyed by Commander Command instance. Populated by
+// SonarCommand.showUpdateNotification() (commands/_common/sonar-command.ts) via
+// registerUpdateNotification() below, so this module owns both the write side
+// (opt-in) and the read side (eligibility check) without depending on that class.
+const updateNotificationRegistry = new WeakMap<Command, true | UpdateNotificationCondition>();
+
+/**
+ * Opt a command into the post-command "new version available" stderr notice.
+ * Called by SonarCommand.showUpdateNotification().
+ */
+export function registerUpdateNotification(
+  command: Command,
+  when?: UpdateNotificationCondition,
+): void {
+  updateNotificationRegistry.set(command, when ?? true);
+}
 
 function collectCommandOpts(command: Command): Record<string, unknown> {
   const names: Command[] = [];
@@ -59,11 +72,9 @@ function resolveUpdateNotification(
 ): true | UpdateNotificationCondition | undefined {
   let current: Command | null = command;
   while (current !== null) {
-    if (current instanceof SonarCommand) {
-      const when = current.showUpdateNotificationWhen;
-      if (when !== undefined) {
-        return when;
-      }
+    const when = updateNotificationRegistry.get(current);
+    if (when !== undefined) {
+      return when;
     }
     current = current.parent;
   }

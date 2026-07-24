@@ -25,6 +25,10 @@ import { Command } from 'commander';
 import { CliError, CommandFailedError, remediationHintFor } from '@/core/command-error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { resolveAuth } from '@/core/host/auth-resolver.ts';
+import {
+  registerUpdateNotification,
+  type UpdateNotificationCondition,
+} from '@/core/host/update/notification.ts';
 import logger from '@/core/observability/logger.ts';
 import { blank, error, print } from '@/core/ui';
 
@@ -37,8 +41,7 @@ export interface RootHelpMetadata {
   label?: string;
 }
 
-/** When to show the post-command update notice for a opted-in command. */
-export type UpdateNotificationCondition = (opts: Record<string, unknown>) => boolean;
+export type { UpdateNotificationCondition };
 
 type CommandArgs = unknown[];
 type CommandResult = void | Promise<void>;
@@ -58,7 +61,6 @@ type CommandResult = void | Promise<void>;
 export class SonarCommand extends Command {
   private _requiresAuth = false;
   private _rootHelp: RootHelpMetadata = {};
-  private _showUpdateNotification?: true | UpdateNotificationCondition;
 
   /** Ensures subcommands created via .command() are also SonarCommand instances. */
   createCommand(name?: string): SonarCommand {
@@ -81,7 +83,7 @@ export class SonarCommand extends Command {
    * merged action-command options (parsed by Commander).
    */
   showUpdateNotification(when?: UpdateNotificationCondition): this {
-    this._showUpdateNotification = when ?? true;
+    registerUpdateNotification(this, when);
     return this;
   }
 
@@ -165,11 +167,6 @@ export class SonarCommand extends Command {
   /** Metadata used by the custom root help menu. */
   get rootHelpMetadata(): RootHelpMetadata {
     return this._rootHelp;
-  }
-
-  /** Update-notification opt-in and optional show condition for this command. */
-  get showUpdateNotificationWhen(): true | UpdateNotificationCondition | undefined {
-    return this._showUpdateNotification;
   }
 
   async runCommand(fn: () => Promise<void>): Promise<void> {

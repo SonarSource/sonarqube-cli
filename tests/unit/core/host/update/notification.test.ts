@@ -29,7 +29,7 @@ import { COMMAND_TREE } from '@/commands/command-tree.ts';
 import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { setFormattedOutputMode } from '@/core/ui';
 
-import { version as CURRENT_VERSION } from '../../../../package.json';
+import { version as CURRENT_VERSION } from '../../../../../package.json';
 
 const originalEnvForNotify = { ...process.env };
 const tempHome = mkdtempSync(join(tmpdir(), 'sonar-update-notify-'));
@@ -39,7 +39,7 @@ const {
   isUpdateNotificationEligible,
   maybeNotifyUpdateAvailable,
   shouldSuppressUpdateNotification,
-} = await import('@/core/host/update-notification.ts');
+} = await import('@/core/host/update/notification.ts');
 
 function resolveCommand(path: string[]): Command {
   let current: Command = COMMAND_TREE;
