@@ -24,8 +24,8 @@
 import { existsSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import logger from '../observability/logger.ts';
-import { spawnProcess } from '../process/process.ts';
+import logger from '../../observability/logger.ts';
+import { tryRunGit } from './exec.ts';
 
 export function findGitRoot(startDir: string): { gitRoot: string; isGit: boolean } {
   let dir = startDir;
@@ -52,13 +52,10 @@ export function findGitRoot(startDir: string): { gitRoot: string; isGit: boolean
 }
 
 export async function getGitRemote(gitRoot: string): Promise<string> {
-  try {
-    const result = await spawnProcess('git', ['remote', 'get-url', 'origin'], { cwd: gitRoot });
-    if (result.exitCode === 0) {
-      return result.stdout.trim();
-    }
-  } catch (error) {
-    logger.debug(`Failed to get git remote: ${(error as Error).message}`);
+  const stdout = await tryRunGit(['remote', 'get-url', 'origin'], gitRoot);
+  if (stdout === undefined) {
+    logger.debug('Failed to get git remote: git command failed or is unavailable.');
+    return '';
   }
-  return '';
+  return stdout.trim();
 }

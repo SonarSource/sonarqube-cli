@@ -22,11 +22,16 @@
 // equivalent path in the repository's main working tree, so per-project state
 // recorded by `sonar integrate` in the main checkout can still be found after a
 // worktree is created (e.g. for SQAA project-key and CAG context lookups).
+//
+// `resolveGitRepoRoot` is also the single source of truth for "resolve the git
+// top-level for a path" used by branch resolution (branch.ts) and other
+// callers that only need the plain repository root, not worktree mapping.
 
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import { statSync } from 'node:fs';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
-import { canonicalizePath, pathComparisonKey } from '../io/fs-utils.ts';
-import { spawnProcess } from '../process/process.ts';
+import { canonicalizePath, pathComparisonKey } from '../../io/fs-utils.ts';
+import { tryRunGit } from './exec.ts';
 
 interface WorktreeMapping {
   /** git top-level of the input path (the linked worktree root when inside one). */
@@ -49,31 +54,30 @@ function runGitStdout(args: string[], cwd: string): Promise<string | null> {
   if (cached !== undefined) {
     return cached;
   }
-  const pending = runGitStdoutUncached(args, cwd);
+  const pending = tryRunGit(args, cwd).then((stdout) => stdout ?? null);
   gitStdoutCache.set(cacheKey, pending);
   return pending;
 }
 
-async function runGitStdoutUncached(args: string[], cwd: string): Promise<string | null> {
+/** Directory to spawn `git` from for `contextPath`: its parent when it's a file, itself otherwise. */
+function gitSpawnCwd(contextPath: string): string {
   try {
-    const result = await spawnProcess('git', args, { cwd });
-    if (result.exitCode === 0) {
-      return result.stdout;
-    }
+    return statSync(contextPath).isFile() ? dirname(contextPath) : contextPath;
   } catch {
-    // git not installed, or `cwd` is not inside a repository — caller falls back.
+    return contextPath;
   }
-  return null;
 }
 
 /**
- * Resolve the git top-level for `dir` via `rev-parse --show-toplevel`. This is
- * more reliable than inferring the current tree from `git worktree list` alone,
- * especially on Windows where path forms from git output and `process.cwd()` can
- * disagree (short vs long paths, slash direction, extended `\\?\` prefixes).
+ * Resolve the git repository top-level for `contextPath` (a file or directory)
+ * via `rev-parse --show-toplevel`, canonicalized. This is more reliable than
+ * inferring the current tree from `git worktree list` alone, especially on
+ * Windows where path forms from git output and `process.cwd()` can disagree
+ * (short vs long paths, slash direction, extended `\\?\` prefixes). Returns
+ * `null` when git is unavailable or `contextPath` is not inside a repository.
  */
-async function resolveGitTopLevel(dir: string): Promise<string | null> {
-  const topLevel = await runGitStdout(['rev-parse', '--show-toplevel'], dir);
+export async function resolveGitRepoRoot(contextPath: string): Promise<string | null> {
+  const topLevel = await runGitStdout(['rev-parse', '--show-toplevel'], gitSpawnCwd(contextPath));
   if (topLevel === null) {
     return null;
   }
@@ -115,14 +119,14 @@ export async function resolveMainWorktreeRoot(dir: string): Promise<string | nul
 
 /**
  * Resolve the current git top-level and the repository's main working tree root
- * for the given directory. The current root comes from `git rev-parse
- * --show-toplevel` (climbs up from subdirectories automatically). The main root
- * is the first `git worktree list` entry when available, otherwise the current
- * root. Returns null when git is unavailable or `dir` is not inside a repository;
+ * for the given directory. The current root comes from `resolveGitRepoRoot`
+ * (climbs up from subdirectories automatically). The main root is the first
+ * `git worktree list` entry when available, otherwise the current root. Returns
+ * null when git is unavailable or the directory is not inside a repository;
  * when not inside a linked worktree, currentRoot equals mainRoot.
  */
 async function resolveWorktreeMapping(dir: string): Promise<WorktreeMapping | null> {
-  const currentRoot = await resolveGitTopLevel(dir);
+  const currentRoot = await resolveGitRepoRoot(dir);
   if (!currentRoot) {
     return null;
   }

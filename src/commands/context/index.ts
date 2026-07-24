@@ -26,7 +26,7 @@ import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/fe
 import { CommandFailedError } from '@/core/command-error.ts';
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { resolveAuth, type ResolvedAuth } from '@/core/host/auth-resolver.ts';
-import { resolveContextWorkspaceRoot } from '@/core/host/git-worktree.ts';
+import { resolveContextWorkspaceRoot } from '@/core/host/git/worktree.ts';
 import { getToken } from '@/core/host/keychain.ts';
 import { selectRecordedFeatureForDir } from '@/core/host/recorded-feature-resolver.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';

@@ -41,7 +41,7 @@ import { PRE_COMMIT_CONFIG_FILE } from '@/commands/integrate/git/tools/pre-commi
 import { LEGACY_HOOK_MARKER } from '@/commands/integrate/git/tools/shared.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { GLOBAL_HOOKS_DIR } from '@/core/config-constants.ts';
-import * as gitDiscovery from '@/core/host/discover-git-repo.ts';
+import * as gitDiscovery from '@/core/host/git/discover.ts';
 import * as processLib from '@/core/process/process.ts';
 import * as discovery from '@/core/project-info.ts';
 import { type CliState, getDefaultState } from '@/core/state/state.ts';

@@ -18,23 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Shared git worktree helpers (repo root, current branch).
+// Current git branch resolution, used for SQAA branch auto-detection.
 
-import { statSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-
-import logger from '@/core/observability/logger.ts';
-import { spawnProcess } from '@/core/process/process.ts';
-
-/**
- * Returns the repository top-level for `contextPath`, or `undefined` when not in a repo
- * or git is unavailable. `contextPath` may be a file or directory.
- */
-export async function resolveGitRepoRoot(contextPath: string): Promise<string | undefined> {
-  const out = await tryRunGit(['rev-parse', '--show-toplevel'], gitSpawnCwd(contextPath));
-  if (out === undefined) return undefined;
-  return resolve(out.trim());
-}
+import logger from '../../observability/logger.ts';
+import { tryRunGit } from './exec.ts';
+import { resolveGitRepoRoot } from './worktree.ts';
 
 /**
  * Returns the current branch name for a path inside a repository, or `undefined`
@@ -65,22 +53,4 @@ export async function resolveGitBranchAtRepoRoot(repoRoot: string): Promise<stri
   const trimmed = branch.trim();
   if (trimmed.length === 0 || trimmed === 'HEAD') return undefined;
   return trimmed;
-}
-
-function gitSpawnCwd(contextPath: string): string {
-  try {
-    return statSync(contextPath).isFile() ? dirname(contextPath) : contextPath;
-  } catch {
-    return contextPath;
-  }
-}
-
-async function tryRunGit(args: string[], cwd: string): Promise<string | undefined> {
-  try {
-    const result = await spawnProcess('git', args, { cwd });
-    if (result.exitCode !== 0) return undefined;
-    return result.stdout;
-  } catch {
-    return undefined;
-  }
 }
