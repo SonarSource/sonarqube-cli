@@ -513,11 +513,11 @@ export class SonarQubeClient {
     if (sqaa === 'check_failed' || cag === 'check_failed') {
       return 'check_failed';
     }
-    if (sqaa === 'over_consumption' || cag === 'over_consumption') {
-      return 'over_consumption';
-    }
     if (sqaa === 'not_entitled' || cag === 'not_entitled') {
       return 'not_entitled';
+    }
+    if (sqaa === 'over_consumption' || cag === 'over_consumption') {
+      return 'over_consumption';
     }
     return 'enabled';
   }

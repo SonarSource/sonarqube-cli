@@ -172,9 +172,9 @@ describe('integrate claude — Vortex entitlement', () => {
   );
 
   it(
-    'skips both when SQAA is entitled but CAG is not',
+    'skips both when SQAA is over its limit but CAG is not entitled',
     async () => {
-      const result = await runIntegrateClaude({ sqaa: 'enabled', cag: 'not_entitled' });
+      const result = await runIntegrateClaude({ sqaa: 'over_consumption', cag: 'not_entitled' });
 
       expect(result.exitCode).toBe(0);
       expect(isSqaaHookInstalled()).toBe(false);
@@ -186,9 +186,9 @@ describe('integrate claude — Vortex entitlement', () => {
   );
 
   it(
-    'skips both when CAG is entitled but SQAA is not',
+    'skips both when CAG is over its limit but SQAA is not entitled',
     async () => {
-      const result = await runIntegrateClaude({ sqaa: 'not_entitled', cag: 'enabled' });
+      const result = await runIntegrateClaude({ sqaa: 'not_entitled', cag: 'over_consumption' });
 
       expect(result.exitCode).toBe(0);
       expect(isSqaaHookInstalled()).toBe(false);
