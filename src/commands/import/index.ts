@@ -104,23 +104,40 @@ function createProvisionTask(
 }
 
 /**
- * Runs `--all`/"Recommended" as a streaming job: import each server page's eligible repos as
- * soon as it's fetched, then fetch the next page — rather than resolving the whole org's repo
- * list before provisioning anything.
+ * Runs `--all`/"Recommended" or `--regex`/"By pattern" as a streaming job: import each server
+ * page's eligible repos as soon as it's fetched, then fetch the next page — rather than
+ * resolving the whole org's repo list before provisioning anything.
+ *
+ * `regex`, when set, is applied here, live, against each page's already-eligible repos, rather
+ * than being baked into `RepositoryCollection`'s own categorization — it's only known once
+ * "By pattern" (or `--regex`) is actually chosen, well after the collection was built to check
+ * eligibility. A repo is imported only if `regex` is undefined (no filter — `--all`/"Recommended")
+ * or matches its name.
  */
 async function runBulkImportJob(
   client: SonarQubeClient,
   orgKey: string,
   almKey: string | undefined,
   collection: RepositoryCollection,
+  regex: RegExp | undefined,
 ): Promise<{ succeeded: number; failed: number; skipped: readonly SkippedRepo[] }> {
   const progress = new ImportProgress({ maxVisible: IMPORT_PROVISION_CONCURRENCY_LIMIT });
   progress.setTotal(collection.total);
   progress.start();
 
+  const skippedByRegex: SkippedRepo[] = [];
+
   const importPage = async (eligible: readonly DopRepository[]): Promise<void> => {
-    if (eligible.length === 0) return;
-    const repos: ResolvedRepo[] = eligible.map((repo) => ({
+    const toImport = eligible.filter((repo) => {
+      if (!regex || regex.test(repo.name)) return true;
+      skippedByRegex.push({ slug: repo.slug, reason: 'name does not match --regex pattern' });
+      return false;
+    });
+    if (toImport.length < eligible.length) {
+      progress.recordSkipped(eligible.length - toImport.length);
+    }
+    if (toImport.length === 0) return;
+    const repos: ResolvedRepo[] = toImport.map((repo) => ({
       slug: repo.slug,
       installationKey: computeInstallationKey(repo, almKey),
     }));
@@ -155,7 +172,7 @@ async function runBulkImportJob(
   }
 
   const { succeeded, failed } = progress.finish();
-  return { succeeded, failed, skipped: collection.skippedRepos };
+  return { succeeded, failed, skipped: [...collection.skippedRepos, ...skippedByRegex] };
 }
 
 function reportSkipped(skipped: readonly SkippedRepo[]): void {
@@ -215,6 +232,7 @@ export async function importHandler(options: ImportOptions, auth: ResolvedAuth):
       resolution.orgKey,
       resolution.almKey,
       resolution.collection,
+      resolution.regex,
     );
     reportSkipped(skipped);
     reportOutcome(

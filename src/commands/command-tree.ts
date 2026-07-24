@@ -218,13 +218,22 @@ COMMAND_TREE.command('import', { hidden: true })
   .description('Import repositories from a connected DevOps platform into SonarQube')
   .option(
     '--repo <slug>',
-    'DevOps platform repository slug (e.g. my-org/my-repo). Repeatable and/or comma-separated to import multiple repositories.',
+    'DevOps platform repository slug (e.g. my-org/my-repo). Repeatable and/or comma-separated to import multiple repositories. Cannot be combined with --all or --regex.',
     collectRepoOption,
     [],
   )
   .option(
     '--all',
-    'Import every eligible repository in the organization (not already imported, and allowed by its project visibility settings). Cannot be combined with --repo.',
+    'Import every eligible repository in the organization (not already imported, and allowed by its project visibility settings). Cannot be combined with --repo or --regex.',
+  )
+  .option(
+    '--regex <regex>',
+    'Import only eligible repositories whose DevOps platform name (not slug) matches this regular expression.\n' +
+      '\n' +
+      '                   Case-sensitive by default; wrap as /pattern/flags to add flags like case-insensitive matching. Cannot be combined with --repo or --all.\n' +
+      '                   Examples:\n' +
+      '                       --regex "^test-"\n' +
+      '                       --regex "/^archived-/i"\n',
   )
   .option('--non-interactive', 'Skip all prompts; require explicit flags')
   .authenticatedAction((auth, options: ImportOptions) => importHandler(options, auth));

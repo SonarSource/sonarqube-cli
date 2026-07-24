@@ -21,5 +21,6 @@
 export interface ImportOptions {
   repo?: string[];
   all?: boolean;
+  regex?: string;
   nonInteractive?: boolean;
 }
