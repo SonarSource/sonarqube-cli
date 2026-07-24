@@ -291,7 +291,7 @@ describe('scrubPii', () => {
             {
               value: `ENOENT: no such file or directory '${home}/.sonar/state.json'`,
               stacktrace: {
-                frames: [{ filename: `${home}/project/src/lib/state-manager.ts` }],
+                frames: [{ filename: `${home}/project/src/core/state/state-manager.ts` }],
               },
             },
           ],
@@ -305,7 +305,7 @@ describe('scrubPii', () => {
         "ENOENT: no such file or directory '~/.sonar/state.json'",
       );
       expect(result.exception!.values![0].stacktrace!.frames![0].filename).toBe(
-        '~/project/src/lib/state-manager.ts',
+        '~/project/src/core/state/state-manager.ts',
       );
       expect(result.breadcrumbs![0].message).toBe('loading config from ~/.sonar');
       expect((result.extra as Record<string, string>).configPath).toBe('~/.sonar/state.json');

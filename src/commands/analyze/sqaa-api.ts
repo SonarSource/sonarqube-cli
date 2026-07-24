@@ -69,7 +69,7 @@ export function readSqaaFileContent(file: string): string {
 }
 
 /**
- * Throwing wrapper over `lib/fs-utils.toRelativePosixPath`.
+ * Throwing wrapper over `core/io/fs-utils.toRelativePosixPath`.
  * Throws when `file` is outside `base` (traversal) or on a different drive.
  */
 export function toRelativePosixPath(file: string, base: string = process.cwd()): string {
