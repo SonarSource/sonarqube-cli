@@ -26,7 +26,7 @@ import {
   SQAA_PROMOTION_MESSAGE,
 } from '@/commands/integrate/_common/sqaa-entitlement.js';
 import type { VortexEntitlementStatus } from '@/core/server/client.js';
-import type { CliState } from '@/lib/state.js';
+import type { CliState } from '@/core/state/state.ts';
 
 import { TestHarness } from '../../harness';
 
