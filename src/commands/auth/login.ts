@@ -18,6 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { CommandFailedError, InvalidOptionError } from '@/commands/_common/error.ts';
+import { type BrowserAuthResult, generateTokenViaBrowser } from '@/commands/_common/token.ts';
+import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 import { cloudRegionFromUrl, isSonarQubeCloud } from '@/core/host/auth-resolver.ts';
 import {
   deleteStaleTokens,
@@ -26,6 +29,8 @@ import {
 } from '@/core/host/keychain.ts';
 import { discoverOrganization, discoverServer } from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
+import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
+import { loadState, saveState } from '@/core/state/state-repository.ts';
 import {
   confirmPrompt,
   discreetSuccess,
@@ -36,12 +41,6 @@ import {
   textPrompt,
   warn,
 } from '@/core/ui';
-
-import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '../../lib/config-constants.ts';
-import { loadState, saveState } from '../../lib/repository/state-repository.ts';
-import { addOrUpdateConnection, getActiveConnection } from '../../lib/state-manager.ts';
-import { CommandFailedError, InvalidOptionError } from '../_common/error.ts';
-import { type BrowserAuthResult, generateTokenViaBrowser } from '../_common/token.ts';
 
 /**
  * Login command - authenticate and save token with organization

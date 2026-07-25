@@ -38,18 +38,18 @@ import { generateKeychainAccount } from '@/core/host/keychain.ts';
 import { detectPlatform } from '@/core/host/platform-detector.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
 import { buildDownloadUrl } from '@/core/host/sonarsource-releases.ts';
-
-import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
-import { version as CURRENT_CLI_VERSION } from '../../../package.json';
-import { canonicalizePath } from '../../../src/lib/fs-utils';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import type {
   CliState,
   InstalledIntegration,
   InstalledIntegrationDependency,
   InstalledTool,
   IntegrationScope,
-} from '../../../src/lib/state.js';
-import { getDefaultState } from '../../../src/lib/state.js';
+} from '@/core/state/state.ts';
+import { getDefaultState } from '@/core/state/state.ts';
+
+import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
+import { version as CURRENT_CLI_VERSION } from '../../../package.json';
 import { IS_WINDOWS } from './platform';
 
 function resolveBinaryFixturePath(fixture: BinarySpec): string {

@@ -28,10 +28,9 @@ import {
 } from '@/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import { ScaScannerInvocation } from '@/commands/analyze/dependency-risk-helpers/sca-scanner-runner-base.ts';
 import { ScaScannerSpawner } from '@/commands/analyze/dependency-risk-helpers/sca-scanner-spawner.ts';
+import { LOG_FILE } from '@/core/config-constants.ts';
 import { clearNetworkConfigCache } from '@/core/host/connectivity/network-config.ts';
-
-import { LOG_FILE } from '../../../../src/lib/config-constants.ts';
-import type { SpawnResult } from '../../../../src/lib/process.ts';
+import type { SpawnResult } from '@/core/process/process.ts';
 
 const okInstaller: ScaScannerInstaller = { install: () => Promise.resolve('/bin/sca') };
 const noopSpawner: ScaScannerSpawner = {

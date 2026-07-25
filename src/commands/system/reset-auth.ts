@@ -19,10 +19,10 @@
  */
 
 import { deleteToken, getToken } from '@/core/host/keychain.ts';
+import type { AuthConnection, CliState } from '@/core/state/state.ts';
 import type { PhaseItem } from '@/core/ui';
 import { phaseItem } from '@/core/ui';
 
-import type { AuthConnection, CliState } from '../../lib/state.ts';
 import {
   reportRevokeServerTokenOutcome,
   revokeServerTokenIfPossible,

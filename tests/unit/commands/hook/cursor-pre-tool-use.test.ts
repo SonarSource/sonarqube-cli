@@ -26,6 +26,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CURSOR_IGNORE_FILE } from '@/core/config-constants.ts';
 import * as authResolver from '@/core/host/auth-resolver.ts';
 
 import * as installSecrets from '../../../../src/commands/_common/install/secrets.ts';
@@ -36,7 +37,6 @@ import {
   SECRETS_INACTIVE_UNAUTHENTICATED,
 } from '../../../../src/commands/hook/hook-dependencies.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
-import { CURSOR_IGNORE_FILE } from '../../../../src/lib/config-constants.ts';
 
 const TEST_FILE = '/sonar-test/secret.ts';
 const SECRET_CONTENT = 'const secret = "ghp_test";';

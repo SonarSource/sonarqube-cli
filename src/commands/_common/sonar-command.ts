@@ -24,9 +24,9 @@ import { Command } from 'commander';
 
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { resolveAuth } from '@/core/host/auth-resolver.ts';
+import logger from '@/core/observability/logger.ts';
 import { blank, error, print } from '@/core/ui';
 
-import logger from '../../lib/logger.ts';
 import { CliError, CommandFailedError, remediationHintFor } from './error.ts';
 
 export const COMMAND_CATEGORIES = ['core', 'data', 'integrate', 'cli-management'] as const;

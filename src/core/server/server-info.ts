@@ -22,7 +22,7 @@ import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-confi
 import { isNewerVersion } from '@/core/host/version.ts';
 
 import { version as VERSION } from '../../../package.json';
-import { ApiCallError } from '../../lib/errors.ts';
+import { ApiCallError } from '../errors.ts';
 
 const FETCH_TIMEOUT_MS = 2000;
 

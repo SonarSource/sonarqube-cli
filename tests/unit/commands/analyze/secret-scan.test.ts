@@ -28,6 +28,9 @@ import * as fs from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import * as processLib from '@/core/process/process.ts';
+import { getDefaultState } from '@/core/state/state.ts';
+import * as stateRepository from '@/core/state/state-repository.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { CommandFailedError, InvalidOptionError } from '../../../../src/commands/_common/error.ts';
@@ -36,9 +39,6 @@ import {
   analyzeSecrets,
   runSecretsBinaryOnText,
 } from '../../../../src/commands/analyze/secrets.ts';
-import * as processLib from '../../../../src/lib/process.ts';
-import * as stateRepository from '../../../../src/lib/repository/state-repository.ts';
-import { getDefaultState } from '../../../../src/lib/state.ts';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const TEST_ORG = 'test-org';

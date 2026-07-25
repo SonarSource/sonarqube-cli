@@ -30,11 +30,11 @@ import {
   SONARCLOUD_US_API_URL,
   SONARCLOUD_US_HOSTNAME,
   SONARCLOUD_US_URL,
-} from '../../lib/config-constants.ts';
-import logger from '../../lib/logger.ts';
-import { loadState } from '../../lib/repository/state-repository.ts';
-import type { CloudRegion } from '../../lib/state.ts';
-import { getActiveConnection } from '../../lib/state-manager.ts';
+} from '../config-constants.ts';
+import logger from '../observability/logger.ts';
+import type { CloudRegion } from '../state/state.ts';
+import { getActiveConnection } from '../state/state-manager.ts';
+import { loadState } from '../state/state-repository.ts';
 
 export const ENV_TOKEN = 'SONARQUBE_CLI_TOKEN';
 export const ENV_SERVER = 'SONARQUBE_CLI_SERVER';

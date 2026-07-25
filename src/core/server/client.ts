@@ -24,12 +24,12 @@ import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-confi
 import { print } from '@/core/ui';
 
 import { version as VERSION } from '../../../package.json';
-import logger from '../../lib/logger.ts';
 import {
   isSonarQubeCloud,
   normalizeCloudV2Endpoint,
   resolveFromEndpoint,
 } from '../host/auth-resolver.ts';
+import logger from '../observability/logger.ts';
 import {
   BadRequestError,
   ForbiddenApiError,
@@ -596,22 +596,6 @@ export class SonarQubeClient {
     return { organizations: result.organizations, total: result.paging.total };
   }
 
-  async fetchAllUserOrganizations(): Promise<Organization[]> {
-    const PAGE_SIZE = 500;
-    let page = 1;
-    const all: Organization[] = [];
-
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    while (true) {
-      const { organizations, total } = await this.fetchUserOrganizationsPage(page, PAGE_SIZE);
-      all.push(...organizations);
-      if (all.length >= total || organizations.length === 0) break;
-      page++;
-    }
-
-    return all;
-  }
-
   /** Server-enforced max `pageSize` for `/dop-translation/dop-repositories`. */
   static readonly DOP_REPOSITORIES_MAX_PAGE_SIZE = 50;
 
@@ -652,6 +636,23 @@ export class SonarQubeClient {
       '/api/alm_integration/provision_projects',
       { organization, installationKeys: installationKey },
     );
+  }
+
+  /**
+   * Request SonarQube Cloud Autoscan eligibility/auto-enable for a newly provisioned project.
+   * Best-effort: swallows failures so a hiccup here never fails the enclosing `sonar import` run.
+   */
+  async requestAutoscanEligibility(projectKey: string): Promise<void> {
+    try {
+      await this.get('/api/autoscan/eligibility', {
+        autoEnable: true,
+        ignoreCache: false,
+        projectKey,
+      });
+    } catch (err) {
+      logger.debug('Failed to request autoscan eligibility', err);
+      return undefined;
+    }
   }
 
   /**

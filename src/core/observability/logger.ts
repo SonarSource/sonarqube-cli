@@ -25,7 +25,7 @@
 
 import { appendFileSync, mkdirSync } from 'node:fs';
 
-import { LOG_DIR, LOG_FILE } from './config-constants.js';
+import { LOG_DIR, LOG_FILE } from '../config-constants.ts';
 
 const LOG_LEVELS = {
   DEBUG: 0,

@@ -20,7 +20,7 @@
 
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-import * as process from '@/lib/process.ts';
+import * as process from '@/core/process/process.ts';
 
 // Mock platform-detector so both Windows and non-Windows branches are reachable on any OS.
 const platformDetector = await import('@/core/host/platform-detector.ts');

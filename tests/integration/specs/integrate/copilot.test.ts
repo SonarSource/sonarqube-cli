@@ -22,7 +22,8 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { CLI_COMMAND } from '../../../../src/lib/config-constants.js';
+import { CLI_COMMAND } from '@/core/config-constants.ts';
+
 import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,

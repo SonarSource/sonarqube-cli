@@ -26,8 +26,11 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import type { RunTally } from '@/commands/analyze/sqaa-analysis.ts';
 import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display-json.ts';
+import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import type { SqaaIssue } from '@/core/server/client.ts';
+import * as stateManager from '@/core/state/state-manager.ts';
+import * as stateRepository from '@/core/state/state-repository.ts';
 import {
   collectRuleCounts,
   emitSqaaAnalysisTelemetry,
@@ -36,9 +39,6 @@ import {
   tallyFromSqaaJsonReport,
 } from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 import * as userModule from '@/core/telemetry/user.ts';
-import { ENV_SONAR_USER_HOME } from '@/lib/config-constants.ts';
-import * as stateRepository from '@/lib/repository/state-repository.ts';
-import * as stateManager from '@/lib/state-manager.ts';
 
 import { makeTelemetryState, readAnalysisEvents } from '../../../_common/telemetry-helpers.ts';
 

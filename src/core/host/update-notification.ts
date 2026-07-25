@@ -34,8 +34,8 @@ import { isFormattedOutputMode, text } from '@/core/ui';
 import { cyan } from '@/core/ui/colors.ts';
 
 import { version as CURRENT_VERSION } from '../../../package.json';
-import type { CliUpdateCheckState } from '../../lib/state.ts';
-import { loadState, saveState } from '../../lib/state-manager.ts';
+import type { CliUpdateCheckState } from '../state/state.ts';
+import { loadState, saveState } from '../state/state-manager.ts';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 

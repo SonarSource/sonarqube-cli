@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import {
   type DopRepository,
@@ -27,7 +28,6 @@ import {
 import { info, intro, outro } from '@/core/ui';
 import { ImportProgress } from '@/core/ui/components/import-progress.ts';
 
-import { runWithConcurrencyLimit } from '../../lib/concurrency-pool';
 import { CommandFailedError } from '../_common/error';
 import type {
   OnlyPrivateProjects,
@@ -35,7 +35,6 @@ import type {
   SkippedRepo,
 } from './_common/repository-collection';
 import {
-  BACK,
   computeInstallationKey,
   type RepoResolution,
   type ResolvedRepo,
@@ -49,40 +48,32 @@ export { type ImportOptions } from './_common/types';
 /** Max number of `provision_projects` calls run concurrently. */
 const IMPORT_PROVISION_CONCURRENCY_LIMIT = 10;
 
-/**
- * Resolves org + repos together so choosing "← Back" from the repo-onboarding-mode prompt can
- * loop back to organization selection — re-deriving `almKey`/`onlyPrivateProjects` for whichever
- * org ends up chosen, since those are org-specific.
- */
+/** Resolves the org tied to the active connection, then the repos to import into it. */
 async function resolveOrgAndRepos(
   client: SonarQubeClient,
+  orgKey: string | undefined,
   options: ImportOptions,
 ): Promise<{ orgKey: string; almKey: string | undefined } & RepoResolution> {
-  for (;;) {
-    const {
-      key: orgKey,
-      almKey: resolvedAlmKey,
-      onlyPrivateProjectsEnabled,
-    } = await resolveOrg(client, options);
+  const {
+    key: resolvedOrgKey,
+    almKey: resolvedAlmKey,
+    onlyPrivateProjectsEnabled,
+  } = await resolveOrg(client, orgKey);
 
-    info(`Organization: ${orgKey}`);
+  info(`Organization: ${resolvedOrgKey}`);
 
-    const [almKey, privateProjectsAvailable] = await Promise.all([
-      resolvedAlmKey ?? client.getOrganizationAlmKey(orgKey),
-      client.hasPrivateProjectsEntitlement(orgKey),
-    ]);
-    const onlyPrivateProjects: OnlyPrivateProjects = {
-      enabled: onlyPrivateProjectsEnabled ?? false,
-      available: privateProjectsAvailable,
-    };
+  const [almKey, privateProjectsAvailable] = await Promise.all([
+    resolvedAlmKey ?? client.getOrganizationAlmKey(resolvedOrgKey),
+    client.hasPrivateProjectsEntitlement(resolvedOrgKey),
+  ]);
+  const onlyPrivateProjects: OnlyPrivateProjects = {
+    enabled: onlyPrivateProjectsEnabled ?? false,
+    available: privateProjectsAvailable,
+  };
 
-    const outcome = await resolveRepos(client, orgKey, almKey, onlyPrivateProjects, options);
-    if (outcome === BACK) {
-      continue;
-    }
+  const outcome = await resolveRepos(client, resolvedOrgKey, almKey, onlyPrivateProjects, options);
 
-    return { orgKey, almKey, ...outcome };
-  }
+  return { orgKey: resolvedOrgKey, almKey, ...outcome };
 }
 
 /** Builds the `runWithConcurrencyLimit` task that provisions one repo and updates `progress`. */
@@ -102,6 +93,7 @@ function createProvisionTask(
         );
       }
       const project = result.projects[0];
+      await client.requestAutoscanEligibility(project.projectKey);
       progress.update(repo.slug, 'done');
       return project;
     } catch (err) {
@@ -112,23 +104,40 @@ function createProvisionTask(
 }
 
 /**
- * Runs `--all`/"Recommended" as a streaming job: import each server page's eligible repos as
- * soon as it's fetched, then fetch the next page — rather than resolving the whole org's repo
- * list before provisioning anything.
+ * Runs `--all`/"Recommended" or `--regex`/"By pattern" as a streaming job: import each server
+ * page's eligible repos as soon as it's fetched, then fetch the next page — rather than
+ * resolving the whole org's repo list before provisioning anything.
+ *
+ * `regex`, when set, is applied here, live, against each page's already-eligible repos, rather
+ * than being baked into `RepositoryCollection`'s own categorization — it's only known once
+ * "By pattern" (or `--regex`) is actually chosen, well after the collection was built to check
+ * eligibility. A repo is imported only if `regex` is undefined (no filter — `--all`/"Recommended")
+ * or matches its name.
  */
 async function runBulkImportJob(
   client: SonarQubeClient,
   orgKey: string,
   almKey: string | undefined,
   collection: RepositoryCollection,
+  regex: RegExp | undefined,
 ): Promise<{ succeeded: number; failed: number; skipped: readonly SkippedRepo[] }> {
   const progress = new ImportProgress({ maxVisible: IMPORT_PROVISION_CONCURRENCY_LIMIT });
   progress.setTotal(collection.total);
   progress.start();
 
+  const skippedByRegex: SkippedRepo[] = [];
+
   const importPage = async (eligible: readonly DopRepository[]): Promise<void> => {
-    if (eligible.length === 0) return;
-    const repos: ResolvedRepo[] = eligible.map((repo) => ({
+    const toImport = eligible.filter((repo) => {
+      if (!regex || regex.test(repo.name)) return true;
+      skippedByRegex.push({ slug: repo.slug, reason: 'name does not match --regex pattern' });
+      return false;
+    });
+    if (toImport.length < eligible.length) {
+      progress.recordSkipped(eligible.length - toImport.length);
+    }
+    if (toImport.length === 0) return;
+    const repos: ResolvedRepo[] = toImport.map((repo) => ({
       slug: repo.slug,
       installationKey: computeInstallationKey(repo, almKey),
     }));
@@ -163,7 +172,7 @@ async function runBulkImportJob(
   }
 
   const { succeeded, failed } = progress.finish();
-  return { succeeded, failed, skipped: collection.skippedRepos };
+  return { succeeded, failed, skipped: [...collection.skippedRepos, ...skippedByRegex] };
 }
 
 function reportSkipped(skipped: readonly SkippedRepo[]): void {
@@ -178,7 +187,17 @@ function reportSkipped(skipped: readonly SkippedRepo[]): void {
   }
 }
 
-function reportOutcome(succeeded: number, failed: number, skippedCount: number): void {
+/** Builds the SonarQube Cloud onboarding dashboard link for an organization. */
+function buildOnboardingDashboardUrl(serverUrl: string, orgKey: string): string {
+  return `${serverUrl.replace(/\/$/, '')}/organizations/${orgKey}/onboarding-dashboard`;
+}
+
+function reportOutcome(
+  succeeded: number,
+  failed: number,
+  skippedCount: number,
+  dashboardUrl: string,
+): void {
   const skippedSuffix = skippedCount > 0 ? ` (${skippedCount} skipped)` : '';
 
   if (failed > 0) {
@@ -193,7 +212,11 @@ function reportOutcome(succeeded: number, failed: number, skippedCount: number):
   }
 
   const succeededNoun = succeeded === 1 ? 'repository' : 'repositories';
-  outro(`Imported ${succeeded} ${succeededNoun}${skippedSuffix}`, 'success');
+  outro(
+    `Imported ${succeeded} ${succeededNoun}${skippedSuffix}`,
+    'success',
+    `Dashboard: ${dashboardUrl}`,
+  );
 }
 
 export async function importHandler(options: ImportOptions, auth: ResolvedAuth): Promise<void> {
@@ -201,7 +224,7 @@ export async function importHandler(options: ImportOptions, auth: ResolvedAuth):
 
   intro('Import repositories', 'SonarQube');
 
-  const resolution = await resolveOrgAndRepos(client, options);
+  const resolution = await resolveOrgAndRepos(client, auth.orgKey, options);
 
   if (resolution.kind === 'streaming') {
     const { succeeded, failed, skipped } = await runBulkImportJob(
@@ -209,9 +232,15 @@ export async function importHandler(options: ImportOptions, auth: ResolvedAuth):
       resolution.orgKey,
       resolution.almKey,
       resolution.collection,
+      resolution.regex,
     );
     reportSkipped(skipped);
-    reportOutcome(succeeded, failed, skipped.length);
+    reportOutcome(
+      succeeded,
+      failed,
+      skipped.length,
+      buildOnboardingDashboardUrl(auth.serverUrl, resolution.orgKey),
+    );
     return;
   }
 
@@ -232,5 +261,10 @@ export async function importHandler(options: ImportOptions, auth: ResolvedAuth):
   );
 
   const { succeeded, failed } = progress.finish();
-  reportOutcome(succeeded, failed, skipped.length);
+  reportOutcome(
+    succeeded,
+    failed,
+    skipped.length,
+    buildOnboardingDashboardUrl(auth.serverUrl, resolution.orgKey),
+  );
 }

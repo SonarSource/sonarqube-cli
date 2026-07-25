@@ -32,9 +32,9 @@ import {
 } from '@/core/server/discover-project-by-remote.ts';
 import { print } from '@/core/ui';
 
-import { canonicalizePath } from '../lib/fs-utils.ts';
-import logger from '../lib/logger.ts';
 import { loadSonarLintConfig, type SonarLintConfig } from './host/sonarlint-connected-mode.ts';
+import { canonicalizePath } from './io/fs-utils.ts';
+import logger from './observability/logger.ts';
 
 export interface ProjectInfo {
   root: string;

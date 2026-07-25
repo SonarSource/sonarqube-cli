@@ -23,8 +23,8 @@
 // Replaces the shell logic that was previously embedded in the git hook script.
 
 import { resolveAuth } from '@/core/host/auth-resolver.ts';
+import { spawnProcess } from '@/core/process/process.ts';
 
-import { spawnProcess } from '../../lib/process.ts';
 import { InvalidOptionError } from '../_common/error.ts';
 import { runDepRisksStage } from './git-pre-commit-dependency-risks.ts';
 import { runCommitSecretsStage } from './git-pre-commit-secrets.ts';

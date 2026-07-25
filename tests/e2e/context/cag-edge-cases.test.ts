@@ -34,9 +34,9 @@ import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.t
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
 import { detectPlatform } from '@/core/host/platform-detector.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
+import type { CliState } from '@/core/state/state.ts';
 
 import { version as CURRENT_CLI_VERSION } from '../../../package.json';
-import type { CliState } from '../../../src/lib/state';
 import { TestHarness } from '../../integration/harness';
 import {
   CLAUDE_SKILL_RELATIVE_PATH,

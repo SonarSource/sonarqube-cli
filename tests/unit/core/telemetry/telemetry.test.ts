@@ -31,10 +31,15 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { Command } from 'commander';
 
+import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import * as agentDetector from '@/core/host/agent-detector.ts';
 import * as authResolver from '@/core/host/auth-resolver.ts';
 import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/host/auth-resolver.ts';
 import { DISTRIBUTION } from '@/core/host/distribution.ts';
+import type { StoredAnalysisCompletedEvent } from '@/core/state/state.ts';
+import { getDefaultState } from '@/core/state/state.ts';
+import * as stateManager from '@/core/state/state-manager.ts';
+import * as stateRepository from '@/core/state/state-repository.ts';
 import {
   flushTelemetry,
   setPassthroughSubcommand,
@@ -44,11 +49,6 @@ import {
 import { resolveTelemetryIdentity } from '@/core/telemetry/identity.ts';
 import * as userModule from '@/core/telemetry/user.ts';
 import * as ui from '@/core/ui';
-import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '@/lib/config-constants.ts';
-import * as stateRepository from '@/lib/repository/state-repository.ts';
-import type { StoredAnalysisCompletedEvent } from '@/lib/state.ts';
-import { getDefaultState } from '@/lib/state.ts';
-import * as stateManager from '@/lib/state-manager.ts';
 
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
 import { readCommandEvents, writeTelemetryEvent } from '../../../_common/telemetry-helpers.ts';

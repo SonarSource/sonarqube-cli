@@ -29,11 +29,10 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:te
 import { buildLocalBinaryName } from '@/commands/_common/install/secrets.ts';
 import { detectPlatform } from '@/core/host/platform-detector.ts';
 import { SONAR_SECRETS_VERSION } from '@/core/host/signatures.ts';
+import * as processLib from '@/core/process/process.ts';
+import { getDefaultState } from '@/core/state/state.ts';
+import * as stateRepository from '@/core/state/state-repository.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
-
-import * as processLib from '../../../../src/lib/process.ts';
-import * as stateRepository from '../../../../src/lib/repository/state-repository.ts';
-import { getDefaultState } from '../../../../src/lib/state.ts';
 
 // Import the real module first, then register it as a mock with the same object.
 // Because mock.module returns a plain mutable object (not a frozen ES namespace),

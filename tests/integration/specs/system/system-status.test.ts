@@ -25,13 +25,14 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR_FROM_AGENTS } from '@/core/config-constants.ts';
+
 import { version as CLI_VERSION } from '../../../../package.json';
 import { SECRETS_SPEC } from '../../../../src/commands/_common/install/secrets';
 import {
   formatAntigravityHookCommand,
   hookScriptName,
 } from '../../../../src/commands/integrate/antigravity/hooks';
-import { ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR_FROM_AGENTS } from '../../../../src/lib/config-constants';
 import { IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
 
 function baseState(overrides: Record<string, unknown> = {}): Record<string, unknown> {

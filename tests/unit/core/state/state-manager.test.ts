@@ -30,19 +30,19 @@ import { join } from 'node:path';
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { getDefaultState } from '@/core/state/state.ts';
+import {
+  addOrUpdateConnection,
+  generateConnectionId,
+  removeConnection,
+} from '@/core/state/state-manager.ts';
 import {
   loadState,
   saveState,
   STATE_READ_MAX_ATTEMPTS,
   stateFileExists,
   tryLoadState,
-} from '@/lib/repository/state-repository.ts';
-import { getDefaultState } from '@/lib/state.ts';
-import {
-  addOrUpdateConnection,
-  generateConnectionId,
-  removeConnection,
-} from '@/lib/state-manager.ts';
+} from '@/core/state/state-repository.ts';
 
 const testSonarUserHome = join(tmpdir(), `sonar-cli-state-test-${Date.now()}`);
 const testCliDir = join(testSonarUserHome, 'sonarqube-cli');

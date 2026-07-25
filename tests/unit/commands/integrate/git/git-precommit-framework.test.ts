@@ -24,6 +24,9 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as yaml from 'js-yaml';
 
+import * as processLib from '@/core/process/process.ts';
+import { getDefaultState } from '@/core/state/state.ts';
+
 import { CommandFailedError } from '../../../../../src/commands/_common/error.ts';
 import type { ContainerIntegrationContext } from '../../../../../src/commands/integrate/_common/registry';
 import { IntegrationInstaller } from '../../../../../src/commands/integrate/_common/registry';
@@ -42,8 +45,6 @@ import {
   runPreCommitInstall,
   upsertSonarHook,
 } from '../../../../../src/commands/integrate/git/tools/pre-commit';
-import * as processLib from '../../../../../src/lib/process.ts';
-import { getDefaultState } from '../../../../../src/lib/state.ts';
 
 const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.git-precommit-framework-tmp');
 

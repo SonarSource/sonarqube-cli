@@ -25,11 +25,9 @@ import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import {
-  ENV_DO_NOT_TRACK,
-  ENV_SQAA_RETRY_BASE_DELAY_MS,
-} from '../../../src/lib/config-constants.js';
-import { canonicalizePath } from '../../../src/lib/fs-utils.js';
+import { ENV_DO_NOT_TRACK, ENV_SQAA_RETRY_BASE_DELAY_MS } from '@/core/config-constants.ts';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
+
 import { ISOLATED_CLI_SPAWN_ENV } from '../../_common/isolated-cli-env.js';
 import { getCliBinaryPath, runCli } from './cli-runner.js';
 import { Dir } from './dir';

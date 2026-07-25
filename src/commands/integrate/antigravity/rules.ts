@@ -25,7 +25,8 @@ import {
   ANTIGRAVITY_GLOBAL_GEMINI_MD,
   ANTIGRAVITY_LEGACY_GLOBAL_INSTRUCTIONS_PATH,
   ANTIGRAVITY_LEGACY_PROJECT_INSTRUCTIONS_PATH,
-} from '../../../lib/config-constants.ts';
+} from '@/core/config-constants.ts';
+
 import { sonarBeginMarker } from '../_common/instructions-templates.ts';
 
 export { PROMPT_SECRETS_BODY } from '../copilot/instructions.ts';

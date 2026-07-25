@@ -19,9 +19,9 @@
  */
 
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { timed } from '@/core/observability/timed.ts';
 import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 
-import { timed } from '../../lib/timed.ts';
 import { readSqaaFileContent, toRelativePosixPath } from './sqaa-api.ts';
 import { resolveCloudAuthAndProject } from './sqaa-auth.ts';
 import {

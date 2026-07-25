@@ -32,16 +32,16 @@ import type {
   ScaIssueType,
   Severity,
 } from '@/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
+import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import * as stateManager from '@/core/state/state-manager.ts';
+import * as stateRepository from '@/core/state/state-repository.ts';
 import {
   emitScaAnalysisTelemetry,
   SCA_CALLER_COMMANDS,
   summarizeScaFindings,
 } from '@/core/telemetry/sca-analysis-telemetry.ts';
 import * as userModule from '@/core/telemetry/user.ts';
-import { ENV_SONAR_USER_HOME } from '@/lib/config-constants.ts';
-import * as stateRepository from '@/lib/repository/state-repository.ts';
-import * as stateManager from '@/lib/state-manager.ts';
 
 import { makeTelemetryState, readAnalysisEvents } from '../../../_common/telemetry-helpers.ts';
 

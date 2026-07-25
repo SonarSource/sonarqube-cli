@@ -22,6 +22,9 @@ import { existsSync } from 'node:fs';
 
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { buildSubprocessNetworkEnv } from '@/core/host/connectivity/network-config.ts';
+import logger from '@/core/observability/logger.ts';
+import type { SpawnResult, StdioMode } from '@/core/process/process.ts';
+import { spawnProcessWithTimeout } from '@/core/process/process.ts';
 import {
   SECRETS_CALLER_COMMANDS,
   type SecretsCallerCommand,
@@ -30,9 +33,6 @@ import { emitAnalysisCompleted } from '@/core/telemetry/telemetry-events.ts';
 import { blank, print, success, warn } from '@/core/ui';
 import { green, yellow } from '@/core/ui/colors.ts';
 
-import logger from '../../lib/logger.ts';
-import type { SpawnResult, StdioMode } from '../../lib/process.ts';
-import { spawnProcessWithTimeout } from '../../lib/process.ts';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.ts';
 import { installSecretsBinary } from '../_common/install/secrets.ts';
 

@@ -26,8 +26,8 @@ import * as Sentry from '@sentry/bun';
 import { isTelemetryEnabled } from '@/core/telemetry/enabled.ts';
 import { getOrCreateUserId } from '@/core/telemetry/user.ts';
 
-import { SENTRY_DSN, SENTRY_FLUSH_TIMEOUT_MS } from './config-constants.js';
-import type { CliState } from './state.js';
+import { SENTRY_DSN, SENTRY_FLUSH_TIMEOUT_MS } from '../config-constants.ts';
+import type { CliState } from '../state/state.ts';
 
 /**
  * Initialize Sentry if telemetry is enabled.

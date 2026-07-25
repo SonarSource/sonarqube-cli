@@ -17,7 +17,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-import { spawnProcessWithTimeout, type SpawnResult } from '../../../lib/process.ts';
+import { spawnProcessWithTimeout, type SpawnResult } from '@/core/process/process.ts';
+
 import { type ScaScannerSpawner } from './sca-scanner-spawner.ts';
 
 const ThreeMinuteTimeoutMs = 3 * 60 * 1000;

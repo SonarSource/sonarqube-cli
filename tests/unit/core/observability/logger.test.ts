@@ -20,7 +20,11 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import logger, { configureLogger, getLogLevelConfig, setMockLogger } from '@/lib/logger.ts';
+import logger, {
+  configureLogger,
+  getLogLevelConfig,
+  setMockLogger,
+} from '@/core/observability/logger.ts';
 
 describe('Logger', () => {
   let logOutput: string[];

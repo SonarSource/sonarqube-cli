@@ -20,6 +20,7 @@
 
 import { afterEach, describe, expect, it } from 'bun:test';
 
+import { AUTH_PORT_COUNT, AUTH_PORT_START } from '@/core/config-constants.ts';
 import {
   getSecurityHeaders,
   isValidLoopbackHost,
@@ -27,7 +28,6 @@ import {
   type LoopbackServerResult,
   startLoopbackServer,
 } from '@/core/host/loopback-server.ts';
-import { AUTH_PORT_COUNT, AUTH_PORT_START } from '@/lib/config-constants.ts';
 
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_FORBIDDEN = 403;

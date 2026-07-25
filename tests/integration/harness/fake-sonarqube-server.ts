@@ -177,6 +177,8 @@ export class FakeSonarQubeServerBuilder {
   private provisionProjectsStatusBody?: string;
   private provisionProjectsFailingInstallationKey?: string;
   private provisionProjectsDelayMs?: number;
+  private autoscanEligibilityStatusCode?: number;
+  private autoscanEligibilityStatusBody?: string;
 
   withMode(mode: 'MQR' | 'STANDARD'): this {
     this.serverMode = mode;
@@ -370,6 +372,16 @@ export class FakeSonarQubeServerBuilder {
   }
 
   /**
+   * Force GET /api/autoscan/eligibility to fail with the given HTTP status code, so tests can
+   * verify a failure here never fails the enclosing `sonar import` run.
+   */
+  withAutoscanEligibilityError(statusCode: number, body?: string): this {
+    this.autoscanEligibilityStatusCode = statusCode;
+    this.autoscanEligibilityStatusBody = body;
+    return this;
+  }
+
+  /**
    * Configure the response of the SCA availability endpoints
    * (`/sca/feature-enabled` for cloud, `/api/v2/sca/feature-enabled` for on-premise).
    * When unset (default), both endpoints return 404 to simulate a server
@@ -424,6 +436,8 @@ export class FakeSonarQubeServerBuilder {
       provisionProjectsStatusBody,
       provisionProjectsFailingInstallationKey,
       provisionProjectsDelayMs,
+      autoscanEligibilityStatusCode,
+      autoscanEligibilityStatusBody,
     } = this;
     const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
@@ -821,6 +835,22 @@ export class FakeSonarQubeServerBuilder {
           } finally {
             provisionConcurrency.current--;
           }
+        }
+
+        if (path === '/api/autoscan/eligibility' && req.method === 'GET') {
+          if (autoscanEligibilityStatusCode !== undefined) {
+            return new Response(
+              autoscanEligibilityStatusBody ??
+                JSON.stringify({ errors: [{ msg: 'Autoscan eligibility failed' }] }),
+              {
+                status: autoscanEligibilityStatusCode,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
+          }
+          return new Response(JSON.stringify({ eligible: true }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
 
         if (path === '/api/settings/values' && req.method === 'GET') {

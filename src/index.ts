@@ -24,8 +24,8 @@
 
 import { COMMAND_TREE } from '@/commands/command-tree.ts';
 import * as postUpdate from '@/core/host/post-update.ts';
+import { flushSentry } from '@/core/observability/sentry.ts';
 import { setFormattedOutputMode } from '@/core/ui';
-import { flushSentry } from '@/lib/sentry';
 
 // Activate formatted output mode early so startup messages are collected
 // rather than printed to stdout when the command will produce JSON output.

@@ -20,7 +20,13 @@
 
 // Remediate command - triggers AI agent remediation for eligible issues
 
+import {
+  AGENT_ACTIVITY_PATH,
+  AGENTIC_PACK_URL,
+  AI_REMEDIATION_DOCS_URL,
+} from '@/core/config-constants.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
@@ -29,12 +35,6 @@ import type { SonarQubeIssue } from '@/core/server/types.ts';
 import { blank, info, multiSelectPrompt, print, success, withSpinner } from '@/core/ui';
 import { cyan, dim, red, yellow } from '@/core/ui/colors.ts';
 
-import {
-  AGENT_ACTIVITY_PATH,
-  AGENTIC_PACK_URL,
-  AI_REMEDIATION_DOCS_URL,
-} from '../../lib/config-constants.ts';
-import logger from '../../lib/logger.ts';
 import { printAgentNonInteractiveAlternativeHint } from '../_common/agent-prompt-hint.ts';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.ts';
 

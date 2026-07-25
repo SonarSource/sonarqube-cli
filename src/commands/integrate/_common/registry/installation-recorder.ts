@@ -20,7 +20,6 @@
 
 import { randomUUID } from 'node:crypto';
 
-import { version as VERSION } from '../../../../../package.json';
 import type {
   CliState,
   InstalledIntegration,
@@ -31,7 +30,9 @@ import type {
   InstalledIntegrationResource,
   InstalledSubfeature,
   IntegrationScope,
-} from '../../../../lib/state.ts';
+} from '@/core/state/state.ts';
+
+import { version as VERSION } from '../../../../../package.json';
 import type {
   AppliedFeature,
   AppliedOperation,

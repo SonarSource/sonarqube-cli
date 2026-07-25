@@ -22,8 +22,8 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 
-import { AUTH_PORT_COUNT, AUTH_PORT_START } from '../../lib/config-constants.ts';
-import logger from '../../lib/logger.ts';
+import { AUTH_PORT_COUNT, AUTH_PORT_START } from '../config-constants.ts';
+import logger from '../observability/logger.ts';
 
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_FORBIDDEN = 403;

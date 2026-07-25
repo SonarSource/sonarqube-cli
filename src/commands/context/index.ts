@@ -20,20 +20,19 @@
 
 import { spawn } from 'node:child_process';
 
+import { buildContextAugmentationEnv } from '@/commands/_common/context-augmentation-env.ts';
+import { CommandFailedError } from '@/commands/_common/error.ts';
+import { resolveContextAugmentationBinaryPath } from '@/commands/_common/install/context-augmentation.ts';
+import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
+import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { resolveAuth, type ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { resolveContextWorkspaceRoot } from '@/core/host/git-worktree.ts';
 import { getToken } from '@/core/host/keychain.ts';
-
-import { resolveContextWorkspaceRoot } from '../../core/host/git-worktree.ts';
-import { selectRecordedFeatureForDir } from '../../core/host/recorded-feature-resolver.ts';
-import { SONAR_CONTEXT_INVOCATION } from '../../lib/config-constants.ts';
-import { canonicalizePath } from '../../lib/fs-utils.ts';
-import logger from '../../lib/logger.ts';
-import type { InstalledIntegrationFeature, IntegrationStateAttribute } from '../../lib/state.ts';
-import { loadState } from '../../lib/state-manager.ts';
-import { buildContextAugmentationEnv } from '../_common/context-augmentation-env.ts';
-import { CommandFailedError } from '../_common/error.ts';
-import { resolveContextAugmentationBinaryPath } from '../_common/install/context-augmentation.ts';
-import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../integrate/_common/features/context-augmentation-feature.ts';
+import { selectRecordedFeatureForDir } from '@/core/host/recorded-feature-resolver.ts';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
+import logger from '@/core/observability/logger.ts';
+import type { InstalledIntegrationFeature, IntegrationStateAttribute } from '@/core/state/state.ts';
+import { loadState } from '@/core/state/state-manager.ts';
 
 // Commander may assign --help/-h to the optional [action] positional on some platforms.
 function buildForwardedArgs(

@@ -21,7 +21,9 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { SCA_SCANNER_CACHE_DIR } from '@/core/config-constants.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import logger, { getLogLevelConfig } from '@/core/observability/logger.ts';
 import { type SonarQubeClient } from '@/core/server/client.ts';
 import type { SettingsValue } from '@/core/server/settings-value.ts';
 import {
@@ -30,8 +32,6 @@ import {
 } from '@/core/telemetry/sca-analysis-telemetry.ts';
 import { withSpinner } from '@/core/ui';
 
-import { SCA_SCANNER_CACHE_DIR } from '../../../lib/config-constants.ts';
-import logger, { getLogLevelConfig } from '../../../lib/logger.ts';
 import type { ScaScannerInstaller } from '../../_common/install/sca-scanner.ts';
 import type { SecretsInstaller } from '../../_common/install/secrets.ts';
 import { assertScaAvailable } from '../../_common/sca-availability.ts';

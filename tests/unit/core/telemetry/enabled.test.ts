@@ -20,13 +20,13 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { ENV_DO_NOT_TRACK } from '@/core/config-constants.ts';
+import { getDefaultState } from '@/core/state/state.ts';
 import {
   describeTelemetryStatus,
   isDoNotTrackRequested,
   isTelemetryEnabled,
 } from '@/core/telemetry/enabled.ts';
-import { ENV_DO_NOT_TRACK } from '@/lib/config-constants.ts';
-import { getDefaultState } from '@/lib/state.ts';
 
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
 

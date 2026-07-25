@@ -26,9 +26,10 @@
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { BIN_DIR } from '../../../lib/config-constants.ts';
-import logger from '../../../lib/logger.ts';
-import { spawnProcess } from '../../../lib/process.ts';
+import { BIN_DIR } from '@/core/config-constants.ts';
+import logger from '@/core/observability/logger.ts';
+import { spawnProcess } from '@/core/process/process.ts';
+
 import { CommandFailedError } from '../error.ts';
 
 const VERSION_REGEX_MAX_SEGMENT = 20;

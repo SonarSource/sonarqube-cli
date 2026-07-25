@@ -20,14 +20,14 @@
 
 import { rmSync } from 'node:fs';
 
+import { CommandFailedError } from '@/commands/_common/error.ts';
+import { type ScaScannerInstaller } from '@/commands/_common/install/sca-scanner.ts';
+import { LOG_FILE } from '@/core/config-constants.ts';
 import { buildSubprocessNetworkEnv } from '@/core/host/connectivity/network-config.ts';
+import logger from '@/core/observability/logger.ts';
+import type { SpawnResult } from '@/core/process/process.ts';
 import { warn, withSpinner } from '@/core/ui';
 
-import { LOG_FILE } from '../../../lib/config-constants.ts';
-import logger from '../../../lib/logger.ts';
-import type { SpawnResult } from '../../../lib/process.ts';
-import { CommandFailedError } from '../../_common/error.ts';
-import { type ScaScannerInstaller } from '../../_common/install/sca-scanner.ts';
 import { type ScaScannerSpawner } from './sca-scanner-spawner.ts';
 
 /** Env var the sca-scanner reads the bearer token from. */

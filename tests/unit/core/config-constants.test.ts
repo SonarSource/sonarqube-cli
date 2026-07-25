@@ -33,7 +33,7 @@ import {
   getTelemetryDir,
   LOG_DIR,
   LOG_FILE,
-} from '@/lib/config-constants.ts';
+} from '@/core/config-constants.ts';
 
 describe('config-constants', () => {
   const previousSonarUserHome = process.env[ENV_SONAR_USER_HOME];

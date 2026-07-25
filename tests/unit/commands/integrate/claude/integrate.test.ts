@@ -33,11 +33,10 @@ import * as gitWorktree from '@/core/host/git-worktree.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import * as discovery from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
+import { getDefaultState } from '@/core/state/state.ts';
+import * as stateRepository from '@/core/state/state-repository.ts';
 import type { PhaseItem } from '@/core/ui';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
-
-import * as stateRepository from '../../../../../src/lib/repository/state-repository.ts';
-import { getDefaultState } from '../../../../../src/lib/state.ts';
 
 const SERVER_AUTH: ResolvedAuth = {
   token: 'test-token',

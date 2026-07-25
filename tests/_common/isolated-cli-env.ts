@@ -20,7 +20,7 @@
 
 /** Default env for spawned CLI processes in tests. */
 
-import { ENV_DO_NOT_TRACK } from '../../src/lib/config-constants.js';
+import { ENV_DO_NOT_TRACK } from '@/core/config-constants.ts';
 
 export const ISOLATED_CLI_SPAWN_ENV: Record<string, string> = {
   [ENV_DO_NOT_TRACK]: '1',
