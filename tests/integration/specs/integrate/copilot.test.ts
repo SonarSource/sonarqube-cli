@@ -650,6 +650,7 @@ describe('integrate copilot', () => {
     it(
       'writes secrets and SQAA as independent marker blocks in the project file when org is entitled, project scope, and project key is provided',
       async () => {
+        harness.state().withContextAugmentationBinaryInstalled();
         const { extraEnv } = await setupCloudWithEntitlement();
 
         const result = await harness.run(
@@ -679,10 +680,13 @@ describe('integrate copilot', () => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
         // Interactive (no --non-interactive): the entitled org makes SQAA an ask.
-        const result = await harness.run(`integrate copilot --project ${TEST_PROJECT}`, {
-          extraEnv,
-          stdinChunks: ['\r', '\r', '\r', '\r', '\r'],
-        });
+        const result = await harness.run(
+          `integrate copilot --project ${TEST_PROJECT} --skip-context`,
+          {
+            extraEnv,
+            stdinChunks: ['\r', '\r', '\r', '\r', '\r'],
+          },
+        );
 
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;

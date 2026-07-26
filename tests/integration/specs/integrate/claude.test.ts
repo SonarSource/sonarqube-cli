@@ -639,6 +639,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
   it(
     'installs PostToolUse SQAA hook when Cloud org has SQAA entitlement (repair path)',
     async () => {
+      harness.state().withContextAugmentationBinaryInstalled();
       const server = await harness
         .newFakeServer()
         .withAuthToken('cloud-token')
@@ -682,6 +683,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
   it(
     'records the project key on the declarative sonar-sqaa-hook feature after a fresh SQAA install',
     async () => {
+      harness.state().withContextAugmentationBinaryInstalled();
       const server = await harness
         .newFakeServer()
         .withAuthToken('cloud-token')
@@ -750,6 +752,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
   it(
     'installs the SQAA hook and warns when the org is entitled but over its usage limit',
     async () => {
+      harness.state().withContextAugmentationBinaryInstalled();
       const server = await harness
         .newFakeServer()
         .withAuthToken('cloud-token')
@@ -831,6 +834,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
   it(
     'removes obsolete sonar-a3s hook entry when sonar-sqaa is installed',
     async () => {
+      harness.state().withContextAugmentationBinaryInstalled();
       const server = await harness
         .newFakeServer()
         .withAuthToken('cloud-token')
@@ -1125,6 +1129,7 @@ describe('integrate claude — file placement (local vs global)', () => {
     it(
       'still writes the project-scoped sonar-sqaa hook when the org has SQAA entitlement',
       async () => {
+        harness.state().withContextAugmentationBinaryInstalled();
         const server = await harness
           .newFakeServer()
           .withAuthToken('cloud-token')
@@ -2003,8 +2008,8 @@ describe('integrate claude — interactive feature selection', () => {
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 
-      // '\r' selects project scope, then secrets, SQAA hook, SQAA instructions, MCP, CAG prompts.
-      const result = await harness.run('integrate claude --project my-project', {
+      // '\r' selects project scope, then secrets, SQAA hook, SQAA instructions, MCP prompts.
+      const result = await harness.run('integrate claude --project my-project --skip-context', {
         stdinChunks: ['\r', '\r', '\r', '\r', '\r'],
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,

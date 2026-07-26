@@ -499,10 +499,11 @@ describe('integrate cursor', () => {
     it(
       'writes an always-applied .cursor/rules/sonar-agentic-analysis.mdc when entitled, project scope, with a project key',
       async () => {
+        harness.state().withContextAugmentationBinaryInstalled();
         const { extraEnv } = await setupCloudWithEntitlement();
 
         const result = await harness.run(
-          `integrate cursor --project ${TEST_PROJECT} --non-interactive --skip-context`,
+          `integrate cursor --project ${TEST_PROJECT} --non-interactive`,
           { extraEnv },
         );
 
@@ -532,7 +533,7 @@ describe('integrate cursor', () => {
           `integrate cursor --project ${TEST_PROJECT} --skip-context`,
           {
             extraEnv,
-            stdinChunks: ['\r', '\r', '\r'],
+            stdinChunks: ['\r', '\r', '\r', '\r'],
           },
         );
 
@@ -562,7 +563,7 @@ describe('integrate cursor', () => {
           `integrate cursor --project ${TEST_PROJECT}${isInteractive ? '' : ' --non-interactive'} --skip-context`,
           {
             extraEnv: isAgent ? { ...extraEnv, CURSOR_AGENT: '1' } : extraEnv,
-            ...(isInteractive ? { stdinChunks: ['\r', '\r', '\r'] } : {}),
+            ...(isInteractive ? { stdinChunks: ['\r', '\r', '\r', '\r'] } : {}),
           },
         );
 
@@ -639,16 +640,16 @@ describe('integrate cursor', () => {
     it(
       're-running is idempotent — rule body is unchanged',
       async () => {
+        harness.state().withContextAugmentationBinaryInstalled();
         const { extraEnv } = await setupCloudWithEntitlement();
 
-        await harness.run(
-          `integrate cursor --project ${TEST_PROJECT} --non-interactive --skip-context`,
-          { extraEnv },
-        );
+        await harness.run(`integrate cursor --project ${TEST_PROJECT} --non-interactive`, {
+          extraEnv,
+        });
         const firstBody = harness.cwd.file(...SQAA_RULE_DIRS).asText();
 
         const result = await harness.run(
-          `integrate cursor --project ${TEST_PROJECT} --non-interactive --skip-context`,
+          `integrate cursor --project ${TEST_PROJECT} --non-interactive`,
           { extraEnv },
         );
 
@@ -661,10 +662,11 @@ describe('integrate cursor', () => {
     it(
       'system reset removes the SQAA rule file',
       async () => {
+        harness.state().withContextAugmentationBinaryInstalled();
         const { extraEnv } = await setupCloudWithEntitlement();
 
         const integrateResult = await harness.run(
-          `integrate cursor --project ${TEST_PROJECT} --non-interactive --skip-context`,
+          `integrate cursor --project ${TEST_PROJECT} --non-interactive`,
           { extraEnv },
         );
         expect(integrateResult.exitCode).toBe(0);

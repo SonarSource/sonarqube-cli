@@ -705,6 +705,7 @@ describe('system reset --force', () => {
   it(
     'undoes a Codex sonar-sqaa-hook integration and preserves unrelated PostToolUse entries',
     async () => {
+      harness.state().withContextAugmentationBinaryInstalled();
       const testOrg = 'my-org';
       const testProject = 'my-project';
       const server = await harness
