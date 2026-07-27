@@ -429,7 +429,7 @@ export class SonarQubeClient {
    * over its current usage limit, `'not_entitled'` when not entitled, and
    * `'check_failed'` when the API call errors out.
    */
-  async checkSqaaEntitlement(organizationUuid: string): Promise<VortexEntitlementStatus> {
+  private async checkSqaaEntitlement(organizationUuid: string): Promise<VortexEntitlementStatus> {
     try {
       const endpoint = `/a3s-analysis/org-entitlement/${organizationUuid}`;
       const result = await this.get<{ id: string; allowed: boolean; hasEntitlement: boolean }>(
@@ -481,7 +481,7 @@ export class SonarQubeClient {
     return (await this.getScaEnablement(connectionType, orgKey)) === 'enabled';
   }
 
-  async checkCagEntitlement(organizationUuid: string): Promise<VortexEntitlementStatus> {
+  private async checkCagEntitlement(organizationUuid: string): Promise<VortexEntitlementStatus> {
     try {
       const endpoint = `/cag/cag-entitlement/${organizationUuid}`;
       const result = await this.get<{
@@ -498,6 +498,12 @@ export class SonarQubeClient {
     }
   }
 
+  /**
+   * Vortex is exposed through separate SQAA and CAG services, each with its own
+   * entitlement endpoint. Although both should eventually use one entitlement,
+   * there is no shared Vortex backend yet. Require both checks so the CLI does not
+   * enable both capabilities when only one is available, which would fail later.
+   */
   async hasVortexEntitlement(organizationKey?: string): Promise<VortexEntitlementStatus> {
     if (!organizationKey || !isSonarQubeCloud(this.serverURL)) {
       return 'not_entitled';
