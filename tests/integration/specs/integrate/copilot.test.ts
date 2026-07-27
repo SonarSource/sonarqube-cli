@@ -634,7 +634,7 @@ describe('integrate copilot', () => {
         .newFakeServer()
         .withAuthToken('cloud-token')
         .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
-        .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234', options)
+        .withVortexEntitlement(TEST_ORG, 'test-uuid-1234', options)
         .withProject(TEST_PROJECT)
         .start();
       const serverUrl = server.baseUrl();
@@ -650,6 +650,7 @@ describe('integrate copilot', () => {
     it(
       'writes secrets and SQAA as independent marker blocks in the project file when org is entitled, project scope, and project key is provided',
       async () => {
+        harness.state().withContextAugmentationBinaryInstalled();
         const { extraEnv } = await setupCloudWithEntitlement();
 
         const result = await harness.run(
@@ -679,10 +680,13 @@ describe('integrate copilot', () => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
         // Interactive (no --non-interactive): the entitled org makes SQAA an ask.
-        const result = await harness.run(`integrate copilot --project ${TEST_PROJECT}`, {
-          extraEnv,
-          stdinChunks: ['\r', '\r', '\r', '\r', '\r'],
-        });
+        const result = await harness.run(
+          `integrate copilot --project ${TEST_PROJECT} --skip-context`,
+          {
+            extraEnv,
+            stdinChunks: ['\r', '\r', '\r', '\r', '\r'],
+          },
+        );
 
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;
@@ -789,8 +793,8 @@ describe('integrate copilot', () => {
     it(
       'omits the SQAA section on on-premise (no organization on the auth)',
       async () => {
-        // Default beforeEach sets up on-premise auth (no org). hasSqaaEntitlement
-        // returns false fast without hitting the API in this case.
+        // Default beforeEach sets up on-premise auth (no org). hasVortexEntitlement
+        // returns 'not_entitled' fast without hitting the API in this case.
         const result = await harness.run(
           `integrate copilot --project ${TEST_PROJECT} --non-interactive`,
         );

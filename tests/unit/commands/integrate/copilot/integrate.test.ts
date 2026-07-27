@@ -54,8 +54,11 @@ describe('integrateCopilot', () => {
   let installIntegrationSpy: Mock<
     Extract<(typeof registry)['installIntegration'], (...args: never[]) => unknown>
   >;
-  let hasSqaaEntitlementSpy: Mock<
-    Extract<(typeof SonarQubeClient.prototype)['hasSqaaEntitlement'], (...args: never[]) => unknown>
+  let hasVortexEntitlementSpy: Mock<
+    Extract<
+      (typeof SonarQubeClient.prototype)['hasVortexEntitlement'],
+      (...args: never[]) => unknown
+    >
   >;
   let detectGlobalSecretsHookSpy: Mock<
     Extract<(typeof hooks)['detectGlobalSecretsHook'], (...args: never[]) => unknown>
@@ -75,10 +78,10 @@ describe('integrateCopilot', () => {
     checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
     discoverProjectSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(BASE_PROJECT);
     installIntegrationSpy = spyOn(registry, 'installIntegration').mockResolvedValue([]);
-    hasSqaaEntitlementSpy = spyOn(
+    hasVortexEntitlementSpy = spyOn(
       SonarQubeClient.prototype,
-      'hasSqaaEntitlement',
-    ).mockResolvedValue('not_enabled');
+      'hasVortexEntitlement',
+    ).mockResolvedValue('not_entitled');
     checkComponentSpy = spyOn(SonarQubeClient.prototype, 'checkComponent').mockResolvedValue(true);
     detectGlobalSecretsHookSpy = spyOn(hooks, 'detectGlobalSecretsHook').mockResolvedValue(
       undefined,
@@ -95,7 +98,7 @@ describe('integrateCopilot', () => {
     checkTokenStatusSpy.mockRestore();
     discoverProjectSpy.mockRestore();
     installIntegrationSpy.mockRestore();
-    hasSqaaEntitlementSpy.mockRestore();
+    hasVortexEntitlementSpy.mockRestore();
     checkComponentSpy.mockRestore();
     detectGlobalSecretsHookSpy.mockRestore();
     resolveContextAugmentationSetupSpy.mockRestore();

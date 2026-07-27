@@ -202,7 +202,7 @@ describe('integrate antigravity', () => {
         const result = await harness.run(
           `integrate antigravity --project ${TEST_PROJECT}${isInteractive ? '' : ' --non-interactive'}`,
           {
-            ...(isInteractive ? { stdinChunks: ['\r', '\r', '\r'] } : {}),
+            ...(isInteractive ? { stdinChunks: ['\r', '\r', '\r', '\r'] } : {}),
             extraEnv: isAgent ? { ANTIGRAVITY_AGENT: '1' } : {},
           },
         );
@@ -479,11 +479,12 @@ describe('integrate antigravity', () => {
     it(
       'writes SQAA workspace rules when the org is entitled and a project key is present',
       async () => {
+        harness.state().withContextAugmentationBinaryInstalled();
         const server = await harness
           .newFakeServer()
           .withAuthToken('cloud-token')
           .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
-          .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234')
+          .withVortexEntitlement(TEST_ORG, 'test-uuid-1234')
           .withProject(TEST_PROJECT)
           .start();
         const serverUrl = server.baseUrl();
@@ -531,7 +532,7 @@ describe('integrate antigravity', () => {
           .newFakeServer()
           .withAuthToken('cloud-token')
           .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
-          .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234')
+          .withVortexEntitlement(TEST_ORG, 'test-uuid-1234')
           .start();
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
@@ -557,7 +558,7 @@ describe('integrate antigravity', () => {
           .newFakeServer()
           .withAuthToken('cloud-token')
           .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
-          .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234')
+          .withVortexEntitlement(TEST_ORG, 'test-uuid-1234')
           .withProject(TEST_PROJECT)
           .start();
         const serverUrl = server.baseUrl();
@@ -584,7 +585,7 @@ describe('integrate antigravity', () => {
           .newFakeServer()
           .withAuthToken('cloud-token')
           .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
-          .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234')
+          .withVortexEntitlement(TEST_ORG, 'test-uuid-1234')
           .withProject(TEST_PROJECT)
           .start();
         const serverUrl = server.baseUrl();

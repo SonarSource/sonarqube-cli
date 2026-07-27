@@ -59,11 +59,8 @@ function getPhaseItems(title: string): PhaseItem[] {
 describe('integrateCommand', () => {
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
-  let hasSqaaEntitlementSpy: Mock<
-    Extract<(typeof SonarQubeClient.prototype)['hasSqaaEntitlement'], (...args: any[]) => any>
-  >;
-  let hasCagEntitlementSpy: Mock<
-    Extract<(typeof SonarQubeClient.prototype)['hasCagEntitlement'], (...args: any[]) => any>
+  let hasVortexEntitlementSpy: Mock<
+    Extract<(typeof SonarQubeClient.prototype)['hasVortexEntitlement'], (...args: any[]) => any>
   >;
   let checkTokenStatusSpy: Mock<
     Extract<(typeof token)['checkTokenStatus'], (...args: any[]) => any>
@@ -96,10 +93,8 @@ describe('integrateCommand', () => {
   beforeEach(() => {
     setMockUi(true);
 
-    hasSqaaEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasSqaaEntitlement');
-    hasSqaaEntitlementSpy.mockResolvedValue('not_enabled');
-    hasCagEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasCagEntitlement');
-    hasCagEntitlementSpy.mockResolvedValue('entitled');
+    hasVortexEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasVortexEntitlement');
+    hasVortexEntitlementSpy.mockResolvedValue('not_entitled');
     resolveContextAugmentationSetupSpy = spyOn(
       contextAugmentation,
       'resolveContextAugmentationSetup',
@@ -130,8 +125,7 @@ describe('integrateCommand', () => {
     setMockUi(false);
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
-    hasSqaaEntitlementSpy.mockRestore();
-    hasCagEntitlementSpy.mockRestore();
+    hasVortexEntitlementSpy.mockRestore();
     checkTokenStatusSpy.mockRestore();
     checkComponentSpy.mockRestore();
     checkOrganizationSpy.mockRestore();
@@ -277,12 +271,12 @@ describe('integrateCommand', () => {
     expect(installIntegrationSpy).not.toHaveBeenCalled();
   });
 
-  it('checks SQAA entitlement', async () => {
-    hasSqaaEntitlementSpy.mockResolvedValue('enabled');
+  it('checks Vortex entitlement', async () => {
+    hasVortexEntitlementSpy.mockResolvedValue('enabled');
 
     await integrateClaude({}, CLOUD_AUTH);
 
-    expect(hasSqaaEntitlementSpy).toHaveBeenCalledTimes(1);
+    expect(hasVortexEntitlementSpy).toHaveBeenCalledTimes(1);
   });
 
   it('installs Context Augmentation through the declarative installer in a single call', async () => {
@@ -509,7 +503,7 @@ describe('integrateCommand', () => {
   }
 
   function mockSqaaEntitlement(hasEntitlement: boolean) {
-    hasSqaaEntitlementSpy.mockResolvedValue(hasEntitlement ? 'enabled' : 'not_enabled');
+    hasVortexEntitlementSpy.mockResolvedValue(hasEntitlement ? 'enabled' : 'not_entitled');
   }
 
   function assertMigrationAndHookInstallationRan(

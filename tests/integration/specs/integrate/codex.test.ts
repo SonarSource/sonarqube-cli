@@ -450,11 +450,12 @@ describe('integrate codex', () => {
     it(
       'installs PostToolUse SQAA hook on apply_patch and omits AGENTS.md SQAA protocol when entitled',
       async () => {
+        harness.state().withContextAugmentationBinaryInstalled();
         const server = await harness
           .newFakeServer()
           .withAuthToken('cloud-token')
           .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
-          .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234')
+          .withVortexEntitlement(TEST_ORG, 'test-uuid-1234')
           .withProject(TEST_PROJECT)
           .start();
         const serverUrl = server.baseUrl();
@@ -510,11 +511,12 @@ describe('integrate codex', () => {
     it(
       're-running does not duplicate the PostToolUse SQAA entry when entitled',
       async () => {
+        harness.state().withContextAugmentationBinaryInstalled();
         const server = await harness
           .newFakeServer()
           .withAuthToken('cloud-token')
           .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
-          .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234')
+          .withVortexEntitlement(TEST_ORG, 'test-uuid-1234')
           .withProject(TEST_PROJECT)
           .start();
         const serverUrl = server.baseUrl();
@@ -549,11 +551,12 @@ describe('integrate codex', () => {
     it(
       'preserves pre-existing non-Sonar PostToolUse entries when adding SQAA hook',
       async () => {
+        harness.state().withContextAugmentationBinaryInstalled();
         const server = await harness
           .newFakeServer()
           .withAuthToken('cloud-token')
           .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
-          .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234')
+          .withVortexEntitlement(TEST_ORG, 'test-uuid-1234')
           .withProject(TEST_PROJECT)
           .start();
         const serverUrl = server.baseUrl();
@@ -619,7 +622,7 @@ describe('integrate codex', () => {
           .newFakeServer()
           .withAuthToken('cloud-token')
           .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
-          .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234')
+          .withVortexEntitlement(TEST_ORG, 'test-uuid-1234')
           .withProject(TEST_PROJECT)
           .start();
         const serverUrl = server.baseUrl();
@@ -778,19 +781,22 @@ describe('integrate codex', () => {
           .newFakeServer()
           .withAuthToken('cloud-token')
           .withOrganizations([{ key: testOrg, name: 'My Org' }])
-          .withSqaaEntitlement(testOrg, 'test-uuid-1234')
+          .withVortexEntitlement(testOrg, 'test-uuid-1234')
           .withProject(testProject)
           .start();
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'cloud-token', testOrg);
 
-        const result = await harness.run(`integrate codex --project ${testProject}`, {
-          stdinChunks: ['\r', '\r', '\r', '\r', '\r'],
-          extraEnv: {
-            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
-            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        const result = await harness.run(
+          `integrate codex --project ${testProject} --skip-context`,
+          {
+            stdinChunks: ['\r', '\r', '\r', '\r', '\r'],
+            extraEnv: {
+              SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+              SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+            },
           },
-        });
+        );
 
         expect(result.exitCode).toBe(0);
         const output = `${result.stdout}\n${result.stderr}`;
