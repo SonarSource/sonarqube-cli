@@ -35,7 +35,7 @@ describe('FakeSonarQubeServer — UUID consistency', () => {
   it('returns cag-entitlement 200 when org has both SQAA and CAG entitlement', async () => {
     server = await new FakeSonarQubeServerBuilder()
       .withSqaaEntitlement('my-org', 'test-uuid-1234')
-      .withCagEntitlement('my-org')
+      .withCagEntitlement('my-org', 'test-uuid-1234')
       .start();
 
     const base = server.baseUrl();

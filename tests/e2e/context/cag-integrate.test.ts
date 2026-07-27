@@ -109,7 +109,7 @@ describe('sonar integrate <agent> — CAG pre-flight skip paths (real CLI, fake 
       .newFakeServer()
       .withAuthToken(TOKEN)
       .withProject(PROJECT_KEY)
-      .withCagEntitlement(ORG_KEY, { allowed: false })
+      .withVortexEntitlement(ORG_KEY, `${ORG_KEY}-uuid-v4`, { allowed: false })
       .start();
     const serverUrl = server.baseUrl();
     harness.withAuth(serverUrl, TOKEN, ORG_KEY);

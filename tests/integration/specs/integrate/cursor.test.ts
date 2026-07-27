@@ -483,7 +483,7 @@ describe('integrate cursor', () => {
         .newFakeServer()
         .withAuthToken('cloud-token')
         .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
-        .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234', options)
+        .withVortexEntitlement(TEST_ORG, 'test-uuid-1234', options)
         .withProject(TEST_PROJECT)
         .start();
       const serverUrl = server.baseUrl();
@@ -499,6 +499,7 @@ describe('integrate cursor', () => {
     it(
       'writes an always-applied .cursor/rules/sonar-agentic-analysis.mdc when entitled, project scope, with a project key',
       async () => {
+        harness.state().withContextAugmentationBinaryInstalled();
         const { extraEnv } = await setupCloudWithEntitlement();
 
         const result = await harness.run(
@@ -528,10 +529,13 @@ describe('integrate cursor', () => {
       async () => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
-        const result = await harness.run(`integrate cursor --project ${TEST_PROJECT}`, {
-          extraEnv,
-          stdinChunks: ['\r', '\r', '\r'],
-        });
+        const result = await harness.run(
+          `integrate cursor --project ${TEST_PROJECT} --skip-context`,
+          {
+            extraEnv,
+            stdinChunks: ['\r', '\r', '\r', '\r'],
+          },
+        );
 
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;
@@ -556,10 +560,10 @@ describe('integrate cursor', () => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
         const result = await harness.run(
-          `integrate cursor --project ${TEST_PROJECT}${isInteractive ? '' : ' --non-interactive'}`,
+          `integrate cursor --project ${TEST_PROJECT}${isInteractive ? '' : ' --non-interactive'} --skip-context`,
           {
             extraEnv: isAgent ? { ...extraEnv, CURSOR_AGENT: '1' } : extraEnv,
-            ...(isInteractive ? { stdinChunks: ['\r', '\r', '\r'] } : {}),
+            ...(isInteractive ? { stdinChunks: ['\r', '\r', '\r', '\r'] } : {}),
           },
         );
 
@@ -636,6 +640,7 @@ describe('integrate cursor', () => {
     it(
       're-running is idempotent — rule body is unchanged',
       async () => {
+        harness.state().withContextAugmentationBinaryInstalled();
         const { extraEnv } = await setupCloudWithEntitlement();
 
         await harness.run(`integrate cursor --project ${TEST_PROJECT} --non-interactive`, {
@@ -657,6 +662,7 @@ describe('integrate cursor', () => {
     it(
       'system reset removes the SQAA rule file',
       async () => {
+        harness.state().withContextAugmentationBinaryInstalled();
         const { extraEnv } = await setupCloudWithEntitlement();
 
         const integrateResult = await harness.run(

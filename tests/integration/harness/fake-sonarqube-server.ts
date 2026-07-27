@@ -313,14 +313,25 @@ export class FakeSonarQubeServerBuilder {
 
   withCagEntitlement(
     orgKey: string,
-    options: { uuid?: string; allowed?: boolean; hasEntitlement?: boolean } = {},
+    uuid: string,
+    options: { allowed?: boolean; hasEntitlement?: boolean } = {},
   ): this {
     const allowed = options.allowed ?? true;
     this.cagEntitlementOrgs.set(orgKey, {
-      uuid: options.uuid ?? `${orgKey}-uuid-v4`,
+      uuid,
       allowed,
       hasEntitlement: options.hasEntitlement ?? allowed,
     });
+    return this;
+  }
+
+  withVortexEntitlement(
+    orgKey: string,
+    uuid: string,
+    options: { allowed?: boolean; hasEntitlement?: boolean } = {},
+  ): this {
+    this.withSqaaEntitlement(orgKey, uuid, options);
+    this.withCagEntitlement(orgKey, uuid, options);
     return this;
   }
 

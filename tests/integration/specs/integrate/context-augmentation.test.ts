@@ -216,12 +216,14 @@ function markHarnessCwdAsGitRoot(harness: TestHarness): void {
 
 const PROJECT_KEY = 'my-project';
 const ORG_KEY = 'my-org';
+const ORG_UUID = `${ORG_KEY}-uuid-v4`;
 const TOKEN = 'cloud-token';
 // Internal "dogfooding" tools are gated on an offline org allowlist in CAG; the
 // CAG stub mirrors it (see tests/integration/resources/cag-stub.ts) so the
 // rendered skill only contains the dogfooding tools section for an allowlisted
 // organization.
 const ALLOWLISTED_ORG = 'sonarsource';
+const ALLOWLISTED_ORG_UUID = `${ALLOWLISTED_ORG}-uuid-v4`;
 const DOGFOODING_SKILL_MARKER = '## Dogfooding Tools';
 const CLAUDE_SKILL_PATH = '.claude/skills/sonar-context-augmentation/SKILL.md';
 const COPILOT_SKILL_PATH = '.github/skills/sonar-context-augmentation/SKILL.md';
@@ -252,7 +254,7 @@ describe('integrate claude — Context Augmentation', () => {
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
-        .withCagEntitlement(ORG_KEY)
+        .withVortexEntitlement(ORG_KEY, ORG_UUID)
         .withScaEnabled(true)
         .start();
       const serverUrl = server.baseUrl();
@@ -418,7 +420,7 @@ describe('integrate claude — Context Augmentation', () => {
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
-        .withCagEntitlement(ALLOWLISTED_ORG)
+        .withVortexEntitlement(ALLOWLISTED_ORG, ALLOWLISTED_ORG_UUID)
         .withScaEnabled(false)
         .start();
       const serverUrl = server.baseUrl();
@@ -457,7 +459,7 @@ describe('integrate claude — Context Augmentation', () => {
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
-        .withCagEntitlement(ORG_KEY)
+        .withVortexEntitlement(ORG_KEY, ORG_UUID)
         .withScaEnabled(true)
         .start();
       const serverUrl = server.baseUrl();
@@ -516,7 +518,7 @@ describe('integrate claude — Context Augmentation', () => {
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
-        .withCagEntitlement(ORG_KEY)
+        .withVortexEntitlement(ORG_KEY, ORG_UUID)
         .start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, TOKEN, ORG_KEY);
@@ -563,7 +565,7 @@ describe('integrate claude — Context Augmentation', () => {
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
-        .withCagEntitlement(ORG_KEY)
+        .withVortexEntitlement(ORG_KEY, ORG_UUID)
         .withScaEnabled(true)
         .start();
       const serverUrl = server.baseUrl();
@@ -636,7 +638,7 @@ describe('integrate claude — Context Augmentation', () => {
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
-        .withCagEntitlement(ORG_KEY, { allowed: false })
+        .withVortexEntitlement(ORG_KEY, ORG_UUID, { allowed: false })
         .start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, TOKEN, ORG_KEY);
@@ -676,7 +678,7 @@ describe('integrate claude — Context Augmentation', () => {
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
-        .withCagEntitlement(ORG_KEY, { allowed: false, hasEntitlement: true })
+        .withVortexEntitlement(ORG_KEY, ORG_UUID, { allowed: false, hasEntitlement: true })
         .start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, TOKEN, ORG_KEY);
@@ -753,7 +755,7 @@ describe('integrate claude — Context Augmentation', () => {
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
-        .withCagEntitlement(ORG_KEY)
+        .withVortexEntitlement(ORG_KEY, ORG_UUID)
         .start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, TOKEN, ORG_KEY);
@@ -795,7 +797,7 @@ describe('integrate claude — Context Augmentation', () => {
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
-        .withCagEntitlement(ORG_KEY)
+        .withVortexEntitlement(ORG_KEY, ORG_UUID)
         .start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, TOKEN, ORG_KEY);
@@ -833,7 +835,7 @@ describe('integrate claude — Context Augmentation', () => {
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
-        .withCagEntitlement(ORG_KEY)
+        .withVortexEntitlement(ORG_KEY, ORG_UUID)
         .start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, TOKEN, ORG_KEY);
@@ -873,7 +875,7 @@ describe('integrate claude — Context Augmentation', () => {
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
-        .withCagEntitlement(ORG_KEY)
+        .withVortexEntitlement(ORG_KEY, ORG_UUID)
         .start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, TOKEN, ORG_KEY);
@@ -913,7 +915,7 @@ describe('integrate claude — Context Augmentation', () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken(TOKEN)
-        .withCagEntitlement(ORG_KEY)
+        .withVortexEntitlement(ORG_KEY, ORG_UUID)
         .start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, TOKEN, ORG_KEY);
@@ -993,7 +995,7 @@ describe('integrate copilot — Context Augmentation', () => {
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
-        .withCagEntitlement(ORG_KEY)
+        .withVortexEntitlement(ORG_KEY, ORG_UUID)
         .withScaEnabled(false)
         .start();
       const serverUrl = server.baseUrl();
@@ -1066,7 +1068,7 @@ describe('integrate codex — Context Augmentation', () => {
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
-        .withCagEntitlement(ORG_KEY)
+        .withVortexEntitlement(ORG_KEY, ORG_UUID)
         .withScaEnabled(false)
         .start();
       const serverUrl = server.baseUrl();
@@ -1124,7 +1126,7 @@ describe('integrate codex — Context Augmentation', () => {
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
-        .withCagEntitlement(ORG_KEY)
+        .withVortexEntitlement(ORG_KEY, ORG_UUID)
         .start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, TOKEN, ORG_KEY);
@@ -1162,7 +1164,7 @@ describe('integrate codex — Context Augmentation', () => {
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
-        .withCagEntitlement(ORG_KEY, { allowed: false })
+        .withVortexEntitlement(ORG_KEY, ORG_UUID, { allowed: false })
         .start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, TOKEN, ORG_KEY);
@@ -1198,7 +1200,7 @@ describe('integrate codex — Context Augmentation', () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken(TOKEN)
-        .withCagEntitlement(ORG_KEY)
+        .withVortexEntitlement(ORG_KEY, ORG_UUID)
         .start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, TOKEN, ORG_KEY);
@@ -1245,7 +1247,7 @@ describe('integrate <agent> --global — Context Augmentation', () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken(TOKEN)
-        .withCagEntitlement(ORG_KEY)
+        .withVortexEntitlement(ORG_KEY, ORG_UUID)
         .start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, TOKEN, ORG_KEY);

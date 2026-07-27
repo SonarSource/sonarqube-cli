@@ -639,11 +639,12 @@ describe('integrate claude — SQAA entitlement guard', () => {
   it(
     'installs PostToolUse SQAA hook when Cloud org has SQAA entitlement (repair path)',
     async () => {
+      harness.state().withContextAugmentationBinaryInstalled();
       const server = await harness
         .newFakeServer()
         .withAuthToken('cloud-token')
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-        .withSqaaEntitlement('my-org', 'test-uuid-1234')
+        .withVortexEntitlement('my-org', 'test-uuid-1234')
         .withProject('my-project')
         .start();
 
@@ -682,11 +683,12 @@ describe('integrate claude — SQAA entitlement guard', () => {
   it(
     'records the project key on the declarative sonar-sqaa-hook feature after a fresh SQAA install',
     async () => {
+      harness.state().withContextAugmentationBinaryInstalled();
       const server = await harness
         .newFakeServer()
         .withAuthToken('cloud-token')
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-        .withSqaaEntitlement('my-org', 'test-uuid-1234')
+        .withVortexEntitlement('my-org', 'test-uuid-1234')
         .withProject('my-project')
         .start();
       const serverUrl = server.baseUrl();
@@ -715,7 +717,10 @@ describe('integrate claude — SQAA entitlement guard', () => {
         .newFakeServer()
         .withAuthToken('cloud-token')
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-        .withSqaaEntitlement('my-org', 'test-uuid-1234', { allowed: false, hasEntitlement: false })
+        .withVortexEntitlement('my-org', 'test-uuid-1234', {
+          allowed: false,
+          hasEntitlement: false,
+        })
         .start();
 
       const serverUrl = server.baseUrl();
@@ -747,11 +752,12 @@ describe('integrate claude — SQAA entitlement guard', () => {
   it(
     'installs the SQAA hook and warns when the org is entitled but over its usage limit',
     async () => {
+      harness.state().withContextAugmentationBinaryInstalled();
       const server = await harness
         .newFakeServer()
         .withAuthToken('cloud-token')
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-        .withSqaaEntitlement('my-org', 'test-uuid-1234', {
+        .withVortexEntitlement('my-org', 'test-uuid-1234', {
           allowed: false,
           hasEntitlement: true,
         })
@@ -804,7 +810,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
         .newFakeServer()
         .withAuthToken('cloud-token')
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-        .withSqaaEntitlement('my-org', 'test-uuid-1234')
+        .withVortexEntitlement('my-org', 'test-uuid-1234')
         .withProject('my-project')
         .start();
       const serverUrl = server.baseUrl();
@@ -828,11 +834,12 @@ describe('integrate claude — SQAA entitlement guard', () => {
   it(
     'removes obsolete sonar-a3s hook entry when sonar-sqaa is installed',
     async () => {
+      harness.state().withContextAugmentationBinaryInstalled();
       const server = await harness
         .newFakeServer()
         .withAuthToken('cloud-token')
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-        .withSqaaEntitlement('my-org', 'test-uuid-1234')
+        .withVortexEntitlement('my-org', 'test-uuid-1234')
         .withProject('my-project')
         .start();
       const serverUrl = server.baseUrl();
@@ -1122,11 +1129,12 @@ describe('integrate claude — file placement (local vs global)', () => {
     it(
       'still writes the project-scoped sonar-sqaa hook when the org has SQAA entitlement',
       async () => {
+        harness.state().withContextAugmentationBinaryInstalled();
         const server = await harness
           .newFakeServer()
           .withAuthToken('cloud-token')
           .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-          .withSqaaEntitlement('my-org', 'test-uuid-1234')
+          .withVortexEntitlement('my-org', 'test-uuid-1234')
           .withProject('proj')
           .start();
         const serverUrl = server.baseUrl();
@@ -1994,14 +2002,14 @@ describe('integrate claude — interactive feature selection', () => {
         .newFakeServer()
         .withAuthToken('cloud-token')
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-        .withSqaaEntitlement('my-org', 'test-uuid-1234')
+        .withVortexEntitlement('my-org', 'test-uuid-1234')
         .withProject('my-project')
         .start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 
-      // '\r' selects project scope, then secrets, SQAA hook, SQAA instructions, MCP, CAG prompts.
-      const result = await harness.run('integrate claude --project my-project', {
+      // '\r' selects project scope, then secrets, SQAA hook, SQAA instructions, MCP prompts.
+      const result = await harness.run('integrate claude --project my-project --skip-context', {
         stdinChunks: ['\r', '\r', '\r', '\r', '\r'],
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
