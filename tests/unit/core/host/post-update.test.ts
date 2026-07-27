@@ -25,6 +25,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
+import { supportedIntegrations } from '@/commands/integrate';
+import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import * as hooks from '@/commands/integrate/claude/hooks.ts';
 import * as configConstants from '@/core/config-constants.ts';
 import {
@@ -44,6 +46,7 @@ import {
   migrateClaudeCodeHooks,
   migrateDeclarativeIntegrations,
   migrateLegacyTelemetryEvents,
+  type PostUpdateDependencies,
   runPostUpdateActions,
   updateScaScannerBinaryIfNeeded,
   updateSecretsBinaryIfNeeded,
@@ -58,6 +61,14 @@ import { version as CURRENT_VERSION } from '../../../../package.json';
 
 const FAKE_HOME = '/fake/home';
 const homedirFn = () => FAKE_HOME;
+
+function makeDeps(): PostUpdateDependencies {
+  return {
+    supportedIntegrations,
+    claudeIntegrationId: CLAUDE_INTEGRATION_ID,
+    installHooks: hooks.installHooks,
+  };
+}
 
 function makeState(): CliState {
   return getDefaultState('1.0.0');
@@ -130,7 +141,7 @@ describe('runPostUpdateActions', () => {
   it('does nothing when state file does not exist', async () => {
     stateFileExistsSpy.mockReturnValue(false);
 
-    await runPostUpdateActions();
+    await runPostUpdateActions(makeDeps());
 
     expect(loadStateSpy).not.toHaveBeenCalled();
     expect(saveStateSpy).not.toHaveBeenCalled();
@@ -139,14 +150,14 @@ describe('runPostUpdateActions', () => {
   it('does nothing when version is already up to date', async () => {
     isNewerVersionSpy.mockReturnValue(false);
 
-    await runPostUpdateActions();
+    await runPostUpdateActions(makeDeps());
 
     expect(saveStateSpy).not.toHaveBeenCalled();
     expect(installHooksSpy).not.toHaveBeenCalled();
   });
 
   it('saves state with cliVersion bumped to the current version', async () => {
-    await runPostUpdateActions();
+    await runPostUpdateActions(makeDeps());
 
     expect(saveStateSpy).toHaveBeenCalledTimes(1);
     const savedState = saveStateSpy.mock.calls[0][0];
@@ -170,7 +181,7 @@ describe('runPostUpdateActions', () => {
       .mockReturnValueOnce(makeState()) // call 5: updateScaScannerBinaryIfNeeded
       .mockReturnValueOnce(reloadedState); // call 6: reload
 
-    await runPostUpdateActions();
+    await runPostUpdateActions(makeDeps());
 
     expect(saveStateSpy.mock.calls[0][0]).toBe(reloadedState);
   });
@@ -179,7 +190,7 @@ describe('runPostUpdateActions', () => {
     const state = makeState(); // cliVersion = '1.0.0'
     loadStateSpy.mockReturnValue(state);
 
-    await runPostUpdateActions();
+    await runPostUpdateActions(makeDeps());
 
     expect(isNewerVersionSpy).toHaveBeenCalledWith('1.0.0', CURRENT_VERSION);
   });
@@ -190,7 +201,7 @@ describe('runPostUpdateActions', () => {
       throw new Error('state load failed');
     });
 
-    const actual = await runPostUpdateActions();
+    const actual = await runPostUpdateActions(makeDeps());
 
     expect(actual).toBeUndefined();
   });
@@ -200,7 +211,7 @@ describe('runPostUpdateActions', () => {
       throw new Error('state load failed');
     });
 
-    await runPostUpdateActions();
+    await runPostUpdateActions(makeDeps());
 
     expect(saveStateSpy).not.toHaveBeenCalled();
   });
@@ -214,7 +225,7 @@ describe('runPostUpdateActions', () => {
     });
     loadStateSpy.mockReturnValue(state);
 
-    await runPostUpdateActions();
+    await runPostUpdateActions(makeDeps());
 
     const saved = saveStateSpy.mock.calls[0][0];
     expect(saved.agents['claude-code'].hooks.installed.some((h) => h.name === 'sonar-a3s')).toBe(
@@ -804,7 +815,7 @@ describe('migrateClaudeCodeHooks', () => {
   it('does not install hooks when agent is not configured and registry is empty', async () => {
     loadStateSpy.mockReturnValue(makeState()); // configured = false, no extensions
 
-    await migrateClaudeCodeHooks(homedirFn);
+    await migrateClaudeCodeHooks(hooks.installHooks, CLAUDE_INTEGRATION_ID, homedirFn);
 
     expect(installHooksSpy).not.toHaveBeenCalled();
   });
@@ -814,7 +825,7 @@ describe('migrateClaudeCodeHooks', () => {
     loadStateSpy.mockReturnValue(state);
     existsSyncSpy.mockReturnValue(false); // globalHooksDir does not exist
 
-    await migrateClaudeCodeHooks(homedirFn);
+    await migrateClaudeCodeHooks(hooks.installHooks, CLAUDE_INTEGRATION_ID, homedirFn);
 
     expect(installHooksSpy).not.toHaveBeenCalled();
   });
@@ -836,7 +847,7 @@ describe('migrateClaudeCodeHooks', () => {
     loadStateSpy.mockReturnValue(state);
     existsSyncSpy.mockReturnValue(false); // global hooks dir does not exist
 
-    await migrateClaudeCodeHooks(homedirFn);
+    await migrateClaudeCodeHooks(hooks.installHooks, CLAUDE_INTEGRATION_ID, homedirFn);
 
     expect(installHooksSpy).not.toHaveBeenCalled();
     expect(migrateHookScriptsSpy).not.toHaveBeenCalled();
@@ -868,7 +879,7 @@ describe('migrateClaudeCodeHooks', () => {
     });
     loadStateSpy.mockReturnValue(state);
 
-    await migrateClaudeCodeHooks(homedirFn);
+    await migrateClaudeCodeHooks(hooks.installHooks, CLAUDE_INTEGRATION_ID, homedirFn);
 
     expect(installHooksSpy).not.toHaveBeenCalled();
     expect(migrateHookScriptsSpy).not.toHaveBeenCalled();
@@ -887,7 +898,7 @@ describe('migrateClaudeCodeHooks', () => {
     });
     loadStateSpy.mockReturnValue(state);
 
-    await migrateClaudeCodeHooks(homedirFn);
+    await migrateClaudeCodeHooks(hooks.installHooks, CLAUDE_INTEGRATION_ID, homedirFn);
 
     expect(installHooksSpy).toHaveBeenCalledTimes(1);
     expect(migrateHookScriptsSpy).toHaveBeenCalledTimes(1);
@@ -897,7 +908,7 @@ describe('migrateClaudeCodeHooks', () => {
     const state = makeStateWithExtensions([makeExtension('/proj/root', false)]);
     loadStateSpy.mockReturnValue(state);
 
-    await migrateClaudeCodeHooks(homedirFn);
+    await migrateClaudeCodeHooks(hooks.installHooks, CLAUDE_INTEGRATION_ID, homedirFn);
 
     expect(installHooksSpy).toHaveBeenCalledTimes(1);
   });
@@ -906,7 +917,7 @@ describe('migrateClaudeCodeHooks', () => {
     const state = makeStateWithExtensions([makeExtension('/proj/root', false)]);
     loadStateSpy.mockReturnValue(state);
 
-    await migrateClaudeCodeHooks(homedirFn);
+    await migrateClaudeCodeHooks(hooks.installHooks, CLAUDE_INTEGRATION_ID, homedirFn);
 
     expect(installHooksSpy).toHaveBeenCalledWith('/proj/root', undefined, false);
   });
@@ -915,7 +926,7 @@ describe('migrateClaudeCodeHooks', () => {
     const state = makeStateWithExtensions([makeExtension('/proj/root', true)]);
     loadStateSpy.mockReturnValue(state);
 
-    await migrateClaudeCodeHooks(homedirFn);
+    await migrateClaudeCodeHooks(hooks.installHooks, CLAUDE_INTEGRATION_ID, homedirFn);
 
     expect(installHooksSpy).toHaveBeenCalledWith('/proj/root', FAKE_HOME, false);
   });
@@ -924,7 +935,7 @@ describe('migrateClaudeCodeHooks', () => {
     const state = makeStateWithExtensions([makeExtension('/proj/root', false)]);
     loadStateSpy.mockReturnValue(state);
 
-    await migrateClaudeCodeHooks(homedirFn);
+    await migrateClaudeCodeHooks(hooks.installHooks, CLAUDE_INTEGRATION_ID, homedirFn);
 
     expect(migrateHookScriptsSpy).toHaveBeenCalledTimes(1);
     expect(migrateHookScriptsSpy).toHaveBeenCalledWith('/proj/root', undefined);
@@ -937,7 +948,7 @@ describe('migrateClaudeCodeHooks', () => {
     ]);
     loadStateSpy.mockReturnValue(state);
 
-    await migrateClaudeCodeHooks(homedirFn);
+    await migrateClaudeCodeHooks(hooks.installHooks, CLAUDE_INTEGRATION_ID, homedirFn);
 
     expect(installHooksSpy).toHaveBeenCalledTimes(1);
   });
@@ -949,7 +960,7 @@ describe('migrateClaudeCodeHooks', () => {
     ]);
     loadStateSpy.mockReturnValue(state);
 
-    await migrateClaudeCodeHooks(homedirFn);
+    await migrateClaudeCodeHooks(hooks.installHooks, CLAUDE_INTEGRATION_ID, homedirFn);
 
     expect(installHooksSpy).toHaveBeenCalledTimes(2);
   });
@@ -959,7 +970,7 @@ describe('migrateClaudeCodeHooks', () => {
     loadStateSpy.mockReturnValue(state);
     existsSyncSpy.mockReturnValue(true); // globalHooksDir exists
 
-    await migrateClaudeCodeHooks(homedirFn);
+    await migrateClaudeCodeHooks(hooks.installHooks, CLAUDE_INTEGRATION_ID, homedirFn);
 
     expect(installHooksSpy).toHaveBeenCalledTimes(1);
   });
@@ -969,7 +980,7 @@ describe('migrateClaudeCodeHooks', () => {
     loadStateSpy.mockReturnValue(state);
     existsSyncSpy.mockReturnValue(true);
 
-    await migrateClaudeCodeHooks(homedirFn);
+    await migrateClaudeCodeHooks(hooks.installHooks, CLAUDE_INTEGRATION_ID, homedirFn);
 
     expect(installHooksSpy).toHaveBeenCalledWith(FAKE_HOME, FAKE_HOME, false);
   });
@@ -979,7 +990,7 @@ describe('migrateClaudeCodeHooks', () => {
     loadStateSpy.mockReturnValue(state);
     existsSyncSpy.mockReturnValue(true); // hooks dir exists, but shouldn't matter
 
-    await migrateClaudeCodeHooks(homedirFn);
+    await migrateClaudeCodeHooks(hooks.installHooks, CLAUDE_INTEGRATION_ID, homedirFn);
 
     expect(installHooksSpy).not.toHaveBeenCalled();
   });
@@ -994,7 +1005,7 @@ describe('migrateClaudeCodeHooks', () => {
       throw new Error('migrate failed');
     });
 
-    await migrateClaudeCodeHooks(homedirFn);
+    await migrateClaudeCodeHooks(hooks.installHooks, CLAUDE_INTEGRATION_ID, homedirFn);
 
     // First location failed, but second location still ran
     expect(installHooksSpy).toHaveBeenCalledTimes(1);
@@ -1006,7 +1017,11 @@ describe('migrateClaudeCodeHooks', () => {
     loadStateSpy.mockReturnValue(state);
     installHooksSpy.mockRejectedValue(new Error('hook install failed'));
 
-    const actual = await migrateClaudeCodeHooks(homedirFn);
+    const actual = await migrateClaudeCodeHooks(
+      hooks.installHooks,
+      CLAUDE_INTEGRATION_ID,
+      homedirFn,
+    );
 
     expect(actual).toBeUndefined();
   });
@@ -1018,7 +1033,7 @@ describe('migrateClaudeCodeHooks', () => {
     ]);
     loadStateSpy.mockReturnValue(state);
 
-    await migrateClaudeCodeHooks(homedirFn);
+    await migrateClaudeCodeHooks(hooks.installHooks, CLAUDE_INTEGRATION_ID, homedirFn);
 
     expect(removeObsoleteHookArtifactsSpy).toHaveBeenCalledTimes(2);
     expect(removeObsoleteHookArtifactsSpy).toHaveBeenCalledWith(
