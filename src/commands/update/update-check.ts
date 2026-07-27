@@ -24,6 +24,7 @@ import { rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import {
   CLI_STABLE_VERSION_PATH,
   SONARSOURCE_BINARIES_URL,
@@ -31,10 +32,9 @@ import {
 } from '@/core/config-constants.ts';
 import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
 import { isWindows } from '@/core/host/platform-detector.ts';
+import { Version } from '@/core/version.ts';
 
 import { version as CURRENT_VERSION } from '../../../package.json';
-import { CommandFailedError } from '../_common/error.ts';
-import { Version } from '../_common/version.ts';
 
 const UPDATE_CHECK_TIMEOUT_MS = 5000;
 /** Best-effort background fetch after eligible commands — fail fast to avoid blocking UX. */

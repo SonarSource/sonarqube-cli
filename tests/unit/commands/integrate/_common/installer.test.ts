@@ -25,11 +25,11 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
-import { CommandFailedError } from '../../../../../src/commands/_common/error.ts';
 import {
   type DependencyDeclaration,
   type FeatureContainer,

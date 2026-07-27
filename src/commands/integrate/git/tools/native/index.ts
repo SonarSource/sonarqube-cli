@@ -20,10 +20,10 @@
 
 import { join } from 'node:path';
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 
-import { CommandFailedError } from '../../../../_common/error.ts';
 import { resolveGitHooksDir } from '../../../../_common/git-repo.ts';
 import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependencies';
 import { wholeFile, wholeFileRemover } from '../../../_common/registry/resources';

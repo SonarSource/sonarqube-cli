@@ -18,8 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { isNewerVersion, stripBuildNumber } from '@/core/host/version.ts';
-
 export class Version {
   constructor(readonly text: string) {}
 
@@ -35,4 +33,28 @@ export class Version {
   toString(): string {
     return this.text;
   }
+}
+
+/**
+ * Strips the build number (4th segment) from a version string.
+ * The install script version may include a build number (e.g. "0.5.0.241") while
+ * the CLI version from package.json only has three segments ("0.5.0").
+ */
+export function stripBuildNumber(version: string): string {
+  const SEMVER_SEGMENTS = 3;
+  return version.split('.').slice(0, SEMVER_SEGMENTS).join('.');
+}
+
+/** Returns true when `candidate` is strictly newer than `current` (semver, numeric comparison). */
+export function isNewerVersion(current: string, candidate: string): boolean {
+  const parse = (v: string): number[] => v.split('.').map(Number);
+  const curr = parse(current);
+  const cand = parse(candidate);
+  for (let i = 0; i < Math.max(curr.length, cand.length); i++) {
+    const c = curr[i] ?? 0;
+    const f = cand[i] ?? 0;
+    if (f > c) return true;
+    if (f < c) return false;
+  }
+  return false;
 }

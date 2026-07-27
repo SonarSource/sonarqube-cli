@@ -23,11 +23,11 @@
 import { existsSync, statSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 
 import { PRE_COMMIT_CONFIG_FILE } from '../integrate/git/tools/pre-commit';
-import { CommandFailedError } from './error.ts';
 
 /**
  * Resolves the directory git uses for hooks (core.hooksPath or .git/hooks).

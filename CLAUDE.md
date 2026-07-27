@@ -117,7 +117,7 @@ All telemetry events (`CliCommandExecuted` from `storeEvent`, `CliAnalysisComple
 
 ## Error handling
 
-Please use the exception types defined in `src/commands/_common/error.ts` for production code. If you need to throw an error from a mock in test code, it's fine to use the generic `Error` type.
+Please use the exception types defined in `src/core/command-error.ts` for production code. If you need to throw an error from a mock in test code, it's fine to use the generic `Error` type.
 
 Error subclasses extend the abstract `CliError` and carry their own `exitCode`, which `SonarCommand.runCommand()` forwards to `process.exitCode`:
 

@@ -18,11 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 import { print } from '@/core/ui';
 
-import { CommandFailedError } from '../_common/error.ts';
 import { resolveSecretsBinaryPath } from '../_common/install/secrets.ts';
 import {
   EXIT_CODE_SECRETS_FOUND,

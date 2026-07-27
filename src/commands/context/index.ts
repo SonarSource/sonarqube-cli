@@ -21,9 +21,9 @@
 import { spawn } from 'node:child_process';
 
 import { buildContextAugmentationEnv } from '@/commands/_common/context-augmentation-env.ts';
-import { CommandFailedError } from '@/commands/_common/error.ts';
 import { resolveContextAugmentationBinaryPath } from '@/commands/_common/install/context-augmentation.ts';
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
+import { CommandFailedError } from '@/core/command-error.ts';
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { resolveAuth, type ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { resolveContextWorkspaceRoot } from '@/core/host/git-worktree.ts';

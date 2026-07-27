@@ -28,8 +28,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { CommandFailedError } from '@/commands/_common/error.ts';
 import { runMcp } from '@/commands/run/mcp.ts';
+import { CommandFailedError } from '@/core/command-error.ts';
 import { SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '@/core/config-constants.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import type { ProxyGroup, ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';

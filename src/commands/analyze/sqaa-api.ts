@@ -22,6 +22,7 @@
 
 import { readFileSync } from 'node:fs';
 
+import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { getSqaaRetry503BaseDelayMs } from '@/core/config-constants.ts';
 import { toRelativePosixPath as toRelativePosixPathOrNull } from '@/core/io/fs-utils.ts';
 import type { SqaaAnalysisFile, SqaaIssue } from '@/core/server/client.ts';
@@ -32,7 +33,6 @@ import {
   SqaaForbiddenError,
 } from '@/core/server/errors.ts';
 
-import { CommandFailedError, InvalidOptionError } from '../_common/error.ts';
 import type { CloudAuth } from './sqaa-auth.ts';
 import { type PackChunksLimits, packFilesIntoChunks, type SqaaChunkFile } from './sqaa-chunking.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';

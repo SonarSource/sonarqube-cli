@@ -18,8 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CommandFailedError, InvalidOptionError } from '@/commands/_common/error.ts';
 import { type BrowserAuthResult, generateTokenViaBrowser } from '@/commands/_common/token.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 import { cloudRegionFromUrl, isSonarQubeCloud } from '@/core/host/auth-resolver.ts';
 import {

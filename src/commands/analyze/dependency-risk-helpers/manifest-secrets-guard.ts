@@ -21,12 +21,12 @@
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import logger from '@/core/observability/logger.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 import { withSpinner } from '@/core/ui';
 
-import { CommandFailedError } from '../../_common/error.ts';
 import { formatSpawnOutput } from '../../_common/install/install-utils.ts';
 import type { ScaScannerInstaller } from '../../_common/install/sca-scanner.ts';
 import type { SecretsInstaller } from '../../_common/install/secrets.ts';

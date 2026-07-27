@@ -20,10 +20,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import { RequestPayloadTooLargeError } from '@/core/server/errors.ts';
 import { SqaaProgress } from '@/core/ui/components/sqaa-progress.ts';
 
-import { CommandFailedError } from '../../../../src/commands/_common/error.ts';
 import {
   distributeChunkResponse,
   runAnalyses,

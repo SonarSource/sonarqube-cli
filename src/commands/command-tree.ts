@@ -20,6 +20,7 @@
 
 import { type Command, Help, InvalidArgumentError, Option } from 'commander';
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import { maybeNotifyUpdateAvailable } from '@/core/host/update-notification.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
@@ -39,7 +40,6 @@ import {
 import { blank, error, warn } from '@/core/ui';
 
 import { version as VERSION } from '../../package.json';
-import { CommandFailedError } from './_common/error.ts';
 import { parseInteger } from './_common/parsing.ts';
 import { SonarCommand } from './_common/sonar-command.ts';
 import { analyzeAll, type AnalyzeAllOptions } from './analyze/analyze-all.ts';

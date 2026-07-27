@@ -20,10 +20,10 @@
 
 import { afterEach, describe, expect, it } from 'bun:test';
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import type { SqaaIssue } from '@/core/server/client.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
-import { CommandFailedError } from '../../../../src/commands/_common/error.ts';
 import type { FileResult, RunTally } from '../../../../src/commands/analyze/sqaa-analysis.ts';
 import {
   computeRunSummaryStats,

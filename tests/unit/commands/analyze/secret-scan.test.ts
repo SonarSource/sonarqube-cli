@@ -27,13 +27,13 @@ import * as fs from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import * as processLib from '@/core/process/process.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
-import { CommandFailedError, InvalidOptionError } from '../../../../src/commands/_common/error.ts';
 import * as installSecrets from '../../../../src/commands/_common/install/secrets.ts';
 import {
   analyzeSecrets,

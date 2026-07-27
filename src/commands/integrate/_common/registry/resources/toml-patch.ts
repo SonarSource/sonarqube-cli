@@ -23,7 +23,8 @@ import { readFile } from 'node:fs/promises';
 
 import { parse, stringify } from 'smol-toml';
 
-import { CommandFailedError } from '../../../../_common/error.ts';
+import { CommandFailedError } from '@/core/command-error.ts';
+
 import {
   PatchResource,
   type PatchResourceOptions,

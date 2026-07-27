@@ -20,7 +20,8 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { InvalidOptionError } from '../../../../src/commands/_common/error.ts';
+import { InvalidOptionError } from '@/core/command-error.ts';
+
 import {
   labelAnalysisDepth,
   parseSqaaDepthOption,

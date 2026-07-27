@@ -48,11 +48,11 @@ import {
   updateScaScannerBinaryIfNeeded,
   updateSecretsBinaryIfNeeded,
 } from '@/core/host/post-update.ts';
-import * as versionLib from '@/core/host/version.ts';
 import type { CliState, HookExtension, StoredCommandExecutedEvent } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import * as telemetryEvents from '@/core/telemetry/telemetry-events.ts';
+import * as versionLib from '@/core/version.ts';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
 

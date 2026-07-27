@@ -24,7 +24,6 @@ import {
   SonarCommand,
   type UpdateNotificationCondition,
 } from '@/commands/_common/sonar-command.ts';
-import { Version } from '@/commands/_common/version.ts';
 import {
   BACKGROUND_UPDATE_CHECK_TIMEOUT_MS,
   fetchLatestVersion,
@@ -32,6 +31,7 @@ import {
 import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { isFormattedOutputMode, text } from '@/core/ui';
 import { cyan } from '@/core/ui/colors.ts';
+import { Version } from '@/core/version.ts';
 
 import { version as CURRENT_VERSION } from '../../../package.json';
 import type { CliUpdateCheckState } from '../state/state.ts';

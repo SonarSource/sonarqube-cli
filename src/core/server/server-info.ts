@@ -19,7 +19,7 @@
  */
 
 import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
-import { isNewerVersion } from '@/core/host/version.ts';
+import { isNewerVersion } from '@/core/version.ts';
 
 import { version as VERSION } from '../../../package.json';
 import { ApiCallError } from '../errors.ts';
