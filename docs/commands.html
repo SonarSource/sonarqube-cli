@@ -52,12 +52,15 @@
       <span class="brand-mark brand-mark--sonar" aria-hidden="true"></span>
     </a>
     <span class="brand-separator" aria-hidden="true"></span>
-    <a href="https://www.sonarsource.com/" class="brand-home-link brand-home-link--cli" title="SonarQube CLI on SonarSource" aria-label="SonarQube CLI on SonarSource">
+    <a href="index.html" class="brand-home-link brand-home-link--cli" title="SonarQube CLI home" aria-label="SonarQube CLI home">
       <span class="brand-mark brand-mark--cli" aria-hidden="true"></span>
       <span class="version brand-version" id="nav-version">v1.4.0</span>
     </a>
   </div>
-  <div class="nav-links">
+  <button class="nav-hamburger" id="navHamburger" aria-label="Toggle menu" aria-expanded="false" aria-controls="nav-links">
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path fill="currentColor" d="M2 5h16v2H2zm0 4h16v2H2zm0 4h16v2H2z"/></svg>
+  </button>
+  <div class="nav-links" id="nav-links">
     <a href="index.html" class="nav-link">Home</a>
     <a href="commands.html" class="nav-link active">Commands</a>
     <a href="https://docs.sonarsource.com/sonarqube-cli" class="nav-link nav-link-secondary" target="_blank" rel="noopener">Docs</a>
@@ -504,7 +507,7 @@ function renderDetail(cmd) {
       const allowedHtml = opt.allowedValues && opt.allowedValues.length
         ? `<div class="opt-allowed">${opt.allowedValues.map(v => `<code class="opt-allowed-val">${escHtml(v)}</code>`).join('')}</div>`
         : '';
-      parts.push(`<tr><td>${flags}</td><td>${typeBadge}</td><td>${req}</td><td>${escHtml(opt.description)}${allowedHtml}</td><td>${def}</td></tr>`);
+      parts.push(`<tr><td data-label="Option">${flags}</td><td data-label="Type">${typeBadge}</td><td data-label="Required">${req}</td><td data-label="Description">${escHtml(opt.description)}${allowedHtml}</td><td data-label="Default">${def}</td></tr>`);
     }
     parts.push(`</tbody></table></div>`);
   }
@@ -521,7 +524,7 @@ function renderDetail(cmd) {
       const req = arg.required
         ? `<span class="opt-req-yes">Yes</span>`
         : `<span class="opt-req-no">No</span>`;
-      parts.push(`<tr><td><span class="arg-name">${displayName}</span></td><td>${req}</td><td>${escHtml(arg.description)}</td></tr>`);
+      parts.push(`<tr><td data-label="Argument"><span class="arg-name">${displayName}</span></td><td data-label="Required">${req}</td><td data-label="Description">${escHtml(arg.description)}</td></tr>`);
     }
     parts.push(`</tbody></table></div>`);
   }
@@ -611,6 +614,26 @@ selectCommand(startId);
 if (location.hash !== '#' + startId) {
   history.replaceState(null, '', '#' + startId);
 }
+
+// ── Nav hamburger ────────────────────────────────────────────
+(function() {
+  const nav = document.querySelector('nav.nav');
+  const btn = document.getElementById('navHamburger');
+  if (!nav || !btn) return;
+  function setOpen(open) {
+    nav.classList.toggle('nav-menu-open', open);
+    btn.setAttribute('aria-expanded', String(open));
+  }
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setOpen(!nav.classList.contains('nav-menu-open'));
+  });
+  document.addEventListener('click', (e) => {
+    if (!nav.contains(e.target)) setOpen(false);
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setOpen(false); });
+  nav.querySelectorAll('.nav-links a').forEach((a) => a.addEventListener('click', () => setOpen(false)));
+})();
 
 // ── Theme toggle ─────────────────────────────────────────────
 (function() {
