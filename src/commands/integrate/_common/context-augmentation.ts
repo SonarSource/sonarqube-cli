@@ -25,7 +25,7 @@ import { CommandFailedError } from '@/core/command-error.ts';
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { isSonarQubeCloud } from '@/core/host/auth-resolver.ts';
-import { resolveRecordedRepoRoot } from '@/core/host/git-worktree.ts';
+import { resolveRecordedRepoRoot } from '@/core/host/git/worktree.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
 import logger from '@/core/observability/logger.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';

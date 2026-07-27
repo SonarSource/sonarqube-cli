@@ -26,14 +26,14 @@ import { join } from 'node:path';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { GLOBAL_HOOKS_DIR } from '@/core/config-constants.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
-import { findGitRoot } from '@/core/host/discover-git-repo.ts';
+import { findGitRoot } from '@/core/host/git/discover.ts';
+import { GitRepo, resolveGitHooksDir } from '@/core/host/git/hooks.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { blank, confirmPrompt, info, intro, phase, phaseItem, text, warn } from '@/core/ui';
 import { yellow } from '@/core/ui/colors.ts';
 
 import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint.ts';
-import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo.ts';
 import { resolveIntegrateScope } from '../_common/integrate-scope.ts';
 import { printGitPreflightSummary } from '../_common/preflight-summary.ts';
 import { installIntegration } from '../_common/registry';
@@ -77,7 +77,7 @@ interface HookInstallation {
   hooksDir: string;
 }
 
-export { resolveGitHooksDir } from '../../_common/git-repo.ts';
+export { resolveGitHooksDir } from '@/core/host/git/hooks.ts';
 
 export async function detectSonarHookInstallation(root: string): Promise<HookInstallation> {
   let hooksDir: string;

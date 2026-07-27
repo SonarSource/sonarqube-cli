@@ -24,13 +24,9 @@ import { closeSync, openSync, readSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { CommandFailedError } from '@/core/command-error.ts';
+import { resolveCurrentGitBranch, resolveGitBranchAtRepoRoot } from '@/core/host/git/branch.ts';
+import { resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
 import { spawnProcess } from '@/core/process/process.ts';
-
-import {
-  resolveCurrentGitBranch,
-  resolveGitBranchAtRepoRoot,
-  resolveGitRepoRoot,
-} from '../_common/git-worktree.ts';
 
 /** Maximum byte size per file sent to SQAA. Files exceeding this are skipped. */
 export const SQAA_MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB

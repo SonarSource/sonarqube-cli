@@ -23,11 +23,12 @@
 import { existsSync, statSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 
-import { CommandFailedError } from '@/core/command-error.ts';
-import { normalizePath } from '@/core/io/fs-utils.ts';
-import { spawnProcess } from '@/core/process/process.ts';
+import { CommandFailedError } from '../../command-error.ts';
+import { normalizePath } from '../../io/fs-utils.ts';
+import { spawnProcess } from '../../process/process.ts';
 
-import { PRE_COMMIT_CONFIG_FILE } from '../integrate/git/tools/pre-commit';
+/** Filename used by the `pre-commit` framework (https://pre-commit.com) for its config. */
+export const PRE_COMMIT_CONFIG_FILE = '.pre-commit-config.yaml';
 
 /**
  * Resolves the directory git uses for hooks (core.hooksPath or .git/hooks).
