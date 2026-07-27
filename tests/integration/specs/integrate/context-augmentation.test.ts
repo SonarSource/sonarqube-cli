@@ -326,7 +326,7 @@ describe('integrate claude — Context Augmentation', () => {
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
-        .withCagEntitlement(ORG_KEY)
+        .withVortexEntitlement(ORG_KEY, ORG_UUID)
         .withScaEnabled(true)
         .start();
       const serverUrl = server.baseUrl();
@@ -383,8 +383,7 @@ describe('integrate claude — Context Augmentation', () => {
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
-        .withCagEntitlement(ORG_KEY, { uuid: entitlementUuid })
-        .withSqaaEntitlement(ORG_KEY, entitlementUuid)
+        .withVortexEntitlement(ORG_KEY, entitlementUuid)
         .withScaEnabled(true)
         .start();
       const serverUrl = server.baseUrl();
