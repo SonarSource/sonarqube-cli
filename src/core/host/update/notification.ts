@@ -20,14 +20,14 @@
 
 import type { Command } from 'commander';
 
+import type { CliUpdateCheckState } from '@/core/state/state.ts';
+import { loadState, saveState } from '@/core/state/state-manager.ts';
 import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { isFormattedOutputMode, text } from '@/core/ui';
 import { cyan } from '@/core/ui/colors.ts';
 import { Version } from '@/core/version.ts';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
-import type { CliUpdateCheckState } from '../../state/state.ts';
-import { loadState, saveState } from '../../state/state-manager.ts';
 import { BACKGROUND_UPDATE_CHECK_TIMEOUT_MS, fetchLatestVersion } from './check.ts';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;

@@ -23,9 +23,9 @@
 // version check) and the background update-notification check in
 // core/host/update/notification.ts.
 
-import { CommandFailedError } from '../../command-error.ts';
-import { CLI_STABLE_VERSION_PATH, SONARSOURCE_BINARIES_URL } from '../../config-constants.ts';
-import { buildFetchNetworkOptions } from '../connectivity/network-config.ts';
+import { CommandFailedError } from '@/core/command-error.ts';
+import { CLI_STABLE_VERSION_PATH, SONARSOURCE_BINARIES_URL } from '@/core/config-constants.ts';
+import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
 
 const UPDATE_CHECK_TIMEOUT_MS = 5000;
 /** Best-effort background fetch after eligible commands — fail fast to avoid blocking UX. */

@@ -25,10 +25,8 @@ import { Command } from 'commander';
 import { CliError, CommandFailedError, remediationHintFor } from '@/core/command-error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { resolveAuth } from '@/core/host/auth-resolver.ts';
-import {
-  type UpdateNotificationCondition,
-  UpdateNotifier,
-} from '@/core/host/update/notification.ts';
+import type { UpdateNotificationCondition } from '@/core/host/update/notification.ts';
+import { UpdateNotifier } from '@/core/host/update/notification.ts';
 import logger from '@/core/observability/logger.ts';
 import { blank, error, print } from '@/core/ui';
 
@@ -40,8 +38,6 @@ export interface RootHelpMetadata {
   expandSubcommands?: boolean;
   label?: string;
 }
-
-export type { UpdateNotificationCondition };
 
 type CommandArgs = unknown[];
 type CommandResult = void | Promise<void>;
@@ -77,6 +73,15 @@ export class SonarCommand extends Command {
   /** Ensures subcommands created via .command() are also SonarCommand instances. */
   createCommand(name?: string): SonarCommand {
     return new SonarCommand(name, this._updateNotifier);
+  }
+
+  /**
+   * Disallowed: addCommand() attaches a command constructed independently of
+   * this tree's createCommand(), bypassing the shared per-tree state it sets up.
+   * Use .command() instead.
+   */
+  addCommand(): this {
+    throw new Error('addCommand() is disallowed; use .command() instead');
   }
 
   /**
