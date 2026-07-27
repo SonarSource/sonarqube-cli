@@ -20,6 +20,7 @@
 
 // SonarCommand — Commander Command subclass with built-in error handling and auth support
 
+import type { CommandOptions } from 'commander';
 import { Command } from 'commander';
 
 import { CliError, CommandFailedError, remediationHintFor } from '@/core/command-error.ts';
@@ -80,7 +81,7 @@ export class SonarCommand extends Command {
    * this tree's createCommand(), bypassing the shared per-tree state it sets up.
    * Use .command() instead.
    */
-  addCommand(): this {
+  addCommand(_cmd: Command, _opts?: CommandOptions): this {
     throw new Error('addCommand() is disallowed; use .command() instead');
   }
 
