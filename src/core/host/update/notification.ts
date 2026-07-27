@@ -92,7 +92,7 @@ export function shouldSuppressUpdateNotification(command: Command): boolean {
   if (process.env.CI === 'true') {
     return true;
   }
-  if (!process.stderr.isTTY || !process.stdout.isTTY) {
+  if (!process.env.SONARQUBE_CLI_MOCK_TTY && (!process.stderr.isTTY || !process.stdout.isTTY)) {
     return true;
   }
   if (isFormattedOutputMode()) {
