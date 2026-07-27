@@ -25,6 +25,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
+import * as hooks from '@/commands/integrate/claude/hooks.ts';
+import * as configConstants from '@/core/config-constants.ts';
 import {
   type ContainerIntegrationContext,
   type DependencyDeclaration,
@@ -32,9 +34,7 @@ import {
   type IntegrationContext,
   IntegrationRegistry,
   wholeFile,
-} from '@/commands/integrate/_common/registry';
-import * as hooks from '@/commands/integrate/claude/hooks.ts';
-import * as configConstants from '@/core/config-constants.ts';
+} from '@/core/framework/features';
 import { DISTRIBUTION } from '@/core/host/distribution.ts';
 import * as scaScannerInstall from '@/core/host/install/sca-scanner.ts';
 import * as secretsInstall from '@/core/host/install/secrets.ts';

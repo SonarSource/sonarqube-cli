@@ -30,6 +30,16 @@ import {
   ANTIGRAVITY_SQAA_RULE_FILE,
   CLI_COMMAND,
 } from '@/core/config-constants.ts';
+import type { IntegrationContext, IntegrationDeclaration } from '@/core/framework/features';
+import {
+  askUser,
+  jsonPatch,
+  skip,
+  sonarSecretsBinaryDependency,
+  textSnippet,
+  textSnippetRemover,
+  wholeFile,
+} from '@/core/framework/features';
 import { getMcpConfig } from '@/core/host/mcp/mcp-helper.ts';
 
 import { getRequiredStringAttr } from '../_common/attrs.ts';
@@ -51,16 +61,6 @@ import {
   sonarEndMarker,
 } from '../_common/instructions-templates.ts';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
-import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
-import {
-  askUser,
-  jsonPatch,
-  skip,
-  sonarSecretsBinaryDependency,
-  textSnippet,
-  textSnippetRemover,
-  wholeFile,
-} from '../_common/registry';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { getSecretPreToolTemplateUnix, getSecretPreToolTemplateWindows } from './hook-templates.ts';
 import {

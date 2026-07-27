@@ -32,7 +32,7 @@ import type {
   IntegrationScope,
 } from '@/core/state/state.ts';
 
-import { version as VERSION } from '../../../../../package.json';
+import { version as VERSION } from '../../../../package.json';
 import type {
   AppliedFeature,
   AppliedOperation,

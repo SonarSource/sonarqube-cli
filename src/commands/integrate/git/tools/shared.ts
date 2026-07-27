@@ -21,14 +21,14 @@
 import { platform } from 'node:os';
 
 import { CommandFailedError } from '@/core/command-error.ts';
-
-import { assertSafeSonarProjectKeyForHookScript, shellQuoteBash } from '../../_common/hooks.ts';
 import type {
   InstallDecision,
   IntegrationContext,
   PostInstallExample,
-} from '../../_common/registry';
-import { askUser, install, isContainerIntegrationContext, skip } from '../../_common/registry';
+} from '@/core/framework/features';
+import { askUser, install, isContainerIntegrationContext, skip } from '@/core/framework/features';
+
+import { assertSafeSonarProjectKeyForHookScript, shellQuoteBash } from '../../_common/hooks.ts';
 import type { GitHookType, IntegrateGitOptions } from '../options.ts';
 import { PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID } from './git-integration-subfeatures.ts';
 

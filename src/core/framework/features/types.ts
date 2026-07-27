@@ -21,8 +21,8 @@
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import type { CliState, IntegrationScope, IntegrationStateAttribute } from '@/core/state/state.ts';
 
-import type { DependencyDeclaration } from './dependencies';
-import type { RemovableResource, ResourceDeclaration, ResourceIdentity } from './resources';
+import type { DependencyDeclaration } from '../dependencies';
+import type { RemovableResource, ResourceDeclaration, ResourceIdentity } from '../resources';
 import type { InstallDecision } from './selection.ts';
 
 export type MaybePromise<T> = T | Promise<T>;

@@ -22,12 +22,12 @@ import { describe, expect, it } from 'bun:test';
 
 import { CommandFailedError } from '@/core/command-error.ts';
 import { SUPPORT_URL } from '@/core/config-constants.ts';
+import type { IntegrationContext } from '@/core/framework/features/types.ts';
 
 import {
   getOptionalStringAttr,
   getRequiredStringAttr,
 } from '../../../../../src/commands/integrate/_common/attrs.ts';
-import type { IntegrationContext } from '../../../../../src/commands/integrate/_common/registry/types.ts';
 
 function makeContext(attrs?: IntegrationContext['attrs']): IntegrationContext {
   return { attrs } as IntegrationContext;

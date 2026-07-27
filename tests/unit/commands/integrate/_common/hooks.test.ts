@@ -33,6 +33,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import type { IntegrationContext } from '@/core/framework/features';
+
 import {
   assertSafeSonarProjectKeyForHookScript,
   createAgentHookEntry,
@@ -48,7 +50,6 @@ import {
   windowsTemplate,
   writeHookScript,
 } from '../../../../../src/commands/integrate/_common/hooks.ts';
-import type { IntegrationContext } from '../../../../../src/commands/integrate/_common/registry';
 
 const IS_WINDOWS = process.platform === 'win32';
 

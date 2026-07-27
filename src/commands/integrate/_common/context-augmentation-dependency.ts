@@ -20,6 +20,15 @@
 
 import { rmSync } from 'node:fs';
 
+import type {
+  BaseDependencyOptions,
+  DependencyDeclaration,
+} from '@/core/framework/dependencies/common.ts';
+import type {
+  DependencyInstallContext,
+  InstalledDependency,
+  IntegrationContext,
+} from '@/core/framework/features/types.ts';
 import {
   installContextAugmentationBinary,
   resolveContextAugmentationBinaryPath,
@@ -27,13 +36,7 @@ import {
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
 
-import { stopAllContextAugmentationTools } from '../../context-augmentation.ts';
-import type {
-  DependencyInstallContext,
-  InstalledDependency,
-  IntegrationContext,
-} from '../types.ts';
-import type { BaseDependencyOptions, DependencyDeclaration } from './common.ts';
+import { stopAllContextAugmentationTools } from './context-augmentation.ts';
 
 export type ContextAugmentationBinaryDependencyOptions = BaseDependencyOptions;
 

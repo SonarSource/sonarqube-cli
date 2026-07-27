@@ -24,13 +24,13 @@ import type {
   InstalledIntegrationFeature,
 } from '@/core/state/state.ts';
 
-import type { DependencyDeclaration } from './dependencies';
+import type { DependencyDeclaration } from '../dependencies';
+import type { ResourceDeclaration } from '../resources';
 import {
   findInstalledFeature,
   recordInstalledFeature,
   removeInstalledFeature,
 } from './installation-recorder.ts';
-import type { ResourceDeclaration } from './resources';
 import { isFeatureContainer } from './selection.ts';
 import type {
   AppliedFeature,

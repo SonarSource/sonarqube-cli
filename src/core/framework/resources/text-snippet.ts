@@ -20,7 +20,7 @@
 
 import { rm } from 'node:fs/promises';
 
-import type { AppliedResource, IntegrationContext, MaybePromise } from '../types.ts';
+import type { AppliedResource, IntegrationContext, MaybePromise } from '../features/types.ts';
 import {
   type BaseResourceOptions,
   detectEol,

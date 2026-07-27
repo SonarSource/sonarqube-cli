@@ -25,8 +25,6 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-import { getDefaultState, type InstalledIntegrationFeature } from '@/core/state/state.ts';
-
 import type {
   ContainerIntegrationContext,
   FeatureContainer,
@@ -34,8 +32,9 @@ import type {
   IntegrationContext,
   IntegrationDeclaration,
   IntegrationInvocation,
-} from '../../../../../src/commands/integrate/_common/registry';
-import { isContainerIntegrationContext } from '../../../../../src/commands/integrate/_common/registry/types.ts';
+} from '@/core/framework/features';
+import { isContainerIntegrationContext } from '@/core/framework/features/types.ts';
+import { getDefaultState, type InstalledIntegrationFeature } from '@/core/state/state.ts';
 
 const binaryInstall = await import('@/core/host/install/binary.ts');
 void mock.module('@/core/host/install/binary.ts', () => ({
@@ -60,7 +59,7 @@ const {
   tomlPatch,
   wholeFile,
   yamlPatch,
-} = await import('../../../../../src/commands/integrate/_common/registry');
+} = await import('@/core/framework/features');
 
 type Installer = InstanceType<typeof IntegrationInstaller>;
 

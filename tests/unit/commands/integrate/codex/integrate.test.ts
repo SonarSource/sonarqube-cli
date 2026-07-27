@@ -22,8 +22,8 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'b
 
 import * as token from '@/commands/_common/token.ts';
 import * as contextAugmentation from '@/commands/integrate/_common/context-augmentation.ts';
-import * as registry from '@/commands/integrate/_common/registry';
 import { integrateCodex } from '@/commands/integrate/codex';
+import * as registry from '@/core/framework/features';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import * as discovery from '@/core/project-info.ts';

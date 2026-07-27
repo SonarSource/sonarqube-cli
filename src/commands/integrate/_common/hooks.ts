@@ -27,7 +27,8 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { IntegrationContext } from './registry';
+import type { IntegrationContext } from '@/core/framework/features';
+
 import type { HookConfig, HooksDocument, ManagedHookEntry } from './types.ts';
 
 export const SONAR_SECRETS_MARKER = 'sonar-secrets';

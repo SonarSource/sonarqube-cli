@@ -25,10 +25,10 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, writeFileSync } from 'n
 import { join } from 'node:path';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
-import type { IntegrationDeclaration } from '@/commands/integrate/_common/registry';
-import { recordInstalledFeature } from '@/commands/integrate/_common/registry/installation-recorder.ts';
 import { SQAA_HOOK_FEATURE_ID } from '@/commands/integrate/_common/sqaa-entitlement.ts';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
+import type { IntegrationDeclaration } from '@/core/framework/features';
+import { recordInstalledFeature } from '@/core/framework/features/installation-recorder.ts';
 import { type BinarySpec, buildLocalBinaryName } from '@/core/host/install/binary.ts';
 import { buildLocalCagBinaryName } from '@/core/host/install/context-augmentation.ts';
 import { SCA_SCANNER_SPEC } from '@/core/host/install/sca-scanner.ts';

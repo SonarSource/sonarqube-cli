@@ -23,15 +23,15 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { supportedIntegrations } from '@/commands/integrate';
+import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
+import { installHooks } from '@/commands/integrate/claude/hooks.ts';
 import {
   type FeatureDeclaration,
   findInstalledIntegration,
   integrationInstaller,
   type IntegrationRegistry,
   isFeatureContainer,
-} from '@/commands/integrate/_common/registry';
-import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
-import { installHooks } from '@/commands/integrate/claude/hooks.ts';
+} from '@/core/framework/features';
 import { installScaScannerBinary } from '@/core/host/install/sca-scanner.ts';
 import { installSecretsBinary } from '@/core/host/install/secrets.ts';
 import { appendTelemetryEvent } from '@/core/telemetry/telemetry-events.ts';

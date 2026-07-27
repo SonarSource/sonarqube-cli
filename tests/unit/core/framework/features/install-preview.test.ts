@@ -20,17 +20,16 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { clearMockUiCalls, getMockUiCalls, setMockTty, setMockUi } from '@/core/ui';
-
 import {
   buildInstallPreviewLines,
   renderInstallPreviewAndConfirm,
-} from '../../../../../../src/commands/integrate/_common/registry/install-preview.ts';
+} from '@/core/framework/features/install-preview.ts';
 import type {
   FeatureApplication,
   FeatureContainer,
   FeatureDeclaration,
-} from '../../../../../../src/commands/integrate/_common/registry/types.ts';
+} from '@/core/framework/features/types.ts';
+import { clearMockUiCalls, getMockUiCalls, setMockTty, setMockUi } from '@/core/ui';
 
 function application(feature: FeatureDeclaration): FeatureApplication {
   return { feature, targetRoot: '/repo', scope: 'project' };

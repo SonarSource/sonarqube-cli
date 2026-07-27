@@ -22,6 +22,7 @@
 
 import { homedir } from 'node:os';
 
+import { installIntegration } from '@/core/framework/features';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { OBSOLETE_A3S_MARKER, removeObsoleteHookArtifacts } from '@/core/host/migration.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
@@ -35,7 +36,6 @@ import {
   buildRecordedIntegrationAttrs,
   resolveContextAugmentationSetup,
 } from '../_common/context-augmentation.ts';
-import { installIntegration } from '../_common/registry';
 import { resolveSqaaSetup } from '../_common/sqaa-entitlement.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { supportedIntegrations } from '../index.ts';

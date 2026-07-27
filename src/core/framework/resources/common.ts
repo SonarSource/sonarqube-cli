@@ -24,7 +24,7 @@ import { EOL } from 'node:os';
 import { dirname } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 
-import type { AppliedResource, IntegrationContext, MaybePromise } from '../types.ts';
+import type { AppliedResource, IntegrationContext, MaybePromise } from '../features/types.ts';
 
 const EXECUTABLE_FILE_MODE = 0o755;
 

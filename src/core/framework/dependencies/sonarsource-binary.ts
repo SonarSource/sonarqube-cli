@@ -38,7 +38,7 @@ import type {
   DependencyInstallContext,
   InstalledDependency,
   IntegrationContext,
-} from '../types.ts';
+} from '../features/types.ts';
 import { type BaseDependencyOptions, type DependencyDeclaration } from './common.ts';
 
 export interface SonarSourceBinaryDescriptor {

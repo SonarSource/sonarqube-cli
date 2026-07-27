@@ -23,6 +23,7 @@
 // agent-specific feature flags, resolve Context Augmentation, assemble the
 // integration options and recorded attrs, and run the install.
 
+import { installIntegration } from '@/core/framework/features';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 
 import { supportedIntegrations } from '../index.ts';
@@ -34,7 +35,6 @@ import {
   buildRecordedIntegrationAttrs,
   resolveContextAugmentationSetup,
 } from './context-augmentation.ts';
-import { installIntegration } from './registry';
 import type { IntegrateAgentOptions } from './types.ts';
 
 export interface FinalizeAgentInstallParams<TOptions extends IntegrateAgentOptions> {

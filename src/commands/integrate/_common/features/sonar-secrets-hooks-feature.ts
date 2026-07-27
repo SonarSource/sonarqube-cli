@@ -20,6 +20,16 @@
 
 import { join } from 'node:path';
 
+import { sonarSecretsBinaryDependency } from '@/core/framework/dependencies';
+import { isFeatureInstalledGloballyForProject } from '@/core/framework/features/installation-recorder.ts';
+import { askUser, skip } from '@/core/framework/features/selection.ts';
+import type {
+  FeatureDeclaration,
+  FeaturePreview,
+  IntegrationContext,
+  PostInstallExample,
+} from '@/core/framework/features/types.ts';
+import { jsonPatch, type PlatformSpecificContent, wholeFile } from '@/core/framework/resources';
 import type { CliState, IntegrationScope } from '@/core/state/state.ts';
 
 import {
@@ -28,16 +38,6 @@ import {
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../hooks.ts';
-import { sonarSecretsBinaryDependency } from '../registry/dependencies';
-import { isFeatureInstalledGloballyForProject } from '../registry/installation-recorder.ts';
-import { jsonPatch, type PlatformSpecificContent, wholeFile } from '../registry/resources';
-import { askUser, skip } from '../registry/selection.ts';
-import type {
-  FeatureDeclaration,
-  FeaturePreview,
-  IntegrationContext,
-  PostInstallExample,
-} from '../registry/types.ts';
 
 const SONAR_SECRETS_HOOKS_FEATURE_ID = 'sonar-secrets-hooks';
 
