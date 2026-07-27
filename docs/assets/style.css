@@ -374,7 +374,6 @@ a:hover { text-decoration: underline; }
     align-self: flex-start;
     margin-top: 4px;
   }
-  .nav { position: relative; }
 }
 
 /* ─── Code blocks ────────────────────────────────────────────── */
