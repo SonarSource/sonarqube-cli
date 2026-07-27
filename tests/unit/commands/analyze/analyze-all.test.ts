@@ -25,10 +25,10 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import * as installSecrets from '@/core/host/install/secrets.ts';
 import * as processLib from '@/core/process/process.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
-import * as installSecrets from '../../../../src/commands/_common/install/secrets.ts';
 import { analyzeAll } from '../../../../src/commands/analyze/analyze-all.ts';
 import * as sqaaModule from '../../../../src/commands/analyze/sqaa.ts';
 import * as sqaaFileArg from '../../../../src/commands/analyze/sqaa-file-arg.ts';

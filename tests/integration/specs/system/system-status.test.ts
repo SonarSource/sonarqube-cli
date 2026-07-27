@@ -26,9 +26,9 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR_FROM_AGENTS } from '@/core/config-constants.ts';
+import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
 
 import { version as CLI_VERSION } from '../../../../package.json';
-import { SECRETS_SPEC } from '../../../../src/commands/_common/install/secrets';
 import {
   formatAntigravityHookCommand,
   hookScriptName,

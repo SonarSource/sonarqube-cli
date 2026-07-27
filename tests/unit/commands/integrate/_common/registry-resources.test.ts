@@ -33,8 +33,8 @@ import type {
   IntegrationDeclaration,
 } from '../../../../../src/commands/integrate/_common/registry';
 
-const binaryInstall = await import('../../../../../src/commands/_common/install/binary.ts');
-await mock.module('../../../../../src/commands/_common/install/binary.ts', () => ({
+const binaryInstall = await import('@/core/host/install/binary.ts');
+await mock.module('@/core/host/install/binary.ts', () => ({
   ...binaryInstall,
 }));
 

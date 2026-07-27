@@ -26,7 +26,7 @@ import {
   extractFileFromTar,
   extractFileFromTarGz,
   TAR_BLOCK_SIZE,
-} from '@/commands/_common/install/tar.ts';
+} from '@/core/host/install/tar.ts';
 
 const NAME_LEN = 100;
 const MODE_OFFSET = 100;

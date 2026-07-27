@@ -37,8 +37,8 @@ import type {
 } from '../../../../../src/commands/integrate/_common/registry';
 import { isContainerIntegrationContext } from '../../../../../src/commands/integrate/_common/registry/types.ts';
 
-const binaryInstall = await import('../../../../../src/commands/_common/install/binary.ts');
-void mock.module('../../../../../src/commands/_common/install/binary.ts', () => ({
+const binaryInstall = await import('@/core/host/install/binary.ts');
+void mock.module('@/core/host/install/binary.ts', () => ({
   ...binaryInstall,
 }));
 

@@ -34,6 +34,9 @@ import { existsSync, mkdirSync, statSync } from 'node:fs';
 import { chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import type { BinarySpec } from '@/core/host/install/binary.ts';
+import { SCA_SCANNER_SPEC } from '@/core/host/install/sca-scanner.ts';
+import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
 import { detectPlatform } from '@/core/host/platform-detector.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
 import {
@@ -43,9 +46,6 @@ import {
   verifyBinarySignature,
 } from '@/core/host/sonarsource-releases.ts';
 
-import type { BinarySpec } from '../src/commands/_common/install/binary.js';
-import { SCA_SCANNER_SPEC } from '../src/commands/_common/install/sca-scanner.js';
-import { SECRETS_SPEC } from '../src/commands/_common/install/secrets.js';
 import { DEPENDENCY_ARTIFACTS_DIR } from './dependency-artifacts-path.js';
 
 const RESOURCES_DIR = join(import.meta.dir, '..', 'tests', 'integration', 'resources');

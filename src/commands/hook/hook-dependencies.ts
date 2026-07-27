@@ -24,10 +24,10 @@
 import { CommandFailedError } from '@/core/command-error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { isEnvBasedAuth, resolveAuth } from '@/core/host/auth-resolver.ts';
+import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
 import type { SecretsCallerCommand } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 import { warn } from '@/core/ui';
 
-import { resolveSecretsBinaryPath } from '../_common/install/secrets.ts';
 import {
   runSecretsBinary,
   runSecretsBinaryOnText,

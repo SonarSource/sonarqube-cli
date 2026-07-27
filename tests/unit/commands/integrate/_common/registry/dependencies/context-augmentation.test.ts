@@ -29,15 +29,11 @@ import type { IntegrationContext } from '../../../../../../../src/commands/integ
 let binaryPath: string | null = null;
 const stopCalls: { path: string; existedAtCall: boolean }[] = [];
 
-const installModule =
-  await import('../../../../../../../src/commands/_common/install/context-augmentation.ts');
-await mock.module(
-  '../../../../../../../src/commands/_common/install/context-augmentation.ts',
-  () => ({
-    ...installModule,
-    resolveContextAugmentationBinaryPath: () => binaryPath,
-  }),
-);
+const installModule = await import('@/core/host/install/context-augmentation.ts');
+await mock.module('@/core/host/install/context-augmentation.ts', () => ({
+  ...installModule,
+  resolveContextAugmentationBinaryPath: () => binaryPath,
+}));
 
 const integrateCagModule =
   await import('../../../../../../../src/commands/integrate/_common/context-augmentation.ts');

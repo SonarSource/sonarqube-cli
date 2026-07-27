@@ -23,13 +23,13 @@ import { isAbsolute, join } from 'node:path';
 
 import { CommandFailedError } from '@/core/command-error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { formatSpawnOutput } from '@/core/host/install/install-utils.ts';
+import type { ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
+import type { SecretsInstaller } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 import { withSpinner } from '@/core/ui';
 
-import { formatSpawnOutput } from '../../_common/install/install-utils.ts';
-import type { ScaScannerInstaller } from '../../_common/install/sca-scanner.ts';
-import type { SecretsInstaller } from '../../_common/install/secrets.ts';
 import type { SecretsJsonIssue } from '../secrets.ts';
 import {
   EXIT_CODE_SECRETS_FOUND,

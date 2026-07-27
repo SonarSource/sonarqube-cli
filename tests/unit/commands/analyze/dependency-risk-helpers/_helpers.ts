@@ -21,7 +21,8 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { ScaScannerInstaller } from '../../../../../src/commands/_common/install/sca-scanner.ts';
+import type { ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
+
 import {
   buildRiskFilter,
   type RiskFilterDescription,

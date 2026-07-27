@@ -22,8 +22,6 @@ import * as fs from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { installScaScannerBinary } from '@/commands/_common/install/sca-scanner.ts';
-import { installSecretsBinary } from '@/commands/_common/install/secrets.ts';
 import { supportedIntegrations } from '@/commands/integrate';
 import {
   type FeatureDeclaration,
@@ -34,6 +32,8 @@ import {
 } from '@/commands/integrate/_common/registry';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import { installHooks } from '@/commands/integrate/claude/hooks.ts';
+import { installScaScannerBinary } from '@/core/host/install/sca-scanner.ts';
+import { installSecretsBinary } from '@/core/host/install/secrets.ts';
 import { appendTelemetryEvent } from '@/core/telemetry/telemetry-events.ts';
 
 import { version as CURRENT_VERSION } from '../../../package.json';

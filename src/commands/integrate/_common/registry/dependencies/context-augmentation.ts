@@ -20,13 +20,13 @@
 
 import { rmSync } from 'node:fs';
 
-import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
-import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
-
 import {
   installContextAugmentationBinary,
   resolveContextAugmentationBinaryPath,
-} from '../../../../_common/install/context-augmentation.ts';
+} from '@/core/host/install/context-augmentation.ts';
+import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
+
 import { stopAllContextAugmentationTools } from '../../context-augmentation.ts';
 import type {
   DependencyInstallContext,
