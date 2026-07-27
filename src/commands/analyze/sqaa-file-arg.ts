@@ -23,9 +23,8 @@
 import { statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { normalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
-
-import { CommandFailedError, InvalidOptionError } from '../_common/error.ts';
 
 export interface ResolvedSqaaFileEntry {
   absolutePath: string;

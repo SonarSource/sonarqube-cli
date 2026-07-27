@@ -26,7 +26,7 @@
 
 import { sep } from 'node:path';
 
-import { resolveWorktreeEquivalentPaths } from '@/core/host/git-worktree.ts';
+import { resolveWorktreeEquivalentPaths } from '@/core/host/git/worktree.ts';
 
 import { pathComparisonKey } from '../io/fs-utils.ts';
 

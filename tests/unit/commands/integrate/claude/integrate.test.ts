@@ -22,14 +22,14 @@ import { homedir } from 'node:os';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
-import { CommandFailedError } from '@/commands/_common/error.ts';
 import * as token from '@/commands/_common/token.ts';
 import * as contextAugmentation from '@/commands/integrate/_common/context-augmentation.ts';
 import * as registry from '@/commands/integrate/_common/registry';
 import { integrateClaude } from '@/commands/integrate/claude';
 import * as hooks from '@/commands/integrate/claude/hooks.ts';
+import { CommandFailedError } from '@/core/command-error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
-import * as gitWorktree from '@/core/host/git-worktree.ts';
+import * as gitWorktree from '@/core/host/git/worktree.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import * as discovery from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';

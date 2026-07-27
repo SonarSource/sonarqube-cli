@@ -21,6 +21,7 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import { BIN_DIR } from '@/core/config-constants.ts';
 import {
   buildCagPlatformSuffix,
@@ -41,7 +42,6 @@ import {
 import { recordInstallationInState } from '@/core/state/state-manager.ts';
 import { text, withSpinner } from '@/core/ui';
 
-import { CommandFailedError } from '../error.ts';
 import {
   cleanupOldVersionBinaries,
   ensureBinDirectory,

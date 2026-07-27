@@ -18,12 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test';
 
 const binaryModule = await import('../../../../../src/commands/_common/install/binary.ts');
 
 type InstallBinaryFn = typeof binaryModule.installBinary;
 type ResolveBinaryPathFn = typeof binaryModule.resolveBinaryPath;
+
+const realInstallBinary = binaryModule.installBinary;
+const realResolveBinaryPath = binaryModule.resolveBinaryPath;
 
 const notConfigured = (name: string) => () => {
   throw new Error(`${name} not configured for this test`);
@@ -35,11 +38,16 @@ let resolveBinaryPathImpl: ResolveBinaryPathFn = notConfigured('resolveBinaryPat
 void mock.module('../../../../../src/commands/_common/install/binary.ts', () => ({
   ...binaryModule,
   installBinary: ((spec, options) => installBinaryImpl(spec, options)) as InstallBinaryFn,
-  resolveBinaryPath: ((spec) => resolveBinaryPathImpl(spec)) as ResolveBinaryPathFn,
+  resolveBinaryPath: ((spec, binDir) => resolveBinaryPathImpl(spec, binDir)) as ResolveBinaryPathFn,
 }));
 
 const { DefaultSecretsInstaller, ResolveOnlySecretsInstaller } =
   await import('../../../../../src/commands/_common/install/secrets.ts');
+
+afterAll(() => {
+  installBinaryImpl = realInstallBinary;
+  resolveBinaryPathImpl = realResolveBinaryPath;
+});
 
 describe('ResolveOnlySecretsInstaller', () => {
   beforeEach(() => {

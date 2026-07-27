@@ -20,10 +20,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { InvalidOptionError } from '@/core/command-error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 
-import { InvalidOptionError } from '../../../../../src/commands/_common/error.ts';
 import type { IntegrateGitOptions } from '../../../../../src/commands/integrate/git/options.ts';
 import {
   createDepRisksSubfeature,

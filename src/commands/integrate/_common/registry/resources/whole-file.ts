@@ -20,7 +20,8 @@
 
 import { rm } from 'node:fs/promises';
 
-import { CommandFailedError } from '../../../../_common/error.ts';
+import { CommandFailedError } from '@/core/command-error.ts';
+
 import type { AppliedResource, IntegrationContext, MaybePromise } from '../types.ts';
 import {
   type BaseResourceOptions,

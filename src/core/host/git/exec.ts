@@ -18,21 +18,18 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { isNewerVersion, stripBuildNumber } from '@/core/host/version.ts';
+// Shared low-level git process runner used by every helper in this folder:
+// runs `git <args>` in `cwd` and returns stdout on success, or `undefined`
+// when git is unavailable or exits non-zero.
 
-export class Version {
-  constructor(readonly text: string) {}
+import { spawnProcess } from '../../process/process.ts';
 
-  get noBuild(): Version {
-    const noBuild = stripBuildNumber(this.text);
-    return noBuild === this.text ? this : new Version(noBuild);
-  }
-
-  isNewerThan(other: Version): boolean {
-    return isNewerVersion(other.text, this.text);
-  }
-
-  toString(): string {
-    return this.text;
+export async function tryRunGit(args: string[], cwd: string): Promise<string | undefined> {
+  try {
+    const result = await spawnProcess('git', args, { cwd });
+    if (result.exitCode !== 0) return undefined;
+    return result.stdout;
+  } catch {
+    return undefined;
   }
 }

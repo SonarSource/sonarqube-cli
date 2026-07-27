@@ -20,12 +20,11 @@
 
 // Issues command - search for SonarQube issues
 
+import { InvalidOptionError } from '@/core/command-error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { MAX_PAGE_SIZE, ProjectsClient } from '@/core/server/projects.ts';
 import { print } from '@/core/ui';
-
-import { InvalidOptionError } from '../_common/error.ts';
 
 export interface ListProjectsOptions {
   query?: string;

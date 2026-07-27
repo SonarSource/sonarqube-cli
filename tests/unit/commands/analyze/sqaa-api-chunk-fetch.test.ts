@@ -20,11 +20,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import { ENV_SQAA_RETRY_BASE_DELAY_MS } from '@/core/config-constants.ts';
 import { SonarQubeClient, type SqaaAnalysisRequest } from '@/core/server/client.ts';
 import { RequestPayloadTooLargeError, ServiceUnavailableError } from '@/core/server/errors.ts';
 
-import { CommandFailedError } from '../../../../src/commands/_common/error.ts';
 import { fetchChunkWith413Split } from '../../../../src/commands/analyze/sqaa-api.ts';
 import type { CloudAuth } from '../../../../src/commands/analyze/sqaa-auth.ts';
 import type { SqaaChunkFile } from '../../../../src/commands/analyze/sqaa-chunking.ts';

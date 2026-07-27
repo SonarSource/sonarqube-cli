@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { InvalidOptionError } from '@/commands/_common/error.ts';
+import { InvalidOptionError } from '@/core/command-error.ts';
 import { CLOUD_API_DOCS_URL, SERVER_API_DOCS_URL } from '@/core/config-constants.ts';
 import { type ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import {

@@ -25,14 +25,16 @@ import { join } from 'node:path';
 
 import * as yaml from 'js-yaml';
 
+import { CommandFailedError } from '@/core/command-error.ts';
+import { PRE_COMMIT_CONFIG_FILE } from '@/core/host/git/hooks.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 
-import { CommandFailedError } from '../../../../_common/error.ts';
 import type { IntegrationContext } from '../../../_common/registry/types.ts';
 import type { GitHookType } from '../../options.ts';
 import { resolveDepRisksArgs } from '../shared.ts';
 
-export const PRE_COMMIT_CONFIG_FILE = '.pre-commit-config.yaml';
+export { PRE_COMMIT_CONFIG_FILE };
+
 // Legacy id shared by both stages before per-stage ids existed. Retained only so existing installs
 // are recognized and migrated; never written for new installs.
 const PRE_COMMIT_LEGACY_HOOK_ID = 'sonar-secrets';

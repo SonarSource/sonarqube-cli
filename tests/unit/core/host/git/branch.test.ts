@@ -22,12 +22,9 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { resolveCurrentGitBranch } from '@/core/host/git/branch.ts';
+import { clearGitStdoutCache, resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
 import * as processLib from '@/core/process/process.ts';
-
-import {
-  resolveCurrentGitBranch,
-  resolveGitRepoRoot,
-} from '../../../../src/commands/_common/git-worktree.ts';
 
 let spawnProcessSpy: ReturnType<typeof spyOn>;
 
@@ -51,6 +48,7 @@ beforeEach(() => {
 
 afterEach(() => {
   spawnProcessSpy.mockRestore();
+  clearGitStdoutCache();
 });
 
 describe('resolveCurrentGitBranch', () => {
@@ -92,7 +90,7 @@ describe('resolveCurrentGitBranch', () => {
   });
 
   it('resolves repo root and branch when contextPath is a file (spawn cwd uses parent directory)', async () => {
-    const file = join(process.cwd(), 'src/commands/_common/git-worktree.ts');
+    const file = join(process.cwd(), 'src/core/host/git/branch.ts');
     const parentDir = dirname(file);
 
     spawnProcessSpy.mockImplementation(

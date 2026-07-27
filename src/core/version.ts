@@ -18,6 +18,23 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+export class Version {
+  constructor(readonly text: string) {}
+
+  get noBuild(): Version {
+    const noBuild = stripBuildNumber(this.text);
+    return noBuild === this.text ? this : new Version(noBuild);
+  }
+
+  isNewerThan(other: Version): boolean {
+    return isNewerVersion(other.text, this.text);
+  }
+
+  toString(): string {
+    return this.text;
+  }
+}
+
 /**
  * Strips the build number (4th segment) from a version string.
  * The install script version may include a build number (e.g. "0.5.0.241") while

@@ -20,10 +20,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { clearMockUiCalls, findMockUiCall, getMockUiCalls, setMockUi } from '@/core/ui';
 
-import { CommandFailedError } from '../../../../src/commands/_common/error.ts';
 import * as scaInstall from '../../../../src/commands/_common/install/sca-scanner.ts';
 import { ScaScanOrchestrator } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
 import type {

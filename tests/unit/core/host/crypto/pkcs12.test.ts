@@ -62,7 +62,7 @@ describe('isPkcs12Path', () => {
 });
 
 // forge outputs CRLF; fixtures use LF
-const normalizePem = (pem: string) => pem.replace(/\r\n/g, '\n');
+const normalizeLineEndings = (pem: string) => pem.replace(/\r\n/g, '\n');
 // fixture is PKCS#8; forge outputs PKCS#1 RSA
 const normalizeKey = (pem: string) => forge.pki.privateKeyToPem(forge.pki.privateKeyFromPem(pem));
 
@@ -71,8 +71,12 @@ describe('pkcs12ToPem', () => {
     const p12 = readFileSync(P12_PATH);
     const { cert, key } = pkcs12ToPem(p12, 'testpassword');
 
-    expect(normalizePem(cert)).toBe(readFileSync(CERT_PEM_PATH, 'utf-8'));
-    expect(normalizePem(key)).toBe(normalizePem(normalizeKey(readFileSync(KEY_PEM_PATH, 'utf-8'))));
+    expect(normalizeLineEndings(cert)).toBe(
+      normalizeLineEndings(readFileSync(CERT_PEM_PATH, 'utf-8')),
+    );
+    expect(normalizeLineEndings(key)).toBe(
+      normalizeLineEndings(normalizeKey(readFileSync(KEY_PEM_PATH, 'utf-8'))),
+    );
   });
 
   it('throws CryptographicError on wrong password', () => {
@@ -89,8 +93,12 @@ describe('pkcs12ToPem', () => {
     const p12 = readFileSync(P12_UNENCRYPTED_KEY_PATH);
     const { cert, key } = pkcs12ToPem(p12, undefined);
 
-    expect(normalizePem(cert)).toBe(readFileSync(CERT_PEM_PATH, 'utf-8'));
-    expect(normalizePem(key)).toBe(normalizePem(normalizeKey(readFileSync(KEY_PEM_PATH, 'utf-8'))));
+    expect(normalizeLineEndings(cert)).toBe(
+      normalizeLineEndings(readFileSync(CERT_PEM_PATH, 'utf-8')),
+    );
+    expect(normalizeLineEndings(key)).toBe(
+      normalizeLineEndings(normalizeKey(readFileSync(KEY_PEM_PATH, 'utf-8'))),
+    );
   });
 });
 
@@ -102,8 +110,8 @@ describe('pemToPkcs12', () => {
     const p12Buffer = pemToPkcs12(certPem, keyPem);
     const { cert, key } = pkcs12ToPem(p12Buffer, undefined);
 
-    expect(normalizePem(cert)).toBe(certPem);
-    expect(normalizePem(key)).toBe(normalizePem(normalizeKey(keyPem)));
+    expect(normalizeLineEndings(cert)).toBe(normalizeLineEndings(certPem));
+    expect(normalizeLineEndings(key)).toBe(normalizeLineEndings(normalizeKey(keyPem)));
   });
 
   it('decrypts an encrypted private key when passphrase is provided (round-trip)', () => {
@@ -113,8 +121,10 @@ describe('pemToPkcs12', () => {
     const p12Buffer = pemToPkcs12(certPem, encryptedKeyPem, 'testpassword');
     const { cert, key } = pkcs12ToPem(p12Buffer, undefined);
 
-    expect(normalizePem(cert)).toBe(certPem);
-    expect(normalizePem(key)).toBe(normalizePem(normalizeKey(readFileSync(KEY_PEM_PATH, 'utf-8'))));
+    expect(normalizeLineEndings(cert)).toBe(normalizeLineEndings(certPem));
+    expect(normalizeLineEndings(key)).toBe(
+      normalizeLineEndings(normalizeKey(readFileSync(KEY_PEM_PATH, 'utf-8'))),
+    );
   });
 
   it('decrypts a PKCS#8 encrypted private key when passphrase is provided (round-trip)', () => {
@@ -124,8 +134,10 @@ describe('pemToPkcs12', () => {
     const p12Buffer = pemToPkcs12(certPem, encryptedKeyPem, 'testpassword');
     const { cert, key } = pkcs12ToPem(p12Buffer, undefined);
 
-    expect(normalizePem(cert)).toBe(certPem);
-    expect(normalizePem(key)).toBe(normalizePem(normalizeKey(readFileSync(KEY_PEM_PATH, 'utf-8'))));
+    expect(normalizeLineEndings(cert)).toBe(normalizeLineEndings(certPem));
+    expect(normalizeLineEndings(key)).toBe(
+      normalizeLineEndings(normalizeKey(readFileSync(KEY_PEM_PATH, 'utf-8'))),
+    );
   });
 
   it('throws CryptographicError when key is encrypted but no passphrase is given', () => {

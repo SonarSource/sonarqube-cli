@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CommandFailedError } from '@/commands/_common/error.ts';
+import { CommandFailedError } from '@/core/command-error.ts';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
 

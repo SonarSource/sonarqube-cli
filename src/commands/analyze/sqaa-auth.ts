@@ -21,7 +21,7 @@
 // Auth and project-key resolution for SQAA commands.
 
 import { printAgentNonInteractiveAlternativeHint } from '@/commands/_common/agent-prompt-hint.ts';
-import { CommandFailedError } from '@/commands/_common/error.ts';
+import { CommandFailedError } from '@/core/command-error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { selectRecordedFeatureForDir } from '@/core/host/recorded-feature-resolver.ts';
 import logger from '@/core/observability/logger.ts';

@@ -25,10 +25,10 @@ import { join } from 'node:path';
 
 import { describe, expect, it, mock, spyOn } from 'bun:test';
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import type { SpawnResult } from '@/core/process/process.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
-import { CommandFailedError } from '../../../../../src/commands/_common/error.ts';
 import type { ScaScannerInstaller } from '../../../../../src/commands/_common/install/sca-scanner.ts';
 import { ScaDiscoverManifestsRunner } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-discover-manifests.ts';
 import type { ScaScannerInvocation } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner-runner-base.ts';

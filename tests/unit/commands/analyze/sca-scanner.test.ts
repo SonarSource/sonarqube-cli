@@ -20,7 +20,6 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 
-import { CommandFailedError } from '@/commands/_common/error.ts';
 import { ScaScannerInstaller } from '@/commands/_common/install/sca-scanner.ts';
 import {
   type AnalyzeProjectResponse,
@@ -28,6 +27,7 @@ import {
 } from '@/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import { ScaScannerInvocation } from '@/commands/analyze/dependency-risk-helpers/sca-scanner-runner-base.ts';
 import { ScaScannerSpawner } from '@/commands/analyze/dependency-risk-helpers/sca-scanner-spawner.ts';
+import { CommandFailedError } from '@/core/command-error.ts';
 import { LOG_FILE } from '@/core/config-constants.ts';
 import { clearNetworkConfigCache } from '@/core/host/connectivity/network-config.ts';
 import type { SpawnResult } from '@/core/process/process.ts';

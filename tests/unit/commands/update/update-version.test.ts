@@ -63,14 +63,6 @@ void mock.module('@/core/host/platform-detector.js', () => ({
   isWindows: isWindowsMock,
 }));
 
-// Mock the shared version helpers used by the CLI Version class.
-const { isNewerVersion: realIsNewerVersion, stripBuildNumber: realStripBuildNumber } =
-  await import('@/core/host/version.ts');
-void mock.module('@/core/host/version.ts', () => ({
-  isNewerVersion: mock(realIsNewerVersion),
-  stripBuildNumber: mock(realStripBuildNumber),
-}));
-
 const { checkForUpdate, fetchLatestVersion } = await import('@/commands/update/update-check.ts');
 const { updateVersion } = await import('@/commands/update');
 

@@ -27,10 +27,10 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import { join } from 'node:path';
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import logger from '@/core/observability/logger.ts';
 
 import { version as VERSION } from '../../../package.json';
-import { CommandFailedError } from '../../commands/_common/error.ts';
 import { getCliDir as resolveCliDir } from '../config-constants.ts';
 import { type CliState, getDefaultState } from './state.ts';
 

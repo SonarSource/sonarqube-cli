@@ -23,7 +23,6 @@ import { isAbsolute, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { CommandFailedError, InvalidOptionError } from '@/commands/_common/error.ts';
 import * as binaryInstall from '@/commands/_common/install/binary.ts';
 import * as preflightSummary from '@/commands/integrate/_common/preflight-summary.ts';
 import {
@@ -40,8 +39,9 @@ import {
 } from '@/commands/integrate/git/tools/native';
 import { PRE_COMMIT_CONFIG_FILE } from '@/commands/integrate/git/tools/pre-commit';
 import { LEGACY_HOOK_MARKER } from '@/commands/integrate/git/tools/shared.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { GLOBAL_HOOKS_DIR } from '@/core/config-constants.ts';
-import * as gitDiscovery from '@/core/host/discover-git-repo.ts';
+import * as gitDiscovery from '@/core/host/git/discover.ts';
 import * as processLib from '@/core/process/process.ts';
 import * as discovery from '@/core/project-info.ts';
 import { type CliState, getDefaultState } from '@/core/state/state.ts';

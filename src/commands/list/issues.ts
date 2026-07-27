@@ -22,6 +22,7 @@
 
 import { encode as encodeToToon } from '@toon-format/toon';
 
+import { InvalidOptionError } from '@/core/command-error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
@@ -30,8 +31,6 @@ import type { IssuesSearchParams } from '@/core/server/types.ts';
 import { print } from '@/core/ui';
 import { formatCSV } from '@/core/ui/formatter/csv.ts';
 import { formatTable } from '@/core/ui/formatter/table.ts';
-
-import { InvalidOptionError } from '../_common/error.ts';
 
 export const VALID_FORMATS = ['json', 'toon', 'table', 'csv'];
 export const VALID_STANDARD_SEVERITIES = ['INFO', 'MINOR', 'MAJOR', 'CRITICAL', 'BLOCKER'];

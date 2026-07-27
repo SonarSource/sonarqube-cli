@@ -18,9 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CommandFailedError } from '@/commands/_common/error.ts';
 import type { TokenCheckResult } from '@/commands/_common/token.ts';
 import { checkTokenStatus } from '@/commands/_common/token.ts';
+import { CommandFailedError } from '@/core/command-error.ts';
 import { ENV_ORG, ENV_SERVER, ENV_TOKEN, resolveFromEnv } from '@/core/host/auth-resolver.ts';
 import { getToken as getKeystoreToken } from '@/core/host/keychain.ts';
 import { loadState } from '@/core/state/state-repository.ts';
