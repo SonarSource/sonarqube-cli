@@ -17,7 +17,7 @@
         "smol-toml": "1.7.0",
       },
       "devDependencies": {
-        "@sentry/cli": "3.6.0",
+        "@sentry/cli": "3.6.2",
         "@sonar/scan": "4.3.8",
         "@types/bun": "1.3.14",
         "@types/istanbul-lib-coverage": "2.0.6",
@@ -137,23 +137,23 @@
 
     "@sentry/bun": ["@sentry/bun@10.64.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/bun/-/bun-10.64.0.tgz", { "dependencies": { "@apm-js-collab/code-transformer-bundler-plugins": "^0.5.0", "@sentry/core": "10.64.0", "@sentry/node": "10.64.0", "@sentry/server-utils": "10.64.0" } }, "sha512-z1cZH99RkhepTqSKyTpY1dmjEBK1q0xWpWdX6BhUpXH/MBnEtT7pYZnGjfU/u3ss/ObzzXDNq40QrZWQjWtmrg=="],
 
-    "@sentry/cli": ["@sentry/cli@3.6.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/cli/-/cli-3.6.0.tgz", { "dependencies": { "progress": "^2.0.3", "proxy-from-env": "^1.1.0", "undici": "^6.22.0", "which": "^2.0.2" }, "optionalDependencies": { "@sentry/cli-darwin": "3.6.0", "@sentry/cli-linux-arm": "3.6.0", "@sentry/cli-linux-arm64": "3.6.0", "@sentry/cli-linux-i686": "3.6.0", "@sentry/cli-linux-x64": "3.6.0", "@sentry/cli-win32-arm64": "3.6.0", "@sentry/cli-win32-i686": "3.6.0", "@sentry/cli-win32-x64": "3.6.0" }, "bin": { "sentry-cli": "bin/sentry-cli" } }, "sha512-79XC8o59G/i3VqmnoQD74a/QD/422eQQlUqiPd3sEvcYCxnaZialRVAsxuNEFd6sx4aVGpqt775MMDT9cV/lMg=="],
+    "@sentry/cli": ["@sentry/cli@3.6.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/cli/-/cli-3.6.2.tgz", { "dependencies": { "progress": "^2.0.3", "proxy-from-env": "^1.1.0", "undici": "^6.22.0", "which": "^2.0.2" }, "optionalDependencies": { "@sentry/cli-darwin": "3.6.2", "@sentry/cli-linux-arm": "3.6.2", "@sentry/cli-linux-arm64": "3.6.2", "@sentry/cli-linux-i686": "3.6.2", "@sentry/cli-linux-x64": "3.6.2", "@sentry/cli-win32-arm64": "3.6.2", "@sentry/cli-win32-i686": "3.6.2", "@sentry/cli-win32-x64": "3.6.2" }, "bin": { "sentry-cli": "bin/sentry-cli" } }, "sha512-/OcDsuz005C1tuauNhTd8/XNBHCfHiy46Wru4hAKBaziywgSA52lMSEznh6mWmHjPe/FoaDLpYt3Zd9qk3G0RA=="],
 
-    "@sentry/cli-darwin": ["@sentry/cli-darwin@3.6.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/cli-darwin/-/cli-darwin-3.6.0.tgz", { "os": "darwin" }, "sha512-C2SWHKaEP8NoYkLDr5jwrzklTwlJkzPIx7lu2LZrwBuHG/sNhWdili0ED2mD86b6Q90hlcMtuBm5IHUwcZ6FTQ=="],
+    "@sentry/cli-darwin": ["@sentry/cli-darwin@3.6.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/cli-darwin/-/cli-darwin-3.6.2.tgz", { "os": "darwin" }, "sha512-/ZIMLblj6ncwguhOPw5YL9018iaD2RBhxhbHBxjaowy1vrmnzoCurGe4n5Vv7PaS21ldAHtHNqJwNqHJS4XHUw=="],
 
-    "@sentry/cli-linux-arm": ["@sentry/cli-linux-arm@3.6.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/cli-linux-arm/-/cli-linux-arm-3.6.0.tgz", { "os": [ "linux", "android", "freebsd", ], "cpu": "arm" }, "sha512-S9xsDZTvybOGbrqqZ7DvF7JCNKp4cakDWJ4LdvQX+z82cHQSoLkYOXkA3EafDfWV9BGIRMIXitMMiSsV2PMU4g=="],
+    "@sentry/cli-linux-arm": ["@sentry/cli-linux-arm@3.6.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/cli-linux-arm/-/cli-linux-arm-3.6.2.tgz", { "os": [ "linux", "android", "freebsd", ], "cpu": "arm" }, "sha512-b2M+1ujgf7jHig9r88T2l2HEkg0XR/1Tmo1LCiPg4dsPKtTMC2Rb/f0Mto83//zkVijAA2WDBhznOz9a9Ouo7Q=="],
 
-    "@sentry/cli-linux-arm64": ["@sentry/cli-linux-arm64@3.6.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/cli-linux-arm64/-/cli-linux-arm64-3.6.0.tgz", { "os": [ "linux", "android", "freebsd", ], "cpu": "arm64" }, "sha512-Rc+DB8vuTDpwqY2BxIPnooYk2ZDYQytF+n4nfi6pZZsJtr3SFFe+3wIWVmCVqxiHkaISb33+iJIDxOOqhkSNbQ=="],
+    "@sentry/cli-linux-arm64": ["@sentry/cli-linux-arm64@3.6.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/cli-linux-arm64/-/cli-linux-arm64-3.6.2.tgz", { "os": [ "linux", "android", "freebsd", ], "cpu": "arm64" }, "sha512-KMHW+CIT5H046I1hIYJ6vZmwlbBELZDOTt9Bgue3kqpW5CuvviMeMuuIKXM2oKHr/l4Q1Xnj07oTbVNb1opTsg=="],
 
-    "@sentry/cli-linux-i686": ["@sentry/cli-linux-i686@3.6.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/cli-linux-i686/-/cli-linux-i686-3.6.0.tgz", { "os": [ "linux", "android", "freebsd", ], "cpu": "ia32" }, "sha512-PQ7+ctNmWtHgmbKa+rJheHU7D9GHJXafgWYfVW6gt7R0Ag9LxiDVYLGjrL4G/i7AGFNgudXFaLkGKNX7HUjc+g=="],
+    "@sentry/cli-linux-i686": ["@sentry/cli-linux-i686@3.6.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/cli-linux-i686/-/cli-linux-i686-3.6.2.tgz", { "os": [ "linux", "android", "freebsd", ], "cpu": "ia32" }, "sha512-tsLTOfJBoUkHfcCjUKxb/w1/WGLU00WJUO5zJztgLHKlebrjGAEiKM+8EPexb2hiW4F/P6UXL+4xXPKANk5JXQ=="],
 
-    "@sentry/cli-linux-x64": ["@sentry/cli-linux-x64@3.6.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/cli-linux-x64/-/cli-linux-x64-3.6.0.tgz", { "os": [ "linux", "android", "freebsd", ], "cpu": "x64" }, "sha512-c+7xNg5BAaPE8N2Q6pg3Q/kt97JSaskuQIjRxHaFuDbCkJvww4VozY6mW5NUMJaW48rEs3mahWKamTLqJsO3wQ=="],
+    "@sentry/cli-linux-x64": ["@sentry/cli-linux-x64@3.6.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/cli-linux-x64/-/cli-linux-x64-3.6.2.tgz", { "os": [ "linux", "android", "freebsd", ], "cpu": "x64" }, "sha512-CHwfSJYkPe4w96EovIY/iWfxHnf5gvRYh0BGHCPcQ9knhrgWUJqbHqi3lNfEDZmzCxJ76RqPrnLMW6syoSqXow=="],
 
-    "@sentry/cli-win32-arm64": ["@sentry/cli-win32-arm64@3.6.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/cli-win32-arm64/-/cli-win32-arm64-3.6.0.tgz", { "os": "win32", "cpu": "arm64" }, "sha512-zhZ7YyGreHSKZ92Mwb9h4cEyL0I/eND7W6XIUXUW0BCCmxFOMc71vlQpUw8gijHIsFDbv8c8a6VOSkeRuwbSwQ=="],
+    "@sentry/cli-win32-arm64": ["@sentry/cli-win32-arm64@3.6.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/cli-win32-arm64/-/cli-win32-arm64-3.6.2.tgz", { "os": "win32", "cpu": "arm64" }, "sha512-lTqOPbLexkKnXmuIK8qszv+trpX8fQiZAJoeClVA1+hOerVyrLP9eU2tUqTm/8YW8G/M+mu3ZxAtDvS3OpHvZw=="],
 
-    "@sentry/cli-win32-i686": ["@sentry/cli-win32-i686@3.6.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/cli-win32-i686/-/cli-win32-i686-3.6.0.tgz", { "os": "win32", "cpu": "ia32" }, "sha512-JaxzVDdyetrPBp8NHh2yNAYdDk79ROXqfAfjQwG5z6V764MMMrf2WrhQ7EwoKXOPtBLm/drbOcYgaxHuDZKGRw=="],
+    "@sentry/cli-win32-i686": ["@sentry/cli-win32-i686@3.6.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/cli-win32-i686/-/cli-win32-i686-3.6.2.tgz", { "os": "win32", "cpu": "ia32" }, "sha512-niUPoxN8p7jWrkvC0ekgpcIYEJNb5YxmuXRjUnOJrArwQs+4OPzRM+3e6JIYRXe7RDoUP63j1voYakEncuxioQ=="],
 
-    "@sentry/cli-win32-x64": ["@sentry/cli-win32-x64@3.6.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/cli-win32-x64/-/cli-win32-x64-3.6.0.tgz", { "os": "win32", "cpu": "x64" }, "sha512-LW0078VlxaUeVMMLA15A1zhkvZ5vby/lwthtBXPoBSDdTcgbTE4D4gQXM9vEapV28SvCO3fVIek3pbtrkaeDMw=="],
+    "@sentry/cli-win32-x64": ["@sentry/cli-win32-x64@3.6.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/cli-win32-x64/-/cli-win32-x64-3.6.2.tgz", { "os": "win32", "cpu": "x64" }, "sha512-Xg6ieuJr/1Ewtdpm9Kudb029lJxnfs3Ae/fLZNAOnvWOie/V4V/X+tgZ+lETC3lU+7yz7Gb0f25gKnU6sPBKVg=="],
 
     "@sentry/conventions": ["@sentry/conventions@0.15.1", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/conventions/-/conventions-0.15.1.tgz", {}, "sha512-ZLP8bRdMON3prWE2tJyImuYscCxdcJeIPIhrOs/rgyFm3C1nCh1B6gdvPj3AZ5zW08oSFFCsq7T+tYEW3h8MNA=="],
 
