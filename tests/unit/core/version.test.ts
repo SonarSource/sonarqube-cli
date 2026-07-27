@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { Version } from '@/core/version.ts';
+import { isNewerVersion, stripBuildNumber, Version } from '@/core/version.ts';
 
 describe('Version', () => {
   it('exposes the full version and derived major.minor.patch version', () => {
@@ -47,5 +47,51 @@ describe('Version', () => {
     const latest = new Version('1.2.3.456');
 
     expect(latest.isNewerThan(current)).toBe(true);
+  });
+});
+
+describe('isNewerVersion', () => {
+  it('returns true when candidate has a higher major', () => {
+    expect(isNewerVersion('1.0.0', '2.0.0')).toBe(true);
+  });
+
+  it('returns true when candidate has a higher minor', () => {
+    expect(isNewerVersion('1.2.0', '1.3.0')).toBe(true);
+  });
+
+  it('returns true when candidate has a higher patch', () => {
+    expect(isNewerVersion('1.2.3', '1.2.4')).toBe(true);
+  });
+
+  it('returns false when versions are equal', () => {
+    expect(isNewerVersion('1.2.3', '1.2.3')).toBe(false);
+  });
+
+  it('returns false when current is higher', () => {
+    expect(isNewerVersion('2.0.0', '1.9.9')).toBe(false);
+  });
+
+  it('handles four-segment versions', () => {
+    expect(isNewerVersion('1.2.3.0', '1.2.3.1')).toBe(true);
+    expect(isNewerVersion('1.2.3.1', '1.2.3.0')).toBe(false);
+  });
+
+  it('treats a missing segment as 0', () => {
+    expect(isNewerVersion('1.2.3', '1.2.3.0')).toBe(false);
+    expect(isNewerVersion('1.2.3', '1.2.3.1')).toBe(true);
+  });
+});
+
+describe('stripBuildNumber', () => {
+  it('removes the 4th segment from a version with a build number', () => {
+    expect(stripBuildNumber('0.5.0.241')).toBe('0.5.0');
+  });
+
+  it('leaves a 3-segment version unchanged', () => {
+    expect(stripBuildNumber('1.2.3')).toBe('1.2.3');
+  });
+
+  it('leaves a 2-segment version unchanged', () => {
+    expect(stripBuildNumber('1.2')).toBe('1.2');
   });
 });

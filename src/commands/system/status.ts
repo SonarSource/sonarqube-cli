@@ -45,10 +45,10 @@ import {
   SCA_SCANNER_CLI_VERSION,
   SONAR_CONTEXT_AUGMENTATION_VERSION,
 } from '@/core/host/signatures.ts';
-import { isNewerVersion, stripBuildNumber } from '@/core/host/version.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { loadState } from '@/core/state/state-repository.ts';
 import { blank, print, success, text, warn } from '@/core/ui';
+import { isNewerVersion, stripBuildNumber } from '@/core/version.ts';
 
 import { version as VERSION } from '../../../package.json';
 import { SECRETS_SPEC } from '../_common/install/secrets.ts';

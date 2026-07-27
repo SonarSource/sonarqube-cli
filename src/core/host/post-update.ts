@@ -41,6 +41,7 @@ import { getTelemetryDir } from '../config-constants.ts';
 import logger from '../observability/logger.ts';
 import type { CliState, HookExtension, InstalledIntegrationFeature } from '../state/state.ts';
 import { loadState, saveState, stateFileExists, tryLoadState } from '../state/state-repository.ts';
+import { isNewerVersion } from '../version.ts';
 import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from './install-types.ts';
 import {
   cleanObsoleteFromState,
@@ -48,7 +49,6 @@ import {
   OBSOLETE_A3S_MARKER,
   removeObsoleteHookArtifacts,
 } from './migration.ts';
-import { isNewerVersion } from './version.ts';
 
 /**
  * Runs any actions that need to happen once after the CLI has been updated.
