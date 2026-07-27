@@ -35,11 +35,10 @@ const originalEnvForNotify = { ...process.env };
 const tempHome = mkdtempSync(join(tmpdir(), 'sonar-update-notify-'));
 process.env.SONAR_USER_HOME = tempHome;
 
-const {
-  isUpdateNotificationEligible,
-  maybeNotifyUpdateAvailable,
-  shouldSuppressUpdateNotification,
-} = await import('@/core/host/update/notification.ts');
+// Importing command-tree.ts already ran every .showUpdateNotification() call
+// as a top-level side effect, registering into COMMAND_TREE's UpdateNotifier —
+// reuse that same instance here rather than constructing a fresh one.
+const updateNotifier = COMMAND_TREE.updateNotifier;
 
 function resolveCommand(path: string[]): Command {
   let current: Command = COMMAND_TREE;
@@ -55,28 +54,28 @@ function resolveCommand(path: string[]): Command {
 
 describe('update notification eligibility', () => {
   it('allows auth commands', () => {
-    expect(isUpdateNotificationEligible(resolveCommand(['auth', 'status']))).toBe(true);
+    expect(updateNotifier.isEligible(resolveCommand(['auth', 'status']))).toBe(true);
   });
 
   it('allows analyze and list data commands', () => {
-    expect(isUpdateNotificationEligible(resolveCommand(['analyze', 'agentic']))).toBe(true);
-    expect(isUpdateNotificationEligible(resolveCommand(['list', 'issues']))).toBe(true);
-    expect(isUpdateNotificationEligible(resolveCommand(['list', 'projects']))).toBe(true);
+    expect(updateNotifier.isEligible(resolveCommand(['analyze', 'agentic']))).toBe(true);
+    expect(updateNotifier.isEligible(resolveCommand(['list', 'issues']))).toBe(true);
+    expect(updateNotifier.isEligible(resolveCommand(['list', 'projects']))).toBe(true);
   });
 
   it('blocks integrate when non-interactive', () => {
     const command = resolveCommand(['integrate', 'claude']);
     command.setOptionValue('nonInteractive', true);
-    expect(shouldSuppressUpdateNotification(command)).toBe(true);
-    expect(isUpdateNotificationEligible(command)).toBe(true);
+    expect(updateNotifier.shouldSuppress(command)).toBe(true);
+    expect(updateNotifier.isEligible(command)).toBe(true);
   });
 
   it('blocks api, context, and hook commands', () => {
-    expect(isUpdateNotificationEligible(resolveCommand(['api']))).toBe(false);
-    expect(isUpdateNotificationEligible(resolveCommand(['context']))).toBe(false);
-    expect(isUpdateNotificationEligible(resolveCommand(['hook', 'git-pre-commit']))).toBe(false);
-    expect(isUpdateNotificationEligible(resolveCommand(['config', 'telemetry']))).toBe(false);
-    expect(isUpdateNotificationEligible(resolveCommand(['system', 'reset']))).toBe(false);
+    expect(updateNotifier.isEligible(resolveCommand(['api']))).toBe(false);
+    expect(updateNotifier.isEligible(resolveCommand(['context']))).toBe(false);
+    expect(updateNotifier.isEligible(resolveCommand(['hook', 'git-pre-commit']))).toBe(false);
+    expect(updateNotifier.isEligible(resolveCommand(['config', 'telemetry']))).toBe(false);
+    expect(updateNotifier.isEligible(resolveCommand(['system', 'reset']))).toBe(false);
   });
 });
 
@@ -109,25 +108,25 @@ describe('update notification suppression', () => {
   it('suppresses in CI and machine-readable modes', () => {
     const command = resolveCommand(['auth', 'status']);
     process.env.CI = 'true';
-    expect(shouldSuppressUpdateNotification(command)).toBe(true);
+    expect(updateNotifier.shouldSuppress(command)).toBe(true);
 
     delete process.env.CI;
     setFormattedOutputMode(true);
-    expect(shouldSuppressUpdateNotification(command)).toBe(true);
+    expect(updateNotifier.shouldSuppress(command)).toBe(true);
   });
 
   it('suppresses list issues when format is json', () => {
     const command = resolveCommand(['list', 'issues']);
-    expect(shouldSuppressUpdateNotification(command)).toBe(true);
+    expect(updateNotifier.shouldSuppress(command)).toBe(true);
 
     command.setOptionValue('format', 'table');
-    expect(shouldSuppressUpdateNotification(command)).toBe(false);
+    expect(updateNotifier.shouldSuppress(command)).toBe(false);
   });
 
   it('suppresses system status when --json is set', () => {
     const command = resolveCommand(['system', 'status']);
     command.setOptionValue('json', true);
-    expect(shouldSuppressUpdateNotification(command)).toBe(true);
+    expect(updateNotifier.shouldSuppress(command)).toBe(true);
   });
 });
 
@@ -141,7 +140,7 @@ function fetchUrlString(url: string | URL | Request): string {
   return url.url;
 }
 
-describe('maybeNotifyUpdateAvailable', () => {
+describe('updateNotifier.maybeNotify', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;
   let stderrSpy: ReturnType<typeof spyOn>;
   let fetchSpy: ReturnType<typeof spyOn>;
@@ -183,7 +182,7 @@ describe('maybeNotifyUpdateAvailable', () => {
   }
 
   it('prints a stderr notice when a newer version is available', async () => {
-    await maybeNotifyUpdateAvailable(resolveCommand(['auth', 'status']));
+    await updateNotifier.maybeNotify(resolveCommand(['auth', 'status']));
 
     const output = notificationOutput();
     const [major, minor, patch] = CURRENT_VERSION.split('.');
@@ -194,7 +193,7 @@ describe('maybeNotifyUpdateAvailable', () => {
   });
 
   it('persists fetch metadata in state', async () => {
-    await maybeNotifyUpdateAvailable(resolveCommand(['auth', 'status']));
+    await updateNotifier.maybeNotify(resolveCommand(['auth', 'status']));
 
     const state = JSON.parse(
       readFileSync(join(tempHome, 'sonarqube-cli', 'state.json'), 'utf8'),
@@ -213,10 +212,10 @@ describe('maybeNotifyUpdateAvailable', () => {
   it('notifies on every eligible command when an update is available', async () => {
     const command = resolveCommand(['auth', 'status']);
 
-    await maybeNotifyUpdateAvailable(command);
+    await updateNotifier.maybeNotify(command);
     stdoutSpy.mockClear();
     stderrSpy.mockClear();
-    await maybeNotifyUpdateAvailable(command);
+    await updateNotifier.maybeNotify(command);
 
     const output = notificationOutput();
     expect(output).toContain('A new version of SonarQube CLI is available');
@@ -227,12 +226,12 @@ describe('maybeNotifyUpdateAvailable', () => {
     const command = resolveCommand(['auth', 'status']);
     fetchSpy.mockImplementation(() => Promise.reject(new Error('offline')));
 
-    await maybeNotifyUpdateAvailable(command);
+    await updateNotifier.maybeNotify(command);
     expect(fetchSpy.mock.calls).toHaveLength(1);
 
     // The failed attempt is recorded, so the next command must not hit the
     // network again (which would stall on the fetch timeout).
-    await maybeNotifyUpdateAvailable(command);
+    await updateNotifier.maybeNotify(command);
     expect(fetchSpy.mock.calls).toHaveLength(1);
   });
 });

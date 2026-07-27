@@ -26,8 +26,8 @@ import { CliError, CommandFailedError, remediationHintFor } from '@/core/command
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { resolveAuth } from '@/core/host/auth-resolver.ts';
 import {
-  registerUpdateNotification,
   type UpdateNotificationCondition,
+  UpdateNotifier,
 } from '@/core/host/update/notification.ts';
 import logger from '@/core/observability/logger.ts';
 import { blank, error, print } from '@/core/ui';
@@ -61,10 +61,33 @@ type CommandResult = void | Promise<void>;
 export class SonarCommand extends Command {
   private _requiresAuth = false;
   private _rootHelp: RootHelpMetadata = {};
+  private readonly _updateNotifier: UpdateNotifier;
+
+  /**
+   * `updateNotifier` defaults to a fresh instance so the root command (the only
+   * place `new SonarCommand()` is called without it) owns the one instance the
+   * whole tree shares; every subcommand inherits it via createCommand() below
+   * instead of reading a module-level singleton.
+   */
+  constructor(name?: string, updateNotifier: UpdateNotifier = new UpdateNotifier()) {
+    super(name);
+    this._updateNotifier = updateNotifier;
+  }
 
   /** Ensures subcommands created via .command() are also SonarCommand instances. */
   createCommand(name?: string): SonarCommand {
-    return new SonarCommand(name);
+    return new SonarCommand(name, this._updateNotifier);
+  }
+
+  /**
+   * The update-notification registry shared by this command and its whole subtree.
+   * command-tree.ts builds the whole tree as top-level side effects when the
+   * module loads, registering every .showUpdateNotification() call into this
+   * instance in the process. External code (the postAction hook, unit tests)
+   * reads that already-populated instance via this getter on the root command.
+   */
+  get updateNotifier(): UpdateNotifier {
+    return this._updateNotifier;
   }
 
   /**
@@ -83,7 +106,7 @@ export class SonarCommand extends Command {
    * merged action-command options (parsed by Commander).
    */
   showUpdateNotification(when?: UpdateNotificationCondition): this {
-    registerUpdateNotification(this, when);
+    this._updateNotifier.register(this, when);
     return this;
   }
 

@@ -35,164 +35,162 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 /** When to show the post-command update notice for an opted-in command. */
 export type UpdateNotificationCondition = (opts: Record<string, unknown>) => boolean;
 
-// Per-command opt-in registry, keyed by Commander Command instance. Populated by
-// SonarCommand.showUpdateNotification() (commands/_common/sonar-command.ts) via
-// registerUpdateNotification() below, so this module owns both the write side
-// (opt-in) and the read side (eligibility check) without depending on that class.
-const updateNotificationRegistry = new WeakMap<Command, true | UpdateNotificationCondition>();
-
 /**
- * Opt a command into the post-command "new version available" stderr notice.
- * Called by SonarCommand.showUpdateNotification().
+ * Owns the per-command opt-in registry for the post-command "new version
+ * available" stderr notice, plus the eligibility/suppression checks and the
+ * actual throttled version check. There is no shared singleton here: the root
+ * `SonarCommand` (commands/_common/sonar-command.ts) owns one instance and
+ * propagates it to every subcommand, so `showUpdateNotification()` can call
+ * `register()` on it without this module depending on that class.
  */
-export function registerUpdateNotification(
-  command: Command,
-  when?: UpdateNotificationCondition,
-): void {
-  updateNotificationRegistry.set(command, when ?? true);
-}
+export class UpdateNotifier {
+  private readonly registry = new WeakMap<Command, true | UpdateNotificationCondition>();
 
-function collectCommandOpts(command: Command): Record<string, unknown> {
-  const names: Command[] = [];
-  let current: Command | null = command;
-  while (current.parent !== null) {
-    names.unshift(current);
-    current = current.parent;
+  /** Opt a command into the post-command "new version available" stderr notice. */
+  register(command: Command, when?: UpdateNotificationCondition): void {
+    this.registry.set(command, when ?? true);
   }
 
-  const merged: Record<string, unknown> = {};
-  for (const cmd of names) {
-    Object.assign(merged, cmd.opts());
+  isEligible(command: Command): boolean {
+    return this.resolve(command) !== undefined;
   }
-  return merged;
-}
 
-function resolveUpdateNotification(
-  command: Command,
-): true | UpdateNotificationCondition | undefined {
-  let current: Command | null = command;
-  while (current !== null) {
-    const when = updateNotificationRegistry.get(current);
-    if (when !== undefined) {
-      return when;
+  shouldSuppress(command: Command): boolean {
+    if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {
+      return true;
     }
-    current = current.parent;
-  }
-  return undefined;
-}
+    if (process.env.CI === 'true') {
+      return true;
+    }
+    if (!process.env.SONARQUBE_CLI_MOCK_TTY && (!process.stderr.isTTY || !process.stdout.isTTY)) {
+      return true;
+    }
+    if (isFormattedOutputMode()) {
+      return true;
+    }
 
-export function isUpdateNotificationEligible(command: Command): boolean {
-  return resolveUpdateNotification(command) !== undefined;
-}
+    const when = this.resolve(command);
+    if (typeof when === 'function' && !when(this.collectOpts(command))) {
+      return true;
+    }
 
-export function shouldSuppressUpdateNotification(command: Command): boolean {
-  if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {
-    return true;
-  }
-  if (process.env.CI === 'true') {
-    return true;
-  }
-  if (!process.env.SONARQUBE_CLI_MOCK_TTY && (!process.stderr.isTTY || !process.stdout.isTTY)) {
-    return true;
-  }
-  if (isFormattedOutputMode()) {
-    return true;
-  }
-
-  const when = resolveUpdateNotification(command);
-  if (typeof when === 'function' && !when(collectCommandOpts(command))) {
-    return true;
-  }
-
-  return false;
-}
-
-function isWithinCooldown(isoTimestamp: string | undefined, cooldownMs: number): boolean {
-  if (!isoTimestamp) {
     return false;
   }
-  const elapsed = Date.now() - Date.parse(isoTimestamp);
-  return Number.isFinite(elapsed) && elapsed >= 0 && elapsed < cooldownMs;
-}
 
-async function resolveLatestVersion(
-  updateCheck: CliUpdateCheckState | undefined,
-): Promise<{ latestVersion: string | undefined; updateCheck: CliUpdateCheckState }> {
-  if (isWithinCooldown(updateCheck?.lastCheckedAt, ONE_DAY_MS)) {
-    // Checked within the last day: reuse the cached result (which is undefined
-    // when the previous check failed) instead of hitting the network again.
-    return {
-      latestVersion: updateCheck?.latestVersion,
-      updateCheck: { ...updateCheck },
-    };
-  }
-
-  const lastCheckedAt = new Date().toISOString();
-  try {
-    const latestVersion = await fetchLatestVersion(BACKGROUND_UPDATE_CHECK_TIMEOUT_MS);
-    return {
-      latestVersion,
-      updateCheck: { ...updateCheck, lastCheckedAt, latestVersion },
-    };
-  } catch {
-    // Record the attempt so a failing check does not re-hit the network — and
-    // stall the command for up to the fetch timeout — on every invocation.
-    // Any previously cached version is preserved so we can still notify from it.
-    return {
-      latestVersion: updateCheck?.latestVersion,
-      updateCheck: { ...updateCheck, lastCheckedAt },
-    };
-  }
-}
-
-function renderUpdateNotification(currentNoBuild: string, latestNoBuild: string): void {
-  // Keep the whole notice on stderr so it never contaminates a command's stdout.
-  text('', undefined, 'stderr');
-  text(
-    `  ${cyan('ℹ')}  A new version of SonarQube CLI is available: ${currentNoBuild} → ${latestNoBuild}`,
-    undefined,
-    'stderr',
-  );
-  text(`   → Run \`sonar update\` to update to v${latestNoBuild}`, undefined, 'stderr');
-}
-
-/**
- * After eligible interactive commands, fetch binaries.sonarsource.com at most once
- * per day and print a stderr notice when a newer stable version exists.
- */
-export async function maybeNotifyUpdateAvailable(command: Command): Promise<void> {
-  if ((process.exitCode ?? 0) !== 0) {
-    return;
-  }
-  if (shouldSuppressUpdateNotification(command) || !isUpdateNotificationEligible(command)) {
-    return;
-  }
-
-  try {
-    const state = loadState();
-    const currentVersion = new Version(CURRENT_VERSION);
-    const currentNoBuild = currentVersion.noBuild.text;
-
-    const resolved = await resolveLatestVersion(state.config.updateCheck);
-
-    // Persist the fetch timestamp on every attempt (success or failure) so the
-    // remote version check stays throttled to once per day.
-    state.config.updateCheck = resolved.updateCheck;
-    saveState(state);
-
-    if (!resolved.latestVersion) {
+  /**
+   * After eligible interactive commands, fetch binaries.sonarsource.com at most once
+   * per day and print a stderr notice when a newer stable version exists.
+   */
+  async maybeNotify(command: Command): Promise<void> {
+    if ((process.exitCode ?? 0) !== 0) {
+      return;
+    }
+    if (this.shouldSuppress(command) || !this.isEligible(command)) {
       return;
     }
 
-    const latestVersion = new Version(resolved.latestVersion);
-    const latestNoBuild = latestVersion.noBuild.text;
+    try {
+      const state = loadState();
+      const currentVersion = new Version(CURRENT_VERSION);
+      const currentNoBuild = currentVersion.noBuild.text;
 
-    if (!latestVersion.noBuild.isNewerThan(currentVersion)) {
-      return;
+      const resolved = await this.resolveLatestVersion(state.config.updateCheck);
+
+      // Persist the fetch timestamp on every attempt (success or failure) so the
+      // remote version check stays throttled to once per day.
+      state.config.updateCheck = resolved.updateCheck;
+      saveState(state);
+
+      if (!resolved.latestVersion) {
+        return;
+      }
+
+      const latestVersion = new Version(resolved.latestVersion);
+      const latestNoBuild = latestVersion.noBuild.text;
+
+      if (!latestVersion.noBuild.isNewerThan(currentVersion)) {
+        return;
+      }
+
+      this.renderNotification(currentNoBuild, latestNoBuild);
+    } catch {
+      // Best-effort only — never fail the user's command because of update metadata.
+    }
+  }
+
+  private resolve(command: Command): true | UpdateNotificationCondition | undefined {
+    let current: Command | null = command;
+    while (current !== null) {
+      const when = this.registry.get(current);
+      if (when !== undefined) {
+        return when;
+      }
+      current = current.parent;
+    }
+    return undefined;
+  }
+
+  private collectOpts(command: Command): Record<string, unknown> {
+    const names: Command[] = [];
+    let current: Command | null = command;
+    while (current.parent !== null) {
+      names.unshift(current);
+      current = current.parent;
     }
 
-    renderUpdateNotification(currentNoBuild, latestNoBuild);
-  } catch {
-    // Best-effort only — never fail the user's command because of update metadata.
+    const merged: Record<string, unknown> = {};
+    for (const cmd of names) {
+      Object.assign(merged, cmd.opts());
+    }
+    return merged;
+  }
+
+  private isWithinCooldown(isoTimestamp: string | undefined, cooldownMs: number): boolean {
+    if (!isoTimestamp) {
+      return false;
+    }
+    const elapsed = Date.now() - Date.parse(isoTimestamp);
+    return Number.isFinite(elapsed) && elapsed >= 0 && elapsed < cooldownMs;
+  }
+
+  private async resolveLatestVersion(
+    updateCheck: CliUpdateCheckState | undefined,
+  ): Promise<{ latestVersion: string | undefined; updateCheck: CliUpdateCheckState }> {
+    if (this.isWithinCooldown(updateCheck?.lastCheckedAt, ONE_DAY_MS)) {
+      // Checked within the last day: reuse the cached result (which is undefined
+      // when the previous check failed) instead of hitting the network again.
+      return {
+        latestVersion: updateCheck?.latestVersion,
+        updateCheck: { ...updateCheck },
+      };
+    }
+
+    const lastCheckedAt = new Date().toISOString();
+    try {
+      const latestVersion = await fetchLatestVersion(BACKGROUND_UPDATE_CHECK_TIMEOUT_MS);
+      return {
+        latestVersion,
+        updateCheck: { ...updateCheck, lastCheckedAt, latestVersion },
+      };
+    } catch {
+      // Record the attempt so a failing check does not re-hit the network — and
+      // stall the command for up to the fetch timeout — on every invocation.
+      // Any previously cached version is preserved so we can still notify from it.
+      return {
+        latestVersion: updateCheck?.latestVersion,
+        updateCheck: { ...updateCheck, lastCheckedAt },
+      };
+    }
+  }
+
+  private renderNotification(currentNoBuild: string, latestNoBuild: string): void {
+    // Keep the whole notice on stderr so it never contaminates a command's stdout.
+    text('', undefined, 'stderr');
+    text(
+      `  ${cyan('ℹ')}  A new version of SonarQube CLI is available: ${currentNoBuild} → ${latestNoBuild}`,
+      undefined,
+      'stderr',
+    );
+    text(`   → Run \`sonar update\` to update to v${latestNoBuild}`, undefined, 'stderr');
   }
 }
