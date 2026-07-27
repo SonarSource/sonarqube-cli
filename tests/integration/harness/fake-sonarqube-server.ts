@@ -156,6 +156,8 @@ export class FakeSonarQubeServerBuilder {
   private memberOrganizations: Organization[] = [];
   private memberOrganizationsTotal?: number;
   private readonly dopRepositoriesByOrgId: Map<string, DopRepositoryConfig[]> = new Map();
+  /** Keyed by org legacy id, for `GET /dop-translation/organization-bindings`. */
+  private readonly organizationBindingsByOrgId: Map<string, string> = new Map();
   private revokeTokenStatusCode = 204;
   private revokeTokenResponseBody = '';
   private sqaaResponse?: SqaaResponseConfig;
@@ -224,6 +226,17 @@ export class FakeSonarQubeServerBuilder {
    */
   withDopRepositories(organizationId: string, repos: DopRepositoryConfig[]): this {
     this.dopRepositoriesByOrgId.set(organizationId, repos);
+    return this;
+  }
+
+  /**
+   * Configure the `devOpsPlatform` `/dop-translation/organization-bindings` reports for an
+   * organization, overriding the value otherwise derived from its `alm.key`. Lets a test model an
+   * org that has a binding but no `alm` on the org lookup — the only case where the CLI consults
+   * this endpoint at all.
+   */
+  withOrganizationBinding(organizationId: string, devOpsPlatform: string): this {
+    this.organizationBindingsByOrgId.set(organizationId, devOpsPlatform);
     return this;
   }
 
@@ -423,6 +436,7 @@ export class FakeSonarQubeServerBuilder {
       memberOrganizations,
       memberOrganizationsTotal: rawMemberOrganizationsTotal,
       dopRepositoriesByOrgId,
+      organizationBindingsByOrgId,
       revokeTokenStatusCode,
       revokeTokenResponseBody,
       sqaaResponse,
@@ -786,7 +800,9 @@ export class FakeSonarQubeServerBuilder {
           // defaults to the org key itself in this fake server (see above), so matching on
           // `key` mirrors real lookup-by-legacy-id behavior for these tests.
           const org = memberOrganizations.find((o) => o.key === query.organizationId);
-          const organizationBindings = org?.alm ? [{ devOpsPlatform: org.alm.key }] : [];
+          const devOpsPlatform =
+            organizationBindingsByOrgId.get(query.organizationId ?? '') ?? org?.alm?.key;
+          const organizationBindings = devOpsPlatform ? [{ devOpsPlatform }] : [];
           return new Response(
             JSON.stringify({
               organizationBindings,

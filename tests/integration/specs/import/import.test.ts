@@ -30,6 +30,12 @@ const GITHUB_ALM = {
   personal: false,
   membersSync: false,
 };
+const AZURE_ALM = {
+  key: 'azure',
+  url: 'https://dev.azure.com/my-org',
+  personal: false,
+  membersSync: false,
+};
 const GITLAB_ALM = {
   key: 'gitlab',
   url: 'https://gitlab.com/my-org',
@@ -154,6 +160,89 @@ describe('sonar import', () => {
         expect(result.exitCode).toBe(1);
         const output = result.stdout + result.stderr;
         expect(output).toContain("Organization 'my-org' not found.");
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'exits with code 1 without listing repositories when the org is bound to GitLab',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: GITLAB_ALM, actions: ADMIN_ACTIONS },
+          ])
+          .withDopRepositories('my-org', SAMPLE_REPOS)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        const result = await harness.run('import --all', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain(
+          "sonar import supports GitHub and Azure DevOps organizations only, but 'my-org' is bound to GitLab.",
+        );
+        // The platform is rejected before any repository is fetched.
+        const recorded = server.getRecordedRequests();
+        expect(recorded.some((r) => r.path === '/dop-translation/dop-repositories')).toBe(false);
+        expect(recorded.some((r) => r.path === '/api/alm_integration/provision_projects')).toBe(
+          false,
+        );
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'exits with code 1 when the organization-bindings fallback reports an unsupported platform',
+      async () => {
+        // No `alm` on the org lookup, so the ALM key comes from the bindings fallback instead.
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizationBinding('my-org', 'bitbucket')
+          .withDopRepositories('my-org', SAMPLE_REPOS)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        const result = await harness.run('import --all', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain("'my-org' is bound to Bitbucket.");
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'imports normally when the organization-bindings fallback reports Azure DevOps',
+      async () => {
+        // No `alm` on the org lookup, so the supported platform has to be recognized from the
+        // bindings fallback's `devOpsPlatform` instead.
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizationBinding('my-org', 'azure')
+          .withDopRepositories('my-org', SAMPLE_REPOS)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        const result = await harness.run('import --all', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('Imported 1 repository');
       },
       { timeout: 15000 },
     );
@@ -734,7 +823,7 @@ describe('sonar import', () => {
           .newFakeServer()
           .withAuthToken('test-token')
           .withOrganizations([
-            { key: 'my-org', name: 'My Organization', alm: GITLAB_ALM, actions: ADMIN_ACTIONS },
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
           ])
           .withDopRepositories('my-org', SAMPLE_REPOS)
           .start();
@@ -1086,13 +1175,13 @@ describe('sonar import', () => {
     it(
       "requests autoscan eligibility regardless of the org's connected DevOps platform",
       async () => {
-        // GitLab is deliberately not an Autoscan-eligible platform — proves the request fires
-        // unconditionally rather than being gated on the org's connected ALM.
+        // Azure DevOps is deliberately not an Autoscan-eligible platform — proves the request
+        // fires unconditionally rather than being gated on the org's connected ALM.
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
           .withOrganizations([
-            { key: 'my-org', name: 'My Organization', alm: GITLAB_ALM, actions: ADMIN_ACTIONS },
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
           ])
           .withDopRepositories('my-org', SAMPLE_REPOS)
           .start();

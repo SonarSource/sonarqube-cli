@@ -38,8 +38,22 @@ import {
   type SkippedRepo,
 } from './repository-collection';
 
-/** ALM key used by GitHub-bound organizations, per `Organization.alm.key`. */
+/* ALM keys as the server spells them. */
 const GITHUB_ALM_KEY = 'github';
+const AZURE_DEVOPS_ALM_KEY = 'azure';
+const BITBUCKET_ALM_KEY = 'bitbucket';
+const GITLAB_ALM_KEY = 'gitlab';
+
+/**
+ * Every platform the server can report, the name to show the user for it, and whether
+ * `sonar import` supports importing from it.
+ */
+const KNOWN_ALMS: Record<string, { displayName: string; supported: boolean } | undefined> = {
+  [AZURE_DEVOPS_ALM_KEY]: { displayName: 'Azure DevOps', supported: true },
+  [BITBUCKET_ALM_KEY]: { displayName: 'Bitbucket', supported: false },
+  [GITHUB_ALM_KEY]: { displayName: 'GitHub', supported: true },
+  [GITLAB_ALM_KEY]: { displayName: 'GitLab', supported: false },
+};
 
 export interface ResolvedOrg {
   key: string;
@@ -151,6 +165,34 @@ async function resolveOrgByKey(client: SonarQubeClient, orgKey: string): Promise
     almKey: org.alm?.key,
     onlyPrivateProjectsEnabled: org.onlyPrivateProjects?.enabled,
   };
+}
+
+/**
+ * Rejects organizations bound to a DevOps platform `sonar import` doesn't support: only GitHub
+ * and Azure DevOps are.
+ *
+ * An undefined `almKey` is deliberately not treated as unsupported. It means the platform is
+ * unknown rather than known-unsupported: either the org has nothing bound to it — in which case
+ * it has no repositories to import and falls through to the existing "no repositories found"
+ * path — or `getOrganizationAlmKey`'s lookup failed, and that best-effort call swallows its
+ * errors, so failing here would turn a transient error into a hard stop for supported orgs too.
+ */
+export function assertSupportedAlm(orgKey: string, almKey: string | undefined): void {
+  if (almKey === undefined) {
+    return;
+  }
+
+  // A platform we've never heard of is unsupported too: this is an allowlist, not a blocklist.
+  const alm = KNOWN_ALMS[almKey];
+  if (alm?.supported === true) {
+    return;
+  }
+
+  throw new CommandFailedError(
+    `sonar import supports GitHub and Azure DevOps organizations only, but '${orgKey}' is bound ` +
+      `to ${alm?.displayName ?? almKey}.`,
+    { remediationHint: 'Import these repositories from SonarQube Cloud in your browser instead.' },
+  );
 }
 
 /**
