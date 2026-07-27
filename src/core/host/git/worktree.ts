@@ -59,6 +59,11 @@ function runGitStdout(args: string[], cwd: string): Promise<string | null> {
   return pending;
 }
 
+/** Test-only: clear the per-process git stdout cache so mocked `git` calls aren't served stale results across test cases. */
+export function clearGitStdoutCache(): void {
+  gitStdoutCache.clear();
+}
+
 /** Directory to spawn `git` from for `contextPath`: its parent when it's a file, itself otherwise. */
 function gitSpawnCwd(contextPath: string): string {
   try {

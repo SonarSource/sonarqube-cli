@@ -23,7 +23,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { resolveCurrentGitBranch } from '@/core/host/git/branch.ts';
-import { resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
+import { clearGitStdoutCache, resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
 import * as processLib from '@/core/process/process.ts';
 
 let spawnProcessSpy: ReturnType<typeof spyOn>;
@@ -48,6 +48,7 @@ beforeEach(() => {
 
 afterEach(() => {
   spawnProcessSpy.mockRestore();
+  clearGitStdoutCache();
 });
 
 describe('resolveCurrentGitBranch', () => {
