@@ -72,6 +72,7 @@ export {
   integrationInstaller,
   type RemoveFeatureCallbacks,
 } from './installer.ts';
+export { reconcileInstalledIntegrations } from './reconcile.ts';
 export {
   createIntegrationRegistry,
   IntegrationRegistry,
