@@ -343,13 +343,17 @@ export interface InstalledIntegrationDependencyReference {
 }
 
 /**
- * Recorded state for an active thin subfeature nested inside a {@link InstalledIntegrationFeature}.
+ * Recorded state for an active subfeature nested inside a {@link InstalledIntegrationFeature}.
  */
 export interface InstalledSubfeature {
   /** Subfeature identifier from the integration declaration */
   featureId: string;
   /** Binary dependencies declared by this subfeature */
   dependencies: InstalledIntegrationDependencyReference[];
+  /** Resources installed for this subfeature */
+  resources?: InstalledIntegrationResource[];
+  /** Operations applied for this subfeature */
+  operations?: InstalledIntegrationOperation[];
 }
 
 /**
@@ -378,7 +382,7 @@ export interface InstalledIntegrationFeature {
   operations: InstalledIntegrationOperation[];
   /** Optional command-specific metadata */
   attrs?: Record<string, IntegrationStateAttribute>;
-  /** Active thin subfeatures nested inside this container feature, if any */
+  /** Active subfeatures nested inside this container feature, if any */
   subfeatures?: InstalledSubfeature[];
 }
 

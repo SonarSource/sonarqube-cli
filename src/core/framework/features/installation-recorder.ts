@@ -43,6 +43,58 @@ import type {
   IntegrationDeclaration,
   SubfeatureDeclaration,
 } from './types.ts';
+import { isFeatureContainer } from './types.ts';
+
+function toIdSet(entries: { id: string }[]): Set<string> {
+  return new Set(entries.map((entry) => entry.id));
+}
+
+/** Resources recorded for a feature, including those owned by its active subfeatures. */
+export function recordedFeatureResources(
+  feature: InstalledIntegrationFeature,
+): InstalledIntegrationResource[] {
+  return [
+    ...feature.resources,
+    ...(feature.subfeatures?.flatMap((subfeature) => subfeature.resources ?? []) ?? []),
+  ];
+}
+
+/** Operations recorded for a feature, including those owned by its active subfeatures. */
+export function recordedFeatureOperations(
+  feature: InstalledIntegrationFeature,
+): InstalledIntegrationOperation[] {
+  return [
+    ...feature.operations,
+    ...(feature.subfeatures?.flatMap((subfeature) => subfeature.operations ?? []) ?? []),
+  ];
+}
+
+function recordSubfeature<TOptions>(
+  subfeature: SubfeatureDeclaration<TOptions>,
+  existing: InstalledSubfeature | undefined,
+  applied: AppliedFeature,
+  now: string,
+): InstalledSubfeature {
+  return {
+    featureId: subfeature.id,
+    dependencies: upsertDependencyReferences(
+      existing?.dependencies ?? [],
+      toIdSet(subfeature.dependencies ?? []),
+    ),
+    resources: upsertResources(
+      existing?.resources ?? [],
+      applied.resources,
+      now,
+      toIdSet(subfeature.resources ?? []),
+    ),
+    operations: upsertOperations(
+      existing?.operations ?? [],
+      applied.operations,
+      now,
+      toIdSet(subfeature.operations ?? []),
+    ),
+  };
+}
 
 /** Match a recorded feature entry by its id + scope + targetRoot key. */
 function matchesFeatureKey<TOptions>(
@@ -63,7 +115,6 @@ export function recordInstalledFeature<TOptions>(
   integration: IntegrationDeclaration<TOptions>,
   feature: FeatureDeclaration<TOptions>,
   applied: AppliedFeature,
-  activeSubfeatures?: SubfeatureDeclaration<TOptions>[],
 ): InstalledIntegrationFeature {
   const now = new Date().toISOString();
   const installedIntegration = upsertInstalledIntegration(state, integration, now);
@@ -80,30 +131,31 @@ export function recordInstalledFeature<TOptions>(
     updatedAt: now,
     dependencies: upsertDependencyReferences(
       existing?.dependencies ?? [],
-      new Set((feature.dependencies ?? []).map((dependency) => dependency.id)),
+      toIdSet(feature.dependencies ?? []),
     ),
     resources: upsertResources(
       existing?.resources ?? [],
       applied.resources,
       now,
-      new Set((feature.resources ?? []).map((resource) => resource.id)),
+      toIdSet(feature.resources ?? []),
     ),
     operations: upsertOperations(
       existing?.operations ?? [],
       applied.operations,
       now,
-      new Set((feature.operations ?? []).map((operation) => operation.id)),
+      toIdSet(feature.operations ?? []),
     ),
     attrs: context.attrs,
-    subfeatures: activeSubfeatures
-      ? activeSubfeatures.map((sub): InstalledSubfeature => ({
-          featureId: sub.id,
-          dependencies: upsertDependencyReferences(
-            existing?.subfeatures?.find((s) => s.featureId === sub.id)?.dependencies ?? [],
-            new Set((sub.dependencies ?? []).map((d) => d.id)),
+    subfeatures: isFeatureContainer(feature)
+      ? feature.subfeatures.map((subfeature) =>
+          recordSubfeature(
+            subfeature,
+            existing?.subfeatures?.find((entry) => entry.featureId === subfeature.id),
+            applied,
+            now,
           ),
-        }))
-      : existing?.subfeatures,
+        )
+      : undefined,
   };
 
   if (existing) {
@@ -294,7 +346,7 @@ function upsertResources(
   declaredIds: Set<string>,
 ): InstalledIntegrationResource[] {
   const resources = existing.filter((entry) => declaredIds.has(entry.id));
-  for (const resource of applied) {
+  for (const resource of applied.filter((entry) => declaredIds.has(entry.id))) {
     const next: InstalledIntegrationResource = {
       ...resource,
       updatedByCliVersion: VERSION,
@@ -317,7 +369,7 @@ function upsertOperations(
   declaredIds: Set<string>,
 ): InstalledIntegrationOperation[] {
   const operations = existing.filter((entry) => declaredIds.has(entry.id));
-  for (const operation of applied) {
+  for (const operation of applied.filter((entry) => declaredIds.has(entry.id))) {
     const next: InstalledIntegrationOperation = {
       ...operation,
       updatedByCliVersion: VERSION,

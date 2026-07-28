@@ -30,6 +30,7 @@ import { sep } from 'node:path';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
 import { info, note, outro, phase, phaseItem, text } from '@/core/ui';
 
+import { recordedFeatureResources } from './installation-recorder.ts';
 import type { FeatureDeclaration, IntegrationDeclaration, PostInstallExample } from './types.ts';
 
 export function renderCompletionSummary<TOptions>(
@@ -63,7 +64,7 @@ function renderInstalledList<TOptions>(
   const home = homedir();
   const items = installedFeatures.map((installed) => {
     const declaration = featureDeclaration(integration, installed.featureId);
-    const paths = installed.resources
+    const paths = recordedFeatureResources(installed)
       .map((resource) => resource.path)
       .filter((path): path is string => Boolean(path))
       .map((p) => formatPath(p, home));

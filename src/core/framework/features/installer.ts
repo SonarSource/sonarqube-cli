@@ -22,16 +22,18 @@ import type {
   CliState,
   InstalledIntegrationDependency,
   InstalledIntegrationFeature,
+  InstalledSubfeature,
 } from '@/core/state/state.ts';
 
 import type { DependencyDeclaration } from '../dependencies';
 import type { ResourceDeclaration } from '../resources';
 import {
   findInstalledFeature,
+  recordedFeatureOperations,
+  recordedFeatureResources,
   recordInstalledFeature,
   removeInstalledFeature,
 } from './installation-recorder.ts';
-import { isFeatureContainer } from './selection.ts';
 import type {
   AppliedFeature,
   AppliedOperation,
@@ -44,7 +46,9 @@ import type {
   IntegrationContext,
   IntegrationDeclaration,
   IntegrationExecutionMode,
+  SubfeatureDeclaration,
 } from './types.ts';
+import { isFeatureContainer } from './types.ts';
 
 function resolveVersion(version: string | undefined): string {
   return version ?? '0';
@@ -59,6 +63,21 @@ function resolveAllDeps<TOptions>(feature: FeatureDeclaration<TOptions>): Depend
   ];
 }
 
+function resolveAllResources<TOptions>(
+  feature: FeatureDeclaration<TOptions>,
+): ResourceDeclaration[] {
+  return [
+    ...(feature.resources ?? []),
+    ...(isFeatureContainer(feature) ? feature.subfeatures.flatMap((s) => s.resources ?? []) : []),
+  ];
+}
+
+function resolveAllOperations<TOptions>(feature: FeatureDeclaration<TOptions>): FeatureOperation[] {
+  return [
+    ...(feature.operations ?? []),
+    ...(isFeatureContainer(feature) ? feature.subfeatures.flatMap((s) => s.operations ?? []) : []),
+  ];
+}
 interface ApplyFeatureCallbacks<TOptions = Record<string, unknown>> {
   onFeatureApplyStart?: (feature: FeatureDeclaration<TOptions>) => void;
   onDependencyInstalled?: (dependency: DependencyDeclaration) => void;
@@ -127,7 +146,9 @@ export class IntegrationInstaller {
     installedFeature: InstalledIntegrationFeature | undefined,
     resource: ResourceDeclaration,
   ): Promise<boolean> {
-    const installedResource = installedFeature?.resources.find((entry) => entry.id === resource.id);
+    const installedResource = installedFeature
+      ? recordedFeatureResources(installedFeature).find((entry) => entry.id === resource.id)
+      : undefined;
     if (!installedResource) {
       return true;
     }
@@ -141,9 +162,9 @@ export class IntegrationInstaller {
     installedFeature: InstalledIntegrationFeature | undefined,
     operation: FeatureOperation,
   ): boolean {
-    const installedOperation = installedFeature?.operations.find(
-      (entry) => entry.id === operation.id,
-    );
+    const installedOperation = installedFeature
+      ? recordedFeatureOperations(installedFeature).find((entry) => entry.id === operation.id)
+      : undefined;
     return (
       !installedOperation ||
       resolveVersion(installedOperation.version) !== resolveVersion(operation.version)
@@ -175,6 +196,7 @@ export class IntegrationInstaller {
     for (const execution of executions) {
       try {
         options.callbacks?.onFeatureApplyStart?.(execution.application.feature);
+        await this.removeDeactivatedSubfeatures(integration, execution);
         const applied = await this.applyFeatureWithUniqueDependencies(
           execution.context,
           execution.installedFeature,
@@ -182,15 +204,13 @@ export class IntegrationInstaller {
           preparedDependencies,
           options.callbacks ?? {},
         );
-        const feature = execution.application.feature;
         installedFeatures.push(
           recordInstalledFeature(
             state,
             execution.context,
             integration,
-            feature,
+            execution.application.feature,
             applied,
-            isFeatureContainer(feature) ? feature.subfeatures : undefined,
           ),
         );
       } catch (error) {
@@ -241,7 +261,7 @@ export class IntegrationInstaller {
     feature: FeatureDeclaration<TOptions>,
     callbacks: RemoveFeatureCallbacks<TOptions> = {},
   ): Promise<void> {
-    for (const resource of feature.resources ?? []) {
+    for (const resource of resolveAllResources(feature)) {
       await resource.remove(context);
       callbacks.onResourceRemoved?.(resource);
     }
@@ -250,7 +270,7 @@ export class IntegrationInstaller {
       await cleanup.remove(context);
     }
 
-    for (const operation of [...(feature.operations ?? [])].reverse()) {
+    for (const operation of [...resolveAllOperations(feature)].reverse()) {
       if (operation.undo) {
         await operation.undo(context);
         callbacks.onOperationUndone?.(operation);
@@ -293,6 +313,59 @@ export class IntegrationInstaller {
     }
 
     return removed;
+  }
+
+  /**
+   * Tear down the assets of subfeatures that are recorded as installed but are
+   * no longer active, before recording replaces their state entry.
+   */
+  private async removeDeactivatedSubfeatures<TOptions>(
+    integration: IntegrationDeclaration<TOptions>,
+    execution: PreparedFeatureExecution<TOptions>,
+  ): Promise<void> {
+    const recordedSubfeatures = execution.installedFeature?.subfeatures ?? [];
+    if (recordedSubfeatures.length === 0) {
+      return;
+    }
+
+    const feature = execution.application.feature;
+    const activeIds = new Set(
+      isFeatureContainer(feature) ? feature.subfeatures.map((subfeature) => subfeature.id) : [],
+    );
+    const declaredFeature = integration.features.find((entry) => entry.id === feature.id);
+    const declaredSubfeatures =
+      declaredFeature && isFeatureContainer(declaredFeature) ? declaredFeature.subfeatures : [];
+
+    for (const recorded of recordedSubfeatures) {
+      if (activeIds.has(recorded.featureId)) {
+        continue;
+      }
+      const subfeature = declaredSubfeatures.find((entry) => entry.id === recorded.featureId);
+      if (subfeature) {
+        await this.removeSubfeatureAssets(execution.context, subfeature, recorded);
+      }
+    }
+  }
+
+  private async removeSubfeatureAssets<TOptions>(
+    context: IntegrationContext,
+    subfeature: SubfeatureDeclaration<TOptions>,
+    recorded: InstalledSubfeature,
+  ): Promise<void> {
+    const recordedResourceIds = new Set((recorded.resources ?? []).map((entry) => entry.id));
+    const recordedOperationIds = new Set((recorded.operations ?? []).map((entry) => entry.id));
+
+    for (const resource of subfeature.resources ?? []) {
+      if (recordedResourceIds.has(resource.id)) {
+        await resource.remove(context);
+      }
+    }
+
+    for (const operation of [...(subfeature.operations ?? [])].reverse()) {
+      if (recordedOperationIds.has(operation.id)) {
+        await operation.undo?.(context);
+      }
+    }
   }
 
   private async prepareUniqueDependencies<TOptions>(
@@ -375,7 +448,7 @@ export class IntegrationInstaller {
 
     await this.cleanupRecordedLegacyInstallations(feature, featureContext);
 
-    for (const resource of feature.resources ?? []) {
+    for (const resource of resolveAllResources(feature)) {
       if (!(await this.resourceNeedsApply(featureContext, installedFeature, resource))) {
         callbacks.onResourceSkipped?.(resource);
         continue;
@@ -384,7 +457,7 @@ export class IntegrationInstaller {
       callbacks.onResourceInstalled?.(resource);
     }
 
-    for (const operation of feature.operations ?? []) {
+    for (const operation of resolveAllOperations(feature)) {
       if (operation.shouldApply && !(await operation.shouldApply(featureContext))) {
         continue;
       }

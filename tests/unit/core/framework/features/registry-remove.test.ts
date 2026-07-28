@@ -25,7 +25,11 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import type { FeatureDeclaration, IntegrationContext } from '@/core/framework/features';
+import type {
+  FeatureContainer,
+  FeatureDeclaration,
+  IntegrationContext,
+} from '@/core/framework/features';
 import { getDefaultState } from '@/core/state/state.ts';
 
 const { IntegrationInstaller, jsonPatch, textSnippet, tomlPatch, wholeFile, yamlPatch } =
@@ -610,6 +614,58 @@ describe('declarative integration framework - remove and undo', () => {
       expect(removedResources).toEqual(['whole', 'no-op-remove']);
       expect(skippedResources).toEqual([]);
       expect(undoneOperations).toEqual(['op-with-undo']);
+    });
+
+    it('removes container and subfeature resources, undoing all operations in reverse', async () => {
+      const state = getDefaultState('test');
+      const context = makeContext(state, tempDir);
+      const containerPath = join(tempDir, 'container.sh');
+      const subPath = join(tempDir, 'sub.sh');
+      const removedResources: string[] = [];
+      const undoneOperations: string[] = [];
+      await writeFile(containerPath, '#!/bin/sh\n');
+      await writeFile(subPath, '#!/bin/sh\n');
+
+      const container: FeatureContainer = {
+        id: 'container',
+        displayName: 'Container',
+        resources: [wholeFile({ id: 'container-file', targetPath: containerPath, content: 'c' })],
+        operations: [
+          {
+            id: 'container-op',
+            apply: () => undefined,
+            undo: () => {
+              undoneOperations.push('container-op');
+            },
+          },
+        ],
+        subfeatures: [
+          {
+            id: 'sub-a',
+            displayName: 'Sub A',
+            resources: [wholeFile({ id: 'sub-file', targetPath: subPath, content: 's' })],
+            operations: [
+              {
+                id: 'sub-op',
+                apply: () => undefined,
+                undo: () => {
+                  undoneOperations.push('sub-op');
+                },
+              },
+            ],
+          },
+        ],
+        defaultInstallSubfeatureIds: [],
+      };
+
+      await installer.removeFeature(context, container, {
+        onResourceRemoved: (resource) => removedResources.push(resource.id),
+      });
+
+      expect(existsSync(containerPath)).toBe(false);
+      expect(existsSync(subPath)).toBe(false);
+      expect(removedResources).toEqual(['container-file', 'sub-file']);
+      expect(undoneOperations).toEqual(['sub-op', 'container-op']);
     });
 
     it('undoes operations in reverse order', async () => {
