@@ -53,6 +53,13 @@ const TELEMETRY_EVENTS_FILENAME = 'telemetry-events.ndjson';
 const TELEMETRY_EVENTS_RETENTION_DAYS = 7;
 const TELEMETRY_EVENTS_RETENTION_MS = TELEMETRY_EVENTS_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
+/**
+ * Per-request ceiling for a telemetry POST. Without it a single unresponsive endpoint —
+ * typically a proxy that blackholes rather than rejects — consumes the whole flush deadline,
+ * leaving the detached worker alive for minutes and starving the rest of the batch.
+ */
+const TELEMETRY_REQUEST_TIMEOUT_MS = 20_000;
+
 function getTelemetryEventsPath(): string {
   return join(getTelemetryDir(), TELEMETRY_EVENTS_FILENAME);
 }
@@ -199,7 +206,8 @@ function parseValidEvents(content: string, now: number): StoredTelemetryEvent[] 
  * for the next flush attempt. The .sending file is deleted in all cases.
  *
  * Requests carry the resolved proxy/TLS configuration; when that configuration cannot be
- * resolved the whole batch is requeued rather than sent without it.
+ * resolved the whole batch is requeued rather than sent without it. Each request is capped at
+ * TELEMETRY_REQUEST_TIMEOUT_MS, independently of how much of the deadline is left.
  */
 export async function flushTelemetryEvents(deadline: number): Promise<void> {
   const eventsPath = getTelemetryEventsPath();
@@ -235,13 +243,14 @@ export async function flushTelemetryEvents(deadline: number): Promise<void> {
     for (let i = 0; i < events.length; i++) {
       const remainingTime = deadline - Date.now();
       if (remainingTime <= 0) break;
+      const requestTimeout = Math.min(remainingTime, TELEMETRY_REQUEST_TIMEOUT_MS);
       try {
         await fetchGuarded(
           TELEMETRY_ENDPOINT,
           buildFetchInit(
             'POST',
             { 'Content-Type': 'application/json', 'x-api-key': TELEMETRY_API_KEY },
-            remainingTime,
+            requestTimeout,
             JSON.stringify(events[i], (_key, value) => (value === null ? undefined : value)),
             networkOptions,
           ),

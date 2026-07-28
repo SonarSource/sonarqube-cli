@@ -38,6 +38,7 @@ import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import * as networkConfig from '@/core/host/connectivity/network-config.ts';
 import { DISTRIBUTION } from '@/core/host/distribution.ts';
 import type { SpawnResult } from '@/core/process/process.ts';
+import * as fetchGuardedModule from '@/core/server/fetch-guarded.ts';
 import type {
   AnalysisCompletedEventPayload,
   StoredAnalysisCompletedEvent,
@@ -626,6 +627,38 @@ describe('flushTelemetryEvents()', () => {
     } finally {
       fetchSpy.mockRestore();
     }
+  });
+
+  describe('per-request timeout', () => {
+    it('caps each request at 20s even when the flush deadline is far away', async () => {
+      writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent());
+
+      const initSpy = spyOn(fetchGuardedModule, 'buildFetchInit');
+      const fetchSpy = mockFetch();
+      try {
+        await flushTelemetryEvents(Date.now() + 60_000);
+        expect(initSpy.mock.calls[0][2]).toBe(20_000);
+      } finally {
+        fetchSpy.mockRestore();
+        initSpy.mockRestore();
+      }
+    });
+
+    it('uses the remaining deadline when it is shorter than the cap', async () => {
+      writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent());
+
+      const initSpy = spyOn(fetchGuardedModule, 'buildFetchInit');
+      const fetchSpy = mockFetch();
+      try {
+        await flushTelemetryEvents(Date.now() + 2_000);
+        const timeout = initSpy.mock.calls[0][2];
+        expect(timeout).toBeGreaterThan(0);
+        expect(timeout).toBeLessThanOrEqual(2_000);
+      } finally {
+        fetchSpy.mockRestore();
+        initSpy.mockRestore();
+      }
+    });
   });
 
   describe('network configuration', () => {
