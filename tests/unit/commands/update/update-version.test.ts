@@ -63,7 +63,8 @@ void mock.module('@/core/host/platform-detector.js', () => ({
   isWindows: isWindowsMock,
 }));
 
-const { checkForUpdate, fetchLatestVersion } = await import('@/commands/update/update-check.ts');
+const { checkForUpdate } = await import('@/commands/update/update-check.ts');
+const { fetchLatestVersion } = await import('@/core/host/update/check.ts');
 const { updateVersion } = await import('@/commands/update');
 
 function stableVersionResponse(version: string) {
