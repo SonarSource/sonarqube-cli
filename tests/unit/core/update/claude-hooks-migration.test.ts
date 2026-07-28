@@ -24,11 +24,11 @@ import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:te
 
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import * as hooks from '@/commands/integrate/claude/hooks.ts';
-import * as migration from '@/core/host/migration.ts';
 import type { CliState, HookExtension } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import { migrateClaudeCodeHooks } from '@/core/update/claude-hooks-migration.ts';
+import * as migration from '@/core/update/migration.ts';
 
 const FAKE_HOME = '/fake/home';
 const homedirFn = () => FAKE_HOME;
