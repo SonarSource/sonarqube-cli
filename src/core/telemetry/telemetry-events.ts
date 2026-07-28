@@ -24,6 +24,8 @@ import { join } from 'node:path';
 
 import { detectCallerAgent } from '@/core/host/agent-detector.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
+import type { FetchNetworkOptions } from '@/core/host/connectivity/types.ts';
 import { buildFetchInit, fetchGuarded } from '@/core/server/fetch-guarded.ts';
 import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
 
@@ -195,6 +197,9 @@ function parseValidEvents(content: string, now: number): StoredTelemetryEvent[] 
  * events older than 7 days, then POSTs each remaining event to the telemetry backend.
  * Unsent events (deadline reached or send error) are re-appended to telemetry-events.ndjson
  * for the next flush attempt. The .sending file is deleted in all cases.
+ *
+ * Requests carry the resolved proxy/TLS configuration; when that configuration cannot be
+ * resolved the whole batch is requeued rather than sent without it.
  */
 export async function flushTelemetryEvents(deadline: number): Promise<void> {
   const eventsPath = getTelemetryEventsPath();
@@ -216,6 +221,17 @@ export async function flushTelemetryEvents(deadline: number): Promise<void> {
     const events = parseValidEvents(readFileSync(sendingPath, 'utf-8'), Date.now());
     const sentIndices = new Set<number>();
 
+    // Resolved once: every event targets the same endpoint, and buildFetchNetworkOptions
+    // copies the root certificate list on each call when a custom CA is configured.
+    let networkOptions: FetchNetworkOptions;
+    try {
+      networkOptions = buildFetchNetworkOptions(TELEMETRY_ENDPOINT);
+    } catch {
+      // Unusable proxy/TLS config: requeue everything rather than bypassing it.
+      unsent.push(...events);
+      return;
+    }
+
     for (let i = 0; i < events.length; i++) {
       const remainingTime = deadline - Date.now();
       if (remainingTime <= 0) break;
@@ -227,6 +243,7 @@ export async function flushTelemetryEvents(deadline: number): Promise<void> {
             { 'Content-Type': 'application/json', 'x-api-key': TELEMETRY_API_KEY },
             remainingTime,
             JSON.stringify(events[i], (_key, value) => (value === null ? undefined : value)),
+            networkOptions,
           ),
         );
         sentIndices.add(i);
