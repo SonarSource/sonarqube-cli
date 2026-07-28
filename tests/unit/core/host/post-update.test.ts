@@ -729,6 +729,71 @@ describe('migrateDeclarativeIntegrations', () => {
     expect(savedFeature.subfeatures![0]).toMatchObject({ featureId: 'sub-a' });
   });
 
+  it('refreshes recorded subfeature resources and skips newly added subfeature resources', async () => {
+    const now = '2026-01-01T00:00:00.000Z';
+    const recordedPath = join(tempDir, 'recorded-sub.txt');
+    const newPath = join(tempDir, 'new-sub.txt');
+
+    const state = makeState();
+    state.integrations.installed.push({
+      id: 'integration-id',
+      integrationId: 'test-integration',
+      installedByCliVersion: '0.9.0',
+      installedAt: now,
+      updatedByCliVersion: '0.9.0',
+      updatedAt: now,
+      features: [
+        {
+          featureId: 'container-feature',
+          scope: 'project',
+          targetRoot: tempDir,
+          installedByCliVersion: '0.9.0',
+          installedAt: now,
+          updatedByCliVersion: '0.9.0',
+          updatedAt: now,
+          dependencies: [],
+          resources: [],
+          operations: [],
+          subfeatures: [{ featureId: 'sub-a', dependencies: [] }],
+        },
+      ],
+    });
+    loadStateSpy.mockReturnValue(state);
+
+    const container: FeatureContainer = {
+      id: 'container-feature',
+      displayName: 'Container feature',
+      subfeatures: [
+        {
+          id: 'sub-a',
+          displayName: 'Sub A',
+          resources: [wholeFile({ id: 'sub-a-file', targetPath: recordedPath, content: 'a' })],
+        },
+        // Never opted into, so update must not install it.
+        {
+          id: 'sub-b',
+          displayName: 'Sub B',
+          resources: [wholeFile({ id: 'sub-b-file', targetPath: newPath, content: 'b' })],
+        },
+      ],
+      defaultInstallSubfeatureIds: [],
+    };
+    const registry = new IntegrationRegistry();
+    registry.register({
+      id: 'test-integration',
+      displayName: 'Test integration',
+      features: [container],
+    });
+
+    await migrateDeclarativeIntegrations(registry);
+
+    expect(fs.readFileSync(recordedPath, 'utf-8')).toBe('a');
+    expect(fs.existsSync(newPath)).toBeFalse();
+
+    const savedFeature = saveStateSpy.mock.calls[0][0].integrations.installed[0].features[0];
+    expect(savedFeature.subfeatures![0].resources!.map((r) => r.id)).toEqual(['sub-a-file']);
+  });
+
   it('applies plain feature normally when old state has container subfeatures recorded', async () => {
     const capturedContexts: IntegrationContext[] = [];
     const now = '2026-01-01T00:00:00.000Z';
@@ -783,6 +848,9 @@ describe('migrateDeclarativeIntegrations', () => {
 
     expect(capturedContexts).toHaveLength(1);
     expect('activeSubfeatures' in capturedContexts[0]).toBeFalse();
+
+    const savedFeature = saveStateSpy.mock.calls[0][0].integrations.installed[0].features[0];
+    expect(savedFeature.subfeatures).toBeUndefined();
   });
 });
 

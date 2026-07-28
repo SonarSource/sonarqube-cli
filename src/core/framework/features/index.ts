@@ -64,6 +64,8 @@ export {
   findInstalledFeature,
   findInstalledIntegration,
   isFeatureInstalledGloballyForProject,
+  recordedFeatureOperations,
+  recordedFeatureResources,
 } from './installation-recorder.ts';
 export {
   IntegrationInstaller,
@@ -79,7 +81,6 @@ export {
   askUser,
   install,
   type InstallDecision,
-  isFeatureContainer,
   selectFeaturesForInvocation,
   skip,
 } from './selection.ts';
@@ -103,4 +104,4 @@ export type {
   PostInstallExample,
   SubfeatureDeclaration,
 } from './types.ts';
-export { isContainerIntegrationContext } from './types.ts';
+export { isContainerIntegrationContext, isFeatureContainer } from './types.ts';

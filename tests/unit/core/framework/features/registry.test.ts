@@ -18,8 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdtempSync, rmSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -32,6 +32,8 @@ import type {
   IntegrationContext,
   IntegrationDeclaration,
   IntegrationInvocation,
+  ResourceDeclaration,
+  SubfeatureDeclaration,
 } from '@/core/framework/features';
 import { isContainerIntegrationContext } from '@/core/framework/features/types.ts';
 import { getDefaultState, type InstalledIntegrationFeature } from '@/core/state/state.ts';
@@ -286,6 +288,58 @@ describe('declarative integration framework', () => {
         }),
       ),
     ).toThrow('Subfeature id must not be empty');
+  });
+
+  it('rejects subfeature asset ids that collide with the container or are empty', () => {
+    const registry = new IntegrationRegistry();
+    const container = (subfeature: Partial<SubfeatureDeclaration>): FeatureContainer => ({
+      id: 'container',
+      displayName: 'Container',
+      resources: [wholeFile({ id: 'shared-resource', targetPath: '/tmp/a', content: 'a' })],
+      operations: [{ id: 'shared-operation', apply: () => undefined }],
+      subfeatures: [{ id: 'sub-a', displayName: 'Sub A', ...subfeature }],
+      defaultInstallSubfeatureIds: [],
+    });
+
+    expect(() =>
+      registry.register(
+        makeIntegration({
+          features: [
+            container({
+              resources: [wholeFile({ id: 'shared-resource', targetPath: '/tmp/b', content: 'b' })],
+            }),
+          ],
+        }),
+      ),
+    ).toThrow('Duplicate resource id in feature test-integration.container');
+
+    expect(() =>
+      registry.register(
+        makeIntegration({
+          features: [
+            container({ operations: [{ id: 'shared-operation', apply: () => undefined }] }),
+          ],
+        }),
+      ),
+    ).toThrow('Duplicate operation id in feature test-integration.container');
+
+    expect(() =>
+      registry.register(
+        makeIntegration({
+          features: [
+            container({ resources: [wholeFile({ id: ' ', targetPath: '/tmp/c', content: 'c' })] }),
+          ],
+        }),
+      ),
+    ).toThrow('Resource id must not be empty');
+
+    expect(() =>
+      registry.register(
+        makeIntegration({
+          features: [container({ operations: [{ id: ' ', apply: () => undefined }] })],
+        }),
+      ),
+    ).toThrow('Operation id must not be empty');
   });
 
   it('isFeatureContainer returns true only for features with a subfeatures array', () => {
@@ -599,6 +653,152 @@ describe('declarative integration framework', () => {
     ]);
     const subfeature = state.integrations.installed[0]?.features[0]?.subfeatures?.[0];
     expect(subfeature?.dependencies).toEqual([{ id: 'dep-new' }]);
+  });
+
+  it('records subfeature resources and operations under the subfeature, not the container', async () => {
+    const containerPath = join(tempDir, 'container.txt');
+    const subPath = join(tempDir, 'sub.txt');
+    const container: FeatureContainer = {
+      id: 'container',
+      displayName: 'Container',
+      resources: [wholeFile({ id: 'container-file', targetPath: containerPath, content: 'c' })],
+      subfeatures: [
+        {
+          id: 'sub-a',
+          displayName: 'Sub A',
+          resources: [wholeFile({ id: 'sub-file', targetPath: subPath, content: 's' })],
+          operations: [{ id: 'sub-op', version: '1', apply: () => undefined }],
+        },
+      ],
+      defaultInstallSubfeatureIds: [],
+    };
+    const integration = makeIntegration({ features: [container] });
+    const state = getDefaultState('test');
+
+    await applyAndRecord(installer, makeContext(state, tempDir), integration, container);
+
+    expect(await readFile(subPath, 'utf-8')).toBe('s');
+    const recorded = state.integrations.installed[0]?.features[0];
+    expect(recorded?.resources.map((r) => r.id)).toEqual(['container-file']);
+    expect(recorded?.operations).toEqual([]);
+    expect(recorded?.subfeatures?.[0]?.resources?.map((r) => r.id)).toEqual(['sub-file']);
+    expect(recorded?.subfeatures?.[0]?.operations?.map((o) => o.id)).toEqual(['sub-op']);
+  });
+
+  it('skips reapplying a subfeature resource recorded as already applied', async () => {
+    let applyCount = 0;
+    const container: FeatureContainer = {
+      id: 'container',
+      displayName: 'Container',
+      subfeatures: [
+        {
+          id: 'sub-a',
+          displayName: 'Sub A',
+          resources: [
+            {
+              id: 'sub-resource',
+              resourceType: 'custom',
+              version: '1',
+              apply: () => {
+                applyCount += 1;
+                return { id: 'sub-resource', resourceType: 'custom', version: '1' };
+              },
+              isApplied: () => true,
+              remove: () => undefined,
+            },
+          ],
+        },
+      ],
+      defaultInstallSubfeatureIds: [],
+    };
+    const integration = makeIntegration({ features: [container] });
+    const state = getDefaultState('test');
+    const context = makeContext(state, tempDir);
+
+    await applyAndRecord(installer, context, integration, container);
+    await applyAndRecord(installer, context, integration, container);
+
+    expect(applyCount).toBe(1);
+  });
+
+  it('removes recorded assets of a subfeature that is no longer active', async () => {
+    const subPath = join(tempDir, 'sub.txt');
+    const undoneOperations: string[] = [];
+    const removedResources: string[] = [];
+    const subfeatureResources: ResourceDeclaration[] = [
+      {
+        id: 'sub-file',
+        resourceType: 'custom',
+        apply: async () => {
+          await writeFile(subPath, 's');
+          return { id: 'sub-file', resourceType: 'custom' };
+        },
+        isApplied: () => existsSync(subPath),
+        remove: async () => {
+          removedResources.push('sub-file');
+          await rm(subPath, { force: true });
+        },
+      },
+    ];
+    const container: FeatureContainer = {
+      id: 'container',
+      displayName: 'Container',
+      subfeatures: [
+        {
+          id: 'sub-a',
+          displayName: 'Sub A',
+          resources: subfeatureResources,
+          operations: [
+            {
+              id: 'sub-op',
+              apply: () => undefined,
+              undo: () => {
+                undoneOperations.push('sub-op');
+              },
+            },
+          ],
+        },
+      ],
+      defaultInstallSubfeatureIds: [],
+    };
+    const state = getDefaultState('test');
+    const context = makeContext(state, tempDir);
+
+    /** Install the container with only `activeSubfeatureIds` selected, as feature selection does. */
+    const integrate = (activeSubfeatureIds: string[]) => {
+      const selected: FeatureContainer = {
+        ...container,
+        subfeatures: container.subfeatures.filter((sub) => activeSubfeatureIds.includes(sub.id)),
+      };
+      return applyAndRecord(
+        installer,
+        context,
+        makeIntegration({ features: [container] }),
+        selected,
+      );
+    };
+
+    await integrate(['sub-a']);
+    expect(existsSync(subPath)).toBe(true);
+
+    // A later CLI version declares one more resource on sub-a, which this
+    // install never applied, and sub-a is now deselected.
+    subfeatureResources.push({
+      id: 'added-later',
+      resourceType: 'custom',
+      apply: () => ({ id: 'added-later', resourceType: 'custom' }),
+      isApplied: () => false,
+      remove: () => {
+        removedResources.push('added-later');
+      },
+    });
+
+    await integrate([]);
+
+    expect(existsSync(subPath)).toBe(false);
+    expect(removedResources).toEqual(['sub-file']);
+    expect(undoneOperations).toEqual(['sub-op']);
+    expect(state.integrations.installed[0]?.features[0]?.subfeatures).toEqual([]);
   });
 
   it('lists registered integrations', () => {

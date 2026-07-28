@@ -142,6 +142,57 @@ describe('renderCompletionSummary', () => {
     expect(outroCall?.args[1]).toBe('success');
   });
 
+  it('lists resource paths owned by subfeatures alongside the container ones', () => {
+    const integration: IntegrationDeclaration = {
+      id: 'test',
+      displayName: 'Test',
+      features: [{ id: 'a', displayName: 'Feature A' }],
+    };
+
+    renderCompletionSummary(
+      integration,
+      [
+        installedFeature('a', {
+          resources: [
+            {
+              id: 'container-file',
+              resourceType: 'whole-file',
+              path: '/tmp/project/.sonar/hook.sh',
+              updatedByCliVersion: 'test',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+          subfeatures: [
+            {
+              featureId: 'sub-a',
+              dependencies: [],
+              resources: [
+                {
+                  id: 'sub-file',
+                  resourceType: 'whole-file',
+                  path: '/tmp/project/.sonar/sub.sh',
+                  updatedByCliVersion: 'test',
+                  updatedAt: '2026-01-01T00:00:00.000Z',
+                },
+              ],
+            },
+            { featureId: 'sub-b', dependencies: [] },
+          ],
+        }),
+      ],
+      [],
+    );
+
+    const phaseCall = getMockUiCalls().find(
+      (c) => c.method === 'phase' && c.args[0] === 'Installed',
+    );
+    const items = (phaseCall?.args[1] ?? []) as PhaseItem[];
+    expect(items[0]?.subItems).toEqual([
+      '/tmp/project/.sonar/hook.sh',
+      '/tmp/project/.sonar/sub.sh',
+    ]);
+  });
+
   it('renders a Removed list for uninstalled features', () => {
     const integration: IntegrationDeclaration = {
       id: 'test',

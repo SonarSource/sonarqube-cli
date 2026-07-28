@@ -37,13 +37,14 @@ import { buildApplications } from './feature-target.ts';
 import { renderInstallPreviewAndConfirm } from './install-preview.ts';
 import { integrationInstaller } from './installer.ts';
 import type { IntegrationRegistry } from './registry.ts';
-import { isFeatureContainer, selectFeaturesForInvocation } from './selection.ts';
+import { selectFeaturesForInvocation } from './selection.ts';
 import type {
   IntegrationContext,
   IntegrationDeclaration,
   IntegrationExecutionMode,
   IntegrationInvocation,
 } from './types.ts';
+import { isFeatureContainer } from './types.ts';
 
 export interface InstallIntegrationOptions<TOptions> {
   registry: IntegrationRegistry;

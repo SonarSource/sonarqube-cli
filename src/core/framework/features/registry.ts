@@ -18,8 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { isFeatureContainer } from './selection.ts';
-import type { IntegrationDeclaration } from './types.ts';
+import type { FeatureDeclaration, IntegrationDeclaration } from './types.ts';
+import { isFeatureContainer } from './types.ts';
 
 export class IntegrationRegistry {
   private readonly declarations = new Map<string, IntegrationDeclaration>();
@@ -47,37 +47,7 @@ export class IntegrationRegistry {
       `Duplicate feature id in integration ${declaration.id}`,
     );
     for (const feature of declaration.features) {
-      this.ensureNonEmptyId(feature.id, 'Feature');
-      this.ensureUnique(
-        (feature.dependencies ?? []).map((dependency) => dependency.id),
-        `Duplicate dependency id in feature ${declaration.id}.${feature.id}`,
-      );
-      this.ensureUnique(
-        (feature.resources ?? []).map((resource) => resource.id),
-        `Duplicate resource id in feature ${declaration.id}.${feature.id}`,
-      );
-      this.ensureUnique(
-        (feature.operations ?? []).map((operation) => operation.id),
-        `Duplicate operation id in feature ${declaration.id}.${feature.id}`,
-      );
-      for (const dependency of feature.dependencies ?? []) {
-        this.ensureNonEmptyId(dependency.id, 'Dependency');
-      }
-      for (const resource of feature.resources ?? []) {
-        this.ensureNonEmptyId(resource.id, 'Resource');
-      }
-      for (const operation of feature.operations ?? []) {
-        this.ensureNonEmptyId(operation.id, 'Operation');
-      }
-      if (isFeatureContainer(feature)) {
-        this.ensureUnique(
-          feature.subfeatures.map((sub) => sub.id),
-          `Duplicate subfeature id in container ${declaration.id}.${feature.id}`,
-        );
-        for (const subfeature of feature.subfeatures) {
-          this.ensureNonEmptyId(subfeature.id, 'Subfeature');
-        }
-      }
+      this.validateFeature(declaration, feature);
     }
     this.ensureUnique(
       (declaration.legacyFeatures ?? []).map((feature) => feature.id),
@@ -85,6 +55,51 @@ export class IntegrationRegistry {
     );
     for (const legacyFeature of declaration.legacyFeatures ?? []) {
       this.ensureNonEmptyId(legacyFeature.id, 'Legacy feature');
+    }
+  }
+
+  private validateFeature(declaration: IntegrationDeclaration, feature: FeatureDeclaration): void {
+    this.ensureNonEmptyId(feature.id, 'Feature');
+    const featurePath = `${declaration.id}.${feature.id}`;
+    const subfeatures = isFeatureContainer(feature) ? feature.subfeatures : [];
+    const resources = [
+      ...(feature.resources ?? []),
+      ...subfeatures.flatMap((subfeature) => subfeature.resources ?? []),
+    ];
+    const operations = [
+      ...(feature.operations ?? []),
+      ...subfeatures.flatMap((subfeature) => subfeature.operations ?? []),
+    ];
+
+    this.ensureUnique(
+      (feature.dependencies ?? []).map((dependency) => dependency.id),
+      `Duplicate dependency id in feature ${featurePath}`,
+    );
+    this.ensureUnique(
+      resources.map((resource) => resource.id),
+      `Duplicate resource id in feature ${featurePath}`,
+    );
+    this.ensureUnique(
+      operations.map((operation) => operation.id),
+      `Duplicate operation id in feature ${featurePath}`,
+    );
+    for (const dependency of feature.dependencies ?? []) {
+      this.ensureNonEmptyId(dependency.id, 'Dependency');
+    }
+    for (const resource of resources) {
+      this.ensureNonEmptyId(resource.id, 'Resource');
+    }
+    for (const operation of operations) {
+      this.ensureNonEmptyId(operation.id, 'Operation');
+    }
+    if (isFeatureContainer(feature)) {
+      this.ensureUnique(
+        feature.subfeatures.map((subfeature) => subfeature.id),
+        `Duplicate subfeature id in container ${featurePath}`,
+      );
+      for (const subfeature of feature.subfeatures) {
+        this.ensureNonEmptyId(subfeature.id, 'Subfeature');
+      }
     }
   }
 

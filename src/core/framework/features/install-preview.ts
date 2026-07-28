@@ -23,8 +23,8 @@
 
 import { bold, dim, note, pressEnterKeyPrompt, wrapText } from '@/core/ui';
 
-import { isFeatureContainer } from './selection.ts';
 import type { FeatureApplication, FeatureDeclaration } from './types.ts';
+import { isFeatureContainer } from './types.ts';
 
 const PREVIEW_BOX_TITLE = 'What will be installed';
 const INSTALL_PROMPT = 'Press Enter to install…';

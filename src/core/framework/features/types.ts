@@ -130,25 +130,33 @@ export interface FeatureDeclaration<TOptions = Record<string, unknown>> {
 }
 
 /**
- * Thin subfeature declaration — metadata, install condition, and binary dependencies only.
- * No resources or operations; those belong to the owning {@link FeatureContainer}.
+ * Subfeature declaration — metadata, install condition, and the dependencies,
+ * resources, and operations owned by that subfeature. Scope, target root, and
+ * attrs always come from the owning {@link FeatureContainer}.
  */
 export type SubfeatureDeclaration<TOptions = Record<string, unknown>> = Pick<
   FeatureDeclaration<TOptions>,
-  'id' | 'displayName' | 'shouldInstall' | 'dependencies'
+  'id' | 'displayName' | 'shouldInstall' | 'dependencies' | 'resources' | 'operations'
 >;
 
 /**
- * A {@link FeatureDeclaration} that groups thin {@link SubfeatureDeclaration}s under it.
- * The container owns the centralized resource; subfeatures contribute only binary
- * dependencies and install conditions (no resources, no operations).
- * Use {@link isFeatureContainer} from `selection` to downcast before accessing `subfeatures`.
+ * A {@link FeatureDeclaration} that groups {@link SubfeatureDeclaration}s under it.
+ * Container-owned assets always apply; subfeature-owned assets apply only while
+ * that subfeature is active.
+ * Use {@link isFeatureContainer} to downcast before accessing `subfeatures`.
  */
 export interface FeatureContainer<
   TOptions = Record<string, unknown>,
 > extends FeatureDeclaration<TOptions> {
   subfeatures: SubfeatureDeclaration<TOptions>[];
   defaultInstallSubfeatureIds: string[];
+}
+
+/** Type guard — returns true when `feature` is a {@link FeatureContainer}. */
+export function isFeatureContainer<TOptions>(
+  feature: FeatureDeclaration<TOptions>,
+): feature is FeatureContainer<TOptions> {
+  return 'subfeatures' in feature;
 }
 
 export interface LegacyFeatureDeclaration {

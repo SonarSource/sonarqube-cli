@@ -25,6 +25,7 @@ import { join } from 'node:path';
 import { parse as parseToml } from 'smol-toml';
 
 import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '@/core/config-constants.ts';
+import { recordedFeatureResources } from '@/core/framework/features';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { resolveAuth } from '@/core/host/auth-resolver.ts';
 import { getNetworkConfig } from '@/core/host/connectivity/network-config.ts';
@@ -332,7 +333,7 @@ function pathFromFeatures(
   features: CliState['integrations']['installed'][number]['features'],
 ): string | undefined {
   for (const feature of features) {
-    for (const resource of feature.resources) {
+    for (const resource of recordedFeatureResources(feature)) {
       if (resource.path && !resource.path.endsWith('.sh') && !resource.path.endsWith('.ps1')) {
         return abbreviatePath(resource.path);
       }
