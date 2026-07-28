@@ -19,7 +19,7 @@
  */
 
 // Integration tests for the background "new version available" stderr notice
-// (core/host/update/notification.ts). The harness always spawns the CLI with
+// (core/update/notification.ts). The harness always spawns the CLI with
 // piped stdio (never a real TTY) and defaults CI=true for determinism, so
 // these tests explicitly clear CI and set SONARQUBE_CLI_MOCK_TTY to reach the
 // code path that would otherwise only run for an interactive human user.

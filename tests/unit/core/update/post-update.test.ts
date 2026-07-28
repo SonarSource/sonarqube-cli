@@ -27,11 +27,11 @@ import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.t
 import * as hooks from '@/commands/integrate/claude/hooks.ts';
 import * as secretsInstall from '@/core/host/install/secrets.ts';
 import * as migration from '@/core/host/migration.ts';
-import type { PostUpdateDependencies } from '@/core/host/post-update.ts';
-import { runPostUpdateActions } from '@/core/host/post-update.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
+import type { PostUpdateDependencies } from '@/core/update/post-update.ts';
+import { runPostUpdateActions } from '@/core/update/post-update.ts';
 import * as versionLib from '@/core/version.ts';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';

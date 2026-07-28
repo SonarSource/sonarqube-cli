@@ -19,6 +19,7 @@
  */
 
 import type { IntegrationRegistry } from '@/core/framework/features';
+import { cleanObsoleteFromState, OBSOLETE_A3S_MARKER } from '@/core/host/migration.ts';
 
 import { version as CURRENT_VERSION } from '../../../package.json';
 import logger from '../observability/logger.ts';
@@ -28,7 +29,6 @@ import { updateScaScannerBinaryIfNeeded, updateSecretsBinaryIfNeeded } from './b
 import type { InstallHooksFn } from './claude-hooks-migration.ts';
 import { migrateClaudeCodeHooks } from './claude-hooks-migration.ts';
 import { migrateDeclarativeIntegrations } from './declarative-integrations-migration.ts';
-import { cleanObsoleteFromState, OBSOLETE_A3S_MARKER } from './migration.ts';
 import { migrateLegacyTelemetryEvents } from './telemetry-migration.ts';
 
 /**

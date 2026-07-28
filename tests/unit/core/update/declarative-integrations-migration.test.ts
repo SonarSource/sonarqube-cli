@@ -21,10 +21,10 @@
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
 import { IntegrationRegistry } from '@/core/framework/features';
-import { migrateDeclarativeIntegrations } from '@/core/host/declarative-integrations-migration.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
+import { migrateDeclarativeIntegrations } from '@/core/update/declarative-integrations-migration.ts';
 
 function makeState(): CliState {
   return getDefaultState('1.0.0');

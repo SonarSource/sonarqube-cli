@@ -26,9 +26,9 @@ import { COMMAND_TREE } from '@/commands/command-tree.ts';
 import { supportedIntegrations } from '@/commands/integrate';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import { installHooks } from '@/commands/integrate/claude/hooks.ts';
-import * as postUpdate from '@/core/host/post-update.ts';
 import { flushSentry } from '@/core/observability/sentry.ts';
 import { setFormattedOutputMode } from '@/core/ui';
+import * as postUpdate from '@/core/update/post-update.ts';
 
 // Activate formatted output mode early so startup messages are collected
 // rather than printed to stdout when the command will produce JSON output.

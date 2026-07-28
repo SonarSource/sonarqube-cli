@@ -27,11 +27,11 @@ import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:te
 
 import * as configConstants from '@/core/config-constants.ts';
 import { DISTRIBUTION } from '@/core/host/distribution.ts';
-import { migrateLegacyTelemetryEvents } from '@/core/host/telemetry-migration.ts';
 import type { CliState, StoredCommandExecutedEvent } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import * as telemetryEvents from '@/core/telemetry/telemetry-events.ts';
+import { migrateLegacyTelemetryEvents } from '@/core/update/telemetry-migration.ts';
 
 function makeState(): CliState {
   return getDefaultState('1.0.0');

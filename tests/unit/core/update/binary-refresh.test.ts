@@ -20,16 +20,16 @@
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
-import {
-  updateScaScannerBinaryIfNeeded,
-  updateSecretsBinaryIfNeeded,
-} from '@/core/host/binary-refresh.ts';
 import * as scaScannerInstall from '@/core/host/install/sca-scanner.ts';
 import * as secretsInstall from '@/core/host/install/secrets.ts';
 import { SCA_SCANNER_BINARY_NAME } from '@/core/host/install-types.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
+import {
+  updateScaScannerBinaryIfNeeded,
+  updateSecretsBinaryIfNeeded,
+} from '@/core/update/binary-refresh.ts';
 
 function makeState(): CliState {
   return getDefaultState('1.0.0');

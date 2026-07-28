@@ -25,14 +25,15 @@ import * as fs from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import logger from '../observability/logger.ts';
-import type { CliState, HookExtension } from '../state/state.ts';
-import { loadState } from '../state/state-repository.ts';
 import {
   migrateHookScripts,
   OBSOLETE_A3S_MARKER,
   removeObsoleteHookArtifacts,
-} from './migration.ts';
+} from '@/core/host/migration.ts';
+
+import logger from '../observability/logger.ts';
+import type { CliState, HookExtension } from '../state/state.ts';
+import { loadState } from '../state/state-repository.ts';
 
 /**
  * Signature of `@/commands/integrate/claude/hooks.ts`'s `installHooks`,

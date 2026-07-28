@@ -23,11 +23,11 @@
 
 import { installScaScannerBinary } from '@/core/host/install/sca-scanner.ts';
 import { installSecretsBinary } from '@/core/host/install/secrets.ts';
+import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from '@/core/host/install-types.ts';
 
 import logger from '../observability/logger.ts';
 import type { CliState } from '../state/state.ts';
 import { loadState } from '../state/state-repository.ts';
-import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from './install-types.ts';
 
 /**
  * Update the sonar-secrets binary if it is already installed but targets a different version
