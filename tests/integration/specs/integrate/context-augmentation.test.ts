@@ -417,7 +417,7 @@ describe('integrate claude — Context Augmentation', () => {
   );
 
   it(
-    'skips CAG entirely when --skip-context is passed',
+    'skips CAG entirely when _SKIP_CAG is set',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -435,7 +435,9 @@ describe('integrate claude — Context Augmentation', () => {
         ].join('\n'),
       );
 
-      const result = await harness.run('integrate claude --non-interactive --skip-context');
+      const result = await harness.run('integrate claude --non-interactive', {
+        extraEnv: { _SKIP_CAG: '1' },
+      });
 
       expect(result.exitCode).toBe(0);
       // No init/skill invocations — only --version probes (if any) are allowed
@@ -929,7 +931,7 @@ describe('integrate codex — Context Augmentation', () => {
   );
 
   it(
-    'skips CAG entirely when --skip-context is passed',
+    'skips CAG entirely when _SKIP_CAG is set',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -949,10 +951,11 @@ describe('integrate codex — Context Augmentation', () => {
         ].join('\n'),
       );
 
-      const result = await harness.run('integrate codex --non-interactive --skip-context', {
+      const result = await harness.run('integrate codex --non-interactive', {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+          _SKIP_CAG: '1',
         },
       });
 

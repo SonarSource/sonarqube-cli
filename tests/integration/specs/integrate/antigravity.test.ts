@@ -174,19 +174,6 @@ describe('integrate antigravity', () => {
       { timeout: 30000 },
     );
 
-    it(
-      'announces Context Augmentation skip when --skip-context is set',
-      async () => {
-        const result = await harness.run('integrate antigravity --non-interactive --skip-context');
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout + result.stderr).toContain(
-          'Skipping Vortex context augmentation (--skip-context)',
-        );
-      },
-      { timeout: 30000 },
-    );
-
     it.each([
       [true, true, true],
       [true, false, false],
@@ -325,7 +312,8 @@ describe('integrate antigravity', () => {
         writeExistingGlobalHook(harness);
         writeExistingGlobalInstructions(harness);
 
-        const result = await harness.run('integrate antigravity --skip-context', {
+        const result = await harness.run('integrate antigravity', {
+          extraEnv: { _SKIP_CAG: '1' },
           stdinChunks: ['\r', '\r', '\r'],
         });
 
@@ -468,7 +456,6 @@ describe('integrate antigravity', () => {
         expect(help).toContain('--project');
         expect(help).toContain('--global');
         expect(help).toContain('--non-interactive');
-        expect(help).toContain('--skip-context');
         expect(help).toContain('sonar.projectKey');
       },
       { timeout: 15000 },

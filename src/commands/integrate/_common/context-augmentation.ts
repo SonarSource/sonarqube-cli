@@ -32,6 +32,13 @@ import { SonarQubeClient } from '@/core/server/client.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 import { discreetSuccess, type OutputChannel, print, text, warn, withSpinner } from '@/core/ui';
 
+export const ENV_SKIP_CAG = '_SKIP_CAG';
+
+/** True when _SKIP_CAG is set to 1. */
+export function isContextAugmentationSkipped(): boolean {
+  return process.env[ENV_SKIP_CAG]?.trim() === '1';
+}
+
 export interface ResolveContextAugmentationSetupParams {
   auth: ResolvedAuth;
   projectKey: string | undefined;

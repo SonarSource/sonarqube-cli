@@ -680,13 +680,10 @@ describe('integrate copilot', () => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
         // Interactive (no --non-interactive): the entitled org makes SQAA an ask.
-        const result = await harness.run(
-          `integrate copilot --project ${TEST_PROJECT} --skip-context`,
-          {
-            extraEnv,
-            stdinChunks: ['\r', '\r', '\r', '\r', '\r'],
-          },
-        );
+        const result = await harness.run(`integrate copilot --project ${TEST_PROJECT}`, {
+          extraEnv: { ...extraEnv, _SKIP_CAG: '1' },
+          stdinChunks: ['\r', '\r', '\r', '\r', '\r'],
+        });
 
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;

@@ -2009,11 +2009,12 @@ describe('integrate claude — interactive feature selection', () => {
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 
       // '\r' selects project scope, then secrets, SQAA hook, SQAA instructions, MCP prompts.
-      const result = await harness.run('integrate claude --project my-project --skip-context', {
+      const result = await harness.run('integrate claude --project my-project', {
         stdinChunks: ['\r', '\r', '\r', '\r', '\r'],
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+          _SKIP_CAG: '1',
         },
       });
 

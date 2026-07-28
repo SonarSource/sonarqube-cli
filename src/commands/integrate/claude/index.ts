@@ -34,6 +34,7 @@ import {
 } from '../_common/agent-integrate-prelude.ts';
 import {
   buildRecordedIntegrationAttrs,
+  isContextAugmentationSkipped,
   resolveContextAugmentationSetup,
 } from '../_common/context-augmentation.ts';
 import { resolveSqaaSetup } from '../_common/sqaa-entitlement.ts';
@@ -80,7 +81,7 @@ export async function integrateClaude(
     isGlobal: ctx.isGlobal,
   });
 
-  const contextAugmentation = options.skipContext
+  const contextAugmentation = isContextAugmentationSkipped()
     ? null
     : await resolveContextAugmentationSetup({
         auth: { ...auth, token: config.token },
