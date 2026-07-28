@@ -20,13 +20,14 @@
 
 import { join } from 'node:path';
 
-import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependencies';
-import { textSnippet, textSnippetRemover } from '../../../_common/registry/resources';
+import { sonarSecretsBinaryDependency } from '@/core/framework/dependencies';
 import type {
   FeatureContainer,
   FeatureDeclaration,
   IntegrationDeclaration,
-} from '../../../_common/registry/types.ts';
+} from '@/core/framework/features/types.ts';
+import { textSnippet, textSnippetRemover } from '@/core/framework/resources';
+
 import type { GitHookType, IntegrateGitOptions } from '../../options.ts';
 import {
   createDepRisksSubfeature,

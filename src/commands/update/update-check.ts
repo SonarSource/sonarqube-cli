@@ -25,21 +25,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { CommandFailedError } from '@/core/command-error.ts';
-import {
-  CLI_STABLE_VERSION_PATH,
-  SONARSOURCE_BINARIES_URL,
-  UPDATE_SCRIPT_BASE_URL,
-} from '@/core/config-constants.ts';
-import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
+import { UPDATE_SCRIPT_BASE_URL } from '@/core/config-constants.ts';
 import { isWindows } from '@/core/host/platform-detector.ts';
+import { fetchLatestVersion, fetchText } from '@/core/host/update/check.ts';
 import { Version } from '@/core/version.ts';
 
 import { version as CURRENT_VERSION } from '../../../package.json';
 
-const UPDATE_CHECK_TIMEOUT_MS = 5000;
-/** Best-effort background fetch after eligible commands — fail fast to avoid blocking UX. */
-export const BACKGROUND_UPDATE_CHECK_TIMEOUT_MS = 1500;
-const STABLE_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:\.\d+)?$/;
 const TEMP_SCRIPT_PREFIX = 'sonar-update-';
 const TEMP_SCRIPT_CREATE_ATTEMPTS = 5;
 
@@ -165,43 +157,6 @@ export interface UpdateCheckResult {
   currentVersion: Version;
   latest: Update;
   upToDate: boolean;
-}
-
-async function fetchText(
-  url: string,
-  description: string,
-  timeoutMs = UPDATE_CHECK_TIMEOUT_MS,
-): Promise<string> {
-  const response = await fetch(url, {
-    signal: AbortSignal.timeout(timeoutMs),
-    ...buildFetchNetworkOptions(url),
-  });
-  if (!response.ok) {
-    throw new CommandFailedError(`Failed to fetch ${description}: HTTP ${response.status}`, {
-      remediationHint: 'Check network access and retry.',
-    });
-  }
-  return response.text();
-}
-
-function parseStableVersion(raw: string): string | null {
-  const latestVersion = raw.trim();
-  return STABLE_VERSION_PATTERN.test(latestVersion) ? latestVersion : null;
-}
-
-/**
- * Reads the published stable.version string from binaries.sonarsource.com.
- */
-export async function fetchLatestVersion(timeoutMs = UPDATE_CHECK_TIMEOUT_MS): Promise<string> {
-  const stableVersionUrl = `${SONARSOURCE_BINARIES_URL}/${CLI_STABLE_VERSION_PATH}`;
-  const body = await fetchText(stableVersionUrl, 'stable version', timeoutMs);
-  const version = parseStableVersion(body);
-  if (!version) {
-    throw new CommandFailedError('Could not determine the latest version.', {
-      remediationHint: 'Retry later or update manually using the installer script.',
-    });
-  }
-  return version;
 }
 
 /**

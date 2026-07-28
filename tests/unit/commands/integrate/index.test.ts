@@ -20,8 +20,9 @@
 
 import { describe, expect, it } from 'bun:test';
 
+import { createIntegrationRegistry } from '@/core/framework/features/registry.ts';
+
 import { ALL_INTEGRATIONS, supportedIntegrations } from '../../../../src/commands/integrate';
-import { createIntegrationRegistry } from '../../../../src/commands/integrate/_common/registry/core.ts';
 
 describe('ALL_INTEGRATIONS', () => {
   it('seeds the global supportedIntegrations registry in order', () => {

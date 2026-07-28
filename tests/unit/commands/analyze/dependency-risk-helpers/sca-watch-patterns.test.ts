@@ -20,7 +20,8 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import type { ScaScannerInstaller } from '../../../../../src/commands/_common/install/sca-scanner.ts';
+import type { ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
+
 import type { ScaScannerSpawner } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner-spawner.ts';
 import {
   anyFileMatches,

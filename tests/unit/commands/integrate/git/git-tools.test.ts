@@ -20,7 +20,8 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { createIntegrationRegistry } from '../../../../../src/commands/integrate/_common/registry/core.ts';
+import { createIntegrationRegistry } from '@/core/framework/features/registry.ts';
+
 import {
   GIT_INTEGRATIONS,
   HUSKY_INTEGRATION_ID,

@@ -24,12 +24,13 @@
 // unlike the nested Claude/Codex format. These helpers are isolated here and do not modify
 // the shared hook infrastructure.
 
+import type { IntegrationContext } from '@/core/framework/features';
+
 import {
   HOOK_TIMEOUT_SEC,
   resolveAgentHookCommand,
   SONAR_SECRETS_MARKER,
 } from '../_common/hooks.ts';
-import type { IntegrationContext } from '../_common/registry';
 
 export const CURSOR_HOOK_MATCHERS: Record<string, string> = {
   beforeReadFile: 'Read|TabRead',

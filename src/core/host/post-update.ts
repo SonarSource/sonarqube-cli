@@ -22,18 +22,15 @@ import * as fs from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { installScaScannerBinary } from '@/commands/_common/install/sca-scanner.ts';
-import { installSecretsBinary } from '@/commands/_common/install/secrets.ts';
-import { supportedIntegrations } from '@/commands/integrate';
 import {
   type FeatureDeclaration,
   findInstalledIntegration,
   integrationInstaller,
   type IntegrationRegistry,
   isFeatureContainer,
-} from '@/commands/integrate/_common/registry';
-import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
-import { installHooks } from '@/commands/integrate/claude/hooks.ts';
+} from '@/core/framework/features';
+import { installScaScannerBinary } from '@/core/host/install/sca-scanner.ts';
+import { installSecretsBinary } from '@/core/host/install/secrets.ts';
 import { appendTelemetryEvent } from '@/core/telemetry/telemetry-events.ts';
 
 import { version as CURRENT_VERSION } from '../../../package.json';
@@ -51,6 +48,24 @@ import {
 } from './migration.ts';
 
 /**
+ * Command-layer values `post-update` needs but must not import directly
+ * (this module lives in `core/`, which must not depend on `commands/`).
+ * The CLI composition root (`src/index.ts`) supplies these.
+ */
+export interface PostUpdateDependencies {
+  /** Full registry of declarative integrations (`@/commands/integrate`). */
+  supportedIntegrations: IntegrationRegistry;
+  /** Claude Code's integration id (`@/commands/integrate/claude/declaration.ts`). */
+  claudeIntegrationId: string;
+  /** Installs/refreshes Claude Code hook scripts (`@/commands/integrate/claude/hooks.ts`). */
+  installHooks: (
+    projectRoot: string,
+    globalDir: string | undefined,
+    installSqaa: boolean,
+  ) => Promise<void>;
+}
+
+/**
  * Runs any actions that need to happen once after the CLI has been updated.
  *
  * - Skipped entirely when the state file is absent (fresh installation).
@@ -58,7 +73,7 @@ import {
  * - On success the persisted CLI version is bumped to `CURRENT_VERSION` so the
  *   actions are not repeated on the next invocation.
  */
-export async function runPostUpdateActions(): Promise<void> {
+export async function runPostUpdateActions(deps: PostUpdateDependencies): Promise<void> {
   if (!stateFileExists()) {
     // No state file means this is a fresh installation — nothing to migrate.
     return;
@@ -77,7 +92,7 @@ export async function runPostUpdateActions(): Promise<void> {
   logger.debug(`Running post-update actions (${previousVersion} → ${CURRENT_VERSION})`);
 
   try {
-    await runActions(previousVersion, CURRENT_VERSION);
+    await runActions(deps);
     // Reload state to pick up changes made by subroutines
     // (migrateDeclarativeIntegrations, migrateClaudeCodeHooks,
     // updateSecretsBinaryIfNeeded) that load and save their own state copies.
@@ -90,10 +105,10 @@ export async function runPostUpdateActions(): Promise<void> {
   }
 }
 
-async function runActions(_previousVersion: string, _currentVersion: string): Promise<void> {
+async function runActions(deps: PostUpdateDependencies): Promise<void> {
   migrateLegacyTelemetryEvents();
-  await migrateDeclarativeIntegrations();
-  await migrateClaudeCodeHooks();
+  await migrateDeclarativeIntegrations(deps.supportedIntegrations);
+  await migrateClaudeCodeHooks(deps.installHooks, deps.claudeIntegrationId);
   await updateSecretsBinaryIfNeeded();
   await updateScaScannerBinaryIfNeeded();
 }
@@ -151,9 +166,7 @@ function migrateSinkFile(): void {
   }
 }
 
-export async function migrateDeclarativeIntegrations(
-  registry: IntegrationRegistry = supportedIntegrations,
-): Promise<void> {
+export async function migrateDeclarativeIntegrations(registry: IntegrationRegistry): Promise<void> {
   const state = loadState();
   let stateChanged = false;
 
@@ -302,10 +315,14 @@ function hasBinaryInState(state: CliState, binaryName: string): boolean {
  *
  * @param homedirFn - Injectable for tests; defaults to os.homedir()
  */
-export async function migrateClaudeCodeHooks(homedirFn: () => string = homedir): Promise<void> {
+export async function migrateClaudeCodeHooks(
+  installHooksFn: PostUpdateDependencies['installHooks'],
+  claudeIntegrationId: string,
+  homedirFn: () => string = homedir,
+): Promise<void> {
   const state = loadState();
 
-  if (hasInstalledDeclarativeIntegration(state, CLAUDE_INTEGRATION_ID)) {
+  if (hasInstalledDeclarativeIntegration(state, claudeIntegrationId)) {
     logger.debug('Declarative Claude Code integration detected — skipping legacy hook migration');
     return;
   }
@@ -338,7 +355,7 @@ export async function migrateClaudeCodeHooks(homedirFn: () => string = homedir):
   for (const { projectRoot, globalDir } of locations) {
     try {
       migrateHookScripts(projectRoot, globalDir);
-      await installHooks(projectRoot, globalDir, false);
+      await installHooksFn(projectRoot, globalDir, false);
       await removeObsoleteHookArtifacts(projectRoot, OBSOLETE_A3S_MARKER);
       logger.debug(`Migrated Claude Code hooks for: ${globalDir ?? projectRoot}`);
     } catch (err) {

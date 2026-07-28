@@ -20,9 +20,9 @@
 
 import picomatch from 'picomatch';
 
+import type { ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import logger from '@/core/observability/logger.ts';
 
-import type { ScaScannerInstaller } from '../../_common/install/sca-scanner.ts';
 import type { ScaScannerSpawner } from './sca-scanner-spawner.ts';
 
 interface WatchPatternsPayload {

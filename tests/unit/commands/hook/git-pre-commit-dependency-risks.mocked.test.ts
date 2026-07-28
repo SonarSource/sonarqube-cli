@@ -22,9 +22,9 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { CommandFailedError } from '@/core/command-error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import * as scaInstall from '@/core/host/install/sca-scanner.ts';
 import { clearMockUiCalls, findMockUiCall, getMockUiCalls, setMockUi } from '@/core/ui';
 
-import * as scaInstall from '../../../../src/commands/_common/install/sca-scanner.ts';
 import { ScaScanOrchestrator } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
 import type {
   AnalyzeProjectResponse,

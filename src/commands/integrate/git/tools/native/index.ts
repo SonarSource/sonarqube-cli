@@ -21,18 +21,18 @@
 import { join } from 'node:path';
 
 import { CommandFailedError } from '@/core/command-error.ts';
-import { resolveGitHooksDir } from '@/core/host/git/hooks.ts';
-import { normalizePath } from '@/core/io/fs-utils.ts';
-import { spawnProcess } from '@/core/process/process.ts';
-
-import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependencies';
-import { wholeFile, wholeFileRemover } from '../../../_common/registry/resources';
+import { sonarSecretsBinaryDependency } from '@/core/framework/dependencies';
 import type {
   FeatureContainer,
   FeatureDeclaration,
   IntegrationContext,
   IntegrationDeclaration,
-} from '../../../_common/registry/types.ts';
+} from '@/core/framework/features/types.ts';
+import { wholeFile, wholeFileRemover } from '@/core/framework/resources';
+import { resolveGitHooksDir } from '@/core/host/git/hooks.ts';
+import { normalizePath } from '@/core/io/fs-utils.ts';
+import { spawnProcess } from '@/core/process/process.ts';
+
 import type { GitHookType, IntegrateGitOptions } from '../../options.ts';
 import {
   createDepRisksSubfeature,

@@ -38,8 +38,8 @@ import { dirname, join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
-import { buildLocalCagBinaryName } from '@/commands/_common/install/context-augmentation.ts';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
+import { buildLocalCagBinaryName } from '@/core/host/install/context-augmentation.ts';
 import { detectPlatform } from '@/core/host/platform-detector.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
 import type { CliState } from '@/core/state/state.ts';

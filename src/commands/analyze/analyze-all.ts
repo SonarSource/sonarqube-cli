@@ -19,6 +19,7 @@
  */
 
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 import { SQAA_ANALYZE_CALLER_COMMAND } from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 import {
@@ -29,7 +30,6 @@ import {
   text,
 } from '@/core/ui';
 
-import { resolveSecretsBinaryPath } from '../_common/install/secrets.ts';
 import type { SecretsJsonIssue } from './secrets.ts';
 import {
   analyzeSecrets,

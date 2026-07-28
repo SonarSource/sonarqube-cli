@@ -20,7 +20,6 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 
-import { ScaScannerInstaller } from '@/commands/_common/install/sca-scanner.ts';
 import {
   type AnalyzeProjectResponse,
   ScaScannerRunner,
@@ -30,6 +29,7 @@ import { ScaScannerSpawner } from '@/commands/analyze/dependency-risk-helpers/sc
 import { CommandFailedError } from '@/core/command-error.ts';
 import { LOG_FILE } from '@/core/config-constants.ts';
 import { clearNetworkConfigCache } from '@/core/host/connectivity/network-config.ts';
+import { ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import type { SpawnResult } from '@/core/process/process.ts';
 
 const okInstaller: ScaScannerInstaller = { install: () => Promise.resolve('/bin/sca') };

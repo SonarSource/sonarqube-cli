@@ -64,6 +64,18 @@ describe('SonarCommand', () => {
     });
   });
 
+  // ─── addCommand() ────────────────────────────────────────────────────────
+
+  describe('addCommand()', () => {
+    it('throws to enforce use of .command() instead', () => {
+      const cmd = new SonarCommand();
+      const sub = new SonarCommand('sub');
+      expect(() => cmd.addCommand(sub)).toThrow(
+        'addCommand() is disallowed; use .command() instead',
+      );
+    });
+  });
+
   // ─── runCommand() ─────────────────────────────────────────────────────────
 
   describe('runCommand()', () => {

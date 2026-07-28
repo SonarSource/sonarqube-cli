@@ -28,10 +28,10 @@ import {
   ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR,
   ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR_FROM_AGENTS,
 } from '@/core/config-constants.ts';
+import type { IntegrationContext } from '@/core/framework/features';
 import { warn } from '@/core/ui';
 
 import { HOOK_TIMEOUT_SEC, readOrInitJson, SONAR_SECRETS_MARKER } from '../_common/hooks.ts';
-import type { IntegrationContext } from '../_common/registry';
 
 export const SONAR_SECRETS_BLOCK_NAME = 'sonar-secrets';
 export const PRETOOL_SECRETS_BASENAME = 'pretool-secrets';

@@ -25,16 +25,15 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { getDefaultState } from '@/core/state/state.ts';
-
-import { textSnippet, wholeFile } from '../../../../../src/commands/integrate/_common/registry';
+import { textSnippet, wholeFile } from '@/core/framework/features';
+import type { IntegrationContext } from '@/core/framework/features/types.ts';
 import {
   detectEol,
   equalsIgnoringEol,
   includesIgnoringEol,
   toEol,
-} from '../../../../../src/commands/integrate/_common/registry/resources/common.ts';
-import type { IntegrationContext } from '../../../../../src/commands/integrate/_common/registry/types.ts';
+} from '@/core/framework/resources/common.ts';
+import { getDefaultState } from '@/core/state/state.ts';
 
 describe('EOL-preserving resource writes', () => {
   let tempDir: string;

@@ -34,8 +34,8 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
 
-import { resolveSecretsBinaryPath } from '../../src/commands/_common/install/secrets';
 import {
   EXIT_CODE_SECRETS_FOUND,
   parseSecretsJson,

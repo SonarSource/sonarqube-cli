@@ -26,7 +26,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-import { buildLocalBinaryName } from '@/commands/_common/install/secrets.ts';
+import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
 import { detectPlatform } from '@/core/host/platform-detector.ts';
 import { SONAR_SECRETS_VERSION } from '@/core/host/signatures.ts';
 import * as processLib from '@/core/process/process.ts';
@@ -43,8 +43,7 @@ void mock.module('@/core/host/sonarsource-releases.ts', () => ({
   ...releases,
 }));
 
-const { resolveSecretsBinary } =
-  await import('../../../../src/commands/_common/install/secrets.ts');
+const { resolveSecretsBinary } = await import('@/core/host/install/secrets.ts');
 
 // =============================================================================
 // SECTION: resolveSecretsBinary — happy path

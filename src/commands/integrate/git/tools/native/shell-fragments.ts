@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { IntegrationContext } from '../../../_common/registry/types.ts';
+import type { IntegrationContext } from '@/core/framework/features/types.ts';
+
 import type { GitHookType } from '../../options.ts';
 import {
   LEGACY_HOOK_MARKER,

@@ -22,7 +22,6 @@ import { type Command, Help, InvalidArgumentError, Option } from 'commander';
 
 import { CommandFailedError } from '@/core/command-error.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
-import { maybeNotifyUpdateAvailable } from '@/core/host/update-notification.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
 import { GENERIC_HTTP_METHODS } from '@/core/server/client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
@@ -734,5 +733,5 @@ COMMAND_TREE.hook('preAction', () => {
 // Collect a telemetry event after every command action.
 COMMAND_TREE.hook('postAction', async (_thisCommand, actionCommand) => {
   await storeEvent(actionCommand, (process.exitCode ?? 0) === 0);
-  await maybeNotifyUpdateAvailable(actionCommand);
+  await COMMAND_TREE.updateNotifier.maybeNotify(actionCommand);
 });

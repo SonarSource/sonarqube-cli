@@ -20,11 +20,14 @@
 
 // SonarCommand — Commander Command subclass with built-in error handling and auth support
 
+import type { CommandOptions } from 'commander';
 import { Command } from 'commander';
 
 import { CliError, CommandFailedError, remediationHintFor } from '@/core/command-error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { resolveAuth } from '@/core/host/auth-resolver.ts';
+import type { UpdateNotificationCondition } from '@/core/host/update/notification.ts';
+import { UpdateNotifier } from '@/core/host/update/notification.ts';
 import logger from '@/core/observability/logger.ts';
 import { blank, error, print } from '@/core/ui';
 
@@ -36,9 +39,6 @@ export interface RootHelpMetadata {
   expandSubcommands?: boolean;
   label?: string;
 }
-
-/** When to show the post-command update notice for a opted-in command. */
-export type UpdateNotificationCondition = (opts: Record<string, unknown>) => boolean;
 
 type CommandArgs = unknown[];
 type CommandResult = void | Promise<void>;
@@ -58,11 +58,42 @@ type CommandResult = void | Promise<void>;
 export class SonarCommand extends Command {
   private _requiresAuth = false;
   private _rootHelp: RootHelpMetadata = {};
-  private _showUpdateNotification?: true | UpdateNotificationCondition;
+  private readonly _updateNotifier: UpdateNotifier;
+
+  /**
+   * `updateNotifier` defaults to a fresh instance so the root command (the only
+   * place `new SonarCommand()` is called without it) owns the one instance the
+   * whole tree shares; every subcommand inherits it via createCommand() below
+   * instead of reading a module-level singleton.
+   */
+  constructor(name?: string, updateNotifier: UpdateNotifier = new UpdateNotifier()) {
+    super(name);
+    this._updateNotifier = updateNotifier;
+  }
 
   /** Ensures subcommands created via .command() are also SonarCommand instances. */
   createCommand(name?: string): SonarCommand {
-    return new SonarCommand(name);
+    return new SonarCommand(name, this._updateNotifier);
+  }
+
+  /**
+   * Disallowed: addCommand() attaches a command constructed independently of
+   * this tree's createCommand(), bypassing the shared per-tree state it sets up.
+   * Use .command() instead.
+   */
+  addCommand(_cmd: Command, _opts?: CommandOptions): this {
+    throw new Error('addCommand() is disallowed; use .command() instead');
+  }
+
+  /**
+   * The update-notification registry shared by this command and its whole subtree.
+   * command-tree.ts builds the whole tree as top-level side effects when the
+   * module loads, registering every .showUpdateNotification() call into this
+   * instance in the process. External code (the postAction hook, unit tests)
+   * reads that already-populated instance via this getter on the root command.
+   */
+  get updateNotifier(): UpdateNotifier {
+    return this._updateNotifier;
   }
 
   /**
@@ -81,7 +112,7 @@ export class SonarCommand extends Command {
    * merged action-command options (parsed by Commander).
    */
   showUpdateNotification(when?: UpdateNotificationCondition): this {
-    this._showUpdateNotification = when ?? true;
+    this._updateNotifier.register(this, when);
     return this;
   }
 
@@ -165,11 +196,6 @@ export class SonarCommand extends Command {
   /** Metadata used by the custom root help menu. */
   get rootHelpMetadata(): RootHelpMetadata {
     return this._rootHelp;
-  }
-
-  /** Update-notification opt-in and optional show condition for this command. */
-  get showUpdateNotificationWhen(): true | UpdateNotificationCondition | undefined {
-    return this._showUpdateNotification;
   }
 
   async runCommand(fn: () => Promise<void>): Promise<void> {

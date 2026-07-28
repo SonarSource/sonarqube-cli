@@ -28,8 +28,8 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { CURSOR_IGNORE_FILE } from '@/core/config-constants.ts';
 import * as authResolver from '@/core/host/auth-resolver.ts';
+import * as installSecrets from '@/core/host/install/secrets.ts';
 
-import * as installSecrets from '../../../../src/commands/_common/install/secrets.ts';
 import * as analyzeSecrets from '../../../../src/commands/analyze/secrets.ts';
 import { cursorPreToolUse } from '../../../../src/commands/hook/cursor-pre-tool-use.ts';
 import {

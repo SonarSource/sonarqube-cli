@@ -24,12 +24,13 @@ import type {
   FeatureContainer,
   FeatureDeclaration,
   IntegrationDeclaration,
-} from '../../../_common/registry';
+} from '@/core/framework/features';
 import {
   sonarSecretsBinaryDependency,
   yamlPatch,
   yamlPatchRemover,
-} from '../../../_common/registry';
+} from '@/core/framework/features';
+
 import type { GitHookType, IntegrateGitOptions } from '../../options.ts';
 import {
   createDepRisksSubfeature,

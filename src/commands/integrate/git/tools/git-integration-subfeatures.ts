@@ -19,16 +19,16 @@
  */
 
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
+import {
+  scaScannerBinaryDependency,
+  sonarSecretsBinaryDependency,
+} from '@/core/framework/dependencies';
+import { askUser, install, skip } from '@/core/framework/features/selection.ts';
+import type { FeaturePreview, SubfeatureDeclaration } from '@/core/framework/features/types.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 
 import { assertScaAvailable } from '../../../_common/sca-availability.ts';
-import {
-  scaScannerBinaryDependency,
-  sonarSecretsBinaryDependency,
-} from '../../_common/registry/dependencies';
-import { askUser, install, skip } from '../../_common/registry/selection.ts';
-import type { FeaturePreview, SubfeatureDeclaration } from '../../_common/registry/types.ts';
 import type { GitHookType, IntegrateGitOptions } from '../options.ts';
 
 export const PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID = 'pre-commit-dependency-risks';

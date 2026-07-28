@@ -19,19 +19,20 @@
  */
 
 import { CommandFailedError } from '@/core/command-error.ts';
+import { askUser, skip } from '@/core/framework/features/selection.ts';
+import type { FeatureDeclaration, IntegrationContext } from '@/core/framework/features/types.ts';
+import type { ResourceDeclaration } from '@/core/framework/resources';
+import { wholeFile } from '@/core/framework/resources';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
 
 import { getOptionalStringAttr } from '../attrs.ts';
 import { printContextAugmentationSkill, runToolIntegrateCommand } from '../context-augmentation.ts';
+import { contextAugmentationBinaryDependency } from '../context-augmentation-dependency.ts';
 import {
   CONTEXT_AUGMENTATION_FEATURE_BENEFIT,
   CONTEXT_AUGMENTATION_FEATURE_PREVIEW,
 } from '../feature-constants.ts';
-import { contextAugmentationBinaryDependency } from '../registry/dependencies';
-import { type ResourceDeclaration, wholeFile } from '../registry/resources';
-import { askUser, skip } from '../registry/selection.ts';
-import type { FeatureDeclaration, IntegrationContext } from '../registry/types.ts';
 
 export const CONTEXT_AUGMENTATION_FEATURE_ID = 'context-augmentation';
 export const CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID = 'context-augmentation-skill-file';

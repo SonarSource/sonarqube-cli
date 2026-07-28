@@ -26,10 +26,10 @@ import { join } from 'node:path';
 import * as yaml from 'js-yaml';
 
 import { CommandFailedError } from '@/core/command-error.ts';
+import type { IntegrationContext } from '@/core/framework/features/types.ts';
 import { PRE_COMMIT_CONFIG_FILE } from '@/core/host/git/hooks.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 
-import type { IntegrationContext } from '../../../_common/registry/types.ts';
 import type { GitHookType } from '../../options.ts';
 import { resolveDepRisksArgs } from '../shared.ts';
 

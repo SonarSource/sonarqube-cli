@@ -25,6 +25,7 @@ import { join } from 'node:path';
 import { parse as parseToml } from 'smol-toml';
 
 import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '@/core/config-constants.ts';
+import { recordedFeatureResources } from '@/core/framework/features';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { resolveAuth } from '@/core/host/auth-resolver.ts';
 import { getNetworkConfig } from '@/core/host/connectivity/network-config.ts';
@@ -36,6 +37,7 @@ import type {
   ResolvedNetworkConfig,
 } from '@/core/host/connectivity/types.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
+import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
 import {
   CONTEXT_AUGMENTATION_BINARY_NAME,
   SCA_SCANNER_BINARY_NAME,
@@ -51,7 +53,6 @@ import { blank, print, success, text, warn } from '@/core/ui';
 import { isNewerVersion, stripBuildNumber } from '@/core/version.ts';
 
 import { version as VERSION } from '../../../package.json';
-import { SECRETS_SPEC } from '../_common/install/secrets.ts';
 import type { TokenCheckResult } from '../_common/token.ts';
 import { checkTokenStatus } from '../_common/token.ts';
 import { supportedIntegrations } from '../integrate';
@@ -332,7 +333,7 @@ function pathFromFeatures(
   features: CliState['integrations']['installed'][number]['features'],
 ): string | undefined {
   for (const feature of features) {
-    for (const resource of feature.resources) {
+    for (const resource of recordedFeatureResources(feature)) {
       if (resource.path && !resource.path.endsWith('.sh') && !resource.path.endsWith('.ps1')) {
         return abbreviatePath(resource.path);
       }

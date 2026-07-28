@@ -25,9 +25,9 @@ import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
 import { CommandFailedError } from '@/core/command-error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import type { SecretsInstaller } from '@/core/host/install/secrets.ts';
 import type { SpawnResult } from '@/core/process/process.ts';
 
-import type { SecretsInstaller } from '../../../../../src/commands/_common/install/secrets.ts';
 import type { ScaScannerSpawner } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner-spawner.ts';
 import { makeScaInvocation as makeInvocation, okScaInstaller } from './_helpers.ts';
 
