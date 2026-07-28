@@ -323,35 +323,43 @@ export class IntegrationInstaller {
     integration: IntegrationDeclaration<TOptions>,
     execution: PreparedFeatureExecution<TOptions>,
   ): Promise<void> {
-    const recordedSubfeatures = execution.installedFeature?.subfeatures ?? [];
-    if (recordedSubfeatures.length === 0) {
+    const existingSubfeatures = execution.installedFeature?.subfeatures ?? [];
+    if (existingSubfeatures.length === 0) {
       return;
     }
 
-    const feature = execution.application.feature;
-    const activeIds = new Set(
-      isFeatureContainer(feature) ? feature.subfeatures.map((subfeature) => subfeature.id) : [],
+    const selectedFeature = execution.application.feature;
+    const selectedSubfeatureIds = new Set(
+      isFeatureContainer(selectedFeature)
+        ? selectedFeature.subfeatures.map((subfeature) => subfeature.id)
+        : [],
     );
-    const declaredFeature = integration.features.find((entry) => entry.id === feature.id);
+    const declaredFeature = integration.features.find((entry) => entry.id === selectedFeature.id);
     const declaredSubfeatures =
       declaredFeature && isFeatureContainer(declaredFeature) ? declaredFeature.subfeatures : [];
 
-    for (const recorded of recordedSubfeatures) {
-      if (activeIds.has(recorded.featureId)) {
+    for (const recorded of existingSubfeatures) {
+      if (selectedSubfeatureIds.has(recorded.featureId)) {
         continue;
       }
-      const subfeature = declaredSubfeatures.find((entry) => entry.id === recorded.featureId);
-      if (subfeature) {
-        await this.removeSubfeatureAssets(execution.context, subfeature, recorded);
-      }
+      await this.removeKnownSubfeatureAssets(execution.context, declaredSubfeatures, recorded);
     }
   }
 
-  private async removeSubfeatureAssets<TOptions>(
+  /**
+   * Subfeatures removed entirely from the declaration cannot be resolved here.
+   * Their assets must instead be removed by the container's legacyCleanups property.
+   */
+  private async removeKnownSubfeatureAssets<TOptions>(
     context: IntegrationContext,
-    subfeature: SubfeatureDeclaration<TOptions>,
+    declaredSubfeatures: SubfeatureDeclaration<TOptions>[],
     recorded: InstalledSubfeature,
   ): Promise<void> {
+    const subfeature = declaredSubfeatures.find((entry) => entry.id === recorded.featureId);
+    if (!subfeature) {
+      return;
+    }
+
     const recordedResourceIds = new Set((recorded.resources ?? []).map((entry) => entry.id));
     const recordedOperationIds = new Set((recorded.operations ?? []).map((entry) => entry.id));
 
