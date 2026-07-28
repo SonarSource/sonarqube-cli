@@ -18,6 +18,12 @@ if (-not $RollbackVersion) {
     Write-Error 'SONARQUBE_CLI_ROLLBACK_VERSION must be set via JumpCloud variable injection.'
     exit 1
 }
+# Defense-in-depth: a valid version can't contain quotes/$()/backticks, so this closes off
+# variable-substitution injection regardless of how the MDM tool quotes Custom Variables.
+if ($RollbackVersion -notmatch '^[0-9][0-9.]*$') {
+    Write-Error "SONARQUBE_CLI_ROLLBACK_VERSION has an invalid format: $RollbackVersion"
+    exit 1
+}
 
 # -- Helpers -------------------------------------------------------------------
 

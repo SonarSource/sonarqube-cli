@@ -13,6 +13,9 @@ export PATH="/usr/local/bin:$PATH"
 ROLLBACK_VERSION={{SONARQUBE_CLI_ROLLBACK_VERSION}}
 [[ "$ROLLBACK_VERSION" == \{\{*\}\} ]] && ROLLBACK_VERSION=""  # defensive: unattached JumpCloud var may leave the literal placeholder
 : "${ROLLBACK_VERSION:?SONARQUBE_CLI_ROLLBACK_VERSION must be set via JumpCloud variable injection}"
+# Defense-in-depth: a valid version can't contain quotes/$()/backticks, so this closes off
+# variable-substitution injection regardless of how the MDM tool quotes Custom Variables.
+[[ "$ROLLBACK_VERSION" =~ ^[0-9][0-9.]*$ ]] || { echo "Error: SONARQUBE_CLI_ROLLBACK_VERSION has an invalid format: $ROLLBACK_VERSION" >&2; exit 1; }
 
 # ── SHA256 helpers ────────────────────────────────────────────────────────────
 

@@ -13,6 +13,9 @@ readonly ARTIFACT_BASE_URL="https://binaries.sonarsource.com/Distribution/sonarq
 # systems may inject this differently.
 APPROVED_VERSION_OVERRIDE={{SONARQUBE_CLI_APPROVED_VERSION}}
 [[ "$APPROVED_VERSION_OVERRIDE" == \{\{*\}\} ]] && APPROVED_VERSION_OVERRIDE=""  # defensive: unattached JumpCloud var may leave the literal placeholder
+# Defense-in-depth: a valid version can't contain quotes/$()/backticks, so this closes off
+# variable-substitution injection regardless of how the MDM tool quotes Custom Variables.
+[[ -z "$APPROVED_VERSION_OVERRIDE" || "$APPROVED_VERSION_OVERRIDE" =~ ^[0-9][0-9.]*$ ]] || { echo "Error: SONARQUBE_CLI_APPROVED_VERSION has an invalid format: $APPROVED_VERSION_OVERRIDE" >&2; exit 1; }
 FORCE={{SONARQUBE_CLI_FORCE}}
 readonly HTTPS_ONLY="=https"
 export PATH="/usr/local/bin:$PATH"

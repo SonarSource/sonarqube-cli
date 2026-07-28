@@ -16,6 +16,12 @@ $ArtifactBaseUrl = 'https://binaries.sonarsource.com/Distribution/sonarqube-cli'
 # it ourselves below to keep it a valid string literal.
 $ApprovedVersionOverride = {{SONARQUBE_CLI_APPROVED_VERSION}}
 if ($ApprovedVersionOverride -isnot [string]) { $ApprovedVersionOverride = $null }
+# Defense-in-depth: a valid version can't contain quotes/$()/backticks, so this closes off
+# variable-substitution injection regardless of how the MDM tool quotes Custom Variables.
+if ($ApprovedVersionOverride -and $ApprovedVersionOverride -notmatch '^[0-9][0-9.]*$') {
+    Write-Error "SONARQUBE_CLI_APPROVED_VERSION has an invalid format: $ApprovedVersionOverride"
+    exit 1
+}
 $Platform        = 'windows-x86-64'
 $ForceUpdate     = '{{SONARQUBE_CLI_FORCE}}' -eq 'true'
 $env:PATH        = "$(Split-Path $MdmBinary);$env:PATH"
