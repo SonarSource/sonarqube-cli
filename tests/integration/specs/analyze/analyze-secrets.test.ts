@@ -25,7 +25,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { buildLocalBinaryName } from '@/commands/_common/install/secrets.ts';
+import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
 import { detectPlatform } from '@/core/host/platform-detector.ts';
 
 import { readAnalysisEvents } from '../../../_common/telemetry-helpers';

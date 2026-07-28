@@ -20,8 +20,7 @@
 
 import { CommandFailedError } from '@/core/command-error.ts';
 import { SUPPORT_URL } from '@/core/config-constants.ts';
-
-import type { IntegrationContext } from './registry/types.ts';
+import type { IntegrationContext } from '@/core/framework/features/types.ts';
 
 export function getOptionalStringAttr(
   context: IntegrationContext,

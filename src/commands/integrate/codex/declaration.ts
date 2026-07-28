@@ -21,6 +21,16 @@
 import { join } from 'node:path';
 
 import { CLI_COMMAND } from '@/core/config-constants.ts';
+import type { IntegrationContext, IntegrationDeclaration } from '@/core/framework/features';
+import {
+  askUser,
+  isFeatureInstalledGloballyForProject,
+  jsonPatch,
+  skip,
+  textSnippet,
+  tomlPatch,
+  wholeFile,
+} from '@/core/framework/features';
 import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs.ts';
@@ -44,16 +54,6 @@ import {
 } from '../_common/hooks.ts';
 import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates.ts';
 import { removeCodexMcpServer } from '../_common/mcp-config.ts';
-import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
-import {
-  askUser,
-  isFeatureInstalledGloballyForProject,
-  jsonPatch,
-  skip,
-  textSnippet,
-  tomlPatch,
-  wholeFile,
-} from '../_common/registry';
 import { SQAA_HOOK_FEATURE_ID } from '../_common/sqaa-entitlement.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import {

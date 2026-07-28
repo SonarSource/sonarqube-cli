@@ -26,7 +26,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { buildLocalBinaryName } from '@/commands/_common/install/sca-scanner.ts';
+import { buildLocalBinaryName } from '@/core/host/install/sca-scanner.ts';
 import { detectPlatform } from '@/core/host/platform-detector.ts';
 
 import { TestHarness } from '../../harness';

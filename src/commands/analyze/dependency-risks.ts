@@ -20,6 +20,8 @@
 
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { type ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { DefaultScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
+import { DefaultSecretsInstaller } from '@/core/host/install/secrets.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import {
@@ -28,8 +30,6 @@ import {
 } from '@/core/telemetry/sca-analysis-telemetry.ts';
 import { error, print, warn } from '@/core/ui';
 
-import { DefaultScaScannerInstaller } from '../_common/install/sca-scanner.ts';
-import { DefaultSecretsInstaller } from '../_common/install/secrets.ts';
 import { countSelectedRisks } from './dependency-risk-helpers/count-selected-risks.ts';
 import { DefaultScaScannerSpawner } from './dependency-risk-helpers/default-sca-scanner-spawner.ts';
 import { formatDependencyRisksJson } from './dependency-risk-helpers/format-dependency-risks-json.ts';

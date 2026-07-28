@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { installIntegration } from '@/core/framework/features';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 import { info } from '@/core/ui';
@@ -28,7 +29,6 @@ import {
   buildRecordedIntegrationAttrs,
   resolveContextAugmentationSetup,
 } from '../_common/context-augmentation.ts';
-import { installIntegration } from '../_common/registry';
 import { resolveSqaaSetup } from '../_common/sqaa-entitlement.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { supportedIntegrations } from '../index.ts';

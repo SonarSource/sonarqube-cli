@@ -33,10 +33,10 @@ import { emitIntegrationConfiguredTelemetry } from '@/core/telemetry/integrate-t
 import { text, warn } from '@/core/ui';
 
 import { renderCompletionSummary } from './completion-summary.ts';
-import type { IntegrationRegistry } from './core.ts';
 import { buildApplications } from './feature-target.ts';
 import { renderInstallPreviewAndConfirm } from './install-preview.ts';
 import { integrationInstaller } from './installer.ts';
+import type { IntegrationRegistry } from './registry.ts';
 import { isFeatureContainer, selectFeaturesForInvocation } from './selection.ts';
 import type {
   IntegrationContext,

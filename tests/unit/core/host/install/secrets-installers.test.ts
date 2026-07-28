@@ -20,7 +20,7 @@
 
 import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test';
 
-const binaryModule = await import('../../../../../src/commands/_common/install/binary.ts');
+const binaryModule = await import('@/core/host/install/binary.ts');
 
 type InstallBinaryFn = typeof binaryModule.installBinary;
 type ResolveBinaryPathFn = typeof binaryModule.resolveBinaryPath;
@@ -35,14 +35,14 @@ const notConfigured = (name: string) => () => {
 let installBinaryImpl: InstallBinaryFn = notConfigured('installBinary');
 let resolveBinaryPathImpl: ResolveBinaryPathFn = notConfigured('resolveBinaryPath');
 
-void mock.module('../../../../../src/commands/_common/install/binary.ts', () => ({
+void mock.module('@/core/host/install/binary.ts', () => ({
   ...binaryModule,
   installBinary: ((spec, options) => installBinaryImpl(spec, options)) as InstallBinaryFn,
   resolveBinaryPath: ((spec, binDir) => resolveBinaryPathImpl(spec, binDir)) as ResolveBinaryPathFn,
 }));
 
 const { DefaultSecretsInstaller, ResolveOnlySecretsInstaller } =
-  await import('../../../../../src/commands/_common/install/secrets.ts');
+  await import('@/core/host/install/secrets.ts');
 
 afterAll(() => {
   installBinaryImpl = realInstallBinary;

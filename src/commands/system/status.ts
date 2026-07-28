@@ -36,6 +36,7 @@ import type {
   ResolvedNetworkConfig,
 } from '@/core/host/connectivity/types.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
+import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
 import {
   CONTEXT_AUGMENTATION_BINARY_NAME,
   SCA_SCANNER_BINARY_NAME,
@@ -51,7 +52,6 @@ import { blank, print, success, text, warn } from '@/core/ui';
 import { isNewerVersion, stripBuildNumber } from '@/core/version.ts';
 
 import { version as VERSION } from '../../../package.json';
-import { SECRETS_SPEC } from '../_common/install/secrets.ts';
 import type { TokenCheckResult } from '../_common/token.ts';
 import { checkTokenStatus } from '../_common/token.ts';
 import { supportedIntegrations } from '../integrate';

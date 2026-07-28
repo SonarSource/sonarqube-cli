@@ -22,11 +22,7 @@ import { gzipSync } from 'node:zlib';
 
 import { describe, expect, it } from 'bun:test';
 
-import {
-  extractFileFromTar,
-  extractFileFromTarGz,
-  TAR_BLOCK_SIZE,
-} from '@/commands/_common/install/tar.ts';
+import { extractFileFromTar, extractFileFromTarGz, TAR_BLOCK_SIZE } from '@/core/io/tar.ts';
 
 const NAME_LEN = 100;
 const MODE_OFFSET = 100;

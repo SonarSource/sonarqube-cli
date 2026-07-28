@@ -21,6 +21,15 @@
 import { join } from 'node:path';
 
 import { CLI_COMMAND, CURSOR_CONFIG_DIR } from '@/core/config-constants.ts';
+import type { IntegrationContext, IntegrationDeclaration } from '@/core/framework/features';
+import {
+  askUser,
+  isFeatureInstalledGloballyForProject,
+  jsonPatch,
+  skip,
+  sonarSecretsBinaryDependency,
+  wholeFile,
+} from '@/core/framework/features';
 import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs.ts';
@@ -40,15 +49,6 @@ import {
 import { resolveAgentHookScriptPath } from '../_common/hooks.ts';
 import { buildSqaaSectionBody } from '../_common/instructions-templates.ts';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
-import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
-import {
-  askUser,
-  isFeatureInstalledGloballyForProject,
-  jsonPatch,
-  skip,
-  sonarSecretsBinaryDependency,
-  wholeFile,
-} from '../_common/registry';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import {
   getSecretPreFileReadTemplateUnix,

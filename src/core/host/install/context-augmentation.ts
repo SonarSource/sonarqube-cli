@@ -39,6 +39,7 @@ import {
   downloadBinary,
   verifyPgpSignature,
 } from '@/core/host/sonarsource-releases.ts';
+import { extractFileFromTarGz } from '@/core/io/tar.ts';
 import { recordInstallationInState } from '@/core/state/state-manager.ts';
 import { text, withSpinner } from '@/core/ui';
 
@@ -48,7 +49,6 @@ import {
   makeExecutable,
   verifyInstallation,
 } from './install-utils.ts';
-import { extractFileFromTarGz } from './tar.ts';
 
 export interface ContextAugmentationInstallOptions {
   force?: boolean;

@@ -25,16 +25,15 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-import { getDefaultState, type InstalledIntegrationFeature } from '@/core/state/state.ts';
-
 import type {
   FeatureDeclaration,
   IntegrationContext,
   IntegrationDeclaration,
-} from '../../../../../src/commands/integrate/_common/registry';
+} from '@/core/framework/features';
+import { getDefaultState, type InstalledIntegrationFeature } from '@/core/state/state.ts';
 
-const binaryInstall = await import('../../../../../src/commands/_common/install/binary.ts');
-await mock.module('../../../../../src/commands/_common/install/binary.ts', () => ({
+const binaryInstall = await import('@/core/host/install/binary.ts');
+await mock.module('@/core/host/install/binary.ts', () => ({
   ...binaryInstall,
 }));
 
@@ -47,9 +46,9 @@ const {
   sonarSourceBinary,
   textSnippet,
   wholeFile,
-} = await import('../../../../../src/commands/integrate/_common/registry');
+} = await import('@/core/framework/features');
 const { removeInstalledFeature } =
-  await import('../../../../../src/commands/integrate/_common/registry/installation-recorder.ts');
+  await import('@/core/framework/features/installation-recorder.ts');
 
 type Installer = InstanceType<typeof IntegrationInstaller>;
 

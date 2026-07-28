@@ -23,12 +23,9 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import type { ContainerIntegrationContext, ResourceDeclaration } from '@/core/framework/features';
 import { getDefaultState } from '@/core/state/state.ts';
 
-import type {
-  ContainerIntegrationContext,
-  ResourceDeclaration,
-} from '../../../../../src/commands/integrate/_common/registry';
 import {
   getHuskyBeginMarker,
   getHuskySnippetContent,

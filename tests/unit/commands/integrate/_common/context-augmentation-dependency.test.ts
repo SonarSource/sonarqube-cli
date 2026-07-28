@@ -24,36 +24,28 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 
-import type { IntegrationContext } from '../../../../../../../src/commands/integrate/_common/registry';
+import type { IntegrationContext } from '@/core/framework/features';
 
 let binaryPath: string | null = null;
 const stopCalls: { path: string; existedAtCall: boolean }[] = [];
 
-const installModule =
-  await import('../../../../../../../src/commands/_common/install/context-augmentation.ts');
-await mock.module(
-  '../../../../../../../src/commands/_common/install/context-augmentation.ts',
-  () => ({
-    ...installModule,
-    resolveContextAugmentationBinaryPath: () => binaryPath,
-  }),
-);
+const installModule = await import('@/core/host/install/context-augmentation.ts');
+await mock.module('@/core/host/install/context-augmentation.ts', () => ({
+  ...installModule,
+  resolveContextAugmentationBinaryPath: () => binaryPath,
+}));
 
-const integrateCagModule =
-  await import('../../../../../../../src/commands/integrate/_common/context-augmentation.ts');
-await mock.module(
-  '../../../../../../../src/commands/integrate/_common/context-augmentation.ts',
-  () => ({
-    ...integrateCagModule,
-    stopAllContextAugmentationTools: (path: string) => {
-      stopCalls.push({ path, existedAtCall: existsSync(path) });
-      return Promise.resolve(true);
-    },
-  }),
-);
+const integrateCagModule = await import('@/commands/integrate/_common/context-augmentation.ts');
+await mock.module('@/commands/integrate/_common/context-augmentation.ts', () => ({
+  ...integrateCagModule,
+  stopAllContextAugmentationTools: (path: string) => {
+    stopCalls.push({ path, existedAtCall: existsSync(path) });
+    return Promise.resolve(true);
+  },
+}));
 
 const { contextAugmentationBinaryDependency } =
-  await import('../../../../../../../src/commands/integrate/_common/registry/dependencies/context-augmentation.ts');
+  await import('@/commands/integrate/_common/context-augmentation-dependency.ts');
 
 const context = {} as IntegrationContext;
 

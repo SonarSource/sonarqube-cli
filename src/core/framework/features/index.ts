@@ -19,14 +19,6 @@
  */
 
 export {
-  buildProjectScopeLabel,
-  type IntegrateScopeOptions,
-  isGlobalIntegrateScope,
-  resolveIntegrateScope,
-} from '../integrate-scope.ts';
-export { renderCompletionSummary } from './completion-summary.ts';
-export { createIntegrationRegistry, IntegrationRegistry, registerIntegrations } from './core.ts';
-export {
   type DependencyDeclaration,
   scaScannerBinaryDependency,
   sonarSecretsBinaryDependency,
@@ -34,23 +26,7 @@ export {
   sonarSourceBinary,
   type SonarSourceBinaryDependencyOptions,
   type SonarSourceBinaryDescriptor,
-} from './dependencies';
-export { buildApplications } from './feature-target.ts';
-export {
-  installIntegration,
-  type InstallIntegrationOptions,
-  makeContext,
-} from './install-integration.ts';
-export {
-  findInstalledFeature,
-  findInstalledIntegration,
-  isFeatureInstalledGloballyForProject,
-} from './installation-recorder.ts';
-export {
-  IntegrationInstaller,
-  integrationInstaller,
-  type RemoveFeatureCallbacks,
-} from './installer.ts';
+} from '../dependencies';
 export {
   jsonPatch,
   type JsonPatchOptions,
@@ -76,7 +52,29 @@ export {
   type YamlPatchOptions,
   yamlPatchRemover,
   type YamlPatchRemoverOptions,
-} from './resources';
+} from '../resources';
+export { renderCompletionSummary } from './completion-summary.ts';
+export { buildApplications } from './feature-target.ts';
+export {
+  installIntegration,
+  type InstallIntegrationOptions,
+  makeContext,
+} from './install-integration.ts';
+export {
+  findInstalledFeature,
+  findInstalledIntegration,
+  isFeatureInstalledGloballyForProject,
+} from './installation-recorder.ts';
+export {
+  IntegrationInstaller,
+  integrationInstaller,
+  type RemoveFeatureCallbacks,
+} from './installer.ts';
+export {
+  createIntegrationRegistry,
+  IntegrationRegistry,
+  registerIntegrations,
+} from './registry.ts';
 export {
   askUser,
   install,

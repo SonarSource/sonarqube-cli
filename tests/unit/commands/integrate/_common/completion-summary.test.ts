@@ -23,14 +23,10 @@ import { join, sep } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { type IntegrationDeclaration, renderCompletionSummary } from '@/core/framework/features';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
 import type { PhaseItem } from '@/core/ui';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
-
-import {
-  type IntegrationDeclaration,
-  renderCompletionSummary,
-} from '../../../../../src/commands/integrate/_common/registry';
 
 function installedFeature(
   featureId: string,

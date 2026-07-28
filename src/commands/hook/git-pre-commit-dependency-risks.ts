@@ -26,6 +26,11 @@
 
 import { CommandFailedError } from '@/core/command-error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import {
+  resolveScaScannerBinaryPath,
+  ScaScannerNoopInstaller,
+} from '@/core/host/install/sca-scanner.ts';
+import { ResolveOnlySecretsInstaller } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import {
@@ -34,11 +39,6 @@ import {
 } from '@/core/telemetry/sca-analysis-telemetry.ts';
 import { discreetSuccess, success, warn } from '@/core/ui';
 
-import {
-  resolveScaScannerBinaryPath,
-  ScaScannerNoopInstaller,
-} from '../_common/install/sca-scanner.ts';
-import { ResolveOnlySecretsInstaller } from '../_common/install/secrets.ts';
 import { countSelectedRisks } from '../analyze/dependency-risk-helpers/count-selected-risks.ts';
 import { DefaultScaScannerSpawner } from '../analyze/dependency-risk-helpers/default-sca-scanner-spawner.ts';
 import { pluralize } from '../analyze/dependency-risk-helpers/pluralize.ts';

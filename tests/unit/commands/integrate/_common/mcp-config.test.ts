@@ -20,6 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
+import type { ContainerIntegrationContext } from '@/core/framework/features';
 import { getDefaultState } from '@/core/state/state.ts';
 
 import {
@@ -32,7 +33,6 @@ import {
   removeJsonMcpServer,
   upsertJsonMcpServer,
 } from '../../../../../src/commands/integrate/_common/mcp-config.ts';
-import type { ContainerIntegrationContext } from '../../../../../src/commands/integrate/_common/registry';
 import { removeCopilotHookConfig } from '../../../../../src/commands/integrate/copilot/hooks.ts';
 import {
   normalizePreCommitConfig,

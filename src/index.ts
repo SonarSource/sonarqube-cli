@@ -23,6 +23,9 @@
 // Main CLI entry point
 
 import { COMMAND_TREE } from '@/commands/command-tree.ts';
+import { supportedIntegrations } from '@/commands/integrate';
+import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
+import { installHooks } from '@/commands/integrate/claude/hooks.ts';
 import * as postUpdate from '@/core/host/post-update.ts';
 import { flushSentry } from '@/core/observability/sentry.ts';
 import { setFormattedOutputMode } from '@/core/ui';
@@ -41,7 +44,11 @@ if (
   setFormattedOutputMode(true);
 }
 
-await postUpdate.runPostUpdateActions();
+await postUpdate.runPostUpdateActions({
+  supportedIntegrations,
+  claudeIntegrationId: CLAUDE_INTEGRATION_ID,
+  installHooks,
+});
 
 await COMMAND_TREE.parseAsync(process.argv);
 await flushSentry();

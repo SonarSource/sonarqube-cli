@@ -18,6 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import {
+  type IntegrationDeclaration,
+  integrationInstaller,
+  type IntegrationRegistry,
+  makeContext,
+} from '@/core/framework/features';
 import type {
   CliState,
   InstalledIntegration,
@@ -25,13 +31,6 @@ import type {
 } from '@/core/state/state.ts';
 import type { PhaseItem } from '@/core/ui';
 import { phaseItem } from '@/core/ui';
-
-import {
-  type IntegrationDeclaration,
-  integrationInstaller,
-  type IntegrationRegistry,
-  makeContext,
-} from '../integrate/_common/registry';
 
 export interface IntegrationResetResult {
   item: PhaseItem;

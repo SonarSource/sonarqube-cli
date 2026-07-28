@@ -22,9 +22,9 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { CommandFailedError } from '@/core/command-error.ts';
 import * as authResolver from '@/core/host/auth-resolver.ts';
+import * as installSecrets from '@/core/host/install/secrets.ts';
 import * as processLib from '@/core/process/process.ts';
 
-import * as installSecrets from '../../../../src/commands/_common/install/secrets.ts';
 import * as analyzeSecrets from '../../../../src/commands/analyze/secrets.ts';
 import { gitPreCommit } from '../../../../src/commands/hook/git-pre-commit.ts';
 import { gitPrePush } from '../../../../src/commands/hook/git-pre-push.ts';

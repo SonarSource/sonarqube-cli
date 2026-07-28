@@ -18,25 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type {
-  DependencyInstallContext,
-  InstalledDependency,
-  IntegrationContext,
-  MaybePromise,
-} from '../types.ts';
-
-export interface BaseDependencyOptions {
-  id: string;
-  displayName?: string;
-  version?: string;
-}
-
-export interface DependencyDeclaration {
-  id: string;
-  displayName?: string;
-  dependencyType: string;
-  version?: string;
-  installOrUpdate: (context: DependencyInstallContext) => MaybePromise<InstalledDependency>;
-  isInstalled: (context: IntegrationContext) => MaybePromise<boolean>;
-  remove: (context: IntegrationContext) => MaybePromise<void>;
-}
+export type { BaseDependencyOptions, DependencyDeclaration } from './common.ts';
+export {
+  scaScannerBinaryDependency,
+  sonarSecretsBinaryDependency,
+  SonarSourceBinary,
+  sonarSourceBinary,
+  SonarSourceBinaryDependency,
+  type SonarSourceBinaryDependencyOptions,
+  type SonarSourceBinaryDescriptor,
+} from './sonarsource-binary.ts';
