@@ -29,8 +29,9 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CommandFailedError } from '@/core/command-error.ts';
 import {
   clearTokenCache,
   deleteStaleTokens,
@@ -285,5 +286,45 @@ describe('file backend edge cases', () => {
     expect(await getToken('https://sonarcloud.io', 'org1')).toBe('tok-alt');
 
     rmSync(altDir, { recursive: true, force: true });
+  });
+});
+
+describe('OS keychain unavailable (Bun.secrets backend)', () => {
+  let savedKeychainFile: string | undefined;
+
+  beforeEach(() => {
+    savedKeychainFile = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
+    delete process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
+    clearTokenCache();
+  });
+
+  afterEach(() => {
+    if (savedKeychainFile !== undefined) {
+      process.env.SONARQUBE_CLI_KEYCHAIN_FILE = savedKeychainFile;
+    }
+    clearTokenCache();
+  });
+
+  it('surfaces a remediation hint mentioning env var auth when the OS keychain is unreachable', async () => {
+    const getSpy = spyOn(Bun.secrets, 'get').mockRejectedValue(new Error('D-Bus not available'));
+
+    try {
+      let caught: unknown;
+      try {
+        await getToken('https://sonarcloud.io', 'my-org');
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(CommandFailedError);
+      const commandFailedError = caught as CommandFailedError;
+      expect(commandFailedError.message).toContain('Failed to access the system keychain.');
+      expect(commandFailedError.message).toContain('D-Bus not available');
+      expect(commandFailedError.remediationHint).toContain('SONARQUBE_CLI_TOKEN');
+      expect(commandFailedError.remediationHint).toContain('SONARQUBE_CLI_SERVER');
+      expect(commandFailedError.remediationHint).toContain('SONARQUBE_CLI_ORG');
+    } finally {
+      getSpy.mockRestore();
+    }
   });
 });
