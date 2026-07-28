@@ -190,6 +190,7 @@ function expectClaudeCagHookInstalled(harness: TestHarness): void {
   expect(script.asText()).not.toContain('ClaudePostToolUse');
 
   const settings = readClaudeSettings(harness, 'cwd');
+  expect(claudeCagHookEntries(settings, 'PreToolUse')).toHaveLength(0);
   for (const eventType of CLAUDE_CAG_EVENT_TYPES) {
     const entries = claudeCagHookEntries(settings, eventType);
     expect(entries).toHaveLength(1);
@@ -204,6 +205,7 @@ function expectClaudeCagHookAbsent(harness: TestHarness): void {
   for (const root of ['cwd', 'userHome'] as const) {
     expect(harness[root].file(CLAUDE_CAG_HOOK_SCRIPT_PATH).exists()).toBe(false);
     const settings = readClaudeSettings(harness, root);
+    expect(claudeCagHookEntries(settings, 'PreToolUse')).toHaveLength(0);
     for (const eventType of CLAUDE_CAG_EVENT_TYPES) {
       expect(claudeCagHookEntries(settings, eventType)).toHaveLength(0);
     }
@@ -231,7 +233,7 @@ const CODEX_SKILL_PATH = '.agents/skills/sonar-context-augmentation/SKILL.md';
 const CLAUDE_CAG_HOOK_MARKER = 'sonar-context-augmentation';
 const CLAUDE_CAG_HOOK_MATCHER = 'Bash|PowerShell|Monitor|Read';
 const CLAUDE_CAG_HOOK_SCRIPT_PATH = `.claude/hooks/sonar-context-augmentation/build-scripts/${hookScriptName('context-augmentation-hook')}`;
-const CLAUDE_CAG_EVENT_TYPES = ['PreToolUse', 'PostToolUse', 'PostToolUseFailure'] as const;
+const CLAUDE_CAG_EVENT_TYPES = ['PostToolUse', 'PostToolUseFailure'] as const;
 const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 describe('integrate claude — Context Augmentation', () => {
@@ -367,7 +369,7 @@ describe('integrate claude — Context Augmentation', () => {
 
       const settings = readClaudeSettings(harness, 'cwd');
       expectClaudeCagHookInstalled(harness);
-      expect(claudeCagHookEntries(settings, 'PreToolUse')).toHaveLength(1);
+      expect(claudeCagHookEntries(settings, 'PreToolUse')).toHaveLength(0);
       expect(claudeCagPostToolEntries(settings)).toHaveLength(1);
       expect(claudeCagHookEntries(settings, 'PostToolUseFailure')).toHaveLength(1);
       expect(settings?.hooks?.PostToolUse?.some((entry) => entry.matcher === 'Bash')).toBe(true);
@@ -405,7 +407,7 @@ describe('integrate claude — Context Augmentation', () => {
       expectClaudeCagHookInstalled(harness);
       expect(claudeSqaaPostToolEntries(settings)).toHaveLength(1);
       expect(claudeSqaaPostToolEntries(settings)[0]?.matcher).toBe('Edit|Write');
-      expect(claudeCagHookEntries(settings, 'PreToolUse')).toHaveLength(1);
+      expect(claudeCagHookEntries(settings, 'PreToolUse')).toHaveLength(0);
       expect(claudeCagPostToolEntries(settings)).toHaveLength(1);
       expect(claudeCagHookEntries(settings, 'PostToolUseFailure')).toHaveLength(1);
     },
