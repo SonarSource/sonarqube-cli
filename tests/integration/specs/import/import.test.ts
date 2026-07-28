@@ -30,8 +30,9 @@ const GITHUB_ALM = {
   personal: false,
   membersSync: false,
 };
+// `Organization.alm.key` spells Azure DevOps `microsoft`.
 const AZURE_ALM = {
-  key: 'azure',
+  key: 'microsoft',
   url: 'https://dev.azure.com/my-org',
   personal: false,
   membersSync: false,
@@ -185,7 +186,7 @@ describe('sonar import', () => {
         expect(result.exitCode).toBe(1);
         const output = result.stdout + result.stderr;
         expect(output).toContain(
-          "sonar import supports GitHub and Azure DevOps organizations only, but 'my-org' is bound to GitLab.",
+          "sonar import supports GitHub and Azure DevOps organizations only, but 'my-org' is bound to 'gitlab'.",
         );
         // The platform is rejected before any repository is fetched.
         const recorded = server.getRecordedRequests();
@@ -217,21 +218,18 @@ describe('sonar import', () => {
 
         expect(result.exitCode).toBe(1);
         const output = result.stdout + result.stderr;
-        expect(output).toContain("'my-org' is bound to Bitbucket.");
+        expect(output).toContain("'my-org' is bound to 'bitbucket'.");
       },
       { timeout: 15000 },
     );
 
     it(
-      'imports normally when the organization-bindings fallback reports Azure DevOps',
+      'exits with code 1 when the organization is bound to no DevOps platform',
       async () => {
-        // No `alm` on the org lookup, so the supported platform has to be recognized from the
-        // bindings fallback's `devOpsPlatform` instead.
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
           .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
-          .withOrganizationBinding('my-org', 'azure')
           .withDopRepositories('my-org', SAMPLE_REPOS)
           .start();
         const serverUrl = server.baseUrl();
@@ -241,11 +239,100 @@ describe('sonar import', () => {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('Imported 1 repository');
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain("'my-org' is bound to no DevOps platform.");
+        const recorded = server.getRecordedRequests();
+        expect(recorded.some((r) => r.path === '/dop-translation/dop-repositories')).toBe(false);
+        expect(recorded.some((r) => r.path === '/api/alm_integration/provision_projects')).toBe(
+          false,
+        );
       },
       { timeout: 15000 },
     );
+
+    it(
+      'exits with code 1 when the platform lookup fails, instead of importing unchecked',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizationBindingsError(500)
+          .withDopRepositories('my-org', SAMPLE_REPOS)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        const result = await harness.run('import --all', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain("Failed to look up the DevOps platform for organization 'my-org'");
+        const recorded = server.getRecordedRequests();
+        expect(recorded.some((r) => r.path === '/api/alm_integration/provision_projects')).toBe(
+          false,
+        );
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'exits with code 1 when the legacy-id lookup fails, without importing anything',
+      async () => {
+        // That lookup swallows its errors and reports a missing org, so the platform stays
+        // unresolved — which the check now rejects outright.
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrgsLookupError(500)
+          .withDopRepositories('my-org', SAMPLE_REPOS)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        const result = await harness.run('import --all', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(1);
+        const recorded = server.getRecordedRequests();
+        expect(recorded.some((r) => r.path === '/dop-translation/dop-repositories')).toBe(false);
+        expect(recorded.some((r) => r.path === '/api/alm_integration/provision_projects')).toBe(
+          false,
+        );
+      },
+      { timeout: 15000 },
+    );
+
+    // Every spelling the API may report Azure DevOps under.
+    for (const almKey of ['microsoft', 'azure', 'azure_devops', 'Microsoft', 'AZURE']) {
+      it(
+        `imports for an Azure DevOps organization reported as '${almKey}'`,
+        async () => {
+          const server = await harness
+            .newFakeServer()
+            .withAuthToken('test-token')
+            .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+            .withOrganizationBinding('my-org', almKey)
+            .withDopRepositories('my-org', SAMPLE_REPOS)
+            .start();
+          const serverUrl = server.baseUrl();
+          harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+          const result = await harness.run('import --all', {
+            extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+          });
+
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout).toContain('Imported 1 repository');
+        },
+        { timeout: 15000 },
+      );
+    }
 
     it(
       'exits with code 1 rather than silently disabling visibility rules when the org lookup fails',
@@ -277,7 +364,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [
             { id: 'repo-1', name: 'repo-1', slug: 'my-org/repo-1' },
             { id: 'repo-2', name: 'repo-2', slug: 'my-org/repo-2' },
@@ -317,7 +406,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [
             { id: 'repo-1', name: 'repo-1', slug: 'my-org/repo-1' },
             { id: 'repo-2', name: 'repo-2', slug: 'my-org/repo-2' },
@@ -392,7 +483,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', SAMPLE_REPOS)
           .start();
         const serverUrl = server.baseUrl();
@@ -415,7 +508,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [
             { id: 'repo-1', name: 'repo-one', slug: 'kevinmlsilva/repo-one' },
             { id: 'repo-2', name: 'repo-two', slug: 'kevinmlsilva/repo-two' },
@@ -442,7 +537,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [
             ...SAMPLE_REPOS,
             { id: 'repo-2', name: 'other-repo', slug: 'kevinmlsilva/other-repo' },
@@ -479,7 +576,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', manyRepos)
           .start();
         const serverUrl = server.baseUrl();
@@ -505,7 +604,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .start();
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
@@ -527,7 +628,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .start();
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
@@ -549,7 +652,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [
             { id: 'repo-1', name: 'repo', slug: 'kevinmlsilva/repo', importedInCurrentOrg: true },
             { id: 'repo-2', name: 'other-repo', slug: 'kevinmlsilva/other-repo' },
@@ -592,7 +697,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [
             { id: 'repo-1', name: 'repo', slug: 'kevinmlsilva/repo', importedInCurrentOrg: true },
           ])
@@ -626,7 +733,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', manyRepos)
           .start();
         const serverUrl = server.baseUrl();
@@ -665,7 +774,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', manyRepos)
           .start();
         const serverUrl = server.baseUrl();
@@ -703,7 +814,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', manyRepos)
           .start();
         const serverUrl = server.baseUrl();
@@ -750,7 +863,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', manyRepos)
           .start();
         const serverUrl = server.baseUrl();
@@ -847,6 +962,40 @@ describe('sonar import', () => {
     );
 
     it(
+      'still formats GitHub installation keys when the ALM key comes back capitalized',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withOrganizations([
+            {
+              key: 'my-org',
+              name: 'My Organization',
+              alm: { ...GITHUB_ALM, key: 'GitHub' },
+              actions: ADMIN_ACTIONS,
+            },
+          ])
+          .withDopRepositories('my-org', SAMPLE_REPOS)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        const result = await harness.run('import --repo kevinmlsilva/repo', {
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(0);
+        const recorded = server.getRecordedRequests();
+        const provisionRequest = recorded.find(
+          (r) => r.path === '/api/alm_integration/provision_projects',
+        );
+        const params = new URLSearchParams(provisionRequest?.body ?? '');
+        expect(params.get('installationKeys')).toBe('kevinmlsilva/repo|repo-1');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
       'resolves the ALM type from the targeted org lookup',
       async () => {
         const server = await harness
@@ -889,7 +1038,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', SAMPLE_REPOS)
           .withProvisionProjectsError(
             400,
@@ -917,7 +1068,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', SAMPLE_REPOS)
           .start();
         const serverUrl = server.baseUrl();
@@ -1044,7 +1197,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withPrivateProjectsEntitlement('my-org', true)
           .withDopRepositories('my-org', [
             { id: 'repo-1', name: 'repo', slug: 'kevinmlsilva/repo', private: true },
@@ -1071,7 +1226,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [
             {
               id: 'repo-1',
@@ -1106,7 +1263,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [
             {
               id: 'repo-1',
@@ -1246,7 +1405,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', BATCH_REPOS)
           .start();
         const serverUrl = server.baseUrl();
@@ -1278,7 +1439,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', BATCH_REPOS)
           .start();
         const serverUrl = server.baseUrl();
@@ -1306,7 +1469,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', BATCH_REPOS)
           .start();
         const serverUrl = server.baseUrl();
@@ -1334,7 +1499,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', BATCH_REPOS)
           .start();
         const serverUrl = server.baseUrl();
@@ -1368,7 +1535,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', BATCH_REPOS)
           .withProvisionProjectsError(
             400,
@@ -1401,7 +1570,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', BATCH_REPOS)
           .start();
         const serverUrl = server.baseUrl();
@@ -1432,7 +1603,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [
             ...BATCH_REPOS.map((repo) =>
               repo.slug === 'my-org/repo-a' ? { ...repo, importedInCurrentOrg: true } : repo,
@@ -1466,7 +1639,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [
             ...BATCH_REPOS.map((repo) =>
               repo.slug === 'my-org/repo-a' || repo.slug === 'my-org/repo-b'
@@ -1509,7 +1684,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', manyRepos)
           .withProvisionProjectsDelay(50)
           .start();
@@ -1551,7 +1728,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', manyRepos)
           .start();
         const serverUrl = server.baseUrl();
@@ -1614,7 +1793,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [
             {
               id: 'repo-1',
@@ -1672,7 +1853,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [{ id: 'repo-1', name: 'repo-1', slug: 'my-org/repo-1' }])
           .start();
         const serverUrl = server.baseUrl();
@@ -1695,7 +1878,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .start();
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
@@ -1720,7 +1905,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [
             { id: 'repo-1', name: 'repo-1', slug: 'my-org/repo-1', importedInCurrentOrg: true },
             { id: 'repo-2', name: 'repo-2', slug: 'my-org/repo-2', private: true },
@@ -1769,7 +1956,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .start();
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
@@ -1791,7 +1980,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [
             // Slug deliberately does NOT match the pattern below — only `name` should be tested.
             { id: 'repo-1', name: 'engineering-tools', slug: 'my-org/renamed-tools' },
@@ -1825,7 +2016,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [
             { id: 'repo-1', name: 'engineering-tools', slug: 'my-org/engineering-tools' },
             { id: 'repo-2', name: 'random-notes', slug: 'my-org/random-notes' },
@@ -1853,7 +2046,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [
             { id: 'repo-1', name: 'engineering-tools', slug: 'my-org/engineering-tools' },
             { id: 'repo-2', name: 'random-notes', slug: 'my-org/random-notes' },
@@ -1885,7 +2080,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [
             { id: 'repo-1', name: 'engineering-tools', slug: 'my-org/engineering-tools' },
           ])
@@ -1912,7 +2109,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [
             { id: 'repo-1', name: 'repo-1', slug: 'my-org/repo-1' },
             { id: 'repo-2', name: 'repo-2', slug: 'my-org/repo-2' },
@@ -1940,7 +2139,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [
             { id: 'repo-1', name: 'ENGINEERING-tools', slug: 'my-org/engineering-tools' },
             { id: 'repo-2', name: 'random-notes', slug: 'my-org/random-notes' },
@@ -1968,7 +2169,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [
             // The non-matching repo must come FIRST: a /pattern/g regex object's lastIndex
             // only advances past 0 on a *match*, so two matching repos with a non-matching one
@@ -2004,7 +2207,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [
             // Ends in "passwd" after a "/", which isn't a valid set of RegExp flag
             // characters — this must NOT be misread as pattern "etc" + flags "passwd".
@@ -2032,7 +2237,9 @@ describe('sonar import', () => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
+          .withOrganizations([
+            { key: 'my-org', name: 'My Organization', alm: AZURE_ALM, actions: ADMIN_ACTIONS },
+          ])
           .withDopRepositories('my-org', [
             { id: 'repo-1', name: 'repo-one', slug: 'my-org/repo-one' },
             { id: 'repo-2', name: 'repo-two', slug: 'my-org/repo-two' },

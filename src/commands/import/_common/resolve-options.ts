@@ -38,22 +38,11 @@ import {
   type SkippedRepo,
 } from './repository-collection';
 
-/* ALM keys as the server spells them. */
 const GITHUB_ALM_KEY = 'github';
-const AZURE_DEVOPS_ALM_KEY = 'azure';
-const BITBUCKET_ALM_KEY = 'bitbucket';
-const GITLAB_ALM_KEY = 'gitlab';
-
-/**
- * Every platform the server can report, the name to show the user for it, and whether
- * `sonar import` supports importing from it.
- */
-const KNOWN_ALMS: Record<string, { displayName: string; supported: boolean } | undefined> = {
-  [AZURE_DEVOPS_ALM_KEY]: { displayName: 'Azure DevOps', supported: true },
-  [BITBUCKET_ALM_KEY]: { displayName: 'Bitbucket', supported: false },
-  [GITHUB_ALM_KEY]: { displayName: 'GitHub', supported: true },
-  [GITLAB_ALM_KEY]: { displayName: 'GitLab', supported: false },
-};
+/** Azure DevOps as `Organization.alm.key` spells it. */
+const AZURE_DEVOPS_ALM_KEY = 'microsoft';
+/** Azure DevOps elsewhere, where the key carries a suffix (e.g. `azure_devops`). */
+const AZURE_DEVOPS_ALM_KEY_PREFIX = 'azure';
 
 export interface ResolvedOrg {
   key: string;
@@ -167,32 +156,51 @@ async function resolveOrgByKey(client: SonarQubeClient, orgKey: string): Promise
   };
 }
 
+/** The API doesn't guarantee the casing it reports; a blank key means no platform. */
+export function normalizeAlmKey(almKey: string | undefined): string | undefined {
+  return almKey?.trim().toLowerCase() || undefined;
+}
+
 /**
- * Rejects organizations bound to a DevOps platform `sonar import` doesn't support: only GitHub
- * and Azure DevOps are.
- *
- * An undefined `almKey` is deliberately not treated as unsupported. It means the platform is
- * unknown rather than known-unsupported: either the org has nothing bound to it — in which case
- * it has no repositories to import and falls through to the existing "no repositories found"
- * path — or `getOrganizationAlmKey`'s lookup failed, and that best-effort call swallows its
- * errors, so failing here would turn a transient error into a hard stop for supported orgs too.
+ * Rejects any organization not bound to GitHub or Azure DevOps, an unresolved platform included:
+ * unknown is not a licence to import, since `dop-repositories` is keyed on the organization alone
+ * and returns its repositories whatever the platform turns out to be.
  */
 export function assertSupportedAlm(orgKey: string, almKey: string | undefined): void {
-  if (almKey === undefined) {
+  if (
+    almKey === GITHUB_ALM_KEY ||
+    almKey === AZURE_DEVOPS_ALM_KEY ||
+    almKey?.startsWith(AZURE_DEVOPS_ALM_KEY_PREFIX)
+  ) {
     return;
   }
 
-  // A platform we've never heard of is unsupported too: this is an allowlist, not a blocklist.
-  const alm = KNOWN_ALMS[almKey];
-  if (alm?.supported === true) {
-    return;
-  }
-
+  const platform = almKey ? `'${almKey}'` : 'no DevOps platform';
   throw new CommandFailedError(
     `sonar import supports GitHub and Azure DevOps organizations only, but '${orgKey}' is bound ` +
-      `to ${alm?.displayName ?? almKey}.`,
+      `to ${platform}.`,
     { remediationHint: 'Import these repositories from SonarQube Cloud in your browser instead.' },
   );
+}
+
+/** The key from the org record when it carries one, otherwise the organization-bindings lookup. */
+export async function resolveAlmKey(
+  client: SonarQubeClient,
+  orgKey: string,
+  orgRecordAlmKey: string | undefined,
+): Promise<string | undefined> {
+  if (orgRecordAlmKey !== undefined) {
+    return normalizeAlmKey(orgRecordAlmKey);
+  }
+
+  try {
+    return normalizeAlmKey(await client.getOrganizationAlmKey(orgKey));
+  } catch (err) {
+    throw new CommandFailedError(
+      `Failed to look up the DevOps platform for organization '${orgKey}': ${err instanceof Error ? err.message : String(err)}`,
+      { remediationHint: 'Check your network connection and authentication, then retry.' },
+    );
+  }
 }
 
 /**

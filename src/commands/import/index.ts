@@ -38,6 +38,7 @@ import {
   assertSupportedAlm,
   computeInstallationKey,
   type RepoResolution,
+  resolveAlmKey,
   type ResolvedRepo,
   resolveOrg,
   resolveRepos,
@@ -64,12 +65,12 @@ async function resolveOrgAndRepos(
   info(`Organization: ${resolvedOrgKey}`);
 
   const [almKey, privateProjectsAvailable] = await Promise.all([
-    resolvedAlmKey ?? client.getOrganizationAlmKey(resolvedOrgKey),
+    resolveAlmKey(client, resolvedOrgKey, resolvedAlmKey),
     client.hasPrivateProjectsEntitlement(resolvedOrgKey),
   ]);
 
-  // Checked as soon as the platform is known — before any repository is listed — so an
-  // unsupported organization stops here instead of after a full paginated repo fetch.
+  // Before any repository is listed, so an unsupported org stops here rather than after a full
+  // paginated fetch.
   assertSupportedAlm(resolvedOrgKey, almKey);
 
   const onlyPrivateProjects: OnlyPrivateProjects = {
