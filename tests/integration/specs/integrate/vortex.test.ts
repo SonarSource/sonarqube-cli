@@ -140,106 +140,71 @@ describe('integrate claude — Vortex entitlement', () => {
     { timeout: 30000 },
   );
 
-  it(
-    'installs Vortex with an over-consumption warning when SQAA is over its limit and CAG is enabled',
-    async () => {
-      const result = await runIntegrateClaude({
-        sqaa: 'over_consumption',
-        cag: 'enabled',
-        scaEnabled: true,
-      });
+  it.each([
+    [
+      'installs Vortex with an over-consumption warning when SQAA is over its limit and CAG is enabled',
+      'over_consumption',
+      'enabled',
+      true,
+      VORTEX_OVER_CONSUMPTION_MESSAGE,
+    ],
+    [
+      'installs Vortex with an over-consumption warning when CAG is over its limit and SQAA is enabled',
+      'enabled',
+      'over_consumption',
+      true,
+      VORTEX_OVER_CONSUMPTION_MESSAGE,
+    ],
+    [
+      'skips Vortex when SQAA is over its limit but CAG is not entitled',
+      'over_consumption',
+      'not_entitled',
+      false,
+      VORTEX_PROMOTION_MESSAGE,
+    ],
+    [
+      'skips Vortex when CAG is over its limit but SQAA is not entitled',
+      'not_entitled',
+      'over_consumption',
+      false,
+      VORTEX_PROMOTION_MESSAGE,
+    ],
+    [
+      'skips Vortex when neither feature is entitled',
+      'not_entitled',
+      'not_entitled',
+      false,
+      VORTEX_PROMOTION_MESSAGE,
+    ],
+    [
+      'skips Vortex when the SQAA entitlement check fails even though CAG is entitled',
+      'check_failed',
+      'enabled',
+      false,
+      VORTEX_CHECK_FAILED_MESSAGE,
+    ],
+    [
+      'skips Vortex when the CAG entitlement check fails even though SQAA is entitled',
+      'enabled',
+      'check_failed',
+      false,
+      VORTEX_CHECK_FAILED_MESSAGE,
+    ],
+    [
+      'skips Vortex when one check fails even though the other is over consumption',
+      'over_consumption',
+      'check_failed',
+      false,
+      VORTEX_CHECK_FAILED_MESSAGE,
+    ],
+  ] as const)(
+    '%s',
+    async (_name, sqaa, cag, expectedInstalled, expectedMessage) => {
+      const result = await runIntegrateClaude({ sqaa, cag, scaEnabled: true });
 
       expect(result.exitCode).toBe(0);
-      expect(isVortexInstalled()).toBe(true);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_OVER_CONSUMPTION_MESSAGE);
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'installs Vortex with an over-consumption warning when CAG is over its limit and SQAA is enabled',
-    async () => {
-      const result = await runIntegrateClaude({
-        sqaa: 'enabled',
-        cag: 'over_consumption',
-        scaEnabled: true,
-      });
-
-      expect(result.exitCode).toBe(0);
-      expect(isVortexInstalled()).toBe(true);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_OVER_CONSUMPTION_MESSAGE);
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'skips Vortex when SQAA is over its limit but CAG is not entitled',
-    async () => {
-      const result = await runIntegrateClaude({ sqaa: 'over_consumption', cag: 'not_entitled' });
-
-      expect(result.exitCode).toBe(0);
-      expect(isVortexInstalled()).toBe(false);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_PROMOTION_MESSAGE);
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'skips Vortex when CAG is over its limit but SQAA is not entitled',
-    async () => {
-      const result = await runIntegrateClaude({ sqaa: 'not_entitled', cag: 'over_consumption' });
-
-      expect(result.exitCode).toBe(0);
-      expect(isVortexInstalled()).toBe(false);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_PROMOTION_MESSAGE);
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'skips Vortex when neither feature is entitled',
-    async () => {
-      const result = await runIntegrateClaude({ sqaa: 'not_entitled', cag: 'not_entitled' });
-
-      expect(result.exitCode).toBe(0);
-      expect(isVortexInstalled()).toBe(false);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_PROMOTION_MESSAGE);
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'skips Vortex when the SQAA entitlement check fails (endpoint error) even though CAG is entitled',
-    async () => {
-      const result = await runIntegrateClaude({ sqaa: 'check_failed', cag: 'enabled' });
-
-      expect(result.exitCode).toBe(0);
-      expect(isVortexInstalled()).toBe(false);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_CHECK_FAILED_MESSAGE);
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'skips Vortex when the CAG entitlement check fails (endpoint error) even though SQAA is entitled',
-    async () => {
-      const result = await runIntegrateClaude({ sqaa: 'enabled', cag: 'check_failed' });
-
-      expect(result.exitCode).toBe(0);
-      expect(isVortexInstalled()).toBe(false);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_CHECK_FAILED_MESSAGE);
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'skips Vortex when one check fails even though the other is over consumption (check_failed wins)',
-    async () => {
-      const result = await runIntegrateClaude({ sqaa: 'over_consumption', cag: 'check_failed' });
-
-      expect(result.exitCode).toBe(0);
-      expect(isVortexInstalled()).toBe(false);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_CHECK_FAILED_MESSAGE);
+      expect(isVortexInstalled()).toBe(expectedInstalled);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(expectedMessage);
     },
     { timeout: 30000 },
   );

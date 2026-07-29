@@ -38,6 +38,7 @@ import {
   expectSkillRendersWithWrapperInvocation,
   findRecordedCagDependency,
   findRecordedCagFeature,
+  findRecordedCagSkillResource,
   seedState,
   STALE_CLI_VERSION,
 } from './_helpers';
@@ -97,9 +98,7 @@ describe('sonar-context-augmentation copilot skill refresh (offline, real binary
     if (!feature) {
       throw new Error('Expected a recorded declarative Copilot CAG feature');
     }
-    const resource = feature.feature.resources.find(
-      (entry) => entry.id === 'context-augmentation-skill-file',
-    );
+    const resource = findRecordedCagSkillResource(feature);
     expect(resource).toBeDefined();
     expect(resource?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
     expect(resource?.path).toBe(copilotSkillPath);

@@ -70,6 +70,9 @@ export function createVortexFeature<TOptions extends VortexIntegrationOptions>(
     scope: 'project',
     replacedIds: subfeatureIds,
     defaultInstallSubfeatureIds: subfeatureIds,
+    // No legacyCleanups are needed: the retired standalone features owned the
+    // same resources now owned by these subfeatures. Post-update replacement
+    // revokes only their state records, then re-applies and adopts the assets.
     subfeatures,
   };
 }

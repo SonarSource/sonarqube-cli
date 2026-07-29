@@ -19,9 +19,9 @@
  */
 
 /**
- * Offline e2e for `sonar integrate <agent>` Context Augmentation pre-flight
- * checks, against a fake SonarQube server. Asserts that the CLI never reaches
- * the real CAG binary at all on connections where CAG must be skipped:
+ * Offline e2e for `sonar integrate <agent>` Vortex/Context Augmentation
+ * pre-flight checks, against a fake SonarQube server. Asserts that the CLI
+ * never reaches the real CAG binary on connections where CAG must be skipped:
  *
  *   - SonarQube Server (non-Cloud) connections.
  *   - Cloud connections where the org is not allowed to use CAG.
@@ -97,9 +97,7 @@ describe('sonar integrate <agent> — CAG pre-flight skip paths (real CLI, fake 
     });
 
     expect(result.exitCode, result.stderr).toBe(0);
-    expect(result.stdout).toContain(
-      'Skipping Vortex context augmentation: not available on SonarQube Server.',
-    );
+    expect(result.stdout).toContain('Vortex is available on SonarQube Cloud.');
     expect(existsSync(cagBinaryPath), 'no CAG download on SonarQube Server').toBe(false);
     expect(findRecordedCagFeature(harness.stateJsonFile.asJson() as CliState)).toBeUndefined();
   });
@@ -132,9 +130,7 @@ describe('sonar integrate <agent> — CAG pre-flight skip paths (real CLI, fake 
     });
 
     expect(result.exitCode, result.stderr).toBe(0);
-    expect(result.stderr).toContain(
-      'Skipping Vortex context augmentation: not available for your organization. Access requires an eligible SonarQube Cloud plan.',
-    );
+    expect(result.stdout).toContain('Vortex is available on SonarQube Cloud.');
     expect(existsSync(cagBinaryPath), 'no CAG download when access is denied').toBe(false);
     expect(findRecordedCagFeature(harness.stateJsonFile.asJson() as CliState)).toBeUndefined();
   });

@@ -183,6 +183,7 @@ export async function migrateDeclarativeIntegrations(registry: IntegrationRegist
     if (!installedIntegration) {
       continue;
     }
+    const originalFeatures = [...installedIntegration.features];
     const { applications, removedUnknownFeatures } = createMigrationFeatureApplications(
       integration,
       installedIntegration,
@@ -212,6 +213,7 @@ export async function migrateDeclarativeIntegrations(registry: IntegrationRegist
     } catch (err) {
       logger.debug(`Declarative migration failed for ${integration.id}: ${(err as Error).message}`);
     }
+    restoreFailedReplacements(installedIntegration, originalFeatures, applications);
   }
 
   if (stateChanged) {
@@ -292,6 +294,37 @@ function migrateReplacedFeatures(
   }
 
   return applications;
+}
+
+function restoreFailedReplacements(
+  installedIntegration: InstalledIntegration,
+  originalFeatures: InstalledIntegrationFeature[],
+  applications: FeatureApplication[],
+): void {
+  for (const application of applications) {
+    const replacedIds = application.feature.replacedIds;
+    if (!replacedIds?.length) {
+      continue;
+    }
+    const successorWasInstalled = installedIntegration.features.some(
+      (feature) =>
+        feature.featureId === application.feature.id &&
+        feature.scope === application.scope &&
+        feature.targetRoot === application.targetRoot,
+    );
+    if (successorWasInstalled) {
+      continue;
+    }
+
+    const predecessorsToRestore = originalFeatures.filter(
+      (originalFeature) =>
+        replacedIds.includes(originalFeature.featureId) &&
+        originalFeature.scope === application.scope &&
+        originalFeature.targetRoot === application.targetRoot &&
+        !installedIntegration.features.includes(originalFeature),
+    );
+    installedIntegration.features.push(...predecessorsToRestore);
+  }
 }
 
 function groupReplacedFeaturesByTarget(
