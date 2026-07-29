@@ -928,6 +928,49 @@ describe('migrateDeclarativeIntegrations', () => {
     });
   });
 
+  it('merges predecessor attrs in successor replacement order', async () => {
+    const appliedAttrs: (IntegrationContext['attrs'] | undefined)[] = [];
+    const state = makeState();
+    state.integrations.installed.push({
+      id: 'integration-id',
+      integrationId: 'test-integration',
+      installedByCliVersion: '0.9.0',
+      installedAt: '2026-01-01T00:00:00.000Z',
+      updatedByCliVersion: '0.9.0',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      features: [
+        recordedFeature('old-context', { projectKey: 'context-project' }),
+        recordedFeature('old-sqaa', { projectKey: 'sqaa-project' }),
+      ],
+    });
+    loadStateSpy.mockReturnValue(state);
+
+    const registry = new IntegrationRegistry();
+    registry.register({
+      id: 'test-integration',
+      displayName: 'Test integration',
+      features: [
+        {
+          id: 'vortex',
+          displayName: 'Vortex',
+          replaces: ['old-sqaa', 'old-context'],
+          operations: [
+            {
+              id: 'vortex-operation',
+              apply: (context) => {
+                appliedAttrs.push(context.attrs);
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    await migrateDeclarativeIntegrations(registry);
+
+    expect(appliedAttrs).toEqual([{ projectKey: 'context-project' }]);
+  });
+
   it('reapplies a recorded successor without merging predecessor attrs', async () => {
     const appliedAttrs: (IntegrationContext['attrs'] | undefined)[] = [];
     const state = makeState();

@@ -284,19 +284,20 @@ function groupReplacedFeaturesByTarget(
   successor: FeatureDeclaration,
   installedFeatures: InstalledIntegrationFeature[],
 ): Map<string, InstalledIntegrationFeature[]> {
-  const replacedIds = new Set(successor.replaces ?? []);
   const predecessorsByTarget = new Map<string, InstalledIntegrationFeature[]>();
 
-  for (const installedFeature of installedFeatures) {
-    if (!replacedIds.has(installedFeature.featureId)) {
-      continue;
-    }
-    const targetKey = `${installedFeature.scope}:${installedFeature.targetRoot}`;
-    const predecessors = predecessorsByTarget.get(targetKey);
-    if (predecessors) {
-      predecessors.push(installedFeature);
-    } else {
-      predecessorsByTarget.set(targetKey, [installedFeature]);
+  for (const replacedId of successor.replaces ?? []) {
+    for (const installedFeature of installedFeatures) {
+      if (installedFeature.featureId !== replacedId) {
+        continue;
+      }
+      const targetKey = `${installedFeature.scope}:${installedFeature.targetRoot}`;
+      const predecessors = predecessorsByTarget.get(targetKey);
+      if (predecessors) {
+        predecessors.push(installedFeature);
+      } else {
+        predecessorsByTarget.set(targetKey, [installedFeature]);
+      }
     }
   }
   return predecessorsByTarget;
