@@ -505,27 +505,31 @@ export class SonarQubeClient {
    * enable both capabilities when only one is available, which would fail later.
    */
   async hasVortexEntitlement(organizationKey?: string): Promise<VortexEntitlementStatus> {
-    if (!organizationKey || !isSonarQubeCloud(this.serverURL)) {
-      return 'not_entitled';
-    }
-    const uuid = await this.getOrganizationId(organizationKey);
-    if (!uuid) {
+    try {
+      if (!organizationKey || !isSonarQubeCloud(this.serverURL)) {
+        return 'not_entitled';
+      }
+      const uuid = await this.getOrganizationId(organizationKey);
+      if (!uuid) {
+        return 'check_failed';
+      }
+      const [sqaa, cag] = await Promise.all([
+        this.checkSqaaEntitlement(uuid),
+        this.checkCagEntitlement(uuid),
+      ]);
+      if (sqaa === 'check_failed' || cag === 'check_failed') {
+        return 'check_failed';
+      }
+      if (sqaa === 'not_entitled' || cag === 'not_entitled') {
+        return 'not_entitled';
+      }
+      if (sqaa === 'over_consumption' || cag === 'over_consumption') {
+        return 'over_consumption';
+      }
+      return 'enabled';
+    } catch {
       return 'check_failed';
     }
-    const [sqaa, cag] = await Promise.all([
-      this.checkSqaaEntitlement(uuid),
-      this.checkCagEntitlement(uuid),
-    ]);
-    if (sqaa === 'check_failed' || cag === 'check_failed') {
-      return 'check_failed';
-    }
-    if (sqaa === 'not_entitled' || cag === 'not_entitled') {
-      return 'not_entitled';
-    }
-    if (sqaa === 'over_consumption' || cag === 'over_consumption') {
-      return 'over_consumption';
-    }
-    return 'enabled';
   }
 
   /**

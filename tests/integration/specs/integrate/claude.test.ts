@@ -25,6 +25,10 @@ import { isAbsolute } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import {
+  SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+  VORTEX_FEATURE_ID,
+} from '@/commands/integrate/_common/vortex.ts';
 import { claudeIntegration } from '@/commands/integrate/claude/declaration.ts';
 import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
 import { detectPlatform } from '@/core/host/platform-detector.ts';
@@ -41,6 +45,8 @@ import {
   TestHarness,
 } from '../../harness';
 import { findInstalledFeature, getInstalledIntegration } from './state-helpers';
+
+const CLAUDE_PROMPT_STDIN_DELAY_MS = 1000;
 
 function findClaudeFeature(harness: TestHarness, featureId: string, scope?: string) {
   return findInstalledFeature(harness, 'claude-code', featureId, scope);
@@ -624,7 +630,7 @@ describe('integrate claude', () => {
 
 // ─── SQAA entitlement guard ────────────────────────────────────────────────────
 
-describe('integrate claude — SQAA entitlement guard', () => {
+describe('integrate claude — Vortex entitlement guard', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -637,7 +643,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
   });
 
   it(
-    'installs PostToolUse SQAA hook when Cloud org has SQAA entitlement (repair path)',
+    'installs PostToolUse SQAA hook when Cloud org has Vortex entitlement (repair path)',
     async () => {
       harness.state().withContextAugmentationBinaryInstalled();
       const server = await harness
@@ -675,13 +681,13 @@ describe('integrate claude — SQAA entitlement guard', () => {
       expect(harness.cwd.file('CLAUDE.md').asText()).toContain(
         '# SonarQube Agentic Analysis protocol',
       );
-      expect(findClaudeFeature(harness, 'sqaa-instructions')?.scope).toBe('project');
+      expect(findClaudeFeature(harness, VORTEX_FEATURE_ID)?.scope).toBe('project');
     },
     { timeout: 30000 },
   );
 
   it(
-    'records the project key on the declarative sonar-sqaa-hook feature after a fresh SQAA install',
+    'records the project key on the declarative vortex feature after a fresh Vortex install',
     async () => {
       harness.state().withContextAugmentationBinaryInstalled();
       const server = await harness
@@ -703,15 +709,15 @@ describe('integrate claude — SQAA entitlement guard', () => {
 
       expect(result.exitCode).toBe(0);
 
-      const sqaaFeature = findClaudeFeature(harness, 'sonar-sqaa-hook', 'project');
-      expect(sqaaFeature).toBeDefined();
-      expect(sqaaFeature?.attrs?.projectKey).toBe('my-project');
+      const vortexFeature = findClaudeFeature(harness, VORTEX_FEATURE_ID, 'project');
+      expect(vortexFeature).toBeDefined();
+      expect(vortexFeature?.attrs?.projectKey).toBe('my-project');
     },
     { timeout: 30000 },
   );
 
   it(
-    'does not install PostToolUse SQAA hook when org has no SQAA entitlement (repair path)',
+    'does not install PostToolUse SQAA hook when org has no Vortex entitlement (repair path)',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -776,7 +782,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
 
       expect(result.exitCode).toBe(0);
       expect(`${result.stdout}\n${result.stderr}`).toContain(
-        'Your organization has reached its Vortex agentic analysis usage limit',
+        'Your organization has reached its Vortex usage limit',
       );
       const settings = harness.cwd.file('.claude', 'settings.json').asJson();
       expect(settings.hooks?.PostToolUse).toBeDefined();
@@ -804,7 +810,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
   });
 
   it(
-    'skips the sonar-sqaa hook on a -g install even when the org is entitled, and warns',
+    'skips Vortex on a -g install even when the org is entitled, and warns',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -826,7 +832,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
       expect(result.exitCode).toBe(0);
       expect(`${result.stdout}\n${result.stderr}`).toContain('not supported with --global');
 
-      expect(findClaudeFeature(harness, 'sonar-sqaa-hook')).toBeUndefined();
+      expect(findClaudeFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
     },
     { timeout: 30000 },
   );
@@ -1127,7 +1133,7 @@ describe('integrate claude — file placement (local vs global)', () => {
     );
 
     it(
-      'still writes the project-scoped sonar-sqaa hook when the org has SQAA entitlement',
+      'still writes the project-scoped sonar-sqaa hook when the org has Vortex entitlement',
       async () => {
         harness.state().withContextAugmentationBinaryInstalled();
         const server = await harness
@@ -1298,8 +1304,8 @@ describe('integrate claude — file placement (local vs global)', () => {
         // The global secrets-hooks feature is also recorded.
         expect(findClaudeFeature(harness, 'sonar-secrets-hooks', 'global')).toBeDefined();
 
-        // sonar-sqaa is never installed on a -g install (it is project-scoped only)
-        expect(findClaudeFeature(harness, 'sonar-sqaa-hook')).toBeUndefined();
+        // Vortex is never installed on a -g install (it is project-scoped only)
+        expect(findClaudeFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
       },
       { timeout: 30000 },
     );
@@ -1884,7 +1890,7 @@ describe('integrate claude — interactive feature selection', () => {
   });
 
   it(
-    'prompts per feature, installs accepted features, and shows the SQAA promotion when not entitled',
+    'prompts per feature, installs accepted features, and shows the Vortex promotion when not entitled',
     async () => {
       // On-premise auth with no org: SQAA is not available, so it is skipped
       // without a prompt but surfaces the shared promotion message. Context
@@ -1900,6 +1906,7 @@ describe('integrate claude — interactive feature selection', () => {
       // '\r' selects project scope, then the hook + MCP feature prompts.
       const result = await harness.run('integrate claude', {
         stdinChunks: ['\r', '\r', '\r'],
+        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
       });
 
       expect(result.exitCode).toBe(0);
@@ -1908,8 +1915,8 @@ describe('integrate claude — interactive feature selection', () => {
       expect(output).toContain('Install MCP server?');
       // SQAA is not eligible, so it is skipped without a prompt but the shared
       // promotion message is surfaced.
-      expect(output).not.toContain('Install Vortex agentic analysis hook?');
-      expect(output).toContain('Vortex agentic analysis is available on SonarQube Cloud');
+      expect(output).not.toContain('Install Vortex?');
+      expect(output).toContain('Vortex is available on SonarQube Cloud');
 
       // Accepted features are installed on disk.
       expect(
@@ -1926,7 +1933,7 @@ describe('integrate claude — interactive feature selection', () => {
       // Declarative state records only the accepted features.
       expect(findClaudeFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
       expect(findClaudeFeature(harness, 'mcp-server')).toBeDefined();
-      expect(findClaudeFeature(harness, 'sonar-sqaa-hook')).toBeUndefined();
+      expect(findClaudeFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
     },
     { timeout: 30000 },
   );
@@ -1949,7 +1956,9 @@ describe('integrate claude — interactive feature selection', () => {
       const result = await harness.run(
         `integrate claude${isInteractive ? '' : ' --non-interactive'}`,
         {
-          ...(isInteractive ? { stdinChunks: ['\r', '\r', '\r'] } : {}),
+          ...(isInteractive
+            ? { stdinChunks: ['\r', '\r', '\r'], stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS }
+            : {}),
           extraEnv: isAgent ? { CLAUDECODE: '1' } : {},
         },
       );
@@ -1982,6 +1991,7 @@ describe('integrate claude — interactive feature selection', () => {
       // '\r' selects project scope; decline the secret scanning hooks ('n'), accept MCP ('\r').
       const result = await harness.run('integrate claude', {
         stdinChunks: ['\r', 'n', '\r'],
+        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
       });
 
       expect(result.exitCode).toBe(0);
@@ -1996,7 +2006,7 @@ describe('integrate claude — interactive feature selection', () => {
   );
 
   it(
-    'asks before installing the SQAA hook when the org is entitled and a project key is known',
+    'asks before installing Vortex when the org is entitled and a project key is known',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -2008,9 +2018,10 @@ describe('integrate claude — interactive feature selection', () => {
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 
-      // '\r' selects project scope, then secrets, SQAA hook, SQAA instructions, MCP prompts.
+      // '\r' selects project scope, then the secrets, Vortex, and MCP prompts.
       const result = await harness.run('integrate claude --project my-project', {
-        stdinChunks: ['\r', '\r', '\r', '\r', '\r'],
+        stdinChunks: ['\r', '\r', '\r', '\r'],
+        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
@@ -2020,7 +2031,7 @@ describe('integrate claude — interactive feature selection', () => {
 
       expect(result.exitCode).toBe(0);
       const output = `${result.stdout}\n${result.stderr}`;
-      expect(output).toContain('Install Vortex agentic analysis hook?');
+      expect(output).toContain('Install Vortex?');
 
       // Accepting installs the PostToolUse SQAA hook script and SQAA instructions.
       expect(
@@ -2032,19 +2043,21 @@ describe('integrate claude — interactive feature selection', () => {
           hookScriptName('posttool-sqaa'),
         ),
       ).toBe(true);
-      expect(findClaudeFeature(harness, 'sonar-sqaa-hook')).toBeDefined();
+      expect(findClaudeFeature(harness, VORTEX_FEATURE_ID)).toBeDefined();
       expect(harness.cwd.file('CLAUDE.md').asText()).toContain(
         '# SonarQube Agentic Analysis protocol',
       );
-      expect(findClaudeFeature(harness, 'sqaa-instructions')).toBeDefined();
+      expect(
+        findClaudeFeature(harness, VORTEX_FEATURE_ID)?.subfeatures?.map((s) => s.featureId),
+      ).toContain(SQAA_INSTRUCTIONS_SUBFEATURE_ID);
     },
     { timeout: 30000 },
   );
 
   it(
-    'warns and skips SQAA when the entitlement check fails',
+    'warns and skips Vortex when the entitlement check fails',
     async () => {
-      // Cloud connection whose org/entitlement lookup errors out: resolveSqaaSetup
+      // Cloud connection whose org/entitlement lookup errors out: resolveVortexSetup
       // hits the 'check_failed' branch, which warns and skips silently rather than
       // surfacing the promotion.
       const server = await harness
@@ -2058,9 +2071,10 @@ describe('integrate claude — interactive feature selection', () => {
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 
       // '\r' selects project scope, then the secret scanning hooks + MCP prompts.
-      // SQAA is skipped without a prompt because entitlement could not be resolved.
+      // Vortex is skipped without a prompt because entitlement could not be resolved.
       const result = await harness.run('integrate claude --project my-project', {
         stdinChunks: ['\r', '\r', '\r'],
+        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
@@ -2069,9 +2083,9 @@ describe('integrate claude — interactive feature selection', () => {
 
       expect(result.exitCode).toBe(0);
       const output = `${result.stdout}\n${result.stderr}`;
-      expect(output).toContain('Could not determine Vortex agentic analysis entitlement');
-      expect(output).not.toContain('Install Vortex agentic analysis hook?');
-      expect(findClaudeFeature(harness, 'sonar-sqaa-hook')).toBeUndefined();
+      expect(output).toContain('Could not determine Vortex entitlement');
+      expect(output).not.toContain('Install Vortex?');
+      expect(findClaudeFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
     },
     { timeout: 30000 },
   );
@@ -2123,6 +2137,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       // then confirm removal (default Yes).
       const result = await harness.run('integrate claude', {
         stdinChunks: ['\r', '\r', 'n', '\r'],
+        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
       });
 
       expect(result.exitCode).toBe(0);
@@ -2153,6 +2168,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       // Project scope, keep the hooks, decline MCP keep ('n') then decline removal ('n').
       const result = await harness.run('integrate claude', {
         stdinChunks: ['\r', '\r', 'n', 'n'],
+        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
       });
 
       expect(result.exitCode).toBe(0);
@@ -2178,6 +2194,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       // sonar-secrets, so the binary is orphaned and uninstalled.
       const result = await harness.run('integrate claude', {
         stdinChunks: ['\r', 'n', '\r', '\r'],
+        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
       });
 
       expect(result.exitCode).toBe(0);
@@ -2223,6 +2240,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       // removal (default Yes); keep the MCP server (default Yes).
       const result = await harness.run('integrate claude', {
         stdinChunks: ['\r', 'n', '\r', '\r'],
+        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
       });
 
       expect(result.exitCode).toBe(0);
@@ -2290,6 +2308,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       // (secret scanning hooks, then MCP server). No feature remains afterwards.
       const result = await harness.run('integrate claude', {
         stdinChunks: ['\r', 'n', '\r', 'n', '\r'],
+        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
       });
 
       expect(result.exitCode).toBe(0);

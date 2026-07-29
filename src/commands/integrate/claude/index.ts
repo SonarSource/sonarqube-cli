@@ -32,13 +32,9 @@ import {
   displayAgentIntegratePrelude,
   resolveIntegrateInstallTarget,
 } from '../_common/agent-integrate-prelude.ts';
-import {
-  buildRecordedIntegrationAttrs,
-  isContextAugmentationSkipped,
-  resolveContextAugmentationSetup,
-} from '../_common/context-augmentation.ts';
-import { resolveSqaaSetup } from '../_common/sqaa-entitlement.ts';
+import { buildRecordedIntegrationAttrs } from '../_common/context-augmentation.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
+import { resolveVortexSetup } from '../_common/vortex-setup.ts';
 import { supportedIntegrations } from '../index.ts';
 import { CLAUDE_INTEGRATION_ID, type ClaudeIntegrationOptions } from './declaration.ts';
 import { detectGlobalSecretsHook } from './hooks.ts';
@@ -74,26 +70,17 @@ export async function integrateClaude(
     : await detectGlobalSecretsHook(homedir());
   const skipSecretsHooks = !!existingGlobalHookPath;
 
-  const sqaaEnabled = await resolveSqaaSetup({
-    serverURL: config.serverURL,
-    token: config.token,
-    organization: config.organization,
+  const vortex = await resolveVortexSetup({
+    auth,
+    projectKey: ctx.projectKey,
     isGlobal: ctx.isGlobal,
   });
-
-  const contextAugmentation = isContextAugmentationSkipped()
-    ? null
-    : await resolveContextAugmentationSetup({
-        auth: { ...auth, token: config.token },
-        projectKey: ctx.projectKey,
-        isGlobal: ctx.isGlobal,
-      });
   const featureAttrs = await buildRecordedIntegrationAttrs({
     baseAttrs: buildIntegrationAttrs(config),
     projectRoot: ctx.project.rootDir,
     serverUrl: config.serverURL,
     orgKey: config.organization,
-    contextAugmentation,
+    contextAugmentation: vortex,
   });
   const { installRoot, installScope } = resolveIntegrateInstallTarget(
     ctx.isGlobal,
@@ -103,9 +90,7 @@ export async function integrateClaude(
     ...options,
     projectRoot: ctx.project.rootDir,
     globalSecretsHookExists: skipSecretsHooks,
-    installSqaaHook: sqaaEnabled && config.projectKey !== undefined,
-    installSqaaInstructions: sqaaEnabled && config.projectKey !== undefined,
-    installContextAugmentation: contextAugmentation !== null,
+    installVortex: vortex !== null,
   } satisfies ClaudeIntegrationOptions;
   let installError: Error | undefined;
   try {
@@ -115,7 +100,7 @@ export async function integrateClaude(
       options: integrationOptions,
       targetRoot: installRoot,
       scope: installScope,
-      auth: { ...auth, token: config.token },
+      auth,
       attrs: featureAttrs,
       nonInteractive: options.nonInteractive,
       isFromRouter: options.isFromRouter,

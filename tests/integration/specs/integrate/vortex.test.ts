@@ -21,10 +21,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.js';
+import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.js';
 import {
-  SQAA_OVER_CONSUMPTION_MESSAGE,
-  SQAA_PROMOTION_MESSAGE,
-} from '@/commands/integrate/_common/sqaa-entitlement.js';
+  VORTEX_CHECK_FAILED_MESSAGE,
+  VORTEX_OVER_CONSUMPTION_MESSAGE,
+  VORTEX_PROMOTION_MESSAGE,
+} from '@/commands/integrate/_common/vortex-setup.js';
 import type { VortexEntitlementStatus } from '@/core/server/client.js';
 import type { CliState } from '@/core/state/state.ts';
 
@@ -35,10 +37,6 @@ const ORG_KEY = 'my-org';
 const ORG_UUID = `${ORG_KEY}-uuid-v4`;
 const TOKEN = 'cloud-token';
 const CLAUDE_SKILL_PATH = '.claude/skills/sonar-context-augmentation/SKILL.md';
-
-const CAG_NOT_ENTITLED_MESSAGE = 'not available for your organization';
-const CAG_CHECK_FAILED_MESSAGE = 'could not verify entitlement';
-const CAG_SERVER_MESSAGE = 'not available on SonarQube Server';
 
 describe('integrate claude — Vortex entitlement', () => {
   let harness: TestHarness;
@@ -52,17 +50,23 @@ describe('integrate claude — Vortex entitlement', () => {
     await harness.dispose();
   });
 
-  function isSqaaHookInstalled(): boolean {
+  /** SQAA and CAG ship together as Vortex, so one probe covers both. */
+  function isVortexInstalled(): boolean {
     const settingsFile = harness.cwd.file('.claude', 'settings.json');
-    return settingsFile.exists() ? Boolean(settingsFile.asJson().hooks?.PostToolUse) : false;
-  }
-
-  function isCagInstalled(): boolean {
+    const sqaaHook = settingsFile.exists()
+      ? Boolean(settingsFile.asJson().hooks?.PostToolUse)
+      : false;
     const state = harness.stateJsonFile.asJson() as CliState;
-    const recorded = state.integrations.installed.some((integration) =>
-      integration.features.some((feature) => feature.featureId === CONTEXT_AUGMENTATION_FEATURE_ID),
+    const recordedCag = state.integrations.installed.some((integration) =>
+      integration.features.some(
+        (feature) =>
+          feature.featureId === VORTEX_FEATURE_ID &&
+          (feature.subfeatures ?? []).some(
+            (subfeature) => subfeature.featureId === CONTEXT_AUGMENTATION_FEATURE_ID,
+          ),
+      ),
     );
-    return recorded && harness.cwd.file(CLAUDE_SKILL_PATH).exists();
+    return sqaaHook && recordedCag && harness.cwd.file(CLAUDE_SKILL_PATH).exists();
   }
 
   function entitlementBody(status: Exclude<VortexEntitlementStatus, 'check_failed'>): {
@@ -119,7 +123,7 @@ describe('integrate claude — Vortex entitlement', () => {
   }
 
   it(
-    'installs both SQAA and CAG when both features are entitled',
+    'installs Vortex when both SQAA and CAG are entitled',
     async () => {
       const result = await runIntegrateClaude({
         sqaa: 'enabled',
@@ -128,8 +132,7 @@ describe('integrate claude — Vortex entitlement', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(isSqaaHookInstalled()).toBe(true);
-      expect(isCagInstalled()).toBe(true);
+      expect(isVortexInstalled()).toBe(true);
       expect(harness.cwd.file('CLAUDE.md').asText()).toContain(
         '# SonarQube Agentic Analysis protocol',
       );
@@ -138,7 +141,7 @@ describe('integrate claude — Vortex entitlement', () => {
   );
 
   it(
-    'installs both with an over-consumption warning when SQAA is over its limit and CAG is enabled',
+    'installs Vortex with an over-consumption warning when SQAA is over its limit and CAG is enabled',
     async () => {
       const result = await runIntegrateClaude({
         sqaa: 'over_consumption',
@@ -147,15 +150,14 @@ describe('integrate claude — Vortex entitlement', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(isSqaaHookInstalled()).toBe(true);
-      expect(isCagInstalled()).toBe(true);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(SQAA_OVER_CONSUMPTION_MESSAGE);
+      expect(isVortexInstalled()).toBe(true);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_OVER_CONSUMPTION_MESSAGE);
     },
     { timeout: 30000 },
   );
 
   it(
-    'installs both with an over-consumption warning when CAG is over its limit and SQAA is enabled',
+    'installs Vortex with an over-consumption warning when CAG is over its limit and SQAA is enabled',
     async () => {
       const result = await runIntegrateClaude({
         sqaa: 'enabled',
@@ -164,70 +166,92 @@ describe('integrate claude — Vortex entitlement', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(isSqaaHookInstalled()).toBe(true);
-      expect(isCagInstalled()).toBe(true);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(SQAA_OVER_CONSUMPTION_MESSAGE);
-    },
-    { timeout: 30000 },
-  );
-
-  it.each([
-    ['SQAA is over its limit but CAG is not entitled', 'over_consumption', 'not_entitled'],
-    ['CAG is over its limit but SQAA is not entitled', 'not_entitled', 'over_consumption'],
-    ['neither feature is entitled', 'not_entitled', 'not_entitled'],
-  ] as const)(
-    'skips both when %s',
-    async (_, sqaa, cag) => {
-      const result = await runIntegrateClaude({ sqaa, cag });
-
-      expect(result.exitCode).toBe(0);
-      expect(isSqaaHookInstalled()).toBe(false);
-      expect(isCagInstalled()).toBe(false);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(SQAA_PROMOTION_MESSAGE);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(CAG_NOT_ENTITLED_MESSAGE);
-    },
-    { timeout: 30000 },
-  );
-
-  it.each([
-    [
-      'the SQAA entitlement check fails (endpoint error) even though CAG is entitled',
-      'check_failed',
-      'enabled',
-    ],
-    [
-      'the CAG entitlement check fails (endpoint error) even though SQAA is entitled',
-      'enabled',
-      'check_failed',
-    ],
-    [
-      'one check fails even though the other is over consumption (check_failed wins)',
-      'over_consumption',
-      'check_failed',
-    ],
-  ] as const)(
-    'skips both when %s',
-    async (_, sqaa, cag) => {
-      const result = await runIntegrateClaude({ sqaa, cag });
-
-      expect(result.exitCode).toBe(0);
-      expect(isSqaaHookInstalled()).toBe(false);
-      expect(isCagInstalled()).toBe(false);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(CAG_CHECK_FAILED_MESSAGE);
+      expect(isVortexInstalled()).toBe(true);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_OVER_CONSUMPTION_MESSAGE);
     },
     { timeout: 30000 },
   );
 
   it(
-    'skips both on a SonarQube Server connection',
+    'skips Vortex when SQAA is over its limit but CAG is not entitled',
+    async () => {
+      const result = await runIntegrateClaude({ sqaa: 'over_consumption', cag: 'not_entitled' });
+
+      expect(result.exitCode).toBe(0);
+      expect(isVortexInstalled()).toBe(false);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_PROMOTION_MESSAGE);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'skips Vortex when CAG is over its limit but SQAA is not entitled',
+    async () => {
+      const result = await runIntegrateClaude({ sqaa: 'not_entitled', cag: 'over_consumption' });
+
+      expect(result.exitCode).toBe(0);
+      expect(isVortexInstalled()).toBe(false);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_PROMOTION_MESSAGE);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'skips Vortex when neither feature is entitled',
+    async () => {
+      const result = await runIntegrateClaude({ sqaa: 'not_entitled', cag: 'not_entitled' });
+
+      expect(result.exitCode).toBe(0);
+      expect(isVortexInstalled()).toBe(false);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_PROMOTION_MESSAGE);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'skips Vortex when the SQAA entitlement check fails (endpoint error) even though CAG is entitled',
+    async () => {
+      const result = await runIntegrateClaude({ sqaa: 'check_failed', cag: 'enabled' });
+
+      expect(result.exitCode).toBe(0);
+      expect(isVortexInstalled()).toBe(false);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_CHECK_FAILED_MESSAGE);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'skips Vortex when the CAG entitlement check fails (endpoint error) even though SQAA is entitled',
+    async () => {
+      const result = await runIntegrateClaude({ sqaa: 'enabled', cag: 'check_failed' });
+
+      expect(result.exitCode).toBe(0);
+      expect(isVortexInstalled()).toBe(false);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_CHECK_FAILED_MESSAGE);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'skips Vortex when one check fails even though the other is over consumption (check_failed wins)',
+    async () => {
+      const result = await runIntegrateClaude({ sqaa: 'over_consumption', cag: 'check_failed' });
+
+      expect(result.exitCode).toBe(0);
+      expect(isVortexInstalled()).toBe(false);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_CHECK_FAILED_MESSAGE);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'skips Vortex on a SonarQube Server connection',
     async () => {
       const result = await runIntegrateClaude({ sqaa: 'enabled', cag: 'enabled', cloud: false });
 
       expect(result.exitCode).toBe(0);
-      expect(isSqaaHookInstalled()).toBe(false);
-      expect(isCagInstalled()).toBe(false);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(SQAA_PROMOTION_MESSAGE);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(CAG_SERVER_MESSAGE);
+      expect(isVortexInstalled()).toBe(false);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_PROMOTION_MESSAGE);
     },
     { timeout: 30000 },
   );

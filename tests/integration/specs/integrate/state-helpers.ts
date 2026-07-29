@@ -30,6 +30,7 @@ export interface InstalledIntegrationFeature {
   targetRoot?: string;
   dependencies?: Array<{ id: string }>;
   attrs?: Record<string, unknown>;
+  subfeatures?: Array<{ featureId: string }>;
 }
 
 export interface InstalledIntegration {

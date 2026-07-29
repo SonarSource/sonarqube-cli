@@ -27,6 +27,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.js';
+import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.js';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.js';
 import { CODEX_INTEGRATION_ID } from '@/commands/integrate/codex/declaration.js';
 import { COPILOT_INTEGRATION_ID } from '@/commands/integrate/copilot/declaration.js';
@@ -62,6 +63,16 @@ interface RecordedCagFeature {
   feature: InstalledIntegrationFeature;
 }
 
+function providesContextAugmentation(feature: InstalledIntegrationFeature): boolean {
+  return (
+    feature.featureId === CONTEXT_AUGMENTATION_FEATURE_ID ||
+    (feature.featureId === VORTEX_FEATURE_ID &&
+      (feature.subfeatures ?? []).some(
+        (subfeature) => subfeature.featureId === CONTEXT_AUGMENTATION_FEATURE_ID,
+      ))
+  );
+}
+
 function findRecordedCagFeature(
   state: CliState,
   integrationId?: string,
@@ -71,7 +82,7 @@ function findRecordedCagFeature(
       continue;
     }
     for (const feature of integration.features) {
-      if (feature.featureId !== CONTEXT_AUGMENTATION_FEATURE_ID) {
+      if (!providesContextAugmentation(feature)) {
         continue;
       }
       return {
@@ -485,7 +496,9 @@ describe('integrate claude — Context Augmentation', () => {
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeUndefined();
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
-      expect(result.stderr).toContain('not available for your organization');
+      expect(`${result.stdout}\n${result.stderr}`).toContain(
+        'Vortex is available on SonarQube Cloud',
+      );
     },
     { timeout: 30000 },
   );
@@ -519,7 +532,7 @@ describe('integrate claude — Context Augmentation', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stderr).not.toContain('not available for your organization');
+      expect(`${result.stdout}\n${result.stderr}`).toContain('reached its Vortex usage limit');
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeDefined();
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(true);
@@ -561,7 +574,7 @@ describe('integrate claude — Context Augmentation', () => {
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeUndefined();
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
-      expect(result.stderr).toContain('could not verify entitlement');
+      expect(result.stderr).toContain('Could not determine Vortex entitlement');
     },
     { timeout: 30000 },
   );
@@ -781,9 +794,9 @@ describe('integrate claude — Context Augmentation', () => {
       const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
       expect(nonProbe).toEqual([]);
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
-      // "not available on SonarQube Server" info line must appear, not the
-      // misleading "organization required" warning
-      expect(result.stdout + result.stderr).toContain('not available on SonarQube Server');
+      // The Cloud-only promotion info line must appear, not the misleading
+      // "organization required" warning
+      expect(result.stdout + result.stderr).toContain('Vortex is available on SonarQube Cloud');
       expect(result.stdout + result.stderr).not.toContain('organization are required');
     },
     { timeout: 30000 },
@@ -1048,13 +1061,18 @@ describe('integrate <agent> --global — Context Augmentation', () => {
     await harness.dispose();
   });
 
+  // Claude skips CAG as part of the whole Vortex feature, so its warning covers
+  // Vortex; the other agents still skip CAG on its own.
+  const CLAUDE_GLOBAL_SKIP = 'Skipping Vortex: not supported with --global';
+  const CAG_GLOBAL_SKIP = 'Skipping Vortex context augmentation: not supported with --global';
+
   it.each([
-    ['claude', 'integrate claude -g --non-interactive'],
-    ['copilot', 'integrate copilot -g --non-interactive'],
-    ['codex', 'integrate codex -g --non-interactive'],
+    ['claude', 'integrate claude -g --non-interactive', CLAUDE_GLOBAL_SKIP],
+    ['copilot', 'integrate copilot -g --non-interactive', CAG_GLOBAL_SKIP],
+    ['codex', 'integrate codex -g --non-interactive', CAG_GLOBAL_SKIP],
   ])(
     'skips CAG entirely on "integrate %s --global" and warns when the org is entitled',
-    async (_agent, command) => {
+    async (_agent, command, expectedWarning) => {
       const server = await harness
         .newFakeServer()
         .withAuthToken(TOKEN)
@@ -1078,20 +1096,18 @@ describe('integrate <agent> --global — Context Augmentation', () => {
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
       expect(harness.cwd.file(COPILOT_SKILL_PATH).exists()).toBe(false);
       expect(harness.cwd.file(CODEX_SKILL_PATH).exists()).toBe(false);
-      expect(result.stderr).toContain(
-        'Skipping Vortex context augmentation: not supported with --global',
-      );
+      expect(result.stderr).toContain(expectedWarning);
     },
     { timeout: 30000 },
   );
 
   it.each([
-    ['claude', 'integrate claude -g --non-interactive'],
-    ['copilot', 'integrate copilot -g --non-interactive'],
-    ['codex', 'integrate codex -g --non-interactive'],
+    ['claude', 'integrate claude -g --non-interactive', CLAUDE_GLOBAL_SKIP],
+    ['copilot', 'integrate copilot -g --non-interactive', CAG_GLOBAL_SKIP],
+    ['codex', 'integrate codex -g --non-interactive', CAG_GLOBAL_SKIP],
   ])(
     'skips CAG entirely on "integrate %s --global" without warning when the org is not entitled',
-    async (_agent, command) => {
+    async (_agent, command, unexpectedWarning) => {
       // No CAG entitlement configured on the server.
       const server = await harness.newFakeServer().withAuthToken(TOKEN).start();
       const serverUrl = server.baseUrl();
@@ -1109,9 +1125,7 @@ describe('integrate <agent> --global — Context Augmentation', () => {
       expect(nonProbe).toEqual([]);
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeUndefined();
-      expect(`${result.stdout}\n${result.stderr}`).not.toContain(
-        'Skipping Vortex context augmentation: not supported with --global',
-      );
+      expect(`${result.stdout}\n${result.stderr}`).not.toContain(unexpectedWarning);
     },
     { timeout: 30000 },
   );

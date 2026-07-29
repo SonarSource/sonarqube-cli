@@ -25,9 +25,15 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
+import { SQAA_HOOK_FEATURE_ID } from '@/commands/integrate/_common/sqaa-entitlement.ts';
+import {
+  SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+  VORTEX_FEATURE_ID,
+} from '@/commands/integrate/_common/vortex.ts';
 import { buildLocalCagBinaryName } from '@/core/host/install/context-augmentation.ts';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
 import { detectPlatform } from '@/core/host/platform-detector.ts';
+import type { CliState } from '@/core/state/state.ts';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
 import { hookScriptName, IS_WINDOWS, TestHarness } from '../../harness';
@@ -239,6 +245,96 @@ describe('post-update migration', () => {
       expect(
         harness.cwd.file('.claude', 'skills', 'sonar-context-augmentation', 'SKILL.md').asText(),
       ).toContain('# Generated CAG skill');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'migrates pre-unification Claude SQAA and CAG features into the Vortex container',
+    async () => {
+      const now = new Date().toISOString();
+      const legacyFeature = (featureId: string) => ({
+        featureId,
+        scope: 'project',
+        targetRoot: harness.cwd.path,
+        installedByCliVersion: '0.5.0',
+        installedAt: now,
+        updatedByCliVersion: '0.5.0',
+        updatedAt: now,
+        dependencies: [],
+        resources: [],
+        operations: [],
+        attrs: {
+          orgKey: 'o',
+          projectKey: 'p',
+          serverUrl: 'https://sonarcloud.io',
+          scaEnabled: false,
+        },
+      });
+
+      harness.state().withRawState(
+        JSON.stringify({
+          version: '1.0',
+          lastUpdated: now,
+          auth: { isAuthenticated: false, connections: [] },
+          agents: {},
+          config: { cliVersion: '0.5.0' },
+          telemetry: { enabled: false, firstUseDate: now, events: [] },
+          agentExtensions: [],
+          integrations: {
+            installed: [
+              {
+                id: randomUUID(),
+                integrationId: 'claude-code',
+                installedByCliVersion: '0.5.0',
+                installedAt: now,
+                updatedByCliVersion: '0.5.0',
+                updatedAt: now,
+                features: [
+                  legacyFeature(SQAA_HOOK_FEATURE_ID),
+                  legacyFeature(SQAA_INSTRUCTIONS_SUBFEATURE_ID),
+                  legacyFeature(CONTEXT_AUGMENTATION_FEATURE_ID),
+                ],
+              },
+            ],
+          },
+        }),
+      );
+      harness.state().withContextAugmentationBinaryInstalled();
+
+      const result = await harness.run('--version');
+
+      expect(result.exitCode).toBe(0);
+      const state = harness.stateJsonFile.asJson() as CliState;
+      const claude = state.integrations.installed.find(
+        (integration) => integration.integrationId === 'claude-code',
+      );
+      expect(claude?.features.map((feature) => feature.featureId)).toEqual([VORTEX_FEATURE_ID]);
+      const vortex = claude?.features[0];
+      expect(vortex?.scope).toBe('project');
+      expect(vortex?.targetRoot).toBe(harness.cwd.path);
+      // Attrs of all three predecessors are merged onto the container.
+      expect(vortex?.attrs).toMatchObject({
+        orgKey: 'o',
+        projectKey: 'p',
+        serverUrl: 'https://sonarcloud.io',
+        scaEnabled: false,
+      });
+      expect(vortex?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
+        SQAA_HOOK_FEATURE_ID,
+        SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+        CONTEXT_AUGMENTATION_FEATURE_ID,
+      ]);
+      // Each subfeature reapplied its own resources under the container.
+      expect(
+        harness.cwd.file('.claude', 'settings.json').asJson().hooks?.PostToolUse,
+      ).toBeDefined();
+      expect(harness.cwd.file('CLAUDE.md').asText()).toContain(
+        '# SonarQube Agentic Analysis protocol',
+      );
+      expect(
+        harness.cwd.file('.claude', 'skills', 'sonar-context-augmentation', 'SKILL.md').exists(),
+      ).toBe(true);
     },
     { timeout: 30000 },
   );
