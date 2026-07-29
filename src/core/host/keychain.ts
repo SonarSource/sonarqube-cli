@@ -40,7 +40,9 @@ const tokenCache = new Map<string, string | null>();
 
 const KEYCHAIN_UNAVAILABLE_MESSAGE = 'Failed to access the system keychain.';
 const KEYCHAIN_UNAVAILABLE_HINT =
-  "Make sure your system's keychain or credential manager is available and unlocked, then try again.";
+  "Make sure your system's keychain or credential manager is available and unlocked, then try again. " +
+  'Alternatively, authenticate via environment variables instead of the keychain: SONARQUBE_CLI_TOKEN ' +
+  'plus either SONARQUBE_CLI_SERVER (SonarQube Server) or SONARQUBE_CLI_ORG (SonarQube Cloud).';
 
 async function wrapBunSecrets<T>(operation: () => Promise<T>): Promise<T> {
   try {
