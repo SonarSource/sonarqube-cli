@@ -24,6 +24,8 @@ import { join } from 'node:path';
 
 import { detectCallerAgent } from '@/core/host/agent-detector.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
+import type { FetchNetworkOptions } from '@/core/host/connectivity/types.ts';
 import { buildFetchInit, fetchGuarded } from '@/core/server/fetch-guarded.ts';
 import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
 
@@ -50,6 +52,13 @@ import { getOrCreateUserId } from './user.ts';
 const TELEMETRY_EVENTS_FILENAME = 'telemetry-events.ndjson';
 const TELEMETRY_EVENTS_RETENTION_DAYS = 7;
 const TELEMETRY_EVENTS_RETENTION_MS = TELEMETRY_EVENTS_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+/**
+ * Per-request ceiling for a telemetry POST. Without it a single unresponsive endpoint —
+ * typically a proxy that blackholes rather than rejects — consumes the whole flush deadline,
+ * leaving the detached worker alive for minutes and starving the rest of the batch.
+ */
+const TELEMETRY_REQUEST_TIMEOUT_MS = 20_000;
 
 function getTelemetryEventsPath(): string {
   return join(getTelemetryDir(), TELEMETRY_EVENTS_FILENAME);
@@ -195,6 +204,10 @@ function parseValidEvents(content: string, now: number): StoredTelemetryEvent[] 
  * events older than 7 days, then POSTs each remaining event to the telemetry backend.
  * Unsent events (deadline reached or send error) are re-appended to telemetry-events.ndjson
  * for the next flush attempt. The .sending file is deleted in all cases.
+ *
+ * Requests carry the resolved proxy/TLS configuration; when that configuration cannot be
+ * resolved the whole batch is requeued rather than sent without it. Each request is capped at
+ * TELEMETRY_REQUEST_TIMEOUT_MS, independently of how much of the deadline is left.
  */
 export async function flushTelemetryEvents(deadline: number): Promise<void> {
   const eventsPath = getTelemetryEventsPath();
@@ -216,17 +229,30 @@ export async function flushTelemetryEvents(deadline: number): Promise<void> {
     const events = parseValidEvents(readFileSync(sendingPath, 'utf-8'), Date.now());
     const sentIndices = new Set<number>();
 
+    // Resolved once: every event targets the same endpoint, and buildFetchNetworkOptions
+    // copies the root certificate list on each call when a custom CA is configured.
+    let networkOptions: FetchNetworkOptions;
+    try {
+      networkOptions = buildFetchNetworkOptions(TELEMETRY_ENDPOINT);
+    } catch {
+      // Unusable proxy/TLS config: requeue everything rather than bypassing it.
+      unsent.push(...events);
+      return;
+    }
+
     for (let i = 0; i < events.length; i++) {
       const remainingTime = deadline - Date.now();
       if (remainingTime <= 0) break;
+      const requestTimeout = Math.min(remainingTime, TELEMETRY_REQUEST_TIMEOUT_MS);
       try {
         await fetchGuarded(
           TELEMETRY_ENDPOINT,
           buildFetchInit(
             'POST',
             { 'Content-Type': 'application/json', 'x-api-key': TELEMETRY_API_KEY },
-            remainingTime,
+            requestTimeout,
             JSON.stringify(events[i], (_key, value) => (value === null ? undefined : value)),
+            networkOptions,
           ),
         );
         sentIndices.add(i);

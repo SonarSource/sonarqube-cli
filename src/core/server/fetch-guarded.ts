@@ -23,12 +23,17 @@
 import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
 import type { FetchNetworkOptions } from '@/core/host/connectivity/types.ts';
 
+/**
+ * `networkOptions` is required so a new call site cannot silently skip the resolved
+ * proxy/TLS configuration. Pass `buildFetchNetworkOptions(url)` for the URL being fetched.
+ * `body` stays positional but explicit: pass `undefined` for bodyless requests.
+ */
 export function buildFetchInit(
   method: string,
   headers: Record<string, string>,
   timeoutMs: number,
-  body?: string,
-  networkOptions?: FetchNetworkOptions,
+  body: string | undefined,
+  networkOptions: FetchNetworkOptions,
 ): RequestInit {
   return { method, headers, body, signal: AbortSignal.timeout(timeoutMs), ...networkOptions };
 }
