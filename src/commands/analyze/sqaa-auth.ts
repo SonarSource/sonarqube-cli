@@ -27,6 +27,7 @@ import { selectRecordedFeatureForDir } from '@/core/host/recorded-feature-resolv
 import logger from '@/core/observability/logger.ts';
 import type { InstalledIntegrationFeature, IntegrationStateAttribute } from '@/core/state/state.ts';
 import { loadState } from '@/core/state/state-repository.ts';
+import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { blank, confirmPrompt, text, warn } from '@/core/ui';
 
 import { SQAA_HOOK_FEATURE_ID } from '../integrate/_common/sqaa-entitlement.ts';
@@ -77,9 +78,13 @@ export type SqaaAuthResolution =
   | { kind: 'no-project' };
 
 /**
- * Combines cloud-auth validation and project-key resolution. Pure with respect to
- * the missing-project case: it never throws or warns for `no-project` — the caller
- * owns that decision (see `resolveSqaaContext` in sqaa.ts).
+ * Combines cloud-auth validation and project-key resolution. Never throws or warns for
+ * `no-project` — the caller owns that decision (see `resolveSqaaContext` in sqaa.ts).
+ *
+ * Not side-effect-free: on a successful resolution it publishes the project key for
+ * `project_uuid` telemetry (see `noteProject`). This is the single choke point for every SQAA
+ * entry point — bare `sonar analyze`, `analyze agentic`, and `verify` — so noting here covers
+ * all of them instead of at each of the five downstream call sites.
  */
 export async function resolveCloudAuthAndProject(
   auth: ResolvedAuth,
@@ -92,6 +97,7 @@ export async function resolveCloudAuthAndProject(
   const projectKey = explicitProject ?? (await resolveSqaaProjectKey(projectRoot));
   if (!projectKey) return { kind: 'no-project' };
 
+  noteProject(auth, projectKey);
   return { kind: 'resolved', cloudAuth, projectKey };
 }
 

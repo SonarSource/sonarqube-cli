@@ -29,6 +29,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { buildLocalBinaryName } from '@/core/host/install/sca-scanner.ts';
 import { detectPlatform } from '@/core/host/platform-detector.ts';
 
+import { readCommandEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
 
 const VALID_TOKEN = 'integration-test-token';
@@ -377,4 +378,62 @@ describe('analyze dependency-risks', () => {
     expect(result.stderr).toContain('Using project key: demo');
     expect(result.stderr).not.toContain('Using auto-detected project key');
   });
+});
+
+describe('analyze dependency-risks — project_uuid telemetry', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'resolves and records a non-null project_uuid on CliCommandExecuted',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withScaEnabled(true)
+        .withProject('demo')
+        .withProjectSettings('demo', [])
+        .start();
+      // Deliberately do NOT set TELEMETRY_FLUSH_MODE_ENV here: that flag makes storeEvent()
+      // (which owns CliCommandExecuted) no-op, since it also doubles as the guard that stops
+      // the detached flush worker from recursively emitting its own CliCommandExecuted event.
+      harness.state().withTelemetryEnabled();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      // The scan itself still fails against the fake server (no SCA backend — the manifest
+      // discovery/secrets pre-scan step fails first, before the SCA analyzer's own telemetry
+      // try/catch is even reached; see sca-scan-orchestrator.ts), but the project key is
+      // resolved (and project_uuid recorded on the command) before any of that runs.
+      const result = await harness.run('analyze dependency-risks --project demo --format json', {
+        timeoutMs: 30_000,
+      });
+
+      expect(result.exitCode).toBe(1);
+      const [commandEvent] = readCommandEvents(harness.sonarUserHome.path);
+      expect(commandEvent.event_payload.command).toBe('analyze');
+      expect(commandEvent.event_payload.project_uuid).toBe('AYdemolegacy');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'leaves project_uuid null on CliCommandExecuted for commands with no project context',
+    async () => {
+      harness.state().withTelemetryEnabled();
+
+      const result = await harness.run('system status --json');
+
+      expect(result.exitCode).toBe(0);
+      const [commandEvent] = readCommandEvents(harness.sonarUserHome.path);
+      expect(commandEvent.event_payload.project_uuid).toBeNull();
+    },
+    { timeout: 15000 },
+  );
 });

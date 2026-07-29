@@ -32,6 +32,7 @@ import {
 import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
 import { detectPlatform } from '@/core/host/platform-detector.ts';
 
+import { readCommandEvents } from '../../../_common/telemetry-helpers.ts';
 import { TestHarness } from '../../harness';
 import { initGitRepo, stageFile } from './git-test-helpers';
 
@@ -197,6 +198,34 @@ describe('sonar hook git-pre-commit', () => {
     { timeout: 15000 },
   );
 
+  it(
+    'reports project_uuid null for a secrets-only pre-commit (no -p passed)',
+    async () => {
+      initGitRepo(harness.cwd.path);
+      stageFile(harness.cwd.path, 'index.ts', CLEAN_CONTENT);
+
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withProject('demo')
+        .start();
+
+      harness.state().withTelemetryEnabled();
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      const result = await harness.run('hook git-pre-commit');
+
+      expect(result.exitCode).toBe(0);
+      // integrate only bakes `-p` into the hook alongside --dependency-risks, so a
+      // secrets-only hook knows no project and must report null rather than guessing.
+      const [commandEvent] = readCommandEvents(harness.sonarUserHome.path);
+      expect(commandEvent.event_payload.subcommand).toBe('git-pre-commit');
+      expect(commandEvent.event_payload.project_uuid).toBeNull();
+    },
+    { timeout: 30000 },
+  );
+
   describe('with --dependency-risks', () => {
     it(
       'exits 1 with the unauthenticated message when not authenticated (fails closed)',
@@ -242,6 +271,38 @@ describe('sonar hook git-pre-commit', () => {
         expect(result.stdout + result.stderr).toContain(
           'No dependency manifests changed in this commit',
         );
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'records a non-null project_uuid on CliCommandExecuted',
+      async () => {
+        initGitRepo(harness.cwd.path);
+        stageFile(harness.cwd.path, 'index.ts', CLEAN_CONTENT);
+
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken(VALID_TOKEN)
+          .withScaEnabled(true)
+          .withProject('demo')
+          .withProjectSettings('demo', [])
+          .start();
+
+        // Do NOT enable flush mode: TELEMETRY_FLUSH_MODE_ENV no-ops storeEvent(), which owns
+        // CliCommandExecuted, so the command event would never be written.
+        harness.state().withTelemetryEnabled();
+        harness.state().withSecretsBinaryInstalled();
+        harness.state().withScaScannerBinaryInstalled();
+        harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+        const result = await harness.run('hook git-pre-commit -p demo --dependency-risks');
+
+        expect(result.exitCode).toBe(0);
+        const [commandEvent] = readCommandEvents(harness.sonarUserHome.path);
+        expect(commandEvent.event_payload.command).toBe('hook');
+        expect(commandEvent.event_payload.subcommand).toBe('git-pre-commit');
+        expect(commandEvent.event_payload.project_uuid).toBe('AYdemolegacy');
       },
       { timeout: 30000 },
     );

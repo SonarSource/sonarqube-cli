@@ -323,4 +323,30 @@ describe('emitSqaaAnalysisTelemetry()', () => {
 
     expect(readAnalysisEvents(testSonarUserHome)).toHaveLength(0);
   });
+
+  it('never throws when identity resolution fails (strictly fire-and-forget)', async () => {
+    // getOrCreateUserId does mkdirSync/openSync and can throw on permission/disk errors.
+    // This is the bundled exception-safety fix: emitSqaaAnalysisTelemetry previously had no
+    // top-level try/catch anywhere in its call chain (see sca-analysis-telemetry.test.ts's
+    // equivalent test for the pattern this mirrors).
+    getUserIdSpy.mockImplementation(() => {
+      throw new Error('disk full');
+    });
+    const tally = makeTally({
+      totalIssues: 1,
+      allResults: [
+        {
+          file: 'src/a.ts',
+          filePath: 'src/a.ts',
+          issues: [makeIssue('sqaa:S1234')],
+          errors: null,
+        },
+      ],
+    });
+
+    // Must resolve, not reject — a telemetry failure must never reach the command handler.
+    await emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, tally, 100, 51);
+
+    expect(readAnalysisEvents(testSonarUserHome)).toHaveLength(0);
+  });
 });

@@ -81,10 +81,11 @@ describe('updateSecretsBinaryIfNeeded', () => {
     expect(installSecretsBinarySpy).toHaveBeenCalledTimes(1);
   });
 
-  it('propagates errors from installSecretsBinary to the caller', () => {
+  it('propagates errors from installSecretsBinary to the caller', async () => {
     installSecretsBinarySpy.mockRejectedValue(new Error('download failed'));
 
-    expect(updateSecretsBinaryIfNeeded()).rejects.toThrow('download failed');
+    // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+    await expect(updateSecretsBinaryIfNeeded()).rejects.toThrow('download failed');
   });
 });
 
@@ -135,9 +136,10 @@ describe('updateScaScannerBinaryIfNeeded', () => {
     expect(installScaScannerBinarySpy).toHaveBeenCalledTimes(1);
   });
 
-  it('propagates errors from installScaScannerBinary to the caller', () => {
+  it('propagates errors from installScaScannerBinary to the caller', async () => {
     installScaScannerBinarySpy.mockRejectedValue(new Error('download failed'));
 
-    expect(updateScaScannerBinaryIfNeeded()).rejects.toThrow('download failed');
+    // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+    await expect(updateScaScannerBinaryIfNeeded()).rejects.toThrow('download failed');
   });
 });

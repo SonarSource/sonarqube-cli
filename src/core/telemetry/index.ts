@@ -23,6 +23,7 @@ import { type Command } from 'commander';
 import { DISTRIBUTION } from '../host/distribution.ts';
 import { tryLoadState } from '../state/state-manager.ts';
 import { isTelemetryEnabled } from './enabled.ts';
+import { currentProjectUuid } from './project-uuid.ts';
 import { emitCommandExecuted, flushTelemetryEvents } from './telemetry-events.ts';
 
 export const TELEMETRY_FLUSH_MODE_ENV = '__SQ_CLI_TELEMETRY_FLUSH__';
@@ -63,12 +64,15 @@ export async function storeEvent(command: Command, success: boolean): Promise<vo
   } else {
     subcommand = fallbackSubcommand;
   }
-
   await emitCommandExecuted({
     command: topCommand,
     subcommand,
     result: success ? 'success' : 'failure',
     distribution: DISTRIBUTION,
+    // Per-invocation, published by whichever command resolved a project key (see
+    // noteProject). `null` for commands that never resolve one; the other telemetry
+    // events recover it by joining on the shared invocation_id.
+    project_uuid: await currentProjectUuid(),
   });
 
   spawnFlushWorker();

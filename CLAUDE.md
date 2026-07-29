@@ -119,6 +119,15 @@ All telemetry events (`CliCommandExecuted` from `storeEvent`, `CliAnalysisComple
 
 **Caching rules** — disk entries are written only when the API call succeeded (`response.ok`). Non-null values and confirmed-absent nulls are persisted; failed/transient responses are omitted so the next run retries. The `'fieldName' in entry` check in `planFieldsToFetch()` distinguishes “not yet tried” from “confirmed absent”.
 
+**`project_uuid`** — `string | null`, on `CommandExecutedEventPayload` **only**. Despite the name it is **not** an RFC-4122 UUID: it's SonarQube's legacy internal `projects.uuid`, fetched via `GET /api/navigation/component` (the same value `SonarQubeClient.getComponentId()` returns), and works identically on SQC and SQS. `CliAnalysisCompleted` and `CliIntegrationConfigured` deliberately do **not** carry it — they join to the command event on `invocation_id`.
+
+`src/core/telemetry/project-uuid.ts` owns both halves:
+
+- **Resolver** — `resolveProjectUuid(auth, projectKey)`: cache-then-API, never rejects, short-circuits when telemetry is disabled. Permanent disk cache (`project-uuid-cache.json`) keyed by `` `${serverUrl}::${projectKey}` `` — deliberately *not* by auth fingerprint, since the legacy id is a property of the project, not the caller. Resolved-but-empty is cached as `null` (stop retrying); transient failures are not cached (retry next call).
+- **Ambient context** — the project is a *per-invocation* fact held in a module-level slot rather than threaded through call signatures. `noteProject(auth, projectKey)` records it (synchronous, no I/O, no-ops on a missing key); `currentProjectUuid()` resolves it, memoized to at most one API call per process; `storeEvent` is the only consumer. Tests **must** call `resetProjectUuidContextForTests()` in `beforeEach` — module state outlives individual tests in a file.
+
+Call `noteProject` wherever a project key resolves and auth is in hand: `resolveCloudAuthAndProject` (`analyze/sqaa-auth.ts` — the choke point for bare `sonar analyze`, `analyze agentic`, and `verify`), `analyze/dependency-risks.ts`, `remediate/index.ts`, the three `hook/` handlers (`agent-post-tool-use`, `codex-post-tool-use`, `git-pre-commit`), and `framework/features/install-integration.ts` (project scope only, from the first non-empty `attrs.projectKey` — so a secrets-only `integrate git` and `--global` report `null`). `sonar run mcp` deliberately does not note it: it starts a long-running server, so its `CliCommandExecuted` may never fire.
+
 ## Error handling
 
 Please use the exception types defined in `src/core/command-error.ts` for production code. If you need to throw an error from a mock in test code, it's fine to use the generic `Error` type.

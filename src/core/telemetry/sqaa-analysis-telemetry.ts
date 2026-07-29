@@ -138,6 +138,11 @@ export function tallyFromSqaaJsonReport(report: SqaaJsonReport): RunTally {
  *
  * `errors_count` is {@link RunTally.totalErrors} only (API `errors[]` on successful analyses).
  * `failures_count` is {@link RunTally.totalFailures} (per-file analysis failures).
+ *
+ * The body is fully guarded, matching {@link emitScaAnalysisTelemetry}: this was the only
+ * `emit*` path with no exception handling anywhere in its call chain, so a throw from identity
+ * resolution or the event file write could turn a successful SQAA analysis into a reported
+ * command failure. Telemetry is strictly fire-and-forget.
  */
 export async function emitSqaaAnalysisTelemetry(
   callerCommand: SqaaTelemetryCallerCommand,
@@ -146,20 +151,24 @@ export async function emitSqaaAnalysisTelemetry(
   durationMs: number,
   exitCode?: number | null,
 ): Promise<void> {
-  const analysisId = randomUUID();
-  const findingsCount = tally.totalIssues;
-  const details =
-    findingsCount > 0 ? JSON.stringify(collectRuleCounts(collectIssuesFromTally(tally))) : '';
+  try {
+    const analysisId = randomUUID();
+    const findingsCount = tally.totalIssues;
+    const details =
+      findingsCount > 0 ? JSON.stringify(collectRuleCounts(collectIssuesFromTally(tally))) : '';
 
-  await emitAnalysisCompleted(auth, {
-    caller_command: callerCommand,
-    analyzer: 'sqaa',
-    analysis_id: analysisId,
-    findings_count: findingsCount,
-    exit_code: exitCode ?? null,
-    errors_count: tally.totalErrors,
-    failures_count: tally.totalFailures,
-    scan_duration_ms: durationMs,
-    details,
-  });
+    await emitAnalysisCompleted(auth, {
+      caller_command: callerCommand,
+      analyzer: 'sqaa',
+      analysis_id: analysisId,
+      findings_count: findingsCount,
+      exit_code: exitCode ?? null,
+      errors_count: tally.totalErrors,
+      failures_count: tally.totalFailures,
+      scan_duration_ms: durationMs,
+      details,
+    });
+  } catch {
+    // Telemetry is strictly fire-and-forget; never surface to the command handler.
+  }
 }

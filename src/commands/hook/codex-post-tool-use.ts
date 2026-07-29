@@ -26,6 +26,7 @@ import { AGENTIC_PACK_URL } from '@/core/config-constants.ts';
 import { resolveAuth } from '@/core/host/auth-resolver.ts';
 import logger from '@/core/observability/logger.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
+import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import {
   emitSqaaHookFailureTelemetry,
   SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
@@ -52,6 +53,8 @@ export async function codexPostToolUse(options: CodexPostToolUseOptions): Promis
 
   const auth = await resolveAuth().catch(() => null);
   if (auth?.connectionType !== 'cloud' || !auth.orgKey) return;
+
+  noteProject(auth, projectKey);
 
   const runStart = performance.now();
   let report: SqaaJsonReport | null;

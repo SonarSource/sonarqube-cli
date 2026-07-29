@@ -227,6 +227,7 @@ export class SonarQubeClient {
     endpoint: string,
     params?: Record<string, string | number | boolean>,
     baseUrl?: string,
+    timeoutMs: number = GET_REQUEST_TIMEOUT_MS,
   ): Promise<{ response: Response; value: TValue | undefined }> {
     const url = new URL(`${baseUrl ?? this.serverURL}${endpoint}`);
 
@@ -242,7 +243,7 @@ export class SonarQubeClient {
       buildFetchInit(
         'GET',
         this.commonHeaders(),
-        GET_REQUEST_TIMEOUT_MS,
+        timeoutMs,
         undefined,
         buildFetchNetworkOptions(urlString),
       ),

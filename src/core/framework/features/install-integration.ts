@@ -30,6 +30,7 @@ import type {
 } from '@/core/state/state.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
 import { emitIntegrationConfiguredTelemetry } from '@/core/telemetry/integrate-telemetry.ts';
+import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { text, warn } from '@/core/ui';
 
 import { renderCompletionSummary } from './completion-summary.ts';
@@ -142,6 +143,12 @@ export async function installIntegration<TOptions>({
 
     renderCompletionSummary(integration, installedFeatures, removedFeatures);
 
+    // Publish the project for `project_uuid` on CliCommandExecuted. Project scope only:
+    // `--global` installs have no project key recorded, which is why they report null.
+    if (scope === 'project' && auth) {
+      noteProject(auth, findProjectKeyFromFeatures(installedFeatures));
+    }
+
     const stateSaved = saveInstalledFeatures(state);
     if (stateSaved) {
       await emitIntegrationConfiguredTelemetry({
@@ -185,6 +192,23 @@ export function makeContext(
     attrs,
     resolvedDependencies: new Map(),
   };
+}
+
+/**
+ * Project key for telemetry `project_uuid`: the first `attrs.projectKey` recorded on any
+ * installed feature, or undefined when none carries one.
+ *
+ * `integrate git` records `{ projectKey: options.project ?? null }`, and the agent
+ * integrations record the discovered key on their SQAA/CAG features — so the non-empty-string
+ * check is what makes a secrets-only git install (which records an explicit `null`) report
+ * `project_uuid: null` rather than a bogus value.
+ */
+function findProjectKeyFromFeatures(features: InstalledIntegrationFeature[]): string | undefined {
+  for (const feature of features) {
+    const value = feature.attrs?.projectKey;
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  return undefined;
 }
 
 /**
