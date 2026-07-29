@@ -577,11 +577,7 @@ describe('reconcileInstalledIntegrations', () => {
       updatedAt: now,
       features: [
         recordedReplaceableFeature('old-sqaa', { projectKey: 'project-key' }, tempDir),
-        recordedReplaceableFeature(
-          'old-context',
-          { orgKey: 'org-key', scaEnabled: true },
-          tempDir,
-        ),
+        recordedReplaceableFeature('old-context', { orgKey: 'org-key', scaEnabled: true }, tempDir),
       ],
     });
 
