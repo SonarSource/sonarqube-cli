@@ -53,7 +53,7 @@ export function isProjectVortexFeature(feature: InstalledIntegrationFeature): bo
 /**
  * Builds an agent's Vortex container from the capabilities it supports. The
  * subfeature ids are the ids those capabilities had as standalone features, so
- * `replaces` migrates installs recorded before the unification into this one.
+ * `replacedIds` migrates installs recorded before the unification into this one.
  */
 export function createVortexFeature<TOptions extends VortexIntegrationOptions>(
   subfeatures: SubfeatureDeclaration<TOptions>[],
@@ -68,7 +68,7 @@ export function createVortexFeature<TOptions extends VortexIntegrationOptions>(
     shouldInstall: ({ options }) => (options.installVortex === true ? askUser() : skip()),
     targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
     scope: 'project',
-    replaces: subfeatureIds,
+    replacedIds: subfeatureIds,
     defaultInstallSubfeatureIds: subfeatureIds,
     subfeatures,
   };
