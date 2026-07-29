@@ -23,8 +23,10 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import {
+  type FeatureApplication,
   type FeatureDeclaration,
   findInstalledIntegration,
+  type IntegrationDeclaration,
   integrationInstaller,
   type IntegrationRegistry,
   isFeatureContainer,
@@ -36,7 +38,12 @@ import { appendTelemetryEvent } from '@/core/telemetry/telemetry-events.ts';
 import { version as CURRENT_VERSION } from '../../../package.json';
 import { getTelemetryDir } from '../config-constants.ts';
 import logger from '../observability/logger.ts';
-import type { CliState, HookExtension, InstalledIntegrationFeature } from '../state/state.ts';
+import type {
+  CliState,
+  HookExtension,
+  InstalledIntegrationFeature,
+  IntegrationStateAttribute,
+} from '../state/state.ts';
 import { loadState, saveState, stateFileExists, tryLoadState } from '../state/state-repository.ts';
 import { isNewerVersion } from '../version.ts';
 import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from './install-types.ts';
@@ -176,6 +183,11 @@ export async function migrateDeclarativeIntegrations(registry: IntegrationRegist
       continue;
     }
 
+    const replacementApplications = migrateReplacedFeatures(
+      integration,
+      installedIntegration.features,
+    );
+
     const featuresById = new Map(integration.features.map((feature) => [feature.id, feature]));
     const knownFeatures = installedIntegration.features.filter((feature) =>
       featuresById.has(feature.featureId),
@@ -186,27 +198,21 @@ export async function migrateDeclarativeIntegrations(registry: IntegrationRegist
       stateChanged = true;
     }
 
-    const applications = [];
+    const applications: FeatureApplication[] = [];
     for (const installedFeature of knownFeatures) {
-      const feature = getFeature(featuresById, installedFeature);
-      if (!feature) {
-        continue;
+      const application = createFeatureMigrationApplication(
+        featuresById,
+        installedFeature.featureId,
+        installedFeature.subfeatures?.map((subfeature) => subfeature.featureId),
+        installedFeature.targetRoot,
+        installedFeature.scope,
+        installedFeature.attrs,
+      );
+      if (application) {
+        applications.push(application);
       }
-
-      if (installedFeature.scope === 'project' && !fs.existsSync(installedFeature.targetRoot)) {
-        logger.debug(
-          `Declarative migration skipped for ${integration.id}.${installedFeature.featureId}: target root no longer exists: ${installedFeature.targetRoot}`,
-        );
-        continue;
-      }
-
-      applications.push({
-        feature: feature,
-        targetRoot: installedFeature.targetRoot,
-        scope: installedFeature.scope,
-        attrs: installedFeature.attrs,
-      });
     }
+    applications.push(...replacementApplications);
 
     try {
       const installedFeatures = await integrationInstaller.applyAndRecordFeatures(
@@ -236,22 +242,89 @@ export async function migrateDeclarativeIntegrations(registry: IntegrationRegist
   }
 }
 
+function migrateReplacedFeatures(
+  integration: IntegrationDeclaration,
+  installedFeatures: InstalledIntegrationFeature[],
+): FeatureApplication[] {
+  const applications: FeatureApplication[] = [];
+
+  const featuresById = new Map(integration.features.map((feature) => [feature.id, feature]));
+  for (const successor of integration.features) {
+    const predecessorsByTarget = groupReplacedFeaturesByTarget(successor, installedFeatures);
+
+    for (const predecessors of predecessorsByTarget.values()) {
+      const { scope, targetRoot } = predecessors[0];
+      const hasRecordedSuccessor = installedFeatures.some(
+        (feature) =>
+          feature.featureId === successor.id &&
+          feature.scope === scope &&
+          feature.targetRoot === targetRoot,
+      );
+      if (hasRecordedSuccessor) {
+        continue;
+      }
+      const application = createFeatureMigrationApplication(
+        featuresById,
+        successor.id,
+        undefined,
+        targetRoot,
+        scope,
+        mergeFeatureAttrs(predecessors),
+      );
+      if (application) {
+        applications.push(application);
+      }
+    }
+  }
+
+  return applications;
+}
+
+function groupReplacedFeaturesByTarget(
+  successor: FeatureDeclaration,
+  installedFeatures: InstalledIntegrationFeature[],
+): Map<string, InstalledIntegrationFeature[]> {
+  const replacedIds = new Set(successor.replaces ?? []);
+  const predecessorsByTarget = new Map<string, InstalledIntegrationFeature[]>();
+
+  for (const installedFeature of installedFeatures) {
+    if (!replacedIds.has(installedFeature.featureId)) {
+      continue;
+    }
+    const targetKey = `${installedFeature.scope}:${installedFeature.targetRoot}`;
+    const predecessors = predecessorsByTarget.get(targetKey);
+    if (predecessors) {
+      predecessors.push(installedFeature);
+    } else {
+      predecessorsByTarget.set(targetKey, [installedFeature]);
+    }
+  }
+  return predecessorsByTarget;
+}
+
+function mergeFeatureAttrs(
+  features: InstalledIntegrationFeature[],
+): Record<string, IntegrationStateAttribute> | undefined {
+  const attrs = features.reduce<Record<string, IntegrationStateAttribute>>(
+    (merged, feature) => ({ ...merged, ...feature.attrs }),
+    {},
+  );
+  return Object.keys(attrs).length > 0 ? attrs : undefined;
+}
+
 function getFeature(
   featuresById: Map<string, FeatureDeclaration>,
-  installedFeature: InstalledIntegrationFeature,
+  featureId: string,
+  subfeatureIds: string[] | undefined,
 ): FeatureDeclaration | undefined {
-  const feature = featuresById.get(installedFeature.featureId);
+  const feature = featuresById.get(featureId);
   if (!feature) {
     return undefined;
   }
 
   let applicationFeature = feature;
   if (isFeatureContainer(feature)) {
-    const activeIds = new Set(
-      installedFeature.subfeatures !== undefined
-        ? installedFeature.subfeatures.map((s) => s.featureId)
-        : feature.defaultInstallSubfeatureIds,
-    );
+    const activeIds = new Set(subfeatureIds ?? feature.defaultInstallSubfeatureIds);
     const filteredContainer = {
       ...feature,
       subfeatures: feature.subfeatures.filter((s) => activeIds.has(s.id)),
@@ -259,6 +332,29 @@ function getFeature(
     applicationFeature = filteredContainer;
   }
   return applicationFeature;
+}
+
+function createFeatureMigrationApplication(
+  featuresById: Map<string, FeatureDeclaration>,
+  featureId: string,
+  subfeatureIds: string[] | undefined,
+  targetRoot: string,
+  scope: InstalledIntegrationFeature['scope'],
+  attrs: InstalledIntegrationFeature['attrs'],
+): FeatureApplication | undefined {
+  const feature = getFeature(featuresById, featureId, subfeatureIds);
+  if (!feature) {
+    return undefined;
+  }
+
+  if (scope === 'project' && !fs.existsSync(targetRoot)) {
+    logger.debug(
+      `Declarative migration skipped for ${featureId}: target root no longer exists: ${targetRoot}`,
+    );
+    return undefined;
+  }
+
+  return { feature, targetRoot, scope, attrs };
 }
 
 /**

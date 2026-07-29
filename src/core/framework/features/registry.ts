@@ -49,6 +49,7 @@ export class IntegrationRegistry {
     for (const feature of declaration.features) {
       this.validateFeature(declaration, feature);
     }
+    this.validateReplacements(declaration);
     this.ensureUnique(
       (declaration.legacyFeatures ?? []).map((feature) => feature.id),
       `Duplicate legacy feature id in integration ${declaration.id}`,
@@ -56,6 +57,28 @@ export class IntegrationRegistry {
     for (const legacyFeature of declaration.legacyFeatures ?? []) {
       this.ensureNonEmptyId(legacyFeature.id, 'Legacy feature');
     }
+  }
+
+  private validateReplacements(declaration: IntegrationDeclaration): void {
+    const featureIds = new Set(declaration.features.map((feature) => feature.id));
+    const replacedIds: string[] = [];
+
+    for (const feature of declaration.features) {
+      for (const replacedId of feature.replaces ?? []) {
+        this.ensureNonEmptyId(replacedId, 'Replaced feature');
+        if (featureIds.has(replacedId)) {
+          throw new Error(
+            `Feature ${declaration.id}.${feature.id} replaces an active feature id: ${replacedId}`,
+          );
+        }
+        replacedIds.push(replacedId);
+      }
+    }
+
+    this.ensureUnique(
+      replacedIds,
+      `Duplicate replaced feature id in integration ${declaration.id}`,
+    );
   }
 
   private validateFeature(declaration: IntegrationDeclaration, feature: FeatureDeclaration): void {

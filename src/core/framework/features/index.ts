@@ -90,6 +90,7 @@ export type {
   AppliedResource,
   ContainerIntegrationContext,
   DependencyInstallContext,
+  FeatureApplication,
   FeatureContainer,
   FeatureDeclaration,
   FeatureOperation,

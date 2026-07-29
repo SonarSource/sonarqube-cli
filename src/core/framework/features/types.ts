@@ -121,6 +121,11 @@ export interface FeatureDeclaration<TOptions = Record<string, unknown>> {
   dependencies?: DependencyDeclaration[];
   resources?: ResourceDeclaration[];
   operations?: FeatureOperation[];
+  /**
+   * Ids of retired features of the same integration that this feature supersedes.
+   * Post-update migrates each recorded predecessor install into this feature.
+   */
+  replaces?: string[];
   legacyCleanups?: (ResourceIdentity & RemovableResource)[];
   /**
    * Optional "try it out" example rendered by the framework completion summary

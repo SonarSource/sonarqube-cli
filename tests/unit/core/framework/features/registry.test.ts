@@ -255,6 +255,73 @@ describe('declarative integration framework', () => {
     ).toThrow('Legacy feature id must not be empty');
   });
 
+  // Feature replacement (`replaces`) :O
+
+  const expectReplacementRejected = (features: FeatureDeclaration[], expectedError: string) =>
+    expect(() =>
+      new IntegrationRegistry().register(makeIntegration({ id: 'claude-code', features })),
+    ).toThrow(expectedError);
+
+  it('rejects empty replaced feature ids', () => {
+    expectReplacementRejected(
+      [{ id: 'vortex', displayName: 'Vortex', replaces: [' '] }],
+      'Replaced feature id must not be empty',
+    );
+  });
+
+  it('rejects replacing an active feature id, including the feature itself', () => {
+    expectReplacementRejected(
+      [
+        { id: 'vortex', displayName: 'Vortex', replaces: ['sqaa-instructions'] },
+        { id: 'sqaa-instructions', displayName: 'SQAA instructions' },
+      ],
+      'Feature claude-code.vortex replaces an active feature id: sqaa-instructions',
+    );
+
+    expectReplacementRejected(
+      [{ id: 'vortex', displayName: 'Vortex', replaces: ['vortex'] }],
+      'Feature claude-code.vortex replaces an active feature id: vortex',
+    );
+  });
+
+  it('rejects the same replaced feature id claimed twice in one integration', () => {
+    const duplicateClaim = 'Duplicate replaced feature id in integration claude-code';
+
+    expectReplacementRejected(
+      [
+        { id: 'vortex-sqaa', displayName: 'Vortex SQAA', replaces: ['context-augmentation'] },
+        { id: 'vortex-cag', displayName: 'Vortex CAG', replaces: ['context-augmentation'] },
+      ],
+      duplicateClaim,
+    );
+
+    expectReplacementRejected(
+      [{ id: 'vortex', displayName: 'Vortex', replaces: ['sonar-sqaa-hook', 'sonar-sqaa-hook'] }],
+      duplicateClaim,
+    );
+  });
+
+  it('accepts the same replaced feature ids in different agent integrations', () => {
+    const registry = new IntegrationRegistry();
+    const replaces = ['sonar-sqaa-hook', 'sqaa-instructions', 'context-augmentation'];
+
+    registry.register(
+      makeIntegration({
+        id: 'claude-code',
+        features: [{ id: 'vortex', displayName: 'Vortex', replaces }],
+      }),
+    );
+    registry.register(
+      makeIntegration({
+        id: 'copilot-cli',
+        features: [{ id: 'vortex', displayName: 'Vortex', replaces }],
+      }),
+    );
+
+    expect(registry.get('claude-code')?.features[0].replaces).toEqual(replaces);
+    expect(registry.get('copilot-cli')?.features[0].replaces).toEqual(replaces);
+  });
+
   it('rejects duplicate and empty subfeature ids in a FeatureContainer', () => {
     const registry = new IntegrationRegistry();
 
