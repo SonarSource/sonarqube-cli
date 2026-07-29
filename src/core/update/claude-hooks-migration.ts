@@ -19,20 +19,20 @@
  */
 
 // Legacy Claude Code hook migration, consumed by the post-update mechanism
-// that runs automatically after CLI upgrades.
+// that runs automatically after CLI upgrades. Also holds the sonar-a3s
+// obsolete-artifact cleanup helpers, which are Claude-specific but called
+// directly (not just from migrateClaudeCodeHooks below) by
+// commands/integrate/claude/index.ts (manual re-run) and post-update.ts's
+// own top-level state cleanup.
 
 import * as fs from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import logger from '../observability/logger.ts';
 import type { CliState, HookExtension } from '../state/state.ts';
 import { loadState } from '../state/state-repository.ts';
-import {
-  migrateHookScripts,
-  OBSOLETE_A3S_MARKER,
-  removeObsoleteHookArtifacts,
-} from './migration.ts';
 
 /**
  * Signature of `@/commands/integrate/claude/hooks.ts`'s `installHooks`,
@@ -79,7 +79,7 @@ export async function migrateClaudeCodeHooks(
     try {
       migrateHookScripts(projectRoot, globalDir);
       await installHooksFn(projectRoot, globalDir, false);
-      await removeObsoleteHookArtifacts(projectRoot, OBSOLETE_A3S_MARKER);
+      await removeObsoleteHookArtifacts(projectRoot);
       logger.debug(`Migrated Claude Code hooks for: ${globalDir ?? projectRoot}`);
     } catch (err) {
       logger.debug(
@@ -125,4 +125,133 @@ function hasInstalledDeclarativeIntegration(state: CliState, integrationId: stri
   return state.integrations.installed.some(
     (entry) => entry.integrationId === integrationId && entry.features.length > 0,
   );
+}
+
+// --- sonar-a3s obsolete artifact cleanup ---
+// Shared by migrateClaudeCodeHooks above, commands/integrate/claude/index.ts
+// (manual re-run), and post-update.ts (top-level state cleanup).
+
+const OBSOLETE_A3S_MARKER = 'sonar-a3s';
+const CLAUDE_CONFIG_DIR = '.claude';
+const HOOKS_DIR = 'hooks';
+
+interface HookEntry {
+  command: string;
+  [key: string]: unknown;
+}
+interface HookConfig {
+  hooks: HookEntry[];
+  [key: string]: unknown;
+}
+interface AgentSettings {
+  hooks?: Record<string, HookConfig[] | undefined>;
+  [key: string]: unknown;
+}
+
+async function readObsoleteSettings(settingsPath: string): Promise<AgentSettings | undefined> {
+  if (!fs.existsSync(settingsPath)) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(await readFile(settingsPath, 'utf-8')) as AgentSettings;
+  } catch {
+    return undefined;
+  }
+}
+
+async function removeObsoleteSettingsEntries(installDir: string): Promise<void> {
+  const settingsPath = join(installDir, CLAUDE_CONFIG_DIR, 'settings.json');
+  const settings = await readObsoleteSettings(settingsPath);
+  if (!settings?.hooks) {
+    return;
+  }
+  let changed = false;
+  for (const eventType of Object.keys(settings.hooks)) {
+    const entries = settings.hooks[eventType];
+    if (!Array.isArray(entries)) {
+      continue;
+    }
+    const filtered = entries.filter(
+      (e) =>
+        !(Array.isArray(e.hooks) && e.hooks.some((h) => h.command.includes(OBSOLETE_A3S_MARKER))),
+    );
+    if (filtered.length !== entries.length) {
+      settings.hooks[eventType] = filtered;
+      changed = true;
+    }
+  }
+  if (changed) {
+    await writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+  }
+}
+
+function deleteObsoleteHookDir(installDir: string): void {
+  const obsoleteDir = join(installDir, CLAUDE_CONFIG_DIR, HOOKS_DIR, OBSOLETE_A3S_MARKER);
+  if (fs.existsSync(obsoleteDir)) {
+    fs.rmSync(obsoleteDir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Remove obsolete sonar-a3s hook entries from settings.json and delete the
+ * obsolete hook script directory. Does NOT touch state.json — callers are
+ * responsible for filtering state in-place.
+ */
+export async function removeObsoleteHookArtifacts(installDir: string): Promise<void> {
+  try {
+    await removeObsoleteSettingsEntries(installDir);
+    deleteObsoleteHookDir(installDir);
+  } catch (err) {
+    logger.debug(
+      `Failed to remove obsolete hook artifacts for ${OBSOLETE_A3S_MARKER}: ${(err as Error).message}`,
+    );
+  }
+}
+
+/**
+ * Remove obsolete sonar-a3s hook entries from an in-memory state object.
+ * Mutates state in place — caller is responsible for saving.
+ */
+export function cleanObsoleteFromState(state: CliState): void {
+  state.agents['claude-code'].hooks.installed = state.agents['claude-code'].hooks.installed.filter(
+    (h) => h.name !== OBSOLETE_A3S_MARKER,
+  );
+  state.agentExtensions = state.agentExtensions.filter((e) => e.name !== OBSOLETE_A3S_MARKER);
+}
+
+/**
+ * Rewrite old hook scripts that called `sonar analyze --file` to use specific subcommands.
+ * Also called from post-update.ts for automatic migration after CLI upgrades.
+ */
+export function migrateHookScripts(projectRoot: string, globalDir?: string): void {
+  const baseDir = globalDir ?? projectRoot;
+  const secretsDir = join(baseDir, '.claude', 'hooks', 'sonar-secrets', 'build-scripts');
+
+  const scripts = [
+    'pretool-secrets.sh',
+    'prompt-secrets.sh',
+    'pretool-secrets.ps1',
+    'prompt-secrets.ps1',
+  ];
+
+  for (const script of scripts) {
+    const scriptPath = join(secretsDir, script);
+    if (!fs.existsSync(scriptPath)) {
+      continue;
+    }
+
+    try {
+      const content = fs.readFileSync(scriptPath, 'utf-8');
+      // Replace old `sonar analyze --file` with `sonar analyze secrets`
+      // Only replace if it's the direct analyze command, not already migrated
+      const migrated = content.replaceAll('sonar analyze --file', 'sonar analyze secrets');
+
+      if (migrated !== content) {
+        fs.writeFileSync(scriptPath, migrated, 'utf-8');
+        logger.debug(`Migrated hook script: ${script}`);
+      }
+    } catch (err) {
+      logger.debug(`Failed to migrate script ${script}: ${(err as Error).message}`);
+    }
+  }
 }

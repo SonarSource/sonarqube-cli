@@ -28,9 +28,11 @@ import logger from '../observability/logger.ts';
 import { loadState, saveState, stateFileExists, tryLoadState } from '../state/state-repository.ts';
 import { isNewerVersion } from '../version.ts';
 import { updateScaScannerBinaryIfNeeded, updateSecretsBinaryIfNeeded } from './binary-refresh.ts';
-import type { InstallHooksFn } from './claude-hooks-migration.ts';
-import { migrateClaudeCodeHooks } from './claude-hooks-migration.ts';
-import { cleanObsoleteFromState, OBSOLETE_A3S_MARKER } from './migration.ts';
+import {
+  cleanObsoleteFromState,
+  type InstallHooksFn,
+  migrateClaudeCodeHooks,
+} from './claude-hooks-migration.ts';
 import { migrateLegacyTelemetryEvents } from './telemetry-migration.ts';
 
 /**
@@ -80,7 +82,7 @@ export async function runPostUpdateActions(deps: PostUpdateDependencies): Promis
     // updateSecretsBinaryIfNeeded) that load and save their own state copies.
     const state = loadState();
     state.config.cliVersion = CURRENT_VERSION;
-    cleanObsoleteFromState(state, OBSOLETE_A3S_MARKER);
+    cleanObsoleteFromState(state);
     saveState(state);
   } catch (error) {
     logger.debug(`Post-update actions failed: ${(error as Error).message}`);

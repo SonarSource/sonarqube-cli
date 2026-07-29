@@ -30,7 +30,7 @@ import * as secretsInstall from '@/core/host/install/secrets.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
-import * as migration from '@/core/update/migration.ts';
+import * as migration from '@/core/update/claude-hooks-migration.ts';
 import type { PostUpdateDependencies } from '@/core/update/post-update.ts';
 import { migrateDeclarativeIntegrations, runPostUpdateActions } from '@/core/update/post-update.ts';
 import * as versionLib from '@/core/version.ts';
