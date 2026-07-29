@@ -529,13 +529,10 @@ describe('integrate cursor', () => {
       async () => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
-        const result = await harness.run(
-          `integrate cursor --project ${TEST_PROJECT} --skip-context`,
-          {
-            extraEnv,
-            stdinChunks: ['\r', '\r', '\r', '\r'],
-          },
-        );
+        const result = await harness.run(`integrate cursor --project ${TEST_PROJECT}`, {
+          extraEnv: { ...extraEnv, __SQCLI_DEV_SKIP_CAG: '1' },
+          stdinChunks: ['\r', '\r', '\r', '\r'],
+        });
 
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;
@@ -560,9 +557,13 @@ describe('integrate cursor', () => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
         const result = await harness.run(
-          `integrate cursor --project ${TEST_PROJECT}${isInteractive ? '' : ' --non-interactive'} --skip-context`,
+          `integrate cursor --project ${TEST_PROJECT}${isInteractive ? '' : ' --non-interactive'}`,
           {
-            extraEnv: isAgent ? { ...extraEnv, CURSOR_AGENT: '1' } : extraEnv,
+            extraEnv: {
+              ...extraEnv,
+              __SQCLI_DEV_SKIP_CAG: '1',
+              ...(isAgent ? { CURSOR_AGENT: '1' } : {}),
+            },
             ...(isInteractive ? { stdinChunks: ['\r', '\r', '\r', '\r'] } : {}),
           },
         );

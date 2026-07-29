@@ -22,8 +22,6 @@ export interface IntegrateAgentOptions {
   project?: string;
   nonInteractive?: boolean;
   global?: boolean;
-  /** Skip the sonar-context-augmentation install/init/skill step. */
-  skipContext?: boolean;
   /** Set by the bare `sonar integrate` router; forwarded to telemetry only. */
   isFromRouter?: boolean;
 }

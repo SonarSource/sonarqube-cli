@@ -32,11 +32,13 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { scanAndEmitSecrets } from '@/commands/analyze/secrets.ts';
-import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
+import { ENV_SONAR_USER_HOME, TELEMETRY_ENDPOINT } from '@/core/config-constants.ts';
 import * as agentDetector from '@/core/host/agent-detector.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import * as networkConfig from '@/core/host/connectivity/network-config.ts';
 import { DISTRIBUTION } from '@/core/host/distribution.ts';
 import type { SpawnResult } from '@/core/process/process.ts';
+import * as fetchGuardedModule from '@/core/server/fetch-guarded.ts';
 import type {
   AnalysisCompletedEventPayload,
   StoredAnalysisCompletedEvent,
@@ -625,6 +627,91 @@ describe('flushTelemetryEvents()', () => {
     } finally {
       fetchSpy.mockRestore();
     }
+  });
+
+  describe('per-request timeout', () => {
+    it('caps each request at 20s even when the flush deadline is far away', async () => {
+      writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent());
+
+      const initSpy = spyOn(fetchGuardedModule, 'buildFetchInit');
+      const fetchSpy = mockFetch();
+      try {
+        await flushTelemetryEvents(Date.now() + 60_000);
+        expect(initSpy.mock.calls[0][2]).toBe(20_000);
+      } finally {
+        fetchSpy.mockRestore();
+        initSpy.mockRestore();
+      }
+    });
+
+    it('uses the remaining deadline when it is shorter than the cap', async () => {
+      writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent());
+
+      const initSpy = spyOn(fetchGuardedModule, 'buildFetchInit');
+      const fetchSpy = mockFetch();
+      try {
+        await flushTelemetryEvents(Date.now() + 2_000);
+        const timeout = initSpy.mock.calls[0][2];
+        expect(timeout).toBeGreaterThan(0);
+        expect(timeout).toBeLessThanOrEqual(2_000);
+      } finally {
+        fetchSpy.mockRestore();
+        initSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('network configuration', () => {
+    it('sends through the resolved proxy and TLS options', async () => {
+      writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent());
+
+      const networkSpy = spyOn(networkConfig, 'buildFetchNetworkOptions').mockReturnValue({
+        proxy: 'http://proxy.internal:3128',
+      });
+      const fetchSpy = mockFetch();
+      try {
+        await flushTelemetryEvents(Date.now() + 60_000);
+        expect(networkSpy).toHaveBeenCalledWith(TELEMETRY_ENDPOINT);
+        const init = fetchSpy.mock.calls[0][1] as RequestInit & { proxy?: string };
+        expect(init.proxy).toBe('http://proxy.internal:3128');
+      } finally {
+        fetchSpy.mockRestore();
+        networkSpy.mockRestore();
+      }
+    });
+
+    it('resolves the network options once for the whole batch', async () => {
+      writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent({ analysis_id: 'run-a' }));
+      writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent({ analysis_id: 'run-b' }));
+
+      const networkSpy = spyOn(networkConfig, 'buildFetchNetworkOptions').mockReturnValue({});
+      const fetchSpy = mockFetch();
+      try {
+        await flushTelemetryEvents(Date.now() + 60_000);
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+        expect(networkSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        fetchSpy.mockRestore();
+        networkSpy.mockRestore();
+      }
+    });
+
+    it('requeues events instead of bypassing an unusable network config', async () => {
+      writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent({ analysis_id: 'run-a' }));
+
+      const networkSpy = spyOn(networkConfig, 'buildFetchNetworkOptions').mockImplementation(() => {
+        throw new Error('unreadable client certificate');
+      });
+      const fetchSpy = mockFetch();
+      try {
+        await flushTelemetryEvents(Date.now() + 60_000);
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(readAnalysisEvents(testSonarUserHome)).toHaveLength(1);
+      } finally {
+        fetchSpy.mockRestore();
+        networkSpy.mockRestore();
+      }
+    });
   });
 });
 
