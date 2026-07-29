@@ -25,13 +25,14 @@ import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:te
 import { supportedIntegrations } from '@/commands/integrate';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import * as hooks from '@/commands/integrate/claude/hooks.ts';
+import { IntegrationRegistry } from '@/core/framework/features';
 import * as secretsInstall from '@/core/host/install/secrets.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import * as migration from '@/core/update/migration.ts';
 import type { PostUpdateDependencies } from '@/core/update/post-update.ts';
-import { runPostUpdateActions } from '@/core/update/post-update.ts';
+import { migrateDeclarativeIntegrations, runPostUpdateActions } from '@/core/update/post-update.ts';
 import * as versionLib from '@/core/version.ts';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
@@ -184,5 +185,74 @@ describe('runPostUpdateActions', () => {
     expect(saved.agents['claude-code'].hooks.installed.some((h) => h.name === 'sonar-a3s')).toBe(
       false,
     );
+  });
+});
+
+describe('migrateDeclarativeIntegrations', () => {
+  let loadStateSpy: Mock<typeof stateRepository.loadState>;
+  let saveStateSpy: Mock<typeof stateRepository.saveState>;
+
+  beforeEach(() => {
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeState());
+    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    loadStateSpy.mockRestore();
+    saveStateSpy.mockRestore();
+  });
+
+  it('loads state, reconciles the registry against it, and saves when changed', async () => {
+    const state = makeState();
+    loadStateSpy.mockReturnValue(state);
+
+    const registry = new IntegrationRegistry();
+
+    await migrateDeclarativeIntegrations(registry);
+
+    expect(loadStateSpy).toHaveBeenCalledTimes(1);
+    expect(saveStateSpy).not.toHaveBeenCalled();
+  });
+
+  it('saves state when reconciliation reports a change', async () => {
+    const now = '2026-01-01T00:00:00.000Z';
+    const state = makeState();
+    state.integrations.installed.push({
+      id: 'integration-id',
+      integrationId: 'test-integration',
+      installedByCliVersion: '0.9.0',
+      installedAt: now,
+      updatedByCliVersion: '0.9.0',
+      updatedAt: now,
+      features: [
+        {
+          featureId: 'removed-feature',
+          scope: 'project',
+          targetRoot: '/does-not-matter',
+          installedByCliVersion: '0.9.0',
+          installedAt: now,
+          updatedByCliVersion: '0.9.0',
+          updatedAt: now,
+          dependencies: [],
+          resources: [],
+          operations: [],
+        },
+      ],
+    });
+    loadStateSpy.mockReturnValue(state);
+
+    // Registry has no matching feature declaration, so the unknown
+    // 'removed-feature' entry gets pruned — that alone should trigger a save.
+    const registry = new IntegrationRegistry();
+    registry.register({
+      id: 'test-integration',
+      displayName: 'Test integration',
+      features: [],
+    });
+
+    await migrateDeclarativeIntegrations(registry);
+
+    expect(saveStateSpy).toHaveBeenCalledTimes(1);
+    expect(saveStateSpy.mock.calls[0][0].integrations.installed[0].features).toHaveLength(0);
   });
 });

@@ -18,7 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { IntegrationRegistry } from '@/core/framework/features';
+import {
+  type IntegrationRegistry,
+  reconcileInstalledIntegrations,
+} from '@/core/framework/features';
 
 import { version as CURRENT_VERSION } from '../../../package.json';
 import logger from '../observability/logger.ts';
@@ -27,7 +30,6 @@ import { isNewerVersion } from '../version.ts';
 import { updateScaScannerBinaryIfNeeded, updateSecretsBinaryIfNeeded } from './binary-refresh.ts';
 import type { InstallHooksFn } from './claude-hooks-migration.ts';
 import { migrateClaudeCodeHooks } from './claude-hooks-migration.ts';
-import { migrateDeclarativeIntegrations } from './declarative-integrations-migration.ts';
 import { cleanObsoleteFromState, OBSOLETE_A3S_MARKER } from './migration.ts';
 import { migrateLegacyTelemetryEvents } from './telemetry-migration.ts';
 
@@ -91,4 +93,16 @@ async function runActions(deps: PostUpdateDependencies): Promise<void> {
   await migrateClaudeCodeHooks(deps.installHooks, deps.claudeIntegrationId);
   await updateSecretsBinaryIfNeeded();
   await updateScaScannerBinaryIfNeeded();
+}
+
+/**
+ * Replays every registered integration's declared features against what is
+ * currently recorded in state (see reconcileInstalledIntegrations), then
+ * persists the result if anything changed.
+ */
+export async function migrateDeclarativeIntegrations(registry: IntegrationRegistry): Promise<void> {
+  const state = loadState();
+  if (await reconcileInstalledIntegrations(state, registry)) {
+    saveState(state);
+  }
 }
