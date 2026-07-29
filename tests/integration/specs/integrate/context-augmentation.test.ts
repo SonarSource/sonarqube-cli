@@ -417,7 +417,7 @@ describe('integrate claude — Context Augmentation', () => {
   );
 
   it(
-    'skips CAG entirely when _SKIP_CAG is set',
+    'skips CAG entirely when __SQCLI_DEV_SKIP_CAG is set',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -436,7 +436,7 @@ describe('integrate claude — Context Augmentation', () => {
       );
 
       const result = await harness.run('integrate claude --non-interactive', {
-        extraEnv: { _SKIP_CAG: '1' },
+        extraEnv: { __SQCLI_DEV_SKIP_CAG: '1' },
       });
 
       expect(result.exitCode).toBe(0);
@@ -931,7 +931,7 @@ describe('integrate codex — Context Augmentation', () => {
   );
 
   it(
-    'skips CAG entirely when _SKIP_CAG is set',
+    'skips CAG entirely when __SQCLI_DEV_SKIP_CAG is set',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -955,7 +955,7 @@ describe('integrate codex — Context Augmentation', () => {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
-          _SKIP_CAG: '1',
+          __SQCLI_DEV_SKIP_CAG: '1',
         },
       });
 

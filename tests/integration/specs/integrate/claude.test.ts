@@ -2014,7 +2014,7 @@ describe('integrate claude — interactive feature selection', () => {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
-          _SKIP_CAG: '1',
+          __SQCLI_DEV_SKIP_CAG: '1',
         },
       });
 

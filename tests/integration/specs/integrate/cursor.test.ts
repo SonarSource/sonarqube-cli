@@ -530,7 +530,7 @@ describe('integrate cursor', () => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
         const result = await harness.run(`integrate cursor --project ${TEST_PROJECT}`, {
-          extraEnv: { ...extraEnv, _SKIP_CAG: '1' },
+          extraEnv: { ...extraEnv, __SQCLI_DEV_SKIP_CAG: '1' },
           stdinChunks: ['\r', '\r', '\r', '\r'],
         });
 
@@ -561,7 +561,7 @@ describe('integrate cursor', () => {
           {
             extraEnv: {
               ...extraEnv,
-              _SKIP_CAG: '1',
+              __SQCLI_DEV_SKIP_CAG: '1',
               ...(isAgent ? { CURSOR_AGENT: '1' } : {}),
             },
             ...(isInteractive ? { stdinChunks: ['\r', '\r', '\r', '\r'] } : {}),

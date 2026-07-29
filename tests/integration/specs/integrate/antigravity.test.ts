@@ -313,7 +313,7 @@ describe('integrate antigravity', () => {
         writeExistingGlobalInstructions(harness);
 
         const result = await harness.run('integrate antigravity', {
-          extraEnv: { _SKIP_CAG: '1' },
+          extraEnv: { __SQCLI_DEV_SKIP_CAG: '1' },
           stdinChunks: ['\r', '\r', '\r'],
         });
 

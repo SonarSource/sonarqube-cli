@@ -681,7 +681,7 @@ describe('integrate copilot', () => {
 
         // Interactive (no --non-interactive): the entitled org makes SQAA an ask.
         const result = await harness.run(`integrate copilot --project ${TEST_PROJECT}`, {
-          extraEnv: { ...extraEnv, _SKIP_CAG: '1' },
+          extraEnv: { ...extraEnv, __SQCLI_DEV_SKIP_CAG: '1' },
           stdinChunks: ['\r', '\r', '\r', '\r', '\r'],
         });
 
