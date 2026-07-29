@@ -51,7 +51,12 @@ import {
   updateScaScannerBinaryIfNeeded,
   updateSecretsBinaryIfNeeded,
 } from '@/core/host/post-update.ts';
-import type { CliState, HookExtension, StoredCommandExecutedEvent } from '@/core/state/state.ts';
+import type {
+  CliState,
+  HookExtension,
+  InstalledIntegrationFeature,
+  StoredCommandExecutedEvent,
+} from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import * as telemetryEvents from '@/core/telemetry/telemetry-events.ts';
@@ -350,6 +355,26 @@ describe('migrateDeclarativeIntegrations', () => {
     saveStateSpy.mockRestore();
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
+
+  function recordedFeature(
+    featureId: string,
+    attrs?: InstalledIntegrationFeature['attrs'],
+  ): InstalledIntegrationFeature {
+    const now = '2026-01-01T00:00:00.000Z';
+    return {
+      featureId,
+      scope: 'project',
+      targetRoot: tempDir,
+      installedByCliVersion: '0.9.0',
+      installedAt: now,
+      updatedByCliVersion: '0.9.0',
+      updatedAt: now,
+      dependencies: [],
+      resources: [],
+      operations: [],
+      attrs,
+    };
+  }
 
   it('reapplies only installed declarative features and prunes unknown feature state', async () => {
     const operationCalls: string[] = [];
@@ -851,6 +876,144 @@ describe('migrateDeclarativeIntegrations', () => {
 
     const savedFeature = saveStateSpy.mock.calls[0][0].integrations.installed[0].features[0];
     expect(savedFeature.subfeatures).toBeUndefined();
+  });
+
+  it('migrates replaced features into one successor with merged attrs', async () => {
+    const appliedAttrs: (IntegrationContext['attrs'] | undefined)[] = [];
+    const state = makeState();
+    state.integrations.installed.push({
+      id: 'integration-id',
+      integrationId: 'test-integration',
+      installedByCliVersion: '0.9.0',
+      installedAt: '2026-01-01T00:00:00.000Z',
+      updatedByCliVersion: '0.9.0',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      features: [
+        recordedFeature('old-sqaa', { projectKey: 'project-key' }),
+        recordedFeature('old-context', { orgKey: 'org-key', scaEnabled: true }),
+      ],
+    });
+    loadStateSpy.mockReturnValue(state);
+
+    const registry = new IntegrationRegistry();
+    registry.register({
+      id: 'test-integration',
+      displayName: 'Test integration',
+      features: [
+        {
+          id: 'vortex',
+          displayName: 'Vortex',
+          replacedIds: ['old-sqaa', 'old-context'],
+          operations: [
+            {
+              id: 'vortex-operation',
+              apply: (context) => {
+                appliedAttrs.push(context.attrs);
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    await migrateDeclarativeIntegrations(registry);
+
+    expect(appliedAttrs).toEqual([
+      { projectKey: 'project-key', orgKey: 'org-key', scaEnabled: true },
+    ]);
+    expect(state.integrations.installed[0].features).toHaveLength(1);
+    expect(state.integrations.installed[0].features[0]).toMatchObject({
+      featureId: 'vortex',
+      attrs: { projectKey: 'project-key', orgKey: 'org-key', scaEnabled: true },
+    });
+  });
+
+  it('merges predecessor attrs in successor replacement order', async () => {
+    const appliedAttrs: (IntegrationContext['attrs'] | undefined)[] = [];
+    const state = makeState();
+    state.integrations.installed.push({
+      id: 'integration-id',
+      integrationId: 'test-integration',
+      installedByCliVersion: '0.9.0',
+      installedAt: '2026-01-01T00:00:00.000Z',
+      updatedByCliVersion: '0.9.0',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      features: [
+        recordedFeature('old-context', { projectKey: 'context-project' }),
+        recordedFeature('old-sqaa', { projectKey: 'sqaa-project' }),
+      ],
+    });
+    loadStateSpy.mockReturnValue(state);
+
+    const registry = new IntegrationRegistry();
+    registry.register({
+      id: 'test-integration',
+      displayName: 'Test integration',
+      features: [
+        {
+          id: 'vortex',
+          displayName: 'Vortex',
+          replacedIds: ['old-sqaa', 'old-context'],
+          operations: [
+            {
+              id: 'vortex-operation',
+              apply: (context) => {
+                appliedAttrs.push(context.attrs);
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    await migrateDeclarativeIntegrations(registry);
+
+    expect(appliedAttrs).toEqual([{ projectKey: 'context-project' }]);
+  });
+
+  it('reapplies a recorded successor without merging predecessor attrs', async () => {
+    const appliedAttrs: (IntegrationContext['attrs'] | undefined)[] = [];
+    const state = makeState();
+    state.integrations.installed.push({
+      id: 'integration-id',
+      integrationId: 'test-integration',
+      installedByCliVersion: '0.9.0',
+      installedAt: '2026-01-01T00:00:00.000Z',
+      updatedByCliVersion: '0.9.0',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      features: [
+        recordedFeature('old-context', { orgKey: 'old-org' }),
+        recordedFeature('vortex', { projectKey: 'project-key' }),
+      ],
+    });
+    loadStateSpy.mockReturnValue(state);
+
+    const registry = new IntegrationRegistry();
+    registry.register({
+      id: 'test-integration',
+      displayName: 'Test integration',
+      features: [
+        {
+          id: 'vortex',
+          displayName: 'Vortex',
+          replacedIds: ['old-context'],
+          operations: [
+            {
+              id: 'vortex-operation',
+              apply: (context) => {
+                appliedAttrs.push(context.attrs);
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    await migrateDeclarativeIntegrations(registry);
+
+    expect(appliedAttrs).toEqual([{ projectKey: 'project-key' }]);
+    expect(state.integrations.installed[0].features).toHaveLength(1);
+    expect(state.integrations.installed[0].features[0].featureId).toBe('vortex');
   });
 });
 
