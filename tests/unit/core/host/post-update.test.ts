@@ -903,7 +903,7 @@ describe('migrateDeclarativeIntegrations', () => {
         {
           id: 'vortex',
           displayName: 'Vortex',
-          replaces: ['old-sqaa', 'old-context'],
+          replacedIds: ['old-sqaa', 'old-context'],
           operations: [
             {
               id: 'vortex-operation',
@@ -953,7 +953,7 @@ describe('migrateDeclarativeIntegrations', () => {
         {
           id: 'vortex',
           displayName: 'Vortex',
-          replaces: ['old-sqaa', 'old-context'],
+          replacedIds: ['old-sqaa', 'old-context'],
           operations: [
             {
               id: 'vortex-operation',
@@ -996,7 +996,7 @@ describe('migrateDeclarativeIntegrations', () => {
         {
           id: 'vortex',
           displayName: 'Vortex',
-          replaces: ['old-context'],
+          replacedIds: ['old-context'],
           operations: [
             {
               id: 'vortex-operation',

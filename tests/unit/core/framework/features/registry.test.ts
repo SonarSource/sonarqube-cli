@@ -255,7 +255,7 @@ describe('declarative integration framework', () => {
     ).toThrow('Legacy feature id must not be empty');
   });
 
-  // Feature replacement (`replaces`) :O
+  // Feature replacement (`replacedIds`) :O
 
   const expectReplacementRejected = (features: FeatureDeclaration[], expectedError: string) =>
     expect(() =>
@@ -264,7 +264,7 @@ describe('declarative integration framework', () => {
 
   it('rejects empty replaced feature ids', () => {
     expectReplacementRejected(
-      [{ id: 'vortex', displayName: 'Vortex', replaces: [' '] }],
+      [{ id: 'vortex', displayName: 'Vortex', replacedIds: [' '] }],
       'Replaced feature id must not be empty',
     );
   });
@@ -272,14 +272,14 @@ describe('declarative integration framework', () => {
   it('rejects replacing an active feature id, including the feature itself', () => {
     expectReplacementRejected(
       [
-        { id: 'vortex', displayName: 'Vortex', replaces: ['sqaa-instructions'] },
+        { id: 'vortex', displayName: 'Vortex', replacedIds: ['sqaa-instructions'] },
         { id: 'sqaa-instructions', displayName: 'SQAA instructions' },
       ],
       'Feature claude-code.vortex replaces an active feature id: sqaa-instructions',
     );
 
     expectReplacementRejected(
-      [{ id: 'vortex', displayName: 'Vortex', replaces: ['vortex'] }],
+      [{ id: 'vortex', displayName: 'Vortex', replacedIds: ['vortex'] }],
       'Feature claude-code.vortex replaces an active feature id: vortex',
     );
   });
@@ -289,37 +289,43 @@ describe('declarative integration framework', () => {
 
     expectReplacementRejected(
       [
-        { id: 'vortex-sqaa', displayName: 'Vortex SQAA', replaces: ['context-augmentation'] },
-        { id: 'vortex-cag', displayName: 'Vortex CAG', replaces: ['context-augmentation'] },
+        { id: 'vortex-sqaa', displayName: 'Vortex SQAA', replacedIds: ['context-augmentation'] },
+        { id: 'vortex-cag', displayName: 'Vortex CAG', replacedIds: ['context-augmentation'] },
       ],
       duplicateClaim,
     );
 
     expectReplacementRejected(
-      [{ id: 'vortex', displayName: 'Vortex', replaces: ['sonar-sqaa-hook', 'sonar-sqaa-hook'] }],
+      [
+        {
+          id: 'vortex',
+          displayName: 'Vortex',
+          replacedIds: ['sonar-sqaa-hook', 'sonar-sqaa-hook'],
+        },
+      ],
       duplicateClaim,
     );
   });
 
   it('accepts the same replaced feature ids in different agent integrations', () => {
     const registry = new IntegrationRegistry();
-    const replaces = ['sonar-sqaa-hook', 'sqaa-instructions', 'context-augmentation'];
+    const replacedIds = ['sonar-sqaa-hook', 'sqaa-instructions', 'context-augmentation'];
 
     registry.register(
       makeIntegration({
         id: 'claude-code',
-        features: [{ id: 'vortex', displayName: 'Vortex', replaces }],
+        features: [{ id: 'vortex', displayName: 'Vortex', replacedIds }],
       }),
     );
     registry.register(
       makeIntegration({
         id: 'copilot-cli',
-        features: [{ id: 'vortex', displayName: 'Vortex', replaces }],
+        features: [{ id: 'vortex', displayName: 'Vortex', replacedIds }],
       }),
     );
 
-    expect(registry.get('claude-code')?.features[0].replaces).toEqual(replaces);
-    expect(registry.get('copilot-cli')?.features[0].replaces).toEqual(replaces);
+    expect(registry.get('claude-code')?.features[0].replacedIds).toEqual(replacedIds);
+    expect(registry.get('copilot-cli')?.features[0].replacedIds).toEqual(replacedIds);
   });
 
   it('rejects duplicate and empty subfeature ids in a FeatureContainer', () => {

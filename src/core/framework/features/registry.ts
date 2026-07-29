@@ -64,7 +64,7 @@ export class IntegrationRegistry {
     const replacedIds: string[] = [];
 
     for (const feature of declaration.features) {
-      for (const replacedId of feature.replaces ?? []) {
+      for (const replacedId of feature.replacedIds ?? []) {
         this.ensureNonEmptyId(replacedId, 'Replaced feature');
         if (featureIds.has(replacedId)) {
           throw new Error(

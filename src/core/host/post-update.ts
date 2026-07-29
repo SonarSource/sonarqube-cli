@@ -41,6 +41,7 @@ import logger from '../observability/logger.ts';
 import type {
   CliState,
   HookExtension,
+  InstalledIntegration,
   InstalledIntegrationFeature,
   IntegrationStateAttribute,
 } from '../state/state.ts';
@@ -182,37 +183,13 @@ export async function migrateDeclarativeIntegrations(registry: IntegrationRegist
     if (!installedIntegration) {
       continue;
     }
-
-    const replacementApplications = migrateReplacedFeatures(
+    const { applications, removedUnknownFeatures } = createMigrationFeatureApplications(
       integration,
-      installedIntegration.features,
+      installedIntegration,
     );
-
-    const featuresById = new Map(integration.features.map((feature) => [feature.id, feature]));
-    const knownFeatures = installedIntegration.features.filter((feature) =>
-      featuresById.has(feature.featureId),
-    );
-
-    if (knownFeatures.length !== installedIntegration.features.length) {
-      installedIntegration.features = knownFeatures;
+    if (removedUnknownFeatures) {
       stateChanged = true;
     }
-
-    const applications: FeatureApplication[] = [];
-    for (const installedFeature of knownFeatures) {
-      const application = createFeatureMigrationApplication(
-        featuresById,
-        installedFeature.featureId,
-        installedFeature.subfeatures?.map((subfeature) => subfeature.featureId),
-        installedFeature.targetRoot,
-        installedFeature.scope,
-        installedFeature.attrs,
-      );
-      if (application) {
-        applications.push(application);
-      }
-    }
-    applications.push(...replacementApplications);
 
     try {
       const installedFeatures = await integrationInstaller.applyAndRecordFeatures(
@@ -242,13 +219,50 @@ export async function migrateDeclarativeIntegrations(registry: IntegrationRegist
   }
 }
 
+function createMigrationFeatureApplications(
+  integration: IntegrationDeclaration,
+  installedIntegration: InstalledIntegration,
+): { applications: FeatureApplication[]; removedUnknownFeatures: boolean } {
+  const featuresById = new Map(integration.features.map((feature) => [feature.id, feature]));
+  const replacementApplications = migrateReplacedFeatures(
+    integration,
+    featuresById,
+    installedIntegration.features,
+  );
+  const knownFeatures = installedIntegration.features.filter((feature) =>
+    featuresById.has(feature.featureId),
+  );
+  const removedUnknownFeatures = knownFeatures.length !== installedIntegration.features.length;
+  if (removedUnknownFeatures) {
+    installedIntegration.features = knownFeatures;
+  }
+
+  const applications: FeatureApplication[] = [];
+  for (const installedFeature of knownFeatures) {
+    const application = createFeatureApplication(
+      featuresById,
+      installedFeature.featureId,
+      installedFeature.subfeatures?.map((subfeature) => subfeature.featureId),
+      installedFeature.targetRoot,
+      installedFeature.scope,
+      installedFeature.attrs,
+    );
+    if (application) {
+      applications.push(application);
+    }
+  }
+  applications.push(...replacementApplications);
+
+  return { applications, removedUnknownFeatures };
+}
+
 function migrateReplacedFeatures(
   integration: IntegrationDeclaration,
+  featuresById: Map<string, FeatureDeclaration>,
   installedFeatures: InstalledIntegrationFeature[],
 ): FeatureApplication[] {
   const applications: FeatureApplication[] = [];
 
-  const featuresById = new Map(integration.features.map((feature) => [feature.id, feature]));
   for (const successor of integration.features) {
     const predecessorsByTarget = groupReplacedFeaturesByTarget(successor, installedFeatures);
 
@@ -263,7 +277,7 @@ function migrateReplacedFeatures(
       if (hasRecordedSuccessor) {
         continue;
       }
-      const application = createFeatureMigrationApplication(
+      const application = createFeatureApplication(
         featuresById,
         successor.id,
         undefined,
@@ -286,7 +300,7 @@ function groupReplacedFeaturesByTarget(
 ): Map<string, InstalledIntegrationFeature[]> {
   const predecessorsByTarget = new Map<string, InstalledIntegrationFeature[]>();
 
-  for (const replacedId of successor.replaces ?? []) {
+  for (const replacedId of successor.replacedIds ?? []) {
     for (const installedFeature of installedFeatures) {
       if (installedFeature.featureId !== replacedId) {
         continue;
@@ -335,7 +349,7 @@ function getFeature(
   return applicationFeature;
 }
 
-function createFeatureMigrationApplication(
+function createFeatureApplication(
   featuresById: Map<string, FeatureDeclaration>,
   featureId: string,
   subfeatureIds: string[] | undefined,
