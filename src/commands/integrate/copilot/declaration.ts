@@ -32,10 +32,8 @@ import {
 } from '@/core/framework/features';
 import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 
-import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs.ts';
+import { getOptionalStringAttr } from '../_common/attrs.ts';
 import {
-  AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,
-  AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
   MCP_SERVER_FEATURE_BENEFIT,
   MCP_SERVER_FEATURE_PREVIEW,
   SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
@@ -43,15 +41,16 @@ import {
   SECRETS_PROMPT_FEATURE_BENEFIT,
   SECRETS_PROMPT_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
-import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature.ts';
+import { createContextAugmentationSubfeature } from '../_common/features/context-augmentation-feature.ts';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
-import {
-  buildSqaaSectionBody,
-  sonarBeginMarker,
-  sonarEndMarker,
-} from '../_common/instructions-templates.ts';
+import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates.ts';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
+import {
+  createSqaaInstructionsSnippet,
+  createSqaaInstructionsSubfeature,
+} from '../_common/sqaa-entitlement.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
+import { createVortexFeature } from '../_common/vortex.ts';
 import { getSecretPreToolTemplateUnix, getSecretPreToolTemplateWindows } from './hook-templates.ts';
 import {
   entryReferencesSonarSecrets,
@@ -72,17 +71,15 @@ import {
 } from './instructions.ts';
 
 export const COPILOT_INTEGRATION_ID = 'copilot-cli';
+const COPILOT_DISPLAY_NAME = 'Copilot';
 
 export interface CopilotIntegrationOptions extends IntegrateAgentOptions {
-  projectRoot?: string;
   globalSecretsHookExists?: boolean;
-  installSqaaInstructions?: boolean;
-  installContextAugmentation?: boolean;
 }
 
 export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOptions> = {
   id: COPILOT_INTEGRATION_ID,
-  displayName: 'Copilot',
+  displayName: COPILOT_DISPLAY_NAME,
   features: [
     {
       id: 'pre-tool-use-hook',
@@ -140,29 +137,17 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
         }),
       ],
     },
-    {
-      id: 'sqaa-instructions',
-      displayName: 'Vortex agentic analysis instructions',
-      benefitDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,
-      previewDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
-      shouldInstall: ({ options }) =>
-        options.installSqaaInstructions === true ? askUser() : skip(),
-      targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
-      scope: 'project',
-      resources: [
-        textSnippet({
-          id: 'sqaa-instructions-file',
-          displayName: 'Copilot Vortex agentic analysis instructions',
+    createVortexFeature<CopilotIntegrationOptions>([
+      createSqaaInstructionsSubfeature([
+        createSqaaInstructionsSnippet({
+          agentDisplayName: COPILOT_DISPLAY_NAME,
           targetPath: resolveInstructionsPath,
-          startMarker: sonarBeginMarker('sonarqube-agentic-analysis-protocol'),
-          endMarker: sonarEndMarker('sonarqube-agentic-analysis-protocol'),
-          content: (context) =>
-            buildSqaaSectionBody(
-              getRequiredStringAttr(context, 'projectKey', copilotIntegration.displayName),
-            ),
         }),
-      ],
-    },
+      ]),
+      createContextAugmentationSubfeature<CopilotIntegrationOptions>({
+        targetPath: resolveCopilotSkillPath,
+      }),
+    ]),
     {
       id: 'mcp-server',
       displayName: 'MCP server',
@@ -180,9 +165,6 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
         }),
       ],
     },
-    createContextAugmentationFeature<CopilotIntegrationOptions>({
-      targetPath: resolveCopilotSkillPath,
-    }),
   ],
 };
 

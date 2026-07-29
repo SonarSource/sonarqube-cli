@@ -23,7 +23,6 @@ import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint.ts';
 import { finalizeAgentInstall } from '../_common/agent-integrate-postlude.ts';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';
-import { resolveSqaaSetup } from '../_common/sqaa-entitlement.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { COPILOT_INTEGRATION_ID, type CopilotIntegrationOptions } from './declaration.ts';
 import { detectGlobalSecretsHook } from './hooks.ts';
@@ -38,15 +37,6 @@ export async function integrateCopilot(options: IntegrateAgentOptions, auth: Res
 
   const ctx = await displayAgentIntegratePrelude('Copilot', 'copilot', options, auth);
 
-  // SQAA is always project-scoped. resolveSqaaSetup owns the user-facing
-  // messaging: it surfaces the promotion message when the org is not entitled
-  // and the "not supported with --global" notice on an entitled global install.
-  const entitled = await resolveSqaaSetup({
-    serverURL: ctx.serverUrl,
-    token: ctx.token,
-    organization: ctx.organization,
-    isGlobal: ctx.isGlobal,
-  });
   const existingGlobalHookPath = ctx.isGlobal ? undefined : await detectGlobalSecretsHook();
 
   await finalizeAgentInstall<CopilotIntegrationOptions>({
@@ -55,9 +45,7 @@ export async function integrateCopilot(options: IntegrateAgentOptions, auth: Res
     options,
     auth,
     featureOptions: {
-      projectRoot: ctx.project.rootDir,
       globalSecretsHookExists: existingGlobalHookPath !== undefined,
-      installSqaaInstructions: entitled && Boolean(ctx.projectKey),
     },
   });
 }

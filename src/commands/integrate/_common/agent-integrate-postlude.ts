@@ -20,8 +20,8 @@
 
 // Shared postlude for agent integrate commands (the closing counterpart to
 // agent-integrate-prelude): given an agent's resolved context and its
-// agent-specific feature flags, resolve Context Augmentation, assemble the
-// integration options and recorded attrs, and run the install.
+// agent-specific feature flags, resolve Vortex, assemble the integration
+// options and recorded attrs, and run the install.
 
 import { installIntegration } from '@/core/framework/features';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
@@ -37,6 +37,7 @@ import {
   resolveContextAugmentationSetup,
 } from './context-augmentation.ts';
 import type { IntegrateAgentOptions } from './types.ts';
+import { resolveVortexSetup } from './vortex.ts';
 
 export interface FinalizeAgentInstallParams<TOptions extends IntegrateAgentOptions> {
   integrationId: string;
@@ -45,10 +46,56 @@ export interface FinalizeAgentInstallParams<TOptions extends IntegrateAgentOptio
   auth: ResolvedAuth;
   /**
    * Agent-specific feature flags merged into the integration options (e.g. the
-   * SQAA flag, whose name differs per agent). `installContextAugmentation` is
-   * derived here and must not be passed in.
+   * SQAA flag, whose name differs per agent). `projectRoot`, `installVortex`
+   * and `installContextAugmentation` are derived here and must not be passed in.
    */
   featureOptions?: Partial<TOptions>;
+}
+
+/**
+ * Shared install tail for agent integrations: resolves Vortex, assembles the
+ * integration options and recorded state attrs, and runs `installIntegration`.
+ * Keeps each agent handler focused on its agent-specific setup (prompts, scope
+ * warnings).
+ */
+export async function finalizeAgentInstall<TOptions extends IntegrateAgentOptions>(
+  params: FinalizeAgentInstallParams<TOptions>,
+): Promise<void> {
+  const { context, options, auth } = params;
+  // resolveVortexSetup owns the user-facing messaging for every skip reason:
+  // not entitled, check failed, --global, and a missing project key.
+  const vortex = await resolveVortexSetup({
+    auth,
+    projectKey: context.projectKey,
+    isGlobal: context.isGlobal,
+  });
+  const { installRoot, installScope } = resolveIntegrateInstallTarget(
+    context.isGlobal,
+    context.project.rootDir,
+  );
+  const attrs = await buildRecordedIntegrationAttrs({
+    baseAttrs: { projectKey: context.projectKey ?? null },
+    projectRoot: context.project.rootDir,
+    serverUrl: context.serverUrl,
+    orgKey: context.organization,
+    contextAugmentation: vortex,
+  });
+  await installIntegration({
+    registry: supportedIntegrations,
+    integrationId: params.integrationId,
+    options: {
+      ...options,
+      ...params.featureOptions,
+      projectRoot: context.project.rootDir,
+      installVortex: vortex !== null,
+    },
+    targetRoot: installRoot,
+    scope: installScope,
+    auth,
+    nonInteractive: options.nonInteractive,
+    isFromRouter: options.isFromRouter,
+    attrs,
+  });
 }
 
 /**
@@ -57,7 +104,7 @@ export interface FinalizeAgentInstallParams<TOptions extends IntegrateAgentOptio
  * `installIntegration`. Keeps each agent handler focused on its agent-specific
  * setup (prompts, scope warnings, SQAA option name).
  */
-export async function finalizeAgentInstall<TOptions extends IntegrateAgentOptions>(
+export async function finalizeAgentInstallDeprecated<TOptions extends IntegrateAgentOptions>(
   params: FinalizeAgentInstallParams<TOptions>,
 ): Promise<void> {
   const { context, options, auth } = params;

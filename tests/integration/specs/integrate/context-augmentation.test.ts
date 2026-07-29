@@ -1061,14 +1061,14 @@ describe('integrate <agent> --global — Context Augmentation', () => {
     await harness.dispose();
   });
 
-  // Claude skips CAG as part of the whole Vortex feature, so its warning covers
-  // Vortex; the other agents still skip CAG on its own.
-  const CLAUDE_GLOBAL_SKIP = 'Skipping Vortex: not supported with --global';
+  // Claude and Copilot skip CAG as part of the whole Vortex feature, so their
+  // warning covers Vortex; the other agents still skip CAG on its own.
+  const VORTEX_GLOBAL_SKIP = 'Skipping Vortex: not supported with --global';
   const CAG_GLOBAL_SKIP = 'Skipping Vortex context augmentation: not supported with --global';
 
   it.each([
-    ['claude', 'integrate claude -g --non-interactive', CLAUDE_GLOBAL_SKIP],
-    ['copilot', 'integrate copilot -g --non-interactive', CAG_GLOBAL_SKIP],
+    ['claude', 'integrate claude -g --non-interactive', VORTEX_GLOBAL_SKIP],
+    ['copilot', 'integrate copilot -g --non-interactive', VORTEX_GLOBAL_SKIP],
     ['codex', 'integrate codex -g --non-interactive', CAG_GLOBAL_SKIP],
   ])(
     'skips CAG entirely on "integrate %s --global" and warns when the org is entitled',
@@ -1102,8 +1102,8 @@ describe('integrate <agent> --global — Context Augmentation', () => {
   );
 
   it.each([
-    ['claude', 'integrate claude -g --non-interactive', CLAUDE_GLOBAL_SKIP],
-    ['copilot', 'integrate copilot -g --non-interactive', CAG_GLOBAL_SKIP],
+    ['claude', 'integrate claude -g --non-interactive', VORTEX_GLOBAL_SKIP],
+    ['copilot', 'integrate copilot -g --non-interactive', VORTEX_GLOBAL_SKIP],
     ['codex', 'integrate codex -g --non-interactive', CAG_GLOBAL_SKIP],
   ])(
     'skips CAG entirely on "integrate %s --global" without warning when the org is not entitled',

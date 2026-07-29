@@ -23,7 +23,7 @@
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 
 import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint.ts';
-import { finalizeAgentInstall } from '../_common/agent-integrate-postlude.ts';
+import { finalizeAgentInstallDeprecated } from '../_common/agent-integrate-postlude.ts';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';
 import { resolveSqaaSetup } from '../_common/sqaa-entitlement.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
@@ -52,7 +52,7 @@ export async function integrateCodex(
     isGlobal: ctx.isGlobal,
   });
 
-  await finalizeAgentInstall<CodexIntegrationOptions>({
+  await finalizeAgentInstallDeprecated<CodexIntegrationOptions>({
     integrationId: CODEX_INTEGRATION_ID,
     context: ctx,
     options,

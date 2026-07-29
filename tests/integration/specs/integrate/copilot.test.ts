@@ -619,9 +619,8 @@ describe('integrate copilot', () => {
     const TEST_ORG = 'my-org';
     const TEST_PROJECT = 'my-project';
     const HTTP_SERVICE_UNAVAILABLE = 503;
-
     /**
-     * Stand up a fake SonarQube Cloud server with SQAA entitlement configured
+     * Stand up a fake SonarQube Cloud server with Vortex entitlement configured
      * for the test org, swap the harness auth to a cloud connection, and
      * return env vars that point the CLI's hard-coded SonarCloud URL
      * constants at the fake server (so `isSonarQubeCloud(serverUrl)` and the
@@ -669,17 +668,17 @@ describe('integrate copilot', () => {
 
         const promptSecrets = findCopilotFeature(harness, 'prompt-secrets-instructions');
         expect(promptSecrets?.scope).toBe('project');
-        expect(findCopilotFeature(harness, 'sqaa-instructions')?.scope).toBe('project');
+        expect(findCopilotFeature(harness, 'vortex')?.scope).toBe('project');
       },
       { timeout: 30000 },
     );
 
     it(
-      'prompts to install SQAA and writes the section when accepted (entitled org, interactive)',
+      'prompts to install Vortex and writes the SQAA section when accepted (entitled org, interactive)',
       async () => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
-        // Interactive (no --non-interactive): the entitled org makes SQAA an ask.
+        // Interactive (no --non-interactive): the entitled org makes Vortex an ask.
         const result = await harness.run(`integrate copilot --project ${TEST_PROJECT}`, {
           extraEnv: { ...extraEnv, __SQCLI_DEV_SKIP_CAG: '1' },
           stdinChunks: ['\r', '\r', '\r', '\r', '\r'],
@@ -687,10 +686,10 @@ describe('integrate copilot', () => {
 
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;
-        expect(output).toContain('Install Vortex agentic analysis instructions?');
+        expect(output).toContain('Install Vortex?');
         const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
         expect(body).toContain('# SonarQube Agentic Analysis protocol');
-        expect(findCopilotFeature(harness, 'sqaa-instructions')?.scope).toBe('project');
+        expect(findCopilotFeature(harness, 'vortex')?.scope).toBe('project');
       },
       { timeout: 30000 },
     );
@@ -716,9 +715,9 @@ describe('integrate copilot', () => {
         // SQAA is never written project-side on a global install.
         expect(harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).exists()).toBe(false);
 
-        // Declarative state: prompt-secrets is global, SQAA is not recorded.
+        // Declarative state: prompt-secrets is global, Vortex is not recorded.
         expect(findCopilotFeature(harness, 'prompt-secrets-instructions')?.scope).toBe('global');
-        expect(findCopilotFeature(harness, 'sqaa-instructions')).toBeUndefined();
+        expect(findCopilotFeature(harness, 'vortex')).toBeUndefined();
       },
       { timeout: 30000 },
     );
@@ -739,7 +738,7 @@ describe('integrate copilot', () => {
     );
 
     it(
-      'omits the SQAA section when the org is not entitled to SQAA',
+      'omits the SQAA section when the org is not entitled to Vortex',
       async () => {
         const { extraEnv } = await setupCloudWithEntitlement({
           allowed: false,
@@ -776,13 +775,13 @@ describe('integrate copilot', () => {
         expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
         expect(body).not.toContain('# SonarQube Agentic Analysis');
         expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(false);
-        expect(findCopilotFeature(harness, 'sqaa-instructions')).toBeUndefined();
-        // SQAA is project-scoped, so a --global install skips it with the central
+        expect(findCopilotFeature(harness, 'vortex')).toBeUndefined();
+        // Vortex is project-scoped, so a --global install skips it with the central
         // "not supported with --global" notice. It is never the missing-key
         // message, which is reserved for project installs that lack a key.
         const output = result.stdout + result.stderr;
         expect(output).toContain('not supported with --global');
-        expect(output).not.toContain('no project key could be resolved');
+        expect(output).not.toContain('a project key and organization are required');
       },
       { timeout: 30000 },
     );
@@ -845,11 +844,10 @@ describe('integrate copilot', () => {
 
   describe('interactive feature selection', () => {
     it(
-      'prompts per feature, installs accepted features, and shows the SQAA promotion when not entitled',
+      'prompts per feature, installs accepted features, and shows the Vortex promotion when not entitled',
       async () => {
-        // Default beforeEach is on-premise auth with no org, so SQAA and
-        // Context Augmentation are not available: SQAA is skipped with the
-        // promotion line and CAG is skipped silently. The three remaining
+        // Default beforeEach is on-premise auth with no org, so Vortex is not
+        // available: it is skipped with the promotion line. The three remaining
         // features (hook, prompt-secrets, MCP) each ask.
         const result = await harness.run('integrate copilot', {
           stdinChunks: ['\r', '\r', '\r', '\r'],
@@ -861,8 +859,8 @@ describe('integrate copilot', () => {
         expect(output).toContain('Install pre-tool-use hook?');
         expect(output).toContain('Install prompt-secrets instructions?');
         expect(output).toContain('Install MCP server?');
-        // SQAA is skipped with the promotion message.
-        expect(output).toContain('Vortex agentic analysis is available on SonarQube Cloud');
+        // Vortex is skipped with the promotion message.
+        expect(output).toContain('Vortex is available on SonarQube Cloud');
         // Accepted features are installed on disk.
         expect(harness.cwd.file(...PROJECT_HOOK_SCRIPT_PATH).exists()).toBe(true);
         expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(true);
@@ -875,7 +873,7 @@ describe('integrate copilot', () => {
         expect(findCopilotFeature(harness, 'pre-tool-use-hook')).toBeDefined();
         expect(findCopilotFeature(harness, 'prompt-secrets-instructions')).toBeDefined();
         expect(findCopilotFeature(harness, 'mcp-server')).toBeDefined();
-        expect(findCopilotFeature(harness, 'sqaa-instructions')).toBeUndefined();
+        expect(findCopilotFeature(harness, 'vortex')).toBeUndefined();
       },
       { timeout: 30000 },
     );
