@@ -25,11 +25,11 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
-import { SQAA_HOOK_FEATURE_ID } from '@/commands/integrate/_common/sqaa-entitlement.ts';
 import {
+  SQAA_HOOK_FEATURE_ID,
   SQAA_INSTRUCTIONS_SUBFEATURE_ID,
-  VORTEX_FEATURE_ID,
-} from '@/commands/integrate/_common/vortex.ts';
+} from '@/commands/integrate/_common/sqaa-entitlement.ts';
+import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
 import { buildLocalCagBinaryName } from '@/core/host/install/context-augmentation.ts';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
 import { detectPlatform } from '@/core/host/platform-detector.ts';

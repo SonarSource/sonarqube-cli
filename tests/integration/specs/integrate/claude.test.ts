@@ -25,10 +25,8 @@ import { isAbsolute } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import {
-  SQAA_INSTRUCTIONS_SUBFEATURE_ID,
-  VORTEX_FEATURE_ID,
-} from '@/commands/integrate/_common/vortex.ts';
+import { SQAA_INSTRUCTIONS_SUBFEATURE_ID } from '@/commands/integrate/_common/sqaa-entitlement.ts';
+import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
 import { claudeIntegration } from '@/commands/integrate/claude/declaration.ts';
 import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
 import { detectPlatform } from '@/core/host/platform-detector.ts';

@@ -18,27 +18,18 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type {
-  FeatureContainer,
-  IntegrationContext,
-  ResourceDeclaration,
-  SubfeatureDeclaration,
-} from '@/core/framework/features';
-import { askUser, install, skip, textSnippet } from '@/core/framework/features';
+import { AGENTIC_ANALYSIS_DOCS_URL } from '@/core/config-constants.ts';
+import type { FeatureContainer, SubfeatureDeclaration } from '@/core/framework/features';
+import { askUser, skip } from '@/core/framework/features';
+import { isSonarQubeCloud, type ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { SonarQubeClient } from '@/core/server/client.ts';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
+import { info, warn } from '@/core/ui';
 
-import { getRequiredStringAttr } from './attrs.ts';
+import { isContextAugmentationSkipped } from './context-augmentation.ts';
 import { VORTEX_FEATURE_BENEFIT, VORTEX_FEATURE_PREVIEW } from './feature-constants.ts';
-import {
-  buildSqaaSectionBody,
-  sonarBeginMarker,
-  sonarEndMarker,
-} from './instructions-templates.ts';
 
 export const VORTEX_FEATURE_ID = 'vortex';
-
-export const SQAA_INSTRUCTIONS_SUBFEATURE_ID = 'sqaa-instructions';
-const SQAA_INSTRUCTIONS_MARKER = 'sonarqube-agentic-analysis-protocol';
 
 export interface VortexIntegrationOptions {
   projectRoot?: string;
@@ -77,35 +68,77 @@ export function createVortexFeature<TOptions extends VortexIntegrationOptions>(
   };
 }
 
-/** End-of-turn SQAA instructions, written by each agent into its own rules format. */
-export function createSqaaInstructionsSubfeature<TOptions>(
-  resources: ResourceDeclaration[],
-): SubfeatureDeclaration<TOptions> {
-  return {
-    id: SQAA_INSTRUCTIONS_SUBFEATURE_ID,
-    displayName: 'SQAA instructions',
-    shouldInstall: () => install(),
-    resources,
-  };
+export const VORTEX_PROMOTION_MESSAGE = `Vortex is available on SonarQube Cloud. Learn more: ${AGENTIC_ANALYSIS_DOCS_URL}`;
+
+export const VORTEX_CHECK_FAILED_MESSAGE = 'Could not determine Vortex entitlement — skipping.';
+
+export const VORTEX_GLOBAL_SKIP_MESSAGE =
+  'Skipping Vortex: not supported with --global. Re-run without --global from a project directory to install it there.';
+
+export const VORTEX_MISSING_PROJECT_MESSAGE =
+  'Skipping Vortex: a project key and organization are required (configure your project or pass --project).';
+
+export const VORTEX_OVER_CONSUMPTION_MESSAGE =
+  'Your organization has reached its Vortex usage limit. Installing it anyway — Vortex will resume once your usage resets.';
+
+export const VORTEX_SCA_CHECK_FAILED_MESSAGE =
+  'Could not verify SCA availability on the connected server. Proceeding with SCA disabled in the generated skill content.';
+
+export interface ResolveVortexSetupParams {
+  auth: ResolvedAuth;
+  projectKey: string | undefined;
+  isGlobal: boolean;
 }
 
-export interface SqaaInstructionsSnippetOptions {
-  /** Integration name reported when the recorded project key is missing. */
-  agentDisplayName: string;
-  targetPath: (context: IntegrationContext) => string;
+export interface ResolvedVortexSetup {
+  scaEnabled: boolean;
 }
 
-export function createSqaaInstructionsSnippet({
-  agentDisplayName,
-  targetPath,
-}: SqaaInstructionsSnippetOptions): ResourceDeclaration {
-  return textSnippet({
-    id: 'sqaa-instructions-file',
-    displayName: 'Vortex agentic analysis instructions',
-    targetPath,
-    startMarker: sonarBeginMarker(SQAA_INSTRUCTIONS_MARKER),
-    endMarker: sonarEndMarker(SQAA_INSTRUCTIONS_MARKER),
-    content: (context) =>
-      buildSqaaSectionBody(getRequiredStringAttr(context, 'projectKey', agentDisplayName)),
-  });
+/**
+ * One entitlement check for all Vortex capabilities, resolving whether the
+ * Vortex feature can be installed and the SCA flag its content depends on.
+ */
+export async function resolveVortexSetup(
+  params: ResolveVortexSetupParams,
+): Promise<ResolvedVortexSetup | null> {
+  if (!isSonarQubeCloud(params.auth.serverUrl)) {
+    info(VORTEX_PROMOTION_MESSAGE);
+    return null;
+  }
+
+  const client = new SonarQubeClient(params.auth.serverUrl, params.auth.token);
+  const status = await client.hasVortexEntitlement(params.auth.orgKey);
+
+  if (status === 'check_failed') {
+    warn(VORTEX_CHECK_FAILED_MESSAGE);
+    return null;
+  }
+  if (status === 'not_entitled') {
+    info(VORTEX_PROMOTION_MESSAGE);
+    return null;
+  }
+  if (params.isGlobal) {
+    warn(VORTEX_GLOBAL_SKIP_MESSAGE);
+    return null;
+  }
+  if (!params.projectKey || !params.auth.orgKey) {
+    warn(VORTEX_MISSING_PROJECT_MESSAGE);
+    return null;
+  }
+  if (status === 'over_consumption') {
+    warn(VORTEX_OVER_CONSUMPTION_MESSAGE);
+  }
+
+  if (isContextAugmentationSkipped()) {
+    return { scaEnabled: false };
+  }
+
+  // The rendered context augmentation skill advertises
+  // SCA tools only when SCA is available on the connection.
+  const scaStatus = await client.getScaEnablement(params.auth.connectionType, params.auth.orgKey);
+  if (scaStatus === 'check_failed') {
+    warn(VORTEX_SCA_CHECK_FAILED_MESSAGE);
+  }
+
+  return { scaEnabled: scaStatus === 'enabled' };
 }

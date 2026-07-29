@@ -34,7 +34,7 @@ import {
 } from '../_common/agent-integrate-prelude.ts';
 import { buildRecordedIntegrationAttrs } from '../_common/context-augmentation.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
-import { resolveVortexSetup } from '../_common/vortex-setup.ts';
+import { resolveVortexSetup } from '../_common/vortex.ts';
 import { supportedIntegrations } from '../index.ts';
 import { CLAUDE_INTEGRATION_ID, type ClaudeIntegrationOptions } from './declaration.ts';
 import { detectGlobalSecretsHook } from './hooks.ts';

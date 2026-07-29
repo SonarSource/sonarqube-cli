@@ -21,12 +21,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.js';
-import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.js';
 import {
   VORTEX_CHECK_FAILED_MESSAGE,
+  VORTEX_FEATURE_ID,
   VORTEX_OVER_CONSUMPTION_MESSAGE,
   VORTEX_PROMOTION_MESSAGE,
-} from '@/commands/integrate/_common/vortex-setup.js';
+} from '@/commands/integrate/_common/vortex.js';
 import type { VortexEntitlementStatus } from '@/core/server/client.js';
 import type { CliState } from '@/core/state/state.ts';
 

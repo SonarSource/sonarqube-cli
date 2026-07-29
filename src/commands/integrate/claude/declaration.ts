@@ -45,14 +45,13 @@ import {
   upsertAgentHooks,
 } from '../_common/hooks.ts';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
-import { SQAA_HOOK_FEATURE_ID } from '../_common/sqaa-entitlement.ts';
-import type { IntegrateAgentOptions } from '../_common/types.ts';
 import {
   createSqaaInstructionsSnippet,
   createSqaaInstructionsSubfeature,
-  createVortexFeature,
-  type VortexIntegrationOptions,
-} from '../_common/vortex.ts';
+  SQAA_HOOK_FEATURE_ID,
+} from '../_common/sqaa-entitlement.ts';
+import type { IntegrateAgentOptions } from '../_common/types.ts';
+import { createVortexFeature, type VortexIntegrationOptions } from '../_common/vortex.ts';
 import {
   getSecretPreToolTemplateUnix,
   getSecretPreToolTemplateWindows,
