@@ -51,7 +51,7 @@ import {
   SQAA_HOOK_FEATURE_ID,
 } from '../_common/sqaa-entitlement.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
-import { createVortexFeature, type VortexIntegrationOptions } from '../_common/vortex.ts';
+import { createVortexFeature } from '../_common/vortex.ts';
 import {
   getSecretPreToolTemplateUnix,
   getSecretPreToolTemplateWindows,
@@ -70,7 +70,7 @@ const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 export const CLAUDE_INTEGRATION_ID = 'claude-code';
 const CLAUDE_DISPLAY_NAME = 'Claude Code';
 
-export interface ClaudeIntegrationOptions extends IntegrateAgentOptions, VortexIntegrationOptions {
+export interface ClaudeIntegrationOptions extends IntegrateAgentOptions {
   globalSecretsHookExists?: boolean;
 }
 

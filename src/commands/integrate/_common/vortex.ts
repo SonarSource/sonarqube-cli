@@ -28,13 +28,9 @@ import { info, warn } from '@/core/ui';
 
 import { isContextAugmentationSkipped } from './context-augmentation.ts';
 import { VORTEX_FEATURE_BENEFIT, VORTEX_FEATURE_PREVIEW } from './feature-constants.ts';
+import type { IntegrateAgentOptions } from './types.ts';
 
 export const VORTEX_FEATURE_ID = 'vortex';
-
-export interface VortexIntegrationOptions {
-  projectRoot?: string;
-  installVortex?: boolean;
-}
 
 /** Vortex is project-scoped, so only these records carry usable project metadata. */
 export function isProjectVortexFeature(feature: InstalledIntegrationFeature): boolean {
@@ -46,7 +42,7 @@ export function isProjectVortexFeature(feature: InstalledIntegrationFeature): bo
  * subfeature ids are the ids those capabilities had as standalone features, so
  * `replacedIds` migrates installs recorded before the unification into this one.
  */
-export function createVortexFeature<TOptions extends VortexIntegrationOptions>(
+export function createVortexFeature<TOptions extends IntegrateAgentOptions>(
   subfeatures: SubfeatureDeclaration<TOptions>[],
 ): FeatureContainer<TOptions> {
   const subfeatureIds = subfeatures.map((subfeature) => subfeature.id);
