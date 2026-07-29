@@ -787,16 +787,14 @@ describe('integrate codex', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'cloud-token', testOrg);
 
-        const result = await harness.run(
-          `integrate codex --project ${testProject} --skip-context`,
-          {
-            stdinChunks: ['\r', '\r', '\r', '\r', '\r'],
-            extraEnv: {
-              SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
-              SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
-            },
+        const result = await harness.run(`integrate codex --project ${testProject}`, {
+          stdinChunks: ['\r', '\r', '\r', '\r', '\r'],
+          extraEnv: {
+            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+            __SQCLI_DEV_SKIP_CAG: '1',
           },
-        );
+        });
 
         expect(result.exitCode).toBe(0);
         const output = `${result.stdout}\n${result.stderr}`;

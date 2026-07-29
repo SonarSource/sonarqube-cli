@@ -313,7 +313,6 @@ integrateCommand
     '-g, --global',
     'Install hooks and config globally to ~/.claude instead of project directory',
   )
-  .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
   .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateClaude(options, auth));
 
@@ -328,7 +327,6 @@ integrateCommand
   )
   .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
-  .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
   .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCopilot(options, auth));
 
@@ -362,7 +360,6 @@ integrateCommand
   )
   .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
-  .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
   .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCodex(options, auth));
 
@@ -377,7 +374,6 @@ integrateCommand
     '-g, --global',
     'Install hooks and config globally under ~/.gemini/config instead of the project .agents/ directory',
   )
-  .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
   .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((auth, options: IntegrateAgentOptions) =>
     integrateAntigravity(options, auth),
@@ -394,7 +390,6 @@ integrateCommand
     '-g, --global',
     "Install config globally to ~/.cursor instead of project directory. Note: Cursor's cloud/background agents only pick up project-level hooks, not global ones.",
   )
-  .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
   .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCursor(options, auth));
 

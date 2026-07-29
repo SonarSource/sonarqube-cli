@@ -33,6 +33,7 @@ import {
 } from './agent-integrate-prelude.ts';
 import {
   buildRecordedIntegrationAttrs,
+  isContextAugmentationSkipped,
   resolveContextAugmentationSetup,
 } from './context-augmentation.ts';
 import type { IntegrateAgentOptions } from './types.ts';
@@ -51,16 +52,16 @@ export interface FinalizeAgentInstallParams<TOptions extends IntegrateAgentOptio
 }
 
 /**
- * Shared install tail for agent integrations: resolves Context Augmentation
- * (honouring `--skip-context`), assembles the integration options and recorded
- * state attrs, and runs `installIntegration`. Keeps each agent handler focused
- * on its agent-specific setup (prompts, scope warnings, SQAA option name).
+ * Shared install tail for agent integrations: resolves Context Augmentation,
+ * assembles the integration options and recorded state attrs, and runs
+ * `installIntegration`. Keeps each agent handler focused on its agent-specific
+ * setup (prompts, scope warnings, SQAA option name).
  */
 export async function finalizeAgentInstall<TOptions extends IntegrateAgentOptions>(
   params: FinalizeAgentInstallParams<TOptions>,
 ): Promise<void> {
   const { context, options, auth } = params;
-  const contextAugmentation = options.skipContext
+  const contextAugmentation = isContextAugmentationSkipped()
     ? null
     : await resolveContextAugmentationSetup({
         auth,

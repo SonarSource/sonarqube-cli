@@ -21,12 +21,12 @@
 import { installIntegration } from '@/core/framework/features';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
-import { info } from '@/core/ui';
 
 import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint.ts';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';
 import {
   buildRecordedIntegrationAttrs,
+  isContextAugmentationSkipped,
   resolveContextAugmentationSetup,
 } from '../_common/context-augmentation.ts';
 import { resolveSqaaSetup } from '../_common/sqaa-entitlement.ts';
@@ -49,10 +49,6 @@ export async function integrateAntigravity(
 
   const ctx = await displayAgentIntegratePrelude('Antigravity', 'antigravity', options, auth);
 
-  if (options.skipContext) {
-    info('Skipping Vortex context augmentation (--skip-context).');
-  }
-
   const sqaaEligible = await resolveSqaaSetup({
     serverURL: ctx.serverUrl,
     token: ctx.token,
@@ -61,7 +57,7 @@ export async function integrateAntigravity(
   });
   const includeSqaa = sqaaEligible && Boolean(ctx.projectKey);
 
-  const contextAugmentation = options.skipContext
+  const contextAugmentation = isContextAugmentationSkipped()
     ? null
     : await resolveContextAugmentationSetup({
         auth,
