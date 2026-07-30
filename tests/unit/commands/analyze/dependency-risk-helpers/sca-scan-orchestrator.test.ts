@@ -85,7 +85,7 @@ describe('ScaScanOrchestrator', () => {
     expect(result.scanDurationMs).toBeGreaterThanOrEqual(0);
   });
 
-  it('throws when SCA is not available for the connection', () => {
+  it('throws when SCA is not available for the connection', async () => {
     const orchestrator = new ScaScanOrchestrator(
       makeClient({ checkScaEnabled: () => Promise.resolve(false) }),
       okInstaller,
@@ -93,7 +93,8 @@ describe('ScaScanOrchestrator', () => {
       noopSecretsInstaller,
     );
 
-    expect(
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(
       orchestrator.run(CLOUD_AUTH, 'my-project', SCA_CALLER_COMMANDS.analyzeDependencyRisks),
     ).rejects.toBeInstanceOf(CommandFailedError);
   });

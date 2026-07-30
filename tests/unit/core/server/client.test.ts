@@ -1234,10 +1234,11 @@ describe('SonarQubeClient', () => {
       expect(result.taskId).toBe('task-xyz-789');
     });
 
-    it('throws ForbiddenApiError on 403 response', () => {
+    it('throws ForbiddenApiError on 403 response', async () => {
       const cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
       fetchSpy = mockFetch({ message: 'Insufficient privileges' }, false, 403);
-      expect(
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(
         cloudClient.scheduleAgentJob({
           projectId: 'proj-id',
           issueKeys: ['KEY-1'],

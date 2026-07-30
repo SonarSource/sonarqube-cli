@@ -119,13 +119,14 @@ describe('runMcp', () => {
     cwdSpy?.mockRestore();
   });
 
-  it('throws CommandFailedError when no container runtime is available', () => {
+  it('throws CommandFailedError when no container runtime is available', async () => {
     detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
       runtime: null,
       viaWsl: false,
     });
 
-    expect(runMcp(FAKE_AUTH, {}, NO_NETWORK)).rejects.toBeInstanceOf(CommandFailedError);
+    // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+    await expect(runMcp(FAKE_AUTH, {}, NO_NETWORK)).rejects.toBeInstanceOf(CommandFailedError);
   });
 
   it.each(['docker', 'podman', 'nerdctl'] as const)(
