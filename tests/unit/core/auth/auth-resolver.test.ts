@@ -36,7 +36,7 @@ import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
-import { createKeychainTestHandle } from '../../core/host/keychain-test-handle.ts';
+import { createKeychainTestHandle } from '../host/keychain-test-handle.ts';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const FAKE_TOKEN = 'squ_test_token_abc123';

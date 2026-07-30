@@ -22,8 +22,8 @@
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { warn } from '@/core/ui';
+import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 
-import { printAgentNonInteractiveAlternativeHint } from '../../../core/ui/components/agent-prompt-hint.ts';
 import { finalizeAgentInstall } from '../_common/agent-integrate-postlude.ts';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';

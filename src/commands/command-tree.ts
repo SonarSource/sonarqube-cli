@@ -37,9 +37,9 @@ import {
   SQAA_VERIFY_CALLER_COMMAND,
 } from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 import { blank, error, warn } from '@/core/ui';
+import { parseInteger } from '@/core/ui/parsing.ts';
 
 import { version as VERSION } from '../../package.json';
-import { parseInteger } from '../core/ui/parsing.ts';
 import { analyzeAll, type AnalyzeAllOptions } from './analyze/analyze-all.ts';
 import type { Severity } from './analyze/dependency-risk-helpers/sca-scanner.ts';
 import { SEVERITIES } from './analyze/dependency-risk-helpers/view-model/build/severity.ts';

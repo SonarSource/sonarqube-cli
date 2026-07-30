@@ -27,8 +27,8 @@ import {
 import { askUser, install, skip } from '@/core/framework/features/selection.ts';
 import type { FeaturePreview, SubfeatureDeclaration } from '@/core/framework/features/types.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
+import { assertScaAvailable } from '@/core/server/sca-availability.ts';
 
-import { assertScaAvailable } from '../../../../core/server/sca-availability.ts';
 import type { GitHookType, IntegrateGitOptions } from '../options.ts';
 
 export const PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID = 'pre-commit-dependency-risks';

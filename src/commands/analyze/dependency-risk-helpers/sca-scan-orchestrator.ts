@@ -27,6 +27,7 @@ import type { ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import type { SecretsInstaller } from '@/core/host/install/secrets.ts';
 import logger, { getLogLevelConfig } from '@/core/observability/logger.ts';
 import { type SonarQubeClient } from '@/core/server/client.ts';
+import { assertScaAvailable } from '@/core/server/sca-availability.ts';
 import type { SettingsValue } from '@/core/server/settings-value.ts';
 import {
   emitScaAnalysisTelemetry,
@@ -34,7 +35,6 @@ import {
 } from '@/core/telemetry/sca-analysis-telemetry.ts';
 import { withSpinner } from '@/core/ui';
 
-import { assertScaAvailable } from '../../../core/server/sca-availability.ts';
 import { parseAnalysisProperties } from './analysis-properties.ts';
 import { preScanManifestsForSecrets } from './manifest-secrets-guard.ts';
 import { type AnalyzeProjectResponse, ScaScannerRunner } from './sca-scanner.ts';

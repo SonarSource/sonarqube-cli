@@ -33,8 +33,8 @@ import { normalizePath } from '@/core/io/fs-utils.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { blank, confirmPrompt, info, intro, phase, phaseItem, text, warn } from '@/core/ui';
 import { yellow } from '@/core/ui/colors.ts';
+import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 
-import { printAgentNonInteractiveAlternativeHint } from '../../../core/ui/components/agent-prompt-hint.ts';
 import { resolveIntegrateScope } from '../_common/integrate-scope.ts';
 import { printGitPreflightSummary } from '../_common/preflight-summary.ts';
 import { supportedIntegrations } from '../index.ts';

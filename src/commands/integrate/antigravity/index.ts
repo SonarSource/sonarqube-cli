@@ -21,8 +21,8 @@
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { installIntegration } from '@/core/framework/features';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
+import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 
-import { printAgentNonInteractiveAlternativeHint } from '../../../core/ui/components/agent-prompt-hint.ts';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';
 import { buildRecordedIntegrationAttrs } from '../_common/context-augmentation.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';

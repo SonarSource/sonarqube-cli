@@ -36,8 +36,7 @@ import type { SonarQubeIssue } from '@/core/server/types.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { blank, info, multiSelectPrompt, print, success, withSpinner } from '@/core/ui';
 import { cyan, dim, red, yellow } from '@/core/ui/colors.ts';
-
-import { printAgentNonInteractiveAlternativeHint } from '../../core/ui/components/agent-prompt-hint.ts';
+import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 
 export interface RemediateOptions {
   project?: string;

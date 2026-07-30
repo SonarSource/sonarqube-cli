@@ -26,6 +26,8 @@ import { parse as parseToml } from 'smol-toml';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
+import type { TokenCheckResult } from '@/core/auth/token.ts';
+import { checkTokenStatus } from '@/core/auth/token.ts';
 import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '@/core/config-constants.ts';
 import { recordedFeatureResources } from '@/core/framework/features';
 import { getNetworkConfig } from '@/core/host/connectivity/network-config.ts';
@@ -53,8 +55,6 @@ import { blank, print, success, text, warn } from '@/core/ui';
 import { isNewerVersion, stripBuildNumber } from '@/core/version.ts';
 
 import { version as VERSION } from '../../../package.json';
-import type { TokenCheckResult } from '../../core/auth/token.ts';
-import { checkTokenStatus } from '../../core/auth/token.ts';
 import { supportedIntegrations } from '../integrate';
 import { checkAntigravitySecretsHookFile } from '../integrate/antigravity/health.ts';
 import { resolveAntigravityHooksJsonPathForScope } from '../integrate/antigravity/hooks.ts';
