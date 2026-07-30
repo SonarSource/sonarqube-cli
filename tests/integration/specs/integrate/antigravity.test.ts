@@ -24,9 +24,14 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
+import { SQAA_INSTRUCTIONS_SUBFEATURE_ID } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
+import {
+  VORTEX_FEATURE_ID,
+  VORTEX_GLOBAL_SKIP_MESSAGE,
+} from '@/commands/integrate/_common/vortex.ts';
 import { CLI_COMMAND } from '@/core/config-constants.ts';
 
-import { SQAA_GLOBAL_SKIP_MESSAGE } from '../../../../src/commands/integrate/_common/sqaa-entitlement.ts';
 import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
@@ -462,9 +467,9 @@ describe('integrate antigravity', () => {
     );
   });
 
-  describe('SQAA rules', () => {
+  describe('Vortex (SQAA rules + Context Augmentation)', () => {
     it(
-      'writes SQAA workspace rules when the org is entitled and a project key is present',
+      'writes SQAA workspace rules and enables Context Augmentation when the org is entitled and a project key is present',
       async () => {
         harness.state().withContextAugmentationBinaryInstalled();
         const server = await harness
@@ -495,25 +500,29 @@ describe('integrate antigravity', () => {
         expectAntigravityAlwaysOnRule(sqaaRule);
         expect(sqaaRule).toContain('# SonarQube Agentic Analysis protocol');
         expect(sqaaRule).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --depth DEEP`);
-        expect(findAntigravityFeature(harness, 'sqaa-instructions')?.scope).toBe('project');
+        const vortexFeature = findAntigravityFeature(harness, VORTEX_FEATURE_ID);
+        expect(vortexFeature?.scope).toBe('project');
+        const subfeatureIds = vortexFeature?.subfeatures?.map((subfeature) => subfeature.featureId);
+        expect(subfeatureIds).toContain(SQAA_INSTRUCTIONS_SUBFEATURE_ID);
+        expect(subfeatureIds).toContain(CONTEXT_AUGMENTATION_FEATURE_ID);
       },
       { timeout: 30000 },
     );
 
     it(
-      'does not install SQAA rules when the org has no entitlement',
+      'does not install Vortex when the org has no entitlement',
       async () => {
         const result = await harness.run('integrate antigravity --non-interactive');
 
         expect(result.exitCode).toBe(0);
         expect(harness.cwd.exists(...PROJECT_SQAA_RULE_PATH)).toBe(false);
-        expect(findAntigravityFeature(harness, 'sqaa-instructions')).toBeUndefined();
+        expect(findAntigravityFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
       },
       { timeout: 30000 },
     );
 
     it(
-      'does not install SQAA rules without a project key even when entitled',
+      'does not install Vortex without a project key even when entitled',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -533,13 +542,13 @@ describe('integrate antigravity', () => {
 
         expect(result.exitCode).toBe(0);
         expect(harness.cwd.exists(...PROJECT_SQAA_RULE_PATH)).toBe(false);
-        expect(findAntigravityFeature(harness, 'sqaa-instructions')).toBeUndefined();
+        expect(findAntigravityFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
       },
       { timeout: 30000 },
     );
 
     it(
-      'skips SQAA on global install with the consistent notice when entitled',
+      'skips Vortex on global install with the consistent notice when entitled',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -559,8 +568,8 @@ describe('integrate antigravity', () => {
         });
 
         expect(result.exitCode).toBe(0);
-        expect(findAntigravityFeature(harness, 'sqaa-instructions', 'global')).toBeUndefined();
-        expect(`${result.stdout}\n${result.stderr}`).toContain(SQAA_GLOBAL_SKIP_MESSAGE);
+        expect(findAntigravityFeature(harness, VORTEX_FEATURE_ID, 'global')).toBeUndefined();
+        expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_GLOBAL_SKIP_MESSAGE);
       },
       { timeout: 30000 },
     );

@@ -44,8 +44,6 @@ import { getMcpConfig } from '@/core/host/mcp/mcp-helper.ts';
 
 import { getRequiredStringAttr } from '../_common/attrs.ts';
 import {
-  AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,
-  AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
   MCP_SERVER_FEATURE_BENEFIT,
   MCP_SERVER_FEATURE_PREVIEW,
   SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
@@ -53,8 +51,9 @@ import {
   SECRETS_PROMPT_FEATURE_BENEFIT,
   SECRETS_PROMPT_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
-import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature.ts';
+import { createContextAugmentationSubfeature } from '../_common/features/context-augmentation-feature.ts';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
+import { createSqaaInstructionsSubfeature } from '../_common/features/sqaa-instructions-feature.ts';
 import {
   buildSqaaSectionBody,
   sonarBeginMarker,
@@ -62,6 +61,7 @@ import {
 } from '../_common/instructions-templates.ts';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
+import { createVortexFeature } from '../_common/vortex.ts';
 import { getSecretPreToolTemplateUnix, getSecretPreToolTemplateWindows } from './hook-templates.ts';
 import {
   removeAntigravitySecretsBlock,
@@ -80,13 +80,10 @@ import {
 } from './rules.ts';
 
 export const ANTIGRAVITY_INTEGRATION_ID = 'antigravity';
+const ANTIGRAVITY_DISPLAY_NAME = 'Antigravity';
 
 export interface AntigravityIntegrationOptions extends IntegrateAgentOptions {
-  projectRoot?: string;
   globalSecretsHookExists?: boolean;
-  /** Install SQAA rules (project scope only). */
-  installSqaaInstructions?: boolean;
-  installContextAugmentation?: boolean;
 }
 
 export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrationOptions> = {
@@ -128,28 +125,25 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
       ],
     },
     {
-      id: 'sqaa-instructions',
-      displayName: 'Vortex agentic analysis rules',
-      benefitDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,
-      previewDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
-      shouldInstall: ({ options }) =>
-        options.installSqaaInstructions === true ? askUser() : skip(),
-      targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
-      scope: 'project',
-      resources: [
-        wholeFile({
-          id: 'sqaa-rule-file',
-          displayName: 'Vortex agentic analysis rule for Antigravity',
-          targetPath: resolveSqaaRulePath,
-          content: (context) =>
-            buildAntigravityAlwaysOnRule(
-              buildSqaaSectionBody(
-                getRequiredStringAttr(context, 'projectKey', antigravityIntegration.displayName),
+      ...createVortexFeature<AntigravityIntegrationOptions>([
+        createSqaaInstructionsSubfeature<AntigravityIntegrationOptions>([
+          wholeFile({
+            id: 'sqaa-rule-file',
+            displayName: 'Vortex agentic analysis rule for Antigravity',
+            targetPath: resolveSqaaRulePath,
+            content: (context) =>
+              buildAntigravityAlwaysOnRule(
+                buildSqaaSectionBody(
+                  getRequiredStringAttr(context, 'projectKey', ANTIGRAVITY_DISPLAY_NAME),
+                ),
               ),
-            ),
-          managedMarker: SQAA_RULE_MARKER,
+            managedMarker: SQAA_RULE_MARKER,
+          }),
+        ]),
+        createContextAugmentationSubfeature<AntigravityIntegrationOptions>({
+          targetPath: resolveAntigravitySkillPath,
         }),
-      ],
+      ]),
       legacyCleanups: [
         textSnippetRemover({
           id: 'legacy-sqaa-instructions-snippet',
@@ -234,9 +228,6 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
         }),
       ],
     },
-    createContextAugmentationFeature<AntigravityIntegrationOptions>({
-      targetPath: resolveAntigravitySkillPath,
-    }),
   ],
 };
 
