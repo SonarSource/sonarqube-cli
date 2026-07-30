@@ -21,37 +21,37 @@
 import { join } from 'node:path';
 
 import { CLI_COMMAND } from '@/core/config-constants.ts';
-import type { IntegrationContext, IntegrationDeclaration } from '@/core/framework/features';
-import { askUser, jsonPatch, skip, textSnippet, wholeFile } from '@/core/framework/features';
+import type {
+  IntegrationContext,
+  IntegrationDeclaration,
+  SubfeatureDeclaration,
+} from '@/core/framework/features';
+import { install, jsonPatch, wholeFile } from '@/core/framework/features';
 import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs.ts';
 import {
-  AGENTIC_ANALYSIS_FEATURE_BENEFIT,
-  AGENTIC_ANALYSIS_FEATURE_PREVIEW,
-  AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,
-  AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
   MCP_SERVER_FEATURE_BENEFIT,
   MCP_SERVER_FEATURE_PREVIEW,
   SECRETS_COMBINED_FEATURE_BENEFIT,
   SECRETS_COMBINED_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
-import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature.ts';
+import { createContextAugmentationSubfeature } from '../_common/features/context-augmentation-feature.ts';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature.ts';
+import {
+  createSqaaInstructionsSnippet,
+  createSqaaInstructionsSubfeature,
+} from '../_common/features/sqaa-instructions-feature.ts';
 import {
   createAgentHookEntry,
   removeAgentHooks,
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../_common/hooks.ts';
-import {
-  buildSqaaSectionBody,
-  sonarBeginMarker,
-  sonarEndMarker,
-} from '../_common/instructions-templates.ts';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
 import { SQAA_HOOK_FEATURE_ID } from '../_common/sqaa-entitlement.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
+import { createVortexFeature } from '../_common/vortex.ts';
 import {
   getSecretPreToolTemplateUnix,
   getSecretPreToolTemplateWindows,
@@ -68,19 +68,15 @@ const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pretool-secrets';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 
 export const CLAUDE_INTEGRATION_ID = 'claude-code';
+const CLAUDE_DISPLAY_NAME = 'Claude Code';
 
 export interface ClaudeIntegrationOptions extends IntegrateAgentOptions {
-  projectRoot?: string;
   globalSecretsHookExists?: boolean;
-  installSqaaHook?: boolean;
-  /** Write end-of-turn SQAA instructions into CLAUDE.md (project scope). */
-  installSqaaInstructions?: boolean;
-  installContextAugmentation?: boolean;
 }
 
 export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions> = {
   id: CLAUDE_INTEGRATION_ID,
-  displayName: 'Claude Code',
+  displayName: CLAUDE_DISPLAY_NAME,
   features: [
     createSonarSecretsHooksFeature({
       agentDisplayName: 'Claude',
@@ -125,84 +121,18 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
         },
       ],
     }),
-    {
-      id: SQAA_HOOK_FEATURE_ID,
-      displayName: 'Vortex agentic analysis hook',
-      benefitDescription: AGENTIC_ANALYSIS_FEATURE_BENEFIT,
-      previewDescription: AGENTIC_ANALYSIS_FEATURE_PREVIEW,
-      shouldInstall: ({ options }) => {
-        if (options.installSqaaHook === true) {
-          return askUser();
-        }
-        return skip();
-      },
-      targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
-      scope: 'project',
-      resources: [
-        wholeFile({
-          id: 'posttool-sqaa-script',
-          displayName: 'Claude PostToolUse hook script',
-          targetPath: (context) =>
-            resolveAgentHookScriptPath(
-              context,
-              CLAUDE_CONFIG_DIR,
-              'sonar-sqaa/build-scripts/posttool-sqaa',
-            ),
-          content: (context) => {
-            const projectKey = getRequiredStringAttr(
-              context,
-              'projectKey',
-              claudeIntegration.displayName,
-            );
-            return process.platform === 'win32'
-              ? getSqaaPostToolTemplateWindows(projectKey)
-              : getSqaaPostToolTemplateUnix(projectKey);
-          },
-          executable: true,
-        }),
-        jsonPatch({
-          id: 'claude-settings-sqaa-hook',
-          displayName: 'Claude Vortex agentic analysis hook configuration',
-          targetPath: resolveClaudeSettingsPath,
-          defaultValue: { hooks: {} },
-          patch: (document, context) =>
-            upsertAgentHooks(document, [
-              createAgentHookEntry(
-                context,
-                CLAUDE_CONFIG_DIR,
-                'PostToolUse',
-                'Edit|Write',
-                'sonar-sqaa',
-                'sonar-sqaa/build-scripts/posttool-sqaa',
-              ),
-            ]),
-          removePatch: (document) => removeAgentHooks(document, ['sonar-sqaa']),
-        }),
-      ],
-    },
-    {
-      id: 'sqaa-instructions',
-      displayName: 'Vortex agentic analysis instructions',
-      benefitDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,
-      previewDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
-      shouldInstall: ({ options }) =>
-        options.installSqaaInstructions === true ? askUser() : skip(),
-      targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
-      scope: 'project',
-      resources: [
-        textSnippet({
-          id: 'sqaa-instructions-file',
-          displayName: 'Claude Vortex agentic analysis instructions',
+    createVortexFeature<ClaudeIntegrationOptions>([
+      createSqaaHookSubfeature(),
+      createSqaaInstructionsSubfeature([
+        createSqaaInstructionsSnippet({
+          agentDisplayName: CLAUDE_DISPLAY_NAME,
           targetPath: resolveClaudeMdPath,
-          startMarker: sonarBeginMarker('sonarqube-agentic-analysis-protocol'),
-          endMarker: sonarEndMarker('sonarqube-agentic-analysis-protocol'),
-          content: (context) =>
-            buildSqaaSectionBody(
-              getRequiredStringAttr(context, 'projectKey', claudeIntegration.displayName),
-            ),
         }),
-      ],
-    },
+      ]),
+      createContextAugmentationSubfeature<ClaudeIntegrationOptions>({
+        targetPath: resolveClaudeSkillPath,
+      }),
+    ]),
     {
       id: 'mcp-server',
       displayName: 'MCP server',
@@ -220,11 +150,53 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
         }),
       ],
     },
-    createContextAugmentationFeature<ClaudeIntegrationOptions>({
-      targetPath: resolveClaudeSkillPath,
-    }),
   ],
 };
+
+function createSqaaHookSubfeature(): SubfeatureDeclaration<ClaudeIntegrationOptions> {
+  return {
+    id: SQAA_HOOK_FEATURE_ID,
+    displayName: 'Vortex analysis hook',
+    shouldInstall: () => install(),
+    resources: [
+      wholeFile({
+        id: 'posttool-sqaa-script',
+        displayName: 'Claude PostToolUse hook script',
+        targetPath: (context) =>
+          resolveAgentHookScriptPath(
+            context,
+            CLAUDE_CONFIG_DIR,
+            'sonar-sqaa/build-scripts/posttool-sqaa',
+          ),
+        content: (context) => {
+          const projectKey = getRequiredStringAttr(context, 'projectKey', CLAUDE_DISPLAY_NAME);
+          return process.platform === 'win32'
+            ? getSqaaPostToolTemplateWindows(projectKey)
+            : getSqaaPostToolTemplateUnix(projectKey);
+        },
+        executable: true,
+      }),
+      jsonPatch({
+        id: 'claude-settings-sqaa-hook',
+        displayName: 'Claude Vortex agentic analysis hook configuration',
+        targetPath: resolveClaudeSettingsPath,
+        defaultValue: { hooks: {} },
+        patch: (document, context) =>
+          upsertAgentHooks(document, [
+            createAgentHookEntry(
+              context,
+              CLAUDE_CONFIG_DIR,
+              'PostToolUse',
+              'Edit|Write',
+              'sonar-sqaa',
+              'sonar-sqaa/build-scripts/posttool-sqaa',
+            ),
+          ]),
+        removePatch: (document) => removeAgentHooks(document, ['sonar-sqaa']),
+      }),
+    ],
+  };
+}
 
 function resolveClaudeSettingsPath(context: IntegrationContext): string {
   return join(context.targetRoot, CLAUDE_CONFIG_DIR, SETTINGS_FILE);

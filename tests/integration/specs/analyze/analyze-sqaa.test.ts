@@ -25,6 +25,7 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
 import type { StoredAnalysisCompletedEvent } from '@/core/state/state.ts';
 import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
@@ -694,6 +695,35 @@ describe('analyze agentic', () => {
       expect(sqaaCalls).toHaveLength(1);
       expect(result.stdout + result.stderr).toContain('STANDARD analysis');
       expect(parseSqaaRequestBody(sqaaCalls[0].body).analysisDepth).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'resolves the project key from a recorded Vortex feature',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl(), {
+          featureId: VORTEX_FEATURE_ID,
+        });
+
+      harness.cwd.writeFile('index.ts', 'const x = 1;');
+      const result = await harness.run('analyze agentic --file index.ts');
+
+      expect(result.exitCode).toBe(0);
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+      expect(parseSqaaRequestBody(sqaaCalls[0].body).projectKey).toBe(TEST_PROJECT);
     },
     { timeout: 15000 },
   );

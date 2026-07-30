@@ -43,6 +43,7 @@ import {
   expectSkillRendersWithWrapperInvocation,
   findRecordedCagDependency,
   findRecordedCagFeature,
+  findRecordedCagSkillResource,
   seedState,
   STALE_CLI_VERSION,
   STALE_SKILL_VERSION,
@@ -93,9 +94,7 @@ describe('sonar-context-augmentation post-update edge cases (offline, real binar
     if (!feature) {
       throw new Error('Expected the deleted-root declarative CAG feature to remain recorded');
     }
-    const resource = feature.feature.resources.find(
-      (entry) => entry.id === 'context-augmentation-skill-file',
-    );
+    const resource = findRecordedCagSkillResource(feature);
     expect(resource).toBeDefined();
     expect(resource?.version).toBe(STALE_SKILL_VERSION);
   });
@@ -151,12 +150,8 @@ describe('sonar-context-augmentation post-update edge cases (offline, real binar
     if (!featureA || !featureB) {
       throw new Error('Expected both declarative Claude CAG features to remain recorded');
     }
-    const resourceA = featureA.feature.resources.find(
-      (entry) => entry.id === 'context-augmentation-skill-file',
-    );
-    const resourceB = featureB.feature.resources.find(
-      (entry) => entry.id === 'context-augmentation-skill-file',
-    );
+    const resourceA = findRecordedCagSkillResource(featureA);
+    const resourceB = findRecordedCagSkillResource(featureB);
     expect(resourceA).toBeDefined();
     expect(resourceB).toBeDefined();
     expect(resourceA?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
@@ -189,9 +184,7 @@ describe('sonar-context-augmentation post-update edge cases (offline, real binar
     if (!feature) {
       throw new Error('Expected the no-op declarative CAG feature to remain recorded');
     }
-    const resource = feature.feature.resources.find(
-      (entry) => entry.id === 'context-augmentation-skill-file',
-    );
+    const resource = findRecordedCagSkillResource(feature);
     expect(resource).toBeDefined();
     expect(resource?.version).toBe(STALE_SKILL_VERSION);
   });

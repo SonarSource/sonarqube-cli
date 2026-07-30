@@ -25,12 +25,20 @@ import { CommandFailedError } from '@/core/command-error.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { selectRecordedFeatureForDir } from '@/core/host/recorded-feature-resolver.ts';
 import logger from '@/core/observability/logger.ts';
-import type { IntegrationStateAttribute } from '@/core/state/state.ts';
+import type { InstalledIntegrationFeature, IntegrationStateAttribute } from '@/core/state/state.ts';
 import { loadState } from '@/core/state/state-repository.ts';
 import { blank, confirmPrompt, text, warn } from '@/core/ui';
 
 import { SQAA_HOOK_FEATURE_ID } from '../integrate/_common/sqaa-entitlement.ts';
+import { isProjectVortexFeature } from '../integrate/_common/vortex.ts';
 import { CLAUDE_INTEGRATION_ID } from '../integrate/claude/declaration.ts';
+
+function isProjectSqaaFeature(feature: InstalledIntegrationFeature): boolean {
+  return (
+    isProjectVortexFeature(feature) ||
+    (feature.featureId === SQAA_HOOK_FEATURE_ID && feature.scope === 'project')
+  );
+}
 
 function getOptionalStringAttr(
   attrs: Record<string, IntegrationStateAttribute> | undefined,
@@ -121,7 +129,7 @@ export function resolveCloudAuth(
  * Delegates the worktree-aware matching to the shared resolver (see
  * `selectRecordedFeatureForDir`): the current directory is mapped to its working
  * tree — and, from a linked worktree, to the main working tree — then matched
- * against the recorded Claude SQAA hook features, preferring a `targetRoot`
+ * against the recorded Claude Vortex features, preferring a `targetRoot`
  * (physical install dir) match over a `repoRoot`-only one. Falls back to
  * `process.cwd()` when no `projectRoot` is given so the single-file path still
  * works, including from a subdirectory or outside git.
@@ -131,16 +139,12 @@ export async function resolveSqaaProjectKey(projectRoot?: string): Promise<strin
     const claude = loadState().integrations.installed.find(
       (integration) => integration.integrationId === CLAUDE_INTEGRATION_ID,
     );
-    const candidates = (claude?.features ?? [])
-      .filter(
-        (feature) => feature.featureId === SQAA_HOOK_FEATURE_ID && feature.scope === 'project',
-      )
-      .map((feature) => ({
-        feature,
-        targetRoot: feature.targetRoot,
-        repoRoot: getOptionalStringAttr(feature.attrs, 'repoRoot'),
-        updatedAt: feature.updatedAt,
-      }));
+    const candidates = (claude?.features ?? []).filter(isProjectSqaaFeature).map((feature) => ({
+      feature,
+      targetRoot: feature.targetRoot,
+      repoRoot: getOptionalStringAttr(feature.attrs, 'repoRoot'),
+      updatedAt: feature.updatedAt,
+    }));
     const sqaaFeature = await selectRecordedFeatureForDir(projectRoot ?? process.cwd(), candidates);
 
     const projectKey = sqaaFeature?.attrs?.projectKey;

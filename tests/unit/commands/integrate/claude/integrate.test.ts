@@ -23,7 +23,6 @@ import { homedir } from 'node:os';
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
 import * as token from '@/commands/_common/token.ts';
-import * as contextAugmentation from '@/commands/integrate/_common/context-augmentation.ts';
 import { integrateClaude } from '@/commands/integrate/claude';
 import * as hooks from '@/commands/integrate/claude/hooks.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
@@ -80,11 +79,8 @@ describe('integrateCommand', () => {
   let detectGlobalSecretsHookSpy: Mock<
     Extract<(typeof hooks)['detectGlobalSecretsHook'], (...args: any[]) => any>
   >;
-  let resolveContextAugmentationSetupSpy: Mock<
-    Extract<
-      (typeof contextAugmentation)['resolveContextAugmentationSetup'],
-      (...args: any[]) => any
-    >
+  let getScaEnablementSpy: Mock<
+    Extract<(typeof SonarQubeClient.prototype)['getScaEnablement'], (...args: any[]) => any>
   >;
   let resolveRecordedRepoRootSpy: Mock<
     Extract<(typeof gitWorktree)['resolveRecordedRepoRoot'], (...args: any[]) => any>
@@ -95,10 +91,9 @@ describe('integrateCommand', () => {
 
     hasVortexEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasVortexEntitlement');
     hasVortexEntitlementSpy.mockResolvedValue('not_entitled');
-    resolveContextAugmentationSetupSpy = spyOn(
-      contextAugmentation,
-      'resolveContextAugmentationSetup',
-    ).mockResolvedValue(null);
+    getScaEnablementSpy = spyOn(SonarQubeClient.prototype, 'getScaEnablement').mockResolvedValue(
+      'not_enabled',
+    );
     resolveRecordedRepoRootSpy = spyOn(gitWorktree, 'resolveRecordedRepoRoot').mockImplementation(
       (projectRoot: string) => Promise.resolve(projectRoot),
     );
@@ -132,7 +127,7 @@ describe('integrateCommand', () => {
     discoverProjectSpy.mockRestore();
     installIntegrationSpy.mockRestore();
     detectGlobalSecretsHookSpy.mockRestore();
-    resolveContextAugmentationSetupSpy.mockRestore();
+    getScaEnablementSpy.mockRestore();
     resolveRecordedRepoRootSpy.mockRestore();
   });
 
@@ -279,9 +274,10 @@ describe('integrateCommand', () => {
     expect(hasVortexEntitlementSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('installs Context Augmentation through the declarative installer in a single call', async () => {
+  it('installs Vortex through the declarative installer in a single call', async () => {
     mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
-    resolveContextAugmentationSetupSpy.mockResolvedValue({ scaEnabled: true });
+    mockVortexEntitlement(true);
+    getScaEnablementSpy.mockResolvedValue('enabled');
 
     await integrateClaude({}, CLOUD_AUTH);
 
@@ -293,8 +289,7 @@ describe('integrateCommand', () => {
         options: expect.objectContaining({
           projectRoot: '/project/root',
           globalSecretsHookExists: false,
-          installSqaaHook: false,
-          installContextAugmentation: true,
+          installVortex: true,
         }),
         scope: 'project',
         targetRoot: '/project/root',
@@ -309,9 +304,9 @@ describe('integrateCommand', () => {
     );
   });
 
-  it('rethrows CAG installation failures', async () => {
+  it('rethrows Vortex installation failures', async () => {
     mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
-    resolveContextAugmentationSetupSpy.mockResolvedValue({ scaEnabled: false });
+    mockVortexEntitlement(true);
     installIntegrationSpy.mockRejectedValueOnce(new Error('print failed'));
 
     let thrown: unknown;
@@ -331,7 +326,7 @@ describe('integrateCommand', () => {
 
   it('runs migration and installs hooks when setup summary succeeds', async () => {
     mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
-    mockSqaaEntitlement(true);
+    mockVortexEntitlement(true);
 
     await integrateClaude({}, CLOUD_AUTH);
 
@@ -340,18 +335,18 @@ describe('integrateCommand', () => {
 
   it('runs migration and installs hooks when global option is set', async () => {
     mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
-    mockSqaaEntitlement(true);
+    mockVortexEntitlement(true);
 
     await integrateClaude({ global: true }, CLOUD_AUTH);
 
-    // SQAA is project-scoped, so a global install never enables it even when the
-    // org is entitled — sqaaEnabled flows through as false.
+    // Vortex is project-scoped, so a global install never enables it even when
+    // the org is entitled.
     assertMigrationAndHookInstallationRan('a-project', '/project/root', homedir(), true, false);
   });
 
   it('still installs when organization access check fails in the summary', async () => {
     mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
-    mockSqaaEntitlement(true);
+    mockVortexEntitlement(true);
     checkOrganizationSpy.mockResolvedValue(false);
 
     await integrateClaude({}, CLOUD_AUTH);
@@ -361,7 +356,7 @@ describe('integrateCommand', () => {
 
   it('runs migration and installs hooks when project key is missing', async () => {
     mockDiscoveredProject({ rootDir: '/projectB/root' });
-    mockSqaaEntitlement(false);
+    mockVortexEntitlement(false);
 
     await integrateClaude({}, CLOUD_AUTH);
 
@@ -401,14 +396,13 @@ describe('integrateCommand', () => {
         projectRoot: '/project/root',
         projectKey: 'a-project',
         globalSecretsHookExists: true,
-        installSqaaHook: false,
-        installSqaaInstructions: false,
+        installVortex: false,
       });
     });
 
-    it('still installs the project-scoped sonar-sqaa hook when SQAA is entitled', async () => {
+    it('still installs project-scoped Vortex when the org is entitled', async () => {
       mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
-      mockSqaaEntitlement(true);
+      mockVortexEntitlement(true);
 
       await integrateClaude({}, CLOUD_AUTH);
 
@@ -419,8 +413,7 @@ describe('integrateCommand', () => {
         projectRoot: '/project/root',
         projectKey: 'a-project',
         globalSecretsHookExists: true,
-        installSqaaHook: true,
-        installSqaaInstructions: true,
+        installVortex: true,
       });
     });
   });
@@ -442,8 +435,7 @@ describe('integrateCommand', () => {
         projectRoot: '/project/root',
         projectKey: 'a-project',
         globalSecretsHookExists: false,
-        installSqaaHook: false,
-        installSqaaInstructions: false,
+        installVortex: false,
       });
     });
   });
@@ -465,14 +457,13 @@ describe('integrateCommand', () => {
       expect(skipNotice).toBeUndefined();
     });
 
-    it('skips the SQAA hook (and warns) even when the org is entitled', async () => {
+    it('skips Vortex (and warns) even when the org is entitled', async () => {
       mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
-      mockSqaaEntitlement(true);
+      mockVortexEntitlement(true);
 
       await integrateClaude({ global: true }, CLOUD_AUTH);
 
-      // SQAA is never installed on a global run, and the install/state
-      // paths all see sqaaEnabled = false.
+      // Vortex is project-scoped, so a global run never installs it.
       expectClaudeInstallCall({
         targetRoot: homedir(),
         scope: 'global',
@@ -480,8 +471,7 @@ describe('integrateCommand', () => {
         projectRoot: '/project/root',
         projectKey: 'a-project',
         globalSecretsHookExists: false,
-        installSqaaHook: false,
-        installSqaaInstructions: false,
+        installVortex: false,
       });
 
       const warnNotice = getMockUiCalls().find(
@@ -502,7 +492,7 @@ describe('integrateCommand', () => {
     });
   }
 
-  function mockSqaaEntitlement(hasEntitlement: boolean) {
+  function mockVortexEntitlement(hasEntitlement: boolean) {
     hasVortexEntitlementSpy.mockResolvedValue(hasEntitlement ? 'enabled' : 'not_entitled');
   }
 
@@ -511,7 +501,7 @@ describe('integrateCommand', () => {
     projectRootDir: string,
     globalDir: string | undefined,
     isGlobal: boolean,
-    sqaaEnabled: boolean,
+    vortexEnabled: boolean,
     auth: ResolvedAuth = CLOUD_AUTH,
     skipSecretsHooks = false,
   ): void {
@@ -524,8 +514,7 @@ describe('integrateCommand', () => {
       projectRoot: projectRootDir,
       projectKey,
       globalSecretsHookExists: skipSecretsHooks,
-      installSqaaHook: sqaaEnabled && projectKey !== undefined,
-      installSqaaInstructions: sqaaEnabled && projectKey !== undefined,
+      installVortex: vortexEnabled && projectKey !== undefined,
     });
   }
 
@@ -536,8 +525,7 @@ describe('integrateCommand', () => {
     projectRoot,
     projectKey,
     globalSecretsHookExists,
-    installSqaaHook,
-    installSqaaInstructions,
+    installVortex,
   }: {
     targetRoot: string;
     scope: 'global' | 'project';
@@ -545,12 +533,16 @@ describe('integrateCommand', () => {
     projectRoot: string;
     projectKey?: string;
     globalSecretsHookExists: boolean;
-    installSqaaHook: boolean;
-    installSqaaInstructions: boolean;
+    installVortex: boolean;
   }): void {
+    // The connection attrs are recorded only when Vortex is installed: its
+    // context augmentation subfeature reads them back at runtime.
     const attrs = {
       projectKey: projectKey ?? null,
       repoRoot: projectRoot,
+      ...(installVortex
+        ? { orgKey: auth.orgKey ?? null, scaEnabled: false, serverUrl: auth.serverUrl }
+        : {}),
     };
 
     expect(installIntegrationSpy).toHaveBeenCalledTimes(1);
@@ -561,8 +553,7 @@ describe('integrateCommand', () => {
         options: expect.objectContaining({
           projectRoot,
           globalSecretsHookExists,
-          installSqaaHook,
-          installSqaaInstructions,
+          installVortex,
         }),
         scope,
         targetRoot,

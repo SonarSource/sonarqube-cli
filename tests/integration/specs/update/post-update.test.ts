@@ -25,9 +25,13 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
+import { SQAA_INSTRUCTIONS_SUBFEATURE_ID } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
+import { SQAA_HOOK_FEATURE_ID } from '@/commands/integrate/_common/sqaa-entitlement.ts';
+import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
 import { buildLocalCagBinaryName } from '@/core/host/install/context-augmentation.ts';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
 import { detectPlatform } from '@/core/host/platform-detector.ts';
+import type { CliState, InstalledIntegrationFeature } from '@/core/state/state.ts';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
 import { hookScriptName, IS_WINDOWS, TestHarness } from '../../harness';
@@ -35,6 +39,75 @@ import { readCagInvocations } from '../../harness/cag-invocations';
 
 describe('post-update migration', () => {
   let harness: TestHarness;
+
+  function seedPreUnificationClaudeFeatures(featureIds: string[]): void {
+    const now = new Date().toISOString();
+    const legacyFeature = (featureId: string) => ({
+      featureId,
+      scope: 'project',
+      targetRoot: harness.cwd.path,
+      installedByCliVersion: '0.5.0',
+      installedAt: now,
+      updatedByCliVersion: '0.5.0',
+      updatedAt: now,
+      dependencies: [],
+      resources: [],
+      operations: [],
+      attrs: {
+        orgKey: 'o',
+        projectKey: 'p',
+        serverUrl: 'https://sonarcloud.io',
+        scaEnabled: false,
+      },
+    });
+
+    harness.state().withRawState(
+      JSON.stringify({
+        version: '1.0',
+        lastUpdated: now,
+        auth: { isAuthenticated: false, connections: [] },
+        agents: {},
+        config: { cliVersion: '0.5.0' },
+        telemetry: { enabled: false, firstUseDate: now, events: [] },
+        agentExtensions: [],
+        integrations: {
+          installed: [
+            {
+              id: randomUUID(),
+              integrationId: 'claude-code',
+              installedByCliVersion: '0.5.0',
+              installedAt: now,
+              updatedByCliVersion: '0.5.0',
+              updatedAt: now,
+              features: featureIds.map(legacyFeature),
+            },
+          ],
+        },
+      }),
+    );
+  }
+
+  function expectFullClaudeVortexMigration(): InstalledIntegrationFeature | undefined {
+    const state = harness.stateJsonFile.asJson() as CliState;
+    const claude = state.integrations.installed.find(
+      (integration) => integration.integrationId === 'claude-code',
+    );
+    expect(claude?.features.map((feature) => feature.featureId)).toEqual([VORTEX_FEATURE_ID]);
+    const vortex = claude?.features[0];
+    expect(vortex?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
+      SQAA_HOOK_FEATURE_ID,
+      SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+      CONTEXT_AUGMENTATION_FEATURE_ID,
+    ]);
+    expect(harness.cwd.file('.claude', 'settings.json').asJson().hooks?.PostToolUse).toBeDefined();
+    expect(harness.cwd.file('CLAUDE.md').asText()).toContain(
+      '# SonarQube Agentic Analysis protocol',
+    );
+    expect(
+      harness.cwd.file('.claude', 'skills', 'sonar-context-augmentation', 'SKILL.md').exists(),
+    ).toBe(true);
+    return vortex;
+  }
 
   beforeEach(async () => {
     harness = await TestHarness.create();
@@ -239,6 +312,74 @@ describe('post-update migration', () => {
       expect(
         harness.cwd.file('.claude', 'skills', 'sonar-context-augmentation', 'SKILL.md').asText(),
       ).toContain('# Generated CAG skill');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'migrates pre-unification Claude SQAA and CAG features into the Vortex container',
+    async () => {
+      seedPreUnificationClaudeFeatures([
+        SQAA_HOOK_FEATURE_ID,
+        SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+        CONTEXT_AUGMENTATION_FEATURE_ID,
+      ]);
+      harness.state().withContextAugmentationBinaryInstalled();
+
+      const result = await harness.run('--version');
+
+      expect(result.exitCode).toBe(0);
+      const vortex = expectFullClaudeVortexMigration();
+      expect(vortex?.scope).toBe('project');
+      expect(vortex?.targetRoot).toBe(harness.cwd.path);
+      // Attrs of all three predecessors are merged onto the container.
+      expect(vortex?.attrs).toMatchObject({
+        orgKey: 'o',
+        projectKey: 'p',
+        serverUrl: 'https://sonarcloud.io',
+        scaEnabled: false,
+      });
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'installs every Vortex subfeature when migrating a partial pre-unification install',
+    async () => {
+      seedPreUnificationClaudeFeatures([SQAA_HOOK_FEATURE_ID]);
+      harness.state().withContextAugmentationBinaryInstalled();
+
+      const result = await harness.run('--version');
+
+      expect(result.exitCode).toBe(0);
+      expectFullClaudeVortexMigration();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'restores deprecated feature records when their Vortex successor fails to apply',
+    async () => {
+      const deprecatedFeatureIds = [
+        SQAA_HOOK_FEATURE_ID,
+        SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+        CONTEXT_AUGMENTATION_FEATURE_ID,
+      ];
+      seedPreUnificationClaudeFeatures(deprecatedFeatureIds);
+      harness.state().withContextAugmentationBinaryInstalled({ printSkillEmpty: true });
+
+      const result = await harness.run('--version');
+
+      expect(result.exitCode).toBe(0);
+      const state = harness.stateJsonFile.asJson() as CliState;
+      const claudeFeatures =
+        state.integrations.installed.find(
+          (integration) => integration.integrationId === 'claude-code',
+        )?.features ?? [];
+      expect(claudeFeatures.map((feature) => feature.featureId).sort()).toEqual(
+        [...deprecatedFeatureIds].sort(),
+      );
+      expect(claudeFeatures.some((feature) => feature.featureId === VORTEX_FEATURE_ID)).toBe(false);
     },
     { timeout: 30000 },
   );

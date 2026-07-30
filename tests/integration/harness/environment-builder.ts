@@ -66,6 +66,7 @@ interface SqaaFeatureConfig {
   serverUrl?: string;
   targetRoot?: string;
   repoRoot?: string;
+  featureId?: string;
 }
 
 interface ContextAugmentationSkillConfig {
@@ -138,13 +139,15 @@ function recordSqaaHookFeature(
     serverUrl?: string;
     targetRoot?: string;
     repoRoot?: string;
+    /** Agents that deliver SQAA through Vortex record the container instead. */
+    featureId?: string;
   },
 ): void {
   const integration = getOrCreateClaudeIntegration(state);
   const timestamp = integration.installedAt;
 
   integration.features.push({
-    featureId: SQAA_HOOK_FEATURE_ID,
+    featureId: args.featureId ?? SQAA_HOOK_FEATURE_ID,
     scope: 'project',
     targetRoot: args.targetRoot ?? args.projectRoot,
     installedByCliVersion: 'integration-test',
@@ -371,7 +374,7 @@ export class EnvironmentBuilder {
     projectKey: string,
     orgKey?: string,
     serverUrl?: string,
-    options?: { targetRoot?: string; repoRoot?: string },
+    options?: { targetRoot?: string; repoRoot?: string; featureId?: string },
   ): this {
     this.sqaaFeatures.push({
       projectRoot,
@@ -380,6 +383,7 @@ export class EnvironmentBuilder {
       serverUrl,
       targetRoot: options?.targetRoot,
       repoRoot: options?.repoRoot,
+      featureId: options?.featureId,
     });
     return this;
   }
@@ -527,6 +531,7 @@ export class EnvironmentBuilder {
         serverUrl: feature.serverUrl ?? this.activeConnectionUrl,
         targetRoot: feature.targetRoot,
         repoRoot: feature.repoRoot,
+        featureId: feature.featureId,
       });
     }
 

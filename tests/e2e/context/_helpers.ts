@@ -31,6 +31,7 @@ import {
   CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
   CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID,
 } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
+import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import { CODEX_INTEGRATION_ID } from '@/commands/integrate/codex/declaration.ts';
 import { COPILOT_INTEGRATION_ID } from '@/commands/integrate/copilot/declaration.ts';
@@ -40,6 +41,8 @@ import type {
   CliState,
   InstalledIntegrationDependency,
   InstalledIntegrationFeature,
+  InstalledIntegrationResource,
+  InstalledSubfeature,
 } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 
@@ -124,39 +127,51 @@ function seedDeclarativeContextAugmentationFeature(state: CliState, skill: SeedS
     state.integrations.installed.push(integration);
   }
 
-  integration.features.push({
-    featureId: CONTEXT_AUGMENTATION_FEATURE_ID,
+  const isVortexContainer = skill.agentId === 'claude-code';
+  const resource = {
+    id: CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
+    resourceType: 'whole-file' as const,
+    version: skill.version ?? STALE_SKILL_VERSION,
+    path: join(skill.projectRoot, resolveSkillRelativePath(skill.agentId)),
+    updatedByCliVersion: STALE_CLI_VERSION,
+    updatedAt: SEEDED_UPDATED_AT,
+  };
+  const operation = {
+    id: CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID,
+    updatedByCliVersion: STALE_CLI_VERSION,
+    updatedAt: SEEDED_UPDATED_AT,
+  };
+  const attrs = {
+    orgKey: skill.orgKey ?? SEEDED_ORG_KEY,
+    projectKey: skill.projectKey ?? SEEDED_PROJECT_KEY,
+    serverUrl: 'https://sonarcloud.io',
+    scaEnabled: false,
+  };
+
+  const feature: InstalledIntegrationFeature = {
+    featureId: isVortexContainer ? VORTEX_FEATURE_ID : CONTEXT_AUGMENTATION_FEATURE_ID,
     scope: 'project',
     targetRoot: skill.projectRoot,
     installedByCliVersion: STALE_CLI_VERSION,
     installedAt: SEEDED_UPDATED_AT,
     updatedByCliVersion: STALE_CLI_VERSION,
     updatedAt: SEEDED_UPDATED_AT,
-    dependencies: [{ id: CONTEXT_AUGMENTATION_BINARY_NAME }],
-    resources: [
-      {
-        id: CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
-        resourceType: 'whole-file',
-        version: skill.version ?? STALE_SKILL_VERSION,
-        path: join(skill.projectRoot, resolveSkillRelativePath(skill.agentId)),
-        updatedByCliVersion: STALE_CLI_VERSION,
-        updatedAt: SEEDED_UPDATED_AT,
-      },
-    ],
-    operations: [
-      {
-        id: CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID,
-        updatedByCliVersion: STALE_CLI_VERSION,
-        updatedAt: SEEDED_UPDATED_AT,
-      },
-    ],
-    attrs: {
-      orgKey: skill.orgKey ?? SEEDED_ORG_KEY,
-      projectKey: skill.projectKey ?? SEEDED_PROJECT_KEY,
-      serverUrl: 'https://sonarcloud.io',
-      scaEnabled: false,
-    },
-  });
+    dependencies: isVortexContainer ? [] : [{ id: CONTEXT_AUGMENTATION_BINARY_NAME }],
+    resources: isVortexContainer ? [] : [resource],
+    operations: isVortexContainer ? [] : [operation],
+    attrs,
+    subfeatures: isVortexContainer
+      ? [
+          {
+            featureId: CONTEXT_AUGMENTATION_FEATURE_ID,
+            dependencies: [{ id: CONTEXT_AUGMENTATION_BINARY_NAME }],
+            resources: [resource],
+            operations: [operation],
+          },
+        ]
+      : undefined,
+  };
+  integration.features.push(feature);
 }
 
 function resolveIntegrationId(agentId: SeedSkillOptions['agentId']): string {
@@ -190,13 +205,20 @@ export interface RecordedCagFeature {
   feature: InstalledIntegrationFeature;
 }
 
+function findCagSubfeature(feature: InstalledIntegrationFeature): InstalledSubfeature | undefined {
+  return feature.subfeatures?.find(
+    (subfeature) => subfeature.featureId === CONTEXT_AUGMENTATION_FEATURE_ID,
+  );
+}
+
 export function findRecordedCagFeature(
   state: CliState,
   predicate?: (entry: RecordedCagFeature) => boolean,
 ): RecordedCagFeature | undefined {
   for (const integration of state.integrations.installed) {
     for (const feature of integration.features) {
-      if (feature.featureId !== CONTEXT_AUGMENTATION_FEATURE_ID) {
+      const cagSubfeature = findCagSubfeature(feature);
+      if (feature.featureId !== CONTEXT_AUGMENTATION_FEATURE_ID && !cagSubfeature) {
         continue;
       }
       const entry = {
@@ -209,6 +231,16 @@ export function findRecordedCagFeature(
     }
   }
   return undefined;
+}
+
+export function findRecordedCagSkillResource(
+  entry: RecordedCagFeature,
+): InstalledIntegrationResource | undefined {
+  const resources =
+    entry.feature.featureId === CONTEXT_AUGMENTATION_FEATURE_ID
+      ? entry.feature.resources
+      : findCagSubfeature(entry.feature)?.resources;
+  return resources?.find((resource) => resource.id === CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID);
 }
 
 export function findRecordedCagDependency(

@@ -22,6 +22,7 @@ import { spawn } from 'node:child_process';
 
 import { buildContextAugmentationEnv } from '@/commands/_common/context-augmentation-env.ts';
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
+import { isProjectVortexFeature } from '@/commands/integrate/_common/vortex.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { resolveAuth, type ResolvedAuth } from '@/core/host/auth-resolver.ts';
@@ -85,9 +86,10 @@ interface RecordedContextAugmentationConfig {
 }
 
 function isProjectContextAugmentationFeature(feature: InstalledIntegrationFeature): boolean {
-  // Global CAG installs are skipped, so only project-scoped feature entries
-  // can provide passthrough context.
-  return feature.featureId === CONTEXT_AUGMENTATION_FEATURE_ID && feature.scope === 'project';
+  return (
+    isProjectVortexFeature(feature) ||
+    (feature.featureId === CONTEXT_AUGMENTATION_FEATURE_ID && feature.scope === 'project')
+  );
 }
 
 function getOptionalStringAttr(

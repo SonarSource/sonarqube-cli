@@ -25,6 +25,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { hookScriptName, TestHarness } from '../../harness';
 import { findInstalledFeature } from './state-helpers';
 
+const CLAUDE_PROMPT_STDIN_DELAY_MS = 1000;
+
 describe('integrate (bare command)', () => {
   let harness: TestHarness;
 
@@ -95,6 +97,7 @@ describe('integrate (bare command)', () => {
           '\r',
           '\r',
         ],
+        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
       });
       const output = result.stdout + result.stderr;
 
@@ -133,6 +136,7 @@ describe('integrate (bare command)', () => {
           '\r',
           '\r',
         ],
+        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
       });
 
       expect(result.exitCode).toBe(0);
@@ -173,6 +177,7 @@ describe('integrate (bare command)', () => {
           '\r',
           '\r',
         ],
+        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
       });
 
       expect(result.exitCode).toBe(0);

@@ -30,6 +30,7 @@ import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import type { CliState, InstalledIntegrationFeature } from '@/core/state/state.ts';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/commands/integrate/_common/features/context-augmentation-feature';
+import { VORTEX_FEATURE_ID } from '../../../../src/commands/integrate/_common/vortex';
 import { CLAUDE_INTEGRATION_ID } from '../../../../src/commands/integrate/claude/declaration';
 import { COPILOT_INTEGRATION_ID } from '../../../../src/commands/integrate/copilot/declaration';
 import { TestHarness } from '../../harness';
@@ -62,6 +63,8 @@ function appendRecordedCagFeature(
     orgKey: string;
     serverUrl: string;
     repoRoot?: string;
+    /** Agents that deliver CAG through Vortex record the container instead. */
+    featureId?: string;
   },
 ): void {
   let integration = state.integrations.installed.find(
@@ -81,7 +84,7 @@ function appendRecordedCagFeature(
   }
 
   const feature: InstalledIntegrationFeature = {
-    featureId: CONTEXT_AUGMENTATION_FEATURE_ID,
+    featureId: args.featureId ?? CONTEXT_AUGMENTATION_FEATURE_ID,
     scope: 'project',
     targetRoot: args.targetRoot,
     installedByCliVersion: 'integration-test',
@@ -259,6 +262,39 @@ describe('sonar context passthrough', () => {
       const invocation = findInvocation(readInvocations(harness), ['status']);
       expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe(PROJECT_KEY);
       expect(invocation.env.SONAR_CONTEXT_WORKSPACE_ROOT).toBe(canonicalizePath(worktreePath));
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'resolves context from a recorded Vortex feature',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      const serverUrl = server.baseUrl();
+      const stateBuilder = harness
+        .state()
+        .withAuth(serverUrl, 'project-token', ORG_KEY)
+        .withContextAugmentationBinaryInstalled();
+      const state = stateBuilder.build();
+      appendRecordedCagFeature(state, {
+        integrationId: CLAUDE_INTEGRATION_ID,
+        featureId: VORTEX_FEATURE_ID,
+        targetRoot: harness.cwd.path,
+        updatedAt: '2026-03-01T00:00:00.000Z',
+        projectKey: PROJECT_KEY,
+        orgKey: ORG_KEY,
+        serverUrl,
+      });
+      stateBuilder.withRawState(JSON.stringify(state, null, 2));
+
+      const result = await harness.run('context status');
+
+      expect(result.exitCode).toBe(0);
+      const invocation = findInvocation(readInvocations(harness), ['status']);
+      expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe(PROJECT_KEY);
+      expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe(ORG_KEY);
+      expect(invocation.env.SONAR_CONTEXT_URL).toBe(serverUrl);
+      expect(invocation.env.SONAR_CONTEXT_TOKEN).toBe('project-token');
     },
     { timeout: 30000 },
   );

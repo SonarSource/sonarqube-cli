@@ -50,6 +50,7 @@ import {
   expectSkillRendersWithWrapperInvocation,
   findRecordedCagDependency,
   findRecordedCagFeature,
+  findRecordedCagSkillResource,
   seedState,
   STALE_CLI_VERSION,
 } from './_helpers';
@@ -132,9 +133,7 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
     if (!feature) {
       throw new Error('Expected a recorded declarative Claude CAG feature');
     }
-    const resource = feature.feature.resources.find(
-      (entry) => entry.id === 'context-augmentation-skill-file',
-    );
+    const resource = findRecordedCagSkillResource(feature);
     expect(resource).toBeDefined();
     expect(resource?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
     expect(resource?.path).toBe(join(harness.cwd.path, CLAUDE_SKILL_RELATIVE_PATH));

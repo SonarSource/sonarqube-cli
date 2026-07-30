@@ -43,6 +43,9 @@ export const AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT =
 
 export const CONTEXT_AUGMENTATION_FEATURE_BENEFIT = 'enriches AI prompts with SonarQube context';
 
+/** Agentic analysis and context augmentation, installed as one Vortex unit. */
+export const VORTEX_FEATURE_BENEFIT = 'analyzes edits and enriches prompts';
+
 export const MCP_SERVER_FEATURE_BENEFIT = 'gives your AI agent access to SonarQube data';
 
 /**
@@ -72,6 +75,9 @@ export const AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW =
 
 export const CONTEXT_AUGMENTATION_FEATURE_PREVIEW =
   'Enriches AI prompts with SonarQube context: issues, hotspots, and rules for the file at hand.';
+
+export const VORTEX_FEATURE_PREVIEW =
+  'Analyzes the code your agent writes, and enriches its prompts with SonarQube context: issues, hotspots, and rules for the file at hand.';
 
 export const MCP_SERVER_FEATURE_PREVIEW =
   'Gives the agent direct access to your SonarQube project: issues, quality profiles, and rules.';
