@@ -171,10 +171,14 @@ describe('integrate claude — Vortex entitlement', () => {
     { timeout: 30000 },
   );
 
-  it(
-    'skips both when SQAA is over its limit but CAG is not entitled',
-    async () => {
-      const result = await runIntegrateClaude({ sqaa: 'over_consumption', cag: 'not_entitled' });
+  it.each([
+    ['SQAA is over its limit but CAG is not entitled', 'over_consumption', 'not_entitled'],
+    ['CAG is over its limit but SQAA is not entitled', 'not_entitled', 'over_consumption'],
+    ['neither feature is entitled', 'not_entitled', 'not_entitled'],
+  ] as const)(
+    'skips both when %s',
+    async (_, sqaa, cag) => {
+      const result = await runIntegrateClaude({ sqaa, cag });
 
       expect(result.exitCode).toBe(0);
       expect(isSqaaHookInstalled()).toBe(false);
@@ -185,64 +189,26 @@ describe('integrate claude — Vortex entitlement', () => {
     { timeout: 30000 },
   );
 
-  it(
-    'skips both when CAG is over its limit but SQAA is not entitled',
-    async () => {
-      const result = await runIntegrateClaude({ sqaa: 'not_entitled', cag: 'over_consumption' });
-
-      expect(result.exitCode).toBe(0);
-      expect(isSqaaHookInstalled()).toBe(false);
-      expect(isCagInstalled()).toBe(false);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(SQAA_PROMOTION_MESSAGE);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(CAG_NOT_ENTITLED_MESSAGE);
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'skips both when neither feature is entitled',
-    async () => {
-      const result = await runIntegrateClaude({ sqaa: 'not_entitled', cag: 'not_entitled' });
-
-      expect(result.exitCode).toBe(0);
-      expect(isSqaaHookInstalled()).toBe(false);
-      expect(isCagInstalled()).toBe(false);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(SQAA_PROMOTION_MESSAGE);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(CAG_NOT_ENTITLED_MESSAGE);
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'skips both when the SQAA entitlement check fails (endpoint error) even though CAG is entitled',
-    async () => {
-      const result = await runIntegrateClaude({ sqaa: 'check_failed', cag: 'enabled' });
-
-      expect(result.exitCode).toBe(0);
-      expect(isSqaaHookInstalled()).toBe(false);
-      expect(isCagInstalled()).toBe(false);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(CAG_CHECK_FAILED_MESSAGE);
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'skips both when the CAG entitlement check fails (endpoint error) even though SQAA is entitled',
-    async () => {
-      const result = await runIntegrateClaude({ sqaa: 'enabled', cag: 'check_failed' });
-
-      expect(result.exitCode).toBe(0);
-      expect(isSqaaHookInstalled()).toBe(false);
-      expect(isCagInstalled()).toBe(false);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(CAG_CHECK_FAILED_MESSAGE);
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'skips both when one check fails even though the other is over consumption (check_failed wins)',
-    async () => {
-      const result = await runIntegrateClaude({ sqaa: 'over_consumption', cag: 'check_failed' });
+  it.each([
+    [
+      'the SQAA entitlement check fails (endpoint error) even though CAG is entitled',
+      'check_failed',
+      'enabled',
+    ],
+    [
+      'the CAG entitlement check fails (endpoint error) even though SQAA is entitled',
+      'enabled',
+      'check_failed',
+    ],
+    [
+      'one check fails even though the other is over consumption (check_failed wins)',
+      'over_consumption',
+      'check_failed',
+    ],
+  ] as const)(
+    'skips both when %s',
+    async (_, sqaa, cag) => {
+      const result = await runIntegrateClaude({ sqaa, cag });
 
       expect(result.exitCode).toBe(0);
       expect(isSqaaHookInstalled()).toBe(false);

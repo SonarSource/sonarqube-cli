@@ -1653,9 +1653,30 @@ describe('sonar import', () => {
   });
 
   describe('selecting repositories by pattern (--regex)', () => {
-    it(
-      'exits with code 2 when --all is combined with --regex',
-      async () => {
+    it.each([
+      [
+        '--all is combined with --regex',
+        'import --all --regex "^test-"',
+        '--all, --regex cannot be combined',
+      ],
+      [
+        '--repo is combined with --regex',
+        'import --repo my-org/repo-1 --regex "^test-"',
+        '--repo, --regex cannot be combined',
+      ],
+      [
+        '--all, --repo, and --regex are all combined',
+        'import --all --repo my-org/repo-1 --regex "^test-"',
+        '--all, --repo, --regex cannot be combined',
+      ],
+      [
+        '--regex is not a valid regular expression',
+        'import --regex "("',
+        '--regex is not a valid regular expression',
+      ],
+    ])(
+      'exits with code 2 when %s',
+      async (_, command, expectedError) => {
         const server = await harness
           .newFakeServer()
           .withAuthToken('test-token')
@@ -1664,79 +1685,13 @@ describe('sonar import', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import --all --regex "^test-"', {
+        const result = await harness.run(command, {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
         expect(result.exitCode).toBe(2);
         const output = result.stdout + result.stderr;
-        expect(output).toContain('--all, --regex cannot be combined');
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      'exits with code 2 when --repo is combined with --regex',
-      async () => {
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
-          .start();
-        const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token', 'my-org');
-
-        const result = await harness.run('import --repo my-org/repo-1 --regex "^test-"', {
-          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
-        });
-
-        expect(result.exitCode).toBe(2);
-        const output = result.stdout + result.stderr;
-        expect(output).toContain('--repo, --regex cannot be combined');
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      'exits with code 2 when --all, --repo, and --regex are all combined',
-      async () => {
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
-          .start();
-        const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token', 'my-org');
-
-        const result = await harness.run('import --all --repo my-org/repo-1 --regex "^test-"', {
-          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
-        });
-
-        expect(result.exitCode).toBe(2);
-        const output = result.stdout + result.stderr;
-        expect(output).toContain('--all, --repo, --regex cannot be combined');
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      'exits with code 2 when --regex is not a valid regular expression',
-      async () => {
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
-          .start();
-        const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token', 'my-org');
-
-        const result = await harness.run('import --regex "("', {
-          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
-        });
-
-        expect(result.exitCode).toBe(2);
-        const output = result.stdout + result.stderr;
-        expect(output).toContain('--regex is not a valid regular expression');
+        expect(output).toContain(expectedError);
       },
       { timeout: 15000 },
     );
