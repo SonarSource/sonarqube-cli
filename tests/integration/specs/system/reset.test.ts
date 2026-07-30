@@ -703,7 +703,7 @@ describe('system reset --force', () => {
   );
 
   it(
-    'undoes a Codex sonar-sqaa-hook integration and preserves unrelated PostToolUse entries',
+    'undoes a Codex Vortex integration and preserves unrelated PostToolUse entries',
     async () => {
       harness.state().withContextAugmentationBinaryInstalled();
       const testOrg = 'my-org';
@@ -749,6 +749,9 @@ describe('system reset --force', () => {
       expect(
         harness.cwd.file(...CODEX_SQAA_SCRIPT_DIRS, hookScriptName('posttool-sqaa')).exists(),
       ).toBe(true);
+      expect(
+        harness.cwd.file('.agents', 'skills', 'sonar-context-augmentation', 'SKILL.md').exists(),
+      ).toBe(true);
       expect(readState(harness.stateJsonFile.path).integrations.installed.length).toBeGreaterThan(
         0,
       );
@@ -765,6 +768,9 @@ describe('system reset --force', () => {
       expect(readState(harness.stateJsonFile.path).integrations.installed).toHaveLength(0);
       expect(
         harness.cwd.file(...CODEX_SQAA_SCRIPT_DIRS, hookScriptName('posttool-sqaa')).exists(),
+      ).toBe(false);
+      expect(
+        harness.cwd.file('.agents', 'skills', 'sonar-context-augmentation', 'SKILL.md').exists(),
       ).toBe(false);
 
       const hooks = harness.cwd.file('.codex', 'hooks.json').asJson() as {

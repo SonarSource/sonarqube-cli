@@ -21,7 +21,7 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
 
 import * as token from '@/commands/_common/token.ts';
-import * as contextAugmentation from '@/commands/integrate/_common/context-augmentation.ts';
+import * as vortex from '@/commands/integrate/_common/vortex.ts';
 import { integrateCodex } from '@/commands/integrate/codex';
 import * as registry from '@/core/framework/features';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
@@ -62,11 +62,8 @@ describe('integrateCodex', () => {
   let checkComponentSpy: Mock<
     Extract<(typeof SonarQubeClient.prototype)['checkComponent'], (...args: never[]) => unknown>
   >;
-  let resolveContextAugmentationSetupSpy: Mock<
-    Extract<
-      (typeof contextAugmentation)['resolveContextAugmentationSetup'],
-      (...args: never[]) => unknown
-    >
+  let resolveVortexSetupSpy: Mock<
+    Extract<(typeof vortex)['resolveVortexSetup'], (...args: never[]) => unknown>
   >;
 
   beforeEach(() => {
@@ -79,10 +76,7 @@ describe('integrateCodex', () => {
       'hasVortexEntitlement',
     ).mockResolvedValue('not_entitled');
     checkComponentSpy = spyOn(SonarQubeClient.prototype, 'checkComponent').mockResolvedValue(true);
-    resolveContextAugmentationSetupSpy = spyOn(
-      contextAugmentation,
-      'resolveContextAugmentationSetup',
-    ).mockResolvedValue(null);
+    resolveVortexSetupSpy = spyOn(vortex, 'resolveVortexSetup').mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -93,7 +87,7 @@ describe('integrateCodex', () => {
     installIntegrationSpy.mockRestore();
     hasVortexEntitlementSpy.mockRestore();
     checkComponentSpy.mockRestore();
-    resolveContextAugmentationSetupSpy.mockRestore();
+    resolveVortexSetupSpy.mockRestore();
   });
 
   it('aborts when token is invalid', () => {
