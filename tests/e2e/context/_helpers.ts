@@ -32,6 +32,7 @@ import {
   CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID,
 } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
 import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
+import { ANTIGRAVITY_INTEGRATION_ID } from '@/commands/integrate/antigravity/declaration.ts';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import { CODEX_INTEGRATION_ID } from '@/commands/integrate/codex/declaration.ts';
 import { COPILOT_INTEGRATION_ID } from '@/commands/integrate/copilot/declaration.ts';
@@ -81,9 +82,16 @@ export const CURSOR_SKILL_RELATIVE_PATH = join(
   CONTEXT_AUGMENTATION_BINARY_NAME,
   'SKILL.md',
 );
+// Antigravity also reads from the shared `.agents/skills` directory.
+export const ANTIGRAVITY_SKILL_RELATIVE_PATH = join(
+  '.agents',
+  'skills',
+  CONTEXT_AUGMENTATION_BINARY_NAME,
+  'SKILL.md',
+);
 
 export interface SeedSkillOptions {
-  agentId: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+  agentId: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor' | 'antigravity';
   projectRoot: string;
   global?: boolean;
   version?: string;
@@ -130,7 +138,8 @@ function seedDeclarativeContextAugmentationFeature(state: CliState, skill: SeedS
   const isVortexContainer =
     skill.agentId === 'claude-code' ||
     skill.agentId === 'copilot-cli' ||
-    skill.agentId === 'cursor';
+    skill.agentId === 'cursor' ||
+    skill.agentId === 'antigravity';
   const resource = {
     id: CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
     resourceType: 'whole-file' as const,
@@ -187,6 +196,8 @@ function resolveIntegrationId(agentId: SeedSkillOptions['agentId']): string {
       return CODEX_INTEGRATION_ID;
     case 'cursor':
       return CURSOR_INTEGRATION_ID;
+    case 'antigravity':
+      return ANTIGRAVITY_INTEGRATION_ID;
   }
 }
 
@@ -200,6 +211,8 @@ function resolveSkillRelativePath(agentId: SeedSkillOptions['agentId']): string 
       return CODEX_SKILL_RELATIVE_PATH;
     case 'cursor':
       return CURSOR_SKILL_RELATIVE_PATH;
+    case 'antigravity':
+      return ANTIGRAVITY_SKILL_RELATIVE_PATH;
   }
 }
 

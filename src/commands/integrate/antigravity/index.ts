@@ -24,13 +24,9 @@ import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 
 import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint.ts';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';
-import {
-  buildRecordedIntegrationAttrs,
-  isContextAugmentationSkipped,
-  resolveContextAugmentationSetup,
-} from '../_common/context-augmentation.ts';
-import { resolveSqaaSetup } from '../_common/sqaa-entitlement.ts';
+import { buildRecordedIntegrationAttrs } from '../_common/context-augmentation.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
+import { resolveVortexSetup } from '../_common/vortex.ts';
 import { supportedIntegrations } from '../index.ts';
 import { ANTIGRAVITY_INTEGRATION_ID, type AntigravityIntegrationOptions } from './declaration.ts';
 import { detectGlobalSecretsHook } from './hooks.ts';
@@ -49,21 +45,11 @@ export async function integrateAntigravity(
 
   const ctx = await displayAgentIntegratePrelude('Antigravity', 'antigravity', options, auth);
 
-  const sqaaEligible = await resolveSqaaSetup({
-    serverURL: ctx.serverUrl,
-    token: ctx.token,
-    organization: ctx.organization,
+  const vortex = await resolveVortexSetup({
+    auth,
+    projectKey: ctx.projectKey,
     isGlobal: ctx.isGlobal,
   });
-  const includeSqaa = sqaaEligible && Boolean(ctx.projectKey);
-
-  const contextAugmentation = isContextAugmentationSkipped()
-    ? null
-    : await resolveContextAugmentationSetup({
-        auth,
-        projectKey: ctx.projectKey,
-        isGlobal: ctx.isGlobal,
-      });
 
   const { installRoot: targetRoot, installScope: scope } = resolveAntigravityInstallTarget(
     ctx.isGlobal,
@@ -76,8 +62,7 @@ export async function integrateAntigravity(
     ...options,
     projectRoot: ctx.project.rootDir,
     globalSecretsHookExists,
-    installSqaaInstructions: includeSqaa,
-    installContextAugmentation: contextAugmentation !== null,
+    installVortex: vortex !== null,
   };
 
   const attrs = await buildRecordedIntegrationAttrs({
@@ -85,7 +70,7 @@ export async function integrateAntigravity(
     projectRoot: ctx.project.rootDir,
     serverUrl: ctx.serverUrl,
     orgKey: ctx.organization,
-    contextAugmentation,
+    contextAugmentation: vortex,
   });
 
   await installIntegration({
