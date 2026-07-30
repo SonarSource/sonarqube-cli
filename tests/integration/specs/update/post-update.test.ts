@@ -389,6 +389,37 @@ describe('post-update migration', () => {
   );
 
   it(
+    'migrates pre-unification Cursor SQAA and Context Augmentation records into one Vortex container',
+    async () => {
+      seedPreUnificationFeatures('cursor', [
+        SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+        CONTEXT_AUGMENTATION_FEATURE_ID,
+      ]);
+      harness.state().withContextAugmentationBinaryInstalled();
+
+      const result = await harness.run('--version');
+
+      expect(result.exitCode).toBe(0);
+      const state = harness.stateJsonFile.asJson() as CliState;
+      const cursor = state.integrations.installed.find(
+        (integration) => integration.integrationId === 'cursor',
+      );
+      expect(cursor?.features.map((feature) => feature.featureId)).toEqual([VORTEX_FEATURE_ID]);
+      expect(cursor?.features[0].subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
+        SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+        CONTEXT_AUGMENTATION_FEATURE_ID,
+      ]);
+      expect(harness.cwd.file('.cursor', 'rules', 'sonar-agentic-analysis.mdc').asText()).toContain(
+        '# SonarQube Agentic Analysis protocol',
+      );
+      expect(
+        harness.cwd.file('.agents', 'skills', 'sonar-context-augmentation', 'SKILL.md').exists(),
+      ).toBe(true);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'restores deprecated feature records when their Vortex successor fails to apply',
     async () => {
       const deprecatedFeatureIds = [

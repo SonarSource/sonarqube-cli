@@ -153,9 +153,7 @@ describe('sonar integrate <agent> — CAG pre-flight skip paths (real CLI, fake 
     });
 
     expect(result.exitCode, result.stderr).toBe(0);
-    expect(result.stdout).toContain(
-      'Skipping Vortex context augmentation: not available on SonarQube Server.',
-    );
+    expect(result.stdout).toContain('Vortex is available on SonarQube Cloud.');
     expect(existsSync(cagBinaryPath), 'no CAG download on SonarQube Server').toBe(false);
     expect(findRecordedCagFeature(harness.stateJsonFile.asJson() as CliState)).toBeUndefined();
   });
