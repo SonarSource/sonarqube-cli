@@ -39,7 +39,7 @@ import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 // spyOn can patch individual exports per-test and restore them in afterEach —
 // without permanently replacing any function for other test files in this process.
 const releases = await import('@/core/host/install/sonarsource-releases.ts');
-void mock.module('@/core/host/sonarsource-releases.ts', () => ({
+void mock.module('@/core/host/install/sonarsource-releases.ts', () => ({
   ...releases,
 }));
 
