@@ -43,12 +43,12 @@ import {
 } from '../_common/feature-constants.ts';
 import { createContextAugmentationSubfeature } from '../_common/features/context-augmentation-feature.ts';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
-import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates.ts';
-import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
 import {
   createSqaaInstructionsSnippet,
   createSqaaInstructionsSubfeature,
-} from '../_common/sqaa-entitlement.ts';
+} from '../_common/features/sqaa-instructions-feature.ts';
+import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates.ts';
+import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
 import { getSecretPreToolTemplateUnix, getSecretPreToolTemplateWindows } from './hook-templates.ts';
