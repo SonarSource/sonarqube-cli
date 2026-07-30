@@ -25,11 +25,11 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { SonarQubeClient } from '@/core/server/client.ts';
+import { resolveFromEndpoint } from '@/core/server/sonarcloud-region.ts';
 
 import { getTelemetryDir } from '../config-constants.ts';
 import type { AuthConnection, ServerType } from '../state/state.ts';
 import type { ResolvedAuth } from './auth-resolver.ts';
-import { resolveFromEndpoint } from './sonarcloud-region.ts';
 
 export interface TelemetryIdentity {
   user_uuid: string | null;

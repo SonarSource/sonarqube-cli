@@ -39,9 +39,10 @@ export { tryLoadState } from './state-repository.ts';
 import { type AuthConnection, type CliState, type CloudRegion } from './state.ts';
 
 export function authMatchesConnection(auth: ResolvedAuth, conn: AuthConnection): boolean {
-  if (auth.serverUrl !== conn.serverUrl) return false;
-  if (auth.connectionType === 'cloud' && auth.orgKey !== conn.orgKey) return false;
-  return true;
+  return (
+    auth.serverUrl === conn.serverUrl &&
+    (auth.connectionType !== 'cloud' || auth.orgKey === conn.orgKey)
+  );
 }
 
 /**

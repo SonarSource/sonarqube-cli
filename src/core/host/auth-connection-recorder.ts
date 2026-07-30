@@ -20,6 +20,8 @@
 
 // Records a resolved auth into state.auth.connections like `sonar auth login` does, minus saveToken().
 
+import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
+
 import type { AuthConnection } from '../state/state.ts';
 import {
   addOrUpdateConnection,
@@ -32,8 +34,8 @@ import {
   identityFromConnection,
   needsIdentityEnrichment,
   resolveTelemetryIdentity,
+  type TelemetryIdentity,
 } from './identity-fetch.ts';
-import { cloudRegionFromUrl } from './sonarcloud-region.ts';
 
 export interface RecordConnectionOptions {
   /** Only browser-OAuth logins carry a token name — env-var auth never does. */
@@ -51,16 +53,16 @@ export async function recordConnectionFromAuth(
 ): Promise<AuthConnection> {
   const state = loadState();
   const active = getActiveConnection(state);
-  const matches = active !== undefined && authMatchesConnection(auth, active);
-  const seedConn = matches ? active : undefined;
-  const seedIdentity = identityFromConnection(seedConn);
+  const seedConnection =
+    active !== undefined && authMatchesConnection(auth, active) ? active : undefined;
+  const seedIdentity = identityFromConnection(seedConnection);
 
   if (
     !options.force &&
-    seedConn &&
-    !needsIdentityEnrichment(seedIdentity, auth.connectionType, seedConn)
+    seedConnection &&
+    !needsIdentityEnrichment(seedIdentity, auth.connectionType, seedConnection)
   ) {
-    return seedConn;
+    return seedConnection;
   }
 
   const connection = addOrUpdateConnection(state, auth.serverUrl, auth.connectionType, {
@@ -71,13 +73,22 @@ export async function recordConnectionFromAuth(
   });
 
   const identity = await resolveTelemetryIdentity(auth, seedIdentity);
+  applyIdentityToConnection(connection, auth, identity);
+
+  saveState(state);
+  return connection;
+}
+
+/** Applies fetched identity fields to the connection, per connection type. */
+function applyIdentityToConnection(
+  connection: AuthConnection,
+  auth: ResolvedAuth,
+  identity: TelemetryIdentity,
+): void {
   connection.userUuid = identity.user_uuid;
   if (auth.connectionType === 'cloud' && auth.orgKey) {
     connection.organizationUuidV4 = identity.organization_uuid_v4;
   } else if (auth.connectionType === 'on-premise') {
     connection.sqsInstallationId = identity.sqs_installation_id;
   }
-
-  saveState(state);
-  return connection;
 }

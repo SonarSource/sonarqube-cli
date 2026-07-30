@@ -29,13 +29,13 @@ import { getActiveConnection } from '../state/state-manager.ts';
 import { loadState } from '../state/state-repository.ts';
 import { recordConnectionFromAuth } from './auth-connection-recorder.ts';
 
-// Re-exported for backward compatibility (moved to sonarcloud-region.ts to avoid an import cycle).
+// Re-exported for backward compatibility (lives in server/sonarcloud-region.ts to avoid an import cycle).
 export {
   cloudRegionFromUrl,
   isSonarQubeCloud,
   normalizeCloudV2Endpoint,
   resolveFromEndpoint,
-} from './sonarcloud-region.ts';
+} from '@/core/server/sonarcloud-region.ts';
 
 export const ENV_TOKEN = 'SONARQUBE_CLI_TOKEN';
 export const ENV_SERVER = 'SONARQUBE_CLI_SERVER';
@@ -69,15 +69,25 @@ let envAuthRecordAttempted = false;
 export async function resolveAuth(options: ResolveAuthOptions = {}): Promise<ResolvedAuth | null> {
   const envAuth = resolveFromEnv(options);
   if (envAuth) {
-    if (!envAuthRecordAttempted) {
-      envAuthRecordAttempted = true;
-      await recordConnectionFromAuth(envAuth, { envOnly: true }).catch((err: unknown) => {
-        logger.debug(`Failed to record env-var connection in state: ${(err as Error).message}`);
-      });
-    }
+    await recordEnvAuthConnectionOnce(envAuth);
     return envAuth;
   }
   return await resolveFromState();
+}
+
+/**
+ * Records an env-var-based auth into state.auth.connections, at most once per
+ * process — env vars are fixed for the process lifetime, so repeat attempts
+ * within the same run would only redo the same work.
+ */
+async function recordEnvAuthConnectionOnce(envAuth: ResolvedAuth): Promise<void> {
+  if (envAuthRecordAttempted) {
+    return;
+  }
+  envAuthRecordAttempted = true;
+  await recordConnectionFromAuth(envAuth, { envOnly: true }).catch((err: unknown) => {
+    logger.debug(`Failed to record env-var connection in state: ${(err as Error).message}`);
+  });
 }
 
 /** Test-only: resets the per-process env-auth record guard between test cases. */

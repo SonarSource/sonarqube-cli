@@ -28,9 +28,9 @@ import {
   getToken as getKeystoreToken,
   saveToken,
 } from '@/core/host/keychain.ts';
-import { cloudRegionFromUrl } from '@/core/host/sonarcloud-region.ts';
 import { discoverOrganization, discoverServer } from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
+import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
 import {

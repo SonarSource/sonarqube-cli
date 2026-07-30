@@ -78,7 +78,13 @@ export interface AuthConnection {
   organizationUuidV4?: string | null;
   /** Installation ID of the SonarQube Server (fetched at auth time, SQS only) */
   sqsInstallationId?: string | null;
-  /** True when there is no keychain entry behind this connection. */
+  /**
+   * True when this connection was recorded from env-var auth (see
+   * `recordConnectionFromAuth`), not `sonar auth login`. `resolveAuth()` always
+   * prefers env vars when set, so an env-recorded connection is never the one
+   * actually used to fetch a keychain token — even if a keychain entry happens
+   * to exist for the same server/org from an earlier login.
+   */
   envOnly?: boolean;
 }
 
