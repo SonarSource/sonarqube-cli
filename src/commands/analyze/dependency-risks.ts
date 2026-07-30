@@ -24,6 +24,7 @@ import { DefaultScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import { DefaultSecretsInstaller } from '@/core/host/install/secrets.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
+import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import {
   emitScaAnalysisTelemetry,
   SCA_CALLER_COMMANDS,
@@ -69,6 +70,7 @@ export async function analyzeDependencyRisks(
   }
 
   const projectKey = await resolveProjectKey(options.project, auth);
+  noteProject(auth, projectKey);
 
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
   const orchestrator = new ScaScanOrchestrator(

@@ -29,6 +29,7 @@ import { canonicalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import { timed } from '@/core/observability/timed.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
+import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import {
   emitSqaaHookFailureTelemetry,
   SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
@@ -76,6 +77,8 @@ export async function agentPostToolUse(options: AgentPostToolUseOptions): Promis
 
   const projectKey = options.project;
   if (!projectKey) return;
+
+  noteProject(auth, projectKey);
 
   const canonicalPath = canonicalizePath(filePath);
   const normalizedPath = toRelativePosixPath(canonicalPath);

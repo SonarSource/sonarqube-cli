@@ -33,6 +33,7 @@ import { SonarQubeClient } from '@/core/server/client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import type { SonarQubeIssue } from '@/core/server/types.ts';
+import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { blank, info, multiSelectPrompt, print, success, withSpinner } from '@/core/ui';
 import { cyan, dim, red, yellow } from '@/core/ui/colors.ts';
 
@@ -78,6 +79,7 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
   if (!(await confirmEntitlement(client, orgKey))) return;
 
   const projectKey = await resolveProjectKey(options, auth);
+  noteProject(auth, projectKey);
   const selectedKeys =
     suppliedIssueKeys ?? (await selectIssuesInteractively(client, orgKey, projectKey));
   if (selectedKeys === null) return;

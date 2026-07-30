@@ -38,7 +38,7 @@ import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
-import { readAnalysisEvents } from '../../../_common/telemetry-helpers';
+import { readAnalysisEvents, readCommandEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
 import { commitFile, git, initGitRepo, stageFile } from '../hook/git-test-helpers';
 import {
@@ -1172,6 +1172,45 @@ describe('analyze agentic — analysis telemetry', () => {
     },
     { timeout: 15000 },
   );
+
+  it(
+    'resolves and records a non-null project_uuid on CliCommandExecuted',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .withProject(TEST_PROJECT)
+        .start();
+
+      // Deliberately do NOT set TELEMETRY_FLUSH_MODE_ENV: it makes storeEvent() (which owns
+      // CliCommandExecuted) no-op, since it also doubles as the guard that stops the detached
+      // flush worker from recursively emitting its own CliCommandExecuted event.
+      harness
+        .state()
+        .withTelemetryEnabled()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+
+      const result = await harness.run('analyze agentic --file src/index.ts');
+
+      expect(result.exitCode).toBe(0);
+      const [analysisEvent] = readAnalysisEvents(harness.sonarUserHome.path);
+      expect(analysisEvent.event_payload.analyzer).toBe('sqaa');
+
+      // project_uuid lives only on CliCommandExecuted; the analysis event above is joined to
+      // it on the shared invocation_id.
+      const [commandEvent] = readCommandEvents(harness.sonarUserHome.path);
+      expect(commandEvent.event_payload.command).toBe('analyze');
+      expect(commandEvent.event_payload.invocation_id).toBe(
+        analysisEvent.event_payload.invocation_id,
+      );
+      expect(commandEvent.event_payload.project_uuid).toBe(`AY${TEST_PROJECT}legacy`);
+    },
+    { timeout: 15000 },
+  );
 });
 
 describe('sonar analyze — analysis telemetry', () => {
@@ -1259,6 +1298,71 @@ describe('sonar analyze — analysis telemetry', () => {
       expect(sqaaEvents).toHaveLength(1);
       expect(secretsEvents[0].event_payload.caller_command).toBe(SECRETS_CALLER_COMMANDS.analyze);
       expect(sqaaEvents[0].event_payload.caller_command).toBe(SQAA_ANALYZE_CALLER_COMMAND);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'records a non-null project_uuid on CliCommandExecuted for bare analyze --file (text)',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .withProject(TEST_PROJECT)
+        .start();
+
+      // Do NOT enable flush mode: TELEMETRY_FLUSH_MODE_ENV no-ops storeEvent(), which owns
+      // CliCommandExecuted, so the command event would never be written.
+      harness
+        .state()
+        .withTelemetryEnabled()
+        .withSecretsBinaryInstalled()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+
+      const result = await harness.run('analyze --file src/index.ts');
+
+      expect(result.exitCode).toBe(0);
+      const [analysisEvent] = readCompletedEventsForAnalyzer('sqaa');
+
+      const [commandEvent] = readCommandEvents(harness.sonarUserHome.path);
+      expect(commandEvent.event_payload.invocation_id).toBe(
+        analysisEvent.event_payload.invocation_id,
+      );
+      expect(commandEvent.event_payload.command).toBe('analyze');
+      expect(commandEvent.event_payload.project_uuid).toBe(`AY${TEST_PROJECT}legacy`);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'records a non-null project_uuid on CliCommandExecuted for bare analyze --format json --file',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .withProject(TEST_PROJECT)
+        .start();
+
+      harness
+        .state()
+        .withTelemetryEnabled()
+        .withSecretsBinaryInstalled()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+
+      const result = await harness.run('analyze --format json --file src/index.ts');
+
+      expect(result.exitCode).toBe(0);
+      const [commandEvent] = readCommandEvents(harness.sonarUserHome.path);
+      expect(commandEvent.event_payload.command).toBe('analyze');
+      expect(commandEvent.event_payload.project_uuid).toBe(`AY${TEST_PROJECT}legacy`);
     },
     { timeout: 30000 },
   );

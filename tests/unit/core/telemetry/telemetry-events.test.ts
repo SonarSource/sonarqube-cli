@@ -150,6 +150,7 @@ let loadStateSpy: ReturnType<typeof spyOn>;
 let getConnectionSpy: ReturnType<typeof spyOn>;
 let getUserIdSpy: ReturnType<typeof spyOn>;
 let detectAgentSpy: ReturnType<typeof spyOn>;
+let defaultFetchSpy: ReturnType<typeof spyOn>;
 let savedDoNotTrack: string | undefined;
 
 beforeEach(async () => {
@@ -163,6 +164,12 @@ beforeEach(async () => {
   getConnectionSpy = spyOn(stateManager, 'getActiveConnection').mockReturnValue(undefined);
   getUserIdSpy = spyOn(userModule, 'getOrCreateUserId').mockReturnValue('machine-id');
   detectAgentSpy = spyOn(agentDetector, 'detectCallerAgent').mockReturnValue(null);
+  // Emitting an event with a cloud/server auth but no seeded connection triggers
+  // identity enrichment, which otherwise hits the real network. Stub fetch by
+  // default so no test in this file depends on network reachability (a real call
+  // fails fast locally but hangs to a 5s timeout in CI). Tests that assert on the
+  // telemetry HTTP flush install their own fetch spy, which shadows this one.
+  defaultFetchSpy = mockFetch();
 });
 
 afterEach(async () => {
@@ -176,6 +183,7 @@ afterEach(async () => {
   getConnectionSpy.mockRestore();
   getUserIdSpy.mockRestore();
   detectAgentSpy.mockRestore();
+  defaultFetchSpy.mockRestore();
 
   await rm(testSonarUserHome, { recursive: true, force: true });
   if (previousSonarUserHome === undefined) {
@@ -335,6 +343,7 @@ describe('emitCommandExecuted()', () => {
       subcommand: 'login',
       result: 'success',
       distribution: DISTRIBUTION,
+      project_uuid: null,
     });
 
     const [event] = readCommandEvents(testSonarUserHome);
@@ -346,6 +355,21 @@ describe('emitCommandExecuted()', () => {
     // Identity base is merged in.
     expect(event.event_payload.cli_installation_id).toBe('install-id');
     expect(event.event_payload.machine_id).toBe('machine-id');
+    // No project resolved for this command.
+    expect(event.event_payload.project_uuid).toBeNull();
+  });
+
+  it('carries a resolved project_uuid through for opt-in commands', async () => {
+    await emitCommandExecuted({
+      command: 'analyze',
+      subcommand: 'dependency-risks',
+      result: 'success',
+      distribution: DISTRIBUTION,
+      project_uuid: 'AYmy-projectlegacy',
+    });
+
+    const [event] = readCommandEvents(testSonarUserHome);
+    expect(event.event_payload.project_uuid).toBe('AYmy-projectlegacy');
   });
 
   it('does not append when telemetry is disabled', async () => {
@@ -356,6 +380,7 @@ describe('emitCommandExecuted()', () => {
       subcommand: null,
       result: 'success',
       distribution: DISTRIBUTION,
+      project_uuid: null,
     });
 
     expect(readCommandEvents(testSonarUserHome)).toHaveLength(0);
@@ -371,6 +396,7 @@ describe('emitCommandExecuted()', () => {
       subcommand: null,
       result: 'success',
       distribution: DISTRIBUTION,
+      project_uuid: null,
     });
 
     expect(readCommandEvents(testSonarUserHome)).toHaveLength(0);

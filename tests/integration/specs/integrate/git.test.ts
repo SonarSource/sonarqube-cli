@@ -31,6 +31,7 @@ import {
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
 import { ISOLATED_CLI_SPAWN_ENV } from '../../../_common/isolated-cli-env.js';
+import { readCommandEvents } from '../../../_common/telemetry-helpers.ts';
 import { TestHarness } from '../../harness';
 import { getCliBinaryPath } from '../../harness/cli-runner.js';
 import { buildHomeEnv, IS_WINDOWS } from '../../harness/platform';
@@ -613,6 +614,37 @@ describe('integrate git (native hooks)', () => {
       expect(feature.attrs).toMatchObject({ projectKey: 'my-project' });
       expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
       expectSubfeatureHasDependency(feature, 'pre-commit-dependency-risks', 'sca-scanner-cli');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'records project_uuid on CliCommandExecuted for a project-scoped install',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(INTEGRATION_TEST_TOKEN)
+        .withProject('my-project')
+        .start();
+      // Do NOT enable flush mode: TELEMETRY_FLUSH_MODE_ENV no-ops storeEvent(), which owns
+      // CliCommandExecuted, so the command event would never be written.
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl())
+        .withKeychainToken(server.baseUrl(), INTEGRATION_TEST_TOKEN)
+        .withSecretsBinaryInstalled()
+        .withTelemetryEnabled();
+      initGitRepo(harness);
+
+      const result = await harness.run(
+        'integrate git --hook pre-commit -p my-project --non-interactive',
+      );
+
+      expect(result.exitCode).toBe(0);
+      const [commandEvent] = readCommandEvents(harness.sonarUserHome.path);
+      expect(commandEvent.event_payload.command).toBe('integrate');
+      expect(commandEvent.event_payload.subcommand).toBe('git');
+      expect(commandEvent.event_payload.project_uuid).toBe('AYmy-projectlegacy');
     },
     { timeout: 15000 },
   );

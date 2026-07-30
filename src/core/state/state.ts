@@ -542,6 +542,18 @@ export interface CommandExecutedEventPayload extends TelemetryEventIdentityPaylo
   result: 'success' | 'failure';
   /** Distribution channel of the running CLI binary. */
   distribution: Distribution;
+  /**
+   * SonarQube's legacy internal project identifier (`projects.uuid`, resolved via
+   * `GET /api/navigation/component`) — NOT a real RFC-4122 UUID.
+   *
+   * The only event carrying it: `CliAnalysisCompleted` and `CliIntegrationConfigured` are
+   * joined to this event on the shared `invocation_id`. Populated for every command that
+   * resolves a project key (see `noteProject` in telemetry/project-uuid.ts); `null` for
+   * commands that never resolve one, for `sonar integrate --global`, and when resolution
+   * failed or was skipped. Stripped from the wire by the existing null-stripping replacer,
+   * same as `user_uuid`/`organization_uuid_v4`.
+   */
+  project_uuid: string | null;
 }
 
 /** Full CliCommandExecuted event written to telemetry-events.ndjson. */

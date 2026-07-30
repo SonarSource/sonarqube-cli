@@ -25,6 +25,7 @@
 import { InvalidOptionError } from '@/core/command-error.ts';
 import { resolveAuth } from '@/core/host/auth-resolver.ts';
 import { spawnProcess } from '@/core/process/process.ts';
+import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
 import { runDepRisksStage } from './git-pre-commit-dependency-risks.ts';
 import { runCommitSecretsStage } from './git-pre-commit-secrets.ts';
@@ -50,6 +51,11 @@ export async function gitPreCommit(
   if (!auth) {
     throw new MissingDependenciesError(HOOK_INACTIVE_UNAUTHENTICATED);
   }
+
+  // Noted before the stages, not inside the dependency-risks one, so a `-p` passed without
+  // --dependency-risks is still reported. In practice integrate only bakes `-p` into the hook
+  // alongside --dependency-risks, so a secrets-only pre-commit correctly reports null.
+  noteProject(auth, options.project);
 
   await runCommitSecretsStage(stagedFiles, auth);
 

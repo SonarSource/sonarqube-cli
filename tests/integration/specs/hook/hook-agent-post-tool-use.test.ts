@@ -24,6 +24,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { readAnalysisEvents, readCommandEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
 import { parseSqaaRequestBody, sqaaRequestFirstFilePath } from '../analyze/sqaa-request-helpers';
 
@@ -174,6 +175,43 @@ describe('sonar hook claude-post-tool-use', () => {
       expect(body.files).toHaveLength(1);
       expect(body.files?.[0]?.content).toContain('const x');
       expect(body.analysisDepth).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'resolves and records a non-null project_uuid on CliCommandExecuted',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .withProject(TEST_PROJECT)
+        .start();
+      // Deliberately do NOT set TELEMETRY_FLUSH_MODE_ENV: it makes storeEvent() (which owns
+      // CliCommandExecuted) no-op, since it also doubles as the guard that stops the detached
+      // flush worker from recursively emitting its own CliCommandExecuted event.
+      harness.state().withTelemetryEnabled();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      harness.cwd.writeFile('src/main.ts', 'const x = 1;');
+      const filePath = join(harness.cwd.path, 'src/main.ts');
+
+      const result = await harness.run(`hook claude-post-tool-use --project ${TEST_PROJECT}`, {
+        stdin: postToolUseStdin(filePath),
+      });
+
+      expect(result.exitCode).toBe(0);
+      const [analysisEvent] = readAnalysisEvents(harness.sonarUserHome.path);
+      expect(analysisEvent.event_payload.analyzer).toBe('sqaa');
+
+      // project_uuid lives only on CliCommandExecuted; the analysis event above is joined to
+      // it on the shared invocation_id.
+      const [commandEvent] = readCommandEvents(harness.sonarUserHome.path);
+      expect(commandEvent.event_payload.command).toBe('hook');
+      expect(commandEvent.event_payload.invocation_id).toBe(
+        analysisEvent.event_payload.invocation_id,
+      );
+      expect(commandEvent.event_payload.project_uuid).toBe(`AY${TEST_PROJECT}legacy`);
     },
     { timeout: 15000 },
   );

@@ -26,6 +26,7 @@ import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
+import { readCommandEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
 
 const VALID_TOKEN = 'integration-test-token';
@@ -973,4 +974,45 @@ describe('sonar remediate', () => {
       { timeout: 15000 },
     );
   });
+
+  it(
+    'resolves and records a non-null project_uuid on CliCommandExecuted',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withProject(TEST_PROJECT)
+        .start();
+      // Deliberately do NOT set TELEMETRY_FLUSH_MODE_ENV: it makes storeEvent() (which owns
+      // CliCommandExecuted) no-op, since it also doubles as the guard that stops the detached
+      // flush worker from recursively emitting its own CliCommandExecuted event.
+      harness.state().withTelemetryEnabled();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      const result = await harness.run(`remediate --project ${TEST_PROJECT} --issues k1,k2`, {
+        extraEnv: { SONARQUBE_CLI_MOCK_TTY: '' },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const [commandEvent] = readCommandEvents(harness.sonarUserHome.path);
+      expect(commandEvent.event_payload.command).toBe('remediate');
+      expect(commandEvent.event_payload.project_uuid).toBe(`AY${TEST_PROJECT}legacy`);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'leaves project_uuid null on CliCommandExecuted when the command fails before resolving a project',
+    async () => {
+      harness.state().withTelemetryEnabled();
+
+      const result = await harness.run('remediate --issues k1,k2');
+
+      expect(result.exitCode).toBe(1);
+      const [commandEvent] = readCommandEvents(harness.sonarUserHome.path);
+      expect(commandEvent.event_payload.result).toBe('failure');
+      expect(commandEvent.event_payload.project_uuid).toBeNull();
+    },
+    { timeout: 15000 },
+  );
 });

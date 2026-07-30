@@ -60,6 +60,7 @@ function makeLegacyCommandEvent(command: string): StoredCommandExecutedEvent {
       subcommand: null,
       result: 'success',
       distribution: DISTRIBUTION,
+      project_uuid: null,
     },
   };
 }

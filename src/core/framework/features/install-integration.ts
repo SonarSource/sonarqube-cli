@@ -30,6 +30,7 @@ import type {
 } from '@/core/state/state.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
 import { emitIntegrationConfiguredTelemetry } from '@/core/telemetry/integrate-telemetry.ts';
+import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { text, warn } from '@/core/ui';
 
 import { renderCompletionSummary } from './completion-summary.ts';
@@ -142,6 +143,12 @@ export async function installIntegration<TOptions>({
 
     renderCompletionSummary(integration, installedFeatures, removedFeatures);
 
+    // Publish the project for `project_uuid` on CliCommandExecuted. Project scope only:
+    // `--global` installs have no project key recorded, which is why they report null.
+    if (scope === 'project' && auth) {
+      noteProject(auth, projectKeyFromAttrs(attrs));
+    }
+
     const stateSaved = saveInstalledFeatures(state);
     if (stateSaved) {
       await emitIntegrationConfiguredTelemetry({
@@ -185,6 +192,19 @@ export function makeContext(
     attrs,
     resolvedDependencies: new Map(),
   };
+}
+
+/**
+ * Project key for telemetry `project_uuid`. Read from the invocation attrs rather than the
+ * installed features — every application inherits these verbatim, so the value is the same,
+ * but it also survives a run that only removes features. The non-empty check is what makes a
+ * secrets-only `integrate git` (which records an explicit `null`) report no project.
+ */
+function projectKeyFromAttrs(
+  attrs: Record<string, IntegrationStateAttribute> | undefined,
+): string | undefined {
+  const value = attrs?.projectKey;
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 /**
