@@ -23,9 +23,8 @@
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 
 import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint.ts';
-import { finalizeAgentInstallDeprecated } from '../_common/agent-integrate-postlude.ts';
+import { finalizeAgentInstall } from '../_common/agent-integrate-postlude.ts';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';
-import { resolveSqaaSetup } from '../_common/sqaa-entitlement.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { CODEX_INTEGRATION_ID, type CodexIntegrationOptions } from './declaration.ts';
 
@@ -42,21 +41,10 @@ export async function integrateCodex(
 
   const ctx = await displayAgentIntegratePrelude('Codex', 'codex', options, auth);
 
-  // SQAA is always project-scoped. resolveSqaaSetup returns false (and surfaces
-  // the consistent skip notice when the org is entitled) on a global install, so
-  // here we only install the PostToolUse hook for a project install with a known key.
-  const sqaaEligible = await resolveSqaaSetup({
-    serverURL: ctx.serverUrl,
-    token: ctx.token,
-    organization: ctx.organization,
-    isGlobal: ctx.isGlobal,
-  });
-
-  await finalizeAgentInstallDeprecated<CodexIntegrationOptions>({
+  await finalizeAgentInstall<CodexIntegrationOptions>({
     integrationId: CODEX_INTEGRATION_ID,
     context: ctx,
     options,
     auth,
-    featureOptions: { installSqaaHook: sqaaEligible && Boolean(ctx.projectKey) },
   });
 }

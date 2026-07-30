@@ -27,6 +27,9 @@ import { isAbsolute } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/commands/integrate/_common/features/context-augmentation-feature';
+import { SQAA_HOOK_FEATURE_ID } from '../../../../src/commands/integrate/_common/sqaa-entitlement';
+import { VORTEX_FEATURE_ID } from '../../../../src/commands/integrate/_common/vortex';
 import { codexIntegration } from '../../../../src/commands/integrate/codex/declaration';
 import {
   expectAgentPromptHint,
@@ -39,7 +42,7 @@ import {
   normalizePath,
   TestHarness,
 } from '../../harness';
-import { findInstalledFeature } from './state-helpers';
+import { findInstalledFeature, findInstalledSubfeature } from './state-helpers';
 
 const PROMPT_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-secrets', 'build-scripts'];
 const SQAA_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-sqaa', 'build-scripts'];
@@ -432,7 +435,7 @@ describe('integrate codex', () => {
     const TEST_PROJECT = 'my-project';
 
     it(
-      'writes the secrets-on-read section to <repo>/AGENTS.md at project scope (no SQAA without entitlement)',
+      'writes the secrets-on-read section to <repo>/AGENTS.md at project scope (no Vortex without entitlement)',
       async () => {
         const result = await harness.run('integrate codex --non-interactive');
 
@@ -448,7 +451,7 @@ describe('integrate codex', () => {
     );
 
     it(
-      'installs PostToolUse SQAA hook on apply_patch and omits AGENTS.md SQAA protocol when entitled',
+      'installs PostToolUse SQAA hook on apply_patch and omits AGENTS.md SQAA protocol when Vortex entitled',
       async () => {
         harness.state().withContextAugmentationBinaryInstalled();
         const server = await harness
@@ -495,7 +498,7 @@ describe('integrate codex', () => {
     );
 
     it(
-      'does not install PostToolUse SQAA hook when the org has no entitlement',
+      'does not install PostToolUse SQAA hook when the org has no Vortex entitlement',
       async () => {
         const result = await harness.run('integrate codex --non-interactive');
 
@@ -509,7 +512,7 @@ describe('integrate codex', () => {
     );
 
     it(
-      're-running does not duplicate the PostToolUse SQAA entry when entitled',
+      're-running does not duplicate the PostToolUse SQAA entry when Vortex entitled',
       async () => {
         harness.state().withContextAugmentationBinaryInstalled();
         const server = await harness
@@ -600,7 +603,7 @@ describe('integrate codex', () => {
     );
 
     it(
-      'writes ~/.codex/AGENTS.md (and nothing project-side) at global scope without SQAA entitlement, showing the promotion',
+      'writes ~/.codex/AGENTS.md (and nothing project-side) at global scope without Vortex entitlement, showing the promotion',
       async () => {
         const result = await harness.run('integrate codex -g --non-interactive');
 
@@ -610,7 +613,7 @@ describe('integrate codex', () => {
         expect(body).toContain(SECRETS_HEADING);
         expect(body).not.toContain(SQAA_HEADING);
         const output = `${result.stdout}\n${result.stderr}`;
-        expect(output).toContain('Vortex agentic analysis is available on SonarQube Cloud');
+        expect(output).toContain('Vortex is available on SonarQube Cloud');
       },
       { timeout: 30000 },
     );
@@ -644,7 +647,7 @@ describe('integrate codex', () => {
         expect(globalBody).not.toContain(SQAA_HEADING);
 
         const output = `${result.stdout}\n${result.stderr}`;
-        expect(output).toContain('Skipping Vortex agentic analysis');
+        expect(output).toContain('Skipping Vortex');
         expect(output).toContain('not supported with --global');
       },
       { timeout: 30000 },
@@ -653,10 +656,10 @@ describe('integrate codex', () => {
 
   describe('interactive feature selection', () => {
     it(
-      'prompts per feature, installs accepted features, and shows the SQAA promotion when not entitled',
+      'prompts per feature, installs accepted features, and shows the Vortex promotion when not entitled',
       async () => {
-        // Default beforeEach is on-premise auth with no org, so SQAA and
-        // Context Augmentation are not available. The three remaining features
+        // Default beforeEach is on-premise auth with no org, so Vortex is not
+        // available. The three remaining features
         // (secrets hook, secrets instructions, MCP) each ask. The leading '\r'
         // selects project scope before the per-feature prompts.
         const result = await harness.run('integrate codex', {
@@ -669,10 +672,10 @@ describe('integrate codex', () => {
         expect(output).toContain('Install secret scanning hooks?');
         expect(output).toContain('Install secrets-on-read instructions?');
         expect(output).toContain('Install MCP server?');
-        // SQAA is not eligible, so it is skipped without a prompt but the shared
+        // Vortex is not eligible, so it is skipped without a prompt but the shared
         // promotion message is surfaced.
-        expect(output).not.toContain('Install Vortex agentic analysis hook?');
-        expect(output).toContain('Vortex agentic analysis is available on SonarQube Cloud');
+        expect(output).not.toContain('Install Vortex?');
+        expect(output).toContain('Vortex is available on SonarQube Cloud');
         // Accepted features are installed on disk.
         expect(
           harness.cwd.file(...PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')).exists(),
@@ -687,7 +690,7 @@ describe('integrate codex', () => {
         expect(findCodexFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
         expect(findCodexFeature(harness, 'secrets-instructions')).toBeDefined();
         expect(findCodexFeature(harness, 'mcp-server')).toBeDefined();
-        expect(findCodexFeature(harness, 'sonar-sqaa-hook')).toBeUndefined();
+        expect(findCodexFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
       },
       { timeout: 30000 },
     );
@@ -773,7 +776,7 @@ describe('integrate codex', () => {
     );
 
     it(
-      'asks before installing the SQAA hook when the org is entitled and a project key is known',
+      'asks before installing Vortex when the org is entitled and a project key is known',
       async () => {
         const testOrg = 'my-org';
         const testProject = 'my-project';
@@ -798,11 +801,21 @@ describe('integrate codex', () => {
 
         expect(result.exitCode).toBe(0);
         const output = `${result.stdout}\n${result.stderr}`;
-        expect(output).toContain('Install Vortex agentic analysis hook?');
+        expect(output).toContain('Install Vortex?');
         expect(
           harness.cwd.file(...SQAA_SCRIPT_DIRS, hookScriptName('posttool-sqaa')).exists(),
         ).toBe(true);
-        expect(findCodexFeature(harness, 'sonar-sqaa-hook')).toBeDefined();
+        expect(
+          findInstalledSubfeature(harness, 'codex', VORTEX_FEATURE_ID, SQAA_HOOK_FEATURE_ID),
+        ).toBeDefined();
+        expect(
+          findInstalledSubfeature(
+            harness,
+            'codex',
+            VORTEX_FEATURE_ID,
+            CONTEXT_AUGMENTATION_FEATURE_ID,
+          ),
+        ).toBeUndefined();
       },
       { timeout: 30000 },
     );

@@ -61,3 +61,15 @@ export function findInstalledFeature(
       feature.featureId === featureId && (scope === undefined || feature.scope === scope),
   );
 }
+
+export function findInstalledSubfeature(
+  harness: TestHarness,
+  integrationId: string,
+  featureId: string,
+  subfeatureId: string,
+  scope?: string,
+): { featureId: string } | undefined {
+  return findInstalledFeature(harness, integrationId, featureId, scope)?.subfeatures?.find(
+    (subfeature) => subfeature.featureId === subfeatureId,
+  );
+}

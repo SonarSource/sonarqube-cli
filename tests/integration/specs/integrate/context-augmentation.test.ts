@@ -1014,7 +1014,9 @@ describe('integrate codex — Context Augmentation', () => {
       const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
       expect(nonProbe).toEqual([]);
       expect(harness.cwd.file(CODEX_SKILL_PATH).exists()).toBe(false);
-      expect(result.stderr).toContain('not available for your organization');
+      expect(`${result.stdout}\n${result.stderr}`).toContain(
+        'Vortex is available on SonarQube Cloud',
+      );
     },
     { timeout: 30000 },
   );
@@ -1061,15 +1063,13 @@ describe('integrate <agent> --global — Context Augmentation', () => {
     await harness.dispose();
   });
 
-  // Claude and Copilot skip CAG as part of the whole Vortex feature, so their
-  // warning covers Vortex; the other agents still skip CAG on its own.
+  // Unified agents skip CAG as part of the whole Vortex feature.
   const VORTEX_GLOBAL_SKIP = 'Skipping Vortex: not supported with --global';
-  const CAG_GLOBAL_SKIP = 'Skipping Vortex context augmentation: not supported with --global';
 
   it.each([
     ['claude', 'integrate claude -g --non-interactive', VORTEX_GLOBAL_SKIP],
     ['copilot', 'integrate copilot -g --non-interactive', VORTEX_GLOBAL_SKIP],
-    ['codex', 'integrate codex -g --non-interactive', CAG_GLOBAL_SKIP],
+    ['codex', 'integrate codex -g --non-interactive', VORTEX_GLOBAL_SKIP],
   ])(
     'skips CAG entirely on "integrate %s --global" and warns when the org is entitled',
     async (_agent, command, expectedWarning) => {
@@ -1104,7 +1104,7 @@ describe('integrate <agent> --global — Context Augmentation', () => {
   it.each([
     ['claude', 'integrate claude -g --non-interactive', VORTEX_GLOBAL_SKIP],
     ['copilot', 'integrate copilot -g --non-interactive', VORTEX_GLOBAL_SKIP],
-    ['codex', 'integrate codex -g --non-interactive', CAG_GLOBAL_SKIP],
+    ['codex', 'integrate codex -g --non-interactive', VORTEX_GLOBAL_SKIP],
   ])(
     'skips CAG entirely on "integrate %s --global" without warning when the org is not entitled',
     async (_agent, command, unexpectedWarning) => {

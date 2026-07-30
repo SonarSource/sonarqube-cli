@@ -139,7 +139,8 @@ function seedDeclarativeContextAugmentationFeature(state: CliState, skill: SeedS
     skill.agentId === 'claude-code' ||
     skill.agentId === 'copilot-cli' ||
     skill.agentId === 'cursor' ||
-    skill.agentId === 'antigravity';
+    skill.agentId === 'antigravity' ||
+    skill.agentId === 'codex';
   const resource = {
     id: CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
     resourceType: 'whole-file' as const,

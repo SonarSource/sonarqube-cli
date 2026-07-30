@@ -452,6 +452,32 @@ describe('post-update migration', () => {
   );
 
   it(
+    'migrates pre-unification Codex SQAA and Context Augmentation records into one Vortex container',
+    async () => {
+      seedPreUnificationFeatures('codex', [SQAA_HOOK_FEATURE_ID, CONTEXT_AUGMENTATION_FEATURE_ID]);
+      harness.state().withContextAugmentationBinaryInstalled();
+
+      const result = await harness.run('--version');
+
+      expect(result.exitCode).toBe(0);
+      const state = harness.stateJsonFile.asJson() as CliState;
+      const codex = state.integrations.installed.find(
+        (integration) => integration.integrationId === 'codex',
+      );
+      expect(codex?.features.map((feature) => feature.featureId)).toEqual([VORTEX_FEATURE_ID]);
+      expect(codex?.features[0].subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
+        SQAA_HOOK_FEATURE_ID,
+        CONTEXT_AUGMENTATION_FEATURE_ID,
+      ]);
+      expect(harness.cwd.file('.codex', 'hooks.json').asJson().hooks?.PostToolUse).toBeDefined();
+      expect(
+        harness.cwd.file('.agents', 'skills', 'sonar-context-augmentation', 'SKILL.md').exists(),
+      ).toBe(true);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'restores deprecated feature records when their Vortex successor fails to apply',
     async () => {
       const deprecatedFeatureIds = [
