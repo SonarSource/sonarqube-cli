@@ -39,6 +39,7 @@ const MCP_JSON_DIRS = ['.cursor', 'mcp.json'];
 const SQAA_RULE_DIRS = ['.cursor', 'rules', 'sonar-agentic-analysis.mdc'];
 const HOOK_BUILD_SCRIPT_DIRS = ['.cursor', 'hooks', 'sonar-secrets', 'build-scripts'];
 const HOOKS_JSON_DIRS = ['.cursor', 'hooks.json'];
+const CURSOR_PROMPT_STDIN_DELAY_MS = 1000;
 
 interface CursorMcpFile {
   mcpServers?: Record<string, { command?: string; args?: string[] }>;
@@ -469,11 +470,11 @@ describe('integrate cursor', () => {
     );
   });
 
-  describe('SonarQube Agentic Analysis instructions', () => {
+  describe('Vortex entitlement and SQAA instructions', () => {
     const TEST_ORG = 'my-org';
     const TEST_PROJECT = 'my-project';
 
-    // Stand up a fake SonarQube Cloud server with SQAA entitlement for the test
+    // Stand up a fake SonarQube Cloud server with Vortex entitlement for the test
     // org, swap the harness auth to a cloud connection, and return env vars that
     // point the CLI's hard-coded SonarCloud URL constants at the fake server.
     async function setupCloudWithEntitlement(
@@ -517,31 +518,28 @@ describe('integrate cursor', () => {
         expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT}`);
         expect(body).toContain('--file');
 
-        expect(
-          findInstalledFeature(harness, 'cursor', 'sqaa-instructions', 'project'),
-        ).toBeDefined();
+        expect(findInstalledFeature(harness, 'cursor', 'vortex', 'project')).toBeDefined();
       },
       { timeout: 30000 },
     );
 
     it(
-      'prompts to install SQAA and writes the rule when accepted (entitled org, interactive)',
+      'prompts to install Vortex and writes the rule when accepted (entitled org, interactive)',
       async () => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
         const result = await harness.run(`integrate cursor --project ${TEST_PROJECT}`, {
           extraEnv: { ...extraEnv, __SQCLI_DEV_SKIP_CAG: '1' },
           stdinChunks: ['\r', '\r', '\r', '\r'],
+          stdinChunkDelayMs: CURSOR_PROMPT_STDIN_DELAY_MS,
         });
 
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;
-        expect(output).toContain('Install Vortex agentic analysis instructions?');
+        expect(output).toContain('Install Vortex?');
         const body = harness.cwd.file(...SQAA_RULE_DIRS).asText();
         expect(body).toContain('# SonarQube Agentic Analysis protocol');
-        expect(
-          findInstalledFeature(harness, 'cursor', 'sqaa-instructions', 'project'),
-        ).toBeDefined();
+        expect(findInstalledFeature(harness, 'cursor', 'vortex', 'project')).toBeDefined();
       },
       { timeout: 30000 },
     );
@@ -564,7 +562,12 @@ describe('integrate cursor', () => {
               __SQCLI_DEV_SKIP_CAG: '1',
               ...(isAgent ? { CURSOR_AGENT: '1' } : {}),
             },
-            ...(isInteractive ? { stdinChunks: ['\r', '\r', '\r', '\r'] } : {}),
+            ...(isInteractive
+              ? {
+                  stdinChunks: ['\r', '\r', '\r', '\r'],
+                  stdinChunkDelayMs: CURSOR_PROMPT_STDIN_DELAY_MS,
+                }
+              : {}),
           },
         );
 
@@ -596,7 +599,7 @@ describe('integrate cursor', () => {
         expect(`${result.stdout}\n${result.stderr}`).toContain('not supported with --global');
         // Never written project-side on a global install.
         expect(harness.cwd.file(...SQAA_RULE_DIRS).exists()).toBe(false);
-        expect(findInstalledFeature(harness, 'cursor', 'sqaa-instructions')).toBeUndefined();
+        expect(findInstalledFeature(harness, 'cursor', 'vortex')).toBeUndefined();
       },
       { timeout: 30000 },
     );
@@ -610,13 +613,13 @@ describe('integrate cursor', () => {
 
         expect(result.exitCode).toBe(0);
         expect(harness.cwd.file(...SQAA_RULE_DIRS).exists()).toBe(false);
-        expect(findInstalledFeature(harness, 'cursor', 'sqaa-instructions')).toBeUndefined();
+        expect(findInstalledFeature(harness, 'cursor', 'vortex')).toBeUndefined();
       },
       { timeout: 30000 },
     );
 
     it(
-      'skips SQAA and shows the promotion message when the org is not entitled',
+      'skips Vortex and shows the promotion message when the org is not entitled',
       async () => {
         const { extraEnv } = await setupCloudWithEntitlement({
           allowed: false,
@@ -630,10 +633,10 @@ describe('integrate cursor', () => {
 
         expect(result.exitCode).toBe(0);
         expect(`${result.stdout}\n${result.stderr}`).toContain(
-          'Vortex agentic analysis is available on SonarQube Cloud',
+          'Vortex is available on SonarQube Cloud',
         );
         expect(harness.cwd.file(...SQAA_RULE_DIRS).exists()).toBe(false);
-        expect(findInstalledFeature(harness, 'cursor', 'sqaa-instructions')).toBeUndefined();
+        expect(findInstalledFeature(harness, 'cursor', 'vortex')).toBeUndefined();
       },
       { timeout: 30000 },
     );

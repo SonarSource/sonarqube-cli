@@ -127,7 +127,10 @@ function seedDeclarativeContextAugmentationFeature(state: CliState, skill: SeedS
     state.integrations.installed.push(integration);
   }
 
-  const isVortexContainer = skill.agentId === 'claude-code';
+  const isVortexContainer =
+    skill.agentId === 'claude-code' ||
+    skill.agentId === 'copilot-cli' ||
+    skill.agentId === 'cursor';
   const resource = {
     id: CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
     resourceType: 'whole-file' as const,

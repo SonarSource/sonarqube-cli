@@ -34,22 +34,22 @@ import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.t
 
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs.ts';
 import {
-  AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,
-  AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
   MCP_SERVER_FEATURE_BENEFIT,
   MCP_SERVER_FEATURE_PREVIEW,
   SECRETS_COMBINED_FEATURE_BENEFIT,
   SECRETS_COMBINED_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
-import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature.ts';
+import { createContextAugmentationSubfeature } from '../_common/features/context-augmentation-feature.ts';
 import {
   resolveAgentHooksConfigPath,
   secretsScanningExample,
 } from '../_common/features/sonar-secrets-hooks-feature.ts';
+import { createSqaaInstructionsSubfeature } from '../_common/features/sqaa-instructions-feature.ts';
 import { resolveAgentHookScriptPath } from '../_common/hooks.ts';
 import { buildSqaaSectionBody } from '../_common/instructions-templates.ts';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
+import { createVortexFeature } from '../_common/vortex.ts';
 import {
   getSecretPreFileReadTemplateUnix,
   getSecretPreFileReadTemplateWindows,
@@ -80,14 +80,6 @@ const SQAA_RULE_MARKER = '# SonarQube Agentic Analysis protocol';
 
 export interface CursorIntegrationOptions extends IntegrateAgentOptions {
   globalSecretsHookExists?: boolean;
-  /**
-   * Write the Vortex agentic analysis rule (`.cursor/rules`) instructing the
-   * agent to run `sonar analyze agentic` after edits. Cursor's `afterFileEdit`
-   * hook cannot inject analysis results back into the conversation, so SQAA is
-   * delivered as an always-applied rule rather than a hook (project scope).
-   */
-  installSqaaInstructions?: boolean;
-  installContextAugmentation?: boolean;
 }
 
 function resolveCursorMcpConfigPath(context: IntegrationContext): string {
@@ -219,15 +211,8 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
         }),
       ],
     },
-    {
-      id: 'sqaa-instructions',
-      displayName: 'Vortex agentic analysis instructions',
-      benefitDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,
-      previewDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
-      shouldInstall: ({ options }) =>
-        options.installSqaaInstructions === true ? askUser() : skip(),
-      scope: 'project',
-      resources: [
+    createVortexFeature<CursorIntegrationOptions>([
+      createSqaaInstructionsSubfeature([
         wholeFile({
           id: 'sqaa-instructions-rule',
           displayName: 'Cursor Vortex agentic analysis rule',
@@ -235,8 +220,11 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
           content: buildCursorSqaaRule,
           managedMarker: SQAA_RULE_MARKER,
         }),
-      ],
-    },
+      ]),
+      createContextAugmentationSubfeature<CursorIntegrationOptions>({
+        targetPath: resolveCursorCagSkillPath,
+      }),
+    ]),
     {
       id: 'mcp-server',
       displayName: 'MCP server',
@@ -254,8 +242,5 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
         }),
       ],
     },
-    createContextAugmentationFeature<CursorIntegrationOptions>({
-      targetPath: resolveCursorCagSkillPath,
-    }),
   ],
 };

@@ -24,9 +24,8 @@ import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { warn } from '@/core/ui';
 
 import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint.ts';
-import { finalizeAgentInstallDeprecated } from '../_common/agent-integrate-postlude.ts';
+import { finalizeAgentInstall } from '../_common/agent-integrate-postlude.ts';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';
-import { resolveSqaaSetup } from '../_common/sqaa-entitlement.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { CURSOR_INTEGRATION_ID, type CursorIntegrationOptions } from './declaration.ts';
 
@@ -49,23 +48,10 @@ export async function integrateCursor(
     );
   }
 
-  // SQAA is always project-scoped. resolveSqaaSetup owns the user-facing
-  // messaging (promotion when not entitled, "not supported with --global" on an
-  // entitled global install); its result decides whether the always-applied
-  // SonarQube Agentic Analysis rule is written. Context Augmentation is resolved
-  // inside finalizeAgentInstallDeprecated.
-  const sqaaEligible = await resolveSqaaSetup({
-    serverURL: ctx.serverUrl,
-    token: ctx.token,
-    organization: ctx.organization,
-    isGlobal: ctx.isGlobal,
-  });
-
-  await finalizeAgentInstallDeprecated<CursorIntegrationOptions>({
+  await finalizeAgentInstall<CursorIntegrationOptions>({
     integrationId: CURSOR_INTEGRATION_ID,
     context: ctx,
     options,
     auth,
-    featureOptions: { installSqaaInstructions: sqaaEligible && Boolean(ctx.projectKey) },
   });
 }
