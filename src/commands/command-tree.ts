@@ -21,7 +21,7 @@
 import { type Command, Help, InvalidArgumentError, Option } from 'commander';
 
 import { CommandFailedError } from '@/core/command-error.ts';
-import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
+import { CURRENT_DISTRIBUTION } from '@/core/host/environment/distribution.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
 import { GENERIC_HTTP_METHODS } from '@/core/server/client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
@@ -39,8 +39,7 @@ import {
 import { blank, error, warn } from '@/core/ui';
 
 import { version as VERSION } from '../../package.json';
-import { parseInteger } from './_common/parsing.ts';
-import { SonarCommand } from './_common/sonar-command.ts';
+import { parseInteger } from '../core/ui/parsing.ts';
 import { analyzeAll, type AnalyzeAllOptions } from './analyze/analyze-all.ts';
 import type { Severity } from './analyze/dependency-risk-helpers/sca-scanner.ts';
 import { SEVERITIES } from './analyze/dependency-risk-helpers/view-model/build/severity.ts';
@@ -98,6 +97,7 @@ import { listProjects, type ListProjectsOptions } from './list/projects.ts';
 import { remediate, type RemediateOptions } from './remediate';
 import { getBanner, getCustomRootHelp } from './root-help.ts';
 import { runMcp } from './run/mcp.ts';
+import { SonarCommand } from './sonar-command.ts';
 import { systemReset, type SystemResetOptions } from './system/reset.ts';
 import { systemStatus, type SystemStatusOptions } from './system/status.ts';
 import { updateVersion, type UpdateVersionOptions } from './update';

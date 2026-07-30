@@ -20,11 +20,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import * as token from '@/commands/_common/token.ts';
 import {
   printAgentPreflightSummary,
   printGitPreflightSummary,
 } from '@/commands/integrate/_common/preflight-summary.ts';
+import * as token from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import * as processLib from '@/core/process/process.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';

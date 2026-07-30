@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { detectPlatform } from '@/core/host/platform-detector.ts';
+import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 
 describe('platform-detector', () => {
   describe('detectPlatform', () => {

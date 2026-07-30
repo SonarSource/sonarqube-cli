@@ -20,7 +20,7 @@
 
 import { randomUUID } from 'node:crypto';
 
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { SqaaIssue } from '@/core/server/client.ts';
 
 import type { FileResult, RunTally } from '../../commands/analyze/sqaa-analysis.ts';

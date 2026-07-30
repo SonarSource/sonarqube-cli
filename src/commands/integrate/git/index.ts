@@ -23,10 +23,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { GLOBAL_HOOKS_DIR } from '@/core/config-constants.ts';
 import { installIntegration } from '@/core/framework/features';
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { findGitRoot } from '@/core/host/git/discover.ts';
 import { GitRepo, resolveGitHooksDir } from '@/core/host/git/hooks.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
@@ -34,7 +34,7 @@ import { discoverProject } from '@/core/project-info.ts';
 import { blank, confirmPrompt, info, intro, phase, phaseItem, text, warn } from '@/core/ui';
 import { yellow } from '@/core/ui/colors.ts';
 
-import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint.ts';
+import { printAgentNonInteractiveAlternativeHint } from '../../../core/ui/components/agent-prompt-hint.ts';
 import { resolveIntegrateScope } from '../_common/integrate-scope.ts';
 import { printGitPreflightSummary } from '../_common/preflight-summary.ts';
 import { supportedIntegrations } from '../index.ts';

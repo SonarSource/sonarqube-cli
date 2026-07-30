@@ -23,7 +23,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as readline from 'node:readline';
 
-import { isSonarQubeCloud } from '@/core/host/auth-resolver.ts';
+import { isSonarQubeCloud } from '@/core/auth/auth-resolver.ts';
 import { openBrowser } from '@/core/host/browser.ts';
 import { startLoopbackServer } from '@/core/host/loopback-server.ts';
 import logger from '@/core/observability/logger.ts';

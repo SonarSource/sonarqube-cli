@@ -24,7 +24,7 @@ import { readFileSync } from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/host/auth-resolver.ts';
+import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/auth/auth-resolver.ts';
 import { generateKeychainAccount } from '@/core/host/keychain.ts';
 
 import { TestHarness } from '../../harness';

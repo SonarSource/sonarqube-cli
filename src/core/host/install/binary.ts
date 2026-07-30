@@ -25,8 +25,8 @@ import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { BIN_DIR } from '@/core/config-constants.ts';
+import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildPlatformSuffix, type PlatformInfo } from '@/core/host/install-types.ts';
-import { detectPlatform } from '@/core/host/platform-detector.ts';
 import {
   buildDownloadUrl,
   downloadBinary,

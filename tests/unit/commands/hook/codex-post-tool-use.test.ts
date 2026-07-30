@@ -20,7 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import * as authResolver from '@/core/host/auth-resolver.ts';
+import * as authResolver from '@/core/auth/auth-resolver.ts';
 import * as sqaaTelemetry from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 import {
   SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,

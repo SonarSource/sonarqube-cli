@@ -20,8 +20,8 @@
 
 import { describe, expect, it, mock, spyOn } from 'bun:test';
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import type { SecretsInstaller } from '@/core/host/install/secrets.ts';
 import type { SonarQubeClient } from '@/core/server/client.ts';
 import type { SettingsValue } from '@/core/server/settings-value.ts';

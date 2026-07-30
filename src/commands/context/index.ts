@@ -20,12 +20,12 @@
 
 import { spawn } from 'node:child_process';
 
-import { buildContextAugmentationEnv } from '@/commands/_common/context-augmentation-env.ts';
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
 import { isProjectVortexFeature } from '@/commands/integrate/_common/vortex.ts';
+import { resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
-import { resolveAuth, type ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
 import { resolveContextWorkspaceRoot } from '@/core/host/git/worktree.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
 import { getToken } from '@/core/host/keychain.ts';

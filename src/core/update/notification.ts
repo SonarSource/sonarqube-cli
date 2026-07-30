@@ -39,7 +39,7 @@ export type UpdateNotificationCondition = (opts: Record<string, unknown>) => boo
  * Owns the per-command opt-in registry for the post-command "new version
  * available" stderr notice, plus the eligibility/suppression checks and the
  * actual throttled version check. There is no shared singleton here: the root
- * `SonarCommand` (commands/_common/sonar-command.ts) owns one instance and
+ * `SonarCommand` (commands/sonar-command.ts) owns one instance and
  * propagates it to every subcommand, so `showUpdateNotification()` can call
  * `register()` on it without this module depending on that class.
  */

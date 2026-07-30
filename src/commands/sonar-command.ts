@@ -23,9 +23,9 @@
 import type { CommandOptions } from 'commander';
 import { Command } from 'commander';
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { CliError, CommandFailedError, remediationHintFor } from '@/core/command-error.ts';
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
-import { resolveAuth } from '@/core/host/auth-resolver.ts';
 import logger from '@/core/observability/logger.ts';
 import { blank, error, print } from '@/core/ui';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';

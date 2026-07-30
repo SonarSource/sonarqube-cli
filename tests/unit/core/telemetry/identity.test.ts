@@ -32,9 +32,9 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import * as authResolver from '@/core/auth/auth-resolver.ts';
 import { ENV_SONAR_USER_HOME, getTelemetryDir } from '@/core/config-constants.ts';
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
-import * as authResolver from '@/core/host/auth-resolver.ts';
 import { resolveTelemetryIdentity } from '@/core/host/identity-fetch.ts';
 import type { AuthConnection } from '@/core/state/state.ts';
 import {

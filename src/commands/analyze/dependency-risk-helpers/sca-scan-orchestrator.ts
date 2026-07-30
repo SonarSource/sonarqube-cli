@@ -21,8 +21,8 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { SCA_SCANNER_CACHE_DIR } from '@/core/config-constants.ts';
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import type { ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import type { SecretsInstaller } from '@/core/host/install/secrets.ts';
 import logger, { getLogLevelConfig } from '@/core/observability/logger.ts';
@@ -34,7 +34,7 @@ import {
 } from '@/core/telemetry/sca-analysis-telemetry.ts';
 import { withSpinner } from '@/core/ui';
 
-import { assertScaAvailable } from '../../_common/sca-availability.ts';
+import { assertScaAvailable } from '../../../core/server/sca-availability.ts';
 import { parseAnalysisProperties } from './analysis-properties.ts';
 import { preScanManifestsForSecrets } from './manifest-secrets-guard.ts';
 import { type AnalyzeProjectResponse, ScaScannerRunner } from './sca-scanner.ts';

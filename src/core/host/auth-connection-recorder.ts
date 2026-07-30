@@ -20,6 +20,7 @@
 
 // Records a resolved auth into state.auth.connections like `sonar auth login` does, minus saveToken().
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 
 import type { AuthConnection } from '../state/state.ts';
@@ -29,7 +30,6 @@ import {
   getActiveConnection,
 } from '../state/state-manager.ts';
 import { loadState, saveState } from '../state/state-repository.ts';
-import type { ResolvedAuth } from './auth-resolver.ts';
 import {
   identityFromConnection,
   needsIdentityEnrichment,

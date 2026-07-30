@@ -24,7 +24,7 @@ import type { PhaseItem } from '@/core/ui';
 import { info, phase, print, success, text, textPrompt, warn } from '@/core/ui';
 
 import { version as VERSION } from '../../../package.json';
-import { printAgentNonInteractiveAlternativeHint } from '../_common/agent-prompt-hint.ts';
+import { printAgentNonInteractiveAlternativeHint } from '../../core/ui/components/agent-prompt-hint.ts';
 import { supportedIntegrations } from '../integrate';
 import { purgeAuth } from './reset-auth.ts';
 import { removeBinaries } from './reset-binaries.ts';

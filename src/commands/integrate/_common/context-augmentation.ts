@@ -20,12 +20,12 @@
 
 import { spawn } from 'node:child_process';
 
-import { buildContextAugmentationEnv } from '@/commands/_common/context-augmentation-env.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
 import { resolveRecordedRepoRoot } from '@/core/host/git/worktree.ts';
-import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
 import logger from '@/core/observability/logger.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 import { discreetSuccess, type OutputChannel, print, text, warn, withSpinner } from '@/core/ui';

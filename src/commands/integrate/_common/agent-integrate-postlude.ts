@@ -23,8 +23,8 @@
 // agent-specific feature flags, resolve Vortex, assemble the integration
 // options and recorded attrs, and run the install.
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { installIntegration } from '@/core/framework/features';
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 
 import { supportedIntegrations } from '../index.ts';
 import {

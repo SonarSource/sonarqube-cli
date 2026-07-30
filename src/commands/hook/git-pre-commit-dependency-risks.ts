@@ -24,8 +24,8 @@
 // missing, scanner failure), and blocks the commit only when risks matching the
 // configured filter are found.
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import {
   resolveScaScannerBinaryPath,
   ScaScannerNoopInstaller,

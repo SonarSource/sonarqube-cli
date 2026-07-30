@@ -27,7 +27,11 @@ import { SonarQubeClient } from '@/core/server/client.ts';
 import type { PhaseItem, StepStatus } from '@/core/ui';
 import { info, outro, phase, phaseItem, text } from '@/core/ui';
 
-import { checkTokenStatus, type TokenCheckResult, type TokenStatus } from '../../_common/token.ts';
+import {
+  checkTokenStatus,
+  type TokenCheckResult,
+  type TokenStatus,
+} from '../../../core/auth/token.ts';
 
 export interface AgentPreflightSummaryOptions {
   serverUrl: string;

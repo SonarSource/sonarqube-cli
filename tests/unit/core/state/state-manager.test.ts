@@ -30,7 +30,7 @@ import { join } from 'node:path';
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { AuthConnection } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import {

@@ -22,8 +22,8 @@
 
 import { buildSqaaJsonReport } from '@/commands/analyze/sqaa.ts';
 import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display.ts';
+import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { AGENTIC_PACK_URL } from '@/core/config-constants.ts';
-import { resolveAuth } from '@/core/host/auth-resolver.ts';
 import logger from '@/core/observability/logger.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';

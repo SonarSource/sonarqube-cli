@@ -20,7 +20,7 @@
 
 // Tool detector - checks presence and availability of system tools
 
-import { spawnProcess } from '../process/process.ts';
+import { spawnProcess } from '../../process/process.ts';
 import { isWindows } from './platform-detector.ts';
 
 const CONTAINER_RUNTIMES = ['docker', 'podman', 'nerdctl'] as const;

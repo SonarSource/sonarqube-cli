@@ -29,12 +29,13 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { runMcp } from '@/commands/run/mcp.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '@/core/config-constants.ts';
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import type { ProxyGroup, ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
 import type { ClientCertConfig } from '@/core/host/connectivity/types.ts';
 import * as pkcs12Module from '@/core/host/crypto/pkcs12.ts';
+import * as toolDetector from '@/core/host/environment/tool-detector.ts';
 import {
   clientCertCachePath,
   getMcpContainerCommand,
@@ -43,7 +44,6 @@ import {
   resolveMcpContainerCommand,
 } from '@/core/host/mcp/mcp-helper.ts';
 import { createRedactedUrl } from '@/core/host/redacted-url.ts';
-import * as toolDetector from '@/core/host/tool-detector.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import * as projectInfo from '@/core/project-info.ts';
 

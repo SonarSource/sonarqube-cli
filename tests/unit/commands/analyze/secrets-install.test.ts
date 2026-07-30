@@ -26,9 +26,9 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
+import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
-import { detectPlatform } from '@/core/host/platform-detector.ts';
-import { SONAR_SECRETS_VERSION } from '@/core/host/signatures.ts';
+import { SONAR_SECRETS_VERSION } from '@/core/host/install/signatures.ts';
 import * as processLib from '@/core/process/process.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';

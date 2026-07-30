@@ -20,15 +20,15 @@
 
 // Auth and project-key resolution for SQAA commands.
 
-import { printAgentNonInteractiveAlternativeHint } from '@/commands/_common/agent-prompt-hint.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { selectRecordedFeatureForDir } from '@/core/host/recorded-feature-resolver.ts';
 import logger from '@/core/observability/logger.ts';
 import type { InstalledIntegrationFeature, IntegrationStateAttribute } from '@/core/state/state.ts';
 import { loadState } from '@/core/state/state-repository.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { blank, confirmPrompt, text, warn } from '@/core/ui';
+import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 
 import { SQAA_HOOK_FEATURE_ID } from '../integrate/_common/features/sqaa-instructions-feature.ts';
 import { isProjectVortexFeature } from '../integrate/_common/vortex.ts';

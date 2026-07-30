@@ -20,7 +20,10 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { resolveDistribution, resolveDistributionConfig } from '@/core/host/distribution.ts';
+import {
+  resolveDistribution,
+  resolveDistributionConfig,
+} from '@/core/host/environment/distribution.ts';
 
 describe('distribution', () => {
   it('defaults to standalone when no distribution is provided', () => {

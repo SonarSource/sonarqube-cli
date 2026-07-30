@@ -56,9 +56,9 @@ void mock.module('node:child_process', () => ({
 }));
 
 // Mock platform-detector so both Unix and Windows branches are reachable on any OS.
-const platformDetector = await import('@/core/host/platform-detector.ts');
+const platformDetector = await import('@/core/host/environment/platform-detector.ts');
 const isWindowsMock = mock(() => false);
-void mock.module('@/core/host/platform-detector.js', () => ({
+void mock.module('@/core/host/environment/platform-detector.ts', () => ({
   ...platformDetector,
   isWindows: isWindowsMock,
 }));

@@ -29,14 +29,14 @@ import { SQAA_HOOK_FEATURE_ID } from '@/commands/integrate/_common/features/sqaa
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import type { IntegrationDeclaration } from '@/core/framework/features';
 import { recordInstalledFeature } from '@/core/framework/features/installation-recorder.ts';
+import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { type BinarySpec, buildLocalBinaryName } from '@/core/host/install/binary.ts';
 import { buildLocalCagBinaryName } from '@/core/host/install/context-augmentation.ts';
 import { SCA_SCANNER_SPEC } from '@/core/host/install/sca-scanner.ts';
 import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
 import { generateKeychainAccount } from '@/core/host/keychain.ts';
-import { detectPlatform } from '@/core/host/platform-detector.ts';
-import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
 import { buildDownloadUrl } from '@/core/host/sonarsource-releases.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import type {

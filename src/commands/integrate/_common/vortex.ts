@@ -18,10 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
 import type { FeatureContainer, SubfeatureDeclaration } from '@/core/framework/features';
 import { askUser, skip } from '@/core/framework/features';
-import { isSonarQubeCloud, type ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
 import { info, warn } from '@/core/ui';

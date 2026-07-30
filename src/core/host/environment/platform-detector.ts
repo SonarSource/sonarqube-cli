@@ -22,7 +22,7 @@
 
 import { arch, platform } from 'node:os';
 
-import type { PlatformInfo } from './install-types.ts';
+import type { PlatformInfo } from '../install-types.ts';
 
 const OS_MAP: Record<string, string> = {
   darwin: 'macos',

@@ -25,14 +25,14 @@ import {
   removeBinary,
   resolveBinaryPath,
 } from '@/core/host/install/binary.ts';
-import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from '@/core/host/install-types.ts';
 import {
   SCA_SCANNER_CLI_SIGNATURES,
   SCA_SCANNER_CLI_VERSION,
   SONAR_SECRETS_SIGNATURES,
   SONAR_SECRETS_VERSION,
   SONARSOURCE_PUBLIC_KEY,
-} from '@/core/host/signatures.ts';
+} from '@/core/host/install/signatures.ts';
+import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from '@/core/host/install-types.ts';
 
 import type {
   DependencyInstallContext,

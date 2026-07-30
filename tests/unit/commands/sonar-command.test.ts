@@ -22,13 +22,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
+import { SonarCommand } from '@/commands/sonar-command.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import * as authResolver from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
-import * as authResolver from '@/core/host/auth-resolver.ts';
 import { RateLimitError, ServiceUnavailableError } from '@/core/server/errors.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
-
-import { SonarCommand } from '../../../../src/commands/_common/sonar-command.ts';
 
 const FAKE_AUTH: ResolvedAuth = {
   token: 'fake-token',

@@ -26,8 +26,8 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { setupMcpServer } from '@/commands/integrate/claude/mcp.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CLI_TMP_DIR, SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '@/core/config-constants.ts';
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import type { ClientCertConfig, ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
 import * as pkcs12Module from '@/core/host/crypto/pkcs12.ts';
 import {
