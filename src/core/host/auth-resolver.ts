@@ -23,18 +23,19 @@
 import { getToken } from '@/core/host/keychain.ts';
 import { warn } from '@/core/ui';
 
-import {
-  SONARCLOUD_API_URL,
-  SONARCLOUD_HOSTNAME,
-  SONARCLOUD_URL,
-  SONARCLOUD_US_API_URL,
-  SONARCLOUD_US_HOSTNAME,
-  SONARCLOUD_US_URL,
-} from '../config-constants.ts';
+import { SONARCLOUD_URL } from '../config-constants.ts';
 import logger from '../observability/logger.ts';
-import type { CloudRegion } from '../state/state.ts';
 import { getActiveConnection } from '../state/state-manager.ts';
 import { loadState } from '../state/state-repository.ts';
+import { recordConnectionFromAuth } from './auth-connection-recorder.ts';
+
+// Re-exported for backward compatibility (lives in server/sonarcloud-region.ts to avoid an import cycle).
+export {
+  cloudRegionFromUrl,
+  isSonarQubeCloud,
+  normalizeCloudV2Endpoint,
+  resolveFromEndpoint,
+} from '@/core/server/sonarcloud-region.ts';
 
 export const ENV_TOKEN = 'SONARQUBE_CLI_TOKEN';
 export const ENV_SERVER = 'SONARQUBE_CLI_SERVER';
@@ -57,11 +58,44 @@ export interface ResolvedAuth {
  *   4. Keychain lookup → token
  *   5. Throw descriptive error
  */
-export async function resolveAuth(): Promise<ResolvedAuth | null> {
-  return resolveFromEnv() ?? (await resolveFromState());
+export interface ResolveAuthOptions {
+  /** Suppress the "partial env vars" warning. */
+  silent?: boolean;
 }
 
-export function resolveFromEnv(): ResolvedAuth | null {
+// Env vars are fixed for the process lifetime, so this only needs to run once per process.
+let envAuthRecordAttempted = false;
+
+export async function resolveAuth(options: ResolveAuthOptions = {}): Promise<ResolvedAuth | null> {
+  const envAuth = resolveFromEnv(options);
+  if (envAuth) {
+    await recordEnvAuthConnectionOnce(envAuth);
+    return envAuth;
+  }
+  return await resolveFromState();
+}
+
+/**
+ * Records an env-var-based auth into state.auth.connections, at most once per
+ * process — env vars are fixed for the process lifetime, so repeat attempts
+ * within the same run would only redo the same work.
+ */
+async function recordEnvAuthConnectionOnce(envAuth: ResolvedAuth): Promise<void> {
+  if (envAuthRecordAttempted) {
+    return;
+  }
+  envAuthRecordAttempted = true;
+  await recordConnectionFromAuth(envAuth, { envOnly: true }).catch((err: unknown) => {
+    logger.debug(`Failed to record env-var connection in state: ${(err as Error).message}`);
+  });
+}
+
+/** Test-only: resets the per-process env-auth record guard between test cases. */
+export function resetEnvAuthRecordGuard(): void {
+  envAuthRecordAttempted = false;
+}
+
+export function resolveFromEnv(options: ResolveAuthOptions = {}): ResolvedAuth | null {
   const envToken = process.env[ENV_TOKEN];
   const envServer = process.env[ENV_SERVER];
   const envOrg = process.env[ENV_ORG];
@@ -87,16 +121,18 @@ export function resolveFromEnv(): ResolvedAuth | null {
     };
   }
 
-  // 3. Partial env vars → warn and ignore both
-  if (envToken) {
-    warn(
-      `${ENV_TOKEN} is set, but either ${ENV_SERVER} or ${ENV_ORG} are required for environment variable authentication. Falling back to saved credentials.`,
-    );
-  } else if (envServer || envOrg) {
-    const setEnv = envServer ? ENV_SERVER : ENV_ORG;
-    warn(
-      `${setEnv} is set, but ${ENV_TOKEN} is required for environment variable authentication. Falling back to saved credentials.`,
-    );
+  // 3. Partial env vars → warn (unless silenced) and ignore both
+  if (!options.silent) {
+    if (envToken) {
+      warn(
+        `${ENV_TOKEN} is set, but either ${ENV_SERVER} or ${ENV_ORG} are required for environment variable authentication. Falling back to saved credentials.`,
+      );
+    } else if (envServer || envOrg) {
+      const setEnv = envServer ? ENV_SERVER : ENV_ORG;
+      warn(
+        `${setEnv} is set, but ${ENV_TOKEN} is required for environment variable authentication. Falling back to saved credentials.`,
+      );
+    }
   }
   return null;
 }
@@ -136,57 +172,4 @@ export async function resolveFromState(): Promise<ResolvedAuth | null> {
     return { token, serverUrl, orgKey, connectionType };
   }
   return null;
-}
-
-/**
- * Determine the base URL for a request based on its endpoint.
- * SonarCloud uses separate hosts:
- * - sonarcloud.io for /api/... endpoints
- * - api.sonarcloud.io for all other endpoints
- */
-export function resolveFromEndpoint(serverUrl: string, endpoint: string): string {
-  const normalized = serverUrl.replace(/\/$/, '');
-  const region = cloudRegionFromUrl(serverUrl);
-  if (region !== undefined) {
-    const isUS = region === 'us';
-
-    if (endpoint.startsWith('/api')) {
-      return isUS ? SONARCLOUD_US_URL : SONARCLOUD_URL;
-    }
-
-    return isUS ? SONARCLOUD_US_API_URL : SONARCLOUD_API_URL;
-  }
-  return normalized;
-}
-
-export function cloudRegionFromUrl(serverUrl: string): CloudRegion | undefined {
-  try {
-    const { hostname } = new URL(serverUrl);
-    if (hostname === SONARCLOUD_US_HOSTNAME) return 'us';
-    if (hostname === SONARCLOUD_HOSTNAME) return 'eu';
-    return undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-export function isSonarQubeCloud(serverUrl: string): boolean {
-  return cloudRegionFromUrl(serverUrl) !== undefined;
-}
-
-const SERVER_V2_PREFIX = '/api/v2';
-
-/**
- * SonarQube Server's V2 API paths (`/api/v2/...`) have no equivalent under that
- * prefix on SonarCloud: the same functionality lives at the API host without it
- * (e.g. Server's `/api/v2/sca/issues-releases` is SonarCloud's `/sca/issues-releases`).
- * A request with that prefix 404s or 403s on SonarCloud regardless of host, so
- * stripping it is always correct there. Only relevant for `sonar api`'s free-form
- * endpoint — every other caller already picks the right path per connection type.
- */
-export function normalizeCloudV2Endpoint(serverUrl: string, endpoint: string): string {
-  if (isSonarQubeCloud(serverUrl) && endpoint.startsWith(`${SERVER_V2_PREFIX}/`)) {
-    return endpoint.slice(SERVER_V2_PREFIX.length);
-  }
-  return endpoint;
 }

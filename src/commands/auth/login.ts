@@ -21,7 +21,8 @@
 import { type BrowserAuthResult, generateTokenViaBrowser } from '@/commands/_common/token.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
-import { cloudRegionFromUrl, isSonarQubeCloud } from '@/core/host/auth-resolver.ts';
+import { recordConnectionFromAuth } from '@/core/host/auth-connection-recorder.ts';
+import { isSonarQubeCloud } from '@/core/host/auth-resolver.ts';
 import {
   deleteStaleTokens,
   getToken as getKeystoreToken,
@@ -29,6 +30,7 @@ import {
 } from '@/core/host/keychain.ts';
 import { discoverOrganization, discoverServer } from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
+import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
 import {
@@ -72,28 +74,27 @@ export async function authLogin(options: AuthLoginOptions): Promise<void> {
     existingConnection?.serverUrl === server && existingConnection.orgKey === org
       ? existingConnection.tokenName
       : undefined;
+  const connectionTokenName = reusedExistingToken ? existingTokenName : tokenName;
 
-  const connection = addOrUpdateConnection(state, server, isCloud ? 'cloud' : 'on-premise', {
-    orgKey: org,
-    region: cloudRegionFromUrl(server),
-    // Only browser-OAuth logins carry a tokenName (always provided by the callback for new tokens).
-    tokenName: reusedExistingToken ? existingTokenName : tokenName,
-  });
-
-  // Fetch server-side IDs for telemetry enrichment (best effort, non-blocking on error).
   const actualToken = token || (await getKeystoreToken(server, org));
   if (actualToken) {
-    const apiClient = new SonarQubeClient(server, actualToken);
-    connection.userUuid = (await apiClient.getCurrentUser())?.id ?? null;
-    if (isCloud && org) {
-      connection.organizationUuidV4 = await apiClient.getOrganizationId(org);
-    } else if (!isCloud) {
-      const status = await apiClient.getSystemStatus().catch(() => null);
-      connection.sqsInstallationId = status?.id ?? null;
-    }
+    await recordConnectionFromAuth(
+      {
+        token: actualToken,
+        serverUrl: server,
+        orgKey: org,
+        connectionType: isCloud ? 'cloud' : 'on-premise',
+      },
+      { tokenName: connectionTokenName, force: true },
+    );
+  } else {
+    addOrUpdateConnection(state, server, isCloud ? 'cloud' : 'on-premise', {
+      orgKey: org,
+      region: cloudRegionFromUrl(server),
+      tokenName: connectionTokenName,
+    });
+    saveState(state);
   }
-
-  saveState(state);
 
   const displayServer = isSonarQubeCloud(server) ? `${server} (${org})` : server;
   success(`Authentication successful for: ${displayServer}`);

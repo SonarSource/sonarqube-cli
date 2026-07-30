@@ -24,11 +24,6 @@ import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-confi
 import { print } from '@/core/ui';
 
 import { version as VERSION } from '../../../package.json';
-import {
-  isSonarQubeCloud,
-  normalizeCloudV2Endpoint,
-  resolveFromEndpoint,
-} from '../host/auth-resolver.ts';
 import logger from '../observability/logger.ts';
 import {
   BadRequestError,
@@ -42,6 +37,11 @@ import {
 import { buildFetchInit, fetchGuarded } from './fetch-guarded.ts';
 import { stripGitRemoteUrlUserinfo } from './git-remote-url.ts';
 import type { SettingsValue } from './settings-value.ts';
+import {
+  isSonarQubeCloud,
+  normalizeCloudV2Endpoint,
+  resolveFromEndpoint,
+} from './sonarcloud-region.ts';
 
 const GET_REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 const POST_REQUEST_TIMEOUT_MS = 60000; // 60 seconds for analysis

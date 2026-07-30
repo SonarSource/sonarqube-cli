@@ -35,14 +35,13 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { ENV_SONAR_USER_HOME, getTelemetryDir } from '@/core/config-constants.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import * as authResolver from '@/core/host/auth-resolver.ts';
+import { resolveTelemetryIdentity } from '@/core/host/identity-fetch.ts';
 import type { AuthConnection } from '@/core/state/state.ts';
 import {
-  authMatchesConnection,
   identityFromConnection,
   isIdentityCompleteForConnection,
   resolveCommandTelemetryIdentity,
   resolveStoreEventTelemetryIdentitySafely,
-  resolveTelemetryIdentity,
 } from '@/core/telemetry/identity.ts';
 
 import { mockIdentityGetSafe } from './identity-api-mock.ts';
@@ -121,32 +120,6 @@ describe('identityFromConnection()', () => {
       organization_uuid_v4: 'o',
       sqs_installation_id: 's',
     });
-  });
-});
-
-describe('authMatchesConnection()', () => {
-  it('matches when server URL and org key align (cloud)', () => {
-    expect(authMatchesConnection(cloudAuth('t'), cloudConn())).toBe(true);
-  });
-
-  it('does not match on a different server URL', () => {
-    expect(
-      authMatchesConnection(cloudAuth('t'), cloudConn({ serverUrl: 'https://other.io' })),
-    ).toBe(false);
-  });
-
-  it('does not match on a different org key (cloud)', () => {
-    expect(authMatchesConnection(cloudAuth('t'), cloudConn({ orgKey: 'different' }))).toBe(false);
-  });
-
-  it('ignores org key for on-premise connections', () => {
-    const conn: AuthConnection = {
-      id: 'c',
-      type: 'on-premise',
-      serverUrl: 'https://sq.example.com',
-      authenticatedAt: '2026-01-01T00:00:00.000Z',
-    };
-    expect(authMatchesConnection(serverAuth('t'), conn)).toBe(true);
   });
 });
 

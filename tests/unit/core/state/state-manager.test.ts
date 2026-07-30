@@ -30,9 +30,12 @@ import { join } from 'node:path';
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import type { AuthConnection } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import {
   addOrUpdateConnection,
+  authMatchesConnection,
   generateConnectionId,
   removeConnection,
 } from '@/core/state/state-manager.ts';
@@ -60,11 +63,56 @@ function cleanup(): void {
   }
 }
 
+function cloudAuth(token: string, orgKey = 'my-org'): ResolvedAuth {
+  return { token, serverUrl: 'https://sonarcloud.io', orgKey, connectionType: 'cloud' };
+}
+
+function serverAuth(token: string): ResolvedAuth {
+  return { token, serverUrl: 'https://sq.example.com', connectionType: 'on-premise' };
+}
+
+function cloudConn(overrides: Partial<AuthConnection> = {}): AuthConnection {
+  return {
+    id: 'conn-cloud',
+    type: 'cloud',
+    serverUrl: 'https://sonarcloud.io',
+    orgKey: 'my-org',
+    authenticatedAt: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
 // =============================================================================
 // State Manager — business logic
 // =============================================================================
 
 describe('State Manager', () => {
+  describe('authMatchesConnection', () => {
+    it('should match when server URL and org key align (cloud)', () => {
+      expect(authMatchesConnection(cloudAuth('t'), cloudConn())).toBe(true);
+    });
+
+    it('should not match on a different server URL', () => {
+      expect(
+        authMatchesConnection(cloudAuth('t'), cloudConn({ serverUrl: 'https://other.io' })),
+      ).toBe(false);
+    });
+
+    it('should not match on a different org key (cloud)', () => {
+      expect(authMatchesConnection(cloudAuth('t'), cloudConn({ orgKey: 'different' }))).toBe(false);
+    });
+
+    it('should ignore org key for on-premise connections', () => {
+      const conn: AuthConnection = {
+        id: 'c',
+        type: 'on-premise',
+        serverUrl: 'https://sq.example.com',
+        authenticatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      expect(authMatchesConnection(serverAuth('t'), conn)).toBe(true);
+    });
+  });
+
   describe('generateConnectionId', () => {
     it('should generate consistent hash for same input', () => {
       const id1 = generateConnectionId('https://sonarcloud.io', 'my-org');
