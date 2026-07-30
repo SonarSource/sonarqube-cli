@@ -24,12 +24,12 @@ import { readFileSync } from 'node:fs';
 
 import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
 
-import { version as VERSION } from '../../../package.json';
+import { version as VERSION } from '../../../../package.json';
 import {
   SONAR_CONTEXT_AUGMENTATION_DIST_PREFIX,
   SONARSOURCE_BINARIES_URL,
-} from '../config-constants.ts';
-import logger from '../observability/logger.ts';
+} from '../../config-constants.ts';
+import logger from '../../observability/logger.ts';
 import { buildCagPlatformSuffix, type PlatformInfo } from './install-types.ts';
 
 const DOWNLOAD_TIMEOUT_MS = 60000;

@@ -44,7 +44,7 @@ import {
   buildDownloadUrl,
   downloadBinary,
   verifyBinarySignature,
-} from '@/core/host/sonarsource-releases.ts';
+} from '@/core/host/install/sonarsource-releases.ts';
 
 import { DEPENDENCY_ARTIFACTS_DIR } from './dependency-artifacts-path.js';
 

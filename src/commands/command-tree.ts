@@ -21,7 +21,7 @@
 import { type Command, Help, InvalidArgumentError, Option } from 'commander';
 
 import { CommandFailedError } from '@/core/command-error.ts';
-import { CURRENT_DISTRIBUTION } from '@/core/host/environment/distribution.ts';
+import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
 import { GENERIC_HTTP_METHODS } from '@/core/server/client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';

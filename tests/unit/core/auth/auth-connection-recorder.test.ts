@@ -30,9 +30,9 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
-import { recordConnectionFromAuth } from '@/core/host/auth-connection-recorder.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
 

@@ -21,7 +21,7 @@
 import { existsSync, rmSync } from 'node:fs';
 
 import { BIN_DIR } from '@/core/config-constants.ts';
-import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
+import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import type { CliState } from '@/core/state/state.ts';
 import type { PhaseItem } from '@/core/ui';
 import { phaseItem } from '@/core/ui';

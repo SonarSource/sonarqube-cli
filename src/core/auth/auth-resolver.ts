@@ -20,7 +20,7 @@
 
 // Centralized auth resolver - resolves token + serverUrl from env vars, state, or keychain
 
-import { recordConnectionFromAuth } from '@/core/host/auth-connection-recorder.ts';
+import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
 import { getToken } from '@/core/host/keychain.ts';
 import { warn } from '@/core/ui';
 

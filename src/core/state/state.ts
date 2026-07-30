@@ -25,8 +25,8 @@
 
 import { randomUUID } from 'node:crypto';
 
+import type { Distribution } from '@/core/host/distribution.ts';
 import type { CallerAgent } from '@/core/host/environment/agent-detector.ts';
-import type { Distribution } from '@/core/host/environment/distribution.ts';
 
 /**
  * Region for SonarCloud instances

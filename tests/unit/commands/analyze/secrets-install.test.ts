@@ -38,7 +38,7 @@ import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 // Because mock.module returns a plain mutable object (not a frozen ES namespace),
 // spyOn can patch individual exports per-test and restore them in afterEach —
 // without permanently replacing any function for other test files in this process.
-const releases = await import('@/core/host/sonarsource-releases.ts');
+const releases = await import('@/core/host/install/sonarsource-releases.ts');
 void mock.module('@/core/host/sonarsource-releases.ts', () => ({
   ...releases,
 }));

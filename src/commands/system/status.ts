@@ -38,16 +38,16 @@ import type {
   ProxyGroup,
   ResolvedNetworkConfig,
 } from '@/core/host/connectivity/types.ts';
-import { CURRENT_DISTRIBUTION } from '@/core/host/environment/distribution.ts';
+import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
+import {
+  CONTEXT_AUGMENTATION_BINARY_NAME,
+  SCA_SCANNER_BINARY_NAME,
+} from '@/core/host/install/install-types.ts';
 import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
 import {
   SCA_SCANNER_CLI_VERSION,
   SONAR_CONTEXT_AUGMENTATION_VERSION,
 } from '@/core/host/install/signatures.ts';
-import {
-  CONTEXT_AUGMENTATION_BINARY_NAME,
-  SCA_SCANNER_BINARY_NAME,
-} from '@/core/host/install-types.ts';
 import { getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { loadState } from '@/core/state/state-repository.ts';

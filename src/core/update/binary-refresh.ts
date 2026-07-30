@@ -21,9 +21,9 @@
 // Binary version refresh for already-installed SonarSource tools, consumed by
 // the post-update mechanism that runs automatically after CLI upgrades.
 
+import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import { installScaScannerBinary } from '@/core/host/install/sca-scanner.ts';
 import { installSecretsBinary } from '@/core/host/install/secrets.ts';
-import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from '@/core/host/install-types.ts';
 
 import logger from '../observability/logger.ts';
 import type { CliState } from '../state/state.ts';

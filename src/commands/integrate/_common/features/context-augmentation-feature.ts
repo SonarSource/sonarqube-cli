@@ -22,8 +22,8 @@ import { CommandFailedError } from '@/core/command-error.ts';
 import { install, skip } from '@/core/framework/features/selection.ts';
 import type { IntegrationContext, SubfeatureDeclaration } from '@/core/framework/features/types.ts';
 import { wholeFile } from '@/core/framework/resources';
+import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
-import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
 
 import { getOptionalStringAttr } from '../attrs.ts';
 import {

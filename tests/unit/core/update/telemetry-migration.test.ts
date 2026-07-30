@@ -26,7 +26,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
 import * as configConstants from '@/core/config-constants.ts';
-import { DISTRIBUTION } from '@/core/host/environment/distribution.ts';
+import { DISTRIBUTION } from '@/core/host/distribution.ts';
 import type { CliState, StoredCommandExecutedEvent } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';

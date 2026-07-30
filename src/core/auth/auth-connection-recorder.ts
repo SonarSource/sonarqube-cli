@@ -35,7 +35,7 @@ import {
   needsIdentityEnrichment,
   resolveTelemetryIdentity,
   type TelemetryIdentity,
-} from './identity-fetch.ts';
+} from '../telemetry/identity-fetch.ts';
 
 export interface RecordConnectionOptions {
   /** Only browser-OAuth logins carry a token name — env-var auth never does. */

@@ -32,12 +32,12 @@ import { recordInstalledFeature } from '@/core/framework/features/installation-r
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { type BinarySpec, buildLocalBinaryName } from '@/core/host/install/binary.ts';
 import { buildLocalCagBinaryName } from '@/core/host/install/context-augmentation.ts';
+import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import { SCA_SCANNER_SPEC } from '@/core/host/install/sca-scanner.ts';
 import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
-import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
+import { buildDownloadUrl } from '@/core/host/install/sonarsource-releases.ts';
 import { generateKeychainAccount } from '@/core/host/keychain.ts';
-import { buildDownloadUrl } from '@/core/host/sonarsource-releases.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import type {
   CliState,

@@ -20,7 +20,7 @@
 
 import { type Command } from 'commander';
 
-import { DISTRIBUTION } from '../host/environment/distribution.ts';
+import { DISTRIBUTION } from '../host/distribution.ts';
 import { tryLoadState } from '../state/state-manager.ts';
 import { isTelemetryEnabled } from './enabled.ts';
 import { currentProjectUuid } from './project-uuid.ts';
