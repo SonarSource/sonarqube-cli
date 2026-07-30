@@ -135,12 +135,6 @@ function seedDeclarativeContextAugmentationFeature(state: CliState, skill: SeedS
     state.integrations.installed.push(integration);
   }
 
-  const isVortexContainer =
-    skill.agentId === 'claude-code' ||
-    skill.agentId === 'copilot-cli' ||
-    skill.agentId === 'cursor' ||
-    skill.agentId === 'antigravity' ||
-    skill.agentId === 'codex';
   const resource = {
     id: CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
     resourceType: 'whole-file' as const,
@@ -162,27 +156,25 @@ function seedDeclarativeContextAugmentationFeature(state: CliState, skill: SeedS
   };
 
   const feature: InstalledIntegrationFeature = {
-    featureId: isVortexContainer ? VORTEX_FEATURE_ID : CONTEXT_AUGMENTATION_FEATURE_ID,
+    featureId: VORTEX_FEATURE_ID,
     scope: 'project',
     targetRoot: skill.projectRoot,
     installedByCliVersion: STALE_CLI_VERSION,
     installedAt: SEEDED_UPDATED_AT,
     updatedByCliVersion: STALE_CLI_VERSION,
     updatedAt: SEEDED_UPDATED_AT,
-    dependencies: isVortexContainer ? [] : [{ id: CONTEXT_AUGMENTATION_BINARY_NAME }],
-    resources: isVortexContainer ? [] : [resource],
-    operations: isVortexContainer ? [] : [operation],
+    dependencies: [],
+    resources: [],
+    operations: [],
     attrs,
-    subfeatures: isVortexContainer
-      ? [
-          {
-            featureId: CONTEXT_AUGMENTATION_FEATURE_ID,
-            dependencies: [{ id: CONTEXT_AUGMENTATION_BINARY_NAME }],
-            resources: [resource],
-            operations: [operation],
-          },
-        ]
-      : undefined,
+    subfeatures: [
+      {
+        featureId: CONTEXT_AUGMENTATION_FEATURE_ID,
+        dependencies: [{ id: CONTEXT_AUGMENTATION_BINARY_NAME }],
+        resources: [resource],
+        operations: [operation],
+      },
+    ],
   };
   integration.features.push(feature);
 }
@@ -235,7 +227,7 @@ export function findRecordedCagFeature(
   for (const integration of state.integrations.installed) {
     for (const feature of integration.features) {
       const cagSubfeature = findCagSubfeature(feature);
-      if (feature.featureId !== CONTEXT_AUGMENTATION_FEATURE_ID && !cagSubfeature) {
+      if (feature.featureId !== VORTEX_FEATURE_ID || !cagSubfeature) {
         continue;
       }
       const entry = {
@@ -253,11 +245,9 @@ export function findRecordedCagFeature(
 export function findRecordedCagSkillResource(
   entry: RecordedCagFeature,
 ): InstalledIntegrationResource | undefined {
-  const resources =
-    entry.feature.featureId === CONTEXT_AUGMENTATION_FEATURE_ID
-      ? entry.feature.resources
-      : findCagSubfeature(entry.feature)?.resources;
-  return resources?.find((resource) => resource.id === CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID);
+  return findCagSubfeature(entry.feature)?.resources?.find(
+    (resource) => resource.id === CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
+  );
 }
 
 export function findRecordedCagDependency(

@@ -19,12 +19,8 @@
  */
 
 import { CommandFailedError } from '@/core/command-error.ts';
-import { askUser, install, skip } from '@/core/framework/features/selection.ts';
-import type {
-  FeatureDeclaration,
-  IntegrationContext,
-  SubfeatureDeclaration,
-} from '@/core/framework/features/types.ts';
+import { install, skip } from '@/core/framework/features/selection.ts';
+import type { IntegrationContext, SubfeatureDeclaration } from '@/core/framework/features/types.ts';
 import { wholeFile } from '@/core/framework/resources';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
@@ -36,10 +32,6 @@ import {
   runToolIntegrateCommand,
 } from '../context-augmentation.ts';
 import { contextAugmentationBinaryDependency } from '../context-augmentation-dependency.ts';
-import {
-  CONTEXT_AUGMENTATION_FEATURE_BENEFIT,
-  CONTEXT_AUGMENTATION_FEATURE_PREVIEW,
-} from '../feature-constants.ts';
 
 export const CONTEXT_AUGMENTATION_FEATURE_ID = 'context-augmentation';
 export const CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID = 'context-augmentation-skill-file';
@@ -48,19 +40,6 @@ export const CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID =
 
 export interface ContextAugmentationSkillFeatureOptions {
   targetPath: (context: IntegrationContext) => string;
-}
-
-export function createContextAugmentationFeature<
-  TOptions extends { installContextAugmentation?: boolean },
->(options: ContextAugmentationSkillFeatureOptions): FeatureDeclaration<TOptions> {
-  return {
-    ...createContextAugmentationSubfeature<TOptions>(options),
-    displayName: 'context augmentation',
-    benefitDescription: CONTEXT_AUGMENTATION_FEATURE_BENEFIT,
-    previewDescription: CONTEXT_AUGMENTATION_FEATURE_PREVIEW,
-    shouldInstall: ({ options: integrationOptions }) =>
-      integrationOptions.installContextAugmentation === true ? askUser() : skip(),
-  };
 }
 
 export function createContextAugmentationSubfeature<TOptions>(

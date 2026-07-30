@@ -35,7 +35,7 @@ import { clearMockUiCalls, getMockUiCalls, setMockTty, setMockUi } from '@/core/
 
 import { analyzeSqaa, buildSqaaJsonReport } from '../../../../src/commands/analyze/sqaa.ts';
 import * as changesetModule from '../../../../src/commands/analyze/sqaa-changeset.ts';
-import { SQAA_HOOK_FEATURE_ID } from '../../../../src/commands/integrate/_common/sqaa-entitlement.ts';
+import { SQAA_HOOK_FEATURE_ID } from '../../../../src/commands/integrate/_common/features/sqaa-instructions-feature.ts';
 import { CLAUDE_INTEGRATION_ID } from '../../../../src/commands/integrate/claude/declaration.ts';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';

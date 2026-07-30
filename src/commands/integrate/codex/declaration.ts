@@ -48,6 +48,7 @@ import {
 } from '../_common/feature-constants.ts';
 import { createContextAugmentationSubfeature } from '../_common/features/context-augmentation-feature.ts';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature.ts';
+import { SQAA_HOOK_FEATURE_ID } from '../_common/features/sqaa-instructions-feature.ts';
 import {
   createAgentHookEntry,
   removeAgentHooks,
@@ -56,7 +57,6 @@ import {
 } from '../_common/hooks.ts';
 import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates.ts';
 import { removeCodexMcpServer } from '../_common/mcp-config.ts';
-import { SQAA_HOOK_FEATURE_ID } from '../_common/sqaa-entitlement.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
 import {

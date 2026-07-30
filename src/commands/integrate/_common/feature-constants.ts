@@ -34,15 +34,6 @@ export const SECRETS_PROMPT_FEATURE_BENEFIT = 'prevents leaked secrets in AI pro
 export const SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT =
   'prevents the agent from reading files with secrets';
 
-/** post-tool-use SQAA hook. */
-export const AGENTIC_ANALYSIS_FEATURE_BENEFIT = 'automatic analysis of edits';
-
-/** End-of-turn SQAA delivered via instructions/rules. */
-export const AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT =
-  'deep analysis of all changes at end of turn';
-
-export const CONTEXT_AUGMENTATION_FEATURE_BENEFIT = 'enriches AI prompts with SonarQube context';
-
 /** Agentic analysis and context augmentation, installed as one Vortex unit. */
 export const VORTEX_FEATURE_BENEFIT = 'analyzes edits and enriches prompts';
 
@@ -64,17 +55,6 @@ export const SECRETS_PROMPT_FEATURE_PREVIEW =
 /** pre-tool-use secrets scanning. */
 export const SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW =
   'Scans files for hardcoded secrets before the agent can read them.';
-
-/** post-tool-use SQAA hook. */
-export const AGENTIC_ANALYSIS_FEATURE_PREVIEW =
-  'Analyzes every file the agent edits, on demand. Catches issues before they reach your main branch.';
-
-/** End-of-turn SQAA delivered via instructions/rules. */
-export const AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW =
-  'Runs a deep analysis of all your changes at the end of each turn. Catches issues before they reach your main branch.';
-
-export const CONTEXT_AUGMENTATION_FEATURE_PREVIEW =
-  'Enriches AI prompts with SonarQube context: issues, hotspots, and rules for the file at hand.';
 
 export const VORTEX_FEATURE_PREVIEW =
   'Analyzes the code your agent writes, and enriches its prompts with SonarQube context: issues, hotspots, and rules for the file at hand.';
