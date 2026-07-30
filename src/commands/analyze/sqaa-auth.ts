@@ -29,7 +29,7 @@ import type { InstalledIntegrationFeature, IntegrationStateAttribute } from '@/c
 import { loadState } from '@/core/state/state-repository.ts';
 import { blank, confirmPrompt, text, warn } from '@/core/ui';
 
-import { SQAA_HOOK_FEATURE_ID } from '../integrate/_common/sqaa-entitlement.ts';
+import { SQAA_HOOK_FEATURE_ID } from '../integrate/_common/features/sqaa-instructions-feature.ts';
 import { isProjectVortexFeature } from '../integrate/_common/vortex.ts';
 import { CLAUDE_INTEGRATION_ID } from '../integrate/claude/declaration.ts';
 

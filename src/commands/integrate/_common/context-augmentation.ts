@@ -24,11 +24,9 @@ import { buildContextAugmentationEnv } from '@/commands/_common/context-augmenta
 import { CommandFailedError } from '@/core/command-error.ts';
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
-import { isSonarQubeCloud } from '@/core/host/auth-resolver.ts';
 import { resolveRecordedRepoRoot } from '@/core/host/git/worktree.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
 import logger from '@/core/observability/logger.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 import { discreetSuccess, type OutputChannel, print, text, warn, withSpinner } from '@/core/ui';
 
@@ -37,12 +35,6 @@ export const ENV_SKIP_CAG = '__SQCLI_DEV_SKIP_CAG';
 /** True when __SQCLI_DEV_SKIP_CAG is set to 1. */
 export function isContextAugmentationSkipped(): boolean {
   return process.env[ENV_SKIP_CAG]?.trim() === '1';
-}
-
-export interface ResolveContextAugmentationSetupParams {
-  auth: ResolvedAuth;
-  projectKey: string | undefined;
-  isGlobal: boolean;
 }
 
 export interface ResolvedContextAugmentationSetup {
@@ -129,63 +121,6 @@ export class CagStepFailedError extends Error {
   constructor(readonly result: CagSubprocessResult) {
     super(result.failureMessage ?? 'sonar-context-augmentation step failed');
   }
-}
-
-export async function resolveContextAugmentationSetup(
-  p: ResolveContextAugmentationSetupParams,
-): Promise<ResolvedContextAugmentationSetup | null> {
-  const isCloud = isSonarQubeCloud(p.auth.serverUrl);
-  if (!isCloud) {
-    text('Skipping Vortex context augmentation: not available on SonarQube Server.');
-    return null;
-  }
-
-  if (p.isGlobal) {
-    // CAG is project-scoped, so a global install can never set it up. Only show
-    // the skip notice to orgs that are actually entitled (avoids noise for orgs
-    // that could not use CAG anyway).
-    if (p.auth.orgKey) {
-      const client = new SonarQubeClient(p.auth.serverUrl, p.auth.token);
-      const status = await client.hasVortexEntitlement(p.auth.orgKey);
-      if (status === 'enabled' || status === 'over_consumption') {
-        warn(
-          'Skipping Vortex context augmentation: not supported with --global. Re-run without --global from a project directory to install it there.',
-        );
-      }
-    }
-    return null;
-  }
-
-  if (!p.projectKey || !p.auth.orgKey) {
-    warn(
-      'Skipping Vortex context augmentation: a project key and organization are required (configure your project or pass --project).',
-    );
-    return null;
-  }
-
-  const client = new SonarQubeClient(p.auth.serverUrl, p.auth.token);
-  const entitlement = await client.hasVortexEntitlement(p.auth.orgKey);
-  if (entitlement === 'check_failed') {
-    warn(
-      'Skipping Vortex context augmentation: could not verify entitlement (server unreachable or returned an error).',
-    );
-    return null;
-  }
-  if (entitlement === 'not_entitled') {
-    warn(
-      'Skipping Vortex context augmentation: not available for your organization. Access requires an eligible SonarQube Cloud plan.',
-    );
-    return null;
-  }
-
-  const scaStatus = await client.getScaEnablement(p.auth.connectionType, p.auth.orgKey);
-  if (scaStatus === 'check_failed') {
-    warn(
-      'Could not verify SCA availability on the connected server. Proceeding with SCA disabled in the generated skill content.',
-    );
-  }
-
-  return { scaEnabled: scaStatus === 'enabled' };
 }
 
 export async function runToolIntegrateCommand(

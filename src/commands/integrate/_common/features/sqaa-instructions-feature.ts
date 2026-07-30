@@ -32,6 +32,7 @@ import {
   sonarEndMarker,
 } from '../instructions-templates.ts';
 
+export const SQAA_HOOK_FEATURE_ID = 'sonar-sqaa-hook';
 export const SQAA_INSTRUCTIONS_SUBFEATURE_ID = 'sqaa-instructions';
 const SQAA_INSTRUCTIONS_MARKER = 'sonarqube-agentic-analysis-protocol';
 

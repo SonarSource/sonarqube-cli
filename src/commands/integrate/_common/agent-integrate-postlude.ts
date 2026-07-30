@@ -31,11 +31,7 @@ import {
   type AgentIntegrateContext,
   resolveIntegrateInstallTarget,
 } from './agent-integrate-prelude.ts';
-import {
-  buildRecordedIntegrationAttrs,
-  isContextAugmentationSkipped,
-  resolveContextAugmentationSetup,
-} from './context-augmentation.ts';
+import { buildRecordedIntegrationAttrs } from './context-augmentation.ts';
 import type { IntegrateAgentOptions } from './types.ts';
 import { resolveVortexSetup } from './vortex.ts';
 
@@ -46,8 +42,8 @@ export interface FinalizeAgentInstallParams<TOptions extends IntegrateAgentOptio
   auth: ResolvedAuth;
   /**
    * Agent-specific feature flags merged into the integration options (e.g. the
-   * SQAA flag, whose name differs per agent). `projectRoot`, `installVortex`
-   * and `installContextAugmentation` are derived here and must not be passed in.
+   * SQAA flag, whose name differs per agent). `projectRoot` and `installVortex`
+   * are derived here and must not be passed in.
    */
   featureOptions?: Partial<TOptions>;
 }
@@ -88,51 +84,6 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
       ...params.featureOptions,
       projectRoot: context.project.rootDir,
       installVortex: vortex !== null,
-    },
-    targetRoot: installRoot,
-    scope: installScope,
-    auth,
-    nonInteractive: options.nonInteractive,
-    isFromRouter: options.isFromRouter,
-    attrs,
-  });
-}
-
-/**
- * Shared install tail for agent integrations: resolves Context Augmentation,
- * assembles the integration options and recorded state attrs, and runs
- * `installIntegration`. Keeps each agent handler focused on its agent-specific
- * setup (prompts, scope warnings, SQAA option name).
- */
-export async function finalizeAgentInstallDeprecated<TOptions extends IntegrateAgentOptions>(
-  params: FinalizeAgentInstallParams<TOptions>,
-): Promise<void> {
-  const { context, options, auth } = params;
-  const contextAugmentation = isContextAugmentationSkipped()
-    ? null
-    : await resolveContextAugmentationSetup({
-        auth,
-        projectKey: context.projectKey,
-        isGlobal: context.isGlobal,
-      });
-  const { installRoot, installScope } = resolveIntegrateInstallTarget(
-    context.isGlobal,
-    context.project.rootDir,
-  );
-  const attrs = await buildRecordedIntegrationAttrs({
-    baseAttrs: { projectKey: context.projectKey ?? null },
-    projectRoot: context.project.rootDir,
-    serverUrl: context.serverUrl,
-    orgKey: context.organization,
-    contextAugmentation,
-  });
-  await installIntegration({
-    registry: supportedIntegrations,
-    integrationId: params.integrationId,
-    options: {
-      ...options,
-      ...params.featureOptions,
-      installContextAugmentation: contextAugmentation !== null,
     },
     targetRoot: installRoot,
     scope: installScope,

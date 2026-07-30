@@ -41,6 +41,7 @@ import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secret
 import {
   createSqaaInstructionsSnippet,
   createSqaaInstructionsSubfeature,
+  SQAA_HOOK_FEATURE_ID,
 } from '../_common/features/sqaa-instructions-feature.ts';
 import {
   createAgentHookEntry,
@@ -49,7 +50,6 @@ import {
   upsertAgentHooks,
 } from '../_common/hooks.ts';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
-import { SQAA_HOOK_FEATURE_ID } from '../_common/sqaa-entitlement.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
 import {

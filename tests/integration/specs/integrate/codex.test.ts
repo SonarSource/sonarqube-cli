@@ -28,7 +28,7 @@ import { isAbsolute } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/commands/integrate/_common/features/context-augmentation-feature';
-import { SQAA_HOOK_FEATURE_ID } from '../../../../src/commands/integrate/_common/sqaa-entitlement';
+import { SQAA_HOOK_FEATURE_ID } from '../../../../src/commands/integrate/_common/features/sqaa-instructions-feature';
 import { VORTEX_FEATURE_ID } from '../../../../src/commands/integrate/_common/vortex';
 import { codexIntegration } from '../../../../src/commands/integrate/codex/declaration';
 import {
