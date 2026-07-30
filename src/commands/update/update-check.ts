@@ -27,7 +27,7 @@ import { join } from 'node:path';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { UPDATE_SCRIPT_BASE_URL } from '@/core/config-constants.ts';
 import { isWindows } from '@/core/host/platform-detector.ts';
-import { fetchLatestVersion, fetchText } from '@/core/host/update/check.ts';
+import { fetchLatestVersion, fetchText } from '@/core/update/check.ts';
 import { Version } from '@/core/version.ts';
 
 import { version as CURRENT_VERSION } from '../../../package.json';

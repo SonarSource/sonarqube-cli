@@ -21,7 +21,7 @@
 // Reads the published stable CLI version from binaries.sonarsource.com. Used by
 // both `sonar update` (commands/update/update-check.ts, for the foreground
 // version check) and the background update-notification check in
-// core/host/update/notification.ts.
+// core/update/notification.ts.
 
 import { CommandFailedError } from '@/core/command-error.ts';
 import { CLI_STABLE_VERSION_PATH, SONARSOURCE_BINARIES_URL } from '@/core/config-constants.ts';

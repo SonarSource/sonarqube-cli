@@ -27,7 +27,7 @@ import { isFormattedOutputMode, text } from '@/core/ui';
 import { cyan } from '@/core/ui/colors.ts';
 import { Version } from '@/core/version.ts';
 
-import { version as CURRENT_VERSION } from '../../../../package.json';
+import { version as CURRENT_VERSION } from '../../../package.json';
 import { BACKGROUND_UPDATE_CHECK_TIMEOUT_MS, fetchLatestVersion } from './check.ts';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;

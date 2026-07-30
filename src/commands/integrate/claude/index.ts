@@ -24,8 +24,8 @@ import { homedir } from 'node:os';
 
 import { installIntegration } from '@/core/framework/features';
 import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
-import { OBSOLETE_A3S_MARKER, removeObsoleteHookArtifacts } from '@/core/host/migration.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
+import { removeObsoleteHookArtifacts } from '@/core/update/claude-hooks-migration.ts';
 
 import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint.ts';
 import {
@@ -108,7 +108,7 @@ export async function integrateClaude(
   } catch (error) {
     installError = error instanceof Error ? error : new Error(String(error));
   }
-  await removeObsoleteHookArtifacts(ctx.project.rootDir, OBSOLETE_A3S_MARKER);
+  await removeObsoleteHookArtifacts(ctx.project.rootDir);
   if (installError) {
     throw installError;
   }
