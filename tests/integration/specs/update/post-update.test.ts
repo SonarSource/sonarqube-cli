@@ -40,7 +40,7 @@ import { readCagInvocations } from '../../harness/cag-invocations';
 describe('post-update migration', () => {
   let harness: TestHarness;
 
-  function seedPreUnificationClaudeFeatures(featureIds: string[]): void {
+  function seedPreUnificationFeatures(integrationId: string, featureIds: string[]): void {
     const now = new Date().toISOString();
     const legacyFeature = (featureId: string) => ({
       featureId,
@@ -74,7 +74,7 @@ describe('post-update migration', () => {
           installed: [
             {
               id: randomUUID(),
-              integrationId: 'claude-code',
+              integrationId,
               installedByCliVersion: '0.5.0',
               installedAt: now,
               updatedByCliVersion: '0.5.0',
@@ -319,7 +319,7 @@ describe('post-update migration', () => {
   it(
     'migrates pre-unification Claude SQAA and CAG features into the Vortex container',
     async () => {
-      seedPreUnificationClaudeFeatures([
+      seedPreUnificationFeatures('claude-code', [
         SQAA_HOOK_FEATURE_ID,
         SQAA_INSTRUCTIONS_SUBFEATURE_ID,
         CONTEXT_AUGMENTATION_FEATURE_ID,
@@ -346,13 +346,44 @@ describe('post-update migration', () => {
   it(
     'installs every Vortex subfeature when migrating a partial pre-unification install',
     async () => {
-      seedPreUnificationClaudeFeatures([SQAA_HOOK_FEATURE_ID]);
+      seedPreUnificationFeatures('claude-code', [SQAA_HOOK_FEATURE_ID]);
       harness.state().withContextAugmentationBinaryInstalled();
 
       const result = await harness.run('--version');
 
       expect(result.exitCode).toBe(0);
       expectFullClaudeVortexMigration();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'migrates pre-unification Copilot SQAA and Context Augmentation records into one Vortex container',
+    async () => {
+      seedPreUnificationFeatures('copilot-cli', [
+        SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+        CONTEXT_AUGMENTATION_FEATURE_ID,
+      ]);
+      harness.state().withContextAugmentationBinaryInstalled();
+
+      const result = await harness.run('--version');
+
+      expect(result.exitCode).toBe(0);
+      const state = harness.stateJsonFile.asJson() as CliState;
+      const copilot = state.integrations.installed.find(
+        (integration) => integration.integrationId === 'copilot-cli',
+      );
+      expect(copilot?.features.map((feature) => feature.featureId)).toEqual([VORTEX_FEATURE_ID]);
+      expect(copilot?.features[0].subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
+        SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+        CONTEXT_AUGMENTATION_FEATURE_ID,
+      ]);
+      expect(
+        harness.cwd.file('.github', 'instructions', 'sonarqube.instructions.md').asText(),
+      ).toContain('# SonarQube Agentic Analysis protocol');
+      expect(
+        harness.cwd.file('.github', 'skills', 'sonar-context-augmentation', 'SKILL.md').exists(),
+      ).toBe(true);
     },
     { timeout: 30000 },
   );
@@ -365,7 +396,7 @@ describe('post-update migration', () => {
         SQAA_INSTRUCTIONS_SUBFEATURE_ID,
         CONTEXT_AUGMENTATION_FEATURE_ID,
       ];
-      seedPreUnificationClaudeFeatures(deprecatedFeatureIds);
+      seedPreUnificationFeatures('claude-code', deprecatedFeatureIds);
       harness.state().withContextAugmentationBinaryInstalled({ printSkillEmpty: true });
 
       const result = await harness.run('--version');

@@ -21,7 +21,7 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
 
 import * as token from '@/commands/_common/token.ts';
-import * as contextAugmentation from '@/commands/integrate/_common/context-augmentation.ts';
+import * as vortex from '@/commands/integrate/_common/vortex.ts';
 import { integrateCopilot } from '@/commands/integrate/copilot';
 import * as hooks from '@/commands/integrate/copilot/hooks.ts';
 import * as registry from '@/core/framework/features';
@@ -66,11 +66,8 @@ describe('integrateCopilot', () => {
   let checkComponentSpy: Mock<
     Extract<(typeof SonarQubeClient.prototype)['checkComponent'], (...args: never[]) => unknown>
   >;
-  let resolveContextAugmentationSetupSpy: Mock<
-    Extract<
-      (typeof contextAugmentation)['resolveContextAugmentationSetup'],
-      (...args: never[]) => unknown
-    >
+  let resolveVortexSetupSpy: Mock<
+    Extract<(typeof vortex)['resolveVortexSetup'], (...args: never[]) => unknown>
   >;
 
   beforeEach(() => {
@@ -86,10 +83,7 @@ describe('integrateCopilot', () => {
     detectGlobalSecretsHookSpy = spyOn(hooks, 'detectGlobalSecretsHook').mockResolvedValue(
       undefined,
     );
-    resolveContextAugmentationSetupSpy = spyOn(
-      contextAugmentation,
-      'resolveContextAugmentationSetup',
-    ).mockResolvedValue(null);
+    resolveVortexSetupSpy = spyOn(vortex, 'resolveVortexSetup').mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -101,7 +95,7 @@ describe('integrateCopilot', () => {
     hasVortexEntitlementSpy.mockRestore();
     checkComponentSpy.mockRestore();
     detectGlobalSecretsHookSpy.mockRestore();
-    resolveContextAugmentationSetupSpy.mockRestore();
+    resolveVortexSetupSpy.mockRestore();
   });
 
   it('aborts when token is invalid', () => {
