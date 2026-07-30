@@ -296,6 +296,12 @@ function migrateReplacedFeatures(
   return applications;
 }
 
+/**
+ * A state-only rollback may retain predecessor feature ids that no longer exist
+ * in the current declarations. Post-update will retry the migration on the next
+ * version update; a future command (for example, `sonar doctor`) should also
+ * allow users to trigger these migrations without waiting for another release.
+ */
 function restoreFailedReplacements(
   installedIntegration: InstalledIntegration,
   originalFeatures: InstalledIntegrationFeature[],

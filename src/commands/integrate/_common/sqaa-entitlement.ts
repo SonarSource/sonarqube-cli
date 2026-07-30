@@ -19,21 +19,8 @@
  */
 
 import { AGENTIC_ANALYSIS_DOCS_URL } from '@/core/config-constants.ts';
-import type {
-  IntegrationContext,
-  ResourceDeclaration,
-  SubfeatureDeclaration,
-} from '@/core/framework/features';
-import { install, textSnippet } from '@/core/framework/features';
 import { SonarQubeClient, type VortexEntitlementStatus } from '@/core/server/client.ts';
 import { info, warn } from '@/core/ui';
-
-import { getRequiredStringAttr } from './attrs.ts';
-import {
-  buildSqaaSectionBody,
-  sonarBeginMarker,
-  sonarEndMarker,
-} from './instructions-templates.ts';
 
 export const SQAA_HOOK_FEATURE_ID = 'sonar-sqaa-hook';
 
@@ -97,40 +84,4 @@ export async function resolveSqaaSetup(params: ResolveSqaaSetupParams): Promise<
   // Explicit check so future statuses don't fall through to true.
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   return status === 'enabled' || status === 'over_consumption';
-}
-
-export const SQAA_INSTRUCTIONS_SUBFEATURE_ID = 'sqaa-instructions';
-const SQAA_INSTRUCTIONS_MARKER = 'sonarqube-agentic-analysis-protocol';
-
-/** End-of-turn SQAA instructions, written by each agent into its own rules format. */
-export function createSqaaInstructionsSubfeature<TOptions>(
-  resources: ResourceDeclaration[],
-): SubfeatureDeclaration<TOptions> {
-  return {
-    id: SQAA_INSTRUCTIONS_SUBFEATURE_ID,
-    displayName: 'SQAA instructions',
-    shouldInstall: () => install(),
-    resources,
-  };
-}
-
-export interface SqaaInstructionsSnippetOptions {
-  /** Integration name reported when the recorded project key is missing. */
-  agentDisplayName: string;
-  targetPath: (context: IntegrationContext) => string;
-}
-
-export function createSqaaInstructionsSnippet({
-  agentDisplayName,
-  targetPath,
-}: SqaaInstructionsSnippetOptions): ResourceDeclaration {
-  return textSnippet({
-    id: 'sqaa-instructions-file',
-    displayName: 'Vortex agentic analysis instructions',
-    targetPath,
-    startMarker: sonarBeginMarker(SQAA_INSTRUCTIONS_MARKER),
-    endMarker: sonarEndMarker(SQAA_INSTRUCTIONS_MARKER),
-    content: (context) =>
-      buildSqaaSectionBody(getRequiredStringAttr(context, 'projectKey', agentDisplayName)),
-  });
 }

@@ -68,7 +68,7 @@ export function createContextAugmentationSubfeature<TOptions>(
 ): SubfeatureDeclaration<TOptions> {
   return {
     id: CONTEXT_AUGMENTATION_FEATURE_ID,
-    displayName: 'Context augmentation',
+    displayName: 'Vortex context augmentation',
     shouldInstall: () => (isContextAugmentationSkipped() ? skip() : install()),
     dependencies: [contextAugmentationBinaryDependency],
     resources: [

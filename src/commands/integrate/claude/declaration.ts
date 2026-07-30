@@ -39,17 +39,17 @@ import {
 import { createContextAugmentationSubfeature } from '../_common/features/context-augmentation-feature.ts';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
+  createSqaaInstructionsSnippet,
+  createSqaaInstructionsSubfeature,
+} from '../_common/features/sqaa-instructions-feature.ts';
+import {
   createAgentHookEntry,
   removeAgentHooks,
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../_common/hooks.ts';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
-import {
-  createSqaaInstructionsSnippet,
-  createSqaaInstructionsSubfeature,
-  SQAA_HOOK_FEATURE_ID,
-} from '../_common/sqaa-entitlement.ts';
+import { SQAA_HOOK_FEATURE_ID } from '../_common/sqaa-entitlement.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
 import {
@@ -156,7 +156,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
 function createSqaaHookSubfeature(): SubfeatureDeclaration<ClaudeIntegrationOptions> {
   return {
     id: SQAA_HOOK_FEATURE_ID,
-    displayName: 'SQAA agentic-analysis hook',
+    displayName: 'Vortex analysis hook',
     shouldInstall: () => install(),
     resources: [
       wholeFile({
