@@ -30,15 +30,14 @@ import logger from '@/core/observability/logger.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 import { discreetSuccess, type OutputChannel, print, text, warn, withSpinner } from '@/core/ui';
 
+// Type-only, so it does not create a runtime cycle with vortex.ts.
+import type { ResolvedVortexSetup } from './vortex.ts';
+
 export const ENV_SKIP_CAG = '__SQCLI_DEV_SKIP_CAG';
 
 /** True when __SQCLI_DEV_SKIP_CAG is set to 1. */
 export function isContextAugmentationSkipped(): boolean {
   return process.env[ENV_SKIP_CAG]?.trim() === '1';
-}
-
-export interface ResolvedContextAugmentationSetup {
-  scaEnabled: boolean;
 }
 
 /** Context-Augmentation-specific persisted attrs (connection + SCA flag). */
@@ -68,7 +67,7 @@ export async function buildRecordedIntegrationAttrs(params: {
   projectRoot: string;
   serverUrl: string;
   orgKey: string | undefined;
-  contextAugmentation: ResolvedContextAugmentationSetup | null;
+  contextAugmentation: ResolvedVortexSetup | null;
 }): Promise<Record<string, IntegrationStateAttribute>> {
   return {
     ...params.baseAttrs,

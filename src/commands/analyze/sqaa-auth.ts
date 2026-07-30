@@ -31,7 +31,6 @@ import { blank, confirmPrompt, text, warn } from '@/core/ui';
 
 import { SQAA_HOOK_FEATURE_ID } from '../integrate/_common/features/sqaa-instructions-feature.ts';
 import { isProjectVortexFeature } from '../integrate/_common/vortex.ts';
-import { CLAUDE_INTEGRATION_ID } from '../integrate/claude/declaration.ts';
 
 function isProjectSqaaFeature(feature: InstalledIntegrationFeature): boolean {
   return (
@@ -129,22 +128,21 @@ export function resolveCloudAuth(
  * Delegates the worktree-aware matching to the shared resolver (see
  * `selectRecordedFeatureForDir`): the current directory is mapped to its working
  * tree — and, from a linked worktree, to the main working tree — then matched
- * against the recorded Claude Vortex features, preferring a `targetRoot`
- * (physical install dir) match over a `repoRoot`-only one. Falls back to
- * `process.cwd()` when no `projectRoot` is given so the single-file path still
- * works, including from a subdirectory or outside git.
+ * against the recorded Vortex features, preferring a `targetRoot` (physical
+ * install dir) match over a `repoRoot`-only one. Falls back to `process.cwd()`
+ * when no `projectRoot` is given so the single-file path still works, including
+ * from a subdirectory or outside git.
  */
 export async function resolveSqaaProjectKey(projectRoot?: string): Promise<string | null> {
   try {
-    const claude = loadState().integrations.installed.find(
-      (integration) => integration.integrationId === CLAUDE_INTEGRATION_ID,
+    const candidates = loadState().integrations.installed.flatMap((integration) =>
+      integration.features.filter(isProjectSqaaFeature).map((feature) => ({
+        feature,
+        targetRoot: feature.targetRoot,
+        repoRoot: getOptionalStringAttr(feature.attrs, 'repoRoot'),
+        updatedAt: feature.updatedAt,
+      })),
     );
-    const candidates = (claude?.features ?? []).filter(isProjectSqaaFeature).map((feature) => ({
-      feature,
-      targetRoot: feature.targetRoot,
-      repoRoot: getOptionalStringAttr(feature.attrs, 'repoRoot'),
-      updatedAt: feature.updatedAt,
-    }));
     const sqaaFeature = await selectRecordedFeatureForDir(projectRoot ?? process.cwd(), candidates);
 
     const projectKey = sqaaFeature?.attrs?.projectKey;
