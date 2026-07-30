@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { AGENTIC_ANALYSIS_DOCS_URL } from '@/core/config-constants.ts';
+import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
 import type { FeatureContainer, SubfeatureDeclaration } from '@/core/framework/features';
 import { askUser, skip } from '@/core/framework/features';
 import { isSonarQubeCloud, type ResolvedAuth } from '@/core/host/auth-resolver.ts';
@@ -64,7 +64,7 @@ export function createVortexFeature<TOptions extends IntegrateAgentOptions>(
   };
 }
 
-export const VORTEX_PROMOTION_MESSAGE = `Vortex is available on SonarQube Cloud. Learn more: ${AGENTIC_ANALYSIS_DOCS_URL}`;
+export const VORTEX_PROMOTION_MESSAGE = `Vortex is available on SonarQube Cloud. Learn more: ${VORTEX_PRODUCT_URL}`;
 
 export const VORTEX_CHECK_FAILED_MESSAGE = 'Could not determine Vortex entitlement — skipping.';
 
