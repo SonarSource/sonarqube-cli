@@ -146,7 +146,7 @@ export async function installIntegration<TOptions>({
     // Publish the project for `project_uuid` on CliCommandExecuted. Project scope only:
     // `--global` installs have no project key recorded, which is why they report null.
     if (scope === 'project' && auth) {
-      noteProject(auth, findProjectKeyFromFeatures(installedFeatures));
+      noteProject(auth, projectKeyFromAttrs(attrs));
     }
 
     const stateSaved = saveInstalledFeatures(state);
@@ -195,20 +195,16 @@ export function makeContext(
 }
 
 /**
- * Project key for telemetry `project_uuid`: the first `attrs.projectKey` recorded on any
- * installed feature, or undefined when none carries one.
- *
- * `integrate git` records `{ projectKey: options.project ?? null }`, and the agent
- * integrations record the discovered key on their SQAA/CAG features — so the non-empty-string
- * check is what makes a secrets-only git install (which records an explicit `null`) report
- * `project_uuid: null` rather than a bogus value.
+ * Project key for telemetry `project_uuid`. Read from the invocation attrs rather than the
+ * installed features — every application inherits these verbatim, so the value is the same,
+ * but it also survives a run that only removes features. The non-empty check is what makes a
+ * secrets-only `integrate git` (which records an explicit `null`) report no project.
  */
-function findProjectKeyFromFeatures(features: InstalledIntegrationFeature[]): string | undefined {
-  for (const feature of features) {
-    const value = feature.attrs?.projectKey;
-    if (typeof value === 'string' && value.length > 0) return value;
-  }
-  return undefined;
+function projectKeyFromAttrs(
+  attrs: Record<string, IntegrationStateAttribute> | undefined,
+): string | undefined {
+  const value = attrs?.projectKey;
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 /**
