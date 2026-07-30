@@ -74,7 +74,7 @@
       ]
     },
     "sonar-context-augmentation": {
-      "version": "0.18.0.2833",
+      "version": "0.19.0.3620",
       "binaryPath": "Distribution/sonar-context-augmentation",
       "archive": "tar.gz",
       "platformNaming": "x64",
