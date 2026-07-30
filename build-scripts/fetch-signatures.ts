@@ -21,7 +21,7 @@
 /**
  * Build-time script: download and verify .asc signature files for all
  * external binaries at the pinned version, then embed them
- * into src/core/host/signatures.ts so they compile into the binary.
+ * into src/core/host/install/signatures.ts so they compile into the binary.
  *
  * Run after bumping the version in package.json#externalBinaries:
  *   bun run fetch:signatures
@@ -38,7 +38,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import * as openpgp from 'openpgp';
 
 import { SONARSOURCE_BINARIES_URL } from '@/core/config-constants.ts';
-import { SONARSOURCE_PUBLIC_KEY } from '@/core/host/signatures.ts';
+import { SONARSOURCE_PUBLIC_KEY } from '@/core/host/install/signatures.ts';
 
 interface Platform {
   os: string;
@@ -71,7 +71,7 @@ interface SignatureResult {
   armoredSignature: string;
 }
 
-const SIGNATURES_TS_PATH = new URL('../src/core/host/signatures.ts', import.meta.url);
+const SIGNATURES_TS_PATH = new URL('../src/core/host/install/signatures.ts', import.meta.url);
 const PACKAGE_JSON_PATH = new URL('../package.json', import.meta.url);
 
 async function fetchSignatures(): Promise<void> {

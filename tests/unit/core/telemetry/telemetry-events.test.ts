@@ -32,11 +32,11 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { scanAndEmitSecrets } from '@/commands/analyze/secrets.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { ENV_SONAR_USER_HOME, TELEMETRY_ENDPOINT } from '@/core/config-constants.ts';
-import * as agentDetector from '@/core/host/agent-detector.ts';
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import * as networkConfig from '@/core/host/connectivity/network-config.ts';
 import { DISTRIBUTION } from '@/core/host/distribution.ts';
+import * as agentDetector from '@/core/host/environment/agent-detector.ts';
 import type { SpawnResult } from '@/core/process/process.ts';
 import * as fetchGuardedModule from '@/core/server/fetch-guarded.ts';
 import type {

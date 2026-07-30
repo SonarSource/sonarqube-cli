@@ -25,8 +25,8 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
-import { detectPlatform } from '@/core/host/platform-detector.ts';
 
 import { readAnalysisEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';

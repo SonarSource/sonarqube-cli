@@ -31,7 +31,7 @@ import {
   CONTEXT_AUGMENTATION_BINARY_NAME,
   SCA_SCANNER_BINARY_NAME,
   SECRETS_BINARY_NAME,
-} from '@/core/host/install-types.ts';
+} from '@/core/host/install/install-types.ts';
 
 import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
 import type { RecordedRequest } from './types.js';

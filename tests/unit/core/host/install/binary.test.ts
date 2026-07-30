@@ -24,8 +24,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { type BinarySpec, buildLocalBinaryName, removeBinary } from '@/core/host/install/binary.ts';
-import { detectPlatform } from '@/core/host/platform-detector.ts';
 
 const baseSpec: Omit<BinarySpec, 'name' | 'version'> = {
   distPrefix: 'CommercialDistribution/whatever',

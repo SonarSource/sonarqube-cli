@@ -21,12 +21,12 @@
 // sca-scanner-cli install: thin wrapper over the generic binary install pipeline.
 
 import { SCA_SCANNER_CLI_DIST_PREFIX } from '@/core/config-constants.ts';
-import { type PlatformInfo, SCA_SCANNER_BINARY_NAME } from '@/core/host/install-types.ts';
+import { type PlatformInfo, SCA_SCANNER_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import {
   SCA_SCANNER_CLI_SIGNATURES,
   SCA_SCANNER_CLI_VERSION,
   SONARSOURCE_PUBLIC_KEY,
-} from '@/core/host/signatures.ts';
+} from '@/core/host/install/signatures.ts';
 import { discreetSuccess } from '@/core/ui';
 
 import {

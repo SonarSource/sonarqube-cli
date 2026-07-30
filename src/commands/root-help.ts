@@ -23,11 +23,7 @@ import type { Help, Option } from 'commander';
 import { softBlue, underline } from '@/core/ui/colors.ts';
 
 import { version as VERSION } from '../../package.json';
-import {
-  COMMAND_CATEGORIES,
-  type CommandCategory,
-  type SonarCommand,
-} from './_common/sonar-command.ts';
+import { COMMAND_CATEGORIES, type CommandCategory, type SonarCommand } from './sonar-command.ts';
 
 const BANNER_ART = [
   '  █▀ █▀█ █▄ █ ▄▀█ █▀█ █▀█ █ █ █▄▄ █▀▀   ▄█▀ █   █',

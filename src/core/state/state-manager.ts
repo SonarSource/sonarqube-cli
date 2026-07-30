@@ -25,7 +25,7 @@
 
 import crypto from 'node:crypto';
 
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import logger from '@/core/observability/logger.ts';
 import { warn } from '@/core/ui';
 

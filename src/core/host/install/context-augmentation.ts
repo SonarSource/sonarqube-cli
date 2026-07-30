@@ -23,22 +23,22 @@ import { join } from 'node:path';
 
 import { CommandFailedError } from '@/core/command-error.ts';
 import { BIN_DIR } from '@/core/config-constants.ts';
+import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import {
   buildCagPlatformSuffix,
   CONTEXT_AUGMENTATION_BINARY_NAME,
   type PlatformInfo,
-} from '@/core/host/install-types.ts';
-import { detectPlatform } from '@/core/host/platform-detector.ts';
+} from '@/core/host/install/install-types.ts';
 import {
   SONAR_CONTEXT_AUGMENTATION_SIGNATURES,
   SONAR_CONTEXT_AUGMENTATION_VERSION,
   SONARSOURCE_PUBLIC_KEY,
-} from '@/core/host/signatures.ts';
+} from '@/core/host/install/signatures.ts';
 import {
   buildCagDownloadUrl,
   downloadBinary,
   verifyPgpSignature,
-} from '@/core/host/sonarsource-releases.ts';
+} from '@/core/host/install/sonarsource-releases.ts';
 import { extractFileFromTarGz } from '@/core/io/tar.ts';
 import { recordInstallationInState } from '@/core/state/state-manager.ts';
 import { text, withSpinner } from '@/core/ui';

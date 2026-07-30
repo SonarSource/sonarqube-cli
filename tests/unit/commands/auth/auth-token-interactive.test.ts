@@ -61,7 +61,7 @@ import {
   type BrowserAuthResult,
   openBrowserWithFallback,
   waitForTokenInteractive,
-} from '@/commands/_common/token.ts';
+} from '@/core/auth/token.ts';
 
 // ─── Shared setup ─────────────────────────────────────────────────────────────
 

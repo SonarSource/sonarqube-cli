@@ -34,17 +34,17 @@ import { existsSync, mkdirSync, statSync } from 'node:fs';
 import { chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import type { BinarySpec } from '@/core/host/install/binary.ts';
 import { SCA_SCANNER_SPEC } from '@/core/host/install/sca-scanner.ts';
 import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
-import { detectPlatform } from '@/core/host/platform-detector.ts';
-import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
 import {
   buildCagDownloadUrl,
   buildDownloadUrl,
   downloadBinary,
   verifyBinarySignature,
-} from '@/core/host/sonarsource-releases.ts';
+} from '@/core/host/install/sonarsource-releases.ts';
 
 import { DEPENDENCY_ARTIFACTS_DIR } from './dependency-artifacts-path.js';
 

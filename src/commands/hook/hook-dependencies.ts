@@ -21,9 +21,9 @@
 // Shared guard for hook handlers — resolves auth and binary path, throwing
 // MissingDependenciesError if either is unavailable so handlers fail loudly.
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { isEnvBasedAuth, resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
-import { isEnvBasedAuth, resolveAuth } from '@/core/host/auth-resolver.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
 import type { SecretsCallerCommand } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 import { warn } from '@/core/ui';

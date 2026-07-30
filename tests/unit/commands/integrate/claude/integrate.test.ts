@@ -22,12 +22,12 @@ import { homedir } from 'node:os';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
-import * as token from '@/commands/_common/token.ts';
 import { integrateClaude } from '@/commands/integrate/claude';
 import * as hooks from '@/commands/integrate/claude/hooks.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import * as token from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import * as registry from '@/core/framework/features';
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import * as gitWorktree from '@/core/host/git/worktree.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import * as discovery from '@/core/project-info.ts';

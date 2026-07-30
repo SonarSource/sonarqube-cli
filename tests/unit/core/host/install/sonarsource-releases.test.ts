@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { buildCagDownloadUrl, buildDownloadUrl } from '@/core/host/sonarsource-releases.ts';
+import { buildCagDownloadUrl, buildDownloadUrl } from '@/core/host/install/sonarsource-releases.ts';
 
 describe('sonarsource-releases', () => {
   describe('buildDownloadUrl (sonar-secrets convention)', () => {

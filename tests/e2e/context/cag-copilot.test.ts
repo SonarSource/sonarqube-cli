@@ -29,7 +29,7 @@ import { dirname, join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
 import { COPILOT_INTEGRATION_ID } from '@/commands/integrate/copilot/declaration.ts';
-import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
 import type { CliState } from '@/core/state/state.ts';
 
 import { TestHarness } from '../../integration/harness';

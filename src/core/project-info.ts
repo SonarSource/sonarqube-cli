@@ -23,8 +23,8 @@
 import { existsSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
-import { resolveAuth } from '@/core/host/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { findGitRoot, getGitRemote } from '@/core/host/git/discover.ts';
 import {
   discoverProjectKeyByGitRemote,

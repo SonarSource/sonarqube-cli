@@ -33,8 +33,8 @@ import {
   SECRETS_INACTIVE_BINARY_MISSING,
   SECRETS_INACTIVE_UNAUTHENTICATED,
 } from '@/commands/hook/hook-dependencies.ts';
+import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
-import { detectPlatform } from '@/core/host/platform-detector.ts';
 
 import { TestHarness } from '../../harness';
 

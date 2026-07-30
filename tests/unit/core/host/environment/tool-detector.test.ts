@@ -23,14 +23,14 @@ import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import * as process from '@/core/process/process.ts';
 
 // Mock platform-detector so both Windows and non-Windows branches are reachable on any OS.
-const platformDetector = await import('@/core/host/platform-detector.ts');
+const platformDetector = await import('@/core/host/environment/platform-detector.ts');
 const isWindowsMock = mock(() => false);
-void mock.module('@/core/host/platform-detector.ts', () => ({
+void mock.module('@/core/host/environment/platform-detector.ts', () => ({
   ...platformDetector,
   isWindows: isWindowsMock,
 }));
 
-const { detectContainerRuntime } = await import('@/core/host/tool-detector.ts');
+const { detectContainerRuntime } = await import('@/core/host/environment/tool-detector.ts');
 
 describe('detectContainerRuntime', () => {
   let spawnSpy: ReturnType<typeof spyOn>;

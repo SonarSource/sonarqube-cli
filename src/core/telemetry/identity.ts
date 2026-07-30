@@ -18,22 +18,22 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { resolveAuth, type ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import { resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { authMatchesConnection } from '@/core/state/state-manager.ts';
 import {
   identityFromConnection,
   needsIdentityEnrichment,
   resolveTelemetryIdentity,
   type TelemetryIdentity,
-} from '@/core/host/identity-fetch.ts';
-import { authMatchesConnection } from '@/core/state/state-manager.ts';
+} from '@/core/telemetry/identity-fetch.ts';
 
 import type { AuthConnection, ServerType, TelemetryConnectionType } from '../state/state.ts';
 
-export type { TelemetryIdentity } from '@/core/host/identity-fetch.ts';
+export type { TelemetryIdentity } from '@/core/telemetry/identity-fetch.ts';
 export {
   identityFromConnection,
   isIdentityCompleteForConnection,
-} from '@/core/host/identity-fetch.ts';
+} from '@/core/telemetry/identity-fetch.ts';
 
 function toTelemetryConnectionType(type: ServerType): Exclude<TelemetryConnectionType, null> {
   return type === 'cloud' ? 'sqc' : 'sqs';

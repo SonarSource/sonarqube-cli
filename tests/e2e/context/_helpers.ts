@@ -37,7 +37,7 @@ import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.t
 import { CODEX_INTEGRATION_ID } from '@/commands/integrate/codex/declaration.ts';
 import { COPILOT_INTEGRATION_ID } from '@/commands/integrate/copilot/declaration.ts';
 import { CURSOR_INTEGRATION_ID } from '@/commands/integrate/cursor/declaration.ts';
-import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
+import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import type {
   CliState,
   InstalledIntegrationDependency,

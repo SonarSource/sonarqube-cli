@@ -22,9 +22,9 @@ import { type CliState, getDefaultState, type InstalledIntegration } from '@/cor
 import { loadState, saveState } from '@/core/state/state-repository.ts';
 import type { PhaseItem } from '@/core/ui';
 import { info, phase, print, success, text, textPrompt, warn } from '@/core/ui';
+import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 
 import { version as VERSION } from '../../../package.json';
-import { printAgentNonInteractiveAlternativeHint } from '../_common/agent-prompt-hint.ts';
 import { supportedIntegrations } from '../integrate';
 import { purgeAuth } from './reset-auth.ts';
 import { removeBinaries } from './reset-binaries.ts';

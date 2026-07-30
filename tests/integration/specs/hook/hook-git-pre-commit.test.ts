@@ -29,8 +29,8 @@ import {
   HOOK_INACTIVE_UNAUTHENTICATED,
   SECRETS_INACTIVE_BINARY_MISSING,
 } from '@/commands/hook/hook-dependencies.ts';
+import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
-import { detectPlatform } from '@/core/host/platform-detector.ts';
 
 import { readCommandEvents } from '../../../_common/telemetry-helpers.ts';
 import { TestHarness } from '../../harness';

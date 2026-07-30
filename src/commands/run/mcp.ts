@@ -24,16 +24,16 @@ import { spawn } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { getNetworkConfigOrThrow } from '@/core/host/connectivity/network-config.ts';
 import type { ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
+import { detectContainerRuntime } from '@/core/host/environment/tool-detector.ts';
 import {
   clientCertCachePath,
   type McpServerContext,
   resolveMcpContainerCommand,
 } from '@/core/host/mcp/mcp-helper.ts';
-import { detectContainerRuntime } from '@/core/host/tool-detector.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';

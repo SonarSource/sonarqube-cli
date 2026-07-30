@@ -22,10 +22,10 @@ import { randomUUID } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { detectCallerAgent } from '@/core/host/agent-detector.ts';
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
 import type { FetchNetworkOptions } from '@/core/host/connectivity/types.ts';
+import { detectCallerAgent } from '@/core/host/environment/agent-detector.ts';
 import { buildFetchInit, fetchGuarded } from '@/core/server/fetch-guarded.ts';
 import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
 

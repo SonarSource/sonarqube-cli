@@ -20,11 +20,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
 
-import * as token from '@/commands/_common/token.ts';
 import * as vortex from '@/commands/integrate/_common/vortex.ts';
 import { integrateCodex } from '@/commands/integrate/codex';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import * as token from '@/core/auth/token.ts';
 import * as registry from '@/core/framework/features';
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import * as discovery from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';

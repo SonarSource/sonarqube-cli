@@ -23,8 +23,8 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 
+import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { AGENTIC_PACK_URL } from '@/core/config-constants.ts';
-import { resolveAuth } from '@/core/host/auth-resolver.ts';
 import { canonicalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import { timed } from '@/core/observability/timed.ts';

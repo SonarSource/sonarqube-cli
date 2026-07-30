@@ -25,13 +25,13 @@ import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { BIN_DIR } from '@/core/config-constants.ts';
-import { buildPlatformSuffix, type PlatformInfo } from '@/core/host/install-types.ts';
-import { detectPlatform } from '@/core/host/platform-detector.ts';
+import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
+import { buildPlatformSuffix, type PlatformInfo } from '@/core/host/install/install-types.ts';
 import {
   buildDownloadUrl,
   downloadBinary,
   verifyBinarySignature,
-} from '@/core/host/sonarsource-releases.ts';
+} from '@/core/host/install/sonarsource-releases.ts';
 import { recordInstallationInState } from '@/core/state/state-manager.ts';
 import { type OutputChannel, print, text, withSpinner } from '@/core/ui';
 

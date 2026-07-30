@@ -20,6 +20,7 @@
 
 // Centralized auth resolver - resolves token + serverUrl from env vars, state, or keychain
 
+import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
 import { getToken } from '@/core/host/keychain.ts';
 import { warn } from '@/core/ui';
 
@@ -27,7 +28,6 @@ import { SONARCLOUD_URL } from '../config-constants.ts';
 import logger from '../observability/logger.ts';
 import { getActiveConnection } from '../state/state-manager.ts';
 import { loadState } from '../state/state-repository.ts';
-import { recordConnectionFromAuth } from './auth-connection-recorder.ts';
 
 // Re-exported for backward compatibility (lives in server/sonarcloud-region.ts to avoid an import cycle).
 export {

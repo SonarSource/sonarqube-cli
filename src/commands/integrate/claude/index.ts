@@ -22,12 +22,12 @@
 
 import { homedir } from 'node:os';
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { installIntegration } from '@/core/framework/features';
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
+import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 import { removeObsoleteHookArtifacts } from '@/core/update/claude-hooks-migration.ts';
 
-import { printAgentNonInteractiveAlternativeHint } from '../../_common/agent-prompt-hint.ts';
 import {
   displayAgentIntegratePrelude,
   resolveIntegrateInstallTarget,

@@ -24,10 +24,12 @@ import { join } from 'node:path';
 
 import { parse as parseToml } from 'smol-toml';
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { resolveAuth } from '@/core/auth/auth-resolver.ts';
+import type { TokenCheckResult } from '@/core/auth/token.ts';
+import { checkTokenStatus } from '@/core/auth/token.ts';
 import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '@/core/config-constants.ts';
 import { recordedFeatureResources } from '@/core/framework/features';
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
-import { resolveAuth } from '@/core/host/auth-resolver.ts';
 import { getNetworkConfig } from '@/core/host/connectivity/network-config.ts';
 import type {
   CaCertConfig,
@@ -37,24 +39,22 @@ import type {
   ResolvedNetworkConfig,
 } from '@/core/host/connectivity/types.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
-import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
 import {
   CONTEXT_AUGMENTATION_BINARY_NAME,
   SCA_SCANNER_BINARY_NAME,
-} from '@/core/host/install-types.ts';
-import { getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
+} from '@/core/host/install/install-types.ts';
+import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
 import {
   SCA_SCANNER_CLI_VERSION,
   SONAR_CONTEXT_AUGMENTATION_VERSION,
-} from '@/core/host/signatures.ts';
+} from '@/core/host/install/signatures.ts';
+import { getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { loadState } from '@/core/state/state-repository.ts';
 import { blank, print, success, text, warn } from '@/core/ui';
 import { isNewerVersion, stripBuildNumber } from '@/core/version.ts';
 
 import { version as VERSION } from '../../../package.json';
-import type { TokenCheckResult } from '../_common/token.ts';
-import { checkTokenStatus } from '../_common/token.ts';
 import { supportedIntegrations } from '../integrate';
 import { checkAntigravitySecretsHookFile } from '../integrate/antigravity/health.ts';
 import { resolveAntigravityHooksJsonPathForScope } from '../integrate/antigravity/hooks.ts';

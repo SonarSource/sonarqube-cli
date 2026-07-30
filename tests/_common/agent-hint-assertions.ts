@@ -19,7 +19,7 @@
  */
 
 // Shared assertions for `printAgentNonInteractiveAlternativeHint` output
-// (src/commands/_common/agent-prompt-hint.ts). Callers only supply the
+// (src/core/ui/components/agent-prompt-hint.ts). Callers only supply the
 // non-interactive example(s), mirroring the real function's own signature.
 
 import { expect } from 'bun:test';

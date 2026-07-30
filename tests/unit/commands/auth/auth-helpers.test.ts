@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { buildAuthURL, parseBrowserAuthCallback } from '../../../../src/commands/_common/token.ts';
+import { buildAuthURL, parseBrowserAuthCallback } from '@/core/auth/token.ts';
 
 const SONARCLOUD_SERVER = 'https://sonarcloud.io';
 const SONARQUBE_CLOUD_US_SERVER = 'https://sonarqube.us';

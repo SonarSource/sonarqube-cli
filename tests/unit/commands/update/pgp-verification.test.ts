@@ -29,8 +29,11 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as openpgp from 'openpgp';
 
-import type { PlatformInfo } from '@/core/host/install-types.ts';
-import { verifyBinarySignature, verifyPgpSignature } from '@/core/host/sonarsource-releases.ts';
+import type { PlatformInfo } from '@/core/host/install/install-types.ts';
+import {
+  verifyBinarySignature,
+  verifyPgpSignature,
+} from '@/core/host/install/sonarsource-releases.ts';
 
 const PLATFORM: PlatformInfo = { os: 'linux', arch: 'x86-64', extension: '' };
 

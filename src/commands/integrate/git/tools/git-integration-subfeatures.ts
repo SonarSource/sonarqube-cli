@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import {
   scaScannerBinaryDependency,
@@ -25,10 +26,9 @@ import {
 } from '@/core/framework/dependencies';
 import { askUser, install, skip } from '@/core/framework/features/selection.ts';
 import type { FeaturePreview, SubfeatureDeclaration } from '@/core/framework/features/types.ts';
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
+import { assertScaAvailable } from '@/core/server/sca-availability.ts';
 
-import { assertScaAvailable } from '../../../_common/sca-availability.ts';
 import type { GitHookType, IntegrateGitOptions } from '../options.ts';
 
 export const PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID = 'pre-commit-dependency-risks';

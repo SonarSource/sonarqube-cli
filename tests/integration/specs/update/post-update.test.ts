@@ -30,9 +30,9 @@ import {
   SQAA_INSTRUCTIONS_SUBFEATURE_ID,
 } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
 import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
+import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalCagBinaryName } from '@/core/host/install/context-augmentation.ts';
-import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install-types.ts';
-import { detectPlatform } from '@/core/host/platform-detector.ts';
+import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import type { CliState, InstalledIntegrationFeature } from '@/core/state/state.ts';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';

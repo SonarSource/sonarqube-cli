@@ -20,8 +20,8 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { buildContextAugmentationEnv } from '@/commands/_common/context-augmentation-env.ts';
 import { clearNetworkConfigCache } from '@/core/host/connectivity/network-config.ts';
+import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
 import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
 
 const KEYS = [

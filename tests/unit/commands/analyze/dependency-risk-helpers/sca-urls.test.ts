@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 
 import { buildScaUrls } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-urls.ts';
 

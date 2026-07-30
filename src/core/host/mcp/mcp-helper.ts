@@ -24,7 +24,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-import type { ResolvedAuth } from '@/core/host/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { getNetworkConfig } from '@/core/host/connectivity/network-config.ts';
 import type {
   ClientCertConfig,
@@ -39,8 +39,8 @@ import {
   SONARQUBE_MCP_DOCKER_IMAGE_NAME,
 } from '../../config-constants.ts';
 import { normalizePath } from '../../io/fs-utils.ts';
+import type { ContainerRuntime, ContainerRuntimeDetection } from '../environment/tool-detector.ts';
 import type { RedactedUrl } from '../redacted-url.ts';
-import type { ContainerRuntime, ContainerRuntimeDetection } from '../tool-detector.ts';
 
 export interface McpServerConfig {
   command: string;

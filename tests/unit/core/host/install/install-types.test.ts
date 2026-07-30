@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { buildCagPlatformSuffix, buildPlatformSuffix } from '@/core/host/install-types.ts';
+import { buildCagPlatformSuffix, buildPlatformSuffix } from '@/core/host/install/install-types.ts';
 
 describe('install-types', () => {
   describe('buildPlatformSuffix (sonar-secrets convention)', () => {

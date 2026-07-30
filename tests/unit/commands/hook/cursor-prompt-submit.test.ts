@@ -24,7 +24,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import * as authResolver from '@/core/host/auth-resolver.ts';
+import * as authResolver from '@/core/auth/auth-resolver.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 
 import * as analyzeSecrets from '../../../../src/commands/analyze/secrets.ts';

@@ -31,9 +31,9 @@ import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.js';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.js';
 import { CODEX_INTEGRATION_ID } from '@/commands/integrate/codex/declaration.js';
 import { COPILOT_INTEGRATION_ID } from '@/commands/integrate/copilot/declaration.js';
+import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalCagBinaryName } from '@/core/host/install/context-augmentation.js';
-import { detectPlatform } from '@/core/host/platform-detector.ts';
-import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/signatures.ts';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
 import { pathComparisonKey } from '@/core/io/fs-utils.ts';
 import type { CliState, InstalledIntegrationFeature } from '@/core/state/state.ts';
 

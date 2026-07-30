@@ -27,7 +27,7 @@ import {
   isCodexAgentEnv,
   isCopilotCliAgentEnv,
   isCursorAgentEnv,
-} from '@/core/host/agent-detector.ts';
+} from '@/core/host/environment/agent-detector.ts';
 
 function env(overrides: Record<string, string | undefined>): NodeJS.ProcessEnv {
   return overrides;

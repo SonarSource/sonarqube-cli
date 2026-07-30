@@ -22,7 +22,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import * as authConnectionRecorder from '@/core/host/auth-connection-recorder.ts';
+import * as authConnectionRecorder from '@/core/auth/auth-connection-recorder.ts';
 import {
   cloudRegionFromUrl,
   ENV_SERVER,
@@ -31,12 +31,12 @@ import {
   resetEnvAuthRecordGuard,
   resolveAuth,
   resolveFromEndpoint,
-} from '@/core/host/auth-resolver.ts';
+} from '@/core/auth/auth-resolver.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
-import { createKeychainTestHandle } from '../../core/host/keychain-test-handle.ts';
+import { createKeychainTestHandle } from '../host/keychain-test-handle.ts';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const FAKE_TOKEN = 'squ_test_token_abc123';
