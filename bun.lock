@@ -7,7 +7,7 @@
       "dependencies": {
         "@clack/core": "1.4.3",
         "@sentry/bun": "10.68.0",
-        "@toon-format/toon": "2.3.1",
+        "@toon-format/toon": "4.1.0",
         "commander": "15.0.0",
         "js-yaml": "5.2.2",
         "node-forge": "1.4.0",
@@ -169,7 +169,7 @@
 
     "@sonar/scan": ["@sonar/scan@4.4.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sonar/scan/-/@sonar/scan-4.4.0.tgz", { "dependencies": { "adm-zip": "0.5.17", "axios": "1.17.0", "commander": "14.0.3", "hpagent": "1.2.0", "node-forge": "1.4.0", "properties-file": "5.0.5", "proxy-from-env": "2.1.0", "semver": "7.8.4", "slugify": "1.6.9", "tar-stream": "3.2.0" }, "bin": { "sonar-scanner-npm": "bin/sonar-scanner.js", "sonar": "bin/sonar-scanner.js", "sonar-scanner": "bin/sonar-scanner.js" } }, "sha512-ZRQERJ1pLNfoyrwudfXSYlDI1CaFY6dnvsbSzLELVcyHZ5HAr95FJHshXaDesEja9QONeF1MlcDtgVWSEU1aRA=="],
 
-    "@toon-format/toon": ["@toon-format/toon@2.3.1", "https://repox.jfrog.io/artifactory/api/npm/npm/@toon-format/toon/-/toon-2.3.1.tgz", {}, "sha512-sWqEMeAJGMda9qRrfPKrX3C4c33CO9SJuvJzzrcBEn5sbDB+k6pSLkDsfN0rVnLQwR97MV3sDgVbcxQNsq8xVw=="],
+    "@toon-format/toon": ["@toon-format/toon@4.1.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@toon-format/toon/-/toon-4.1.0.tgz", {}, "sha512-dBB3pkEx9QYvHnHR6rtkaBAh+7x4W/oA5ONur4G0fh7Ow69PbPuM7OFxzNRABqyxC0t6SZ3RixiGbCuaFjPDAQ=="],
 
     "@types/babel-generator": ["@types/babel-generator@6.25.8", "https://repox.jfrog.io/artifactory/api/npm/npm/@types/babel-generator/-/babel-generator-6.25.8.tgz", { "dependencies": { "@types/babel-types": "*" } }, "sha512-f5l89J0UpYhTE6TFCxy3X+8pJVru1eig1fcvF9qHmOk9h1VxZimd+++tu5GShntCOdhE/MoZZ0SlpGTyh4XrKg=="],
 
