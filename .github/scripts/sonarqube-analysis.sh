@@ -38,8 +38,8 @@ sonar_scanner_implementation() {
   fi
   scanner_args+=("${additional_params[@]+${additional_params[@]}}")
 
-  echo "sonar command: npx sonar ${scanner_args[*]}"
-  npx sonar "${scanner_args[@]}"
+  echo "sonar command: npx sonar-scanner-npm ${scanner_args[*]}"
+  npx sonar-scanner-npm "${scanner_args[@]}"
   return 0
 }
 
