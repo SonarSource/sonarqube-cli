@@ -53,32 +53,37 @@ describe('apiCommand', () => {
     genericRequestSpy.mockRestore();
   });
 
-  it('throws InvalidOptionError for invalid HTTP method', () => {
-    expect(apiCommand(FAKE_AUTH, 'TRACE', '/api/system/status', {})).rejects.toThrow(
+  it('throws InvalidOptionError for invalid HTTP method', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(apiCommand(FAKE_AUTH, 'TRACE', '/api/system/status', {})).rejects.toThrow(
       "Invalid HTTP method 'TRACE'",
     );
   });
 
-  it('throws InvalidOptionError when endpoint does not start with /', () => {
-    expect(apiCommand(FAKE_AUTH, 'get', 'api/system/status', {})).rejects.toThrow(
+  it('throws InvalidOptionError when endpoint does not start with /', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(apiCommand(FAKE_AUTH, 'get', 'api/system/status', {})).rejects.toThrow(
       "Endpoint must start with '/'",
     );
   });
 
-  it('throws InvalidOptionError when --data is used with GET', () => {
-    expect(
+  it('throws InvalidOptionError when --data is used with GET', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(
       apiCommand(FAKE_AUTH, 'get', '/api/system/status', { data: '{"k":"v"}' }),
     ).rejects.toThrow('--data is only valid for');
   });
 
-  it('throws InvalidOptionError when --data is used with DELETE', () => {
-    expect(
+  it('throws InvalidOptionError when --data is used with DELETE', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(
       apiCommand(FAKE_AUTH, 'delete', '/api/system/status', { data: '{"k":"v"}' }),
     ).rejects.toThrow('--data is only valid for');
   });
 
-  it('throws InvalidOptionError when --data is not valid JSON', () => {
-    expect(
+  it('throws InvalidOptionError when --data is not valid JSON', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(
       apiCommand(FAKE_AUTH, 'post', '/api/system/status', { data: 'not-json' }),
     ).rejects.toThrow('--data must be valid JSON');
   });

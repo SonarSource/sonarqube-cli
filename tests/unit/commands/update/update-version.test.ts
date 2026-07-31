@@ -137,19 +137,21 @@ describe('checkForUpdate', () => {
     timeoutSpy.mockRestore();
   });
 
-  it('throws on HTTP error', () => {
+  it('throws on HTTP error', async () => {
     fetchSpy.mockResolvedValue({ ok: false, status: 404 });
 
-    expect(checkForUpdate()).rejects.toThrow('HTTP 404');
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(checkForUpdate()).rejects.toThrow('HTTP 404');
   });
 
-  it('throws when stable.version is invalid', () => {
+  it('throws when stable.version is invalid', async () => {
     fetchSpy.mockResolvedValue({
       ok: true,
       text: async () => Promise.resolve('not-a-version'),
     });
 
-    expect(checkForUpdate()).rejects.toThrow('Could not determine the latest version');
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(checkForUpdate()).rejects.toThrow('Could not determine the latest version');
   });
 
   describe('with SONAR_HTTPS_PROXY_URL set', () => {

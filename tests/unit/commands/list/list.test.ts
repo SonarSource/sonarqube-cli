@@ -414,38 +414,44 @@ describe('issuesSearchCommand', () => {
     setMockUi(false);
   });
 
-  it('throws when --project is missing', () => {
-    expect(listIssues({ page: 1, pageSize: 500 }, mockAuth)).rejects.toThrow(
+  it('throws when --project is missing', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(listIssues({ page: 1, pageSize: 500 }, mockAuth)).rejects.toThrow(
       '--project is required',
     );
   });
 
-  it('throws when --format is invalid', () => {
-    expect(
+  it('throws when --format is invalid', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(
       listIssues({ project: 'proj', format: 'xml', page: 1, pageSize: 500 }, mockAuth),
     ).rejects.toThrow('xml');
   });
 
-  it('throws when --page is 0', () => {
-    expect(listIssues({ project: 'proj', page: 0, pageSize: 500 }, mockAuth)).rejects.toThrow(
+  it('throws when --page is 0', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(listIssues({ project: 'proj', page: 0, pageSize: 500 }, mockAuth)).rejects.toThrow(
       'page',
     );
   });
 
-  it('throws when --page-size is 0', () => {
-    expect(listIssues({ project: 'proj', page: 1, pageSize: 0 }, mockAuth)).rejects.toThrow(
+  it('throws when --page-size is 0', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(listIssues({ project: 'proj', page: 1, pageSize: 0 }, mockAuth)).rejects.toThrow(
       'page-size',
     );
   });
 
-  it('throws when --page-size exceeds maximum', () => {
-    expect(
+  it('throws when --page-size exceeds maximum', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(
       listIssues({ project: 'proj', page: 1, pageSize: MAX_PAGE_SIZE + 1 }, mockAuth),
     ).rejects.toThrow('page-size');
   });
 
-  it('throws when --severities is invalid', () => {
-    expect(
+  it('throws when --severities is invalid', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(
       listIssues({ project: 'proj', severities: 'EXTREME', page: 1, pageSize: 500 }, mockAuth),
     ).rejects.toThrow('EXTREME');
   });
@@ -520,8 +526,9 @@ describe('issuesSearchCommand', () => {
     }
   });
 
-  it('throws when Standard-only value is used on MQR server', () => {
-    expect(
+  it('throws when Standard-only value is used on MQR server', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(
       listIssues({ project: 'proj', severities: 'MAJOR', page: 1, pageSize: 500 }, mockAuth),
     ).rejects.toThrow('Invalid severity');
   });
@@ -548,10 +555,11 @@ describe('issuesSearchCommand', () => {
     }
   });
 
-  it('throws when MQR-only value is used on Standard server', () => {
+  it('throws when MQR-only value is used on Standard server', async () => {
     const modeSpy = spyOn(SonarQubeClient.prototype, 'getServerMode').mockResolvedValue('standard');
     try {
-      expect(
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(
         listIssues({ project: 'proj', severities: 'HIGH', page: 1, pageSize: 500 }, mockAuth),
       ).rejects.toThrow('Invalid severity');
     } finally {
@@ -559,8 +567,9 @@ describe('issuesSearchCommand', () => {
     }
   });
 
-  it('throws when --statuses is invalid', () => {
-    expect(
+  it('throws when --statuses is invalid', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(
       listIssues({ project: 'proj', statuses: 'UNKNOWN', page: 1, pageSize: 500 }, mockAuth),
     ).rejects.toThrow('UNKNOWN');
   });

@@ -148,13 +148,17 @@ afterEach(() => {
 // ─── analyzeSqaa ─────────────────────────────────────────────────────────────
 
 describe('analyzeSqaa: input validation', () => {
-  it('throws InvalidOptionError when file does not exist', () => {
+  it('throws InvalidOptionError when file does not exist', async () => {
     statSyncSpy.mockReturnValue(undefined);
 
-    expect(analyzeSqaa({ file: ['nonexistent.ts'] }, FAKE_AUTH)).rejects.toThrow(
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(analyzeSqaa({ file: ['nonexistent.ts'] }, FAKE_AUTH)).rejects.toThrow(
       InvalidOptionError,
     );
-    expect(analyzeSqaa({ file: ['nonexistent.ts'] }, FAKE_AUTH)).rejects.toThrow('File not found');
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(analyzeSqaa({ file: ['nonexistent.ts'] }, FAKE_AUTH)).rejects.toThrow(
+      'File not found',
+    );
   });
 });
 
@@ -335,21 +339,27 @@ describe('analyzeSqaa: path normalization', () => {
     const request = createAnalysisSpy.mock.calls[0][0];
     expect(request.files[0].path).toBe('python/scripts/check_md_code_blocks.py');
   });
-  it('throws InvalidOptionError when file is outside the current working directory', () => {
+  it('throws InvalidOptionError when file is outside the current working directory', async () => {
     const differentDrive =
       process.platform === 'win32'
         ? String.raw`D:\other-project\file.ts`
         : '/other-project/file.ts';
 
-    expect(analyzeSqaa({ file: ['../outside.ts'] }, FAKE_AUTH)).rejects.toThrow(InvalidOptionError);
-    expect(analyzeSqaa({ file: [differentDrive] }, FAKE_AUTH)).rejects.toThrow(InvalidOptionError);
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(analyzeSqaa({ file: ['../outside.ts'] }, FAKE_AUTH)).rejects.toThrow(
+      InvalidOptionError,
+    );
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(analyzeSqaa({ file: [differentDrive] }, FAKE_AUTH)).rejects.toThrow(
+      InvalidOptionError,
+    );
   });
 });
 
 // ─── analyzeSqaa: explicit --project option ──────────────────────────────────
 
 describe('analyzeSqaa: explicit --project option', () => {
-  it('throws CommandFailedError when --project given but on-premise server', () => {
+  it('throws CommandFailedError when --project given but on-premise server', async () => {
     const onPremiseAuth = {
       token: TEST_TOKEN,
       serverUrl: 'https://mysonar.company.com',
@@ -357,7 +367,8 @@ describe('analyzeSqaa: explicit --project option', () => {
       connectionType: 'on-premise' as const,
     };
 
-    expect(
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(
       analyzeSqaa({ file: ['src/index.ts'], project: 'my-project' }, onPremiseAuth),
     ).rejects.toThrow(CommandFailedError);
   });
@@ -405,18 +416,20 @@ describe('buildSqaaJsonReport', () => {
     expect(report?.failures[0].message).toContain('Network error');
   });
 
-  it('throws InvalidOptionError for invalid --depth', () => {
-    expect(
+  it('throws InvalidOptionError for invalid --depth', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(
       buildSqaaJsonReport({ file: ['src/index.ts'], depth: 'INVALID' }, FAKE_AUTH),
     ).rejects.toThrow(InvalidOptionError);
   });
 });
 
 describe('analyzeSqaa: depth option', () => {
-  it('throws InvalidOptionError for invalid --depth', () => {
-    expect(analyzeSqaa({ file: ['src/index.ts'], depth: 'INVALID' }, FAKE_AUTH)).rejects.toThrow(
-      InvalidOptionError,
-    );
+  it('throws InvalidOptionError for invalid --depth', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(
+      analyzeSqaa({ file: ['src/index.ts'], depth: 'INVALID' }, FAKE_AUTH),
+    ).rejects.toThrow(InvalidOptionError);
   });
 
   it('sends DEEP on the wire when --depth DEEP is set for a single file', async () => {

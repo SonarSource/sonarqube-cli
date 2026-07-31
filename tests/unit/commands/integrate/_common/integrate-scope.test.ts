@@ -83,9 +83,10 @@ describe('resolveIntegrateScope', () => {
     ).toBe(true);
   });
 
-  it('throws CommandFailedError when the user cancels the scope prompt', () => {
+  it('throws CommandFailedError when the user cancels the scope prompt', async () => {
     queueMockResponse(null);
-    expect(resolveIntegrateScope({})).rejects.toThrow(CommandFailedError);
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(resolveIntegrateScope({})).rejects.toThrow(CommandFailedError);
   });
 });
 

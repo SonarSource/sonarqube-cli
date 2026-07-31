@@ -91,9 +91,10 @@ describe('DefaultSecretsInstaller', () => {
     expect(result).toBe('/bin/sonar-secrets');
   });
 
-  it('propagates the install error when the binary cannot be installed', () => {
+  it('propagates the install error when the binary cannot be installed', async () => {
     installBinaryImpl = () => Promise.reject(new Error('download failed'));
 
-    expect(new DefaultSecretsInstaller().install()).rejects.toThrow(/download failed/);
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(new DefaultSecretsInstaller().install()).rejects.toThrow(/download failed/);
   });
 });
