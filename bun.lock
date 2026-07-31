@@ -18,7 +18,7 @@
       },
       "devDependencies": {
         "@sentry/cli": "3.6.2",
-        "@sonar/scan": "4.3.8",
+        "@sonar/scan": "4.4.0",
         "@types/bun": "1.3.14",
         "@types/istanbul-lib-coverage": "2.0.6",
         "@types/istanbul-lib-instrument": "1.7.8",
@@ -167,7 +167,7 @@
 
     "@sentry/server-utils": ["@sentry/server-utils@10.64.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sentry/server-utils/-/server-utils-10.64.0.tgz", { "dependencies": { "@apm-js-collab/code-transformer": "^0.15.0", "@apm-js-collab/code-transformer-bundler-plugins": "^0.5.0", "@apm-js-collab/tracing-hooks": "^0.10.1", "@sentry/conventions": "^0.15.1", "@sentry/core": "10.64.0", "magic-string": "~0.30.0" } }, "sha512-d568Jhn3WBfm07dsdPsLh0q+qRj71xZEDZFsA33kizD0UuSCR8axtc2YW6aKdPhtuqgm9tHjSX35Q9vK/XmujA=="],
 
-    "@sonar/scan": ["@sonar/scan@4.3.8", "https://repox.jfrog.io/artifactory/api/npm/npm/@sonar/scan/-/@sonar/scan-4.3.8.tgz", { "dependencies": { "adm-zip": "0.5.17", "axios": "1.17.0", "commander": "14.0.3", "hpagent": "1.2.0", "node-forge": "1.4.0", "properties-file": "5.0.5", "proxy-from-env": "2.1.0", "semver": "7.8.4", "slugify": "1.6.9", "tar-stream": "3.2.0" }, "bin": { "sonar": "bin/sonar-scanner.js", "sonar-scanner": "bin/sonar-scanner.js" } }, "sha512-JibF2fBqUNxyhRzNdEtbnay3krit/vLXPwr34easahTMeIClZflmXBWt/z9lUoqEWki2UhzrCxzGt6wrEFMJLg=="],
+    "@sonar/scan": ["@sonar/scan@4.4.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@sonar/scan/-/@sonar/scan-4.4.0.tgz", { "dependencies": { "adm-zip": "0.5.17", "axios": "1.17.0", "commander": "14.0.3", "hpagent": "1.2.0", "node-forge": "1.4.0", "properties-file": "5.0.5", "proxy-from-env": "2.1.0", "semver": "7.8.4", "slugify": "1.6.9", "tar-stream": "3.2.0" }, "bin": { "sonar-scanner-npm": "bin/sonar-scanner.js", "sonar": "bin/sonar-scanner.js", "sonar-scanner": "bin/sonar-scanner.js" } }, "sha512-ZRQERJ1pLNfoyrwudfXSYlDI1CaFY6dnvsbSzLELVcyHZ5HAr95FJHshXaDesEja9QONeF1MlcDtgVWSEU1aRA=="],
 
     "@toon-format/toon": ["@toon-format/toon@2.3.1", "https://repox.jfrog.io/artifactory/api/npm/npm/@toon-format/toon/-/toon-2.3.1.tgz", {}, "sha512-sWqEMeAJGMda9qRrfPKrX3C4c33CO9SJuvJzzrcBEn5sbDB+k6pSLkDsfN0rVnLQwR97MV3sDgVbcxQNsq8xVw=="],
 
