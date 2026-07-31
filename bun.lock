@@ -14,7 +14,7 @@
         "openpgp": "6.3.1",
         "picocolors": "1.1.1",
         "picomatch": "4.0.5",
-        "smol-toml": "1.7.0",
+        "smol-toml": "1.7.1",
       },
       "devDependencies": {
         "@sentry/cli": "3.6.2",
@@ -527,7 +527,7 @@
 
     "slugify": ["slugify@1.6.9", "https://repox.jfrog.io/artifactory/api/npm/npm/slugify/-/slugify-1.6.9.tgz", {}, "sha512-vZ7rfeehZui7wQs438JXBckYLkIIdfHOXsaVEUMyS5fHo1483l1bMdo0EDSWYclY0yZKFOipDy4KHuKs6ssvdg=="],
 
-    "smol-toml": ["smol-toml@1.7.0", "https://repox.jfrog.io/artifactory/api/npm/npm/smol-toml/-/smol-toml-1.7.0.tgz", {}, "sha512-aqVvWoyO21L23mb+drl4RmMXbf6N7FdHjAhTRA9ZBL7apWBgfWC16KjrASI+1p9GAroljyMHj6fK67i0UiTNvQ=="],
+    "smol-toml": ["smol-toml@1.7.1", "https://repox.jfrog.io/artifactory/api/npm/npm/smol-toml/-/smol-toml-1.7.1.tgz", {}, "sha512-PPlsspAZ4jbMBu5DMFhfUGDQLu/vrL4SyBROVS37x8ynnVmFIs1VPBz1Co8Xks3TvpIaZXmU85y4DrQ+UyVFoQ=="],
 
     "source-map": ["source-map@0.6.1", "https://repox.jfrog.io/artifactory/api/npm/npm/source-map/-/source-map-0.6.1.tgz", {}, "sha512-UjgapumWlbMhkBgzT7Ykc5YXUT46F0iKu8SGXq0bcwP5dz/h0Plj6enJqjz1Zbq2l5WaqYnrVbwWOWMyF3F47g=="],
 
