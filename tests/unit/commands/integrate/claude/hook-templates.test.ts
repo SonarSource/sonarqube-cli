@@ -27,8 +27,8 @@ import {
   WINDOWS_SONAR_COMMAND_GUARD,
 } from '../../../../../src/commands/integrate/_common/hooks.ts';
 import {
-  getContextAugmentationHookTemplateUnix,
-  getContextAugmentationHookTemplateWindows,
+  getPostToolUseFailureTemplateUnix,
+  getPostToolUseFailureTemplateWindows,
   getSecretPreToolTemplateUnix,
   getSecretPreToolTemplateWindows,
   getSecretPromptTemplateUnix,
@@ -84,21 +84,19 @@ describe('Secret Scanning Hook Templates', () => {
   });
 });
 
-describe('Context Augmentation Hook Templates', () => {
-  it('Unix hook: bash shebang, delegates to sonar context hook', () => {
-    const template = getContextAugmentationHookTemplateUnix();
+describe('PostToolUseFailure Hook Templates', () => {
+  it('Unix hook: bash shebang, delegates to sonar hook', () => {
+    const template = getPostToolUseFailureTemplateUnix();
 
     expect(template.startsWith('#!/bin/bash')).toBe(true);
-    expect(template.includes('sonar context __hook Claude')).toBe(true);
-    expect(template.includes('ClaudePostToolUse')).toBe(false);
+    expect(template.includes('sonar hook claude-post-tool-use-failure')).toBe(true);
     expect(template.includes(UNIX_SONAR_COMMAND_GUARD)).toBe(true);
   });
 
-  it('Windows hook: delegates to sonar context hook', () => {
-    const template = getContextAugmentationHookTemplateWindows();
+  it('Windows hook: delegates to sonar hook', () => {
+    const template = getPostToolUseFailureTemplateWindows();
 
-    expect(template.includes('sonar context __hook Claude')).toBe(true);
-    expect(template.includes('ClaudePostToolUse')).toBe(false);
+    expect(template.includes('sonar hook claude-post-tool-use-failure')).toBe(true);
     expect(template.includes(WINDOWS_SONAR_COMMAND_GUARD)).toBe(true);
   });
 });
@@ -144,8 +142,8 @@ describe('Template Integrity', () => {
       getSecretPreToolTemplateWindows(),
       getSecretPromptTemplateUnix(),
       getSecretPromptTemplateWindows(),
-      getContextAugmentationHookTemplateUnix(),
-      getContextAugmentationHookTemplateWindows(),
+      getPostToolUseFailureTemplateUnix(),
+      getPostToolUseFailureTemplateWindows(),
       getSqaaPostToolTemplateUnix('proj'),
       getSqaaPostToolTemplateWindows('proj'),
     ];
@@ -167,8 +165,8 @@ describe('Template Integrity', () => {
       getSecretPreToolTemplateWindows(),
       getSecretPromptTemplateUnix(),
       getSecretPromptTemplateWindows(),
-      getContextAugmentationHookTemplateUnix(),
-      getContextAugmentationHookTemplateWindows(),
+      getPostToolUseFailureTemplateUnix(),
+      getPostToolUseFailureTemplateWindows(),
       getSqaaPostToolTemplateUnix('proj'),
       getSqaaPostToolTemplateWindows('proj'),
     ];
@@ -178,19 +176,12 @@ describe('Template Integrity', () => {
     });
   });
 
-  it('SQAA template routes to claude-post-tool-use, secrets templates route to other events', () => {
+  it('SQAA and PostToolUseFailure templates route to their own events, secrets does not', () => {
     expect(getSqaaPostToolTemplateUnix('proj').includes('claude-post-tool-use')).toBe(true);
     expect(getSqaaPostToolTemplateWindows('proj').includes('claude-post-tool-use')).toBe(true);
+    expect(getPostToolUseFailureTemplateUnix().includes('claude-post-tool-use-failure')).toBe(true);
 
     expect(getSecretPreToolTemplateUnix().includes('claude-post-tool-use')).toBe(false);
     expect(getSecretPromptTemplateUnix().includes('claude-post-tool-use')).toBe(false);
-    expect(getContextAugmentationHookTemplateUnix().includes('claude-post-tool-use')).toBe(false);
-  });
-
-  it('Context Augmentation template routes to the double-underscore CAG hook', () => {
-    expect(getContextAugmentationHookTemplateUnix().includes('sonar context __hook Claude')).toBe(
-      true,
-    );
-    expect(getContextAugmentationHookTemplateUnix().includes('sonar context _hook')).toBe(false);
   });
 });

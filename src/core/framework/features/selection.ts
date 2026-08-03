@@ -86,29 +86,62 @@ export async function selectFeaturesForInvocation<TOptions>(
   invocation: IntegrationInvocation<TOptions>,
   applications: FeatureApplication<TOptions>[],
 ): Promise<FeatureSelectionResult<TOptions>> {
-  const toInstall: FeatureApplication<TOptions>[] = [];
-  const toRemove: FeatureApplication<TOptions>[] = [];
-  const declined: string[] = [];
+  const result: FeatureSelectionResult<TOptions> = { toInstall: [], toRemove: [], declined: [] };
 
   for (const application of applications) {
-    const feature = application.feature;
     if (isFeatureInstalled(integration, invocation, application)) {
-      if (await shouldRemoveInstalledFeature(feature, invocation)) {
-        toRemove.push(application);
-      } else {
-        toInstall.push(await materializeApplication(application, invocation, declined));
-      }
+      await resolveInstalledApplication(application, invocation, result);
     } else {
-      const outcome = await shouldInstallFeature(feature, invocation);
-      if (outcome === 'install') {
-        toInstall.push(await materializeApplication(application, invocation, declined));
-      } else if (outcome === 'declined') {
-        declined.push(feature.id);
-      }
+      await resolveNotInstalledApplication(application, invocation, result);
     }
   }
 
-  return { toInstall, toRemove, declined };
+  return result;
+}
+
+async function resolveInstalledApplication<TOptions>(
+  application: FeatureApplication<TOptions>,
+  invocation: IntegrationInvocation<TOptions>,
+  result: FeatureSelectionResult<TOptions>,
+): Promise<void> {
+  if (await shouldRemoveInstalledFeature(application.feature, invocation)) {
+    result.toRemove.push(application);
+    return;
+  }
+
+  const materialized = await materializeApplication(application, invocation, result.declined);
+  // An installed container left with zero active subfeatures is a removal, not a husk.
+  if (isEmptyContainerApplication(materialized)) {
+    result.toRemove.push(application);
+  } else {
+    result.toInstall.push(materialized);
+  }
+}
+
+async function resolveNotInstalledApplication<TOptions>(
+  application: FeatureApplication<TOptions>,
+  invocation: IntegrationInvocation<TOptions>,
+  result: FeatureSelectionResult<TOptions>,
+): Promise<void> {
+  const outcome = await shouldInstallFeature(application.feature, invocation);
+  if (outcome === 'declined') {
+    result.declined.push(application.feature.id);
+    return;
+  }
+  if (outcome !== 'install') {
+    return;
+  }
+
+  const materialized = await materializeApplication(application, invocation, result.declined);
+  // A container reaching 'install' can still end up with zero subfeatures accepted.
+  if (!isEmptyContainerApplication(materialized)) {
+    result.toInstall.push(materialized);
+  }
+}
+
+function isEmptyContainerApplication<TOptions>(application: FeatureApplication<TOptions>): boolean {
+  const feature = application.feature;
+  return isFeatureContainer(feature) && feature.subfeatures.length === 0;
 }
 
 function isFeatureInstalled<TOptions>(

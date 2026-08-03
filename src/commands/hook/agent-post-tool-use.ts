@@ -19,7 +19,6 @@
  */
 
 // PostToolUse callback handler — runs SQAA analysis after the agent edits or writes a file.
-// Replaces the bash/PowerShell logic that was previously embedded in the hook script.
 
 import { existsSync, readFileSync } from 'node:fs';
 
@@ -37,13 +36,15 @@ import {
 
 import { resolveSqaaBranch } from '../analyze/sqaa-changeset.ts';
 import { fetchSingleFileReport, finishSqaaTelemetryFromReport } from '../analyze/sqaa-run.ts';
-import { formatSqaaIssuesForHook, writePostToolUseHookOutput } from './format-sqaa-hook-context.ts';
-import { readStdinJson } from './stdin.ts';
-
-interface PostToolUsePayload {
-  tool_name?: string;
-  tool_input?: { file_path?: string };
-}
+import type {
+  ClaudePostToolUsePayload,
+  ClaudePostToolUseResult,
+  ClaudePostToolUseSubscriber,
+} from './claude-hook-dispatch.ts';
+import { runClaudePostToolUseDispatch } from './claude-hook-dispatch.ts';
+import { contextAugmentationPostToolUseSubscriber } from './context-augmentation-hook-subscriber.ts';
+import { formatSqaaIssuesForHook } from './format-sqaa-hook-context.ts';
+import { readStdinJsonWithRaw } from './stdin.ts';
 
 export interface AgentPostToolUseOptions {
   project?: string;
@@ -54,34 +55,30 @@ const CLAUDE_HOOK_TELEMETRY_OPTIONS = {
   telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
 } as const;
 
-export async function agentPostToolUse(options: AgentPostToolUseOptions): Promise<void> {
-  let payload: PostToolUsePayload;
-  try {
-    payload = await readStdinJson<PostToolUsePayload>();
-  } catch {
-    return; // unparseable stdin — non-blocking
+async function handleSqaaPostToolUse(
+  payload: ClaudePostToolUsePayload,
+  projectKey: string | undefined,
+): Promise<ClaudePostToolUseResult> {
+  const filePath = payload.tool_input?.file_path;
+  if (!filePath || !existsSync(filePath)) {
+    return { decision: 'none' };
   }
 
-  const toolName = payload.tool_name;
-  if (toolName !== 'Edit' && toolName !== 'Write') return;
-
-  const filePath = payload.tool_input?.file_path;
-  if (!filePath || !existsSync(filePath)) return;
-
   const auth = await resolveAuth().catch(() => null);
-  if (auth?.connectionType !== 'cloud') return;
+  if (auth?.connectionType !== 'cloud') {
+    return { decision: 'none' };
+  }
 
   const orgKey = auth.orgKey;
-  if (!orgKey) return;
-
-  const projectKey = options.project;
-  if (!projectKey) return;
+  if (!orgKey || !projectKey) {
+    return { decision: 'none' };
+  }
 
   const canonicalPath = canonicalizePath(filePath);
   const normalizedPath = toRelativePosixPath(canonicalPath);
   if (normalizedPath == null) {
     logger.debug(`PostToolUse SQAA skipped: file outside cwd: ${filePath}`);
-    return;
+    return { decision: 'none' };
   }
 
   const runStart = performance.now();
@@ -117,25 +114,51 @@ export async function agentPostToolUse(options: AgentPostToolUseOptions): Promis
       Math.round(performance.now() - runStart),
     ).catch(() => undefined);
     logger.debug(`PostToolUse SQAA analysis failed: ${(err as Error).message}`);
-    return;
+    return { decision: 'none' };
   }
 
   if (fetchResult.error) {
     if (fetchResult.error instanceof SqaaForbiddenError) {
-      writePostToolUseHookOutput(
-        `Run \`sonar integrate\` to uninstall unavailable hooks. See ${AGENTIC_PACK_URL}`,
-      );
-      return;
+      return {
+        decision: 'context',
+        additionalContext: `Run \`sonar integrate\` to uninstall unavailable hooks. See ${AGENTIC_PACK_URL}`,
+      };
     }
     logger.debug(`PostToolUse SQAA analysis failed: ${fetchResult.error.message}`);
-    return;
+    return { decision: 'none' };
   }
 
   try {
     const file = fetchResult.report.files[0];
     const text = formatSqaaIssuesForHook(file.issues, file.errors, normalizedPath);
-    writePostToolUseHookOutput(text);
+    return { decision: 'context', additionalContext: text };
   } catch (err) {
     logger.debug(`PostToolUse SQAA hook output failed: ${(err as Error).message}`);
+    return { decision: 'none' };
   }
+}
+
+function createSqaaPostToolUseSubscriber(
+  projectKey: string | undefined,
+): ClaudePostToolUseSubscriber {
+  return {
+    id: 'sqaa',
+    matches: (toolName) => toolName === 'Edit' || toolName === 'Write',
+    handle: (payload) => handleSqaaPostToolUse(payload, projectKey),
+  };
+}
+
+export async function agentPostToolUse(options: AgentPostToolUseOptions): Promise<void> {
+  let raw: string;
+  let payload: ClaudePostToolUsePayload;
+  try {
+    ({ raw, parsed: payload } = await readStdinJsonWithRaw<ClaudePostToolUsePayload>());
+  } catch {
+    return; // unparseable stdin — non-blocking
+  }
+
+  await runClaudePostToolUseDispatch(payload, raw, [
+    createSqaaPostToolUseSubscriber(options.project),
+    contextAugmentationPostToolUseSubscriber,
+  ]);
 }
