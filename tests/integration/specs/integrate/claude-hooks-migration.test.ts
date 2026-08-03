@@ -60,7 +60,7 @@ function entriesOwnedBy(entries: ClaudeHookEntry[] | undefined, marker: string):
 
 describe('integrate claude — CLI-900 CAG hook migration', () => {
   let harness: TestHarness;
-  const ORG_KEY = 'my-org';
+  const ORG_KEY = 'denis-troller-sonar';
   const ORG_UUID = `${ORG_KEY}-uuid-v4`;
   const LEGACY_CAG_SCRIPT_PATH = '.claude/hooks/sonar-context-augmentation/build-scripts';
 

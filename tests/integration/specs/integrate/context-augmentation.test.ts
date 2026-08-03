@@ -242,7 +242,7 @@ function markHarnessCwdAsGitRoot(harness: TestHarness): void {
 }
 
 const PROJECT_KEY = 'my-project';
-const ORG_KEY = 'my-org';
+const ORG_KEY = 'denis-troller-sonar';
 const ORG_UUID = `${ORG_KEY}-uuid-v4`;
 const TOKEN = 'cloud-token';
 // Internal "dogfooding" tools are gated on an offline org allowlist in CAG; the

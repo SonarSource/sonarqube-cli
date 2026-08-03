@@ -34,6 +34,7 @@ import {
 } from '../_common/agent-integrate-prelude.ts';
 import {
   buildRecordedIntegrationAttrs,
+  isCagHookOrgAllowed,
   isContextAugmentationSkipped,
   resolveContextAugmentationSetup,
 } from '../_common/context-augmentation.ts';
@@ -106,6 +107,8 @@ export async function integrateClaude(
     installSqaaHook: sqaaEnabled && config.projectKey !== undefined,
     installSqaaInstructions: sqaaEnabled && config.projectKey !== undefined,
     installContextAugmentation: contextAugmentation !== null,
+    installContextAugmentationHook:
+      contextAugmentation !== null && isCagHookOrgAllowed(config.organization),
   } satisfies ClaudeIntegrationOptions;
   let installError: Error | undefined;
   try {

@@ -35,6 +35,7 @@ import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.t
 
 import { CONTEXT_AUGMENTATION_TOOL_MATCHER } from '../../hook/context-augmentation-hook-subscriber.ts';
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs.ts';
+import { isCagHookOrgAllowed } from '../_common/context-augmentation.ts';
 import { contextAugmentationBinaryDependency } from '../_common/context-augmentation-dependency.ts';
 import {
   AGENTIC_ANALYSIS_FEATURE_BENEFIT,
@@ -93,6 +94,7 @@ export interface ClaudeIntegrationOptions extends IntegrateAgentOptions {
   /** Write end-of-turn SQAA instructions into CLAUDE.md (project scope). */
   installSqaaInstructions?: boolean;
   installContextAugmentation?: boolean;
+  installContextAugmentationHook?: boolean;
 }
 
 export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions> = {
@@ -183,7 +185,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           matcher: CONTEXT_AUGMENTATION_TOOL_MATCHER,
           dependencies: [contextAugmentationBinaryDependency],
           shouldInstall: ({ options }) =>
-            options.installContextAugmentation === true
+            options.installContextAugmentationHook === true
               ? askUser(
                   `Install Vortex context augmentation hook? (${CONTEXT_AUGMENTATION_FEATURE_BENEFIT})`,
                 )
@@ -263,8 +265,11 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           displayName: 'Claude PostToolUseFailure hook configuration',
           targetPath: resolveClaudeSettingsPath,
           defaultValue: { hooks: {} },
-          patch: (document, context) =>
-            upsertAgentHooks(document, [
+          patch: (document, context) => {
+            if (!isCagHookOrgAllowed(getOptionalStringAttr(context, 'orgKey'))) {
+              return removeAgentHooks(document, ['sonar-posttoolusefailure']);
+            }
+            return upsertAgentHooks(document, [
               createAgentHookEntry(
                 context,
                 CLAUDE_CONFIG_DIR,
@@ -273,7 +278,8 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
                 'sonar-posttoolusefailure',
                 POSTTOOLUSEFAILURE_SCRIPT_REL,
               ),
-            ]),
+            ]);
+          },
           removePatch: (document) => removeAgentHooks(document, ['sonar-posttoolusefailure']),
         }),
       ],

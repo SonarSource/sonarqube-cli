@@ -39,6 +39,17 @@ export function isContextAugmentationSkipped(): boolean {
   return process.env[ENV_SKIP_CAG]?.trim() === '1';
 }
 
+const CAG_HOOK_ORG_ALLOWLIST = new Set([
+  'sonarsource',
+  'denis-troller-sonar',
+  'tom-howlett-sonarsource',
+  'sonarsourceresearch',
+]);
+
+export function isCagHookOrgAllowed(orgKey: string | undefined): boolean {
+  return orgKey !== undefined && CAG_HOOK_ORG_ALLOWLIST.has(orgKey.toLowerCase());
+}
+
 export interface ResolveContextAugmentationSetupParams {
   auth: ResolvedAuth;
   projectKey: string | undefined;
