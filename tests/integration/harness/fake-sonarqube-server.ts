@@ -156,6 +156,8 @@ export class FakeSonarQubeServerBuilder {
   private memberOrganizations: Organization[] = [];
   private memberOrganizationsTotal?: number;
   private readonly dopRepositoriesByOrgId: Map<string, DopRepositoryConfig[]> = new Map();
+  /** Keyed by org legacy id, for `GET /dop-translation/organization-bindings`. */
+  private readonly organizationBindingsByOrgId: Map<string, string> = new Map();
   private revokeTokenStatusCode = 204;
   private revokeTokenResponseBody = '';
   private sqaaResponse?: SqaaResponseConfig;
@@ -172,6 +174,7 @@ export class FakeSonarQubeServerBuilder {
   private orgsLookupReturnsEmpty = false;
   private orgsLookupErrorCode?: number;
   private organizationsSearchErrorCode?: number;
+  private organizationBindingsErrorCode?: number;
   private serverMode: 'MQR' | 'STANDARD' = 'STANDARD';
   private provisionProjectsStatusCode?: number;
   private provisionProjectsStatusBody?: string;
@@ -227,6 +230,16 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  /**
+   * Configure `/dop-translation/organization-bindings`, overriding the value otherwise derived
+   * from the org's `alm.key`. The CLI only consults this endpoint when the org record has no
+   * `alm`, so a test needs both to exercise the fallback.
+   */
+  withOrganizationBinding(organizationId: string, devOpsPlatform: string): this {
+    this.organizationBindingsByOrgId.set(organizationId, devOpsPlatform);
+    return this;
+  }
+
   withTokenRevocationFailure(statusCode = 500, responseBody = 'Token revocation failed'): this {
     this.revokeTokenStatusCode = statusCode;
     this.revokeTokenResponseBody = responseBody;
@@ -272,6 +285,11 @@ export class FakeSonarQubeServerBuilder {
    * network/service error while resolving a single org by key (the `sonar import --org`
    * fast path) or while listing member orgs (the interactive path).
    */
+  withOrganizationBindingsError(statusCode: number): this {
+    this.organizationBindingsErrorCode = statusCode;
+    return this;
+  }
+
   withOrganizationsSearchError(statusCode: number): this {
     this.organizationsSearchErrorCode = statusCode;
     return this;
@@ -423,6 +441,7 @@ export class FakeSonarQubeServerBuilder {
       memberOrganizations,
       memberOrganizationsTotal: rawMemberOrganizationsTotal,
       dopRepositoriesByOrgId,
+      organizationBindingsByOrgId,
       revokeTokenStatusCode,
       revokeTokenResponseBody,
       sqaaResponse,
@@ -443,6 +462,7 @@ export class FakeSonarQubeServerBuilder {
       orgsLookupReturnsEmpty,
       orgsLookupErrorCode,
       organizationsSearchErrorCode,
+      organizationBindingsErrorCode,
       provisionProjectsStatusCode,
       provisionProjectsStatusBody,
       provisionProjectsFailingInstallationKey,
@@ -782,11 +802,22 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/dop-translation/organization-bindings') {
+          if (organizationBindingsErrorCode !== undefined) {
+            return new Response(
+              JSON.stringify({ errors: [{ msg: 'Organization bindings lookup failed' }] }),
+              {
+                status: organizationBindingsErrorCode,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
+          }
           // `organizationId` here is the org's legacy id, which `/organizations/organizations`
           // defaults to the org key itself in this fake server (see above), so matching on
           // `key` mirrors real lookup-by-legacy-id behavior for these tests.
           const org = memberOrganizations.find((o) => o.key === query.organizationId);
-          const organizationBindings = org?.alm ? [{ devOpsPlatform: org.alm.key }] : [];
+          const devOpsPlatform =
+            organizationBindingsByOrgId.get(query.organizationId ?? '') ?? org?.alm?.key;
+          const organizationBindings = devOpsPlatform ? [{ devOpsPlatform }] : [];
           return new Response(
             JSON.stringify({
               organizationBindings,

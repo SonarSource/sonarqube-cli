@@ -35,8 +35,10 @@ import type {
   SkippedRepo,
 } from './_common/repository-collection';
 import {
+  assertSupportedAlm,
   computeInstallationKey,
   type RepoResolution,
+  resolveAlmKey,
   type ResolvedRepo,
   resolveOrg,
   resolveRepos,
@@ -63,9 +65,14 @@ async function resolveOrgAndRepos(
   info(`Organization: ${resolvedOrgKey}`);
 
   const [almKey, privateProjectsAvailable] = await Promise.all([
-    resolvedAlmKey ?? client.getOrganizationAlmKey(resolvedOrgKey),
+    resolveAlmKey(client, resolvedOrgKey, resolvedAlmKey),
     client.hasPrivateProjectsEntitlement(resolvedOrgKey),
   ]);
+
+  // Before any repository is listed, so an unsupported org stops here rather than after a full
+  // paginated fetch.
+  assertSupportedAlm(resolvedOrgKey, almKey);
+
   const onlyPrivateProjects: OnlyPrivateProjects = {
     enabled: onlyPrivateProjectsEnabled ?? false,
     available: privateProjectsAvailable,

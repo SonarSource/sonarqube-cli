@@ -670,22 +670,18 @@ export class SonarQubeClient {
    * ALM-type lookup via `GET /dop-translation/organization-bindings` (SonarQube Cloud only,
    * region-specific API host), keyed by the org's **legacy** id (not `uuidV4`). Used to format
    * `provision_projects`' `installationKeys` param correctly for the org's connected DevOps
-   * platform.
+   * platform. Lookup failures are reported to the caller rather than swallowed, so callers can
+   * tell them apart from an org that genuinely has no binding.
    */
   async getOrganizationAlmKey(organizationKey: string): Promise<string | undefined> {
     const organizationId = await this.getOrganizationLegacyId(organizationKey);
     if (!organizationId) return undefined;
 
-    try {
-      const endpoint = '/dop-translation/organization-bindings';
-      const result = await this.get<{
-        organizationBindings: Array<{ devOpsPlatform: string }>;
-      }>(endpoint, { organizationId }, resolveFromEndpoint(this.serverURL, endpoint));
-      return result.organizationBindings[0]?.devOpsPlatform;
-    } catch (err) {
-      logger.debug('Failed to fetch organization-bindings for ALM key lookup', err);
-      return undefined;
-    }
+    const endpoint = '/dop-translation/organization-bindings';
+    const result = await this.get<{
+      organizationBindings: Array<{ devOpsPlatform: string }>;
+    }>(endpoint, { organizationId }, resolveFromEndpoint(this.serverURL, endpoint));
+    return result.organizationBindings[0]?.devOpsPlatform;
   }
 
   /**
