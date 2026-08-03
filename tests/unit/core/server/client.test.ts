@@ -134,9 +134,10 @@ describe('SonarQubeClient', () => {
       );
     });
 
-    it('throws when response is not ok', () => {
+    it('throws when response is not ok', async () => {
       fetchSpy = mockFetch({}, false, 401);
-      expect(client.get('/api/authentication/validate')).rejects.toThrow(
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.get('/api/authentication/validate')).rejects.toThrow(
         'SonarQube API error: 401',
       );
     });
@@ -485,9 +486,10 @@ describe('SonarQubeClient', () => {
       });
     });
 
-    it('throws with error body text when response is not ok', () => {
+    it('throws with error body text when response is not ok', async () => {
       fetchSpy = mockFetch({ message: 'Not found' }, false, 404);
-      expect(client.post('/api/some/endpoint', {})).rejects.toThrow('404');
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.post('/api/some/endpoint', {})).rejects.toThrow('404');
     });
   });
 
@@ -972,16 +974,18 @@ describe('SonarQubeClient', () => {
       expect(messages.some((m) => m.includes('request method:'))).toBe(false);
     });
 
-    it('throws BadRequestError on non-ok POST response', () => {
+    it('throws BadRequestError on non-ok POST response', async () => {
       fetchSpy = mockFetch({ message: 'Bad request' }, false, 400);
-      expect(
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(
         client.genericRequest('POST', '/api/issues/do_transition', '{"k":"v"}', 'form'),
       ).rejects.toMatchObject({ name: 'BadRequestError', message: 'Bad request' });
     });
 
-    it('preserves raw body for non-SQAA POST 400 responses', () => {
+    it('preserves raw body for non-SQAA POST 400 responses', async () => {
       fetchSpy = mockFetch({ errors: [{ msg: 'Transition failed' }] }, false, 400);
-      expect(
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(
         client.genericRequest('POST', '/api/issues/do_transition', '{"k":"v"}', 'form'),
       ).rejects.toMatchObject({
         name: 'BadRequestError',
@@ -989,9 +993,12 @@ describe('SonarQubeClient', () => {
       });
     });
 
-    it('throws access denied on GET 403', () => {
+    it('throws access denied on GET 403', async () => {
       fetchSpy = mockFetch({}, false, 403);
-      expect(client.genericRequest('GET', '/api/system/status')).rejects.toThrow('Access denied');
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.genericRequest('GET', '/api/system/status')).rejects.toThrow(
+        'Access denied',
+      );
     });
 
     it('resolves a plain SonarCloud /api endpoint correctly', async () => {
@@ -1116,21 +1123,22 @@ describe('SonarQubeClient', () => {
       expect(result.issues).toHaveLength(1);
     });
 
-    it('throws BadRequestError on structured 400 response', () => {
+    it('throws BadRequestError on structured 400 response', async () => {
       fetchSpy = mockFetch(
         { message: 'Invalid request body', code: 'INVALID_FILE_PATH' },
         false,
         400,
       );
 
-      expect(client.createAnalysis(singleFileRequest)).rejects.toMatchObject({
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.createAnalysis(singleFileRequest)).rejects.toMatchObject({
         name: 'BadRequestError',
         message: 'Invalid request body',
         code: 'INVALID_FILE_PATH',
       });
     });
 
-    it('throws RequestPayloadTooLargeError on structured 413 response', () => {
+    it('throws RequestPayloadTooLargeError on structured 413 response', async () => {
       fetchSpy = mockFetch(
         {
           message: 'Request payload too large',
@@ -1141,7 +1149,8 @@ describe('SonarQubeClient', () => {
         413,
       );
 
-      expect(client.createAnalysis(singleFileRequest)).rejects.toMatchObject({
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.createAnalysis(singleFileRequest)).rejects.toMatchObject({
         name: 'RequestPayloadTooLargeError',
         message: 'Request payload too large',
         code: 'REQUEST_TOO_LARGE',
@@ -1450,7 +1459,7 @@ describe('SonarQubeClient', () => {
       expect(await client.getServerMode()).toBe('standard');
     });
 
-    it('throws when endpoint returns a server error', () => {
+    it('throws when endpoint returns a server error', async () => {
       fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue({
         ok: false,
         status: 500,
@@ -1458,7 +1467,8 @@ describe('SonarQubeClient', () => {
         json: () => Promise.resolve({}),
         text: () => Promise.resolve(''),
       } as Response);
-      expect(client.getServerMode()).rejects.toThrow();
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.getServerMode()).rejects.toThrow();
     });
   });
 });

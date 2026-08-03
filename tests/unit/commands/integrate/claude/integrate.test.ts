@@ -190,7 +190,7 @@ describe('integrateCommand', () => {
     expect(warnText).toBeDefined();
   });
 
-  it('validates organization is provided when server is SonarQube Cloud', () => {
+  it('validates organization is provided when server is SonarQube Cloud', async () => {
     mockDiscoveredProject({});
     const cloudAuthNoOrg: ResolvedAuth = {
       token: 'test-token',
@@ -198,7 +198,8 @@ describe('integrateCommand', () => {
       connectionType: 'cloud',
     };
 
-    expect(integrateClaude({}, cloudAuthNoOrg)).rejects.toThrow(CommandFailedError);
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(integrateClaude({}, cloudAuthNoOrg)).rejects.toThrow(CommandFailedError);
   });
 
   it('shows config source from discovered files', async () => {
@@ -252,17 +253,19 @@ describe('integrateCommand', () => {
     expect(getPhaseItems('Project').find((i) => i.text === 'Key')?.detail).toBe('override-project');
   });
 
-  it('aborts when token is invalid', () => {
+  it('aborts when token is invalid', async () => {
     checkTokenStatusSpy.mockResolvedValue({ status: 'invalid' });
 
-    expect(integrateClaude({}, SERVER_AUTH)).rejects.toThrow('Token is invalid.');
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(integrateClaude({}, SERVER_AUTH)).rejects.toThrow('Token is invalid.');
     expect(installIntegrationSpy).not.toHaveBeenCalled();
   });
 
-  it('aborts when server is unreachable', () => {
+  it('aborts when server is unreachable', async () => {
     checkTokenStatusSpy.mockResolvedValue({ status: 'unreachable' });
 
-    expect(integrateClaude({}, SERVER_AUTH)).rejects.toThrow('Server is unreachable.');
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(integrateClaude({}, SERVER_AUTH)).rejects.toThrow('Server is unreachable.');
     expect(installIntegrationSpy).not.toHaveBeenCalled();
   });
 

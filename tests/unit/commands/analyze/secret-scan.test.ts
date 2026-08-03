@@ -272,8 +272,9 @@ describe('secretCheckCommand: successful scan', () => {
 // ─── Input validation paths ───────────────────────────────────────────────────
 
 describe('secretCheckCommand: input validation', () => {
-  it('throws InvalidOptionError when paths array is empty', () => {
-    expect(analyzeSecrets({ paths: [] }, FAKE_AUTH)).rejects.toThrow(
+  it('throws InvalidOptionError when paths array is empty', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(analyzeSecrets({ paths: [] }, FAKE_AUTH)).rejects.toThrow(
       new InvalidOptionError('Either provide file/directory paths or --stdin'),
     );
   });
@@ -554,12 +555,13 @@ describe('secretCheckCommand: stdin scan', () => {
     }
   });
 
-  it('throws when binary exits 51 during stdin scan (secrets found)', () => {
+  it('throws when binary exits 51 during stdin scan (secrets found)', async () => {
     spawnSpy.mockResolvedValue({ exitCode: 51, stdout: '', stderr: 'secret found' });
 
     const existsSpy = mockBinaryExists(true);
     try {
-      expect(
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(
         withMockStdin('const secret = "abc123";\n', () =>
           analyzeSecrets({ stdin: true }, FAKE_AUTH),
         ),
@@ -596,12 +598,13 @@ describe('runSecretsBinaryOnText', () => {
 // ─── CommandFailedError propagation ──────────────────────────────────────────
 
 describe('secretCheckCommand: throws CommandFailedError for scan failures', () => {
-  it('rejects with CommandFailedError when binary exits with non-zero code', () => {
+  it('rejects with CommandFailedError when binary exits with non-zero code', async () => {
     spawnSpy.mockResolvedValue({ exitCode: 51, stdout: '', stderr: '' });
 
     const existsSpy = mockBinaryExists(true);
     try {
-      expect(analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH)).rejects.toThrow(
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH)).rejects.toThrow(
         CommandFailedError,
       );
     } finally {

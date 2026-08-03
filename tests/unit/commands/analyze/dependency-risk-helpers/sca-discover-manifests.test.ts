@@ -68,13 +68,14 @@ describe('ScaDiscoverManifestsRunner.run', () => {
     expect(await runner.run(makeInvocation())).toEqual([]);
   });
 
-  it('throws CommandFailedError on a non-zero exit code', () => {
+  it('throws CommandFailedError on a non-zero exit code', async () => {
     const runner = new ScaDiscoverManifestsRunner(
       okInstaller,
       spawnerReturning({ exitCode: 1, stdout: '', stderr: 'error' }),
     );
 
-    expect(runner.run(makeInvocation())).rejects.toThrow(
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(runner.run(makeInvocation())).rejects.toThrow(
       /Manifest discovery error: sca-scanner exited with code 1\./,
     );
   });

@@ -1288,7 +1288,8 @@ describe('declarative integration framework', () => {
 
     await writeFile(targetPath, '#!/bin/sh\necho user-defined\n');
 
-    expect(resource.apply(makeContext(state, tempDir))).rejects.toThrow(
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(resource.apply(makeContext(state, tempDir))).rejects.toThrow(
       `A different pre-commit hook already exists at ${targetPath}`,
     );
 

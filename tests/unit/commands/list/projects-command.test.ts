@@ -52,28 +52,34 @@ describe('projectsSearchCommand', () => {
   });
 
   describe('error conditions', () => {
-    it('throws when page size is not positive', () => {
-      expect(listProjects({ page: 1, pageSize: 0 }, mockAuth)).rejects.toThrow(
+    it('throws when page size is not positive', async () => {
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(listProjects({ page: 1, pageSize: 0 }, mockAuth)).rejects.toThrow(
         `Invalid --page-size option: '0'. Must be an integer between 1 and 500`,
       );
     });
 
-    it('throws when page is not positive', () => {
-      expect(listProjects({ page: 0, pageSize: 500 }, mockAuth)).rejects.toThrow(
+    it('throws when page is not positive', async () => {
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(listProjects({ page: 0, pageSize: 500 }, mockAuth)).rejects.toThrow(
         `Invalid --page option: '0'. Must be an integer >= 1`,
       );
     });
 
-    it('throws when page size exceeds the maximum', () => {
-      expect(listProjects({ page: 1, pageSize: MAX_PAGE_SIZE + 1 }, mockAuth)).rejects.toThrow(
+    it('throws when page size exceeds the maximum', async () => {
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(
+        listProjects({ page: 1, pageSize: MAX_PAGE_SIZE + 1 }, mockAuth),
+      ).rejects.toThrow(
         `Invalid --page-size option: '${MAX_PAGE_SIZE + 1}'. Must be an integer between 1 and 500`,
       );
     });
 
-    it('propagates API errors', () => {
+    it('propagates API errors', async () => {
       getSpy.mockRejectedValue(new Error('SonarQube API error: 401 Unauthorized'));
 
-      expect(listProjects(DEFAULT_OPTIONS, mockAuth)).rejects.toThrow(
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(listProjects(DEFAULT_OPTIONS, mockAuth)).rejects.toThrow(
         'SonarQube API error: 401 Unauthorized',
       );
     });

@@ -98,17 +98,19 @@ describe('integrateCopilot', () => {
     resolveVortexSetupSpy.mockRestore();
   });
 
-  it('aborts when token is invalid', () => {
+  it('aborts when token is invalid', async () => {
     checkTokenStatusSpy.mockResolvedValue({ status: 'invalid' });
 
-    expect(integrateCopilot({}, SERVER_AUTH)).rejects.toThrow('Token is invalid.');
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(integrateCopilot({}, SERVER_AUTH)).rejects.toThrow('Token is invalid.');
     expect(installIntegrationSpy).not.toHaveBeenCalled();
   });
 
-  it('aborts when server is unreachable', () => {
+  it('aborts when server is unreachable', async () => {
     checkTokenStatusSpy.mockResolvedValue({ status: 'unreachable' });
 
-    expect(integrateCopilot({}, SERVER_AUTH)).rejects.toThrow('Server is unreachable.');
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(integrateCopilot({}, SERVER_AUTH)).rejects.toThrow('Server is unreachable.');
     expect(installIntegrationSpy).not.toHaveBeenCalled();
   });
 

@@ -436,9 +436,10 @@ describe('writeMcpServerEntry', () => {
     rmSync(tmpFile, { force: true });
   });
 
-  it('throws when the existing file contains invalid JSON', () => {
+  it('throws when the existing file contains invalid JSON', async () => {
     writeFileSync(tmpFile, 'not valid json', 'utf-8');
-    expect(writeMcpServerEntry(tmpFile, { command: 'sonar' })).rejects.toThrow(
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(writeMcpServerEntry(tmpFile, { command: 'sonar' })).rejects.toThrow(
       'contains invalid JSON',
     );
   });

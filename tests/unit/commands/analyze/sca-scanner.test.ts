@@ -91,11 +91,12 @@ async function expectCommandFailedError(
 }
 
 describe('ScaScannerRunner.run', () => {
-  it('propagates the installer error when install fails', () => {
+  it('propagates the installer error when install fails', async () => {
     const failingInstaller: ScaScannerInstaller = {
       install: () => Promise.reject(new Error('not installed')),
     };
-    expect(
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(
       new ScaScannerRunner(failingInstaller, noopSpawner).run(makeInvocation()),
     ).rejects.toThrow(/not installed/);
   });

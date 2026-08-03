@@ -323,8 +323,9 @@ describe('withSpinner: mock mode', () => {
     expect(result).toBe('data');
   });
 
-  it('propagates error thrown by task in mock mode', () => {
-    expect(
+  it('propagates error thrown by task in mock mode', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(
       withSpinner('Failing', () => {
         throw new Error('task error');
       }),
@@ -359,10 +360,11 @@ describe('withSpinner: non-TTY output', () => {
     }
   });
 
-  it('propagates error thrown by task in non-TTY mode', () => {
+  it('propagates error thrown by task in non-TTY mode', async () => {
     const writeSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
     try {
-      expect(
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(
         withSpinner('Failing', () => {
           throw new Error('non-tty error');
         }),
