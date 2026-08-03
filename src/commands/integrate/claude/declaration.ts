@@ -178,7 +178,7 @@ function createSqaaHookSubfeature(): SubfeatureDeclaration<ClaudeIntegrationOpti
       }),
       jsonPatch({
         id: 'claude-settings-sqaa-hook',
-        displayName: 'Claude Vortex agentic analysis hook configuration',
+        displayName: 'Claude Vortex analysis hook configuration',
         targetPath: resolveClaudeSettingsPath,
         defaultValue: { hooks: {} },
         patch: (document, context) =>

@@ -188,7 +188,7 @@ function createSqaaHookSubfeature(): SubfeatureDeclaration<CodexIntegrationOptio
       }),
       jsonPatch({
         id: 'codex-hooks-sqaa-hook',
-        displayName: 'Codex Vortex agentic analysis hook configuration',
+        displayName: 'Codex Vortex analysis hook configuration',
         targetPath: resolveCodexHooksPath,
         defaultValue: { hooks: {} },
         patch: (document, context) =>

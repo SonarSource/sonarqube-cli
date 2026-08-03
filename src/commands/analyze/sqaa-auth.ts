@@ -111,15 +111,12 @@ export function resolveCloudAuth(
 ): CloudAuth | null {
   if (auth.connectionType != 'cloud' || auth.orgKey == null) {
     if (explicitProject) {
-      throw new CommandFailedError(
-        'Vortex agentic analysis requires a SonarQube Cloud connection.',
-        {
-          remediationHint: "Run 'sonar auth login' and connect to SonarQube Cloud, then retry.",
-        },
-      );
+      throw new CommandFailedError('Vortex analysis requires a SonarQube Cloud connection.', {
+        remediationHint: "Run 'sonar auth login' and connect to SonarQube Cloud, then retry.",
+      });
     }
     warn(
-      'Vortex agentic analysis skipped: a SonarQube Cloud connection is required. Run: sonar auth login (ensure you connect to SonarQube Cloud)',
+      'Vortex analysis skipped: a SonarQube Cloud connection is required. Run: sonar auth login (ensure you connect to SonarQube Cloud)',
     );
     return null;
   }
@@ -153,13 +150,13 @@ export async function resolveSqaaProjectKey(projectRoot?: string): Promise<strin
 
     const projectKey = sqaaFeature?.attrs?.projectKey;
     if (typeof projectKey !== 'string' || projectKey.length === 0) {
-      logger.debug('Vortex agentic analysis skipped: no project key found in integration state');
+      logger.debug('Vortex analysis skipped: no project key found in integration state');
       return null;
     }
 
     return projectKey;
   } catch {
-    logger.debug('Vortex agentic analysis skipped: failed to resolve integration state');
+    logger.debug('Vortex analysis skipped: failed to resolve integration state');
     return null;
   }
 }

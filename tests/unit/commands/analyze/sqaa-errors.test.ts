@@ -35,7 +35,7 @@ import {
 describe('sqaaFailureMessage', () => {
   it('keeps heading and detail on one line for command-level errors', () => {
     expect(sqaaFailureMessage('File path must use forward slashes.')).toBe(
-      'SonarQube Agentic Analysis failed. File path must use forward slashes.',
+      'Vortex analysis failed. File path must use forward slashes.',
     );
   });
 });

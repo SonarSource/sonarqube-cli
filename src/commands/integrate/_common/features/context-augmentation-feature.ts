@@ -53,7 +53,7 @@ export function createContextAugmentationSubfeature<TOptions>(
     resources: [
       wholeFile({
         id: CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
-        displayName: 'context augmentation skill file',
+        displayName: 'Vortex context augmentation skill file',
         version: SONAR_CONTEXT_AUGMENTATION_VERSION,
         targetPath: options.targetPath,
         content: async (context) =>
@@ -68,7 +68,7 @@ export function createContextAugmentationSubfeature<TOptions>(
     operations: [
       {
         id: CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID,
-        displayName: 'context augmentation tool integration',
+        displayName: 'Vortex context augmentation tool integration',
         shouldApply: (context) => context.executionMode === 'install',
         apply: async (context) =>
           runToolIntegrateCommand({

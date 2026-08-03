@@ -676,9 +676,7 @@ describe('integrate claude — Vortex entitlement guard', () => {
           hookScriptName('posttool-sqaa'),
         ),
       ).toBe(true);
-      expect(harness.cwd.file('CLAUDE.md').asText()).toContain(
-        '# SonarQube Agentic Analysis protocol',
-      );
+      expect(harness.cwd.file('CLAUDE.md').asText()).toContain('# Vortex analysis protocol');
       expect(findClaudeFeature(harness, VORTEX_FEATURE_ID)?.scope).toBe('project');
     },
     { timeout: 30000 },
@@ -2042,9 +2040,7 @@ describe('integrate claude — interactive feature selection', () => {
         ),
       ).toBe(true);
       expect(findClaudeFeature(harness, VORTEX_FEATURE_ID)).toBeDefined();
-      expect(harness.cwd.file('CLAUDE.md').asText()).toContain(
-        '# SonarQube Agentic Analysis protocol',
-      );
+      expect(harness.cwd.file('CLAUDE.md').asText()).toContain('# Vortex analysis protocol');
       expect(
         findClaudeFeature(harness, VORTEX_FEATURE_ID)?.subfeatures?.map((s) => s.featureId),
       ).toContain(SQAA_INSTRUCTIONS_SUBFEATURE_ID);

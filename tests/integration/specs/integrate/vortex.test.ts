@@ -133,9 +133,7 @@ describe('integrate claude — Vortex entitlement', () => {
 
       expect(result.exitCode).toBe(0);
       expect(isVortexInstalled()).toBe(true);
-      expect(harness.cwd.file('CLAUDE.md').asText()).toContain(
-        '# SonarQube Agentic Analysis protocol',
-      );
+      expect(harness.cwd.file('CLAUDE.md').asText()).toContain('# Vortex analysis protocol');
     },
     { timeout: 30000 },
   );

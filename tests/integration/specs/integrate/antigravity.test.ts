@@ -498,7 +498,7 @@ describe('integrate antigravity', () => {
         );
         const sqaaRule = harness.cwd.file(...PROJECT_SQAA_RULE_PATH).asText();
         expectAntigravityAlwaysOnRule(sqaaRule);
-        expect(sqaaRule).toContain('# SonarQube Agentic Analysis protocol');
+        expect(sqaaRule).toContain('# Vortex analysis protocol');
         expect(sqaaRule).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --depth DEEP`);
         const vortexFeature = findAntigravityFeature(harness, VORTEX_FEATURE_ID);
         expect(vortexFeature?.scope).toBe('project');
@@ -599,7 +599,7 @@ describe('integrate antigravity', () => {
         });
 
         const body = harness.cwd.file(...PROJECT_SQAA_RULE_PATH).asText();
-        expect(body.match(/# SonarQube Agentic Analysis protocol/g)?.length).toBe(1);
+        expect(body.match(/# Vortex analysis protocol/g)?.length).toBe(1);
       },
       { timeout: 60000 },
     );

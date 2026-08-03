@@ -155,6 +155,27 @@ describe('declarative integration framework - remove and undo', () => {
       expect(await resource.remove(context)).toBeUndefined();
     });
 
+    it('whole-file: without a managedMarker, deletes the file even when its content differs', async () => {
+      const state = getDefaultState('test');
+      const context = makeContext(state, tempDir);
+      const filePath = join(tempDir, 'sonar-agentic-analysis.mdc');
+      const resource = wholeFile({
+        id: 'r',
+        targetPath: filePath,
+        content: '---\nalwaysApply: true\n---\n\n# Vortex analysis protocol\n',
+      });
+      // A rule file left by an older CLI carries the old heading; teardown must
+      // still remove it now that the SQAA rules declare no managedMarker.
+      await writeFile(
+        filePath,
+        '---\nalwaysApply: true\n---\n\n# SonarQube Agentic Analysis protocol\n',
+      );
+
+      await resource.remove(context);
+
+      expect(existsSync(filePath)).toBe(false);
+    });
+
     it('json-patch: removes keys added by removePatch', async () => {
       const state = getDefaultState('test');
       const context = makeContext(state, tempDir);

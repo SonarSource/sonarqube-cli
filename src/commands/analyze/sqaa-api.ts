@@ -213,7 +213,7 @@ async function with503Retry<T>(
     }
   }
   throw new CommandFailedError(
-    `SonarQube Agentic Analysis failed after ${MAX_503_RETRIES} retries. The service is still unavailable.`,
+    `Vortex analysis failed after ${MAX_503_RETRIES} retries. The service is still unavailable.`,
     { cause: lastServiceError },
   );
 }

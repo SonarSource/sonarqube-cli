@@ -74,9 +74,6 @@ const SQAA_RULE_FILE = 'sonar-agentic-analysis.mdc';
 // Cursor-specific `.cursor/skills` to avoid a duplicate skill of the same name.
 const AGENTS_SKILLS_DIR = join('.agents', 'skills');
 const CAG_SKILL_NAME = 'sonar-context-augmentation';
-// Stable string always present in the rendered rule body — used by the
-// wholeFile remover so teardown only deletes the file we manage.
-const SQAA_RULE_MARKER = '# SonarQube Agentic Analysis protocol';
 
 export interface CursorIntegrationOptions extends IntegrateAgentOptions {
   globalSecretsHookExists?: boolean;
@@ -104,7 +101,7 @@ function resolveCursorSqaaRulePath(context: IntegrationContext): string {
 }
 
 /**
- * Render the Vortex agentic analysis rule as a Cursor `.mdc` file. The
+ * Render the Vortex analysis rule as a Cursor `.mdc` file. The
  * `alwaysApply: true` front-matter makes Cursor inject the protocol into every
  * session without the user attaching it manually.
  */
@@ -215,10 +212,9 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
       createSqaaInstructionsSubfeature([
         wholeFile({
           id: 'sqaa-instructions-rule',
-          displayName: 'Cursor Vortex agentic analysis rule',
+          displayName: 'Cursor Vortex analysis rule',
           targetPath: resolveCursorSqaaRulePath,
           content: buildCursorSqaaRule,
-          managedMarker: SQAA_RULE_MARKER,
         }),
       ]),
       createContextAugmentationSubfeature<CursorIntegrationOptions>({

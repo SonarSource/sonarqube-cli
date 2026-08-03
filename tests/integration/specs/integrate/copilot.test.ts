@@ -662,7 +662,7 @@ describe('integrate copilot', () => {
         expect(result.exitCode).toBe(0);
         const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
         expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
-        expect(body).toContain('# SonarQube Agentic Analysis protocol');
+        expect(body).toContain('# Vortex analysis protocol');
         expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT}`);
         expect(body).toContain('--file');
 
@@ -688,7 +688,7 @@ describe('integrate copilot', () => {
         const output = result.stdout + result.stderr;
         expect(output).toContain('Install Vortex?');
         const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
-        expect(body).toContain('# SonarQube Agentic Analysis protocol');
+        expect(body).toContain('# Vortex analysis protocol');
         expect(findCopilotFeature(harness, 'vortex')?.scope).toBe('project');
       },
       { timeout: 30000 },
@@ -710,7 +710,7 @@ describe('integrate copilot', () => {
         // Global file holds prompt-secrets, NOT SQAA.
         const globalBody = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
         expect(globalBody).toContain('# SonarQube secrets scanning for prompts protocol');
-        expect(globalBody).not.toContain('# SonarQube Agentic Analysis');
+        expect(globalBody).not.toContain('# Vortex analysis');
 
         // SQAA is never written project-side on a global install.
         expect(harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).exists()).toBe(false);
@@ -732,7 +732,7 @@ describe('integrate copilot', () => {
         expect(result.exitCode).toBe(0);
         const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
         expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
-        expect(body).not.toContain('# SonarQube Agentic Analysis');
+        expect(body).not.toContain('# Vortex analysis');
       },
       { timeout: 30000 },
     );
@@ -755,7 +755,7 @@ describe('integrate copilot', () => {
         expect(result.exitCode).toBe(0);
         const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
         expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
-        expect(body).not.toContain('# SonarQube Agentic Analysis');
+        expect(body).not.toContain('# Vortex analysis');
       },
       { timeout: 30000 },
     );
@@ -773,7 +773,7 @@ describe('integrate copilot', () => {
         // and no project-level file is written.
         const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
         expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
-        expect(body).not.toContain('# SonarQube Agentic Analysis');
+        expect(body).not.toContain('# Vortex analysis');
         expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(false);
         expect(findCopilotFeature(harness, 'vortex')).toBeUndefined();
         // Vortex is project-scoped, so a --global install skips it with the central
@@ -798,7 +798,7 @@ describe('integrate copilot', () => {
         expect(result.exitCode).toBe(0);
         const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
         expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
-        expect(body).not.toContain('# SonarQube Agentic Analysis');
+        expect(body).not.toContain('# Vortex analysis');
       },
       { timeout: 30000 },
     );
@@ -830,7 +830,7 @@ describe('integrate copilot', () => {
         // Instructions file still written, but without the SQAA section.
         const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
         expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
-        expect(body).not.toContain('# SonarQube Agentic Analysis');
+        expect(body).not.toContain('# Vortex analysis');
       },
       { timeout: 30000 },
     );
@@ -867,7 +867,7 @@ describe('integrate copilot', () => {
         expect(harness.cwd.exists('.mcp.json')).toBe(true);
         // No SQAA marker block was written (org not entitled).
         expect(harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText()).not.toContain(
-          '# SonarQube Agentic Analysis',
+          '# Vortex analysis',
         );
         // Declarative state records only the accepted features.
         expect(findCopilotFeature(harness, 'pre-tool-use-hook')).toBeDefined();
