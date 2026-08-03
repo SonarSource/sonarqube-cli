@@ -174,7 +174,7 @@ describe('waitForTokenInteractive: user input', () => {
     const resultPromise = waitForTokenInteractive(new Promise<BrowserAuthResult>(() => {}));
     await Promise.resolve();
     rlMock.simulateCtrlC();
-    expect(resultPromise).rejects.toThrow('Authentication cancelled');
+    await expect(resultPromise).rejects.toThrow('Authentication cancelled');
   });
 
   it('closes readline when user submits', async () => {
@@ -223,9 +223,9 @@ describe('openBrowserWithFallback', () => {
     expect(mockOpenBrowser).toHaveBeenCalledWith('https://sonarcloud.io/test');
   });
 
-  it('does not throw when browser opening fails', () => {
+  it('does not throw when browser opening fails', async () => {
     mockOpenBrowser.mockImplementationOnce(() => Promise.reject(new Error('No browser found')));
-    expect(openBrowserWithFallback('https://sonarcloud.io/test')).resolves.toBeUndefined();
+    await expect(openBrowserWithFallback('https://sonarcloud.io/test')).resolves.toBeUndefined();
   });
 
   it('skips browser when CI=true', async () => {

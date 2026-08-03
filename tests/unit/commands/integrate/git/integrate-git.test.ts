@@ -115,7 +115,7 @@ describe('resolveGitHooksDir', () => {
     }
   });
 
-  it('throws CommandFailedError when git rev-parse exits with non-zero code', () => {
+  it('throws CommandFailedError when git rev-parse exits with non-zero code', async () => {
     mkdirSync(TEMP_DIR, { recursive: true });
     writeFileSync(join(TEMP_DIR, '.git'), 'gitdir: /some/real/.git/worktrees/foo\n');
 
@@ -127,7 +127,7 @@ describe('resolveGitHooksDir', () => {
     });
 
     try {
-      expect(resolveGitHooksDir(TEMP_DIR)).rejects.toThrow(
+      await expect(resolveGitHooksDir(TEMP_DIR)).rejects.toThrow(
         'Could not resolve git hooks directory (exit code 128)',
       );
     } finally {

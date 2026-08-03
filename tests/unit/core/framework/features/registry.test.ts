@@ -1288,7 +1288,7 @@ describe('declarative integration framework', () => {
 
     await writeFile(targetPath, '#!/bin/sh\necho user-defined\n');
 
-    expect(resource.apply(makeContext(state, tempDir))).rejects.toThrow(
+    await expect(resource.apply(makeContext(state, tempDir))).rejects.toThrow(
       `A different pre-commit hook already exists at ${targetPath}`,
     );
 

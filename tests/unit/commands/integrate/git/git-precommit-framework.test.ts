@@ -548,11 +548,11 @@ describe('runPreCommitInstall', () => {
     }
   });
 
-  it('throws when a pre-commit command exits with non-zero code', () => {
+  it('throws when a pre-commit command exits with non-zero code', async () => {
     const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_FAIL);
 
     try {
-      expect(runPreCommitInstall(TEMP_DIR, 'pre-commit')).rejects.toThrow(
+      await expect(runPreCommitInstall(TEMP_DIR, 'pre-commit')).rejects.toThrow(
         'pre-commit uninstall failed',
       );
     } finally {
