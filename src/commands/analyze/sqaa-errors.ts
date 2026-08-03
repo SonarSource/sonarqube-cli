@@ -27,7 +27,7 @@ const GENERIC_SQAA_FAILURE_HINT =
   'Check your SonarQube Cloud authentication, project key, and network connectivity, then retry.';
 
 /** Shown on command-level failures; stripped from per-file ✗ rows in sqaa-display. */
-export const SQAA_FAILURE_HEADING = 'SonarQube Agentic Analysis failed.';
+export const SQAA_FAILURE_HEADING = 'Vortex analysis failed.';
 
 export function sqaaFailureMessage(detail: string): string {
   return `${SQAA_FAILURE_HEADING} ${detail}`;

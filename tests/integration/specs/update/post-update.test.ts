@@ -102,9 +102,7 @@ describe('post-update migration', () => {
       CONTEXT_AUGMENTATION_FEATURE_ID,
     ]);
     expect(harness.cwd.file('.claude', 'settings.json').asJson().hooks?.PostToolUse).toBeDefined();
-    expect(harness.cwd.file('CLAUDE.md').asText()).toContain(
-      '# SonarQube Agentic Analysis protocol',
-    );
+    expect(harness.cwd.file('CLAUDE.md').asText()).toContain('# Vortex analysis protocol');
     expect(
       harness.cwd.file('.claude', 'skills', 'sonar-context-augmentation', 'SKILL.md').exists(),
     ).toBe(true);
@@ -382,7 +380,7 @@ describe('post-update migration', () => {
       ]);
       expect(
         harness.cwd.file('.github', 'instructions', 'sonarqube.instructions.md').asText(),
-      ).toContain('# SonarQube Agentic Analysis protocol');
+      ).toContain('# Vortex analysis protocol');
       expect(
         harness.cwd.file('.github', 'skills', 'sonar-context-augmentation', 'SKILL.md').exists(),
       ).toBe(true);
@@ -412,7 +410,7 @@ describe('post-update migration', () => {
         CONTEXT_AUGMENTATION_FEATURE_ID,
       ]);
       expect(harness.cwd.file('.cursor', 'rules', 'sonar-agentic-analysis.mdc').asText()).toContain(
-        '# SonarQube Agentic Analysis protocol',
+        '# Vortex analysis protocol',
       );
       expect(
         harness.cwd.file('.agents', 'skills', 'sonar-context-augmentation', 'SKILL.md').exists(),
@@ -444,7 +442,7 @@ describe('post-update migration', () => {
         antigravity?.features[0].subfeatures?.map((subfeature) => subfeature.featureId),
       ).toEqual([SQAA_INSTRUCTIONS_SUBFEATURE_ID, CONTEXT_AUGMENTATION_FEATURE_ID]);
       expect(harness.cwd.file('.agents', 'rules', 'sonar-agentic-analysis.md').asText()).toContain(
-        '# SonarQube Agentic Analysis protocol',
+        '# Vortex analysis protocol',
       );
       expect(
         harness.cwd.file('.agents', 'skills', 'sonar-context-augmentation', 'SKILL.md').exists(),

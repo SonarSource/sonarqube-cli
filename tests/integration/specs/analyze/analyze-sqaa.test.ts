@@ -301,7 +301,7 @@ describe('analyze (no subcommand)', () => {
       const output = result.stdout + result.stderr;
       expect(result.exitCode).toBe(0);
       expect(output).toContain('No issues found');
-      expect(output).toContain('Vortex agentic analysis skipped: no project configured');
+      expect(output).toContain('Vortex analysis skipped: no project configured');
       expect(output).not.toContain('Usage: sonar analyze');
       const sqaaCalls = server
         .getRecordedRequests()
@@ -579,7 +579,7 @@ describe('analyze agentic', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain(
-        'Vortex agentic analysis skipped: a SonarQube Cloud connection is required. Run: sonar auth login (ensure you connect to SonarQube Cloud)',
+        'Vortex analysis skipped: a SonarQube Cloud connection is required. Run: sonar auth login (ensure you connect to SonarQube Cloud)',
       );
       const sqaaCalls = server
         .getRecordedRequests()
@@ -607,7 +607,7 @@ describe('analyze agentic', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain(
-        'Vortex agentic analysis requires a project, but none is configured for this directory.',
+        'Vortex analysis requires a project, but none is configured for this directory.',
       );
       const sqaaCalls = server
         .getRecordedRequests()
@@ -1839,7 +1839,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain(
-        'Vortex agentic analysis requires a project, but none is configured for this directory.',
+        'Vortex analysis requires a project, but none is configured for this directory.',
       );
       const sqaaCalls = server
         .getRecordedRequests()
@@ -1869,7 +1869,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain(
-        'Vortex agentic analysis skipped: no project configured',
+        'Vortex analysis skipped: no project configured',
       );
       const sqaaCalls = server
         .getRecordedRequests()
@@ -2261,7 +2261,7 @@ describe('analyze agentic — API error codes', () => {
       // Issue details are on stdout.
       expect(result.stdout).toContain('TODO');
       // No Sonar error text should appear on stdout.
-      expect(result.stdout).not.toContain('❌ Vortex agentic analysis failed');
+      expect(result.stdout).not.toContain('❌ Vortex analysis failed');
     },
     { timeout: 15000 },
   );

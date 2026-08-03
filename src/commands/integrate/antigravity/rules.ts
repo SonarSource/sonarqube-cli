@@ -32,7 +32,6 @@ import { sonarBeginMarker } from '../_common/instructions-templates.ts';
 export { PROMPT_SECRETS_BODY } from '../copilot/instructions.ts';
 
 export const PROMPT_SECRETS_RULE_MARKER = '# SonarQube secrets scanning for prompts protocol';
-export const SQAA_RULE_MARKER = '# SonarQube Agentic Analysis protocol';
 
 /** Render an Antigravity workspace rule (`.agents/rules/*.md`) with always-on activation. */
 export function buildAntigravityAlwaysOnRule(body: string): string {

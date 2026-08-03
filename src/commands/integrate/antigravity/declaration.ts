@@ -76,7 +76,6 @@ import {
   PROMPT_SECRETS_RULE_MARKER,
   resolveLegacyGlobalInstructionsPath,
   resolveLegacyProjectInstructionsPath,
-  SQAA_RULE_MARKER,
 } from './rules.ts';
 
 export const ANTIGRAVITY_INTEGRATION_ID = 'antigravity';
@@ -129,7 +128,7 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
         createSqaaInstructionsSubfeature<AntigravityIntegrationOptions>([
           wholeFile({
             id: 'sqaa-rule-file',
-            displayName: 'Vortex agentic analysis rule for Antigravity',
+            displayName: 'Vortex analysis rule for Antigravity',
             targetPath: resolveSqaaRulePath,
             content: (context) =>
               buildAntigravityAlwaysOnRule(
@@ -137,7 +136,6 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
                   getRequiredStringAttr(context, 'projectKey', ANTIGRAVITY_DISPLAY_NAME),
                 ),
               ),
-            managedMarker: SQAA_RULE_MARKER,
           }),
         ]),
         createContextAugmentationSubfeature<AntigravityIntegrationOptions>({

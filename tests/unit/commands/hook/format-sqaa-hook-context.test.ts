@@ -96,4 +96,37 @@ describe('formatSqaaJsonReportForHook', () => {
     expect(text).toContain('large.bin');
     expect(text).toContain('oversized');
   });
+
+  it('lists change-set failures under the Vortex heading', () => {
+    const text = formatSqaaJsonReportForHook(
+      emptyReport({
+        failures: [{ path: 'src/broken.ts', message: 'analysis crashed' }],
+        summary: { totalIssues: 0, totalFailures: 1, totalSkipped: 0 },
+      }),
+    );
+
+    expect(text).toContain('Vortex analysis failures:');
+    expect(text).toContain('✗  src/broken.ts: analysis crashed');
+  });
+
+  it('lists skipped files alongside analyzed content', () => {
+    // A file with an error makes the report "analyzed content", so formatting
+    // reaches the skipped block instead of the no-analyzed-content early return.
+    const text = formatSqaaJsonReportForHook(
+      emptyReport({
+        files: [
+          {
+            path: 'src/analyzed.ts',
+            issues: [],
+            errors: [{ code: 'PARSE_ERROR', message: 'could not parse' }],
+          },
+        ],
+        skipped: ['src/skipped.ts'],
+        summary: { totalIssues: 0, totalFailures: 0, totalSkipped: 1 },
+      }),
+    );
+
+    expect(text).toContain('[SKIPPED]');
+    expect(text).toContain('src/skipped.ts');
+  });
 });

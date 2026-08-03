@@ -305,7 +305,7 @@ Alternatively, add SonarQube for IDE shared binding JSON under .sonarlint/ (for 
 integrateCommand
   .command('claude')
   .description(
-    'Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure Vortex agentic analysis and MCP Server.',
+    'Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.',
   )
   .option('-p, --project <project>', 'Project key. Ignored when --global is used.')
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
@@ -319,7 +319,7 @@ integrateCommand
 integrateCommand
   .command('copilot')
   .description(
-    'Setup SonarQube integration for GitHub Copilot CLI. This will install secrets scanning hooks, configure Vortex agentic analysis and MCP Server.',
+    'Setup SonarQube integration for GitHub Copilot CLI. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.',
   )
   .option(
     '-g, --global',
@@ -382,7 +382,7 @@ integrateCommand
 integrateCommand
   .command('cursor')
   .description(
-    'Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure Vortex agentic analysis.',
+    'Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure Vortex analysis.',
   )
   .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
@@ -509,14 +509,14 @@ analyze
 applySqaaOptions(
   analyze
     .command('agentic')
-    .description('Run server-side agentic analysis (SonarQube Cloud only). Limitations apply.'),
+    .description('Run server-side Vortex analysis (SonarQube Cloud only). Limitations apply.'),
   { telemetryCallerCommand: SQAA_ANALYZE_AGENTIC_CALLER_COMMAND },
 );
 
 // `verify` is deprecated in favour of `sonar analyze`.
 const verifyCmd = applySqaaOptions(
   COMMAND_TREE.command('verify', { hidden: true }).description(
-    "Run server-side Vortex agentic analysis (deprecated — use 'sonar analyze' instead)",
+    "Run server-side Vortex analysis (deprecated — use 'sonar analyze' instead)",
   ),
   { telemetryCallerCommand: SQAA_VERIFY_CALLER_COMMAND },
 );
@@ -678,14 +678,14 @@ hookCommand
 
 hookCommand
   .command('claude-post-tool-use')
-  .description('PostToolUse handler: run agentic analysis after agent edits or writes a file')
+  .description('PostToolUse handler: run Vortex analysis after agent edits or writes a file')
   .requiredOption('--project <key>', 'SonarQube Cloud project key')
   .anonymousAction((options: AgentPostToolUseOptions) => agentPostToolUse(options));
 
 hookCommand
   .command('codex-post-tool-use')
   .description(
-    'PostToolUse handler for Codex: run agentic analysis on the git change set after apply_patch',
+    'PostToolUse handler for Codex: run Vortex analysis on the git change set after apply_patch',
   )
   .requiredOption('--project <key>', 'SonarQube Cloud project key')
   .anonymousAction((options: CodexPostToolUseOptions) => codexPostToolUse(options));

@@ -38,7 +38,7 @@ describe('instructions-templates', () => {
   it('buildSqaaSectionBody renders the SQAA protocol body with the analyze command for the project', () => {
     const result = buildSqaaSectionBody('my-project');
 
-    expect(result).toContain('# SonarQube Agentic Analysis protocol');
+    expect(result).toContain('# Vortex analysis protocol');
     expect(result).toContain('sonar analyze agentic --project my-project');
     expect(result).toContain('--depth DEEP');
     expect(result).toContain('**Preferred:**');

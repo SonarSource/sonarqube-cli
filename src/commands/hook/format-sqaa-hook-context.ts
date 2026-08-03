@@ -96,7 +96,7 @@ function formatNoAnalyzedContent(report: SqaaJsonReport): string {
     lines.push(`Skipped ${report.skipped.length} file(s) (analysis not completed).`);
   } else if (report.ignored.length > 0 && report.files.length === 0) {
     lines.push(
-      'Agentic Analysis: no files to analyze — all change set files were excluded (binary or oversized).',
+      'Vortex analysis: no files to analyze — all change set files were excluded (binary or oversized).',
     );
   } else {
     lines.push(formatSqaaRunSummaryPlain(hookSummaryFromReport(report)));
@@ -151,7 +151,7 @@ export function formatSqaaJsonReportForHook(report: SqaaJsonReport): string | nu
   renderFileList(report, lines);
 
   if (report.failures.length > 0) {
-    lines.push('Agentic Analysis failures:');
+    lines.push('Vortex analysis failures:');
     report.failures.forEach((f) => lines.push(`  ✗  ${f.path}: ${f.message}`));
   }
 

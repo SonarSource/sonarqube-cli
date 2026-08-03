@@ -199,13 +199,13 @@ async function analyzeSqaaChangeSet(params: {
   const resolvedBranch = await resolveSqaaBranchAtRepoRoot(branch, changeSet.repoRoot);
 
   if (changeSet.files.length === 0 && changeSet.ignored.length === 0) {
-    text('Vortex agentic analysis: no files in the change set to analyze.');
+    text('Vortex analysis: no files in the change set to analyze.');
     return;
   }
 
   if (changeSet.files.length === 0) {
     text(
-      'Vortex agentic analysis: no files to analyze — all change set files were excluded (binary or oversized).',
+      'Vortex analysis: no files to analyze — all change set files were excluded (binary or oversized).',
     );
     return;
   }

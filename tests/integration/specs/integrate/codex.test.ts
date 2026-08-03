@@ -53,7 +53,7 @@ const PROJECT_AGENTS_MD_DIRS = ['AGENTS.md'];
 const GLOBAL_AGENTS_MD_DIRS = ['.codex', 'AGENTS.md'];
 const CONFIG_TOML_DIRS = ['.codex', 'config.toml'];
 const SECRETS_HEADING = '# SonarQube secrets scanning for files protocol';
-const SQAA_HEADING = '# SonarQube Agentic Analysis protocol';
+const SQAA_HEADING = '# Vortex analysis protocol';
 
 interface CodexHooksFile {
   hooks?: {

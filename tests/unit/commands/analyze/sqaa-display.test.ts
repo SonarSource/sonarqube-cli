@@ -218,7 +218,7 @@ describe('printSqaaTextReport', () => {
     printSqaaTextReport({ tally, allPaths: ['b.ts'], analysisDepth: 'STANDARD' });
 
     const texts = getMockTextLines();
-    expect(texts.some((l) => l.includes('SonarQube Agentic Analysis failed'))).toBe(false);
+    expect(texts.some((l) => l.includes('Vortex analysis failed'))).toBe(false);
     expect(texts.some((l) => l.includes("File path must use forward slashes: 'b\\.ts'"))).toBe(
       true,
     );
@@ -230,7 +230,7 @@ describe('printSqaaTextReport', () => {
     clearMockUiCalls();
 
     const validationError = new CommandFailedError(
-      'SonarQube Agentic Analysis failed. File path must use forward slashes.',
+      'Vortex analysis failed. File path must use forward slashes.',
       { remediationHint: "Normalize paths to POSIX form (e.g. 'src/index.ts')." },
     );
     const tally: RunTally = {
@@ -255,7 +255,7 @@ describe('printSqaaTextReport', () => {
 describe('renderFailureDetailLines', () => {
   it('strips heading prefix from a single-line message', () => {
     const lines = renderFailureDetailLines(
-      new CommandFailedError('SonarQube Agentic Analysis failed. network error'),
+      new CommandFailedError('Vortex analysis failed. network error'),
       false,
     );
     expect(lines).toEqual(['     network error']);
@@ -263,7 +263,7 @@ describe('renderFailureDetailLines', () => {
 
   it('strips legacy multiline heading and indents each detail line', () => {
     const lines = renderFailureDetailLines(
-      new CommandFailedError('SonarQube Agentic Analysis failed.\n  network error'),
+      new CommandFailedError('Vortex analysis failed.\n  network error'),
       false,
     );
     expect(lines).toEqual(['     network error']);

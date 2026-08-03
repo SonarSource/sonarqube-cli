@@ -86,7 +86,7 @@ const PINNED_VERSIONS: Partial<Record<string, string>> = {
 
 const BINARY_DISPLAY_NAMES: Record<string, string> = {
   'sonar-secrets': 'Secrets Detection',
-  'sonar-context-augmentation': 'Sonar Context Augmentation',
+  'sonar-context-augmentation': 'Vortex Context Augmentation',
   'sca-scanner-cli': 'Dependency Risks Scanner',
 };
 
@@ -734,7 +734,7 @@ function renderNetworkSection(network: ResolvedNetworkConfig): void {
   }
   text(
     '  Note: Not all CLI features currently support proxy and certificate configuration. ' +
-      'Secrets hook, Context Augmentation and Software Composition Analysis might currently not pick up the network configuration.',
+      'Secrets hook, Vortex context augmentation and Software Composition Analysis might currently not pick up the network configuration.',
   );
   if (network.proxy) {
     renderProxySubsection(network.proxy);

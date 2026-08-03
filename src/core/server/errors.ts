@@ -65,7 +65,7 @@ export class ForbiddenApiError extends Error {
 /** Thrown when the SQAA analysis endpoint returns 403 — Agentic Pack entitlement revoked. */
 export class SqaaForbiddenError extends Error {
   constructor() {
-    super('Vortex agentic analysis is not available for this organization (403 Forbidden).');
+    super('Vortex analysis is not available for this organization (403 Forbidden).');
     this.name = 'SqaaForbiddenError';
   }
 }
