@@ -706,15 +706,29 @@ describe('integrate claude — Vortex entitlement guard', () => {
 
       expect(result.exitCode).toBe(0);
       const settings = harness.cwd.file('.claude', 'settings.json').asJson();
-      expect(settings.hooks?.PostToolUse).toHaveLength(2);
+      // SQAA and CAG share one PostToolUse entry (union matcher) via the dispatch container.
+      expect(settings.hooks?.PostToolUse).toHaveLength(1);
+      const postToolMatcher = settings.hooks?.PostToolUse?.[0]?.matcher?.split('|') ?? [];
+      for (const tool of ['Edit', 'Write', 'Bash', 'PowerShell', 'Monitor', 'Read']) {
+        expect(postToolMatcher).toContain(tool);
+      }
       expect(settings.hooks?.PostToolUseFailure).toHaveLength(1);
       expect(
         harness.cwd.exists(
           '.claude',
           'hooks',
-          'sonar-context-augmentation',
+          'sonar-sqaa',
           'build-scripts',
-          hookScriptName('context-augmentation-hook'),
+          hookScriptName('posttool-sqaa'),
+        ),
+      ).toBe(true);
+      expect(
+        harness.cwd.exists(
+          '.claude',
+          'hooks',
+          'sonar-posttoolusefailure',
+          'build-scripts',
+          hookScriptName('posttoolusefailure'),
         ),
       ).toBe(true);
     },

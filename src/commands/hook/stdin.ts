@@ -62,7 +62,17 @@ export async function readGitPushRefs(): Promise<PushRef[]> {
  * JSON payload with framing bytes.
  */
 export async function readStdinJson<T>(): Promise<T> {
+  return parseStdinJson(await readRawStdin()) as T;
+}
+
+// false positive
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
+export async function readStdinJsonWithRaw<T>(): Promise<{ raw: string; parsed: T }> {
   const raw = await readRawStdin();
+  return { raw, parsed: parseStdinJson(raw) as T };
+}
+
+function parseStdinJson(raw: string): unknown {
   const jsonStart = raw.search(/[{[]/);
   const withoutPrefix = jsonStart > 0 ? raw.slice(jsonStart) : raw;
   const closeChar = withoutPrefix.startsWith('[') ? ']' : '}';
@@ -72,13 +82,13 @@ export async function readStdinJson<T>(): Promise<T> {
       ? withoutPrefix.slice(0, closeIdx + 1)
       : withoutPrefix;
   try {
-    return JSON.parse(jsonStr) as T;
+    return JSON.parse(jsonStr);
   } catch {
     throw new Error('Failed to parse stdin as JSON');
   }
 }
 
-async function readRawStdin(): Promise<string> {
+export async function readRawStdin(): Promise<string> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([

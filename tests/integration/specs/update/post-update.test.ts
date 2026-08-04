@@ -95,10 +95,19 @@ describe('post-update migration', () => {
     const claude = state.integrations.installed.find(
       (integration) => integration.integrationId === 'claude-code',
     );
-    expect(claude?.features.map((feature) => feature.featureId)).toEqual([VORTEX_FEATURE_ID]);
-    const vortex = claude?.features[0];
-    expect(vortex?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
+    expect(claude?.features.map((feature) => feature.featureId)).toEqual([
       SQAA_HOOK_FEATURE_ID,
+      VORTEX_FEATURE_ID,
+    ]);
+    const postToolUseContainer = claude?.features.find(
+      (feature) => feature.featureId === SQAA_HOOK_FEATURE_ID,
+    );
+    expect(postToolUseContainer?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
+      'sqaa-posttooluse',
+      'cag-posttooluse',
+    ]);
+    const vortex = claude?.features.find((feature) => feature.featureId === VORTEX_FEATURE_ID);
+    expect(vortex?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
       SQAA_INSTRUCTIONS_SUBFEATURE_ID,
       CONTEXT_AUGMENTATION_FEATURE_ID,
       CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
@@ -348,13 +357,46 @@ describe('post-update migration', () => {
   it(
     'installs every Vortex subfeature when migrating a partial pre-unification install',
     async () => {
+      seedPreUnificationFeatures('claude-code', [SQAA_INSTRUCTIONS_SUBFEATURE_ID]);
+      harness.state().withContextAugmentationBinaryInstalled();
+
+      const result = await harness.run('--version');
+
+      expect(result.exitCode).toBe(0);
+      const state = harness.stateJsonFile.asJson() as CliState;
+      const claude = state.integrations.installed.find(
+        (integration) => integration.integrationId === 'claude-code',
+      );
+      const vortex = claude?.features.find((feature) => feature.featureId === VORTEX_FEATURE_ID);
+      expect(vortex?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
+        SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+        CONTEXT_AUGMENTATION_FEATURE_ID,
+        CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
+      ]);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'installs every subfeature of the PostToolUse hook container when migrating a bare pre-unification SQAA hook',
+    async () => {
       seedPreUnificationFeatures('claude-code', [SQAA_HOOK_FEATURE_ID]);
       harness.state().withContextAugmentationBinaryInstalled();
 
       const result = await harness.run('--version');
 
       expect(result.exitCode).toBe(0);
-      expectFullClaudeVortexMigration();
+      const state = harness.stateJsonFile.asJson() as CliState;
+      const claude = state.integrations.installed.find(
+        (integration) => integration.integrationId === 'claude-code',
+      );
+      const postToolUseContainer = claude?.features.find(
+        (feature) => feature.featureId === SQAA_HOOK_FEATURE_ID,
+      );
+      expect(postToolUseContainer?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
+        'sqaa-posttooluse',
+        'cag-posttooluse',
+      ]);
     },
     { timeout: 30000 },
   );
