@@ -346,8 +346,11 @@ export class EnvironmentBuilder {
   /**
    * Enables telemetry in the generated state (off by default for integration tests).
    * Use when a test needs to assert telemetry side effects such as telemetry-events.ndjson.
-   * Pair with extraEnv `__SQ_CLI_TELEMETRY_FLUSH__=1` so the sink is written but the
-   * detached flush worker never spawns, and nothing is POSTed to the telemetry endpoint.
+   *
+   * Safe on its own — no extra env needed. Every spawned CLI carries egress mode `off`, so
+   * the flush worker is never created and nothing is POSTed. Do not reach for
+   * `__SQ_CLI_TELEMETRY_FLUSH__=1`: it also no-ops storeEvent(), which owns
+   * CliCommandExecuted, so specs asserting on that event cannot use it.
    */
   withTelemetryEnabled(): this {
     this._telemetryEnabled = true;

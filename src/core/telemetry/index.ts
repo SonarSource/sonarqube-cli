@@ -22,6 +22,7 @@ import { type Command } from 'commander';
 
 import { DISTRIBUTION } from '../host/distribution.ts';
 import { tryLoadState } from '../state/state-manager.ts';
+import { resolveTelemetryEgress } from './egress.ts';
 import { isTelemetryEnabled } from './enabled.ts';
 import { currentProjectUuid } from './project-uuid.ts';
 import { emitCommandExecuted, flushTelemetryEvents } from './telemetry-events.ts';
@@ -75,7 +76,11 @@ export async function storeEvent(command: Command, success: boolean): Promise<vo
     project_uuid: await currentProjectUuid(),
   });
 
-  spawnFlushWorker();
+  // Gated at the spawn rather than in the worker: a process that is never created cannot
+  // transmit, whatever the drain does.
+  if (resolveTelemetryEgress().kind !== 'off') {
+    spawnFlushWorker();
+  }
 }
 
 /**
@@ -105,6 +110,11 @@ const FLUSH_TIMEOUT_MS = 60_000;
 export async function flushTelemetry(): Promise<void> {
   const state = tryLoadState();
   if (!state || !isTelemetryEnabled(state)) {
+    return;
+  }
+  // Guarded here rather than inside flushTelemetryEvents, which stays an unconditional
+  // drain: returning early leaves the queue on disk for a later attempt.
+  if (resolveTelemetryEgress().kind === 'off') {
     return;
   }
 

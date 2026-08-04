@@ -67,6 +67,35 @@ export default tseslint.config(
     },
   },
 
+  // Telemetry/Sentry destinations are reachable only from the two modules that own the
+  // outbound call; the owners are exempted in the block that follows.
+  {
+    files: ['src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          // Matched as a glob against the import string, so every spelling of the path is
+          // covered — alias, ./, ../ and deeper.
+          patterns: [
+            {
+              group: ['**/config-constants.ts'],
+              importNames: ['TELEMETRY_ENDPOINT', 'TELEMETRY_API_KEY', 'SENTRY_DSN'],
+              message:
+                'Telemetry/Sentry destinations are confined to src/core/telemetry/telemetry-events.ts and src/core/observability/sentry.ts. Gate new outbound calls on resolveTelemetryEgress() instead.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/core/telemetry/telemetry-events.ts', 'src/core/observability/sentry.ts'],
+    rules: {
+      'no-restricted-imports': 'off',
+    },
+  },
+
   // Relaxed rules for non-shipped code (tests + build scripts)
   {
     files: ['tests/**/*.ts', 'build-scripts/**/*.ts'],
