@@ -33,11 +33,6 @@ export interface AnalyzeSqaaRunOptions {
   telemetryCallerCommand?: SqaaTelemetryCallerCommand;
   /** Overrides computed CLI exit for telemetry only (e.g. non-blocking hooks always exit 0). */
   telemetryProcessExitCode?: number | null;
-  /**
-   * When true, SqaaForbiddenError propagates out of the analysis instead of being
-   * recorded as a chunk failure. Set by hook callers that want to show a nudge message.
-   */
-  propagateForbiddenError?: boolean;
 }
 
 export interface AnalyzeSqaaOptions {

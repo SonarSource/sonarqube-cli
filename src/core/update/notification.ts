@@ -23,14 +23,13 @@ import type { Command } from 'commander';
 import type { CliUpdateCheckState } from '@/core/state/state.ts';
 import { loadState, saveState } from '@/core/state/state-manager.ts';
 import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
+import { isWithinCooldown, ONE_DAY_MS } from '@/core/time/cooldown.ts';
 import { isFormattedOutputMode, text } from '@/core/ui';
 import { cyan } from '@/core/ui/colors.ts';
 import { Version } from '@/core/version.ts';
 
 import { version as CURRENT_VERSION } from '../../../package.json';
 import { BACKGROUND_UPDATE_CHECK_TIMEOUT_MS, fetchLatestVersion } from './check.ts';
-
-const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 /** When to show the post-command update notice for an opted-in command. */
 export type UpdateNotificationCondition = (opts: Record<string, unknown>) => boolean;
@@ -145,18 +144,10 @@ export class UpdateNotifier {
     return merged;
   }
 
-  private isWithinCooldown(isoTimestamp: string | undefined, cooldownMs: number): boolean {
-    if (!isoTimestamp) {
-      return false;
-    }
-    const elapsed = Date.now() - Date.parse(isoTimestamp);
-    return Number.isFinite(elapsed) && elapsed >= 0 && elapsed < cooldownMs;
-  }
-
   private async resolveLatestVersion(
     updateCheck: CliUpdateCheckState | undefined,
   ): Promise<{ latestVersion: string | undefined; updateCheck: CliUpdateCheckState }> {
-    if (this.isWithinCooldown(updateCheck?.lastCheckedAt, ONE_DAY_MS)) {
+    if (isWithinCooldown(updateCheck?.lastCheckedAt, ONE_DAY_MS)) {
       // Checked within the last day: reuse the cached result (which is undefined
       // when the previous check failed) instead of hitting the network again.
       return {

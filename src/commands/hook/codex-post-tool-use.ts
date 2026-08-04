@@ -23,9 +23,7 @@
 import { buildSqaaJsonReport } from '@/commands/analyze/sqaa.ts';
 import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
-import { AGENTIC_PACK_URL } from '@/core/config-constants.ts';
 import logger from '@/core/observability/logger.ts';
-import { SqaaForbiddenError } from '@/core/server/errors.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import {
   emitSqaaHookFailureTelemetry,
@@ -37,6 +35,7 @@ import {
   formatSqaaJsonReportForHook,
   writePostToolUseHookOutput,
 } from './format-sqaa-hook-context.ts';
+import { emitVortexUnavailableHookNotice } from './vortex-unavailable-hook-notice.ts';
 
 export interface CodexPostToolUseOptions {
   project?: string;
@@ -62,15 +61,9 @@ export async function codexPostToolUse(options: CodexPostToolUseOptions): Promis
     report = await buildSqaaJsonReport(
       { project: projectKey, force: true, format: 'json', forcedDepth: 'STANDARD' },
       auth,
-      { ...CODEX_HOOK_TELEMETRY_OPTIONS, propagateForbiddenError: true },
+      CODEX_HOOK_TELEMETRY_OPTIONS,
     );
   } catch (err) {
-    if (err instanceof SqaaForbiddenError) {
-      writePostToolUseHookOutput(
-        `Run \`sonar integrate\` to uninstall unavailable hooks. See ${AGENTIC_PACK_URL}`,
-      );
-      return;
-    }
     await emitSqaaHookFailureTelemetry(
       SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
       auth,
@@ -81,6 +74,11 @@ export async function codexPostToolUse(options: CodexPostToolUseOptions): Promis
   }
 
   if (!report) return;
+
+  if (report.globalError?.kind === 'forbidden') {
+    await emitVortexUnavailableHookNotice(auth);
+    return;
+  }
 
   try {
     const text = formatSqaaJsonReportForHook(report);

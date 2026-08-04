@@ -24,13 +24,20 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
+
 import { readAnalysisEvents, readCommandEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
 import { parseSqaaRequestBody, sqaaRequestFirstFilePath } from '../analyze/sqaa-request-helpers';
 
 const VALID_TOKEN = 'integration-test-token';
 const TEST_ORG = 'my-org';
+const TEST_ORG_UUID = 'my-org-uuid';
 const TEST_PROJECT = 'my-project';
+
+function oneHourAgoIso(): string {
+  return new Date(Date.now() - 60 * 60 * 1000).toISOString();
+}
 
 function postToolUseStdin(filePath: string, toolName = 'Edit'): string {
   return JSON.stringify({ tool_name: toolName, tool_input: { file_path: filePath } });
@@ -72,12 +79,14 @@ describe('sonar hook claude-post-tool-use', () => {
   );
 
   it(
-    'exits 0 and outputs nudge message when SQAA returns 403 (entitlement revoked)',
+    'exits 0 and warns about entitlement loss when SQAA 403 re-checks to not_entitled',
     async () => {
       const server = await harness
         .newFakeServer()
+        .asSonarCloud()
         .withAuthToken(VALID_TOKEN)
         .withSqaaStatusCode(403)
+        .withVortexEntitlement(TEST_ORG, TEST_ORG_UUID, { allowed: false, hasEntitlement: false })
         .start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
@@ -90,8 +99,77 @@ describe('sonar hook claude-post-tool-use', () => {
       expect(result.exitCode).toBe(0);
       const output = JSON.parse(result.stdout.trim());
       expect(output.hookSpecificOutput.additionalContext).toContain(
-        'Run `sonar integrate` to uninstall unavailable hooks. See https://www.sonarsource.com/products/agent-essentials/',
+        'no longer available for this organization',
       );
+      expect(output.hookSpecificOutput.additionalContext).toContain('remove the analysis hooks');
+      expect(output.hookSpecificOutput.additionalContext).toContain(VORTEX_PRODUCT_URL);
+      // First warning records the throttle timestamp so later edits stay quiet.
+      expect(
+        harness.stateJsonFile.asJson().config.vortexEntitlementLossNotice.lastWarnedAt,
+      ).toEqual(expect.any(String));
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits 0 and stays silent on a not_entitled 403 when warned within the last 24h',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaStatusCode(403)
+        .withVortexEntitlement(TEST_ORG, TEST_ORG_UUID, { allowed: false, hasEntitlement: false })
+        .start();
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withVortexEntitlementLossWarnedAt(oneHourAgoIso());
+      harness.cwd.writeFile('src/main.ts', 'const x = 1;');
+      const filePath = join(harness.cwd.path, 'src/main.ts');
+
+      const result = await harness.run(`hook claude-post-tool-use --project ${TEST_PROJECT}`, {
+        stdin: postToolUseStdin(filePath),
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe('');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits 0 and shows the usage-limit message every run on an over_consumption 403',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaStatusCode(403)
+        .withVortexEntitlement(TEST_ORG, TEST_ORG_UUID, { allowed: false, hasEntitlement: true })
+        .start();
+      harness.state().withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      harness.cwd.writeFile('src/main.ts', 'const x = 1;');
+      const filePath = join(harness.cwd.path, 'src/main.ts');
+      const runHook = () =>
+        harness.run(`hook claude-post-tool-use --project ${TEST_PROJECT}`, {
+          stdin: postToolUseStdin(filePath),
+        });
+
+      const firstResult = await runHook();
+      const secondResult = await runHook();
+
+      expect(firstResult.exitCode).toBe(0);
+      const firstOutput = JSON.parse(firstResult.stdout.trim());
+      expect(firstOutput.hookSpecificOutput.additionalContext).toContain('usage limit');
+      expect(firstOutput.hookSpecificOutput.additionalContext).not.toContain('sonar integrate');
+
+      expect(secondResult.exitCode).toBe(0);
+      const secondOutput = JSON.parse(secondResult.stdout.trim());
+      expect(secondOutput.hookSpecificOutput.additionalContext).toContain('usage limit');
+      // Unlike the not_entitled case, over_consumption is never throttled via
+      // vortexEntitlementLossNotice, so the message keeps showing on every run.
+      expect(harness.stateJsonFile.asJson().config.vortexEntitlementLossNotice).toBeUndefined();
     },
     { timeout: 15000 },
   );

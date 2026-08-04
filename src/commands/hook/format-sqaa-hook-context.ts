@@ -54,6 +54,7 @@ function hookSummaryFromReport(report: SqaaJsonReport): SqaaRunSummaryStats {
     totalFailures: report.summary.totalFailures,
     totalErrors,
     analysisDepth: report.analysisDepth,
+    hasGlobalError: report.globalError !== undefined,
   };
 }
 
@@ -76,6 +77,7 @@ export function formatSqaaIssuesForHook(
       totalFailures: 0,
       totalErrors: errorCount,
       analysisDepth: 'STANDARD',
+      hasGlobalError: false,
     }),
   ].join('\n');
 }

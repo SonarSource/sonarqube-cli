@@ -86,7 +86,6 @@ async function buildSqaaJsonReportFromEntries(
       branch,
       wireDepth,
       displayDepth,
-      runOptions.propagateForbiddenError,
     ),
   );
   const report = buildJsonReport(tally, [], allPaths, cwd, displayDepth);
@@ -132,7 +131,6 @@ async function buildSqaaJsonReportFromChangeSet(
       resolvedBranch,
       wireDepth,
       displayDepth,
-      runOptions.propagateForbiddenError,
     ),
   );
   const report = buildJsonReport(tally, ignored, allPaths, repoRoot, displayDepth);

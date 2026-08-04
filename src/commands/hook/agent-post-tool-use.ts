@@ -24,7 +24,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
-import { AGENTIC_PACK_URL } from '@/core/config-constants.ts';
 import { canonicalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import { timed } from '@/core/observability/timed.ts';
@@ -47,6 +46,7 @@ import { runClaudePostToolUseDispatch } from './claude-hook-dispatch.ts';
 import { contextAugmentationPostToolUseSubscriber } from './context-augmentation-hook-subscriber.ts';
 import { formatSqaaIssuesForHook } from './format-sqaa-hook-context.ts';
 import { readStdinJsonWithRaw } from './stdin.ts';
+import { emitVortexUnavailableHookNotice } from './vortex-unavailable-hook-notice.ts';
 
 export interface AgentPostToolUseOptions {
   project?: string;
@@ -123,10 +123,8 @@ async function handleSqaaPostToolUse(
 
   if (fetchResult.error) {
     if (fetchResult.error instanceof SqaaForbiddenError) {
-      return {
-        decision: 'context',
-        additionalContext: `Run \`sonar integrate\` to uninstall unavailable hooks. See ${AGENTIC_PACK_URL}`,
-      };
+      const wrote = await emitVortexUnavailableHookNotice(auth);
+      return { decision: wrote ? 'handled' : 'none' };
     }
     logger.debug(`PostToolUse SQAA analysis failed: ${fetchResult.error.message}`);
     return { decision: 'none' };
