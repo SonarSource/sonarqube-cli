@@ -172,7 +172,11 @@ async function runSecretsAndAgentic(
   if (secretsFailed) {
     process.exitCode = secrets.exitCode;
   } else if (agentic) {
-    applyExitCode(agentic.summary.totalIssues, agentic.summary.totalFailures);
+    applyExitCode(
+      agentic.summary.totalIssues,
+      agentic.summary.totalFailures,
+      agentic.globalError !== undefined,
+    );
   }
 }
 

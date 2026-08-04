@@ -26,6 +26,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
+import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
 import type { StoredAnalysisCompletedEvent } from '@/core/state/state.ts';
 import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
@@ -51,6 +52,7 @@ import {
 
 const VALID_TOKEN = 'integration-test-token';
 const TEST_ORG = 'my-org';
+const TEST_ORG_UUID = 'my-org-uuid';
 const TEST_PROJECT = 'my-project';
 // sonar-ignore-next-line
 const GITHUB_TEST_TOKEN = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef1234';
@@ -2235,6 +2237,15 @@ describe('analyze agentic — API error codes', () => {
         .filter((r) => r.path === '/a3s-analysis/analyses');
       expect(sqaaCalls).toHaveLength(4);
       expect(sqaaRequestFileCount(sqaaCalls[0].body)).toBe(2);
+      expect(result.stdout).toContain('a.ts');
+      expect(result.stdout).toContain('b.ts');
+      expect(result.stdout).toContain('[SKIPPED]');
+      expect(result.stdout).not.toContain('✗');
+      // Skipped files aren't counted as failures (they were never analyzed), and the
+      // footer must not falsely claim success via the "No issues found" checkmark.
+      expect(result.stdout).toContain('2 files analyzed');
+      expect(result.stdout).not.toContain('No issues found');
+      expect(result.stdout).not.toContain('failures');
     },
     { timeout: 15000 },
   );
@@ -2262,6 +2273,136 @@ describe('analyze agentic — API error codes', () => {
       expect(result.stdout).toContain('TODO');
       // No Sonar error text should appear on stdout.
       expect(result.stdout).not.toContain('❌ Vortex analysis failed');
+    },
+    { timeout: 15000 },
+  );
+});
+
+describe('analyze agentic — SQAA 403 (Vortex unavailable)', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'exits 1 with an entitlement-loss message when the 403 re-checks to not_entitled',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaStatusCode(403)
+        .withVortexEntitlement(TEST_ORG, TEST_ORG_UUID, { allowed: false, hasEntitlement: false })
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+
+      const result = await harness.run('analyze agentic --file src/index.ts');
+
+      expect(result.exitCode).toBe(1);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('not available for your organization');
+      expect(output).toContain(VORTEX_PRODUCT_URL);
+      // The explicit command never suggests re-running integrate.
+      expect(output).not.toContain('remove the analysis hooks');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits 1 with a usage-limit message (no integrate hint) when the 403 re-checks to over_consumption',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaStatusCode(403)
+        .withVortexEntitlement(TEST_ORG, TEST_ORG_UUID, { allowed: false, hasEntitlement: true })
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+
+      const result = await harness.run('analyze agentic --file src/index.ts');
+
+      expect(result.exitCode).toBe(1);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('usage limit');
+      expect(output).not.toContain('sonar integrate');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits 1 with an entitlement-loss message when the 403 re-checks to not_entitled (multi-file)',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaStatusCode(403)
+        .withVortexEntitlement(TEST_ORG, TEST_ORG_UUID, { allowed: false, hasEntitlement: false })
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('a.ts', 'const a = 1;');
+      harness.cwd.writeFile('b.ts', 'const b = 2;');
+
+      const result = await harness.run('analyze agentic --file a.ts --file b.ts');
+
+      expect(result.exitCode).toBe(1);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('not available for your organization');
+      expect(output).toContain(VORTEX_PRODUCT_URL);
+      // The explicit command never suggests re-running integrate.
+      expect(output).not.toContain('remove the analysis hooks');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits 1 with a usage-limit message (no integrate hint) when the 403 re-checks to over_consumption (multi-file)',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaStatusCode(403)
+        .withVortexEntitlement(TEST_ORG, TEST_ORG_UUID, { allowed: false, hasEntitlement: true })
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('a.ts', 'const a = 1;');
+      harness.cwd.writeFile('b.ts', 'const b = 2;');
+
+      const result = await harness.run('analyze agentic --file a.ts --file b.ts');
+
+      expect(result.exitCode).toBe(1);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('usage limit');
+      expect(output).not.toContain('sonar integrate');
     },
     { timeout: 15000 },
   );
@@ -2484,6 +2625,132 @@ describe('analyze agentic — --format json', () => {
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
       expect(sqaaCalls).toHaveLength(1);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports globalError with the resolved entitlement-loss message when the 403 re-checks to not_entitled',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaStatusCode(403)
+        .withVortexEntitlement(TEST_ORG, TEST_ORG_UUID, { allowed: false, hasEntitlement: false })
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+
+      const result = await harness.run('analyze agentic --file src/index.ts --format json');
+
+      expect(result.exitCode).toBe(1);
+      const report = JSON.parse(result.stdout) as {
+        globalError?: { kind: string; message: string };
+      };
+      expect(report.globalError?.kind).toBe('forbidden');
+      expect(report.globalError?.message).toContain('not available for your organization');
+      expect(report.globalError?.message).toContain(VORTEX_PRODUCT_URL);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports globalError with the resolved entitlement-loss message when the 403 re-checks to not_entitled (multi-file)',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaStatusCode(403)
+        .withVortexEntitlement(TEST_ORG, TEST_ORG_UUID, { allowed: false, hasEntitlement: false })
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('a.ts', 'const a = 1;');
+      harness.cwd.writeFile('b.ts', 'const b = 2;');
+
+      const result = await harness.run('analyze agentic --file a.ts --file b.ts --format json');
+
+      expect(result.exitCode).toBe(1);
+      const report = JSON.parse(result.stdout) as {
+        globalError?: { kind: string; message: string };
+      };
+      expect(report.globalError?.kind).toBe('forbidden');
+      expect(report.globalError?.message).toContain('not available for your organization');
+      expect(report.globalError?.message).toContain(VORTEX_PRODUCT_URL);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports globalError with the resolved usage-limit message when the 403 re-checks to over_consumption',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaStatusCode(403)
+        .withVortexEntitlement(TEST_ORG, TEST_ORG_UUID, { allowed: false, hasEntitlement: true })
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+
+      const result = await harness.run('analyze agentic --file src/index.ts --format json');
+
+      expect(result.exitCode).toBe(1);
+      const report = JSON.parse(result.stdout) as {
+        globalError?: { kind: string; message: string };
+      };
+      expect(report.globalError?.kind).toBe('forbidden');
+      expect(report.globalError?.message).toContain('usage limit');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports globalError with the raw error message for a 503 service outage',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaStatusCode(503)
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('a.ts', 'const a = 1;');
+      harness.cwd.writeFile('b.ts', 'const b = 2;');
+
+      const result = await harness.run('analyze agentic --file a.ts --file b.ts --format json');
+
+      expect(result.exitCode).toBe(1);
+      const report = JSON.parse(result.stdout) as {
+        globalError?: { kind: string; message: string };
+        failures: Array<{ path: string; message: string }>;
+        skipped: string[];
+      };
+      expect(report.globalError?.kind).toBe('unavailable');
+      expect(report.globalError?.message).toContain('still unavailable');
+      expect(report.failures).toEqual([]);
+      expect(report.skipped).toEqual(['a.ts', 'b.ts']);
     },
     { timeout: 15000 },
   );

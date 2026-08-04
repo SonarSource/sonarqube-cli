@@ -231,9 +231,13 @@ export class TestHarness {
       : {};
 
     const activeFakeServer = this.servers.at(-1);
-    const fakeSonarcloudApiEnv: Record<string, string> = activeFakeServer
-      ? { SONARQUBE_CLI_SONARCLOUD_API_URL: activeFakeServer.baseUrl() }
-      : {};
+    const fakeSonarcloudEnv: Record<string, string> = {};
+    if (activeFakeServer) {
+      fakeSonarcloudEnv.SONARQUBE_CLI_SONARCLOUD_API_URL = activeFakeServer.baseUrl();
+      if (activeFakeServer.impersonatesSonarCloud()) {
+        fakeSonarcloudEnv.SONARQUBE_CLI_SONARCLOUD_URL = activeFakeServer.baseUrl();
+      }
+    }
 
     const activeUpdateServer = this.updateScriptServers.at(-1);
     const fakeUpdateScriptEnv: Record<string, string> = activeUpdateServer
@@ -244,7 +248,7 @@ export class TestHarness {
       ...this.systemEnvVars,
       ...builderExtraEnv,
       ...fakeBinariesEnv,
-      ...fakeSonarcloudApiEnv,
+      ...fakeSonarcloudEnv,
       ...fakeUpdateScriptEnv,
       SONARQUBE_CLI_KEYCHAIN_FILE: this.keychainJsonFile,
       CI: 'true',

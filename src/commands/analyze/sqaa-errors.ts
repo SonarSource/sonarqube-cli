@@ -21,7 +21,12 @@
 // Map SQAA API errors to CLI errors with remediation hints.
 
 import { CommandFailedError, type CommandFailedErrorOptions } from '@/core/command-error.ts';
-import { BadRequestError, RequestPayloadTooLargeError } from '@/core/server/errors.ts';
+import {
+  BadRequestError,
+  RequestPayloadTooLargeError,
+  ServiceUnavailableError,
+  SqaaForbiddenError,
+} from '@/core/server/errors.ts';
 
 const GENERIC_SQAA_FAILURE_HINT =
   'Check your SonarQube Cloud authentication, project key, and network connectivity, then retry.';
@@ -133,4 +138,17 @@ export function toSqaaCommandError(err: unknown): CommandFailedError {
     cause: err,
     remediationHint: GENERIC_SQAA_FAILURE_HINT,
   });
+}
+
+export type GlobalSqaaErrorKind = 'forbidden' | 'unavailable';
+
+export function isGlobalSqaaError(err: unknown): boolean {
+  if (err instanceof SqaaForbiddenError || err instanceof ServiceUnavailableError) {
+    return true;
+  }
+  return err instanceof CommandFailedError && err.cause instanceof ServiceUnavailableError;
+}
+
+export function globalSqaaErrorKind(err: unknown): GlobalSqaaErrorKind {
+  return err instanceof SqaaForbiddenError ? 'forbidden' : 'unavailable';
 }

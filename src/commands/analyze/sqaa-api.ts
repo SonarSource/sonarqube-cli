@@ -38,6 +38,7 @@ import { type PackChunksLimits, packFilesIntoChunks, type SqaaChunkFile } from '
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import { displaySqaaResults, printSingleFileTextFailure } from './sqaa-display.ts';
 import {
+  isGlobalSqaaError,
   payloadTooLargeCommandError,
   sqaaCommandFailedError,
   toSqaaCommandError,
@@ -344,14 +345,6 @@ function splitChunkFiles(files: SqaaChunkFile[], limits: PackChunksLimits): Sqaa
   return [files.slice(0, mid), files.slice(mid)];
 }
 
-/** 503 after retry exhaustion is wrapped in CommandFailedError; both must fail-fast. */
-function isTransientChunkFetchError(err: unknown): boolean {
-  if (err instanceof ServiceUnavailableError) {
-    return true;
-  }
-  return err instanceof CommandFailedError && err.cause instanceof ServiceUnavailableError;
-}
-
 async function fetchSplitParts(
   auth: CloudAuth,
   projectKey: string,
@@ -377,7 +370,7 @@ async function fetchSplitParts(
       parts.push(...result.parts);
       groupErrors.push(...result.groupErrors);
     } catch (err) {
-      if (isTransientChunkFetchError(err)) {
+      if (isGlobalSqaaError(err)) {
         throw err;
       }
       groupErrors.push({ files: group, error: err as Error });

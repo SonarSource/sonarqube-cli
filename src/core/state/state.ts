@@ -248,6 +248,13 @@ export interface CliConfig {
   cliVersion: string;
   /** Throttled update-check cache (remote fetch at most once per day) */
   updateCheck?: CliUpdateCheckState;
+  /** Throttle for the Vortex entitlement-loss warning shown by per-edit hooks */
+  vortexEntitlementLossNotice?: VortexEntitlementLossNoticeState;
+}
+
+export interface VortexEntitlementLossNoticeState {
+  /** ISO timestamp of the last entitlement-loss warning emitted by a hook */
+  lastWarnedAt?: string;
 }
 
 /**

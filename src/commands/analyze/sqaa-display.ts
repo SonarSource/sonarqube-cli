@@ -23,9 +23,14 @@
 import { basename, dirname } from 'node:path';
 
 import { CliError } from '@/core/command-error.ts';
-import type { SqaaAnalysisDepth, SqaaIssue } from '@/core/server/client.ts';
+import type {
+  SqaaAnalysisDepth,
+  SqaaIssue,
+  VortexEntitlementStatus,
+} from '@/core/server/client.ts';
 import { text } from '@/core/ui';
 import { bold, dim, green, red, softBlue, yellow } from '@/core/ui/colors.ts';
+import { vortexUnavailableCommandMessage } from '@/core/vortex/availability-messages.ts';
 
 import type { FileResult, FileSuccess, RunTally } from './sqaa-analysis.ts';
 import { SQAA_FAILURE_HEADING } from './sqaa-errors.ts';
@@ -80,6 +85,8 @@ export interface SqaaRunSummaryStats {
   totalFailures: number;
   totalErrors: number;
   analysisDepth: SqaaAnalysisDepth;
+  /** Set when a run-level error stopped the run early (see {@link RunTally.globalError}). */
+  hasGlobalError: boolean;
 }
 
 export interface PrintSqaaTextReportOptions {
@@ -250,6 +257,7 @@ export function computeRunSummaryStats(
     totalFailures: tally.totalFailures,
     totalErrors: tally.totalErrors,
     analysisDepth,
+    hasGlobalError: tally.globalError !== undefined,
   };
 }
 
@@ -268,7 +276,7 @@ function formatSqaaRunSummary(stats: SqaaRunSummaryStats, colored: boolean): str
   const hasIssues = stats.totalIssues > 0;
   const hasErrors = stats.totalErrors > 0;
 
-  if (!hasFailures && !hasIssues && !hasErrors) {
+  if (!hasFailures && !hasIssues && !hasErrors && !stats.hasGlobalError) {
     return `${okIcon} ${lbl('No issues found')} · ${num(stats.filesAnalyzed)} ${lbl('files analyzed')}${formatAnalysisDepthSuffix(stats.analysisDepth, colored)}`;
   }
 
@@ -480,16 +488,25 @@ export function printSingleFileTextFailure(
   printSqaaTextReport({ tally, allPaths: [filePath], analysisDepth });
 }
 
+export function printVortexUnavailable(status: VortexEntitlementStatus): void {
+  text(vortexUnavailableCommandMessage(status));
+}
+
 export function applyExitCode(stats: SqaaRunSummaryStats): void;
-export function applyExitCode(totalIssues: number, totalFailures: number): void;
+export function applyExitCode(
+  totalIssues: number,
+  totalFailures: number,
+  hasGlobalError?: boolean,
+): void;
 export function applyExitCode(
   statsOrIssues: SqaaRunSummaryStats | number,
   totalFailures = 0,
+  hasGlobalError = false,
 ): void {
   const failures = typeof statsOrIssues === 'number' ? totalFailures : statsOrIssues.totalFailures;
   const issues = typeof statsOrIssues === 'number' ? statsOrIssues : statsOrIssues.totalIssues;
 
-  if (failures > 0) {
+  if (failures > 0 || hasGlobalError) {
     process.exitCode = 1;
   } else if (issues > 0) {
     process.exitCode = EXIT_CODE_ISSUES_FOUND;
@@ -529,6 +546,7 @@ export function displaySqaaResults(
     totalFailures: 0,
     totalErrors: errors?.length ?? 0,
     analysisDepth,
+    hasGlobalError: false,
   };
 
   text('');
@@ -542,7 +560,6 @@ export type { SqaaJsonReport } from './sqaa-display-json.ts';
 export {
   buildJsonReport,
   makeReport,
-  printJsonReport,
   singleFileFailureReport,
   singleFileSuccessReport,
 } from './sqaa-display-json.ts';

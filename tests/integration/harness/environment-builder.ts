@@ -392,6 +392,18 @@ export class EnvironmentBuilder {
   }
 
   /**
+   * Seeds the per-edit-hook Vortex entitlement-loss warning throttle with a
+   * previous warning timestamp. A recent value suppresses the next
+   * entitlement-loss warning; an old (or absent) value lets it through.
+   */
+  withVortexEntitlementLossWarnedAt(iso: string): this {
+    this.installedFeatureSeeds.push((state) => {
+      state.config.vortexEntitlementLossNotice = { lastWarnedAt: iso };
+    });
+    return this;
+  }
+
+  /**
    * Registers a declaratively tracked Context Augmentation feature for a
    * project. This mirrors the state consumed by `sonar context`.
    */
