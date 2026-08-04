@@ -26,7 +26,7 @@ import type {
   IntegrationDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { install, jsonPatch, wholeFile } from '@/core/framework/features';
+import { install, jsonPatch, skip, wholeFile } from '@/core/framework/features';
 import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs.ts';
@@ -53,9 +53,10 @@ import {
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
+import { createClaudeHookEventContainer } from './hook-container-feature.ts';
 import {
-  getContextAugmentationHookTemplateUnix,
-  getContextAugmentationHookTemplateWindows,
+  getPostToolUseFailureTemplateUnix,
+  getPostToolUseFailureTemplateWindows,
   getSecretPreToolTemplateUnix,
   getSecretPreToolTemplateWindows,
   getSecretPromptTemplateUnix,
@@ -69,8 +70,7 @@ const SETTINGS_FILE = 'settings.json';
 const CLAUDE_MD_FILE = 'CLAUDE.md';
 const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pretool-secrets';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
-const CONTEXT_HOOK_SCRIPT_REL =
-  'sonar-context-augmentation/build-scripts/context-augmentation-hook';
+const POSTTOOLUSEFAILURE_SCRIPT_REL = 'sonar-posttoolusefailure/build-scripts/posttoolusefailure';
 const CONTEXT_TOOL_MATCHER = 'Bash|PowerShell|Monitor|Read';
 
 export const CLAUDE_INTEGRATION_ID = 'claude-code';
@@ -128,8 +128,39 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
         },
       ],
     }),
+    createClaudeHookEventContainer<ClaudeIntegrationOptions>({
+      id: SQAA_HOOK_FEATURE_ID,
+      displayName: 'Vortex analysis hook',
+      event: 'PostToolUse',
+      configDir: CLAUDE_CONFIG_DIR,
+      marker: 'sonar-sqaa',
+      scriptPath: 'sonar-sqaa/build-scripts/posttool-sqaa',
+      scriptDisplayName: 'Claude PostToolUse hook script',
+      scriptContent: (context) => {
+        const projectKey = getRequiredStringAttr(context, 'projectKey', CLAUDE_DISPLAY_NAME);
+        return process.platform === 'win32'
+          ? getSqaaPostToolTemplateWindows(projectKey)
+          : getSqaaPostToolTemplateUnix(projectKey);
+      },
+      settingsPath: resolveClaudeSettingsPath,
+      subfeatures: [
+        {
+          id: 'sqaa-posttooluse',
+          displayName: 'Vortex analysis',
+          matcher: 'Edit|Write',
+          shouldInstall: ({ options }) => (options.installVortex === true ? install() : skip()),
+        },
+        {
+          id: 'cag-posttooluse',
+          displayName: 'Vortex context augmentation hook',
+          matcher: CONTEXT_TOOL_MATCHER,
+          dependencies: [contextAugmentationBinaryDependency],
+          shouldInstall: ({ options }) => (options.installVortex === true ? install() : skip()),
+        },
+      ],
+      defaultInstallSubfeatureIds: ['sqaa-posttooluse', 'cag-posttooluse'],
+    }),
     createVortexFeature<ClaudeIntegrationOptions>([
-      createSqaaHookSubfeature(),
       createSqaaInstructionsSubfeature([
         createSqaaInstructionsSnippet({
           agentDisplayName: CLAUDE_DISPLAY_NAME,
@@ -139,7 +170,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       createContextAugmentationSubfeature<ClaudeIntegrationOptions>({
         targetPath: resolveClaudeSkillPath,
       }),
-      createContextAugmentationHookSubfeature(),
+      createContextAugmentationFailureHookSubfeature(),
     ]),
     {
       id: 'mcp-server',
@@ -161,52 +192,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
   ],
 };
 
-function createSqaaHookSubfeature(): SubfeatureDeclaration<ClaudeIntegrationOptions> {
-  return {
-    id: SQAA_HOOK_FEATURE_ID,
-    displayName: 'Vortex analysis hook',
-    shouldInstall: () => install(),
-    resources: [
-      wholeFile({
-        id: 'posttool-sqaa-script',
-        displayName: 'Claude PostToolUse hook script',
-        targetPath: (context) =>
-          resolveAgentHookScriptPath(
-            context,
-            CLAUDE_CONFIG_DIR,
-            'sonar-sqaa/build-scripts/posttool-sqaa',
-          ),
-        content: (context) => {
-          const projectKey = getRequiredStringAttr(context, 'projectKey', CLAUDE_DISPLAY_NAME);
-          return process.platform === 'win32'
-            ? getSqaaPostToolTemplateWindows(projectKey)
-            : getSqaaPostToolTemplateUnix(projectKey);
-        },
-        executable: true,
-      }),
-      jsonPatch({
-        id: 'claude-settings-sqaa-hook',
-        displayName: 'Claude Vortex analysis hook configuration',
-        targetPath: resolveClaudeSettingsPath,
-        defaultValue: { hooks: {} },
-        patch: (document, context) =>
-          upsertAgentHooks(document, [
-            createAgentHookEntry(
-              context,
-              CLAUDE_CONFIG_DIR,
-              'PostToolUse',
-              'Edit|Write',
-              'sonar-sqaa',
-              'sonar-sqaa/build-scripts/posttool-sqaa',
-            ),
-          ]),
-        removePatch: (document) => removeAgentHooks(document, ['sonar-sqaa']),
-      }),
-    ],
-  };
-}
-
-function createContextAugmentationHookSubfeature(): SubfeatureDeclaration<ClaudeIntegrationOptions> {
+function createContextAugmentationFailureHookSubfeature(): SubfeatureDeclaration<ClaudeIntegrationOptions> {
   return {
     id: CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
     displayName: 'Vortex context augmentation hook',
@@ -214,19 +200,19 @@ function createContextAugmentationHookSubfeature(): SubfeatureDeclaration<Claude
     dependencies: [contextAugmentationBinaryDependency],
     resources: [
       wholeFile({
-        id: 'context-augmentation-hook-script',
-        displayName: 'Claude Context Augmentation hook script',
+        id: 'posttoolusefailure-script',
+        displayName: 'Claude PostToolUseFailure hook script',
         targetPath: (context) =>
-          resolveAgentHookScriptPath(context, CLAUDE_CONFIG_DIR, CONTEXT_HOOK_SCRIPT_REL),
+          resolveAgentHookScriptPath(context, CLAUDE_CONFIG_DIR, POSTTOOLUSEFAILURE_SCRIPT_REL),
         content: {
-          unix: getContextAugmentationHookTemplateUnix(),
-          windows: getContextAugmentationHookTemplateWindows(),
+          unix: getPostToolUseFailureTemplateUnix(),
+          windows: getPostToolUseFailureTemplateWindows(),
         },
         executable: true,
       }),
       jsonPatch({
-        id: 'claude-settings-context-augmentation-hook',
-        displayName: 'Claude Context Augmentation hook configuration',
+        id: 'claude-settings-posttoolusefailure-hook',
+        displayName: 'Claude PostToolUseFailure hook configuration',
         targetPath: resolveClaudeSettingsPath,
         defaultValue: { hooks: {} },
         patch: (document, context) =>
@@ -234,21 +220,13 @@ function createContextAugmentationHookSubfeature(): SubfeatureDeclaration<Claude
             createAgentHookEntry(
               context,
               CLAUDE_CONFIG_DIR,
-              'PostToolUse',
-              CONTEXT_TOOL_MATCHER,
-              'sonar-context-augmentation',
-              CONTEXT_HOOK_SCRIPT_REL,
-            ),
-            createAgentHookEntry(
-              context,
-              CLAUDE_CONFIG_DIR,
               'PostToolUseFailure',
               CONTEXT_TOOL_MATCHER,
-              'sonar-context-augmentation',
-              CONTEXT_HOOK_SCRIPT_REL,
+              'sonar-posttoolusefailure',
+              POSTTOOLUSEFAILURE_SCRIPT_REL,
             ),
           ]),
-        removePatch: (document) => removeAgentHooks(document, ['sonar-context-augmentation']),
+        removePatch: (document) => removeAgentHooks(document, ['sonar-posttoolusefailure']),
       }),
     ],
   };

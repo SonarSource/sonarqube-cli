@@ -160,9 +160,14 @@ async function resolveContextToken(
   );
 }
 
+export interface RunContextPassthroughOptions {
+  stdinPayload?: string;
+}
+
 export async function runContextPassthrough(
   action: string | undefined,
   args: string[],
+  options: RunContextPassthroughOptions = {},
 ): Promise<void> {
   const binaryPath = resolveContextAugmentationBinaryPath() ?? 'sonar-context-augmentation';
   const { forwarded, isHelp } = buildForwardedArgs(action, args);
@@ -189,9 +194,11 @@ export async function runContextPassthrough(
     });
   }
 
+  const { stdinPayload } = options;
+
   await new Promise<void>((resolve, reject) => {
     const child = spawn(binaryPath, forwarded, {
-      stdio: 'inherit',
+      stdio: stdinPayload === undefined ? 'inherit' : ['pipe', 'inherit', 'inherit'],
       env,
       argv0: SONAR_CONTEXT_INVOCATION,
     });
@@ -212,5 +219,9 @@ export async function runContextPassthrough(
       process.exitCode = code ?? 1;
       resolve();
     });
+
+    if (stdinPayload !== undefined) {
+      child.stdin?.end(stdinPayload);
+    }
   });
 }
