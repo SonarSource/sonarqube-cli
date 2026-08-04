@@ -683,19 +683,19 @@ describe('integrate claude — Vortex entitlement guard', () => {
   );
 
   it(
-    'installs PostToolUse and PostToolUseFailure Context Augmentation hook when Cloud org has Vortex entitlement',
+    'installs PostToolUse and PostToolUseFailure Context Augmentation hook when org is Vortex-entitled and CAG-hook-allowlisted',
     async () => {
       harness.state().withContextAugmentationBinaryInstalled();
       const server = await harness
         .newFakeServer()
         .withAuthToken('cloud-token')
-        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-        .withVortexEntitlement('my-org', 'test-uuid-1234')
+        .withOrganizations([{ key: 'denis-troller-sonar', name: 'Denis Troller Sonar' }])
+        .withVortexEntitlement('denis-troller-sonar', 'test-uuid-1234')
         .withProject('my-project')
         .start();
 
       const serverUrl = server.baseUrl();
-      harness.withAuth(serverUrl, 'cloud-token', 'my-org');
+      harness.withAuth(serverUrl, 'cloud-token', 'denis-troller-sonar');
 
       const result = await harness.run(`integrate claude --project my-project --non-interactive`, {
         extraEnv: {
@@ -731,6 +731,47 @@ describe('integrate claude — Vortex entitlement guard', () => {
           hookScriptName('posttoolusefailure'),
         ),
       ).toBe(true);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'does not install the Context Augmentation hook when org is Vortex-entitled but not CAG-hook-allowlisted',
+    async () => {
+      harness.state().withContextAugmentationBinaryInstalled();
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .withVortexEntitlement('my-org', 'test-uuid-1234')
+        .withProject('my-project')
+        .start();
+
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', 'my-org');
+
+      const result = await harness.run(`integrate claude --project my-project --non-interactive`, {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const settings = harness.cwd.file('.claude', 'settings.json').asJson();
+      // Only SQAA's own matcher remains — CAG never contributed to the union.
+      expect(settings.hooks?.PostToolUse).toHaveLength(1);
+      expect(settings.hooks?.PostToolUse?.[0]?.matcher).toBe('Edit|Write');
+      expect(settings.hooks?.PostToolUseFailure).toBeUndefined();
+      expect(
+        harness.cwd.exists(
+          '.claude',
+          'hooks',
+          'sonar-posttoolusefailure',
+          'build-scripts',
+          hookScriptName('posttoolusefailure'),
+        ),
+      ).toBe(false);
     },
     { timeout: 30000 },
   );

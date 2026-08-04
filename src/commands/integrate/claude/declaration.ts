@@ -20,16 +20,20 @@
 
 import { join } from 'node:path';
 
+import { CONTEXT_AUGMENTATION_TOOL_MATCHER } from '@/commands/hook/context-augmentation-hook-subscriber.ts';
 import { CLI_COMMAND } from '@/core/config-constants.ts';
 import type {
+  InstallDecision,
   IntegrationContext,
   IntegrationDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
 import { install, jsonPatch, skip, wholeFile } from '@/core/framework/features';
 import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
+import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs.ts';
+import { isCagHookOrgAllowed } from '../_common/context-augmentation.ts';
 import { contextAugmentationBinaryDependency } from '../_common/context-augmentation-dependency.ts';
 import {
   MCP_SERVER_FEATURE_BENEFIT,
@@ -71,7 +75,6 @@ const CLAUDE_MD_FILE = 'CLAUDE.md';
 const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pretool-secrets';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 const POSTTOOLUSEFAILURE_SCRIPT_REL = 'sonar-posttoolusefailure/build-scripts/posttoolusefailure';
-const CONTEXT_TOOL_MATCHER = 'Bash|PowerShell|Monitor|Read';
 
 export const CLAUDE_INTEGRATION_ID = 'claude-code';
 export const CONTEXT_AUGMENTATION_HOOK_FEATURE_ID = 'context-augmentation-hook';
@@ -153,9 +156,10 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
         {
           id: 'cag-posttooluse',
           displayName: 'Vortex context augmentation hook',
-          matcher: CONTEXT_TOOL_MATCHER,
+          matcher: CONTEXT_AUGMENTATION_TOOL_MATCHER,
           dependencies: [contextAugmentationBinaryDependency],
-          shouldInstall: ({ options }) => (options.installVortex === true ? install() : skip()),
+          shouldInstall: ({ options, attrs }) => shouldInstallCagHook(options, attrs),
+          migrationEligible: isCagHookAllowedForAttrs,
         },
       ],
       defaultInstallSubfeatureIds: ['sqaa-posttooluse', 'cag-posttooluse'],
@@ -192,11 +196,26 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
   ],
 };
 
+function isCagHookAllowedForAttrs(
+  attrs: Record<string, IntegrationStateAttribute> | undefined,
+): boolean {
+  const orgKey = typeof attrs?.orgKey === 'string' ? attrs.orgKey : undefined;
+  return isCagHookOrgAllowed(orgKey);
+}
+
+function shouldInstallCagHook(
+  options: ClaudeIntegrationOptions,
+  attrs: Record<string, IntegrationStateAttribute> | undefined,
+): InstallDecision {
+  return options.installVortex === true && isCagHookAllowedForAttrs(attrs) ? install() : skip();
+}
+
 function createContextAugmentationFailureHookSubfeature(): SubfeatureDeclaration<ClaudeIntegrationOptions> {
   return {
     id: CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
     displayName: 'Vortex context augmentation hook',
-    shouldInstall: () => install(),
+    shouldInstall: ({ options, attrs }) => shouldInstallCagHook(options, attrs),
+    migrationEligible: isCagHookAllowedForAttrs,
     dependencies: [contextAugmentationBinaryDependency],
     resources: [
       wholeFile({
@@ -221,7 +240,7 @@ function createContextAugmentationFailureHookSubfeature(): SubfeatureDeclaration
               context,
               CLAUDE_CONFIG_DIR,
               'PostToolUseFailure',
-              CONTEXT_TOOL_MATCHER,
+              CONTEXT_AUGMENTATION_TOOL_MATCHER,
               'sonar-posttoolusefailure',
               POSTTOOLUSEFAILURE_SCRIPT_REL,
             ),
