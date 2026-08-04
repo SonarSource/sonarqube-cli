@@ -30,6 +30,7 @@ import { install, jsonPatch, wholeFile } from '@/core/framework/features';
 import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs.ts';
+import { contextAugmentationBinaryDependency } from '../_common/context-augmentation-dependency.ts';
 import {
   MCP_SERVER_FEATURE_BENEFIT,
   MCP_SERVER_FEATURE_PREVIEW,
@@ -53,6 +54,8 @@ import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
 import {
+  getContextAugmentationHookTemplateUnix,
+  getContextAugmentationHookTemplateWindows,
   getSecretPreToolTemplateUnix,
   getSecretPreToolTemplateWindows,
   getSecretPromptTemplateUnix,
@@ -66,8 +69,12 @@ const SETTINGS_FILE = 'settings.json';
 const CLAUDE_MD_FILE = 'CLAUDE.md';
 const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pretool-secrets';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
+const CONTEXT_HOOK_SCRIPT_REL =
+  'sonar-context-augmentation/build-scripts/context-augmentation-hook';
+const CONTEXT_TOOL_MATCHER = 'Bash|PowerShell|Monitor|Read';
 
 export const CLAUDE_INTEGRATION_ID = 'claude-code';
+export const CONTEXT_AUGMENTATION_HOOK_FEATURE_ID = 'context-augmentation-hook';
 const CLAUDE_DISPLAY_NAME = 'Claude Code';
 
 export interface ClaudeIntegrationOptions extends IntegrateAgentOptions {
@@ -132,6 +139,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       createContextAugmentationSubfeature<ClaudeIntegrationOptions>({
         targetPath: resolveClaudeSkillPath,
       }),
+      createContextAugmentationHookSubfeature(),
     ]),
     {
       id: 'mcp-server',
@@ -193,6 +201,54 @@ function createSqaaHookSubfeature(): SubfeatureDeclaration<ClaudeIntegrationOpti
             ),
           ]),
         removePatch: (document) => removeAgentHooks(document, ['sonar-sqaa']),
+      }),
+    ],
+  };
+}
+
+function createContextAugmentationHookSubfeature(): SubfeatureDeclaration<ClaudeIntegrationOptions> {
+  return {
+    id: CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
+    displayName: 'Vortex context augmentation hook',
+    shouldInstall: () => install(),
+    dependencies: [contextAugmentationBinaryDependency],
+    resources: [
+      wholeFile({
+        id: 'context-augmentation-hook-script',
+        displayName: 'Claude Context Augmentation hook script',
+        targetPath: (context) =>
+          resolveAgentHookScriptPath(context, CLAUDE_CONFIG_DIR, CONTEXT_HOOK_SCRIPT_REL),
+        content: {
+          unix: getContextAugmentationHookTemplateUnix(),
+          windows: getContextAugmentationHookTemplateWindows(),
+        },
+        executable: true,
+      }),
+      jsonPatch({
+        id: 'claude-settings-context-augmentation-hook',
+        displayName: 'Claude Context Augmentation hook configuration',
+        targetPath: resolveClaudeSettingsPath,
+        defaultValue: { hooks: {} },
+        patch: (document, context) =>
+          upsertAgentHooks(document, [
+            createAgentHookEntry(
+              context,
+              CLAUDE_CONFIG_DIR,
+              'PostToolUse',
+              CONTEXT_TOOL_MATCHER,
+              'sonar-context-augmentation',
+              CONTEXT_HOOK_SCRIPT_REL,
+            ),
+            createAgentHookEntry(
+              context,
+              CLAUDE_CONFIG_DIR,
+              'PostToolUseFailure',
+              CONTEXT_TOOL_MATCHER,
+              'sonar-context-augmentation',
+              CONTEXT_HOOK_SCRIPT_REL,
+            ),
+          ]),
+        removePatch: (document) => removeAgentHooks(document, ['sonar-context-augmentation']),
       }),
     ],
   };
