@@ -30,6 +30,7 @@ import {
   SQAA_INSTRUCTIONS_SUBFEATURE_ID,
 } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
 import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
+import { CONTEXT_AUGMENTATION_HOOK_FEATURE_ID } from '@/commands/integrate/claude/declaration.ts';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalCagBinaryName } from '@/core/host/install/context-augmentation.ts';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
@@ -100,6 +101,7 @@ describe('post-update migration', () => {
       SQAA_HOOK_FEATURE_ID,
       SQAA_INSTRUCTIONS_SUBFEATURE_ID,
       CONTEXT_AUGMENTATION_FEATURE_ID,
+      CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
     ]);
     expect(harness.cwd.file('.claude', 'settings.json').asJson().hooks?.PostToolUse).toBeDefined();
     expect(harness.cwd.file('CLAUDE.md').asText()).toContain('# Vortex analysis protocol');
