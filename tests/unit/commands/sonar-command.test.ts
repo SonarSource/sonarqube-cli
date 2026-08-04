@@ -22,7 +22,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-import { SonarCommand } from '@/commands/sonar-command.ts';
+import { getCustomRootHelp } from '@/commands/root-help.ts';
+import { ALPHA_ENV_VAR, SonarCommand } from '@/commands/sonar-command.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
@@ -37,10 +38,13 @@ const FAKE_AUTH: ResolvedAuth = {
 
 describe('SonarCommand', () => {
   let resolveAuthSpy: ReturnType<typeof spyOn>;
+  let originalAlphaEnv: string | undefined;
   let originalExitCode: number | string | null | undefined;
 
   beforeEach(() => {
     setMockUi(true);
+    originalAlphaEnv = process.env[ALPHA_ENV_VAR];
+    delete process.env[ALPHA_ENV_VAR];
     originalExitCode = process.exitCode;
     process.exitCode = 0;
   });
@@ -50,6 +54,11 @@ describe('SonarCommand', () => {
     setMockUi(false);
     process.exitCode = originalExitCode ?? 0;
     resolveAuthSpy?.mockRestore();
+    if (originalAlphaEnv === undefined) {
+      delete process.env[ALPHA_ENV_VAR];
+    } else {
+      process.env[ALPHA_ENV_VAR] = originalAlphaEnv;
+    }
   });
 
   // ─── action() ────────────────────────────────────────────────────────────
@@ -166,6 +175,122 @@ describe('SonarCommand', () => {
 
       const hintCall = getMockUiCalls().find((c) => c.method === 'print');
       expect(hintCall?.args[0]).toBe('  → Wait a moment and try again.');
+    });
+  });
+
+  // ─── alpha() ──────────────────────────────────────────────────────────────
+
+  describe('alpha()', () => {
+    it('marks the command as alpha', () => {
+      const cmd = new SonarCommand('experimental');
+
+      expect(cmd.isAlpha).toBe(false);
+      expect(cmd.alpha().isAlpha).toBe(true);
+    });
+
+    it('unregisters the command when SONARQUBE_CLI_ALPHA is not set', () => {
+      const root = new SonarCommand('sonar');
+      root.command('experimental').description('Experimental command').alpha();
+
+      expect(root.commands.map((command) => command.name())).not.toContain('experimental');
+      expect(root.helpInformation()).not.toContain('Experimental command');
+    });
+
+    it('does not execute an unregistered alpha command', async () => {
+      const rootHandler = mock((_command?: string) => {});
+      const alphaHandler = mock(() => {});
+      const root = new SonarCommand('sonar').argument('[command]').anonymousAction(rootHandler);
+      root.command('experimental').alpha().anonymousAction(alphaHandler);
+
+      await root.parseAsync(['experimental'], { from: 'user' });
+
+      expect(rootHandler.mock.calls[0]?.[0]).toBe('experimental');
+      expect(alphaHandler).not.toHaveBeenCalled();
+    });
+
+    it('registers the command and tags help when SONARQUBE_CLI_ALPHA is set', () => {
+      process.env[ALPHA_ENV_VAR] = '';
+      const root = new SonarCommand('sonar');
+      const alphaCommand = root.command('experimental').description('Experimental command').alpha();
+
+      expect(root.commands.map((command) => command.name())).toContain('experimental');
+      expect(root.helpInformation()).toContain('Experimental command [ALPHA]');
+      expect(alphaCommand.helpInformation()).toContain('Experimental command [ALPHA]');
+    });
+
+    it('tags an explicit command summary', () => {
+      process.env[ALPHA_ENV_VAR] = '1';
+      const root = new SonarCommand('sonar');
+      root
+        .command('experimental')
+        .description('Long experimental description')
+        .summary('Experimental summary')
+        .alpha();
+
+      expect(root.helpInformation()).toContain('Experimental summary [ALPHA]');
+    });
+
+    it('groups alpha commands together after all stable root-help categories', () => {
+      process.env[ALPHA_ENV_VAR] = '1';
+      const root = new SonarCommand('sonar');
+      root.command('stable-core').description('Stable core command').rootHelp({ category: 'core' });
+      root
+        .command('alpha-core')
+        .description('Alpha core command')
+        .rootHelp({ category: 'core' })
+        .alpha();
+      root
+        .command('stable-management')
+        .description('Stable management command')
+        .rootHelp({ category: 'cli-management' });
+      root
+        .command('alpha-data')
+        .description('Alpha data command')
+        .rootHelp({ category: 'data' })
+        .alpha();
+
+      const help = getCustomRootHelp(root, root.createHelp());
+      const stableCoreIndex = help.indexOf('Stable core command');
+      const stableManagementIndex = help.indexOf('Stable management command');
+      const alphaCoreIndex = help.indexOf('Alpha core command [ALPHA]');
+      const alphaDataIndex = help.indexOf('Alpha data command [ALPHA]');
+
+      expect(stableCoreIndex).toBeGreaterThan(-1);
+      expect(stableManagementIndex).toBeGreaterThan(stableCoreIndex);
+      expect(alphaCoreIndex).toBeGreaterThan(stableManagementIndex);
+      expect(alphaDataIndex).toBeGreaterThan(alphaCoreIndex);
+      expect(help.slice(stableManagementIndex, alphaCoreIndex)).toContain('\n\n');
+    });
+
+    it('tags alpha subcommands in an expanded root-help label', () => {
+      process.env[ALPHA_ENV_VAR] = '1';
+      const root = new SonarCommand('sonar');
+      const system = root
+        .command('system')
+        .description('System commands')
+        .rootHelp({ category: 'cli-management' });
+      system.command('status').description('Stable status command');
+      system.command('reset').description('Stable reset command');
+      system.command('alpha-example').description('Nested alpha command').alpha();
+
+      const help = getCustomRootHelp(root, root.createHelp());
+
+      expect(help).toContain('system <status|reset|alpha-example[ALPHA]>');
+    });
+
+    it('warns on stderr before invoking the command handler', async () => {
+      process.env[ALPHA_ENV_VAR] = '1';
+      const handler = mock(() => {});
+      const root = new SonarCommand('sonar');
+      root.command('experimental').alpha().anonymousAction(handler);
+
+      await root.parseAsync(['experimental'], { from: 'user' });
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      const warning = getMockUiCalls().find((call) => call.method === 'warn');
+      expect(warning?.args[0]).toBe(
+        "'experimental' is in alpha; may change or be removed without notice.",
+      );
     });
   });
 
