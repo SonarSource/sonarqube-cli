@@ -40,10 +40,16 @@ import { version as CURRENT_VERSION } from '../../../../package.json';
 import { hookScriptName, IS_WINDOWS, TestHarness } from '../../harness';
 import { readCagInvocations } from '../../harness/cag-invocations';
 
+const CAG_HOOK_ALLOWED_ORG_KEY = 'denis-troller-sonar';
+
 describe('post-update migration', () => {
   let harness: TestHarness;
 
-  function seedPreUnificationFeatures(integrationId: string, featureIds: string[]): void {
+  function seedPreUnificationFeatures(
+    integrationId: string,
+    featureIds: string[],
+    orgKey = 'o',
+  ): void {
     const now = new Date().toISOString();
     const legacyFeature = (featureId: string) => ({
       featureId,
@@ -57,7 +63,7 @@ describe('post-update migration', () => {
       resources: [],
       operations: [],
       attrs: {
-        orgKey: 'o',
+        orgKey,
         projectKey: 'p',
         serverUrl: 'https://sonarcloud.io',
         scaEnabled: false,
@@ -330,6 +336,32 @@ describe('post-update migration', () => {
   it(
     'migrates pre-unification Claude SQAA and CAG features into the Vortex container',
     async () => {
+      seedPreUnificationFeatures(
+        'claude-code',
+        [SQAA_HOOK_FEATURE_ID, SQAA_INSTRUCTIONS_SUBFEATURE_ID, CONTEXT_AUGMENTATION_FEATURE_ID],
+        CAG_HOOK_ALLOWED_ORG_KEY,
+      );
+      harness.state().withContextAugmentationBinaryInstalled();
+
+      const result = await harness.run('--version');
+
+      expect(result.exitCode).toBe(0);
+      const vortex = expectFullClaudeVortexMigration();
+      expect(vortex?.scope).toBe('project');
+      expect(vortex?.targetRoot).toBe(harness.cwd.path);
+      expect(vortex?.attrs).toMatchObject({
+        orgKey: CAG_HOOK_ALLOWED_ORG_KEY,
+        projectKey: 'p',
+        serverUrl: 'https://sonarcloud.io',
+        scaEnabled: false,
+      });
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'excludes the CAG PostToolUse and PostToolUseFailure hooks when migrating for a non-allowlisted org',
+    async () => {
       seedPreUnificationFeatures('claude-code', [
         SQAA_HOOK_FEATURE_ID,
         SQAA_INSTRUCTIONS_SUBFEATURE_ID,
@@ -340,16 +372,21 @@ describe('post-update migration', () => {
       const result = await harness.run('--version');
 
       expect(result.exitCode).toBe(0);
-      const vortex = expectFullClaudeVortexMigration();
-      expect(vortex?.scope).toBe('project');
-      expect(vortex?.targetRoot).toBe(harness.cwd.path);
-      // Attrs of all three predecessors are merged onto the container.
-      expect(vortex?.attrs).toMatchObject({
-        orgKey: 'o',
-        projectKey: 'p',
-        serverUrl: 'https://sonarcloud.io',
-        scaEnabled: false,
-      });
+      const state = harness.stateJsonFile.asJson() as CliState;
+      const claude = state.integrations.installed.find(
+        (integration) => integration.integrationId === 'claude-code',
+      );
+      const postToolUseContainer = claude?.features.find(
+        (feature) => feature.featureId === SQAA_HOOK_FEATURE_ID,
+      );
+      expect(postToolUseContainer?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
+        'sqaa-posttooluse',
+      ]);
+      const vortex = claude?.features.find((feature) => feature.featureId === VORTEX_FEATURE_ID);
+      expect(vortex?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
+        SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+        CONTEXT_AUGMENTATION_FEATURE_ID,
+      ]);
     },
     { timeout: 30000 },
   );
@@ -357,7 +394,11 @@ describe('post-update migration', () => {
   it(
     'installs every Vortex subfeature when migrating a partial pre-unification install',
     async () => {
-      seedPreUnificationFeatures('claude-code', [SQAA_INSTRUCTIONS_SUBFEATURE_ID]);
+      seedPreUnificationFeatures(
+        'claude-code',
+        [SQAA_INSTRUCTIONS_SUBFEATURE_ID],
+        CAG_HOOK_ALLOWED_ORG_KEY,
+      );
       harness.state().withContextAugmentationBinaryInstalled();
 
       const result = await harness.run('--version');
@@ -380,7 +421,7 @@ describe('post-update migration', () => {
   it(
     'installs every subfeature of the PostToolUse hook container when migrating a bare pre-unification SQAA hook',
     async () => {
-      seedPreUnificationFeatures('claude-code', [SQAA_HOOK_FEATURE_ID]);
+      seedPreUnificationFeatures('claude-code', [SQAA_HOOK_FEATURE_ID], CAG_HOOK_ALLOWED_ORG_KEY);
       harness.state().withContextAugmentationBinaryInstalled();
 
       const result = await harness.run('--version');

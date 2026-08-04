@@ -142,7 +142,10 @@ export interface FeatureDeclaration<TOptions = Record<string, unknown>> {
 export type SubfeatureDeclaration<TOptions = Record<string, unknown>> = Pick<
   FeatureDeclaration<TOptions>,
   'id' | 'displayName' | 'shouldInstall' | 'dependencies' | 'resources' | 'operations'
->;
+> & {
+  /** Gates inclusion in `defaultInstallSubfeatureIds` during reconcile migration, where `shouldInstall`'s `options` don't exist yet. Defaults to eligible. */
+  migrationEligible?: (attrs: Record<string, IntegrationStateAttribute> | undefined) => boolean;
+};
 
 /**
  * A {@link FeatureDeclaration} that groups {@link SubfeatureDeclaration}s under it.
