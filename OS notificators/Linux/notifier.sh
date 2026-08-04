@@ -4,7 +4,7 @@
 # Mirrors the macOS/Windows notifiers as closely as a POSIX shell + D-Bus allows:
 #
 #   runInTerminal()          → open_terminal()
-#   NotificationDelegate     → gdbus monitor for ActionInvoked/NotificationClosed
+#   NotificationDelegate     → dbus-monitor for ActionInvoked/NotificationClosed
 #   RunLoop (60 s)           → timeout 60 gdbus monitor ...
 #   exit(0) on click         → exit 0 after open_terminal
 #
@@ -57,6 +57,10 @@ notify_and_wait() {
     echo "gdbus not found — cannot deliver a native notification." >&2
     exit 1
   fi
+  if ! command -v dbus-monitor >/dev/null 2>&1; then
+    echo "dbus-monitor not found — cannot wait for a notification click." >&2
+    exit 1
+  fi
 
   local caps
   caps="$(gdbus call --session \
@@ -74,21 +78,40 @@ notify_and_wait() {
     --object-path /org/freedesktop/Notifications \
     --method org.freedesktop.Notifications.Notify \
     "SonarQube CLI" 0 "" "$title" "$message" "['default', '', 'open', 'Open terminal']" '{}' 60000 \
-    | grep -oE '[0-9]+')"
+    | grep -oE '[0-9]+' | tail -n1)"
 
   echo "Notification $notif_id shown, waiting up to 60s for a click…"
 
-  timeout 60 gdbus monitor --session \
-    --dest org.freedesktop.Notifications \
-    --object-path /org/freedesktop/Notifications \
+  # `gdbus monitor --dest org.freedesktop.Notifications` resolves --dest to
+  # that name's current *owner* and filters on sender == owner. On GNOME
+  # Shell, ActionInvoked/NotificationClosed are actually emitted by an
+  # internal proxy distinct from the bus name's registered owner, so a
+  # --dest-filtered `gdbus monitor` silently never observes the click.
+  # dbus-monitor's raw match rules filter on interface/path instead of a
+  # pre-resolved sender, so it sees the signal regardless of which internal
+  # component emits it. Its output splits each signal across multiple lines
+  # (a header, then one line per argument), so track which signal we're in.
+  local member=""
+  timeout 60 dbus-monitor --session \
+    "type='signal',interface='org.freedesktop.Notifications',path='/org/freedesktop/Notifications'" \
     | while read -r line; do
-        echo "D-Bus signal: $line" >&2
-        if [[ "$line" == *"ActionInvoked (uint32 $notif_id,"* ]]; then
-          open_terminal "$command"
-          break
-        fi
-        if [[ "$line" == *"NotificationClosed (uint32 $notif_id,"* ]]; then
-          break
+        echo "D-Bus line: $line" >&2
+        if [[ "$line" == *"member=ActionInvoked"* ]]; then
+          member="ActionInvoked"
+        elif [[ "$line" == *"member=NotificationClosed"* ]]; then
+          member="NotificationClosed"
+        elif [[ "$line" == signal\ * || "$line" == "method call"\ * ]]; then
+          member=""
+        elif [[ -n "$member" && "$line" == *"uint32 "* ]]; then
+          local id
+          id="$(grep -oE '[0-9]+' <<<"$line" | tail -n1)"
+          if [[ "$id" == "$notif_id" ]]; then
+            if [[ "$member" == "ActionInvoked" ]]; then
+              open_terminal "$command"
+            fi
+            break
+          fi
+          member=""
         fi
       done || true
 
