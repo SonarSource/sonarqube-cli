@@ -46,12 +46,17 @@ import {
   storeEvent,
   TELEMETRY_FLUSH_MODE_ENV,
 } from '@/core/telemetry';
+import { ENV_TELEMETRY_EGRESS, TELEMETRY_EGRESS_OFF } from '@/core/telemetry/egress.ts';
 import { resolveTelemetryIdentity } from '@/core/telemetry/identity-fetch.ts';
 import * as userModule from '@/core/telemetry/user.ts';
 import * as ui from '@/core/ui';
 
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
-import { readCommandEvents, writeTelemetryEvent } from '../../../_common/telemetry-helpers.ts';
+import {
+  readCommandEvents,
+  readTelemetryEvents,
+  writeTelemetryEvent,
+} from '../../../_common/telemetry-helpers.ts';
 import { mockIdentityGetSafe } from './identity-api-mock.ts';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -88,14 +93,18 @@ let testDir: string;
 // value to later tests, which would re-enable telemetry against the real ~/.sonar.
 let savedSonarUserHome: string | undefined;
 let savedDoNotTrack: string | undefined;
+let savedEgress: string | undefined;
 
 beforeEach(() => {
   savedSonarUserHome = process.env[ENV_SONAR_USER_HOME];
   savedDoNotTrack = process.env[ENV_DO_NOT_TRACK];
+  savedEgress = process.env[ENV_TELEMETRY_EGRESS];
   testDir = mkdtempSync(join(tmpdir(), 'telemetry-test-'));
   process.env[ENV_SONAR_USER_HOME] = testDir;
   // Enable telemetry for these tests; writes land in the isolated testDir.
   delete process.env[ENV_DO_NOT_TRACK];
+  // Cleared so the spawn and drain paths run; Bun.spawn and fetch are mocked below.
+  delete process.env[ENV_TELEMETRY_EGRESS];
   loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('1.0.0'));
   saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
   getUserIdSpy = spyOn(userModule, 'getOrCreateUserId').mockReturnValue('test-machine-id');
@@ -111,6 +120,7 @@ afterEach(() => {
   spawnSpy.mockRestore();
   restoreEnv(ENV_SONAR_USER_HOME, savedSonarUserHome);
   restoreEnv(ENV_DO_NOT_TRACK, savedDoNotTrack);
+  restoreEnv(ENV_TELEMETRY_EGRESS, savedEgress);
   delete process.env[TELEMETRY_FLUSH_MODE_ENV];
   delete process.env.CLAUDECODE;
   delete process.env.CLAUDE_CODE_ENTRYPOINT;
@@ -538,6 +548,15 @@ describe('storeEvent', () => {
       expect(spawnOptions.env[TELEMETRY_FLUSH_MODE_ENV]).toBe('1');
       expect(spawnOptions.env[ENV_SONAR_USER_HOME]).toBe(testDir);
     });
+
+    it('does not spawn a worker when egress is off, but still queues the event', async () => {
+      process.env[ENV_TELEMETRY_EGRESS] = TELEMETRY_EGRESS_OFF;
+
+      await storeEvent(makeCommand('auth login'), true);
+
+      expect(spawnSpy).not.toHaveBeenCalled();
+      expect(readCommandEvents(testDir)).toHaveLength(1);
+    });
   });
 });
 
@@ -555,6 +574,20 @@ describe('flushTelemetry', () => {
       try {
         await flushTelemetry();
         expect(fetchSpy).not.toHaveBeenCalled();
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
+
+    it('does not transmit or drain the queue when egress is off', async () => {
+      process.env[ENV_TELEMETRY_EGRESS] = TELEMETRY_EGRESS_OFF;
+      writeTelemetryEvent(testDir, makeCompletedFinding());
+
+      const fetchSpy = mockFetch();
+      try {
+        await flushTelemetry();
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(readTelemetryEvents(testDir, 'Analytics.Cli.CliAnalysisCompleted')).toHaveLength(1);
       } finally {
         fetchSpy.mockRestore();
       }

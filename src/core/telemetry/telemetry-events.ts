@@ -208,6 +208,9 @@ function parseValidEvents(content: string, now: number): StoredTelemetryEvent[] 
  * Requests carry the resolved proxy/TLS configuration; when that configuration cannot be
  * resolved the whole batch is requeued rather than sent without it. Each request is capped at
  * TELEMETRY_REQUEST_TIMEOUT_MS, independently of how much of the deadline is left.
+ *
+ * Transmits unconditionally: consent and egress are gated by its caller, `flushTelemetry()`.
+ * Any other caller must supply those guards itself.
  */
 export async function flushTelemetryEvents(deadline: number): Promise<void> {
   const eventsPath = getTelemetryEventsPath();

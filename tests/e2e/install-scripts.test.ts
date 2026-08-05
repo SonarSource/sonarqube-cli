@@ -60,6 +60,8 @@ describe.if(!isWindows)('install.sh (network)', () => {
       const binaryPath = join(tempHome, '.local/share/sonarqube-cli/bin/sonar');
       expect(existsSync(binaryPath)).toBe(true);
 
+      // This spawn bypasses the harness, so ISOLATED_CLI_SPAWN_ENV is the only thing keeping
+      // a real CLI binary from transmitting telemetry.
       const helpProc = Bun.spawnSync([binaryPath, '--help'], {
         env: { HOME: tempHome, PATH: process.env.PATH!, ...ISOLATED_CLI_SPAWN_ENV },
       });
@@ -113,6 +115,8 @@ describe.if(isWindows)('install.ps1 (network)', () => {
       const binaryPath = join(installDir, 'sonar.exe');
       expect(existsSync(binaryPath)).toBe(true);
 
+      // As above: ISOLATED_CLI_SPAWN_ENV is the only thing keeping this spawn from
+      // transmitting telemetry.
       const helpProc = Bun.spawnSync([binaryPath, '--help'], {
         env: { ...process.env, LOCALAPPDATA: tempLocalAppData, ...ISOLATED_CLI_SPAWN_ENV },
       });

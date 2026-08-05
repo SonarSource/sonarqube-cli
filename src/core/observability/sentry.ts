@@ -23,6 +23,7 @@ import { homedir } from 'node:os';
 import type { ErrorEvent, EventHint } from '@sentry/bun';
 import * as Sentry from '@sentry/bun';
 
+import { resolveTelemetryEgress } from '@/core/telemetry/egress.ts';
 import { isTelemetryEnabled } from '@/core/telemetry/enabled.ts';
 import { getOrCreateUserId } from '@/core/telemetry/user.ts';
 
@@ -30,10 +31,12 @@ import { SENTRY_DSN, SENTRY_FLUSH_TIMEOUT_MS } from '../config-constants.ts';
 import type { CliState } from '../state/state.ts';
 
 /**
- * Initialize Sentry if telemetry is enabled.
+ * Initialize Sentry if the user has opted in and egress is production.
+ *
+ * Error reporting has no switch of its own: `sonar config telemetry` governs both.
  */
 export function initSentry(state: CliState): void {
-  if (!isTelemetryEnabled(state)) return;
+  if (!isTelemetryEnabled(state) || resolveTelemetryEgress().kind !== 'production') return;
 
   const environment = process.env.SONARSOURCE_DOGFOODING === '1' ? 'dogfood' : 'production';
 

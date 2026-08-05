@@ -21,10 +21,37 @@
 /** Default env for spawned CLI processes in tests. */
 
 import { ENV_DO_NOT_TRACK } from '@/core/config-constants.ts';
+import { ENV_TELEMETRY_EGRESS, TELEMETRY_EGRESS_OFF } from '@/core/telemetry/egress.ts';
 
+/**
+ * Both switches are needed: a test asserting on telemetry must re-enable consent
+ * (DO_NOT_TRACK), so only the egress mode keeps its fixtures off the production backend.
+ */
 export const ISOLATED_CLI_SPAWN_ENV: Record<string, string> = {
   [ENV_DO_NOT_TRACK]: '1',
+  [ENV_TELEMETRY_EGRESS]: TELEMETRY_EGRESS_OFF,
 };
+
+/**
+ * Overlay the isolation defaults on a spawn environment. Isolation wins over caller-supplied
+ * values, except that a test may set DO_NOT_TRACK=0 to exercise the telemetry pipeline.
+ */
+export function applyIsolatedSpawnEnv(env: Record<string, string>): Record<string, string> {
+  const spawnEnv: Record<string, string> = { ...env, ...ISOLATED_CLI_SPAWN_ENV };
+
+  if (env[ENV_DO_NOT_TRACK] === '0') {
+    spawnEnv[ENV_DO_NOT_TRACK] = '0';
+  }
+
+  if (spawnEnv[ENV_TELEMETRY_EGRESS] !== TELEMETRY_EGRESS_OFF) {
+    throw new Error(
+      `Test isolation broken: ${ENV_TELEMETRY_EGRESS} must be "${TELEMETRY_EGRESS_OFF}" for ` +
+        `spawned CLIs, got "${spawnEnv[ENV_TELEMETRY_EGRESS] ?? '<unset>'}".`,
+    );
+  }
+
+  return spawnEnv;
+}
 
 /** Restore an env var to a captured value, deleting it when the value was unset. */
 export function restoreEnv(key: string, previous: string | undefined): void {

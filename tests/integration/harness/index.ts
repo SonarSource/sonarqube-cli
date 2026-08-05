@@ -28,7 +28,7 @@ import { join } from 'node:path';
 import { ENV_DO_NOT_TRACK, ENV_SQAA_RETRY_BASE_DELAY_MS } from '@/core/config-constants.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 
-import { ISOLATED_CLI_SPAWN_ENV } from '../../_common/isolated-cli-env.js';
+import { applyIsolatedSpawnEnv } from '../../_common/isolated-cli-env.js';
 import { getCliBinaryPath, runCli } from './cli-runner.js';
 import { Dir } from './dir';
 import { EnvironmentBuilder } from './environment-builder.js';
@@ -260,14 +260,12 @@ export class TestHarness {
       composed.PATH = `${dockerBin}:${composed.PATH ?? process.env.PATH ?? ''}`;
     }
 
-    const spawnEnv = { ...composed, ...ISOLATED_CLI_SPAWN_ENV };
-    // ISOLATED_CLI_SPAWN_ENV force-disables telemetry (DO_NOT_TRACK=1) for every spawn.
-    // Tests that opted into telemetry via withTelemetryEnabled() need it re-enabled so the
-    // telemetry-events.ndjson sink is written; pair with __SQ_CLI_TELEMETRY_FLUSH__=1 to avoid posting.
+    // withTelemetryEnabled() re-enables consent so the events sink is written. Egress stays
+    // severed either way: applyIsolatedSpawnEnv pins the egress mode to off for every spawn.
     if (this._envBuilder?.telemetryEnabled) {
-      spawnEnv[ENV_DO_NOT_TRACK] = '0';
+      composed[ENV_DO_NOT_TRACK] = '0';
     }
-    return spawnEnv;
+    return applyIsolatedSpawnEnv(composed);
   }
 
   /**

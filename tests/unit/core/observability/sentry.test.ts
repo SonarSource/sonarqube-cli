@@ -27,7 +27,10 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { ENV_DO_NOT_TRACK } from '@/core/config-constants.ts';
 import { flushSentry, initSentry } from '@/core/observability/sentry.ts';
 import { getDefaultState } from '@/core/state/state.ts';
+import { ENV_TELEMETRY_EGRESS } from '@/core/telemetry/egress.ts';
 import * as userModule from '@/core/telemetry/user.ts';
+
+import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
 
 function makeErrorEvent(
   filenames: (string | undefined)[][],
@@ -64,8 +67,13 @@ let setUserSpy: ReturnType<typeof spyOn>;
 let getUserIdSpy: ReturnType<typeof spyOn>;
 let flushSpy: ReturnType<typeof spyOn>;
 let getClientSpy: ReturnType<typeof spyOn>;
+let savedEgress: string | undefined;
 
 beforeEach(() => {
+  // Cleared so the init path runs; Sentry.init is mocked below.
+  savedEgress = process.env[ENV_TELEMETRY_EGRESS];
+  delete process.env[ENV_TELEMETRY_EGRESS];
+
   initSpy = spyOn(Sentry, 'init').mockImplementation(() => undefined);
   setUserSpy = spyOn(Sentry, 'setUser').mockImplementation(() => {});
   getUserIdSpy = spyOn(userModule, 'getOrCreateUserId').mockReturnValue('test-machine-id');
@@ -82,6 +90,7 @@ afterEach(() => {
   getClientSpy.mockRestore();
   delete process.env['SONARSOURCE_DOGFOODING'];
   process.env[ENV_DO_NOT_TRACK] = '1';
+  restoreEnv(ENV_TELEMETRY_EGRESS, savedEgress);
 });
 
 describe('initSentry', () => {
