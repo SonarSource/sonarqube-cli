@@ -118,6 +118,19 @@ describe('runPostUpdateActions', () => {
     expect(savedState.config.cliVersion).toBe(CURRENT_VERSION);
   });
 
+  it('clears Beta command warning history after an update', async () => {
+    const state = makeState();
+    state.config.betaCommandWarnings = {
+      context: '1.0.0',
+      'analyze preview': '1.0.0',
+    };
+    loadStateSpy.mockReturnValue(state);
+
+    await runPostUpdateActions(makeDeps());
+
+    expect(saveStateSpy.mock.calls[0][0].config.betaCommandWarnings).toBeUndefined();
+  });
+
   it('saves the reloaded state, not the pre-runActions snapshot', async () => {
     // The version check reads via tryLoadState, so loadState is called 6 times:
     //   1. inside migrateLegacyTelemetryEvents

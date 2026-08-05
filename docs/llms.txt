@@ -177,7 +177,7 @@ Options:
   --skip-context   Skip the sonar-context-augmentation install/init/skill step
 
 ### sonar context
-Augment AI agents with context from your codebase (beta: subject to change)
+Augment AI agents with context from your codebase [BETA]
 Usage: sonar context [action] [args]
 
 ### sonar analyze *
@@ -280,4 +280,3 @@ Usage: sonar update [--status] [--force]
 Options:
   --status   Check for a newer version without installing
   --force   Install the latest version even if already up to date
-

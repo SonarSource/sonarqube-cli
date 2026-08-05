@@ -27,12 +27,22 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { CliError, CommandFailedError, remediationHintFor } from '@/core/command-error.ts';
 import logger from '@/core/observability/logger.ts';
+import { loadState, saveState } from '@/core/state/state-manager.ts';
 import { blank, error, print, warn } from '@/core/ui';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
 import { UpdateNotifier } from '@/core/update/notification.ts';
 
+import { version as VERSION } from '../../package.json';
+
 export const ALPHA_ENV_VAR = 'SONARQUBE_CLI_ALPHA';
 export const ALPHA_HELP_TAG = '[ALPHA]';
+export const BETA_HELP_TAG = '[BETA]';
+export const Stage = {
+  Stable: 'stable',
+  Alpha: 'alpha',
+  Beta: 'beta',
+} as const;
+export type Stage = (typeof Stage)[keyof typeof Stage];
 const ALPHA_HELP_GROUP = '__SONARQUBE_CLI_ALPHA_COMMANDS__';
 
 export const COMMAND_CATEGORIES = ['core', 'data', 'integrate', 'cli-management'] as const;
@@ -94,9 +104,11 @@ class SonarHelp extends Help {
  *                          with runCommand(); auth is prepended to the handler args
  *  - requiresAuth          metadata flag, set to true by authenticatedAction();
  *                          useful for documentation generation
+ *  - stage()               marks a command as Stable, Alpha, or Beta, controlling its
+ *                          availability, help, documentation, and warnings
  */
 export class SonarCommand extends Command {
-  private _isAlpha = false;
+  private _stage: Stage = Stage.Stable;
   private _requiresAuth = false;
   private _rootHelp: RootHelpMetadata = {};
   private readonly _updateNotifier: UpdateNotifier;
@@ -110,6 +122,11 @@ export class SonarCommand extends Command {
   constructor(name?: string, updateNotifier: UpdateNotifier = new UpdateNotifier()) {
     super(name);
     this._updateNotifier = updateNotifier;
+    this.hook('preAction', () => {
+      if (this.isAlpha) {
+        warn(`'${this.name()}' is in alpha; may change or be removed without notice.`);
+      }
+    });
   }
 
   /** Ensures subcommands created via .command() are also SonarCommand instances. */
@@ -151,20 +168,27 @@ export class SonarCommand extends Command {
     return this;
   }
 
-  /**
-   * Mark this command as alpha. Alpha commands are registered only when the
-   * SONARQUBE_CLI_ALPHA environment variable is set to true or 1.
-   */
-  alpha(): this {
-    if (this._isAlpha) {
+  /** Mark this command as Stable, Alpha, or Beta. */
+  stage(stage: Stage): this {
+    if (this._stage === stage) {
+      return this;
+    }
+    this._stage = stage;
+    const siblings = this.parent?.commands as Command[] | undefined;
+
+    if (stage !== Stage.Alpha) {
+      if (this.helpGroup() === ALPHA_HELP_GROUP) {
+        this.helpGroup('');
+      }
+      if (siblings && !siblings.includes(this)) {
+        siblings.push(this);
+      }
       return this;
     }
 
-    this._isAlpha = true;
     this.helpGroup(ALPHA_HELP_GROUP);
     if (!isAlphaEnabled()) {
       // Commander has no public command-removal API, so remove it from the registration array.
-      const siblings = this.parent?.commands as Command[] | undefined;
       const commandIndex = siblings?.indexOf(this) ?? -1;
       if (commandIndex >= 0) {
         siblings?.splice(commandIndex, 1);
@@ -172,9 +196,6 @@ export class SonarCommand extends Command {
       return this;
     }
 
-    this.hook('preAction', () => {
-      warn(`'${this.name()}' is in alpha; may change or be removed without notice.`);
-    });
     return this;
   }
 
@@ -189,8 +210,7 @@ export class SonarCommand extends Command {
           super.description(str, argsDescription);
     }
 
-    const description = super.description();
-    return this._isAlpha ? `${description} ${ALPHA_HELP_TAG}` : description;
+    return this.withLifecycleTag(super.description());
   }
 
   summary(str: string): this;
@@ -201,7 +221,7 @@ export class SonarCommand extends Command {
     }
 
     const summary = super.summary();
-    return this._isAlpha && summary ? `${summary} ${ALPHA_HELP_TAG}` : summary;
+    return summary ? this.withLifecycleTag(summary) : summary;
   }
 
   /**
@@ -291,9 +311,19 @@ export class SonarCommand extends Command {
     return this._requiresAuth;
   }
 
-  /** True when this command was declared as alpha. */
+  /** True when this command is Stable. */
+  get isStable(): boolean {
+    return this._stage === Stage.Stable;
+  }
+
+  /** True when this command is Alpha. */
   get isAlpha(): boolean {
-    return this._isAlpha;
+    return this._stage === Stage.Alpha;
+  }
+
+  /** True when this command is Beta. */
+  get isBeta(): boolean {
+    return this._stage === Stage.Beta;
   }
 
   /** Metadata used by the custom root help menu. */
@@ -302,6 +332,8 @@ export class SonarCommand extends Command {
   }
 
   async runCommand(fn: () => Promise<void>): Promise<void> {
+    this.warnIfBeta();
+
     try {
       await fn();
     } catch (err) {
@@ -316,6 +348,58 @@ export class SonarCommand extends Command {
       }
       logger.error(thrownError.message);
       process.exitCode = cliError?.exitCode ?? 1;
+    }
+  }
+
+  private withLifecycleTag(description: string): string {
+    if (this._stage === Stage.Alpha) {
+      return `${description} ${ALPHA_HELP_TAG}`;
+    }
+    if (this._stage === Stage.Beta) {
+      return `${description} ${BETA_HELP_TAG}`;
+    }
+    return description;
+  }
+
+  private commandPath(): string {
+    const names = [this.name()];
+
+    for (let parent = this.parent; parent?.parent; parent = parent.parent) {
+      names.unshift(parent.name());
+    }
+
+    return names.join(' ');
+  }
+
+  private warnIfBeta(): void {
+    if (this._stage !== Stage.Beta) {
+      return;
+    }
+
+    const commandPath = this.commandPath();
+    let state;
+
+    try {
+      state = loadState();
+    } catch {
+      print(`'${commandPath}' is in beta and may change.`, 'stderr');
+      return;
+    }
+
+    if (state.config.betaCommandWarnings?.[commandPath] === VERSION) {
+      return;
+    }
+
+    print(`'${commandPath}' is in beta and may change.`, 'stderr');
+    state.config.betaCommandWarnings = {
+      ...state.config.betaCommandWarnings,
+      [commandPath]: VERSION,
+    };
+
+    try {
+      saveState(state);
+    } catch (err) {
+      logger.debug(`Failed to persist Beta command warning: ${(err as Error).message}`);
     }
   }
 }

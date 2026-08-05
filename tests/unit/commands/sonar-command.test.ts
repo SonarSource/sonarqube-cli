@@ -23,12 +23,16 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import { getCustomRootHelp } from '@/commands/root-help.ts';
-import { ALPHA_ENV_VAR, SonarCommand } from '@/commands/sonar-command.ts';
+import { ALPHA_ENV_VAR, SonarCommand, Stage } from '@/commands/sonar-command.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { RateLimitError, ServiceUnavailableError } from '@/core/server/errors.ts';
+import { getDefaultState } from '@/core/state/state.ts';
+import * as stateManager from '@/core/state/state-manager.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
+import { version as VERSION } from '../../../package.json';
 
 const FAKE_AUTH: ResolvedAuth = {
   token: 'fake-token',
@@ -39,6 +43,8 @@ const FAKE_AUTH: ResolvedAuth = {
 describe('SonarCommand', () => {
   let resolveAuthSpy: ReturnType<typeof spyOn>;
   let originalAlphaEnv: string | undefined;
+  let loadStateSpy: ReturnType<typeof spyOn>;
+  let saveStateSpy: ReturnType<typeof spyOn>;
   let originalExitCode: number | string | null | undefined;
 
   beforeEach(() => {
@@ -54,6 +60,8 @@ describe('SonarCommand', () => {
     setMockUi(false);
     process.exitCode = originalExitCode ?? 0;
     resolveAuthSpy?.mockRestore();
+    loadStateSpy?.mockRestore();
+    saveStateSpy?.mockRestore();
     if (originalAlphaEnv === undefined) {
       delete process.env[ALPHA_ENV_VAR];
     } else {
@@ -178,19 +186,53 @@ describe('SonarCommand', () => {
     });
   });
 
-  // ─── alpha() ──────────────────────────────────────────────────────────────
+  // ─── stage(Stage.Stable) ──────────────────────────────────────────────────
 
-  describe('alpha()', () => {
+  describe('stage(Stage.Stable)', () => {
+    it('uses Stable as the default stage', () => {
+      const command = new SonarCommand('stable');
+
+      expect(command.isStable).toBe(true);
+      expect(command.isAlpha).toBe(false);
+      expect(command.isBeta).toBe(false);
+    });
+
+    it('allows Stable to be declared explicitly', () => {
+      const command = new SonarCommand('stable').description('Stable command').stage(Stage.Stable);
+
+      expect(command.isStable).toBe(true);
+      expect(command.helpInformation()).not.toContain('[ALPHA]');
+      expect(command.helpInformation()).not.toContain('[BETA]');
+    });
+
+    it('uses the last stage assigned after Stable was declared explicitly', () => {
+      const command = new SonarCommand('stable').stage(Stage.Stable).stage(Stage.Beta);
+
+      expect(command.isStable).toBe(false);
+      expect(command.isBeta).toBe(true);
+    });
+  });
+
+  // ─── stage(Stage.Alpha) ───────────────────────────────────────────────────
+
+  describe('stage(Stage.Alpha)', () => {
     it('marks the command as alpha', () => {
       const cmd = new SonarCommand('experimental');
 
       expect(cmd.isAlpha).toBe(false);
-      expect(cmd.alpha().isAlpha).toBe(true);
+      expect(cmd.stage(Stage.Alpha).isAlpha).toBe(true);
+    });
+
+    it('uses Alpha when it is assigned after Beta', () => {
+      const command = new SonarCommand('experimental').stage(Stage.Beta).stage(Stage.Alpha);
+
+      expect(command.isAlpha).toBe(true);
+      expect(command.isBeta).toBe(false);
     });
 
     it('unregisters the command when SONARQUBE_CLI_ALPHA is not set', () => {
       const root = new SonarCommand('sonar');
-      root.command('experimental').description('Experimental command').alpha();
+      root.command('experimental').description('Experimental command').stage(Stage.Alpha);
 
       expect(root.commands.map((command) => command.name())).not.toContain('experimental');
       expect(root.helpInformation()).not.toContain('Experimental command');
@@ -201,7 +243,7 @@ describe('SonarCommand', () => {
       (value) => {
         process.env[ALPHA_ENV_VAR] = value;
         const root = new SonarCommand('sonar');
-        root.command('experimental').description('Experimental command').alpha();
+        root.command('experimental').description('Experimental command').stage(Stage.Alpha);
 
         expect(root.commands.map((command) => command.name())).not.toContain('experimental');
         expect(root.helpInformation()).not.toContain('Experimental command');
@@ -212,7 +254,7 @@ describe('SonarCommand', () => {
       const rootHandler = mock((_command?: string) => {});
       const alphaHandler = mock(() => {});
       const root = new SonarCommand('sonar').argument('[command]').anonymousAction(rootHandler);
-      root.command('experimental').alpha().anonymousAction(alphaHandler);
+      root.command('experimental').stage(Stage.Alpha).anonymousAction(alphaHandler);
 
       await root.parseAsync(['experimental'], { from: 'user' });
 
@@ -228,7 +270,7 @@ describe('SonarCommand', () => {
         const alphaCommand = root
           .command('experimental')
           .description('Experimental command')
-          .alpha();
+          .stage(Stage.Alpha);
 
         expect(root.commands.map((command) => command.name())).toContain('experimental');
         expect(root.helpInformation()).toContain('Experimental command [ALPHA]');
@@ -243,7 +285,7 @@ describe('SonarCommand', () => {
         .command('experimental')
         .description('Long experimental description')
         .summary('Experimental summary')
-        .alpha();
+        .stage(Stage.Alpha);
 
       expect(root.helpInformation()).toContain('Experimental summary [ALPHA]');
     });
@@ -256,7 +298,7 @@ describe('SonarCommand', () => {
         .command('alpha-core')
         .description('Alpha core command')
         .rootHelp({ category: 'core' })
-        .alpha();
+        .stage(Stage.Alpha);
       root
         .command('stable-management')
         .description('Stable management command')
@@ -265,7 +307,7 @@ describe('SonarCommand', () => {
         .command('alpha-data')
         .description('Alpha data command')
         .rootHelp({ category: 'data' })
-        .alpha();
+        .stage(Stage.Alpha);
 
       const help = getCustomRootHelp(root, root.createHelp());
       const stableCoreIndex = help.indexOf('Stable core command');
@@ -288,7 +330,7 @@ describe('SonarCommand', () => {
         .description('System commands')
         .rootHelp({ category: 'cli-management' });
       system.command('status').description('Stable status command');
-      system.command('alpha-example').description('Nested alpha command').alpha();
+      system.command('alpha-example').description('Nested alpha command').stage(Stage.Alpha);
       system.command('reset').description('Stable reset command');
 
       const help = getCustomRootHelp(root, root.createHelp());
@@ -299,9 +341,9 @@ describe('SonarCommand', () => {
     it('lists alpha subcommands in a separate group at the bottom of their parent help', () => {
       process.env[ALPHA_ENV_VAR] = '1';
       const parent = new SonarCommand('parent');
-      parent.command('alpha-one').description('First alpha command').alpha();
+      parent.command('alpha-one').description('First alpha command').stage(Stage.Alpha);
       parent.command('stable-one').description('First stable command');
-      parent.command('alpha-two').description('Second alpha command').alpha();
+      parent.command('alpha-two').description('Second alpha command').stage(Stage.Alpha);
       parent.command('stable-two').description('Second stable command');
 
       expect(parent.helpInformation()).toBe(
@@ -327,7 +369,7 @@ describe('SonarCommand', () => {
       process.env[ALPHA_ENV_VAR] = '1';
       const handler = mock(() => {});
       const root = new SonarCommand('sonar');
-      root.command('experimental').alpha().anonymousAction(handler);
+      root.command('experimental').stage(Stage.Alpha).anonymousAction(handler);
 
       await root.parseAsync(['experimental'], { from: 'user' });
 
@@ -356,6 +398,141 @@ describe('SonarCommand', () => {
       const cmd = new SonarCommand();
       cmd.authenticatedAction(() => Promise.resolve());
       expect(cmd.requiresAuth).toBe(true);
+    });
+  });
+
+  // ─── stage(Stage.Beta) ────────────────────────────────────────────────────
+
+  describe('stage(Stage.Beta)', () => {
+    it('marks the command as Beta and keeps it visible', () => {
+      const parent = new SonarCommand('sonar');
+      const betaCommand = parent
+        .command('preview')
+        .description('Run the preview')
+        .stage(Stage.Beta);
+
+      expect(betaCommand.isBeta).toBe(true);
+      expect(parent.createHelp().visibleCommands(parent)).toContain(betaCommand);
+    });
+
+    it('uses Beta when it is assigned after a disabled Alpha stage', () => {
+      const parent = new SonarCommand('sonar');
+      const command = parent.command('preview').description('Preview command');
+      command.stage(Stage.Alpha);
+
+      expect(parent.commands).not.toContain(command);
+
+      command.stage(Stage.Beta);
+
+      expect(command.isAlpha).toBe(false);
+      expect(command.isBeta).toBe(true);
+      expect(parent.commands).toContain(command);
+      expect(parent.helpInformation()).toContain('Preview command [BETA]');
+      expect(parent.helpInformation()).not.toContain('[ALPHA]');
+    });
+
+    it('leaves commands Stable by default', () => {
+      expect(new SonarCommand('stable').isStable).toBe(true);
+    });
+
+    it('adds the Beta tag to command help', () => {
+      const command = new SonarCommand('preview').description('Run the preview').stage(Stage.Beta);
+
+      expect(command.helpInformation()).toContain('Run the preview [BETA]');
+    });
+
+    it('adds the Beta tag to a parent command subcommand list', () => {
+      const parent = new SonarCommand('sonar');
+      parent.command('preview').description('Run the preview').stage(Stage.Beta);
+
+      expect(parent.helpInformation()).toContain('Run the preview [BETA]');
+    });
+
+    it('adds the Beta tag to an explicit command summary', () => {
+      const parent = new SonarCommand('sonar');
+      parent
+        .command('preview')
+        .description('Long preview description')
+        .summary('Preview summary')
+        .stage(Stage.Beta);
+
+      expect(parent.helpInformation()).toContain('Preview summary [BETA]');
+    });
+
+    it('tags Beta subcommands in a root-help label', () => {
+      const root = new SonarCommand('sonar');
+      const system = root
+        .command('system')
+        .description('System commands')
+        .rootHelp({ category: 'cli-management' });
+      system.command('status').description('Stable status command');
+      system.command('preview').description('Preview command').stage(Stage.Beta);
+
+      const help = getCustomRootHelp(root, root.createHelp());
+
+      expect(help).toContain('system <status|preview[BETA]>');
+    });
+
+    it('keeps Beta commands in category declaration order', () => {
+      const root = new SonarCommand('sonar');
+      root.command('first').description('First command').rootHelp({ category: 'data' });
+      root
+        .command('preview')
+        .description('Preview command')
+        .rootHelp({ category: 'data' })
+        .stage(Stage.Beta);
+      root.command('last').description('Last command').rootHelp({ category: 'data' });
+
+      const help = getCustomRootHelp(root, root.createHelp());
+
+      expect(help.indexOf('First command')).toBeLessThan(help.indexOf('Preview command [BETA]'));
+      expect(help.indexOf('Preview command [BETA]')).toBeLessThan(help.indexOf('Last command'));
+    });
+
+    it('warns once for the command in the current CLI version', async () => {
+      const state = getDefaultState(VERSION);
+      loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
+      saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
+      const command = new SonarCommand('preview').stage(Stage.Beta).anonymousAction(() => {});
+
+      await command.parseAsync([], { from: 'user' });
+      await command.parseAsync([], { from: 'user' });
+
+      const warnings = getMockUiCalls().filter((call) => call.method === 'print');
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]?.args[0]).toBe("'preview' is in beta and may change.");
+      expect(state.config.betaCommandWarnings).toEqual({ preview: VERSION });
+      expect(saveStateSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('warns independently for each Beta command', async () => {
+      const state = getDefaultState(VERSION);
+      loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
+      saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
+      const first = new SonarCommand('first').stage(Stage.Beta).anonymousAction(() => {});
+      const second = new SonarCommand('second').stage(Stage.Beta).anonymousAction(() => {});
+
+      await first.parseAsync([], { from: 'user' });
+      await second.parseAsync([], { from: 'user' });
+
+      expect(
+        getMockUiCalls()
+          .filter((call) => call.method === 'print')
+          .map((call) => call.args[0]),
+      ).toEqual(["'first' is in beta and may change.", "'second' is in beta and may change."]);
+    });
+
+    it('warns again after the CLI version changes', async () => {
+      const state = getDefaultState(VERSION);
+      state.config.betaCommandWarnings = { preview: '0.0.1' };
+      loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
+      saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
+      const command = new SonarCommand('preview').stage(Stage.Beta).anonymousAction(() => {});
+
+      await command.parseAsync([], { from: 'user' });
+
+      expect(getMockUiCalls().filter((call) => call.method === 'print')).toHaveLength(1);
+      expect(state.config.betaCommandWarnings).toEqual({ preview: VERSION });
     });
   });
 

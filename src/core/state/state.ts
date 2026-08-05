@@ -250,6 +250,8 @@ export interface CliConfig {
   updateCheck?: CliUpdateCheckState;
   /** Throttle for the Vortex entitlement-loss warning shown by per-edit hooks */
   vortexEntitlementLossNotice?: VortexEntitlementLossNoticeState;
+  /** Last CLI version that warned about each invoked Beta command */
+  betaCommandWarnings?: Record<string, string>;
 }
 
 export interface VortexEntitlementLossNoticeState {
@@ -573,7 +575,9 @@ export interface StoredCommandExecutedEvent {
 
 /** Any event stored in telemetry-events.ndjson and drained by flushTelemetryEvents. */
 export type StoredTelemetryEvent =
-  StoredAnalysisCompletedEvent | StoredIntegrationConfiguredEvent | StoredCommandExecutedEvent;
+  | StoredAnalysisCompletedEvent
+  | StoredIntegrationConfiguredEvent
+  | StoredCommandExecutedEvent;
 
 /**
  * Telemetry configuration and pending event batch

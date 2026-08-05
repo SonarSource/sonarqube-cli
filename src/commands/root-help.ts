@@ -25,6 +25,7 @@ import { softBlue, underline } from '@/core/ui/colors.ts';
 import { version as VERSION } from '../../package.json';
 import {
   ALPHA_HELP_TAG,
+  BETA_HELP_TAG,
   COMMAND_CATEGORIES,
   type CommandCategory,
   type SonarCommand,
@@ -95,9 +96,10 @@ function getRootCommandLabel(command: SonarCommand, helper: Help): string {
     return command.name();
   }
 
-  const childLabels = visibleChildren.map(
-    (child) => `${child.name()}${child.isAlpha ? ALPHA_HELP_TAG : ''}`,
-  );
+  const childLabels = visibleChildren.map((child) => {
+    const tag = child.isAlpha ? ALPHA_HELP_TAG : child.isBeta ? BETA_HELP_TAG : '';
+    return `${child.name()}${tag}`;
+  });
   return `${command.name()} <${childLabels.join('|')}>`;
 }
 

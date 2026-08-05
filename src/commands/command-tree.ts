@@ -98,7 +98,7 @@ import { listProjects, type ListProjectsOptions } from './list/projects.ts';
 import { remediate, type RemediateOptions } from './remediate';
 import { getBanner, getCustomRootHelp } from './root-help.ts';
 import { runMcp } from './run/mcp.ts';
-import { SonarCommand } from './sonar-command.ts';
+import { SonarCommand, Stage } from './sonar-command.ts';
 import { systemReset, type SystemResetOptions } from './system/reset.ts';
 import { systemStatus, type SystemStatusOptions } from './system/status.ts';
 import { updateVersion, type UpdateVersionOptions } from './update';
@@ -335,11 +335,12 @@ integrateCommand
 // Forwards arguments verbatim to the locally-installed CAG binary; install via
 // `sonar integrate claude` or `sonar integrate copilot`.
 COMMAND_TREE.command('context')
-  .description('Augment AI agents with context from your codebase (beta: subject to change)')
+  .description('Augment AI agents with context from your codebase')
   .rootHelp({
     category: 'data',
     label: 'context [action] [args...]',
   })
+  .stage(Stage.Beta)
   .argument('[action]', 'Action forwarded to sonar-context-augmentation')
   .argument('[args...]', 'Additional arguments forwarded to sonar-context-augmentation')
   .helpOption(false)
