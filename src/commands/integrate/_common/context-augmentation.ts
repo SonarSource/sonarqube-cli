@@ -136,7 +136,7 @@ export class CagStepFailedError extends Error {
 export async function runToolIntegrateCommand(
   p: ApplyContextAugmentationToolIntegrationParams,
 ): Promise<void> {
-  text('     Installing Vortex context augmentation...');
+  text('     Installing Vortex Context...');
 
   const initEnv = buildContextAugmentationEnv({
     organization: p.auth.orgKey,
@@ -148,13 +148,13 @@ export async function runToolIntegrateCommand(
 
   await runCagStepOrThrow(
     `sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION}`,
-    'Vortex context augmentation tool integration failed.',
+    'Vortex Context tool integration failed.',
     p.binaryPath,
     ['tool', 'integrate', '--invocation-prefix', SONAR_CONTEXT_INVOCATION],
     p.projectRoot,
     initEnv,
   );
-  discreetSuccess('Vortex context augmentation configured');
+  discreetSuccess('Vortex Context configured');
 }
 
 export async function printContextAugmentationSkill({

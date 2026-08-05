@@ -152,7 +152,7 @@ async function resolveContextToken(
 
   const connection = organization ? `${serverUrl} (${organization})` : serverUrl;
   throw new CommandFailedError(
-    `Not authenticated for the recorded Vortex context augmentation connection: ${connection}.`,
+    `Not authenticated for the recorded Vortex Context connection: ${connection}.`,
     {
       remediationHint:
         'Run: sonar auth login, then re-run sonar integrate claude or sonar integrate copilot from this project.',
@@ -206,7 +206,7 @@ export async function runContextPassthrough(
     child.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'ENOENT') {
         reject(
-          new CommandFailedError('Vortex context augmentation is not installed.', {
+          new CommandFailedError('Vortex Context is not installed.', {
             remediationHint:
               'Run "sonar integrate claude" or "sonar integrate copilot" to install it.',
           }),

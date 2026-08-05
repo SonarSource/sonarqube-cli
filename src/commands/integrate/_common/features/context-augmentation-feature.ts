@@ -47,13 +47,13 @@ export function createContextAugmentationSubfeature<TOptions>(
 ): SubfeatureDeclaration<TOptions> {
   return {
     id: CONTEXT_AUGMENTATION_FEATURE_ID,
-    displayName: 'Vortex context augmentation',
+    displayName: 'Vortex Context',
     shouldInstall: () => (isContextAugmentationSkipped() ? skip() : install()),
     dependencies: [contextAugmentationBinaryDependency],
     resources: [
       wholeFile({
         id: CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
-        displayName: 'Vortex context augmentation skill file',
+        displayName: 'Vortex Context skill file',
         version: SONAR_CONTEXT_AUGMENTATION_VERSION,
         targetPath: options.targetPath,
         content: async (context) =>
@@ -68,7 +68,7 @@ export function createContextAugmentationSubfeature<TOptions>(
     operations: [
       {
         id: CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID,
-        displayName: 'Vortex context augmentation tool integration',
+        displayName: 'Vortex Context tool integration',
         shouldApply: (context) => context.executionMode === 'install',
         apply: async (context) =>
           runToolIntegrateCommand({
@@ -86,14 +86,14 @@ export function createContextAugmentationSubfeature<TOptions>(
 function resolveContextAugmentationBinaryPath(context: IntegrationContext): string {
   const binaryPath = context.resolvedDependencies.get(CONTEXT_AUGMENTATION_BINARY_NAME)?.path;
   if (!binaryPath) {
-    throw new CommandFailedError('Vortex context augmentation binary path is unavailable.');
+    throw new CommandFailedError('Vortex Context binary path is unavailable.');
   }
   return binaryPath;
 }
 
 function getRequiredAuth(context: IntegrationContext) {
   if (!context.auth) {
-    throw new CommandFailedError('Authentication is unavailable for Vortex context augmentation.');
+    throw new CommandFailedError('Authentication is unavailable for Vortex Context.');
   }
   return context.auth;
 }
