@@ -31,6 +31,7 @@ import {
   CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
   CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID,
 } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
+import { SQAA_HOOK_FEATURE_ID } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
 import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
 import { ANTIGRAVITY_INTEGRATION_ID } from '@/commands/integrate/antigravity/declaration.ts';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
@@ -53,6 +54,9 @@ export const STALE_CLI_VERSION = '0.0.1';
 export const STALE_SKILL_VERSION = '0.0.0';
 export const SEEDED_PROJECT_KEY = 'offline-test-project';
 export const SEEDED_ORG_KEY = 'offline-test-org';
+// Not 'sonarsource': the fake CAG stub renders an extra dogfooding-tools section
+// in the skill only for that exact org, which would pollute unrelated assertions.
+export const ALLOWLISTED_CAG_ORG_KEY = 'denis-troller-sonar';
 const SEEDED_UPDATED_AT = new Date(0).toISOString();
 
 export const CLAUDE_SKILL_RELATIVE_PATH = join(
@@ -97,6 +101,14 @@ export interface SeedSkillOptions {
   version?: string;
   projectKey?: string;
   orgKey?: string;
+  serverUrl?: string;
+  /**
+   * Also seed the Claude PostToolUse hook container (`SQAA_HOOK_FEATURE_ID`)
+   * with only the `cag-posttooluse` subfeature active, so post-update
+   * refreshes `.claude/settings.json` and the hook script — simulating a
+   * prior `sonar integrate claude` on a CAG-hook-allowlisted org. Claude only.
+   */
+  installCagPostToolUseHook?: boolean;
 }
 
 export interface SeedStateOptions {
@@ -151,7 +163,7 @@ function seedDeclarativeContextAugmentationFeature(state: CliState, skill: SeedS
   const attrs = {
     orgKey: skill.orgKey ?? SEEDED_ORG_KEY,
     projectKey: skill.projectKey ?? SEEDED_PROJECT_KEY,
-    serverUrl: 'https://sonarcloud.io',
+    serverUrl: skill.serverUrl ?? 'https://sonarcloud.io',
     scaEnabled: false,
   };
 
@@ -177,6 +189,30 @@ function seedDeclarativeContextAugmentationFeature(state: CliState, skill: SeedS
     ],
   };
   integration.features.push(feature);
+
+  if (skill.installCagPostToolUseHook && skill.agentId === 'claude-code') {
+    integration.features.push({
+      featureId: SQAA_HOOK_FEATURE_ID,
+      scope: 'project',
+      targetRoot: skill.projectRoot,
+      installedByCliVersion: STALE_CLI_VERSION,
+      installedAt: SEEDED_UPDATED_AT,
+      updatedByCliVersion: STALE_CLI_VERSION,
+      updatedAt: SEEDED_UPDATED_AT,
+      dependencies: [],
+      resources: [],
+      operations: [],
+      attrs,
+      subfeatures: [
+        {
+          featureId: 'cag-posttooluse',
+          dependencies: [{ id: CONTEXT_AUGMENTATION_BINARY_NAME }],
+          resources: [],
+          operations: [],
+        },
+      ],
+    });
+  }
 }
 
 function resolveIntegrationId(agentId: SeedSkillOptions['agentId']): string {
@@ -277,4 +313,14 @@ export function expectSkillRendersWithWrapperInvocation(content: string): void {
     wrapperInvocations.length,
     `expected more than ${MIN_WRAPPER_INVOCATIONS_IN_SKILL} \`sonar context\` command examples in SKILL.md`,
   ).toBeGreaterThan(MIN_WRAPPER_INVOCATIONS_IN_SKILL);
+}
+
+export function buildCompressibleGradleStdout(): string {
+  const taskLines = Array.from(
+    { length: 10 },
+    (_, index) => `> Task :module${index}:compileJava UP-TO-DATE`,
+  );
+  return [...taskLines, 'BUILD SUCCESSFUL in 4s', '10 actionable tasks: 10 up-to-date', ''].join(
+    '\n',
+  );
 }
