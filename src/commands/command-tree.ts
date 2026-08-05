@@ -366,7 +366,7 @@ integrateCommand
 integrateCommand
   .command('antigravity')
   .description(
-    'Setup SonarQube integration for Antigravity. Installs secrets scanning hooks, prompt-secrets instructions, and Vortex context augmentation.',
+    'Setup SonarQube integration for Antigravity. Installs secrets scanning hooks, prompt-secrets instructions, and Vortex Context.',
   )
   .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
   .option('--non-interactive', 'Non-interactive mode (no prompts)')

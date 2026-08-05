@@ -694,7 +694,7 @@ describe('integrate claude — Context Augmentation', () => {
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toContain('  cag-stdout-diagnostic');
       expect(result.stderr).toContain('  cag-stderr-diagnostic');
-      expect(result.stderr).toContain('Vortex context augmentation tool integration failed.');
+      expect(result.stderr).toContain('Vortex Context tool integration failed.');
     },
     { timeout: 30000 },
   );
@@ -734,7 +734,7 @@ describe('integrate claude — Context Augmentation', () => {
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeUndefined();
       expectSkillFile(harness, CLAUDE_SKILL_PATH, false);
-      expect(result.stderr).toContain('Vortex context augmentation tool integration failed.');
+      expect(result.stderr).toContain('Vortex Context tool integration failed.');
     },
     { timeout: 30000 },
   );
