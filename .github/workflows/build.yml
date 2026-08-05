@@ -459,6 +459,18 @@ jobs:
         if: matrix.os == 'linux'
         run: SONARQUBE_CLI_USE_COVERAGE=1 bun run test:integration
 
+      # Workaround for CAG-933: CAG deduces the fake SonarQube Cloud API endpoint
+      # as api.localhost. That resolution is platform-specific; Windows CI does not
+      # resolve it by default. Pin api.localhost to loopback so the e2e test
+      # "forwards a Claude Bash hook payload to the real CAG binary and applies
+      # Gradle compression" can reach the fake server until CAG fixes this.
+      - name: Resolve fake SonarQube Cloud API host (Windows)
+        if: matrix.os == 'windows'
+        shell: powershell
+        run: |
+          Add-Content -Path "$env:windir\System32\drivers\etc\hosts" -Value "`n127.0.0.1 api.localhost`n::1 api.localhost"
+          Resolve-DnsName api.localhost
+
       - name: Run e2e tests (Windows)
         if: matrix.os == 'windows'
         env:
