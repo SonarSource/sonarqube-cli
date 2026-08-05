@@ -37,6 +37,11 @@ export const ALPHA_HELP_TAG = '[ALPHA]';
 export const COMMAND_CATEGORIES = ['core', 'data', 'integrate', 'cli-management'] as const;
 export type CommandCategory = (typeof COMMAND_CATEGORIES)[number];
 
+function isAlphaEnabled(): boolean {
+  const value = process.env[ALPHA_ENV_VAR];
+  return value === 'true' || value === '1';
+}
+
 export interface RootHelpMetadata {
   category?: CommandCategory;
   expandSubcommands?: boolean;
@@ -112,7 +117,7 @@ export class SonarCommand extends Command {
 
   /**
    * Mark this command as alpha. Alpha commands are registered only when the
-   * SONARQUBE_CLI_ALPHA environment variable is set.
+   * SONARQUBE_CLI_ALPHA environment variable is set to true or 1.
    */
   alpha(): this {
     if (this._isAlpha) {
@@ -120,7 +125,7 @@ export class SonarCommand extends Command {
     }
 
     this._isAlpha = true;
-    if (process.env[ALPHA_ENV_VAR] === undefined) {
+    if (!isAlphaEnabled()) {
       // Commander has no public command-removal API, so remove it from the registration array.
       const siblings = this.parent?.commands as Command[] | undefined;
       const commandIndex = siblings?.indexOf(this) ?? -1;

@@ -196,6 +196,18 @@ describe('SonarCommand', () => {
       expect(root.helpInformation()).not.toContain('Experimental command');
     });
 
+    it.each(['false', '0', '', 'yes', 'TRUE'])(
+      'unregisters the command when SONARQUBE_CLI_ALPHA is set to %s',
+      (value) => {
+        process.env[ALPHA_ENV_VAR] = value;
+        const root = new SonarCommand('sonar');
+        root.command('experimental').description('Experimental command').alpha();
+
+        expect(root.commands.map((command) => command.name())).not.toContain('experimental');
+        expect(root.helpInformation()).not.toContain('Experimental command');
+      },
+    );
+
     it('does not execute an unregistered alpha command', async () => {
       const rootHandler = mock((_command?: string) => {});
       const alphaHandler = mock(() => {});
@@ -208,15 +220,21 @@ describe('SonarCommand', () => {
       expect(alphaHandler).not.toHaveBeenCalled();
     });
 
-    it('registers the command and tags help when SONARQUBE_CLI_ALPHA is set', () => {
-      process.env[ALPHA_ENV_VAR] = '';
-      const root = new SonarCommand('sonar');
-      const alphaCommand = root.command('experimental').description('Experimental command').alpha();
+    it.each(['true', '1'])(
+      'registers the command and tags help when SONARQUBE_CLI_ALPHA is set to %s',
+      (value) => {
+        process.env[ALPHA_ENV_VAR] = value;
+        const root = new SonarCommand('sonar');
+        const alphaCommand = root
+          .command('experimental')
+          .description('Experimental command')
+          .alpha();
 
-      expect(root.commands.map((command) => command.name())).toContain('experimental');
-      expect(root.helpInformation()).toContain('Experimental command [ALPHA]');
-      expect(alphaCommand.helpInformation()).toContain('Experimental command [ALPHA]');
-    });
+        expect(root.commands.map((command) => command.name())).toContain('experimental');
+        expect(root.helpInformation()).toContain('Experimental command [ALPHA]');
+        expect(alphaCommand.helpInformation()).toContain('Experimental command [ALPHA]');
+      },
+    );
 
     it('tags an explicit command summary', () => {
       process.env[ALPHA_ENV_VAR] = '1';
