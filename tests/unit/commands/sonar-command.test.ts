@@ -288,12 +288,39 @@ describe('SonarCommand', () => {
         .description('System commands')
         .rootHelp({ category: 'cli-management' });
       system.command('status').description('Stable status command');
-      system.command('reset').description('Stable reset command');
       system.command('alpha-example').description('Nested alpha command').alpha();
+      system.command('reset').description('Stable reset command');
 
       const help = getCustomRootHelp(root, root.createHelp());
 
       expect(help).toContain('system <status|reset|alpha-example[ALPHA]>');
+    });
+
+    it('lists alpha subcommands in a separate group at the bottom of their parent help', () => {
+      process.env[ALPHA_ENV_VAR] = '1';
+      const parent = new SonarCommand('parent');
+      parent.command('alpha-one').description('First alpha command').alpha();
+      parent.command('stable-one').description('First stable command');
+      parent.command('alpha-two').description('Second alpha command').alpha();
+      parent.command('stable-two').description('Second stable command');
+
+      expect(parent.helpInformation()).toBe(
+        [
+          'Usage: parent [options] [command]',
+          '',
+          'Options:',
+          '  -h, --help      display help for command',
+          '',
+          'Commands:',
+          '  stable-one      First stable command',
+          '  stable-two      Second stable command',
+          '  help [command]  display help for command',
+          '',
+          '  alpha-one       First alpha command [ALPHA]',
+          '  alpha-two       Second alpha command [ALPHA]',
+          '',
+        ].join('\n'),
+      );
     });
 
     it('warns on stderr before invoking the command handler', async () => {
