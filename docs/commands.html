@@ -125,6 +125,14 @@ const collapsed = new Set(); // IDs of collapsed groups
 let activeId = null;
 let viewMode = 'columns'; // 'tree' (pills) | 'columns' | 'list'
 
+function betaInfoMarkup(cmd) {
+  if (!cmd.isBeta) return '';
+
+  const message = `'${cmd.name}' is in beta and may change.`;
+  const escapedMessage = escAttr(message);
+  return `<span class="beta-info" role="img" aria-label="${escapedMessage}" title="${escapedMessage}" data-tooltip="${escapedMessage}" tabindex="0">β</span>`;
+}
+
 // ── Ancestor helpers ─────────────────────────────────────────
 function getAncestorIds(id) {
   const ancestors = new Set();
@@ -197,6 +205,7 @@ function buildPillNode(cmd, flat) {
     + (isSelected ? ' selected' : '')
     + (!isSelected && isOnPath ? ' path-highlight' : '');
   pill.textContent = cmd.name;
+  pill.insertAdjacentHTML('beforeend', betaInfoMarkup(cmd));
   row.appendChild(pill);
 
   if (!cmd.isRoot) {
@@ -237,6 +246,7 @@ function renderTreeNode(cmd, flat) {
   const label = document.createElement('span');
   label.className = 'tree-label ' + (cmd.isRoot ? 'root' : (cmd.isGroup || cmd.depth === 1) ? 'group' : 'leaf');
   label.textContent = cmd.name;
+  label.insertAdjacentHTML('beforeend', betaInfoMarkup(cmd));
   row.appendChild(label);
 
   row.addEventListener('click', () => { navigateToCommand(cmd.id); });
@@ -323,6 +333,7 @@ function buildColumnView(root) {
           + (isSelected ? ' selected' : '')
           + (isOnPath   ? ' path-highlight' : '');
         pill.textContent = entry.name;
+        pill.insertAdjacentHTML('beforeend', betaInfoMarkup(entry));
         pill.dataset.id = entry.id;
 
 
@@ -480,7 +491,7 @@ function renderDetail(cmd) {
 
   // Header
   parts.push(`<div class="detail-header">`);
-  parts.push(`<span class="detail-title"><code>${escHtml(cmd.fullName)}</code></span>`);
+  parts.push(`<span class="detail-title"><code>${escHtml(cmd.fullName)}</code>${betaInfoMarkup(cmd)}</span>`);
   parts.push(`</div>`);
 
   // Description
@@ -553,7 +564,7 @@ function renderDetail(cmd) {
       const child = byId[childId];
       if (!child) continue;
       parts.push(`<div class="subcmd-item" data-target="${escAttr(child.id)}">`);
-      parts.push(`<span class="subcmd-name">${escHtml(child.fullName)}</span>`);
+      parts.push(`<span class="subcmd-name">${escHtml(child.fullName)}${betaInfoMarkup(child)}</span>`);
       parts.push(`<span class="subcmd-desc">${escHtml(child.description)}</span>`);
       parts.push(`<span class="subcmd-arrow">→</span>`);
       parts.push(`</div>`);
