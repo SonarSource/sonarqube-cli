@@ -54,9 +54,7 @@ export const STALE_CLI_VERSION = '0.0.1';
 export const STALE_SKILL_VERSION = '0.0.0';
 export const SEEDED_PROJECT_KEY = 'offline-test-project';
 export const SEEDED_ORG_KEY = 'offline-test-org';
-// Not 'sonarsource': the fake CAG stub renders an extra dogfooding-tools section
-// in the skill only for that exact org, which would pollute unrelated assertions.
-export const ALLOWLISTED_CAG_ORG_KEY = 'denis-troller-sonar';
+export const ALLOWLISTED_CAG_ORG_KEY = 'sonarsource';
 const SEEDED_UPDATED_AT = new Date(0).toISOString();
 
 export const CLAUDE_SKILL_RELATIVE_PATH = join(
