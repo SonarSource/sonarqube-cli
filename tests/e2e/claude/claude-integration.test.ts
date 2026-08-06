@@ -215,13 +215,13 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
             ).toContain('sonar hook claude-post-tool-use');
 
             const result = await claude.run(
-              'Run ./gradlew build exactly once. In your final response, copy the complete stdout you observed from the Bash tool verbatim. Do not summarize it.',
+              'Run "./gradlew --info build" exactly once. In your final response, copy the complete stdout you observed from the Bash tool verbatim. Do not summarize it.',
               {
                 args: [
                   '--tools',
                   'Bash',
                   '--allowedTools',
-                  'Bash(./gradlew build)',
+                  'Bash(./gradlew --info build)',
                   '--max-turns',
                   '3',
                 ],
