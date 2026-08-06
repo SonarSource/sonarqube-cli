@@ -76,7 +76,7 @@ interface ClidocCommand {
   description: string;
   isGroup: boolean;
   isRoot: boolean;
-  isBeta: boolean;
+  stage: 'stable' | 'beta';
   requiresAuth: boolean;
   depth: number;
   parentId: string | null;
@@ -107,7 +107,7 @@ function serializeCommand(
     description: cmd.description() ?? '',
     isGroup: visibleChildren.length > 0,
     isRoot: depth === 0,
-    isBeta: cmd.isBeta,
+    stage: cmd.isBeta ? 'beta' : 'stable',
     requiresAuth: cmd.requiresAuth,
     depth,
     parentId,
@@ -151,7 +151,7 @@ const rootEntry: ClidocCommand = {
   description: COMMAND_TREE.description() ?? 'SonarQube CLI',
   isGroup: true,
   isRoot: true,
-  isBeta: false,
+  stage: 'stable',
   requiresAuth: false,
   depth: 0,
   parentId: null,

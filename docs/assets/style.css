@@ -18,6 +18,7 @@
   --red: #f87171;
   --pink: #e879a0;
   --purple: #a78bfa;      /* ← add — dark-mode purple */
+  --purple-strong: #6d28d9;
   --cyan: #67e8f9;
   --cyan-dim: #67e8f918;
   --pill-bg: #272b3a;
@@ -41,6 +42,7 @@
   --red: #e1434c;
   --pink: #c24789;
   --purple: #7c3aed;      /* ← add — light-mode purple */
+  --purple-strong: #5b21b6;
   --cyan: #0eb5cc;
   --cyan-dim: #0eb5cc18;
   --pill-bg: #eaecf5;
@@ -203,6 +205,7 @@ a:hover { text-decoration: underline; }
 .pill-group { color: var(--text); }
 .pill-leaf  { color: var(--text-muted); }
 .pill.selected { background: var(--accent-dim); border-color: var(--accent); border-width: 2px; }
+.pill.selected.stage-beta { background: var(--purple-strong); border-color: var(--purple-strong); color: #fff; }
 .pill.path-highlight { border-color: var(--accent); }
 .pill-root.path-highlight { background: var(--accent); }
 
@@ -1216,25 +1219,19 @@ body.commands-page { height: 100%; overflow: hidden; }
 .detail-badge.group { background: var(--orange-dim); color: var(--orange); }
 .detail-badge.cmd { background: var(--green-dim); color: var(--green); }
 
-/* ─── Stage badges (beta / alpha / deprecated) ─────────────────────── */
-/* Color driver — a single --stage-c custom property varies per status
+/* ─── Stage badges ─────────────────────────────────────────────────── */
+/* Color driver — a single --stage-c custom property varies per stage
    and is picked up by the pill and the banner below. */
 .stage-badge.stage-beta,
 .stage-banner.stage-banner-beta        { --stage-c: var(--purple); }
 
-.stage-badge.stage-alpha,
-.stage-banner.stage-banner-alpha       { --stage-c: var(--red); }
-
-.stage-badge.stage-deprecated,
-.stage-banner.stage-banner-deprecated  { --stage-c: var(--text-muted); }
-
-/* Small outline pill — used in the sidebar row and the detail header. */
+/* Small outline pill used in the detail header. */
 .stage-badge {
   display: inline-flex;
   align-items: center;
   height: 18px;
   padding: 0 6px;
-  margin-left: auto;
+  margin-left: 10px;
   font-family: 'SF Mono', 'Fira Code', monospace;
   font-size: 9px;
   font-weight: 600;
@@ -1248,20 +1245,11 @@ body.commands-page { height: 100%; overflow: hidden; }
   white-space: nowrap;
 }
 
-/* In the detail header (right pane) the pill sits next to the command
-   title, so no auto-push and slightly larger for readability. */
+/* Slightly larger in the detail header for readability. */
 .detail-header .stage-badge {
-  margin-left: 10px;
   height: 22px;
   font-size: 10px;
   padding: 0 8px;
-}
-
-/* On the currently-selected sidebar row (which flips to accent color)
-   the pill should inherit that color to stay legible. */
-.tree-row.selected .stage-badge {
-  border-color: currentColor;
-  color: inherit;
 }
 
 /* Stage banner in the detail view (above the description). */

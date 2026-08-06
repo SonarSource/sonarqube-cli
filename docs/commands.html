@@ -196,15 +196,10 @@ function buildPillNode(cmd, flat) {
   const isOnPath    = ancestors.has(cmd.id);
   pill.className = 'pill ' + pillClass
     + (isSelected ? ' selected' : '')
-    + (!isSelected && isOnPath ? ' path-highlight' : '');
+    + (!isSelected && isOnPath ? ' path-highlight' : '')
+    + (cmd.stage === 'beta' ? ' stage-beta' : '');
   pill.textContent = cmd.name;
   row.appendChild(pill);
-  if (cmd.stage) {
-    const badge = document.createElement('span');
-    badge.className = 'stage-badge stage-' + cmd.stage;
-    badge.textContent = cmd.stage;
-    row.appendChild(badge);
-  }
 
   if (!cmd.isRoot) {
     row.addEventListener('click', () => {
@@ -245,12 +240,6 @@ function renderTreeNode(cmd, flat) {
   label.className = 'tree-label ' + (cmd.isRoot ? 'root' : (cmd.isGroup || cmd.depth === 1) ? 'group' : 'leaf');
   label.textContent = cmd.name;
   row.appendChild(label);
-  if (cmd.stage) {
-    const badge = document.createElement('span');
-    badge.className = 'stage-badge stage-' + cmd.stage;
-    badge.textContent = cmd.stage;
-    row.appendChild(badge);
-  }
 
   row.addEventListener('click', () => { navigateToCommand(cmd.id); });
 
@@ -334,19 +323,14 @@ function buildColumnView(root) {
         const isOnPath   = !isSelected && pathIds.has(entry.id);
         pill.className = 'pill ' + pillClass
           + (isSelected ? ' selected' : '')
-          + (isOnPath   ? ' path-highlight' : '');
+          + (isOnPath   ? ' path-highlight' : '')
+          + (entry.stage === 'beta' ? ' stage-beta' : '');
         pill.textContent = entry.name;
         pill.dataset.id = entry.id;
 
 
         if (c > 0) rowEl.addEventListener('click', () => navigateToCommand(entry.id));
         rowEl.appendChild(pill);
-        if (entry.stage) {
-          const badge = document.createElement('span');
-          badge.className = 'stage-badge stage-' + entry.stage;
-          badge.textContent = entry.stage;
-          rowEl.appendChild(badge);
-        }
         cell.appendChild(rowEl);
         pillElements[entry.id] = pill;
       }
@@ -500,18 +484,14 @@ function renderDetail(cmd) {
   // Header
   parts.push(`<div class="detail-header">`);
   parts.push(`<span class="detail-title"><code>${escHtml(cmd.fullName)}</code></span>`);
-  if (cmd.stage) {
+  if (cmd.stage === 'beta') {
     parts.push(`<span class="stage-badge stage-${escHtml(cmd.stage)}">${escHtml(cmd.stage)}</span>`);
   }
   parts.push(`</div>`);
 
-  // Stage banner (beta / alpha / deprecated)
+  // Stage banner
   if (cmd.stage === 'beta') {
     parts.push(`<div class="stage-banner stage-banner-beta">This command is in beta. Its flags and behavior may change without notice.</div>`);
-  } else if (cmd.stage === 'alpha') {
-    parts.push(`<div class="stage-banner stage-banner-alpha">This command is in alpha. Expect breaking changes.</div>`);
-  } else if (cmd.stage === 'deprecated') {
-    parts.push(`<div class="stage-banner stage-banner-deprecated">This command is deprecated and will be removed in a future release.</div>`);
   }
 
   // Description
