@@ -58,16 +58,16 @@ export function channelStream(channel: OutputChannel): NodeJS.WriteStream {
   return channel === 'stderr' ? process.stderr : process.stdout;
 }
 
-export function info(message: string): void {
+export function info(message: string, channel: OutputChannel = 'stdout'): void {
   if (isMockActive()) {
     recordCall('info', message);
     return;
   }
-  if (_formattedOutputMode) {
+  if (channel === 'stdout' && _formattedOutputMode) {
     _collectedMessages.push(`  ℹ  ${message}`);
     return;
   }
-  write(process.stdout, `  ${cyan('ℹ')}  ${message}`);
+  write(channelStream(channel), `  ${cyan('ℹ')}  ${message}`);
 }
 
 export function success(message: string): void {

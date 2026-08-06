@@ -374,7 +374,7 @@ describe('SonarCommand', () => {
       await root.parseAsync(['experimental'], { from: 'user' });
 
       expect(handler).toHaveBeenCalledTimes(1);
-      const warning = getMockUiCalls().find((call) => call.method === 'warn');
+      const warning = getMockUiCalls().find((call) => call.method === 'info');
       expect(warning?.args[0]).toBe(
         "'experimental' is in alpha; may change or be removed without notice.",
       );
@@ -498,7 +498,7 @@ describe('SonarCommand', () => {
       await command.parseAsync([], { from: 'user' });
       await command.parseAsync([], { from: 'user' });
 
-      const warnings = getMockUiCalls().filter((call) => call.method === 'print');
+      const warnings = getMockUiCalls().filter((call) => call.method === 'info');
       expect(warnings).toHaveLength(1);
       expect(warnings[0]?.args[0]).toBe("'preview' is in beta and may change.");
       expect(state.config.betaCommandWarnings).toEqual({ preview: VERSION });
@@ -517,7 +517,7 @@ describe('SonarCommand', () => {
 
       expect(
         getMockUiCalls()
-          .filter((call) => call.method === 'print')
+          .filter((call) => call.method === 'info')
           .map((call) => call.args[0]),
       ).toEqual(["'first' is in beta and may change.", "'second' is in beta and may change."]);
     });
@@ -531,7 +531,7 @@ describe('SonarCommand', () => {
 
       await command.parseAsync([], { from: 'user' });
 
-      expect(getMockUiCalls().filter((call) => call.method === 'print')).toHaveLength(1);
+      expect(getMockUiCalls().filter((call) => call.method === 'info')).toHaveLength(1);
       expect(state.config.betaCommandWarnings).toEqual({ preview: VERSION });
     });
   });

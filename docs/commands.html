@@ -125,14 +125,6 @@ const collapsed = new Set(); // IDs of collapsed groups
 let activeId = null;
 let viewMode = 'columns'; // 'tree' (pills) | 'columns' | 'list'
 
-function betaInfoMarkup(cmd) {
-  if (!cmd.isBeta) return '';
-
-  const message = `'${cmd.name}' is in beta and may change.`;
-  const escapedMessage = escAttr(message);
-  return `<span class="beta-info" role="img" aria-label="${escapedMessage}" title="${escapedMessage}" data-tooltip="${escapedMessage}" tabindex="0">β</span>`;
-}
-
 // ── Ancestor helpers ─────────────────────────────────────────
 function getAncestorIds(id) {
   const ancestors = new Set();
@@ -161,7 +153,8 @@ function renderTree(filter) {
     const q = filter.toLowerCase();
     const matches = data.commands.filter(c =>
       c.fullName.toLowerCase().includes(q) ||
-      c.description.toLowerCase().includes(q)
+      c.description.toLowerCase().includes(q) ||
+      (c.stage || '').toLowerCase().includes(q)
     );
     for (const cmd of matches) {
       treeEl.appendChild(viewMode === 'list'
@@ -205,8 +198,13 @@ function buildPillNode(cmd, flat) {
     + (isSelected ? ' selected' : '')
     + (!isSelected && isOnPath ? ' path-highlight' : '');
   pill.textContent = cmd.name;
-  pill.insertAdjacentHTML('beforeend', betaInfoMarkup(cmd));
   row.appendChild(pill);
+  if (cmd.stage) {
+    const badge = document.createElement('span');
+    badge.className = 'stage-badge stage-' + cmd.stage;
+    badge.textContent = cmd.stage;
+    row.appendChild(badge);
+  }
 
   if (!cmd.isRoot) {
     row.addEventListener('click', () => {
@@ -246,8 +244,13 @@ function renderTreeNode(cmd, flat) {
   const label = document.createElement('span');
   label.className = 'tree-label ' + (cmd.isRoot ? 'root' : (cmd.isGroup || cmd.depth === 1) ? 'group' : 'leaf');
   label.textContent = cmd.name;
-  label.insertAdjacentHTML('beforeend', betaInfoMarkup(cmd));
   row.appendChild(label);
+  if (cmd.stage) {
+    const badge = document.createElement('span');
+    badge.className = 'stage-badge stage-' + cmd.stage;
+    badge.textContent = cmd.stage;
+    row.appendChild(badge);
+  }
 
   row.addEventListener('click', () => { navigateToCommand(cmd.id); });
 
@@ -333,12 +336,17 @@ function buildColumnView(root) {
           + (isSelected ? ' selected' : '')
           + (isOnPath   ? ' path-highlight' : '');
         pill.textContent = entry.name;
-        pill.insertAdjacentHTML('beforeend', betaInfoMarkup(entry));
         pill.dataset.id = entry.id;
 
 
         if (c > 0) rowEl.addEventListener('click', () => navigateToCommand(entry.id));
         rowEl.appendChild(pill);
+        if (entry.stage) {
+          const badge = document.createElement('span');
+          badge.className = 'stage-badge stage-' + entry.stage;
+          badge.textContent = entry.stage;
+          rowEl.appendChild(badge);
+        }
         cell.appendChild(rowEl);
         pillElements[entry.id] = pill;
       }
@@ -491,8 +499,20 @@ function renderDetail(cmd) {
 
   // Header
   parts.push(`<div class="detail-header">`);
-  parts.push(`<span class="detail-title"><code>${escHtml(cmd.fullName)}</code>${betaInfoMarkup(cmd)}</span>`);
+  parts.push(`<span class="detail-title"><code>${escHtml(cmd.fullName)}</code></span>`);
+  if (cmd.stage) {
+    parts.push(`<span class="stage-badge stage-${escHtml(cmd.stage)}">${escHtml(cmd.stage)}</span>`);
+  }
   parts.push(`</div>`);
+
+  // Stage banner (beta / alpha / deprecated)
+  if (cmd.stage === 'beta') {
+    parts.push(`<div class="stage-banner stage-banner-beta">This command is in beta. Its flags and behavior may change without notice.</div>`);
+  } else if (cmd.stage === 'alpha') {
+    parts.push(`<div class="stage-banner stage-banner-alpha">This command is in alpha. Expect breaking changes.</div>`);
+  } else if (cmd.stage === 'deprecated') {
+    parts.push(`<div class="stage-banner stage-banner-deprecated">This command is deprecated and will be removed in a future release.</div>`);
+  }
 
   // Description
   parts.push(`<p class="detail-desc">${escHtml(cmd.description)}</p>`);
@@ -564,7 +584,7 @@ function renderDetail(cmd) {
       const child = byId[childId];
       if (!child) continue;
       parts.push(`<div class="subcmd-item" data-target="${escAttr(child.id)}">`);
-      parts.push(`<span class="subcmd-name">${escHtml(child.fullName)}${betaInfoMarkup(child)}</span>`);
+      parts.push(`<span class="subcmd-name">${escHtml(child.fullName)}</span>`);
       parts.push(`<span class="subcmd-desc">${escHtml(child.description)}</span>`);
       parts.push(`<span class="subcmd-arrow">→</span>`);
       parts.push(`</div>`);

@@ -28,7 +28,7 @@ import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { CliError, CommandFailedError, remediationHintFor } from '@/core/command-error.ts';
 import logger from '@/core/observability/logger.ts';
 import { loadState, saveState } from '@/core/state/state-manager.ts';
-import { blank, error, print, warn } from '@/core/ui';
+import { blank, error, info, print } from '@/core/ui';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
 import { UpdateNotifier } from '@/core/update/notification.ts';
 
@@ -124,7 +124,7 @@ export class SonarCommand extends Command {
     this._updateNotifier = updateNotifier;
     this.hook('preAction', () => {
       if (this.isAlpha) {
-        warn(`'${this.name()}' is in alpha; may change or be removed without notice.`);
+        info(`'${this.name()}' is in alpha; may change or be removed without notice.`, 'stderr');
       }
     });
   }
@@ -382,7 +382,7 @@ export class SonarCommand extends Command {
     try {
       state = loadState();
     } catch {
-      print(`'${commandPath}' is in beta and may change.`, 'stderr');
+      info(`'${commandPath}' is in beta and may change.`, 'stderr');
       return;
     }
 
@@ -390,7 +390,7 @@ export class SonarCommand extends Command {
       return;
     }
 
-    print(`'${commandPath}' is in beta and may change.`, 'stderr');
+    info(`'${commandPath}' is in beta and may change.`, 'stderr');
     state.config.betaCommandWarnings = {
       ...state.config.betaCommandWarnings,
       [commandPath]: VERSION,
