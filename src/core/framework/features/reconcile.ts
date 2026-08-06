@@ -255,6 +255,7 @@ function getFeature(
   featuresById: Map<string, FeatureDeclaration>,
   featureId: string,
   subfeatureIds: string[] | undefined,
+  attrs: InstalledIntegrationFeature['attrs'],
 ): FeatureDeclaration | undefined {
   const feature = featuresById.get(featureId);
   if (!feature) {
@@ -263,7 +264,13 @@ function getFeature(
 
   let applicationFeature = feature;
   if (isFeatureContainer(feature)) {
-    const activeIds = new Set(subfeatureIds ?? feature.defaultInstallSubfeatureIds);
+    const defaultIds =
+      subfeatureIds ??
+      feature.defaultInstallSubfeatureIds.filter((id) => {
+        const subfeature = feature.subfeatures.find((s) => s.id === id);
+        return subfeature?.migrationEligible?.(attrs) ?? true;
+      });
+    const activeIds = new Set(defaultIds);
     const filteredContainer = {
       ...feature,
       subfeatures: feature.subfeatures.filter((s) => activeIds.has(s.id)),
@@ -281,7 +288,7 @@ function createFeatureApplication(
   scope: InstalledIntegrationFeature['scope'],
   attrs: InstalledIntegrationFeature['attrs'],
 ): FeatureApplication | undefined {
-  const feature = getFeature(featuresById, featureId, subfeatureIds);
+  const feature = getFeature(featuresById, featureId, subfeatureIds, attrs);
   if (!feature) {
     return undefined;
   }

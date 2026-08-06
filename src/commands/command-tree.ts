@@ -66,6 +66,7 @@ import { derivePassthroughSubcommand, runContextPassthrough } from './context';
 import { agentPostToolUse, type AgentPostToolUseOptions } from './hook/agent-post-tool-use.ts';
 import { agentPromptSubmit } from './hook/agent-prompt-submit.ts';
 import { antigravityPreToolUse } from './hook/antigravity-pre-tool-use.ts';
+import { claudePostToolUseFailure } from './hook/claude-post-tool-use-failure.ts';
 import { claudePreToolUse } from './hook/claude-pre-tool-use.ts';
 import { codexPostToolUse, type CodexPostToolUseOptions } from './hook/codex-post-tool-use.ts';
 import { codexPromptSubmit } from './hook/codex-prompt-submit.ts';
@@ -366,7 +367,7 @@ integrateCommand
 integrateCommand
   .command('antigravity')
   .description(
-    'Setup SonarQube integration for Antigravity. Installs secrets scanning hooks, prompt-secrets instructions, and Vortex context augmentation.',
+    'Setup SonarQube integration for Antigravity. Installs secrets scanning hooks, prompt-secrets instructions, and Vortex Context.',
   )
   .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
@@ -681,6 +682,13 @@ hookCommand
   .description('PostToolUse handler: run Vortex analysis after agent edits or writes a file')
   .requiredOption('--project <key>', 'SonarQube Cloud project key')
   .anonymousAction((options: AgentPostToolUseOptions) => agentPostToolUse(options));
+
+hookCommand
+  .command('claude-post-tool-use-failure')
+  .description(
+    'PostToolUseFailure handler: forward the failed tool call to Vortex context augmentation',
+  )
+  .anonymousAction(() => claudePostToolUseFailure());
 
 hookCommand
   .command('codex-post-tool-use')

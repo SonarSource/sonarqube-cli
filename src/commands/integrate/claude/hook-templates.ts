@@ -43,6 +43,14 @@ export function getSecretPromptTemplateWindows(): string {
   return windowsTemplate('sonar hook claude-prompt-submit');
 }
 
+export function getPostToolUseFailureTemplateUnix(): string {
+  return unixTemplate('sonar hook claude-post-tool-use-failure');
+}
+
+export function getPostToolUseFailureTemplateWindows(): string {
+  return windowsTemplate('sonar hook claude-post-tool-use-failure');
+}
+
 export function getSqaaPostToolTemplateUnix(projectKey: string): string {
   return unixTemplate(formatSqaaPostToolHookCommandUnix('claude-post-tool-use', projectKey));
 }

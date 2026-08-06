@@ -33,6 +33,7 @@ import {
 } from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 
 import { agentPostToolUse } from '../../../../src/commands/hook/agent-post-tool-use.ts';
+import { contextAugmentationPostToolUseSubscriber } from '../../../../src/commands/hook/context-augmentation-hook-subscriber.ts';
 import * as hookOutput from '../../../../src/commands/hook/format-sqaa-hook-context.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
 
@@ -48,6 +49,7 @@ describe('agentPostToolUse', () => {
   let createAnalysisSpy: ReturnType<typeof spyOn>;
   let emitSqaaAnalysisTelemetrySpy: ReturnType<typeof spyOn>;
   let spawnProcessSpy: ReturnType<typeof spyOn>;
+  let cagMatchesSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     // Deterministic git branch auto-detection (hook resolves branch from the edited file).
@@ -69,10 +71,13 @@ describe('agentPostToolUse', () => {
       connectionType: 'cloud',
       orgKey: 'myorg',
     });
-    readStdinJsonSpy = spyOn(stdinModule, 'readStdinJson').mockResolvedValue({
-      tool_name: 'Edit',
-      tool_input: { file_path: TEST_FILE },
+    readStdinJsonSpy = spyOn(stdinModule, 'readStdinJsonWithRaw').mockResolvedValue({
+      raw: '{}',
+      parsed: { tool_name: 'Edit', tool_input: { file_path: TEST_FILE } },
     });
+    cagMatchesSpy = spyOn(contextAugmentationPostToolUseSubscriber, 'matches').mockReturnValue(
+      false,
+    );
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
     readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue('const x = 1;');
     createAnalysisSpy = spyOn(
@@ -94,6 +99,7 @@ describe('agentPostToolUse', () => {
     createAnalysisSpy.mockRestore();
     emitSqaaAnalysisTelemetrySpy.mockRestore();
     spawnProcessSpy.mockRestore();
+    cagMatchesSpy.mockRestore();
   });
 
   it('emits SQAA analysis telemetry after a successful PostToolUse analysis', async () => {
@@ -143,8 +149,8 @@ describe('agentPostToolUse', () => {
 
   it('triggers analysis when tool_name is Write', async () => {
     readStdinJsonSpy.mockResolvedValue({
-      tool_name: 'Write',
-      tool_input: { file_path: TEST_FILE },
+      raw: '{}',
+      parsed: { tool_name: 'Write', tool_input: { file_path: TEST_FILE } },
     });
 
     await agentPostToolUse({ project: 'my-project' });
@@ -205,7 +211,10 @@ describe('agentPostToolUse', () => {
   });
 
   it('returns without output when tool_name is not Edit or Write', async () => {
-    readStdinJsonSpy.mockResolvedValue({ tool_name: 'Read', tool_input: { file_path: TEST_FILE } });
+    readStdinJsonSpy.mockResolvedValue({
+      raw: '{}',
+      parsed: { tool_name: 'Read', tool_input: { file_path: TEST_FILE } },
+    });
 
     await agentPostToolUse({ project: 'my-project' });
 
@@ -351,7 +360,10 @@ describe('agentPostToolUse', () => {
   });
 
   it('returns without output when file_path is missing from payload', async () => {
-    readStdinJsonSpy.mockResolvedValue({ tool_name: 'Edit', tool_input: {} });
+    readStdinJsonSpy.mockResolvedValue({
+      raw: '{}',
+      parsed: { tool_name: 'Edit', tool_input: {} },
+    });
 
     await agentPostToolUse({ project: 'my-project' });
 
@@ -423,8 +435,8 @@ describe('agentPostToolUse', () => {
     const attackerTarget = join(process.cwd(), 'src/other.ts');
 
     readStdinJsonSpy.mockResolvedValue({
-      tool_name: 'Edit',
-      tool_input: { file_path: symlinkPath },
+      raw: '{}',
+      parsed: { tool_name: 'Edit', tool_input: { file_path: symlinkPath } },
     });
     existsSyncSpy.mockReturnValue(true);
 

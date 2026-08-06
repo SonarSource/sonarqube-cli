@@ -793,7 +793,7 @@ describe('system status', () => {
       expect(result.exitCode).toBe(0);
       const json = JSON.parse(result.stdout) as { binaries: Array<{ name: string }> };
       const names = json.binaries.map((b) => b.name);
-      expect(names).toContain('Vortex Context Augmentation');
+      expect(names).toContain('Vortex Context');
       expect(names).toContain('Dependency Risks Scanner');
     },
     { timeout: 15000 },

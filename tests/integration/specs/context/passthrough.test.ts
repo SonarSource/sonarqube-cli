@@ -434,7 +434,7 @@ describe('sonar context passthrough', () => {
       const result = await harness.run('context status');
 
       expect(result.exitCode).not.toBe(0);
-      expect(result.stderr).toContain('recorded Vortex context augmentation connection');
+      expect(result.stderr).toContain('recorded Vortex Context connection');
       expect(readInvocations(harness).some((i) => i.argv[0] === 'status')).toBe(false);
     },
     { timeout: 30000 },
@@ -456,7 +456,7 @@ describe('sonar context passthrough', () => {
 
       expect(result.exitCode).not.toBe(0);
       expect(result.stderr).toContain(
-        `Not authenticated for the recorded Vortex context augmentation connection: ${recordedServerUrl} (${ORG_KEY}).`,
+        `Not authenticated for the recorded Vortex Context connection: ${recordedServerUrl} (${ORG_KEY}).`,
       );
       expect(result.stderr).toContain('sonar auth login');
       expect(readInvocations(harness).some((i) => i.argv[0] === 'status')).toBe(false);

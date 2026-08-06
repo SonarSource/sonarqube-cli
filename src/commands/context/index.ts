@@ -152,7 +152,7 @@ async function resolveContextToken(
 
   const connection = organization ? `${serverUrl} (${organization})` : serverUrl;
   throw new CommandFailedError(
-    `Not authenticated for the recorded Vortex context augmentation connection: ${connection}.`,
+    `Not authenticated for the recorded Vortex Context connection: ${connection}.`,
     {
       remediationHint:
         'Run: sonar auth login, then re-run sonar integrate claude or sonar integrate copilot from this project.',
@@ -160,9 +160,14 @@ async function resolveContextToken(
   );
 }
 
+export interface RunContextPassthroughOptions {
+  stdinPayload?: string;
+}
+
 export async function runContextPassthrough(
   action: string | undefined,
   args: string[],
+  options: RunContextPassthroughOptions = {},
 ): Promise<void> {
   const binaryPath = resolveContextAugmentationBinaryPath() ?? 'sonar-context-augmentation';
   const { forwarded, isHelp } = buildForwardedArgs(action, args);
@@ -189,9 +194,11 @@ export async function runContextPassthrough(
     });
   }
 
+  const { stdinPayload } = options;
+
   await new Promise<void>((resolve, reject) => {
     const child = spawn(binaryPath, forwarded, {
-      stdio: 'inherit',
+      stdio: stdinPayload === undefined ? 'inherit' : ['pipe', 'inherit', 'inherit'],
       env,
       argv0: SONAR_CONTEXT_INVOCATION,
     });
@@ -199,7 +206,7 @@ export async function runContextPassthrough(
     child.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'ENOENT') {
         reject(
-          new CommandFailedError('Vortex context augmentation is not installed.', {
+          new CommandFailedError('Vortex Context is not installed.', {
             remediationHint:
               'Run "sonar integrate claude" or "sonar integrate copilot" to install it.',
           }),
@@ -212,5 +219,9 @@ export async function runContextPassthrough(
       process.exitCode = code ?? 1;
       resolve();
     });
+
+    if (stdinPayload !== undefined) {
+      child.stdin?.end(stdinPayload);
+    }
   });
 }
