@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 import type { Option } from 'commander';
 
 import { COMMAND_TREE } from '@/commands/command-tree.ts';
-import type { SonarCommand } from '@/commands/sonar-command.ts';
+import { BETA_HELP_TAG, type SonarCommand } from '@/commands/sonar-command.ts';
 
 import { version } from '../../package.json';
 import { EXAMPLES } from './examples';
@@ -89,6 +89,14 @@ interface ClidocCommand {
 const allCommands: ClidocCommand[] = [];
 const help = COMMAND_TREE.createHelp();
 
+function descriptionWithoutBetaTag(cmd: SonarCommand): string {
+  const description = cmd.description() ?? '';
+  const suffix = ` ${BETA_HELP_TAG}`;
+  return cmd.isBeta && description.endsWith(suffix)
+    ? description.slice(0, -suffix.length)
+    : description;
+}
+
 function serializeCommand(
   cmd: SonarCommand,
   prefix: string,
@@ -104,7 +112,7 @@ function serializeCommand(
     id,
     name: cmd.name(),
     fullName,
-    description: cmd.description() ?? '',
+    description: descriptionWithoutBetaTag(cmd),
     isGroup: visibleChildren.length > 0,
     isRoot: depth === 0,
     stage: cmd.isBeta ? 'beta' : 'stable',
@@ -187,7 +195,10 @@ function buildLlmsTxt(): string {
 
     const authMarker = cmd.requiresAuth ? ' *' : '';
     commandLines.push(`### ${cmd.fullName}${authMarker}`);
-    if (cmd.description) commandLines.push(cmd.description);
+    if (cmd.description) {
+      const betaTag = cmd.stage === 'beta' ? ` ${BETA_HELP_TAG}` : '';
+      commandLines.push(`${cmd.description}${betaTag}`);
+    }
 
     if (!cmd.isGroup) {
       // Usage line

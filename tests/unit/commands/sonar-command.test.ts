@@ -534,6 +534,24 @@ describe('SonarCommand', () => {
       expect(getMockUiCalls().filter((call) => call.method === 'info')).toHaveLength(1);
       expect(state.config.betaCommandWarnings).toEqual({ preview: VERSION });
     });
+
+    it('warns once per process when state cannot be loaded', async () => {
+      loadStateSpy = spyOn(stateManager, 'loadState').mockImplementation(() => {
+        throw new Error('State is unreadable');
+      });
+      const command = new SonarCommand('preview-with-unreadable-state')
+        .stage(Stage.Beta)
+        .anonymousAction(() => {});
+
+      await command.parseAsync([], { from: 'user' });
+      await command.parseAsync([], { from: 'user' });
+
+      const warnings = getMockUiCalls().filter((call) => call.method === 'info');
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]?.args[0]).toBe(
+        "'preview-with-unreadable-state' is in beta and may change.",
+      );
+    });
   });
 
   // ─── createCommand() ──────────────────────────────────────────────────────

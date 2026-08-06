@@ -44,6 +44,7 @@ export const Stage = {
 } as const;
 export type Stage = (typeof Stage)[keyof typeof Stage];
 const ALPHA_HELP_GROUP = '__SONARQUBE_CLI_ALPHA_COMMANDS__';
+const betaWarningsShownWithoutState = new Set<string>();
 
 export const COMMAND_CATEGORIES = ['core', 'data', 'integrate', 'cli-management'] as const;
 export type CommandCategory = (typeof COMMAND_CATEGORIES)[number];
@@ -382,6 +383,10 @@ export class SonarCommand extends Command {
     try {
       state = loadState();
     } catch {
+      if (betaWarningsShownWithoutState.has(commandPath)) {
+        return;
+      }
+      betaWarningsShownWithoutState.add(commandPath);
       info(`'${commandPath}' is in beta and may change.`, 'stderr');
       return;
     }

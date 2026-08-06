@@ -737,7 +737,7 @@
       "id": "sonar-context",
       "name": "context",
       "fullName": "sonar context",
-      "description": "Augment AI agents with context from your codebase [BETA]",
+      "description": "Augment AI agents with context from your codebase",
       "isGroup": false,
       "isRoot": false,
       "stage": "beta",

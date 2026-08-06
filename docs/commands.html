@@ -154,7 +154,7 @@ function renderTree(filter) {
     const matches = data.commands.filter(c =>
       c.fullName.toLowerCase().includes(q) ||
       c.description.toLowerCase().includes(q) ||
-      (c.stage || '').toLowerCase().includes(q)
+      (c.stage && c.stage !== 'stable' && c.stage.toLowerCase().includes(q))
     );
     for (const cmd of matches) {
       treeEl.appendChild(viewMode === 'list'
