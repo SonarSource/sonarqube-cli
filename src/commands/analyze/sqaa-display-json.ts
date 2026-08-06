@@ -21,11 +21,11 @@
 // JSON report builders for SQAA results.
 
 import type { SqaaAnalysisDepth, SqaaIssue } from '@/core/server/client.ts';
-import { print } from '@/core/ui';
 
 import type { FileFailure, FileSuccess, RunTally } from './sqaa-analysis.ts';
 import { toRelativePosixPath } from './sqaa-api.ts';
 import type { IgnoredFile } from './sqaa-changeset.ts';
+import { type GlobalSqaaErrorKind, globalSqaaErrorKind } from './sqaa-errors.ts';
 
 export interface SqaaJsonReport {
   files: Array<{
@@ -39,6 +39,7 @@ export interface SqaaJsonReport {
   skipped: string[];
   summary: { totalIssues: number; totalFailures: number; totalSkipped: number };
   analysisDepth: SqaaAnalysisDepth;
+  globalError?: { kind: GlobalSqaaErrorKind; message: string };
 }
 
 export function makeReport(
@@ -96,7 +97,7 @@ export function buildJsonReport(
   const processedPaths = new Set<string>(tally.allResults.map((r) => r.filePath));
   const skipped = allPaths.filter((p) => !processedPaths.has(p));
 
-  return {
+  const report: SqaaJsonReport = {
     files,
     ignored: ignored.map((f) => ({
       path: toRelativePosixPath(f.path, pathBase),
@@ -111,16 +112,11 @@ export function buildJsonReport(
     },
     analysisDepth,
   };
-}
-
-export function printJsonReport(
-  tally: RunTally,
-  ignored: IgnoredFile[],
-  allPaths: string[],
-  pathBase?: string,
-  analysisDepth: SqaaAnalysisDepth = 'STANDARD',
-): void {
-  print(
-    JSON.stringify(buildJsonReport(tally, ignored, allPaths, pathBase, analysisDepth), null, 2),
-  );
+  if (tally.globalError) {
+    report.globalError = {
+      kind: globalSqaaErrorKind(tally.globalError),
+      message: tally.globalError.message,
+    };
+  }
+  return report;
 }

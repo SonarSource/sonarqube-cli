@@ -23,7 +23,12 @@ import type { Help, Option } from 'commander';
 import { softBlue, underline } from '@/core/ui/colors.ts';
 
 import { version as VERSION } from '../../package.json';
-import { COMMAND_CATEGORIES, type CommandCategory, type SonarCommand } from './sonar-command.ts';
+import {
+  ALPHA_HELP_TAG,
+  COMMAND_CATEGORIES,
+  type CommandCategory,
+  type SonarCommand,
+} from './sonar-command.ts';
 
 const BANNER_ART = [
   '  █▀ █▀█ █▄ █ ▄▀█ █▀█ █▀█ █ █ █▄▄ █▀▀   ▄█▀ █   █',
@@ -90,7 +95,10 @@ function getRootCommandLabel(command: SonarCommand, helper: Help): string {
     return command.name();
   }
 
-  return `${command.name()} <${visibleChildren.map((child) => child.name()).join('|')}>`;
+  const childLabels = visibleChildren.map(
+    (child) => `${child.name()}${child.isAlpha ? ALPHA_HELP_TAG : ''}`,
+  );
+  return `${command.name()} <${childLabels.join('|')}>`;
 }
 
 function getRootCommandCategory(command: SonarCommand): CommandCategory {
@@ -112,26 +120,34 @@ function getRootCommandEntries(rootCommand: SonarCommand, helper: Help): HelpMen
   const groupedEntries = new Map<CommandCategory, HelpMenuEntry[]>(
     COMMAND_CATEGORIES.map((category) => [category, []]),
   );
+  const alphaEntries: HelpMenuEntry[] = [];
 
   for (const command of getVisibleChildCommands(rootCommand, helper)) {
+    const commandEntries = [
+      {
+        label: getRootCommandLabel(command, helper),
+        summary: command.description(),
+      },
+      ...getRootCommandSubcommandEntries(command, helper),
+    ];
+    if (command.isAlpha) {
+      alphaEntries.push(...commandEntries);
+      continue;
+    }
+
     const category = getRootCommandCategory(command);
     const entries = groupedEntries.get(category);
     if (!entries) {
       continue;
     }
 
-    entries.push(
-      {
-        label: getRootCommandLabel(command, helper),
-        summary: command.description(),
-      },
-      ...getRootCommandSubcommandEntries(command, helper),
-    );
+    entries.push(...commandEntries);
   }
 
-  return COMMAND_CATEGORIES.map((category) => groupedEntries.get(category) ?? []).filter(
-    (entries) => entries.length > 0,
-  );
+  return [
+    ...COMMAND_CATEGORIES.map((category) => groupedEntries.get(category) ?? []),
+    alphaEntries,
+  ].filter((entries) => entries.length > 0);
 }
 
 function compareRootOptions(optionA: Option, optionB: Option): number {

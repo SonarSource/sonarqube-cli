@@ -91,6 +91,7 @@ describe('formatSqaaRunSummaryPlain', () => {
         totalFailures: 0,
         totalErrors: 0,
         analysisDepth: 'STANDARD',
+        hasGlobalError: false,
       }),
     ).toBe('✓ No issues found · 7 files analyzed · STANDARD analysis');
   });
@@ -105,6 +106,7 @@ describe('formatSqaaRunSummaryPlain', () => {
         totalFailures: 0,
         totalErrors: 0,
         analysisDepth: 'DEEP',
+        hasGlobalError: false,
       }),
     ).toBe('14 files analyzed · 7 with issues · 56 issues found · DEEP analysis');
   });
@@ -301,6 +303,7 @@ describe('computeRunSummaryStats', () => {
         totalFailures: 0,
         totalErrors: 2,
         analysisDepth: 'STANDARD',
+        hasGlobalError: false,
       }),
     ).toBe('3 files analyzed · 1 with errors · 2 errors · STANDARD analysis');
   });
@@ -315,6 +318,7 @@ describe('computeRunSummaryStats', () => {
         totalFailures: 1,
         totalErrors: 0,
         analysisDepth: 'DEEP',
+        hasGlobalError: false,
       }),
     ).toBe('5 files analyzed · 1 failure · 2 with issues · 2 issues found · DEEP analysis');
   });
@@ -329,6 +333,7 @@ describe('computeRunSummaryStats', () => {
         totalFailures: 2,
         totalErrors: 0,
         analysisDepth: 'STANDARD',
+        hasGlobalError: false,
       }),
     ).toBe('2 files analyzed · 2 failures · STANDARD analysis');
   });

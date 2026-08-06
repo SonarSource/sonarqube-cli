@@ -22,7 +22,6 @@
 
 import { getSqaaRetry503BaseDelayMs } from '@/core/config-constants.ts';
 import type { SqaaAnalysisDepth, SqaaIssue } from '@/core/server/client.ts';
-import { SqaaForbiddenError } from '@/core/server/errors.ts';
 import type { SqaaProgress } from '@/core/ui/components/sqaa-progress.ts';
 
 import {
@@ -35,7 +34,7 @@ import {
 import type { CloudAuth } from './sqaa-auth.ts';
 import { type SqaaChunk, type SqaaChunkFile } from './sqaa-chunking.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
-import { isPayloadTooLargeCommandError } from './sqaa-errors.ts';
+import { isGlobalSqaaError, isPayloadTooLargeCommandError } from './sqaa-errors.ts';
 
 export type FileSuccess = {
   file: string;
@@ -57,7 +56,6 @@ export interface RunContext {
   progress: SqaaProgress;
   analysisDepth?: SqaaDeepWireDepth;
   displayAnalysisDepth: SqaaAnalysisDepth;
-  propagateForbiddenError?: boolean;
 }
 
 export interface RunTally {
@@ -67,6 +65,11 @@ export interface RunTally {
   totalErrors: number;
   /** Files that could not be analyzed (HTTP 4xx/5xx, fetch errors, etc.). */
   totalFailures: number;
+  /**
+   * Set when the server refused the run outright, so callers can report a single
+   * run-level cause instead of per-file failures they cannot act on.
+   */
+  globalError?: Error;
 }
 
 /**
@@ -258,10 +261,11 @@ async function processChunk(
     ctx.progress.updateChunk(chunkIndex, 'done');
     return shouldContinueAfterChunk(parts, groupErrors);
   } catch (err) {
-    if (err instanceof SqaaForbiddenError && ctx.propagateForbiddenError) {
-      throw err;
+    if (isGlobalSqaaError(err)) {
+      recordGlobalFailure(ctx.progress, tally, chunkIndex, err as Error);
+    } else {
+      recordChunkFailure(ctx.progress, tally, chunkIndex, fileIndices, chunkPaths, err as Error);
     }
-    recordChunkFailure(ctx.progress, tally, chunkIndex, fileIndices, chunkPaths, err as Error);
     return false;
   }
 }
@@ -307,6 +311,16 @@ function recordFileFailure(
   };
   tally.allResults.push(failure);
   tallyResults([failure], tally);
+}
+
+function recordGlobalFailure(
+  progress: SqaaProgress,
+  tally: RunTally,
+  chunkIndex: number,
+  error: Error,
+): void {
+  progress.updateChunk(chunkIndex, 'failed');
+  tally.globalError = error;
 }
 
 function recordChunkFailure(

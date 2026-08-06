@@ -869,7 +869,7 @@ export class SonarQubeClient {
   }
 
   /**
-   * Create a SonarQube Agentic Analysis (single- or multi-file).
+   * Create a Vortex analysis (single- or multi-file).
    * SonarQube Cloud only — endpoint lives on the region-specific API host.
    */
   async createAnalysis(request: SqaaAnalysisRequest): Promise<SqaaAnalysisResponse> {

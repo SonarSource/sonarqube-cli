@@ -103,15 +103,23 @@ export class FakeSonarQubeServer {
   private readonly server: ReturnType<typeof Bun.serve>;
   private readonly requests: RecordedRequest[];
   private readonly provisionConcurrency: { current: number; peak: number };
+  private readonly treatAsCloud: boolean;
 
   constructor(
     server: ReturnType<typeof Bun.serve>,
     requests: RecordedRequest[],
     provisionConcurrency: { current: number; peak: number },
+    treatAsCloud = false,
   ) {
     this.server = server;
     this.requests = requests;
     this.provisionConcurrency = provisionConcurrency;
+    this.treatAsCloud = treatAsCloud;
+  }
+
+  /** True when the builder opted in via `asSonarCloud()`. */
+  impersonatesSonarCloud(): boolean {
+    return this.treatAsCloud;
   }
 
   /** Peak number of concurrent `provision_projects` requests observed in flight. */
@@ -140,6 +148,7 @@ export class FakeSonarQubeServer {
 export class FakeSonarQubeServerBuilder {
   private readonly projectBuilders: Map<string, ProjectBuilder> = new Map();
   private readonly systemStatus: 'UP' | 'DOWN' = 'UP';
+  private treatAsCloud = false;
   private readonly sqaaEntitlementOrgs: Map<
     string,
     { uuid: string; allowed: boolean; hasEntitlement: boolean }
@@ -350,6 +359,18 @@ export class FakeSonarQubeServerBuilder {
   ): this {
     this.withSqaaEntitlement(orgKey, uuid, options);
     this.withCagEntitlement(orgKey, uuid, options);
+    return this;
+  }
+
+  /**
+   * Make the CLI classify this fake server as SonarQube Cloud, not just route
+   * cloud requests to it. Required by anything gated on `isSonarQubeCloud()`
+   * (Vortex entitlement, `getServerMode`, `getProjectKeyByGitRemote`): without
+   * it those branches silently resolve to the SonarQube Server path, which can
+   * produce the expected result for the wrong reason.
+   */
+  asSonarCloud(): this {
+    this.treatAsCloud = true;
     return this;
   }
 
@@ -1096,6 +1117,8 @@ export class FakeSonarQubeServerBuilder {
       },
     });
 
-    return Promise.resolve(new FakeSonarQubeServer(server, requests, provisionConcurrency));
+    return Promise.resolve(
+      new FakeSonarQubeServer(server, requests, provisionConcurrency, this.treatAsCloud),
+    );
   }
 }

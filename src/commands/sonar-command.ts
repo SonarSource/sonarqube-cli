@@ -20,19 +20,28 @@
 
 // SonarCommand — Commander Command subclass with built-in error handling and auth support
 
-import type { CommandOptions } from 'commander';
-import { Command } from 'commander';
+import type { CommandOptions, Option } from 'commander';
+import { Command, Help } from 'commander';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { CliError, CommandFailedError, remediationHintFor } from '@/core/command-error.ts';
 import logger from '@/core/observability/logger.ts';
-import { blank, error, print } from '@/core/ui';
+import { blank, error, print, warn } from '@/core/ui';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
 import { UpdateNotifier } from '@/core/update/notification.ts';
 
+export const ALPHA_ENV_VAR = 'SONARQUBE_CLI_ALPHA';
+export const ALPHA_HELP_TAG = '[ALPHA]';
+const ALPHA_HELP_GROUP = '__SONARQUBE_CLI_ALPHA_COMMANDS__';
+
 export const COMMAND_CATEGORIES = ['core', 'data', 'integrate', 'cli-management'] as const;
 export type CommandCategory = (typeof COMMAND_CATEGORIES)[number];
+
+function isAlphaEnabled(): boolean {
+  const value = process.env[ALPHA_ENV_VAR];
+  return value === 'true' || value === '1';
+}
 
 export interface RootHelpMetadata {
   category?: CommandCategory;
@@ -42,6 +51,37 @@ export interface RootHelpMetadata {
 
 type CommandArgs = unknown[];
 type CommandResult = void | Promise<void>;
+
+class SonarHelp extends Help {
+  override visibleCommands(command: Command): Command[] {
+    const visibleCommands = super.visibleCommands(command) as SonarCommand[];
+    return [
+      ...visibleCommands.filter((child) => !child.isAlpha),
+      ...visibleCommands.filter((child) => child.isAlpha),
+    ];
+  }
+
+  override groupItems<T extends Command | Option>(
+    unsortedItems: T[],
+    visibleItems: T[],
+    getGroup: (item: T) => string,
+  ): Map<string, T[]> {
+    const groups = super.groupItems(unsortedItems, visibleItems, getGroup);
+    const alphaCommands = groups.get(ALPHA_HELP_GROUP);
+    if (alphaCommands) {
+      groups.delete(ALPHA_HELP_GROUP);
+      groups.set(ALPHA_HELP_GROUP, alphaCommands);
+    }
+    return groups;
+  }
+
+  override formatItemList(heading: string, items: string[], helper: Help): string[] {
+    if (heading === ALPHA_HELP_GROUP) {
+      return items.length === 0 ? [] : [...items, ''];
+    }
+    return super.formatItemList(heading, items, helper);
+  }
+}
 
 /**
  * Commander Command subclass for the Sonar CLI.
@@ -56,6 +96,7 @@ type CommandResult = void | Promise<void>;
  *                          useful for documentation generation
  */
 export class SonarCommand extends Command {
+  private _isAlpha = false;
   private _requiresAuth = false;
   private _rootHelp: RootHelpMetadata = {};
   private readonly _updateNotifier: UpdateNotifier;
@@ -74,6 +115,10 @@ export class SonarCommand extends Command {
   /** Ensures subcommands created via .command() are also SonarCommand instances. */
   createCommand(name?: string): SonarCommand {
     return new SonarCommand(name, this._updateNotifier);
+  }
+
+  createHelp(): Help {
+    return Object.assign(new SonarHelp(), this.configureHelp());
   }
 
   /**
@@ -104,6 +149,59 @@ export class SonarCommand extends Command {
   rootHelp(metadata: RootHelpMetadata): this {
     this._rootHelp = { ...this._rootHelp, ...metadata };
     return this;
+  }
+
+  /**
+   * Mark this command as alpha. Alpha commands are registered only when the
+   * SONARQUBE_CLI_ALPHA environment variable is set to true or 1.
+   */
+  alpha(): this {
+    if (this._isAlpha) {
+      return this;
+    }
+
+    this._isAlpha = true;
+    this.helpGroup(ALPHA_HELP_GROUP);
+    if (!isAlphaEnabled()) {
+      // Commander has no public command-removal API, so remove it from the registration array.
+      const siblings = this.parent?.commands as Command[] | undefined;
+      const commandIndex = siblings?.indexOf(this) ?? -1;
+      if (commandIndex >= 0) {
+        siblings?.splice(commandIndex, 1);
+      }
+      return this;
+    }
+
+    this.hook('preAction', () => {
+      warn(`'${this.name()}' is in alpha; may change or be removed without notice.`);
+    });
+    return this;
+  }
+
+  description(str: string, argsDescription?: Record<string, string>): this;
+  description(): string;
+  description(str?: string, argsDescription?: Record<string, string>): this | string {
+    if (str !== undefined) {
+      // Preserve Commander's deprecated argument-description overload for substitutability.
+      return argsDescription === undefined
+        ? super.description(str)
+        : // eslint-disable-next-line @typescript-eslint/no-deprecated
+          super.description(str, argsDescription);
+    }
+
+    const description = super.description();
+    return this._isAlpha ? `${description} ${ALPHA_HELP_TAG}` : description;
+  }
+
+  summary(str: string): this;
+  summary(): string;
+  summary(str?: string): this | string {
+    if (str !== undefined) {
+      return super.summary(str);
+    }
+
+    const summary = super.summary();
+    return this._isAlpha && summary ? `${summary} ${ALPHA_HELP_TAG}` : summary;
   }
 
   /**
@@ -191,6 +289,11 @@ export class SonarCommand extends Command {
   /** True when this command was registered with authenticatedAction(). */
   get requiresAuth(): boolean {
     return this._requiresAuth;
+  }
+
+  /** True when this command was declared as alpha. */
+  get isAlpha(): boolean {
+    return this._isAlpha;
   }
 
   /** Metadata used by the custom root help menu. */
