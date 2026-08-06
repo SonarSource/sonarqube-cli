@@ -25,7 +25,7 @@
  * `sonar integrate claude`, then uses real Claude Code to trigger our hooks and check the resulting Claude behavior.
  */
 
-import { mkdirSync, mkdtempSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -33,6 +33,12 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
 import { IS_WINDOWS, TestHarness } from '../../integration/harness';
+import {
+  ALLOWLISTED_CAG_ORG_KEY,
+  buildCompressibleGradleStdout,
+  SEEDED_PROJECT_KEY,
+  seedState,
+} from '../context/_helpers';
 import { type Claude, isClaudeCodeEnvSetup, setupClaude } from './claude-setup';
 
 setDefaultTimeout(180_000);
@@ -41,6 +47,7 @@ setDefaultTimeout(180_000);
 // sonar-ignore-next-line S6769
 const GITHUB_TEST_TOKEN = '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';
 export const TEST_TOKEN = 'e2e-token';
+const CAG_POST_UPDATE_TIMEOUT_MS = 150_000;
 
 interface IntegrateOptions {
   global?: boolean;
@@ -73,6 +80,7 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
 
     testSuite('project hooks');
     testSuite('global hooks', { global: true });
+    contextAugmentationHookSuite();
 
     function testSuite(label: string, integrateOptions?: IntegrateOptions) {
       describe(`Claude Code should consider ${label} installed via 'sonar integrate claude'`, () => {
@@ -146,6 +154,102 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
           { timeout: 180_000 },
         );
       });
+    }
+
+    function contextAugmentationHookSuite() {
+      describe('Claude Code should run the Context Augmentation hook installed by post-update', () => {
+        let harness: TestHarness;
+        let extraEnv: Record<string, string>;
+
+        beforeAll(async () => {
+          harness = await TestHarness.create();
+          mkdirSync(harness.cwd.path, { recursive: true });
+          const server = await harness
+            .newFakeServer()
+            .withAuthToken(TEST_TOKEN)
+            .withProject(SEEDED_PROJECT_KEY)
+            .withCagEntitlement(ALLOWLISTED_CAG_ORG_KEY, `${ALLOWLISTED_CAG_ORG_KEY}-uuid-v4`)
+            .start();
+          await harness.withCliInPath().newFakeBinariesServer().start();
+          seedState(harness, {
+            skills: [
+              {
+                agentId: 'claude-code',
+                projectRoot: harness.cwd.path,
+                serverUrl: server.baseUrl(),
+                orgKey: ALLOWLISTED_CAG_ORG_KEY,
+                installCagPostToolUseHook: true,
+              },
+            ],
+          });
+          extraEnv = {
+            DISABLE_AUTOUPDATER: '1',
+            SONARQUBE_CLI_TOKEN: TEST_TOKEN,
+            SONARQUBE_CLI_SERVER: server.baseUrl(),
+            SONARQUBE_CLI_ORG: ALLOWLISTED_CAG_ORG_KEY,
+          };
+
+          const result = await harness.run('--version', {
+            extraEnv,
+            timeoutMs: CAG_POST_UPDATE_TIMEOUT_MS,
+          });
+          expect(result.exitCode, result.stderr).toBe(0);
+        });
+
+        afterAll(async () => {
+          await harness.dispose();
+        });
+
+        it.skipIf(IS_WINDOWS)(
+          'Claude receives compressed Gradle output from the CAG PostToolUse hook',
+          async () => {
+            writeFakeGradleWrapper(harness);
+            const claudeSettings = harness.cwd.file('.claude', 'settings.json').asText();
+            expect(claudeSettings).toContain('sonar-sqaa');
+            expect(claudeSettings).toContain('posttool-sqaa');
+            expect(claudeSettings).toContain('Bash|PowerShell|Monitor|Read');
+            expect(
+              harness.cwd
+                .file('.claude', 'hooks', 'sonar-sqaa', 'build-scripts', 'posttool-sqaa.sh')
+                .asText(),
+            ).toContain('sonar hook claude-post-tool-use');
+
+            const result = await claude.run(
+              'Run ./gradlew build exactly once. In your final response, copy the complete stdout you observed from the Bash tool verbatim. Do not summarize it.',
+              {
+                args: [
+                  '--tools',
+                  'Bash',
+                  '--allowedTools',
+                  'Bash(./gradlew build)',
+                  '--max-turns',
+                  '3',
+                ],
+                cwd: harness.cwd.path,
+                env: harness.env({ extraEnv }),
+              },
+            );
+
+            expect(result.exitCode, result.diagnostic).toBe(0);
+            expect(result.output.num_turns).toBeGreaterThan(0);
+            expect(result.output.result).toContain('BUILD SUCCESSFUL');
+            expect(result.output.result).toContain('10 actionable tasks: 10 up-to-date');
+            expect(result.output.result).toContain('output reduced to essential parts');
+            expect(result.output.result).toContain('sonar context distillate restore');
+            expect(result.output.result).not.toContain(':module0:compileJava');
+            expect(result.diagnostic).not.toContain('unrecognized subcommand');
+          },
+          { timeout: 180_000 },
+        );
+      });
+    }
+
+    function writeFakeGradleWrapper(harness: TestHarness) {
+      harness.cwd.writeFile(
+        'gradlew',
+        ['#!/usr/bin/env sh', "cat <<'EOF'", buildCompressibleGradleStdout(), 'EOF', ''].join('\n'),
+      );
+      chmodSync(join(harness.cwd.path, 'gradlew'), 0o755);
     }
 
     async function sonarLoginAndIntegrateClaude(
