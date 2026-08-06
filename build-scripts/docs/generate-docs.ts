@@ -89,6 +89,12 @@ interface ClidocCommand {
 const allCommands: ClidocCommand[] = [];
 const help = COMMAND_TREE.createHelp();
 
+function visibleDocumentedCommands(cmd: SonarCommand): SonarCommand[] {
+  return (help.visibleCommands(cmd) as SonarCommand[]).filter(
+    (child) => child.name() !== 'help' && !child.isAlpha,
+  );
+}
+
 function descriptionWithoutBetaTag(cmd: SonarCommand): string {
   const description = cmd.description() ?? '';
   const suffix = ` ${BETA_HELP_TAG}`;
@@ -105,8 +111,7 @@ function serializeCommand(
 ) {
   const fullName = `${prefix} ${cmd.name()}`.trim();
   const id = fullName.replaceAll(/\s+/g, '-');
-  // we don't want to display implicit child help menus
-  const visibleChildren = help.visibleCommands(cmd).filter((c) => c.name() !== 'help');
+  const visibleChildren = visibleDocumentedCommands(cmd);
 
   const entry: ClidocCommand = {
     id,
@@ -144,13 +149,13 @@ function serializeCommand(
   allCommands.push(entry);
 
   for (const child of visibleChildren) {
-    serializeCommand(child as SonarCommand, fullName, depth + 1, id);
+    serializeCommand(child, fullName, depth + 1, id);
   }
 }
 
 // Root entry
 const rootId = 'sonar';
-const visibleTopLevel = help.visibleCommands(COMMAND_TREE);
+const visibleTopLevel = visibleDocumentedCommands(COMMAND_TREE);
 
 const rootEntry: ClidocCommand = {
   id: rootId,
@@ -172,7 +177,7 @@ const rootEntry: ClidocCommand = {
 allCommands.push(rootEntry);
 
 for (const cmd of visibleTopLevel) {
-  serializeCommand(cmd as SonarCommand, 'sonar', 1, rootId);
+  serializeCommand(cmd, 'sonar', 1, rootId);
 }
 
 const data = {
