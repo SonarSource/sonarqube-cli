@@ -22,7 +22,6 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
-import { print } from '@/core/ui';
 
 import {
   EXIT_CODE_SECRETS_FOUND,
@@ -35,6 +34,7 @@ import {
   MissingDependenciesError,
   SECRETS_INACTIVE_BINARY_MISSING,
 } from './hook-dependencies.ts';
+import { printSecretsFindingsOrStderr } from './secrets-display.ts';
 
 export async function runCommitSecretsStage(files: string[], auth: ResolvedAuth): Promise<void> {
   const binaryPath = resolveSecretsBinaryPath();
@@ -57,16 +57,7 @@ export async function runCommitSecretsStage(files: string[], auth: ResolvedAuth)
   warnScanErrors(errors);
 
   if ((result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND) {
-    if (issues.length > 0) {
-      const lines = issues.map((issue) => {
-        const location = issue.location ? `:${String(issue.location.startLine)}` : '';
-        const secret = issue.maskedSecret ? ` (secret: ${issue.maskedSecret})` : '';
-        return `  • ${issue.file ?? '(unknown)'}${location} — ${issue.description}${secret}`;
-      });
-      print(lines.join('\n'));
-    } else if (result.stderr) {
-      print(result.stderr);
-    }
+    printSecretsFindingsOrStderr(issues, result.stderr);
     throw new CommandFailedError('Secrets detected in staged files.', {
       remediationHint: 'Remove the reported secret, then retry the commit.',
     });
