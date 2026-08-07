@@ -24,6 +24,7 @@ import * as authResolver from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 import * as processLib from '@/core/process/process.ts';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import * as analyzeSecrets from '../../../../src/commands/analyze/secrets.ts';
 import { gitPreCommit } from '../../../../src/commands/hook/git-pre-commit.ts';
@@ -47,6 +48,21 @@ const FAKE_AUTH = {
 
 const OK_RESULT = { exitCode: 0, stdout: '', stderr: '' };
 const SECRETS_RESULT = { exitCode: EXIT_CODE_SECRETS_FOUND, stdout: '', stderr: '' };
+const SECRETS_RESULT_WITH_ISSUES = {
+  exitCode: EXIT_CODE_SECRETS_FOUND,
+  stdout: JSON.stringify({
+    issues: [
+      {
+        ruleKey: 'secrets:S6640',
+        description: 'AWS key detected',
+        file: 'src/config.ts',
+        location: { startLine: 12, startColumn: 1, endLine: 12, endColumn: 40 },
+        maskedSecret: 'AKIA****',
+      },
+    ],
+  }),
+  stderr: '',
+};
 
 describe('gitPreCommit', () => {
   let resolveAuthSpy: ReturnType<typeof spyOn>;
@@ -55,6 +71,8 @@ describe('gitPreCommit', () => {
   let runSecretsBinarySpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
+    setMockUi(true);
+    clearMockUiCalls();
     resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
     spawnProcessSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
       exitCode: 0,
@@ -68,6 +86,7 @@ describe('gitPreCommit', () => {
   });
 
   afterEach(() => {
+    setMockUi(false);
     resolveAuthSpy.mockRestore();
     spawnProcessSpy.mockRestore();
     resolveSecretsBinaryPathSpy.mockRestore();
@@ -93,6 +112,19 @@ describe('gitPreCommit', () => {
     }
     expect(thrown).toBeInstanceOf(CommandFailedError);
     expect((thrown as CommandFailedError).message).toBe('Secrets detected in staged files.');
+  });
+
+  it('prints finding detail (file, line, masked secret) when secrets are found', async () => {
+    runSecretsBinarySpy.mockResolvedValue(SECRETS_RESULT_WITH_ISSUES);
+
+    await gitPreCommit().catch(() => undefined);
+
+    const prints = getMockUiCalls()
+      .filter((c) => c.method === 'print')
+      .map((c) => String(c.args[0]));
+    expect(prints.some((m) => m.includes('src/config.ts:12'))).toBe(true);
+    expect(prints.some((m) => m.includes('AWS key detected'))).toBe(true);
+    expect(prints.some((m) => m.includes('AKIA****'))).toBe(true);
   });
 
   it('resolves without throwing when no secrets are found', async () => {
@@ -188,6 +220,8 @@ describe('gitPrePush', () => {
   };
 
   beforeEach(() => {
+    setMockUi(true);
+    clearMockUiCalls();
     resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
     spawnProcessSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
       exitCode: 0,
@@ -202,6 +236,7 @@ describe('gitPrePush', () => {
   });
 
   afterEach(() => {
+    setMockUi(false);
     resolveAuthSpy.mockRestore();
     spawnProcessSpy.mockRestore();
     resolveSecretsBinaryPathSpy.mockRestore();
@@ -228,6 +263,19 @@ describe('gitPrePush', () => {
     }
     expect(thrown).toBeInstanceOf(CommandFailedError);
     expect((thrown as CommandFailedError).message).toBe('Secrets detected in pushed commits.');
+  });
+
+  it('prints finding detail (file, line, masked secret) when secrets are found', async () => {
+    runSecretsBinarySpy.mockResolvedValue(SECRETS_RESULT_WITH_ISSUES);
+
+    await gitPrePush().catch(() => undefined);
+
+    const prints = getMockUiCalls()
+      .filter((c) => c.method === 'print')
+      .map((c) => String(c.args[0]));
+    expect(prints.some((m) => m.includes('src/config.ts:12'))).toBe(true);
+    expect(prints.some((m) => m.includes('AWS key detected'))).toBe(true);
+    expect(prints.some((m) => m.includes('AKIA****'))).toBe(true);
   });
 
   it('resolves without throwing when no secrets found', async () => {

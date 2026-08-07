@@ -34,6 +34,7 @@ import {
   MissingDependenciesError,
   SECRETS_INACTIVE_BINARY_MISSING,
 } from './hook-dependencies.ts';
+import { printSecretsFindingsOrStderr } from './secrets-display.ts';
 
 export async function runSecretsStage(files: string[], auth: ResolvedAuth): Promise<void> {
   if (files.length === 0) return;
@@ -56,6 +57,7 @@ export async function runSecretsStage(files: string[], auth: ResolvedAuth): Prom
   warnScanErrors(parsed.errors);
 
   if ((result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND) {
+    printSecretsFindingsOrStderr(parsed.issues, result.stderr);
     throw new CommandFailedError('Secrets detected in pushed commits.', {
       remediationHint:
         'Remove the reported secret, amend the commit if needed, then retry the push.',
