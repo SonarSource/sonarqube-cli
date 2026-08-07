@@ -1,5 +1,5 @@
 {
-  "version": "1.4.0",
+  "version": "1.5.0",
   "commands": [
     {
       "id": "sonar",
@@ -491,7 +491,7 @@
       "id": "sonar-integrate-claude",
       "name": "claude",
       "fullName": "sonar integrate claude",
-      "description": "Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure Vortex agentic analysis and MCP Server.",
+      "description": "Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
@@ -521,13 +521,6 @@
           "description": "Install hooks and config globally to ~/.claude instead of project directory",
           "type": "boolean",
           "required": false
-        },
-        {
-          "flags": "--skip-context",
-          "long": "--skip-context",
-          "description": "Skip the sonar-context-augmentation install/init/skill step",
-          "type": "boolean",
-          "required": false
         }
       ],
       "examples": [],
@@ -537,7 +530,7 @@
       "id": "sonar-integrate-copilot",
       "name": "copilot",
       "fullName": "sonar integrate copilot",
-      "description": "Setup SonarQube integration for GitHub Copilot CLI. This will install secrets scanning hooks, configure Vortex agentic analysis and MCP Server.",
+      "description": "Setup SonarQube integration for GitHub Copilot CLI. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
@@ -565,13 +558,6 @@
           "flags": "--non-interactive",
           "long": "--non-interactive",
           "description": "Non-interactive mode (no prompts)",
-          "type": "boolean",
-          "required": false
-        },
-        {
-          "flags": "--skip-context",
-          "long": "--skip-context",
-          "description": "Skip the sonar-context-augmentation install/init/skill step",
           "type": "boolean",
           "required": false
         }
@@ -613,13 +599,6 @@
           "description": "Non-interactive mode (no prompts)",
           "type": "boolean",
           "required": false
-        },
-        {
-          "flags": "--skip-context",
-          "long": "--skip-context",
-          "description": "Skip the sonar-context-augmentation install/init/skill step",
-          "type": "boolean",
-          "required": false
         }
       ],
       "examples": [],
@@ -629,7 +608,7 @@
       "id": "sonar-integrate-antigravity",
       "name": "antigravity",
       "fullName": "sonar integrate antigravity",
-      "description": "Setup SonarQube integration for Antigravity. Installs secrets scanning hooks, prompt-secrets instructions, and Vortex context augmentation.",
+      "description": "Setup SonarQube integration for Antigravity. Installs secrets scanning hooks, prompt-secrets instructions, and Vortex Context.",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
@@ -659,13 +638,6 @@
           "description": "Install hooks and config globally under ~/.gemini/config instead of the project .agents/ directory",
           "type": "boolean",
           "required": false
-        },
-        {
-          "flags": "--skip-context",
-          "long": "--skip-context",
-          "description": "Skip the sonar-context-augmentation install/init/skill step",
-          "type": "boolean",
-          "required": false
         }
       ],
       "examples": [],
@@ -675,7 +647,7 @@
       "id": "sonar-integrate-cursor",
       "name": "cursor",
       "fullName": "sonar integrate cursor",
-      "description": "Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure Vortex agentic analysis.",
+      "description": "Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure Vortex analysis.",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
@@ -703,13 +675,6 @@
           "long": "--global",
           "short": "-g",
           "description": "Install config globally to ~/.cursor instead of project directory. Note: Cursor's cloud/background agents only pick up project-level hooks, not global ones.",
-          "type": "boolean",
-          "required": false
-        },
-        {
-          "flags": "--skip-context",
-          "long": "--skip-context",
-          "description": "Skip the sonar-context-augmentation install/init/skill step",
           "type": "boolean",
           "required": false
         }
@@ -923,7 +888,7 @@
       "id": "sonar-analyze-agentic",
       "name": "agentic",
       "fullName": "sonar analyze agentic",
-      "description": "Run server-side agentic analysis (SonarQube Cloud only). Limitations apply.",
+      "description": "Run server-side Vortex analysis (SonarQube Cloud only). Limitations apply.",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
