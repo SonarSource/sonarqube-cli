@@ -617,7 +617,7 @@ runCommand
   .option('--read-only', 'Start the MCP server in read-only mode')
   .option(
     '--toolsets <toolsets>',
-    'Comma-separated list of toolsets to enable (e.g. issues,quality-gates,duplications,dependency-risks,coverage,cag,portfolios)',
+    'Comma-separated list of toolsets to enable (e.g. issues,quality-gates,duplications,dependency-risks,coverage,vortex,portfolios)',
   )
   .option('-p, --project <project>', 'Project key (overrides auto-discovery)')
   .addHelpText(`after`, projectKeyExtraHelp)

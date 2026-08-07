@@ -98,10 +98,10 @@ export const MCP_CONTAINER_CA_CERT_PATH = '/usr/local/share/ca-certificates/sona
 // Fixed mount path for the client certificate PKCS12 keystore inside the MCP container.
 export const MCP_CONTAINER_CLIENT_CERT_PATH = '/etc/ssl/mcp/client.p12';
 
-// All MCP toolsets supported by the server, excluding 'cag' which is available directly via the CLI.
-// Passed explicitly to avoid relying on MCP-side defaults.
+// All MCP toolsets supported by the server, excluding 'cag'/'vortex' which are available
+// directly via the CLI's own Vortex analysis. Passed explicitly to avoid relying on MCP-side defaults.
 export const MCP_DEFAULT_TOOLSETS =
-  'analysis,issues,projects,quality-gates,rules,duplications,measures,security-hotspots,dependency-risks,coverage';
+  'issues,projects,quality-gates,rules,duplications,measures,security-hotspots,dependency-risks,coverage,ide';
 
 function toJavaNonProxyHosts(noProxy: string): string {
   return noProxy
