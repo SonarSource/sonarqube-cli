@@ -86,6 +86,7 @@ import { integrateCopilot } from './integrate/copilot';
 import { integrateCursor } from './integrate/cursor';
 import { integrateGit, type IntegrateGitOptions } from './integrate/git';
 import { integrateBare, type IntegrateBareOptions } from './integrate/integrate-bare.ts';
+import { integrateOpenCode } from './integrate/opencode';
 import {
   listIssues,
   type ListIssuesOptions,
@@ -393,6 +394,20 @@ integrateCommand
   )
   .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCursor(options, auth));
+
+integrateCommand
+  .command('opencode')
+  .description(
+    'Setup SonarQube integration for OpenCode. This will configure the SonarQube MCP Server.',
+  )
+  .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
+  .option('--non-interactive', 'Non-interactive mode (no prompts)')
+  .option(
+    '-g, --global',
+    'Install config globally to ~/.config/opencode instead of project directory',
+  )
+  .addHelpText('after', projectKeyExtraHelp)
+  .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateOpenCode(options, auth));
 
 // Analyze code for quality and security issues
 const analyze = COMMAND_TREE.command('analyze')

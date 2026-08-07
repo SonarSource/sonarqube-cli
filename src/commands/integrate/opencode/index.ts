@@ -18,24 +18,23 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { createIntegrationRegistry } from '@/core/framework/features';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 
-import { antigravityIntegration } from './antigravity/declaration.ts';
-import { claudeIntegration } from './claude/declaration.ts';
-import { codexIntegration } from './codex/declaration.ts';
-import { copilotIntegration } from './copilot/declaration.ts';
-import { cursorIntegration } from './cursor/declaration.ts';
-import { GIT_INTEGRATIONS } from './git/tools';
-import { openCodeIntegration } from './opencode/declaration.ts';
+import { finalizeAgentInstall } from '../_common/agent-integrate-postlude.ts';
+import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';
+import type { IntegrateAgentOptions } from '../_common/types.ts';
+import { OPENCODE_INTEGRATION_ID } from './declaration.ts';
 
-export const ALL_INTEGRATIONS = [
-  antigravityIntegration,
-  claudeIntegration,
-  copilotIntegration,
-  codexIntegration,
-  cursorIntegration,
-  openCodeIntegration,
-  ...GIT_INTEGRATIONS,
-] as const;
+export async function integrateOpenCode(
+  options: IntegrateAgentOptions,
+  auth: ResolvedAuth,
+): Promise<void> {
+  const context = await displayAgentIntegratePrelude('OpenCode', 'opencode', options, auth);
 
-export const supportedIntegrations = createIntegrationRegistry(ALL_INTEGRATIONS);
+  await finalizeAgentInstall({
+    integrationId: OPENCODE_INTEGRATION_ID,
+    context,
+    options,
+    auth,
+  });
+}

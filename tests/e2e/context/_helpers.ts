@@ -38,6 +38,7 @@ import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.t
 import { CODEX_INTEGRATION_ID } from '@/commands/integrate/codex/declaration.ts';
 import { COPILOT_INTEGRATION_ID } from '@/commands/integrate/copilot/declaration.ts';
 import { CURSOR_INTEGRATION_ID } from '@/commands/integrate/cursor/declaration.ts';
+import { OPENCODE_INTEGRATION_ID } from '@/commands/integrate/opencode/declaration.ts';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import type {
   CliState,
@@ -91,9 +92,15 @@ export const ANTIGRAVITY_SKILL_RELATIVE_PATH = join(
   CONTEXT_AUGMENTATION_BINARY_NAME,
   'SKILL.md',
 );
+export const OPENCODE_SKILL_RELATIVE_PATH = join(
+  '.opencode',
+  'skills',
+  CONTEXT_AUGMENTATION_BINARY_NAME,
+  'SKILL.md',
+);
 
 export interface SeedSkillOptions {
-  agentId: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor' | 'antigravity';
+  agentId: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor' | 'antigravity' | 'opencode';
   projectRoot: string;
   global?: boolean;
   version?: string;
@@ -225,6 +232,8 @@ function resolveIntegrationId(agentId: SeedSkillOptions['agentId']): string {
       return CURSOR_INTEGRATION_ID;
     case 'antigravity':
       return ANTIGRAVITY_INTEGRATION_ID;
+    case 'opencode':
+      return OPENCODE_INTEGRATION_ID;
   }
 }
 
@@ -240,6 +249,8 @@ function resolveSkillRelativePath(agentId: SeedSkillOptions['agentId']): string 
       return CURSOR_SKILL_RELATIVE_PATH;
     case 'antigravity':
       return ANTIGRAVITY_SKILL_RELATIVE_PATH;
+    case 'opencode':
+      return OPENCODE_SKILL_RELATIVE_PATH;
   }
 }
 

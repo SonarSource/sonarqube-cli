@@ -10,10 +10,10 @@ The SonarQube CLI integrates enterprise-grade static analysis into your developm
 - **🔒 Secret Detection** — Scan code for hardcoded credentials and prevent secrets from being sent to LLM providers
 - **⚡ Fast Feedback Loop** — Get server-side issue detection on your local changes without waiting for CI/CD
 - **🤖 AI-Assisted Fixes** — Generate remediation suggestions for security vulnerabilities (SonarQube Cloud)
-- **🔗 Agent Integration** — Seamless hooks for Claude Code, GitHub Copilot CLI, Codex, Cursor, and Antigravity
+- **🔗 Agent Integration** — Hooks for Claude Code, GitHub Copilot CLI, Codex, Cursor, and Antigravity; MCP, instructions, and context-augmentation skills for OpenCode
 - **📊 Scriptable** — Query and manage SonarQube issues programmatically with JSON output
 
-**Use it standalone or integrate with:** Git hooks, Claude Code, GitHub Copilot CLI, Codex, Cursor, Antigravity, CI/CD pipelines, custom automation
+**Use it standalone or integrate with:** Git hooks, Claude Code, GitHub Copilot CLI, Codex, Cursor, OpenCode, Antigravity, CI/CD pipelines, custom automation
 
 > **🤖 For AI Agents:** If you are an AI agent reading this, navigate to [docs/llms.txt](https://github.com/SonarSource/sonarqube-cli/blob/master/docs/llms.txt) for machine-readable
 > command documentation optimized for LLM consumption.
@@ -52,7 +52,7 @@ The SonarQube CLI integrates enterprise-grade static analysis into your developm
 
 The SonarQube CLI is designed for three distinct use cases:
 
-1. **🤖 Agentic Use** — Built-in support for AI coding agents (Claude Code, GitHub Copilot CLI, Codex, Cursor, and Antigravity) with safeguards that prevent secrets from being sent to LLM providers
+1. **🤖 Agentic Use** — Built-in hooks and secret safeguards for Claude Code, GitHub Copilot CLI, Codex, Cursor, and Antigravity; OpenCode gets MCP, instructions, and a context-augmentation skill
    ```bash
    sonar integrate claude -g
    # Now Claude Code will automatically scan for secrets before processing your code
@@ -86,7 +86,7 @@ Before installing, you need:
 **Optional:**
 
 - Git 2.x+ for git hook integrations
-- Claude Code, GitHub Copilot CLI, Codex, Cursor, or Antigravity for AI assistant integrations
+- Claude Code, GitHub Copilot CLI, Codex, Cursor, OpenCode, or Antigravity for AI assistant integrations
 
 **First time with SonarQube?** [Create a free SonarQube Cloud account](https://sonarcloud.io/sessions/new) — no credit card required for open source projects.
 
@@ -395,7 +395,7 @@ issues[1]:
     type: CODE_SMELL
 ```
 
-This format is designed for parsing by LLMs and can be used with Claude Code, GitHub Copilot CLI, Codex, Cursor, Antigravity, or custom AI workflows.
+This format is designed for parsing by LLMs and can be used with Claude Code, GitHub Copilot CLI, Codex, Cursor, OpenCode, Antigravity, or custom AI workflows.
 
 ## Troubleshooting
 

@@ -82,6 +82,46 @@ export function removeJsonMcpServer(
   };
 }
 
+function toOpenCodeSettings(document: unknown): {
+  mcp: Record<string, unknown>;
+  [key: string]: unknown;
+} {
+  if (!document || typeof document !== 'object' || Array.isArray(document)) {
+    return { mcp: {} };
+  }
+
+  const settings = document as { mcp?: unknown; [key: string]: unknown };
+  return {
+    ...settings,
+    mcp:
+      settings.mcp && typeof settings.mcp === 'object' && !Array.isArray(settings.mcp)
+        ? { ...(settings.mcp as Record<string, unknown>) }
+        : {},
+  };
+}
+
+/** Upsert the Sonar server in OpenCode's root `mcp` object. */
+export function upsertOpenCodeMcpServer(
+  document: unknown,
+  serverConfig: object,
+): Record<string, unknown> {
+  const settings = toOpenCodeSettings(document);
+  return {
+    ...settings,
+    mcp: {
+      ...settings.mcp,
+      [SONARQUBE_MCP_SERVER_ID]: serverConfig,
+    },
+  };
+}
+
+/** Remove only the Sonar server from OpenCode's root `mcp` object. */
+export function removeOpenCodeMcpServer(document: unknown): Record<string, unknown> {
+  const settings = toOpenCodeSettings(document);
+  const { [SONARQUBE_MCP_SERVER_ID]: _removed, ...remainingServers } = settings.mcp;
+  return { ...settings, mcp: remainingServers };
+}
+
 /**
  * Remove a server entry from Codex TOML-backed config (`mcp_servers` table keys).
  */

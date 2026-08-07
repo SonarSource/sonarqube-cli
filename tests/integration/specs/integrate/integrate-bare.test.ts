@@ -197,4 +197,23 @@ describe('integrate (bare command)', () => {
     },
     { timeout: 30000 },
   );
+
+  it(
+    'forwards --global to OpenCode selected from the bare router',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      // OpenCode follows Cursor in the bare selector.
+      const result = await harness.run('integrate --global', {
+        stdinChunks: ['\u001B[B', '\u001B[B', '\u001B[B', '\u001B[B', '\r', '\r'],
+        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(findInstalledFeature(harness, 'opencode', 'mcp-server')?.scope).toBe('global');
+      expect(harness.userHome.exists('.config', 'opencode', 'opencode.json')).toBe(true);
+    },
+    { timeout: 30000 },
+  );
 });

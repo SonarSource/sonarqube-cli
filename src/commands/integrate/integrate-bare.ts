@@ -34,6 +34,8 @@ import { copilotIntegration } from './copilot/declaration.ts';
 import { integrateCursor } from './cursor';
 import { cursorIntegration } from './cursor/declaration.ts';
 import { integrateGit } from './git';
+import { integrateOpenCode } from './opencode';
+import { openCodeIntegration } from './opencode/declaration.ts';
 
 export interface IntegrateBareOptions {
   project?: string;
@@ -49,6 +51,7 @@ const TOOLS: { label: string; handler: Handler }[] = [
   { label: copilotIntegration.displayName, handler: integrateCopilot },
   { label: codexIntegration.displayName, handler: integrateCodex },
   { label: cursorIntegration.displayName, handler: integrateCursor },
+  { label: openCodeIntegration.displayName, handler: integrateOpenCode },
   { label: antigravityIntegration.displayName, handler: integrateAntigravity },
   // Git has 3 separate tool declarations (native, husky, pre-commit)
   // but a single handler that detects which framework is in use.
