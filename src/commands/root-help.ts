@@ -97,7 +97,12 @@ function getRootCommandLabel(command: SonarCommand, helper: Help): string {
   }
 
   const childLabels = visibleChildren.map((child) => {
-    const tag = child.isAlpha ? ALPHA_HELP_TAG : child.isBeta ? BETA_HELP_TAG : '';
+    let tag = '';
+    if (child.isAlpha) {
+      tag = ALPHA_HELP_TAG;
+    } else if (child.isBeta) {
+      tag = BETA_HELP_TAG;
+    }
     return `${child.name()}${tag}`;
   });
   return `${command.name()} <${childLabels.join('|')}>`;
