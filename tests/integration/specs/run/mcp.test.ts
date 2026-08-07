@@ -211,7 +211,7 @@ describe('run mcp', () => {
   );
 
   it(
-    'uses default toolsets (excluding cag) when --toolsets is not set',
+    'uses default toolsets (including ide, excluding vortex) when --toolsets is not set',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('test-token').start();
       harness.withAuth(server.baseUrl(), 'test-token');
@@ -226,26 +226,29 @@ describe('run mcp', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('-e SONARQUBE_TOOLSETS');
-      expect(result.stdout).toContain('ENV_TOOLSETS=analysis,issues,projects');
+      expect(result.stdout).toContain(
+        'ENV_TOOLSETS=issues,projects,quality-gates,rules,duplications,measures,security-hotspots,dependency-risks,coverage,ide',
+      );
       expect(result.stdout).not.toContain('cag');
+      expect(result.stdout).not.toContain('vortex');
     },
     { timeout: 15000 },
   );
 
   it(
-    'passes cag through when explicitly included in --toolsets',
+    'passes cag/vortex through when explicitly included in --toolsets',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('test-token').start();
       harness.withAuth(server.baseUrl(), 'test-token');
       const fakeBinDir = setupFakeDocker();
 
-      const result = await harness.run('run mcp --toolsets cag,issues', {
+      const result = await harness.run('run mcp --toolsets cag,vortex,issues', {
         extraEnv: { PATH: `${fakeBinDir}${PATH_SEP}${process.env.PATH ?? ''}` },
       });
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('-e SONARQUBE_TOOLSETS');
-      expect(result.stdout).toContain('ENV_TOOLSETS=cag,issues');
+      expect(result.stdout).toContain('ENV_TOOLSETS=cag,vortex,issues');
     },
     { timeout: 15000 },
   );

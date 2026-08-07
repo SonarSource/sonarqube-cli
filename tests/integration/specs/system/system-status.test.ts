@@ -1256,6 +1256,7 @@ describe('system status', () => {
     const FIXTURE_DIR = join(import.meta.dir, '../../../fixtures/client-cert');
     const CERT_PATH = join(FIXTURE_DIR, 'client-cert.pem');
     const KEY_PATH = join(FIXTURE_DIR, 'client-key.pem');
+    const KEY_PATH_ENCRYPTED = join(FIXTURE_DIR, 'client-key-encrypted-pkcs8.pem');
     const P12_PATH = join(FIXTURE_DIR, 'client-cert.p12');
     const P12_NO_PASSPHRASE_PATH = join(FIXTURE_DIR, 'client-cert-no-passphrase.p12');
 
@@ -1286,11 +1287,11 @@ describe('system status', () => {
     it('shows Passphrase: Set for PEM cert with passphrase', async () => {
       const result = await runStatus({
         SONAR_TLS_CLIENT_CERT: CERT_PATH,
-        SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
-        SONAR_TLS_CLIENT_PASSPHRASE: 'secret',
+        SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH_ENCRYPTED,
+        SONAR_TLS_CLIENT_PASSPHRASE: 'testpassword',
       });
 
-      expect(result.stdout).toContain(`Key:         ${KEY_PATH}`);
+      expect(result.stdout).toContain(`Key:         ${KEY_PATH_ENCRYPTED}`);
       expect(result.stdout).toContain('Passphrase:  Set');
     });
 
@@ -1349,8 +1350,8 @@ describe('system status', () => {
       it('sets passphraseSet: true for PEM cert with passphrase', async () => {
         const cert = await runStatusJson({
           SONAR_TLS_CLIENT_CERT: CERT_PATH,
-          SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
-          SONAR_TLS_CLIENT_PASSPHRASE: 'secret',
+          SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH_ENCRYPTED,
+          SONAR_TLS_CLIENT_PASSPHRASE: 'testpassword',
         });
         expect(cert).toMatchObject({ passphraseSet: true });
       });
