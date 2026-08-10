@@ -17,6 +17,8 @@
   --orange-dim: #fb923c18;
   --red: #f87171;
   --pink: #e879a0;
+  --purple: #a78bfa;      /* ← add — dark-mode purple */
+  --purple-strong: #6d28d9;
   --cyan: #67e8f9;
   --cyan-dim: #67e8f918;
   --pill-bg: #272b3a;
@@ -39,6 +41,8 @@
   --orange-dim: #ed7d2018;
   --red: #e1434c;
   --pink: #c24789;
+  --purple: #7c3aed;      /* ← add — light-mode purple */
+  --purple-strong: #5b21b6;
   --cyan: #0eb5cc;
   --cyan-dim: #0eb5cc18;
   --pill-bg: #eaecf5;
@@ -201,6 +205,7 @@ a:hover { text-decoration: underline; }
 .pill-group { color: var(--text); }
 .pill-leaf  { color: var(--text-muted); }
 .pill.selected { background: var(--accent-dim); border-color: var(--accent); border-width: 2px; }
+.pill.selected.stage-beta { background: var(--purple-strong); border-color: var(--purple-strong); color: #fff; }
 .pill.path-highlight { border-color: var(--accent); }
 .pill-root.path-highlight { background: var(--accent); }
 
@@ -1213,6 +1218,54 @@ body.commands-page { height: 100%; overflow: hidden; }
 }
 .detail-badge.group { background: var(--orange-dim); color: var(--orange); }
 .detail-badge.cmd { background: var(--green-dim); color: var(--green); }
+
+/* ─── Stage badges ─────────────────────────────────────────────────── */
+/* Color driver — a single --stage-c custom property varies per stage
+   and is picked up by the pill and the banner below. */
+.stage-badge.stage-beta,
+.stage-banner.stage-banner-beta        { --stage-c: var(--purple); }
+
+/* Small outline pill used in the detail header. */
+.stage-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  margin-left: 10px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  background: transparent;
+  border: 1px solid var(--stage-c);
+  color: var(--stage-c);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Slightly larger in the detail header for readability. */
+.detail-header .stage-badge {
+  height: 22px;
+  font-size: 10px;
+  padding: 0 8px;
+}
+
+/* Stage banner in the detail view (above the description). */
+.stage-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 16px 0 20px;
+  padding: 12px 16px;
+  border-left: 3px solid var(--stage-c);
+  background: color-mix(in srgb, var(--stage-c) 8%, transparent);
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+}
 
 .detail-desc {
   font-size: 15px;
