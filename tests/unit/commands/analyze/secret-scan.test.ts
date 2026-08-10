@@ -107,6 +107,9 @@ describe('secretCheckCommand: auth forwarding', () => {
     } finally {
       existsSpy.mockRestore();
     }
+
+    const spawnCall = spawnSpy.mock.calls[0];
+    expect(spawnCall[0]).toBe('/fake/bin/sonar-secrets');
   });
 
   it('passes auth env vars to binary', async () => {
