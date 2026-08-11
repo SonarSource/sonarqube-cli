@@ -78,7 +78,7 @@ describe('integrateCopilot', () => {
     hasVortexEntitlementSpy = spyOn(
       SonarQubeClient.prototype,
       'hasVortexEntitlement',
-    ).mockResolvedValue('not_entitled');
+    ).mockResolvedValue({ status: 'not_entitled' });
     checkComponentSpy = spyOn(SonarQubeClient.prototype, 'checkComponent').mockResolvedValue(true);
     detectGlobalSecretsHookSpy = spyOn(hooks, 'detectGlobalSecretsHook').mockResolvedValue(
       undefined,

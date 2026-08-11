@@ -103,7 +103,7 @@ export async function resolveVortexSetup(
   }
 
   const client = new SonarQubeClient(params.auth.serverUrl, params.auth.token);
-  const status = await client.hasVortexEntitlement(params.auth.orgKey);
+  const { status } = await client.hasVortexEntitlement(params.auth.orgKey);
 
   if (status === 'check_failed') {
     warn(VORTEX_CHECK_FAILED_MESSAGE);

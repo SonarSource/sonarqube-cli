@@ -36,9 +36,9 @@ describe('recheckVortexEntitlement', () => {
   });
 
   it('returns the client status verbatim and forwards the org key', async () => {
-    entitlementSpy = spyOn(SonarQubeClient.prototype, 'hasVortexEntitlement').mockResolvedValue(
-      'not_entitled',
-    );
+    entitlementSpy = spyOn(SonarQubeClient.prototype, 'hasVortexEntitlement').mockResolvedValue({
+      status: 'not_entitled',
+    });
 
     const status = await recheckVortexEntitlement(cloudAuth('acme'));
 
@@ -49,9 +49,9 @@ describe('recheckVortexEntitlement', () => {
   it.each<VortexEntitlementStatus>(['enabled', 'over_consumption', 'not_entitled', 'check_failed'])(
     'passes through the %s verdict',
     async (verdict) => {
-      entitlementSpy = spyOn(SonarQubeClient.prototype, 'hasVortexEntitlement').mockResolvedValue(
-        verdict,
-      );
+      entitlementSpy = spyOn(SonarQubeClient.prototype, 'hasVortexEntitlement').mockResolvedValue({
+        status: verdict,
+      });
 
       expect(await recheckVortexEntitlement(cloudAuth())).toBe(verdict);
     },

@@ -90,7 +90,7 @@ describe('integrateCommand', () => {
     setMockUi(true);
 
     hasVortexEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasVortexEntitlement');
-    hasVortexEntitlementSpy.mockResolvedValue('not_entitled');
+    hasVortexEntitlementSpy.mockResolvedValue({ status: 'not_entitled' });
     getScaEnablementSpy = spyOn(SonarQubeClient.prototype, 'getScaEnablement').mockResolvedValue(
       'not_enabled',
     );
@@ -270,7 +270,7 @@ describe('integrateCommand', () => {
   });
 
   it('checks Vortex entitlement', async () => {
-    hasVortexEntitlementSpy.mockResolvedValue('enabled');
+    hasVortexEntitlementSpy.mockResolvedValue({ status: 'enabled' });
 
     await integrateClaude({}, CLOUD_AUTH);
 
@@ -496,7 +496,9 @@ describe('integrateCommand', () => {
   }
 
   function mockVortexEntitlement(hasEntitlement: boolean) {
-    hasVortexEntitlementSpy.mockResolvedValue(hasEntitlement ? 'enabled' : 'not_entitled');
+    hasVortexEntitlementSpy.mockResolvedValue({
+      status: hasEntitlement ? 'enabled' : 'not_entitled',
+    });
   }
 
   function assertMigrationAndHookInstallationRan(

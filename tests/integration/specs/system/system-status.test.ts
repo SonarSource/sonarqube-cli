@@ -1389,4 +1389,138 @@ describe('system status', () => {
       });
     });
   });
+
+  describe('VORTEX section', () => {
+    const ORG_KEY = 'my-org';
+    const ORG_UUID = 'my-org-uuid';
+    const TOKEN = 'cloud-token';
+
+    async function setupVortex(options: {
+      sqaa?: { allowed?: boolean; hasEntitlement?: boolean };
+      cag?: {
+        allowed?: boolean;
+        hasEntitlement?: boolean;
+        consumption?: { consumed: number; limit: number };
+      };
+    }): Promise<{ extraEnv: Record<string, string> }> {
+      const builder = harness.newFakeServer().withAuthToken(TOKEN);
+      if (options.sqaa) {
+        builder.withSqaaEntitlement(ORG_KEY, ORG_UUID, options.sqaa);
+      }
+      if (options.cag) {
+        builder.withCagEntitlement(ORG_KEY, ORG_UUID, options.cag);
+      }
+      const server = await builder.start();
+      harness.state().withAuth(server.baseUrl(), TOKEN, ORG_KEY);
+      return {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+        },
+      };
+    }
+
+    it(
+      'shows Not entitled and flips the command unhealthy on genuine entitlement loss',
+      async () => {
+        const { extraEnv } = await setupVortex({
+          sqaa: { allowed: false, hasEntitlement: false },
+          cag: { allowed: false, hasEntitlement: false },
+        });
+
+        const result = await harness.run('system status', { extraEnv });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('VORTEX');
+        expect(result.stdout).toContain('Not entitled');
+        expect(result.stderr).toContain('Issues found');
+        expect(result.stdout).toContain('RECOMMENDATIONS');
+        expect(result.stdout).toContain("Re-enable Vortex for organization 'my-org'");
+
+        const jsonResult = await harness.run('system status --json', { extraEnv });
+        const json = JSON.parse(jsonResult.stdout) as {
+          healthy: boolean;
+          vortex: { applicable: boolean; status: string };
+        };
+        expect(json.vortex).toEqual({ applicable: true, status: 'not_entitled' });
+        expect(json.healthy).toBe(false);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'stays healthy and omits usage numbers on over_consumption',
+      async () => {
+        // consumption is set on the fixture to prove it's dropped deliberately, not
+        // just because the fake server never sends it.
+        const { extraEnv } = await setupVortex({
+          sqaa: { allowed: true, hasEntitlement: true },
+          cag: {
+            allowed: false,
+            hasEntitlement: true,
+            consumption: { consumed: 1_000_000, limit: 1_000_000 },
+          },
+        });
+
+        const result = await harness.run('system status', { extraEnv });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('VORTEX');
+        expect(result.stdout).toContain('Active (quota exhausted)');
+        expect(result.stdout).not.toContain('Usage limit:');
+        expect(result.stdout).toContain('SYSTEM CHECK: Healthy');
+        expect(result.stdout).not.toContain('Re-enable Vortex');
+
+        const jsonResult = await harness.run('system status --json', { extraEnv });
+        const json = JSON.parse(jsonResult.stdout) as {
+          healthy: boolean;
+          vortex: { applicable: boolean; status: string; consumption?: unknown };
+        };
+        expect(json.vortex).toEqual({ applicable: true, status: 'over_consumption' });
+        expect(json.healthy).toBe(true);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'shows Active with a usage percentage when entitled and consuming normally',
+      async () => {
+        const { extraEnv } = await setupVortex({
+          sqaa: { allowed: true, hasEntitlement: true },
+          cag: {
+            allowed: true,
+            hasEntitlement: true,
+            consumption: { consumed: 15860, limit: 1000000 },
+          },
+        });
+
+        const result = await harness.run('system status', { extraEnv });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('VORTEX');
+        expect(result.stdout).toContain('Active');
+        expect(result.stdout).toContain('Usage limit: 15,860 / 1,000,000 (1.6%)');
+        expect(result.stdout).toContain('SYSTEM CHECK: Healthy');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'omits the VORTEX section entirely for a non-cloud connection',
+      async () => {
+        const server = await harness.newFakeServer().withAuthToken(TOKEN).start();
+        harness.state().withAuth(server.baseUrl(), TOKEN);
+
+        const result = await harness.run('system status');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).not.toContain('VORTEX');
+
+        const jsonResult = await harness.run('system status --json');
+        const json = JSON.parse(jsonResult.stdout) as { vortex: unknown };
+        expect(json.vortex).toEqual({ applicable: false });
+      },
+      { timeout: 15000 },
+    );
+  });
 });
