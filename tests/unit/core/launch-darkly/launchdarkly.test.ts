@@ -20,8 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { buildLaunchDarklyContext } from '@/core/launch-darkly/launchdarkly.ts';
-import type { FeatureFlagIdentity } from '@/core/launch-darkly/types.ts';
+import { buildLaunchDarklyContext, type FeatureFlagIdentity } from '@/core/launch-darkly';
 
 describe('buildLaunchDarklyContext', () => {
   let previousUserHome: string | undefined;

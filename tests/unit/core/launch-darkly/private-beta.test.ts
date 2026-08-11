@@ -24,25 +24,32 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-import { SonarCommand, Stage } from '@/commands/sonar-command.ts';
-import * as authResolver from '@/core/auth/auth-resolver.ts';
+import { createCommandTree } from '@/commands/command-tree.ts';
+import { type CliRuntime, SonarCommand, Stage } from '@/commands/sonar-command.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import {
   FEATURE_FLAG_CACHE_TTL_MS,
   type FeatureFlagFetcher,
   type FeatureFlagIdentity,
+  resolvePrivateBetaFlags,
 } from '@/core/launch-darkly';
 import * as featureFlagCache from '@/core/launch-darkly/cache.ts';
-import { applyPrivateBetaGating } from '@/core/launch-darkly/private-beta.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as identityFetch from '@/core/telemetry/identity-fetch.ts';
 
 import { version as VERSION } from '../../../../package.json';
 
-describe('applyPrivateBetaGating', () => {
+const cloudAuth: ResolvedAuth = {
+  connectionType: 'cloud',
+  serverUrl: 'https://sonarcloud.io',
+  orgKey: 'my-org',
+  token: 'token',
+};
+
+describe('resolvePrivateBetaFlags', () => {
   let tempHome: string;
   let previousUserHome: string | undefined;
-  let resolveAuthSpy: ReturnType<typeof spyOn>;
   let tryLoadStateSpy: ReturnType<typeof spyOn>;
   let resolveTelemetryIdentitySpy: ReturnType<typeof spyOn>;
 
@@ -59,13 +66,6 @@ describe('applyPrivateBetaGating', () => {
     tempHome = mkdtempSync(join(tmpdir(), 'sqcli-launch-darkly-'));
     previousUserHome = process.env.SONAR_USER_HOME;
     process.env.SONAR_USER_HOME = tempHome;
-
-    resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue({
-      connectionType: 'cloud',
-      serverUrl: 'https://sonarcloud.io',
-      orgKey: 'my-org',
-      token: 'token',
-    });
 
     const state = getDefaultState(cliVersion);
     state.auth.isAuthenticated = true;
@@ -86,7 +86,6 @@ describe('applyPrivateBetaGating', () => {
   });
 
   afterEach(() => {
-    resolveAuthSpy.mockRestore();
     tryLoadStateSpy.mockRestore();
     resolveTelemetryIdentitySpy.mockRestore();
     if (previousUserHome === undefined) {
@@ -97,79 +96,40 @@ describe('applyPrivateBetaGating', () => {
     rmSync(tempHome, { recursive: true, force: true });
   });
 
-  function buildTree() {
-    const root = new SonarCommand('sonar');
-    root.command('stable').description('Stable command');
-    root.command('open-beta').description('Open beta').stage(Stage.Beta());
-    root.command('private-beta').description('Private beta').stage(Stage.Beta('cli.beta.private'));
-    return root;
-  }
+  it('returns an empty map when auth is missing', async () => {
+    const fetchFlags = mock(() =>
+      Promise.resolve({ 'cli.beta.private': true }),
+    ) as FeatureFlagFetcher;
 
-  it('is a no-op when the tree has no Private Beta commands', async () => {
-    const root = new SonarCommand('sonar');
-    root.command('open-beta').stage(Stage.Beta());
-    const fetchFlags = mock(() => Promise.resolve({})) as FeatureFlagFetcher;
-
-    await applyPrivateBetaGating(root, { fetchFlags, clientSideId: 'client-id' });
-
+    expect(await resolvePrivateBetaFlags(null, { fetchFlags, clientSideId: 'client-id' })).toEqual(
+      {},
+    );
     expect(fetchFlags).not.toHaveBeenCalled();
-    expect(resolveAuthSpy).not.toHaveBeenCalled();
-    expect(root.commands.map((c) => c.name())).toContain('open-beta');
   });
 
-  it('keeps entitled Private Beta commands and removes denied ones', async () => {
-    const root = buildTree();
+  it('returns fetched flag decisions for a complete identity', async () => {
     const fetchFlags = mock(() =>
       Promise.resolve({
         'cli.beta.private': true,
+        'cli.beta.other': false,
       }),
     ) as FeatureFlagFetcher;
 
-    await applyPrivateBetaGating(root, { fetchFlags, clientSideId: 'client-id' });
-
-    expect(root.commands.map((c) => c.name())).toEqual(['stable', 'open-beta', 'private-beta']);
+    expect(
+      await resolvePrivateBetaFlags(cloudAuth, { fetchFlags, clientSideId: 'client-id' }),
+    ).toEqual({
+      'cli.beta.private': true,
+      'cli.beta.other': false,
+    });
     expect(fetchFlags).toHaveBeenCalledTimes(1);
   });
 
-  it('removes Private Beta commands when the flag is false', async () => {
-    const root = buildTree();
+  it('returns an empty map when the client-side ID is missing', async () => {
     const fetchFlags = mock(() =>
-      Promise.resolve({
-        'cli.beta.private': false,
-      }),
+      Promise.resolve({ 'cli.beta.private': true }),
     ) as FeatureFlagFetcher;
 
-    await applyPrivateBetaGating(root, { fetchFlags, clientSideId: 'client-id' });
-
-    expect(root.commands.map((c) => c.name())).toEqual(['stable', 'open-beta']);
-  });
-
-  it('treats missing auth as not entitled', async () => {
-    resolveAuthSpy.mockResolvedValue(null);
-    const root = buildTree();
-    const fetchFlags = mock(() =>
-      Promise.resolve({
-        'cli.beta.private': true,
-      }),
-    ) as FeatureFlagFetcher;
-
-    await applyPrivateBetaGating(root, { fetchFlags, clientSideId: 'client-id' });
-
-    expect(root.commands.map((c) => c.name())).toEqual(['stable', 'open-beta']);
-    expect(fetchFlags).not.toHaveBeenCalled();
-  });
-
-  it('treats a missing client-side ID as not entitled', async () => {
-    const root = buildTree();
-    const fetchFlags = mock(() =>
-      Promise.resolve({
-        'cli.beta.private': true,
-      }),
-    ) as FeatureFlagFetcher;
-
-    await applyPrivateBetaGating(root, { fetchFlags, clientSideId: '' });
-
-    expect(root.commands.map((c) => c.name())).toEqual(['stable', 'open-beta']);
+    expect(await resolvePrivateBetaFlags(cloudAuth, { fetchFlags, clientSideId: '' })).toEqual({});
     expect(fetchFlags).not.toHaveBeenCalled();
   });
 
@@ -180,21 +140,18 @@ describe('applyPrivateBetaGating', () => {
       'client-id',
       1_000,
     );
-    const root = buildTree();
     const fetchFlags = mock(() =>
-      Promise.resolve({
-        'cli.beta.private': false,
-      }),
+      Promise.resolve({ 'cli.beta.private': false }),
     ) as FeatureFlagFetcher;
 
-    await applyPrivateBetaGating(root, {
-      fetchFlags,
-      clientSideId: 'client-id',
-      nowMs: 1_000 + FEATURE_FLAG_CACHE_TTL_MS - 1,
-    });
-
+    expect(
+      await resolvePrivateBetaFlags(cloudAuth, {
+        fetchFlags,
+        clientSideId: 'client-id',
+        nowMs: 1_000 + FEATURE_FLAG_CACHE_TTL_MS - 1,
+      }),
+    ).toEqual({ 'cli.beta.private': true });
     expect(fetchFlags).not.toHaveBeenCalled();
-    expect(root.commands.map((c) => c.name())).toContain('private-beta');
   });
 
   it('refreshes after the cache TTL and does not reuse an expired true', async () => {
@@ -204,20 +161,66 @@ describe('applyPrivateBetaGating', () => {
       'client-id',
       1_000,
     );
-    const root = buildTree();
     const fetchFlags = mock(() =>
-      Promise.resolve({
-        'cli.beta.private': false,
-      }),
+      Promise.resolve({ 'cli.beta.private': false }),
     ) as FeatureFlagFetcher;
 
-    await applyPrivateBetaGating(root, {
-      fetchFlags,
-      clientSideId: 'client-id',
-      nowMs: 1_000 + FEATURE_FLAG_CACHE_TTL_MS,
-    });
-
+    expect(
+      await resolvePrivateBetaFlags(cloudAuth, {
+        fetchFlags,
+        clientSideId: 'client-id',
+        nowMs: 1_000 + FEATURE_FLAG_CACHE_TTL_MS,
+      }),
+    ).toEqual({ 'cli.beta.private': false });
     expect(fetchFlags).toHaveBeenCalledTimes(1);
-    expect(root.commands.map((c) => c.name())).toEqual(['stable', 'open-beta']);
+  });
+});
+
+describe('Private Beta command registration', () => {
+  function runtimeWithFlags(flags: Record<string, boolean>): CliRuntime {
+    return {
+      auth: cloudAuth,
+      isPrivateBetaEnabled: (flagKey) => flags[flagKey] === true,
+    };
+  }
+
+  it('registers Private Beta commands only when the flag is enabled', () => {
+    const enabled = new SonarCommand(
+      'sonar',
+      undefined,
+      runtimeWithFlags({ 'cli.beta.private': true }),
+    );
+    enabled.command('stable').description('Stable command');
+    enabled.command('open-beta').description('Open beta').stage(Stage.Beta());
+    enabled
+      .command('private-beta')
+      .description('Private beta')
+      .stage(Stage.Beta('cli.beta.private'));
+
+    expect(enabled.commands.map((c) => c.name())).toEqual(['stable', 'open-beta', 'private-beta']);
+
+    const denied = new SonarCommand(
+      'sonar',
+      undefined,
+      runtimeWithFlags({ 'cli.beta.private': false }),
+    );
+    denied.command('stable').description('Stable command');
+    denied.command('open-beta').description('Open beta').stage(Stage.Beta());
+    denied
+      .command('private-beta')
+      .description('Private beta')
+      .stage(Stage.Beta('cli.beta.private'));
+
+    expect(denied.commands.map((c) => c.name())).toEqual(['stable', 'open-beta']);
+  });
+
+  it('omits Private Beta commands from createCommandTree by default', () => {
+    const tree = createCommandTree();
+    const names = tree.commands.map((c) => c.name());
+    expect(names).toContain('context');
+    // No Private Beta commands exist yet; default runtime keeps Open Beta and omits gated ones.
+    for (const command of tree.commands as SonarCommand[]) {
+      expect(command.isPrivateBeta).toBe(false);
+    }
   });
 });

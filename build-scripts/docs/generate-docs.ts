@@ -30,7 +30,7 @@ import { fileURLToPath } from 'node:url';
 
 import type { Option } from 'commander';
 
-import { COMMAND_TREE } from '@/commands/command-tree.ts';
+import { createCommandTree } from '@/commands/command-tree.ts';
 import { BETA_HELP_TAG, type SonarCommand } from '@/commands/sonar-command.ts';
 
 import { version } from '../../package.json';
@@ -86,6 +86,8 @@ interface ClidocCommand {
   children: string[];
 }
 
+// Docs use the default runtime (Private Beta omitted; Open Beta included).
+const COMMAND_TREE = createCommandTree();
 const allCommands: ClidocCommand[] = [];
 const help = COMMAND_TREE.createHelp();
 

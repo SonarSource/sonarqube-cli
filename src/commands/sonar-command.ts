@@ -67,6 +67,21 @@ const betaWarningsShownWithoutState = new Set<string>();
 export const COMMAND_CATEGORIES = ['core', 'data', 'integrate', 'cli-management'] as const;
 export type CommandCategory = (typeof COMMAND_CATEGORIES)[number];
 
+/** Shared per-invocation context for command-tree construction and execution. */
+export interface CliRuntime {
+  /** Auth resolved once at startup; `null` when unauthenticated. */
+  auth: ResolvedAuth | null;
+  /** Private Beta registration gate; Open Beta ignores this. */
+  isPrivateBetaEnabled: (flagKey: string) => boolean;
+}
+
+export function createDefaultCliRuntime(): CliRuntime {
+  return {
+    auth: null,
+    isPrivateBetaEnabled: () => false,
+  };
+}
+
 function isAlphaEnabled(): boolean {
   const value = process.env[ALPHA_ENV_VAR];
   return value === 'true' || value === '1';
@@ -132,16 +147,16 @@ export class SonarCommand extends Command {
   private _requiresAuth = false;
   private _rootHelp: RootHelpMetadata = {};
   private readonly _updateNotifier: UpdateNotifier;
+  private readonly _runtime: CliRuntime;
 
   /**
-   * `updateNotifier` defaults to a fresh instance so the root command (the only
-   * place `new SonarCommand()` is called without it) owns the one instance the
-   * whole tree shares; every subcommand inherits it via createCommand() below
-   * instead of reading a module-level singleton.
+   * `updateNotifier` / `runtime` default so the root command owns the instances
+   * the whole tree shares; every subcommand inherits them via createCommand().
    */
-  constructor(name?: string, updateNotifier: UpdateNotifier = new UpdateNotifier()) {
+  constructor(name?: string, updateNotifier?: UpdateNotifier, runtime?: CliRuntime) {
     super(name);
-    this._updateNotifier = updateNotifier;
+    this._updateNotifier = updateNotifier ?? new UpdateNotifier();
+    this._runtime = runtime ?? createDefaultCliRuntime();
     this.hook('preAction', () => {
       if (this.isAlpha) {
         info(`'${this.name()}' is in alpha; may change or be removed without notice.`, 'stderr');
@@ -151,7 +166,7 @@ export class SonarCommand extends Command {
 
   /** Ensures subcommands created via .command() are also SonarCommand instances. */
   createCommand(name?: string): SonarCommand {
-    return new SonarCommand(name, this._updateNotifier);
+    return new SonarCommand(name, this._updateNotifier, this._runtime);
   }
 
   createHelp(): Help {
@@ -169,13 +184,16 @@ export class SonarCommand extends Command {
 
   /**
    * The update-notification registry shared by this command and its whole subtree.
-   * command-tree.ts builds the whole tree as top-level side effects when the
-   * module loads, registering every .showUpdateNotification() call into this
-   * instance in the process. External code (the postAction hook, unit tests)
-   * reads that already-populated instance via this getter on the root command.
+   * External code (the postAction hook, unit tests) reads it via this getter on
+   * the root command.
    */
   get updateNotifier(): UpdateNotifier {
     return this._updateNotifier;
+  }
+
+  /** Startup auth / Private Beta gate shared by this command and its subtree. */
+  get runtime(): CliRuntime {
+    return this._runtime;
   }
 
   /**
@@ -190,16 +208,28 @@ export class SonarCommand extends Command {
 
   /** Mark this command as Stable, Alpha, or Beta (optionally Private Beta via a flag key). */
   stage(stage: StageDescriptor): this {
-    const nextStage = stage.name;
-    const nextFlagKey = stage.name === 'beta' ? stage.flagKey : undefined;
-    if (this._stage === nextStage && this._betaFlagKey === nextFlagKey) {
+    const newStage = stage.name;
+    const newFlagKey = stage.name === 'beta' ? stage.flagKey : undefined;
+    if (this._stage === newStage && this._betaFlagKey === newFlagKey) {
       return this;
     }
 
-    this._stage = nextStage;
-    this._betaFlagKey = nextFlagKey;
+    this._stage = newStage;
+    this._betaFlagKey = newFlagKey;
 
-    if (nextStage !== 'alpha') {
+    if (
+      newStage === 'beta' &&
+      newFlagKey !== undefined &&
+      !this._runtime.isPrivateBetaEnabled(newFlagKey)
+    ) {
+      if (this.helpGroup() === ALPHA_HELP_GROUP) {
+        this.helpGroup('');
+      }
+      this.unregisterFromParent();
+      return this;
+    }
+
+    if (newStage !== 'alpha') {
       if (this.helpGroup() === ALPHA_HELP_GROUP) {
         this.helpGroup('');
       }
@@ -305,7 +335,8 @@ export class SonarCommand extends Command {
     this._requiresAuth = true;
     super.action((...args: TArgs) =>
       this.runCommand(async () => {
-        const auth = await resolveAuth();
+        // Prefer auth resolved once at startup; fall back for isolated unit tests.
+        const auth = this._runtime.auth ?? (await resolveAuth());
         if (!auth) {
           throw new CommandFailedError('Not authenticated.', {
             remediationHint: "Run 'sonar auth login' to authenticate.",
