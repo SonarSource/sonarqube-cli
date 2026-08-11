@@ -39,6 +39,7 @@ import { readFreshFlagDecisions, writeFlagDecisions } from './cache.ts';
 import {
   getLaunchDarklyDir,
   LAUNCHDARKLY_INIT_TIMEOUT_SECONDS,
+  PRIVATE_BETA_FLAG_KEYS,
   resolveLaunchDarklyClientSideId,
 } from './constants.ts';
 import type { FeatureFlagFetcher, FeatureFlagIdentity } from './types.ts';
@@ -50,6 +51,7 @@ export {
   getLaunchDarklyDir,
   LAUNCHDARKLY_CLIENT_SIDE_IDS,
   LAUNCHDARKLY_PROJECT_KEY,
+  PRIVATE_BETA_FLAG_KEYS,
   resolveLaunchDarklyClientSideId,
   resolveLaunchDarklyEnvironment,
 } from './constants.ts';
@@ -57,6 +59,7 @@ export type { FeatureFlagFetcher, FeatureFlagIdentity } from './types.ts';
 
 export interface ResolvePrivateBetaFlagsOptions {
   fetchFlags?: FeatureFlagFetcher;
+  flagKeys?: readonly string[];
   nowMs?: number;
   clientSideId?: string;
 }
@@ -167,18 +170,31 @@ async function resolveFeatureFlagIdentity(auth: ResolvedAuth): Promise<FeatureFl
   };
 }
 
+function selectFlagDecisions(
+  allFlags: Record<string, boolean>,
+  flagKeys: readonly string[],
+): Record<string, boolean> {
+  const decisions: Record<string, boolean> = {};
+  for (const key of flagKeys) {
+    decisions[key] = allFlags[key];
+  }
+  return decisions;
+}
+
 /**
  * Resolves Private Beta LaunchDarkly flag values for the current identity.
  *
- * Returns an empty map when unauthenticated, identity is incomplete, the
- * client-side ID is missing, or the fetch fails — callers treat missing keys
- * as false. Uses a 12-hour local cache under `~/.sonar/sonarqube-cli/launch-darkly/`.
+ * Returns an empty map when there are no declared flag keys, auth is missing,
+ * identity is incomplete, the client-side ID is missing, or the fetch fails —
+ * callers treat missing keys as false. Uses a 12-hour local cache under
+ * `~/.sonar/sonarqube-cli/launch-darkly/`.
  */
 export async function resolvePrivateBetaFlags(
   auth: ResolvedAuth | null,
   options: ResolvePrivateBetaFlagsOptions = {},
 ): Promise<Record<string, boolean>> {
-  if (!auth) {
+  const flagKeys = options.flagKeys ?? PRIVATE_BETA_FLAG_KEYS;
+  if (!auth || flagKeys.length === 0) {
     return {};
   }
 
@@ -196,12 +212,12 @@ export async function resolvePrivateBetaFlags(
       return {};
     }
 
-    const cached = readFreshFlagDecisions(identity, clientSideId, nowMs);
+    const cached = readFreshFlagDecisions(identity, flagKeys, clientSideId, nowMs);
     if (cached) {
       return cached;
     }
 
-    const decisions = await fetchFlags(identity);
+    const decisions = selectFlagDecisions(await fetchFlags(identity), flagKeys);
     writeFlagDecisions(identity, decisions, clientSideId, nowMs);
     return decisions;
   } catch (err) {

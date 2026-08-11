@@ -91,14 +91,19 @@ function writeCacheFile(cache: CacheFile): void {
 }
 
 /**
- * Returns the full cached flag map when the entry is fresh for this identity.
- * Expired entries are ignored (never reused as a stale true).
+ * Returns cached flag decisions when every requested key is present and fresh.
+ * Expired or incomplete entries are ignored (never reused as a stale true).
  */
 export function readFreshFlagDecisions(
   identity: FeatureFlagIdentity,
+  flagKeys: readonly string[],
   clientSideId: string,
   nowMs: number = Date.now(),
 ): Record<string, boolean> | null {
+  if (flagKeys.length === 0) {
+    return {};
+  }
+
   const cache = readCacheFile();
   if (cache.clientSideId !== clientSideId) {
     return null;
@@ -110,7 +115,14 @@ export function readFreshFlagDecisions(
     return null;
   }
 
-  return { ...entry.flags };
+  const decisions: Record<string, boolean> = {};
+  for (const key of flagKeys) {
+    if (!(key in entry.flags)) {
+      return null;
+    }
+    decisions[key] = entry.flags[key];
+  }
+  return decisions;
 }
 
 /** Persists boolean decisions for the identity, replacing any previous entry. */
@@ -121,7 +133,10 @@ export function writeFlagDecisions(
   nowMs: number = Date.now(),
 ): void {
   const cache = readCacheFile();
-  cache.clientSideId = clientSideId;
+  if (cache.clientSideId !== clientSideId) {
+    cache.clientSideId = clientSideId;
+    cache.entries = {};
+  }
   cache.entries[identityCacheKey(identity)] = {
     fetchedAt: nowMs,
     flags: { ...flags },

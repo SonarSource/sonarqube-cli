@@ -47,6 +47,8 @@ const cloudAuth: ResolvedAuth = {
   token: 'token',
 };
 
+const FLAG_KEYS = ['cli.beta.private'] as const;
+
 describe('resolvePrivateBetaFlags', () => {
   let tempHome: string;
   let previousUserHome: string | undefined;
@@ -96,14 +98,33 @@ describe('resolvePrivateBetaFlags', () => {
     rmSync(tempHome, { recursive: true, force: true });
   });
 
+  it('returns an empty map when no flag keys are declared', async () => {
+    const fetchFlags = mock(() =>
+      Promise.resolve({ 'cli.beta.private': true }),
+    ) as FeatureFlagFetcher;
+
+    expect(
+      await resolvePrivateBetaFlags(cloudAuth, {
+        fetchFlags,
+        flagKeys: [],
+        clientSideId: 'client-id',
+      }),
+    ).toEqual({});
+    expect(fetchFlags).not.toHaveBeenCalled();
+  });
+
   it('returns an empty map when auth is missing', async () => {
     const fetchFlags = mock(() =>
       Promise.resolve({ 'cli.beta.private': true }),
     ) as FeatureFlagFetcher;
 
-    expect(await resolvePrivateBetaFlags(null, { fetchFlags, clientSideId: 'client-id' })).toEqual(
-      {},
-    );
+    expect(
+      await resolvePrivateBetaFlags(null, {
+        fetchFlags,
+        flagKeys: FLAG_KEYS,
+        clientSideId: 'client-id',
+      }),
+    ).toEqual({});
     expect(fetchFlags).not.toHaveBeenCalled();
   });
 
@@ -116,7 +137,11 @@ describe('resolvePrivateBetaFlags', () => {
     ) as FeatureFlagFetcher;
 
     expect(
-      await resolvePrivateBetaFlags(cloudAuth, { fetchFlags, clientSideId: 'client-id' }),
+      await resolvePrivateBetaFlags(cloudAuth, {
+        fetchFlags,
+        flagKeys: ['cli.beta.private', 'cli.beta.other'],
+        clientSideId: 'client-id',
+      }),
     ).toEqual({
       'cli.beta.private': true,
       'cli.beta.other': false,
@@ -129,7 +154,13 @@ describe('resolvePrivateBetaFlags', () => {
       Promise.resolve({ 'cli.beta.private': true }),
     ) as FeatureFlagFetcher;
 
-    expect(await resolvePrivateBetaFlags(cloudAuth, { fetchFlags, clientSideId: '' })).toEqual({});
+    expect(
+      await resolvePrivateBetaFlags(cloudAuth, {
+        fetchFlags,
+        flagKeys: FLAG_KEYS,
+        clientSideId: '',
+      }),
+    ).toEqual({});
     expect(fetchFlags).not.toHaveBeenCalled();
   });
 
@@ -147,6 +178,7 @@ describe('resolvePrivateBetaFlags', () => {
     expect(
       await resolvePrivateBetaFlags(cloudAuth, {
         fetchFlags,
+        flagKeys: FLAG_KEYS,
         clientSideId: 'client-id',
         nowMs: 1_000 + FEATURE_FLAG_CACHE_TTL_MS - 1,
       }),
@@ -168,8 +200,31 @@ describe('resolvePrivateBetaFlags', () => {
     expect(
       await resolvePrivateBetaFlags(cloudAuth, {
         fetchFlags,
+        flagKeys: FLAG_KEYS,
         clientSideId: 'client-id',
         nowMs: 1_000 + FEATURE_FLAG_CACHE_TTL_MS,
+      }),
+    ).toEqual({ 'cli.beta.private': false });
+    expect(fetchFlags).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops cached entries when the client-side ID changes', async () => {
+    featureFlagCache.writeFlagDecisions(
+      cloudIdentity,
+      { 'cli.beta.private': true },
+      'old-client-id',
+      1_000,
+    );
+    const fetchFlags = mock(() =>
+      Promise.resolve({ 'cli.beta.private': false }),
+    ) as FeatureFlagFetcher;
+
+    expect(
+      await resolvePrivateBetaFlags(cloudAuth, {
+        fetchFlags,
+        flagKeys: FLAG_KEYS,
+        clientSideId: 'new-client-id',
+        nowMs: 1_000 + FEATURE_FLAG_CACHE_TTL_MS - 1,
       }),
     ).toEqual({ 'cli.beta.private': false });
     expect(fetchFlags).toHaveBeenCalledTimes(1);

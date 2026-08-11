@@ -26,8 +26,9 @@ import { createCommandTree } from '@/commands/command-tree.ts';
 import { supportedIntegrations } from '@/commands/integrate';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import { installHooks } from '@/commands/integrate/claude/hooks.ts';
-import { resolveAuth } from '@/core/auth/auth-resolver.ts';
-import { resolvePrivateBetaFlags } from '@/core/launch-darkly';
+import { resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { PRIVATE_BETA_FLAG_KEYS, resolvePrivateBetaFlags } from '@/core/launch-darkly';
+import logger from '@/core/observability/logger.ts';
 import { flushSentry } from '@/core/observability/sentry.ts';
 import { setFormattedOutputMode } from '@/core/ui';
 import * as postUpdate from '@/core/update/post-update.ts';
@@ -52,8 +53,19 @@ await postUpdate.runPostUpdateActions({
   installHooks,
 });
 
-const auth = await resolveAuth({ silent: true });
-const privateBetaFlags = await resolvePrivateBetaFlags(auth);
+async function resolveStartupAuth(): Promise<ResolvedAuth | null> {
+  try {
+    return await resolveAuth({ silent: true });
+  } catch (err) {
+    logger.debug(`Startup auth resolution failed: ${(err as Error).message}`);
+    return null;
+  }
+}
+
+// Skip auth + LaunchDarkly when no Private Beta commands are declared.
+const auth = PRIVATE_BETA_FLAG_KEYS.length > 0 ? await resolveStartupAuth() : null;
+const privateBetaFlags =
+  PRIVATE_BETA_FLAG_KEYS.length > 0 ? await resolvePrivateBetaFlags(auth) : {};
 const tree = createCommandTree({
   auth,
   isPrivateBetaEnabled: (flagKey) => privateBetaFlags[flagKey],
