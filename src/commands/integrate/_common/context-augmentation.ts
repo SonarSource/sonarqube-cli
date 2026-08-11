@@ -83,11 +83,11 @@ export async function buildRecordedIntegrationAttrs(params: {
   return {
     ...params.baseAttrs,
     repoRoot: await resolveRecordedRepoRoot(params.projectRoot),
-    ...(params.contextAugmentation
+    ...(params.contextAugmentation?.disposition === 'install'
       ? buildContextAugmentationAttrs(
           params.serverUrl,
           params.orgKey,
-          params.contextAugmentation.scaEnabled,
+          params.contextAugmentation.scaEnabled === true,
         )
       : {}),
   };

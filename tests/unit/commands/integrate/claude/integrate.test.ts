@@ -22,6 +22,7 @@ import { homedir } from 'node:os';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
+import type { VortexDisposition } from '@/commands/integrate/_common/vortex.ts';
 import { integrateClaude } from '@/commands/integrate/claude';
 import * as hooks from '@/commands/integrate/claude/hooks.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
@@ -292,7 +293,7 @@ describe('integrateCommand', () => {
         options: expect.objectContaining({
           projectRoot: '/project/root',
           globalSecretsHookExists: false,
-          installVortex: true,
+          vortexDisposition: 'install',
         }),
         scope: 'project',
         targetRoot: '/project/root',
@@ -305,6 +306,23 @@ describe('integrateCommand', () => {
         },
       }),
     );
+  });
+
+  it('requests Vortex removal when the project organization is not entitled', async () => {
+    mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+    mockVortexEntitlement(false);
+
+    await integrateClaude({}, CLOUD_AUTH);
+
+    expectClaudeInstallCall({
+      targetRoot: '/project/root',
+      scope: 'project',
+      auth: CLOUD_AUTH,
+      projectRoot: '/project/root',
+      projectKey: 'a-project',
+      globalSecretsHookExists: false,
+      vortexDisposition: 'remove',
+    });
   });
 
   it('rethrows Vortex installation failures', async () => {
@@ -333,7 +351,13 @@ describe('integrateCommand', () => {
 
     await integrateClaude({}, CLOUD_AUTH);
 
-    assertMigrationAndHookInstallationRan('a-project', '/project/root', undefined, false, true);
+    assertMigrationAndHookInstallationRan(
+      'a-project',
+      '/project/root',
+      undefined,
+      false,
+      'install',
+    );
   });
 
   it('runs migration and installs hooks when global option is set', async () => {
@@ -344,7 +368,13 @@ describe('integrateCommand', () => {
 
     // Vortex is project-scoped, so a global install never enables it even when
     // the org is entitled.
-    assertMigrationAndHookInstallationRan('a-project', '/project/root', homedir(), true, false);
+    assertMigrationAndHookInstallationRan(
+      'a-project',
+      '/project/root',
+      homedir(),
+      true,
+      'preserve',
+    );
   });
 
   it('still installs when organization access check fails in the summary', async () => {
@@ -354,7 +384,13 @@ describe('integrateCommand', () => {
 
     await integrateClaude({}, CLOUD_AUTH);
 
-    assertMigrationAndHookInstallationRan('a-project', '/project/root', undefined, false, true);
+    assertMigrationAndHookInstallationRan(
+      'a-project',
+      '/project/root',
+      undefined,
+      false,
+      'install',
+    );
   });
 
   it('runs migration and installs hooks when project key is missing', async () => {
@@ -363,7 +399,13 @@ describe('integrateCommand', () => {
 
     await integrateClaude({}, CLOUD_AUTH);
 
-    assertMigrationAndHookInstallationRan(undefined, '/projectB/root', undefined, false, false);
+    assertMigrationAndHookInstallationRan(
+      undefined,
+      '/projectB/root',
+      undefined,
+      false,
+      'preserve',
+    );
   });
 
   it('aborts integration when sonar-secrets installation fails', async () => {
@@ -399,7 +441,7 @@ describe('integrateCommand', () => {
         projectRoot: '/project/root',
         projectKey: 'a-project',
         globalSecretsHookExists: true,
-        installVortex: false,
+        vortexDisposition: 'preserve',
       });
     });
 
@@ -416,7 +458,7 @@ describe('integrateCommand', () => {
         projectRoot: '/project/root',
         projectKey: 'a-project',
         globalSecretsHookExists: true,
-        installVortex: true,
+        vortexDisposition: 'install',
       });
     });
   });
@@ -438,7 +480,7 @@ describe('integrateCommand', () => {
         projectRoot: '/project/root',
         projectKey: 'a-project',
         globalSecretsHookExists: false,
-        installVortex: false,
+        vortexDisposition: 'preserve',
       });
     });
   });
@@ -474,13 +516,30 @@ describe('integrateCommand', () => {
         projectRoot: '/project/root',
         projectKey: 'a-project',
         globalSecretsHookExists: false,
-        installVortex: false,
+        vortexDisposition: 'preserve',
       });
 
       const warnNotice = getMockUiCalls().find(
         (c) => c.method === 'warn' && String(c.args[0]).includes('not supported with --global'),
       );
       expect(warnNotice).toBeDefined();
+    });
+
+    it('preserves project Vortex features when the org is not entitled', async () => {
+      mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+      mockVortexEntitlement(false);
+
+      await integrateClaude({ global: true }, CLOUD_AUTH);
+
+      expectClaudeInstallCall({
+        targetRoot: homedir(),
+        scope: 'global',
+        auth: CLOUD_AUTH,
+        projectRoot: '/project/root',
+        projectKey: 'a-project',
+        globalSecretsHookExists: false,
+        vortexDisposition: 'preserve',
+      });
     });
   });
 
@@ -506,7 +565,7 @@ describe('integrateCommand', () => {
     projectRootDir: string,
     globalDir: string | undefined,
     isGlobal: boolean,
-    vortexEnabled: boolean,
+    vortexDisposition: VortexDisposition,
     auth: ResolvedAuth = CLOUD_AUTH,
     skipSecretsHooks = false,
   ): void {
@@ -519,7 +578,7 @@ describe('integrateCommand', () => {
       projectRoot: projectRootDir,
       projectKey,
       globalSecretsHookExists: skipSecretsHooks,
-      installVortex: vortexEnabled && projectKey !== undefined,
+      vortexDisposition,
     });
   }
 
@@ -530,7 +589,7 @@ describe('integrateCommand', () => {
     projectRoot,
     projectKey,
     globalSecretsHookExists,
-    installVortex,
+    vortexDisposition,
   }: {
     targetRoot: string;
     scope: 'global' | 'project';
@@ -538,14 +597,14 @@ describe('integrateCommand', () => {
     projectRoot: string;
     projectKey?: string;
     globalSecretsHookExists: boolean;
-    installVortex: boolean;
+    vortexDisposition: VortexDisposition;
   }): void {
     // The connection attrs are recorded only when Vortex is installed: its
     // context augmentation subfeature reads them back at runtime.
     const attrs = {
       projectKey: projectKey ?? null,
       repoRoot: projectRoot,
-      ...(installVortex
+      ...(vortexDisposition === 'install'
         ? { orgKey: auth.orgKey ?? null, scaEnabled: false, serverUrl: auth.serverUrl }
         : {}),
     };
@@ -558,7 +617,7 @@ describe('integrateCommand', () => {
         options: expect.objectContaining({
           projectRoot,
           globalSecretsHookExists,
-          installVortex,
+          vortexDisposition,
         }),
         scope,
         targetRoot,

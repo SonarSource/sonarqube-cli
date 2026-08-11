@@ -21,12 +21,15 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.js';
+import { SQAA_HOOK_FEATURE_ID } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
 import {
   VORTEX_CHECK_FAILED_MESSAGE,
   VORTEX_FEATURE_ID,
   VORTEX_OVER_CONSUMPTION_MESSAGE,
   VORTEX_PROMOTION_MESSAGE,
+  VORTEX_UNINSTALL_MESSAGE,
 } from '@/commands/integrate/_common/vortex.js';
+import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import type { VortexEntitlementStatus } from '@/core/server/client.js';
 import type { CliState } from '@/core/state/state.ts';
 
@@ -81,12 +84,14 @@ describe('integrate claude — Vortex entitlement', () => {
     cag?: VortexEntitlementStatus;
     scaEnabled?: boolean;
     cloud?: boolean;
+    preserveState?: boolean;
   }
 
   async function runIntegrateClaude(
     options: RunOptions = {},
   ): Promise<Awaited<ReturnType<TestHarness['run']>>> {
-    const { sqaa = 'enabled', cag = 'enabled', scaEnabled, cloud = true } = options;
+    const { sqaa = 'enabled', cag = 'enabled', scaEnabled, cloud = true, preserveState } = options;
+    const persistedState = preserveState ? (harness.stateJsonFile.asJson() as CliState) : undefined;
     const builder = harness.newFakeServer().withAuthToken(TOKEN).withProject(PROJECT_KEY);
     if (scaEnabled !== undefined) {
       builder.withScaEnabled(scaEnabled);
@@ -103,6 +108,15 @@ describe('integrate claude — Vortex entitlement', () => {
     const server = await builder.start();
     const serverUrl = server.baseUrl();
     harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+    if (persistedState) {
+      const activeConnection = persistedState.auth.connections.find(
+        (connection) => connection.id === persistedState.auth.activeConnectionId,
+      );
+      if (activeConnection) {
+        activeConnection.serverUrl = serverUrl;
+      }
+      harness.state().withRawState(JSON.stringify(persistedState));
+    }
     harness.state().withContextAugmentationBinaryInstalled();
     harness.cwd.writeFile(
       'sonar-project.properties',
@@ -217,5 +231,67 @@ describe('integrate claude — Vortex entitlement', () => {
       expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_PROMOTION_MESSAGE);
     },
     { timeout: 30000 },
+  );
+
+  it(
+    'removes an installed Vortex integration when entitlement is lost',
+    async () => {
+      const installed = await runIntegrateClaude();
+      expect(installed.exitCode).toBe(0);
+      expect(isVortexInstalled()).toBe(true);
+
+      const removed = await runIntegrateClaude({
+        sqaa: 'not_entitled',
+        cag: 'enabled',
+        preserveState: true,
+      });
+
+      expect(removed.exitCode).toBe(0);
+      expect(isVortexInstalled()).toBe(false);
+      expect(`${removed.stdout}\n${removed.stderr}`).toContain(VORTEX_UNINSTALL_MESSAGE);
+
+      const state = harness.stateJsonFile.asJson() as CliState;
+      const claude = state.integrations.installed.find(
+        (integration) => integration.integrationId === 'claude-code',
+      );
+      expect(claude?.features.some((feature) => feature.featureId === VORTEX_FEATURE_ID)).toBe(
+        false,
+      );
+      expect(claude?.features.some((feature) => feature.featureId === SQAA_HOOK_FEATURE_ID)).toBe(
+        false,
+      );
+      expect(claude?.features.some((feature) => feature.featureId === 'mcp-server')).toBe(true);
+      expect(
+        state.dependencies.installed.some(
+          (dependency) => dependency.id === CONTEXT_AUGMENTATION_BINARY_NAME,
+        ),
+      ).toBe(false);
+      expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
+      expect(
+        harness.cwd.file('.claude', 'settings.json').asJson().hooks?.PostToolUse,
+      ).toBeUndefined();
+    },
+    { timeout: 60000 },
+  );
+
+  it(
+    'preserves an installed Vortex integration when the entitlement check fails',
+    async () => {
+      const installed = await runIntegrateClaude();
+      expect(installed.exitCode).toBe(0);
+      expect(isVortexInstalled()).toBe(true);
+
+      const preserved = await runIntegrateClaude({
+        sqaa: 'check_failed',
+        cag: 'enabled',
+        preserveState: true,
+      });
+
+      expect(preserved.exitCode).toBe(0);
+      expect(isVortexInstalled()).toBe(true);
+      expect(`${preserved.stdout}\n${preserved.stderr}`).toContain(VORTEX_CHECK_FAILED_MESSAGE);
+      expect(`${preserved.stdout}\n${preserved.stderr}`).not.toContain(VORTEX_UNINSTALL_MESSAGE);
+    },
+    { timeout: 60000 },
   );
 });

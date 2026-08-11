@@ -83,7 +83,9 @@ describe('integrateCopilot', () => {
     detectGlobalSecretsHookSpy = spyOn(hooks, 'detectGlobalSecretsHook').mockResolvedValue(
       undefined,
     );
-    resolveVortexSetupSpy = spyOn(vortex, 'resolveVortexSetup').mockResolvedValue(null);
+    resolveVortexSetupSpy = spyOn(vortex, 'resolveVortexSetup').mockResolvedValue({
+      disposition: 'preserve',
+    });
   });
 
   afterEach(() => {

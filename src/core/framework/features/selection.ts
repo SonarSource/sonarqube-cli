@@ -41,6 +41,7 @@ import { isFeatureContainer } from './types.ts';
 export type InstallDecision =
   | { action: 'install'; message?: string }
   | { action: 'skip'; message?: string }
+  | { action: 'uninstall'; message?: string }
   | { action: 'ask'; question?: string };
 
 /** Install the feature without asking, optionally printing a message. */
@@ -51,6 +52,11 @@ export function install(message?: string): InstallDecision {
 /** Skip the feature, optionally explaining why. */
 export function skip(message?: string): InstallDecision {
   return { action: 'skip', message };
+}
+
+/** Uninstall the feature without asking, optionally printing a message. */
+export function uninstall(message?: string): InstallDecision {
+  return { action: 'uninstall', message };
 }
 
 /** Ask the user whether to install the feature, with an optional custom prompt. */
@@ -92,19 +98,14 @@ export async function selectFeaturesForInvocation<TOptions>(
 
   for (const application of applications) {
     const feature = application.feature;
-    if (isFeatureInstalled(integration, invocation, application)) {
-      if (await shouldRemoveInstalledFeature(feature, invocation)) {
-        toRemove.push(application);
-      } else {
-        toInstall.push(await materializeApplication(application, invocation, declined));
-      }
-    } else {
-      const outcome = await shouldInstallFeature(feature, invocation);
-      if (outcome === 'install') {
-        toInstall.push(await materializeApplication(application, invocation, declined));
-      } else if (outcome === 'declined') {
-        declined.push(feature.id);
-      }
+    const installed = isFeatureInstalled(integration, invocation, application);
+    const outcome = await shouldInstallFeature(feature, invocation, installed);
+    if (outcome === 'install') {
+      toInstall.push(await materializeApplication(application, invocation, declined));
+    } else if (outcome === 'uninstall' && installed) {
+      toRemove.push(application);
+    } else if (outcome === 'declined') {
+      declined.push(feature.id);
     }
   }
 
@@ -163,8 +164,7 @@ function warnFeatureRemoval(message: string): void {
   text(`  ${red('✗')}  ${message}`);
 }
 
-/** `install`: install it. `declined`: user was asked and said no. `skipped`: auto-skipped, no user decline. */
-type FeatureSelectionOutcome = 'install' | 'declined' | 'skipped';
+type FeatureSelectionOutcome = 'install' | 'skip' | 'uninstall' | 'declined';
 
 /**
  * For a container application, narrow its subfeatures to those whose
@@ -206,31 +206,46 @@ async function selectActiveSubfeatures<TOptions>(
 async function shouldInstallFeature<TOptions>(
   feature: FeatureDeclaration<TOptions>,
   invocation: IntegrationInvocation<TOptions>,
+  installed = false,
 ): Promise<FeatureSelectionOutcome> {
   const decision = normalizeDecision(await feature.shouldInstall?.(invocation));
-  switch (decision.action) {
-    case 'install':
-      if (decision.message) {
-        discreetSuccess(decision.message);
-      }
-      return 'install';
-    case 'skip':
-      if (decision.message) {
-        info(decision.message);
-      }
-      return 'skipped';
-    case 'ask': {
-      if (invocation.nonInteractive) {
-        return 'install';
-      }
-      const defaultQuestion = feature.benefitDescription
-        ? `Install ${feature.displayName}? (${feature.benefitDescription})`
-        : `Install ${feature.displayName}?`;
-      const confirmed = await confirmPrompt(decision.question ?? defaultQuestion, true);
-      if (confirmed === null) {
-        throw new CommandFailedError('Installation cancelled');
-      }
-      return confirmed ? 'install' : 'declined';
-    }
+  if (decision.action === 'ask') {
+    return resolveAskDecision(feature, invocation, decision.question, installed);
   }
+  displayDecisionMessage(decision.action, decision.message, installed);
+  return decision.action;
+}
+
+function displayDecisionMessage(
+  action: 'install' | 'skip' | 'uninstall',
+  message: string | undefined,
+  installed: boolean,
+): void {
+  if (!message || (action === 'uninstall' && !installed)) {
+    return;
+  }
+  const display = action === 'install' ? discreetSuccess : info;
+  display(message);
+}
+
+async function resolveAskDecision<TOptions>(
+  feature: FeatureDeclaration<TOptions>,
+  invocation: IntegrationInvocation<TOptions>,
+  question: string | undefined,
+  installed: boolean,
+): Promise<FeatureSelectionOutcome> {
+  if (installed) {
+    return (await shouldRemoveInstalledFeature(feature, invocation)) ? 'uninstall' : 'install';
+  }
+  if (invocation.nonInteractive) {
+    return 'install';
+  }
+  const defaultQuestion = feature.benefitDescription
+    ? `Install ${feature.displayName}? (${feature.benefitDescription})`
+    : `Install ${feature.displayName}?`;
+  const confirmed = await confirmPrompt(question ?? defaultQuestion, true);
+  if (confirmed === null) {
+    throw new CommandFailedError('Installation cancelled');
+  }
+  return confirmed ? 'install' : 'declined';
 }

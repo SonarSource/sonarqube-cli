@@ -59,6 +59,7 @@ const {
   textSnippet,
   textSnippetRemover,
   tomlPatch,
+  uninstall,
   wholeFile,
   yamlPatch,
 } = await import('@/core/framework/features');
@@ -665,6 +666,82 @@ describe('declarative integration framework', () => {
     expect(selected.toRemove.map((application) => application.feature.id)).toEqual(['feature']);
     expect(selected.toInstall).toEqual([]);
     expect(selected.declined).toEqual([]);
+  });
+
+  for (const nonInteractive of [true, false]) {
+    it(`selects an installed feature for removal when shouldInstall returns uninstall (nonInteractive: ${nonInteractive})`, async () => {
+      setMockUi(true);
+      const integration = makeIntegration({
+        features: [
+          {
+            id: 'feature',
+            displayName: 'Feature',
+            shouldInstall: () => uninstall('Removing feature'),
+          },
+        ],
+      });
+      const state = getDefaultState('test');
+      await installer.applyAndRecordFeatures(state, integration, [
+        { feature: integration.features[0], targetRoot: tempDir, scope: 'project' },
+      ]);
+
+      const selected = await selectForInvocation(integration, {
+        options: {},
+        targetRoot: tempDir,
+        scope: 'project',
+        nonInteractive,
+        state,
+      });
+
+      expect(selected.toRemove.map((application) => application.feature.id)).toEqual(['feature']);
+      expect(selected.toInstall).toEqual([]);
+      expect(getMockUiCalls().filter((call) => call.method === 'confirmPrompt')).toEqual([]);
+      expect(findMockUiCall('info', 'Removing feature')).toBeDefined();
+    });
+  }
+
+  it('leaves an absent feature absent when its decision is uninstall', async () => {
+    setMockUi(true);
+    const integration = makeIntegration({
+      features: [
+        {
+          id: 'feature',
+          displayName: 'Feature',
+          shouldInstall: () => uninstall('Removing feature'),
+        },
+      ],
+    });
+
+    const selected = await selectForInvocation(integration, {
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+      state: getDefaultState('test'),
+    });
+
+    expect(selected.toInstall).toEqual([]);
+    expect(selected.toRemove).toEqual([]);
+    expect(findMockUiCall('info', 'Removing feature')).toBeUndefined();
+  });
+
+  it('preserves an installed feature when its decision is skip', async () => {
+    const integration = makeIntegration({
+      features: [{ id: 'feature', displayName: 'Feature', shouldInstall: () => skip() }],
+    });
+    const state = getDefaultState('test');
+    await installer.applyAndRecordFeatures(state, integration, [
+      { feature: integration.features[0], targetRoot: tempDir, scope: 'project' },
+    ]);
+
+    const selected = await selectForInvocation(integration, {
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+      state,
+    });
+
+    expect(selected.toInstall).toEqual([]);
+    expect(selected.toRemove).toEqual([]);
   });
 
   it('records active subfeatures nested under the container feature in state', async () => {
