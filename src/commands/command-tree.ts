@@ -340,7 +340,7 @@ COMMAND_TREE.command('context')
     category: 'data',
     label: 'context [action] [args...]',
   })
-  .stage(Stage.Beta)
+  .stage(Stage.Beta())
   .argument('[action]', 'Action forwarded to sonar-context-augmentation')
   .argument('[args...]', 'Additional arguments forwarded to sonar-context-augmentation')
   .helpOption(false)

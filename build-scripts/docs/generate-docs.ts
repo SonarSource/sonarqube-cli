@@ -91,7 +91,7 @@ const help = COMMAND_TREE.createHelp();
 
 function visibleDocumentedCommands(cmd: SonarCommand): SonarCommand[] {
   return (help.visibleCommands(cmd) as SonarCommand[]).filter(
-    (child) => child.name() !== 'help' && !child.isAlpha,
+    (child) => child.name() !== 'help' && !child.isAlpha && !child.isPrivateBeta,
   );
 }
 

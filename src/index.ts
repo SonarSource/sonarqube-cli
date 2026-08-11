@@ -26,6 +26,7 @@ import { COMMAND_TREE } from '@/commands/command-tree.ts';
 import { supportedIntegrations } from '@/commands/integrate';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import { installHooks } from '@/commands/integrate/claude/hooks.ts';
+import { applyPrivateBetaGating } from '@/core/launch-darkly';
 import { flushSentry } from '@/core/observability/sentry.ts';
 import { setFormattedOutputMode } from '@/core/ui';
 import * as postUpdate from '@/core/update/post-update.ts';
@@ -50,5 +51,6 @@ await postUpdate.runPostUpdateActions({
   installHooks,
 });
 
+await applyPrivateBetaGating(COMMAND_TREE);
 await COMMAND_TREE.parseAsync(process.argv);
 await flushSentry();

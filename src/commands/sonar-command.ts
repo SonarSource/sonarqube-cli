@@ -37,12 +37,30 @@ import { version as VERSION } from '../../package.json';
 export const ALPHA_ENV_VAR = 'SONARQUBE_CLI_ALPHA';
 export const ALPHA_HELP_TAG = '[ALPHA]';
 export const BETA_HELP_TAG = '[BETA]';
+
+export type StageName = 'stable' | 'alpha' | 'beta';
+
+/** Descriptor passed to {@link SonarCommand.stage}. */
+export type StageDescriptor =
+  | { readonly name: 'stable' }
+  | { readonly name: 'alpha' }
+  | { readonly name: 'beta'; readonly flagKey?: string };
+
+function betaStage(flagKey?: string): StageDescriptor {
+  return flagKey === undefined ? { name: 'beta' } : { name: 'beta', flagKey };
+}
+
+/**
+ * Command lifecycle stage.
+ * Stable/Alpha are constants; Beta is a function so an optional LaunchDarkly
+ * flag key can only be attached to Private Beta commands.
+ */
 export const Stage = {
-  Stable: 'stable',
-  Alpha: 'alpha',
-  Beta: 'beta',
-} as const;
-export type Stage = (typeof Stage)[keyof typeof Stage];
+  Stable: { name: 'stable' } as const satisfies StageDescriptor,
+  Alpha: { name: 'alpha' } as const satisfies StageDescriptor,
+  Beta: betaStage,
+};
+
 const ALPHA_HELP_GROUP = '__SONARQUBE_CLI_ALPHA_COMMANDS__';
 const betaWarningsShownWithoutState = new Set<string>();
 
@@ -109,7 +127,8 @@ class SonarHelp extends Help {
  *                          availability, help, documentation, and warnings
  */
 export class SonarCommand extends Command {
-  private _stage: Stage = Stage.Stable;
+  private _stage: StageName = 'stable';
+  private _betaFlagKey: string | undefined;
   private _requiresAuth = false;
   private _rootHelp: RootHelpMetadata = {};
   private readonly _updateNotifier: UpdateNotifier;
@@ -169,35 +188,52 @@ export class SonarCommand extends Command {
     return this;
   }
 
-  /** Mark this command as Stable, Alpha, or Beta. */
-  stage(stage: Stage): this {
-    if (this._stage === stage) {
+  /** Mark this command as Stable, Alpha, or Beta (optionally Private Beta via a flag key). */
+  stage(stage: StageDescriptor): this {
+    const nextStage = stage.name;
+    const nextFlagKey = stage.name === 'beta' ? stage.flagKey : undefined;
+    if (this._stage === nextStage && this._betaFlagKey === nextFlagKey) {
       return this;
     }
-    this._stage = stage;
-    const siblings = this.parent?.commands as Command[] | undefined;
 
-    if (stage !== Stage.Alpha) {
+    this._stage = nextStage;
+    this._betaFlagKey = nextFlagKey;
+
+    if (nextStage !== 'alpha') {
       if (this.helpGroup() === ALPHA_HELP_GROUP) {
         this.helpGroup('');
       }
-      if (siblings && !siblings.includes(this)) {
-        siblings.push(this);
-      }
+      this.registerWithParent();
       return this;
     }
 
     this.helpGroup(ALPHA_HELP_GROUP);
     if (!isAlphaEnabled()) {
-      // Commander has no public command-removal API, so remove it from the registration array.
-      const commandIndex = siblings?.indexOf(this) ?? -1;
-      if (commandIndex >= 0) {
-        siblings?.splice(commandIndex, 1);
-      }
+      this.unregisterFromParent();
       return this;
     }
 
     return this;
+  }
+
+  /** Re-attach this command to its parent if it was previously unregistered. */
+  registerWithParent(): void {
+    const siblings = this.parent?.commands as Command[] | undefined;
+    if (siblings && !siblings.includes(this)) {
+      siblings.push(this);
+    }
+  }
+
+  /**
+   * Remove this command from its parent's registration array.
+   * Commander has no public command-removal API.
+   */
+  unregisterFromParent(): void {
+    const siblings = this.parent?.commands as Command[] | undefined;
+    const commandIndex = siblings?.indexOf(this) ?? -1;
+    if (commandIndex >= 0) {
+      siblings?.splice(commandIndex, 1);
+    }
   }
 
   description(str: string, argsDescription?: Record<string, string>): this;
@@ -314,17 +350,27 @@ export class SonarCommand extends Command {
 
   /** True when this command is Stable. */
   get isStable(): boolean {
-    return this._stage === Stage.Stable;
+    return this._stage === 'stable';
   }
 
   /** True when this command is Alpha. */
   get isAlpha(): boolean {
-    return this._stage === Stage.Alpha;
+    return this._stage === 'alpha';
   }
 
-  /** True when this command is Beta. */
+  /** True when this command is Beta (Open or Private). */
   get isBeta(): boolean {
-    return this._stage === Stage.Beta;
+    return this._stage === 'beta';
+  }
+
+  /** True when this Beta command is gated by a LaunchDarkly flag key. */
+  get isPrivateBeta(): boolean {
+    return this._stage === 'beta' && this._betaFlagKey !== undefined;
+  }
+
+  /** LaunchDarkly flag key for Private Beta; undefined for Open Beta / non-Beta. */
+  get betaFlagKey(): string | undefined {
+    return this._betaFlagKey;
   }
 
   /** Metadata used by the custom root help menu. */
@@ -353,10 +399,10 @@ export class SonarCommand extends Command {
   }
 
   private withLifecycleTag(description: string): string {
-    if (this._stage === Stage.Alpha) {
+    if (this._stage === 'alpha') {
       return `${description} ${ALPHA_HELP_TAG}`;
     }
-    if (this._stage === Stage.Beta) {
+    if (this._stage === 'beta') {
       return `${description} ${BETA_HELP_TAG}`;
     }
     return description;
@@ -373,7 +419,7 @@ export class SonarCommand extends Command {
   }
 
   private warnIfBeta(): void {
-    if (this._stage !== Stage.Beta) {
+    if (this._stage !== 'beta') {
       return;
     }
 
