@@ -51,7 +51,7 @@ export function identityCacheKey(identity: FeatureFlagIdentity): string {
   ].join('|');
 }
 
-function isCacheFile(value: unknown): value is CacheFile {
+function isCacheFile(value: unknown): value is { clientSideId?: unknown; entries: object } {
   if (typeof value !== 'object' || value === null) {
     return false;
   }
@@ -75,6 +75,21 @@ function isCacheEntry(value: unknown): value is CacheEntry {
   return Object.values(record.flags).every((flagValue) => typeof flagValue === 'boolean');
 }
 
+function sanitizeCacheEntries(entries: object): Record<string, CacheEntry> {
+  const sanitized: Record<string, CacheEntry> = {};
+  for (const [key, value] of Object.entries(entries)) {
+    if (!isCacheEntry(value)) {
+      continue;
+    }
+    const flags: Record<string, boolean> = {};
+    for (const [flagKey, flagValue] of Object.entries(value.flags)) {
+      flags[flagKey] = flagValue;
+    }
+    sanitized[key] = { fetchedAt: value.fetchedAt, flags };
+  }
+  return sanitized;
+}
+
 function readCacheFile(): CacheFile {
   const path = cacheFilePath();
   if (!existsSync(path)) {
@@ -88,7 +103,7 @@ function readCacheFile(): CacheFile {
     }
     return {
       clientSideId: typeof parsed.clientSideId === 'string' ? parsed.clientSideId : '',
-      entries: parsed.entries,
+      entries: sanitizeCacheEntries(parsed.entries),
     };
   } catch (err) {
     logger.debug(`Failed to read feature-flag cache: ${(err as Error).message}`);
@@ -126,17 +141,17 @@ export function readFreshFlagDecisions(
   }
 
   const entryKey = identityCacheKey(identity);
-  const rawEntry = Object.hasOwn(cache.entries, entryKey) ? cache.entries[entryKey] : undefined;
-  if (!isCacheEntry(rawEntry) || nowMs - rawEntry.fetchedAt >= FEATURE_FLAG_CACHE_TTL_MS) {
+  const entry = Object.hasOwn(cache.entries, entryKey) ? cache.entries[entryKey] : undefined;
+  if (entry === undefined || nowMs - entry.fetchedAt >= FEATURE_FLAG_CACHE_TTL_MS) {
     return null;
   }
 
   const decisions: Record<string, boolean> = {};
   for (const key of flagKeys) {
-    if (!(key in rawEntry.flags)) {
+    if (!(key in entry.flags)) {
       return null;
     }
-    decisions[key] = rawEntry.flags[key];
+    decisions[key] = entry.flags[key];
   }
   return decisions;
 }
