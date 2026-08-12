@@ -155,7 +155,12 @@ export class FakeSonarQubeServerBuilder {
   > = new Map();
   private readonly cagEntitlementOrgs: Map<
     string,
-    { uuid: string; allowed: boolean; hasEntitlement: boolean }
+    {
+      uuid: string;
+      allowed: boolean;
+      hasEntitlement: boolean;
+      consumption?: { consumed: number; limit: number };
+    }
   > = new Map();
   /** Keyed by org UUID (`resourceId`), for `GET /billing/entitlements`. */
   private readonly privateProjectsEntitlements: Map<string, boolean> = new Map();
@@ -341,13 +346,18 @@ export class FakeSonarQubeServerBuilder {
   withCagEntitlement(
     orgKey: string,
     uuid: string,
-    options: { allowed?: boolean; hasEntitlement?: boolean } = {},
+    options: {
+      allowed?: boolean;
+      hasEntitlement?: boolean;
+      consumption?: { consumed: number; limit: number };
+    } = {},
   ): this {
     const allowed = options.allowed ?? true;
     this.cagEntitlementOrgs.set(orgKey, {
       uuid,
       allowed,
       hasEntitlement: options.hasEntitlement ?? allowed,
+      consumption: options.consumption,
     });
     return this;
   }
@@ -355,7 +365,11 @@ export class FakeSonarQubeServerBuilder {
   withVortexEntitlement(
     orgKey: string,
     uuid: string,
-    options: { allowed?: boolean; hasEntitlement?: boolean } = {},
+    options: {
+      allowed?: boolean;
+      hasEntitlement?: boolean;
+      consumption?: { consumed: number; limit: number };
+    } = {},
   ): this {
     this.withSqaaEntitlement(orgKey, uuid, options);
     this.withCagEntitlement(orgKey, uuid, options);
@@ -985,6 +999,7 @@ export class FakeSonarQubeServerBuilder {
             JSON.stringify({
               allowed: entitlement.allowed,
               hasEntitlement: entitlement.hasEntitlement,
+              ...(entitlement.consumption ? { consumption: entitlement.consumption } : {}),
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );

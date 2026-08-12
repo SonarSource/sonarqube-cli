@@ -19,7 +19,16 @@
  */
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { SonarQubeClient, type VortexEntitlementStatus } from '@/core/server/client.ts';
+import {
+  SonarQubeClient,
+  type VortexEntitlementResult,
+  type VortexEntitlementStatus,
+} from '@/core/server/client.ts';
+
+/** Shared low-level call: every entitlement lookup in this file goes through here. */
+async function queryVortexEntitlement(auth: ResolvedAuth): Promise<VortexEntitlementResult> {
+  return new SonarQubeClient(auth.serverUrl, auth.token).hasVortexEntitlement(auth.orgKey);
+}
 
 /**
  * Re-query the combined Vortex entitlement for the resolved connection. Used to
@@ -29,5 +38,28 @@ import { SonarQubeClient, type VortexEntitlementStatus } from '@/core/server/cli
 export async function recheckVortexEntitlement(
   auth: ResolvedAuth,
 ): Promise<VortexEntitlementStatus> {
-  return new SonarQubeClient(auth.serverUrl, auth.token).hasVortexEntitlement(auth.orgKey);
+  const { status } = await queryVortexEntitlement(auth);
+  return status;
+}
+
+/**
+ * `not_applicable` (unauthenticated, or not SonarQube Cloud with an organization) is
+ * decided here, before ever calling the entitlement API — deliberately distinct from a
+ * real `not_entitled` result, so callers never tell a SonarQube Server user to re-enable
+ * a feature they can never reach.
+ */
+export async function resolveVortexEntitlement(
+  auth: ResolvedAuth | null,
+): Promise<VortexEntitlementResult> {
+  if (auth?.connectionType !== 'cloud' || !auth.orgKey) {
+    return { status: 'not_applicable' };
+  }
+  return queryVortexEntitlement(auth);
+}
+
+export function isVortexEntitlementLoss(
+  vortexEntitlement: VortexEntitlementResult,
+  vortexInstalled: boolean,
+): boolean {
+  return vortexInstalled && vortexEntitlement.status === 'not_entitled';
 }
