@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
 import type {
   FeatureContainer,
@@ -30,6 +30,7 @@ import { askUser, skip, uninstall } from '@/core/framework/features';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
 import { info, warn } from '@/core/ui';
+import { resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 import { isContextAugmentationSkipped } from './context-augmentation.ts';
 import { VORTEX_FEATURE_BENEFIT, VORTEX_FEATURE_PREVIEW } from './feature-constants.ts';
@@ -119,13 +120,12 @@ export interface ResolvedVortexSetup {
 export async function resolveVortexSetup(
   params: ResolveVortexSetupParams,
 ): Promise<ResolvedVortexSetup> {
-  if (!isSonarQubeCloud(params.auth.serverUrl)) {
+  const { status } = await resolveVortexEntitlement(params.auth);
+
+  if (status === 'not_applicable') {
     info(VORTEX_PROMOTION_MESSAGE);
     return { disposition: 'preserve' };
   }
-
-  const client = new SonarQubeClient(params.auth.serverUrl, params.auth.token);
-  const { status } = await client.hasVortexEntitlement(params.auth.orgKey);
 
   if (status === 'check_failed') {
     warn(VORTEX_CHECK_FAILED_MESSAGE);
@@ -133,10 +133,7 @@ export async function resolveVortexSetup(
   }
   if (status === 'not_entitled') {
     info(VORTEX_PROMOTION_MESSAGE);
-    return {
-      disposition:
-        params.isGlobal || !params.projectKey || !params.auth.orgKey ? 'preserve' : 'remove',
-    };
+    return { disposition: 'remove' };
   }
   if (params.isGlobal) {
     warn(VORTEX_GLOBAL_SKIP_MESSAGE);
@@ -154,6 +151,7 @@ export async function resolveVortexSetup(
     return { disposition: 'install', scaEnabled: false };
   }
 
+  const client = new SonarQubeClient(params.auth.serverUrl, params.auth.token);
   // The rendered context augmentation skill advertises
   // SCA tools only when SCA is available on the connection.
   const scaStatus = await client.getScaEnablement(params.auth.connectionType, params.auth.orgKey);

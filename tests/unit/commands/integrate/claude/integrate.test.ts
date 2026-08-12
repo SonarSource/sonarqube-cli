@@ -393,19 +393,13 @@ describe('integrateCommand', () => {
     );
   });
 
-  it('runs migration and installs hooks when project key is missing', async () => {
+  it('requests Vortex removal when project key is missing and entitlement is lost', async () => {
     mockDiscoveredProject({ rootDir: '/projectB/root' });
     mockVortexEntitlement(false);
 
     await integrateClaude({}, CLOUD_AUTH);
 
-    assertMigrationAndHookInstallationRan(
-      undefined,
-      '/projectB/root',
-      undefined,
-      false,
-      'preserve',
-    );
+    assertMigrationAndHookInstallationRan(undefined, '/projectB/root', undefined, false, 'remove');
   });
 
   it('aborts integration when sonar-secrets installation fails', async () => {
@@ -525,7 +519,7 @@ describe('integrateCommand', () => {
       expect(warnNotice).toBeDefined();
     });
 
-    it('preserves project Vortex features when the org is not entitled', async () => {
+    it('requests Vortex removal when a global run finds the org is not entitled', async () => {
       mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
       mockVortexEntitlement(false);
 
@@ -538,7 +532,7 @@ describe('integrateCommand', () => {
         projectRoot: '/project/root',
         projectKey: 'a-project',
         globalSecretsHookExists: false,
-        vortexDisposition: 'preserve',
+        vortexDisposition: 'remove',
       });
     });
   });
