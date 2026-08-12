@@ -120,14 +120,21 @@ describe('fetchFlagsFromLaunchDarkly', () => {
     options.logger.error('e');
   });
 
-  it('returns an empty map when the client-side ID is missing', async () => {
+  it('returns null when SDK initialization fails', async () => {
+    waitForInitialization.mockImplementation(() => Promise.reject(new Error('timeout')));
+
+    expect(await fetchFlagsFromLaunchDarkly(cloudIdentity)).toBeNull();
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns null when the client-side ID is missing', async () => {
     clientSideIdSpy = spyOn(ldConstants, 'resolveLaunchDarklyClientSideId').mockReturnValue('');
 
-    expect(await fetchFlagsFromLaunchDarkly(cloudIdentity)).toEqual({});
+    expect(await fetchFlagsFromLaunchDarkly(cloudIdentity)).toBeNull();
     expect(initialize).not.toHaveBeenCalled();
   });
 
-  it('returns an empty map when the identity cannot build an LD context', async () => {
+  it('returns null when the identity cannot build an LD context', async () => {
     expect(
       await fetchFlagsFromLaunchDarkly({
         connectionType: 'cloud',
@@ -135,15 +142,8 @@ describe('fetchFlagsFromLaunchDarkly', () => {
         organizationUuidV4: null,
         sqsInstallationId: null,
       }),
-    ).toEqual({});
+    ).toBeNull();
     expect(initialize).not.toHaveBeenCalled();
-  });
-
-  it('returns an empty map when SDK initialization fails', async () => {
-    waitForInitialization.mockImplementation(() => Promise.reject(new Error('timeout')));
-
-    expect(await fetchFlagsFromLaunchDarkly(cloudIdentity)).toEqual({});
-    expect(close).toHaveBeenCalledTimes(1);
   });
 
   it('still returns flags when client.close rejects', async () => {

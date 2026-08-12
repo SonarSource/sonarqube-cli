@@ -261,6 +261,35 @@ describe('resolvePrivateBetaFlags', () => {
     ).toEqual({});
   });
 
+  it('does not cache a null fetch result so a later success can enable the flag', async () => {
+    const fetchFlags = mock(
+      (_identity: FeatureFlagIdentity): Promise<Record<string, boolean> | null> =>
+        Promise.resolve(null),
+    );
+
+    expect(
+      await resolvePrivateBetaFlags(cloudAuth, {
+        fetchFlags,
+        flagKeys: FLAG_KEYS,
+        clientSideId: 'client-id',
+        nowMs: 1_000,
+      }),
+    ).toEqual({});
+    expect(fetchFlags).toHaveBeenCalledTimes(1);
+
+    fetchFlags.mockImplementation(() => Promise.resolve({ 'cli.beta.private': true }));
+
+    expect(
+      await resolvePrivateBetaFlags(cloudAuth, {
+        fetchFlags,
+        flagKeys: FLAG_KEYS,
+        clientSideId: 'client-id',
+        nowMs: 1_000 + FEATURE_FLAG_CACHE_TTL_MS - 1,
+      }),
+    ).toEqual({ 'cli.beta.private': true });
+    expect(fetchFlags).toHaveBeenCalledTimes(2);
+  });
+
   it('uses the default client-side ID when omitted', async () => {
     const fetchFlags = mock(() =>
       Promise.resolve({ 'cli.beta.private': true }),

@@ -103,17 +103,19 @@ function toBooleanFlagMap(allFlags: Record<string, unknown>): Record<string, boo
 
 /**
  * Fetches Private Beta flag values via the LaunchDarkly client-side SDK.
- * Failures and missing client-side IDs yield an empty map (all flags treated as false).
+ * Returns `null` on failure (missing client-side ID, unusable context, or SDK error)
+ * so callers do not cache a poisoned all-false decision. A successful empty map means
+ * LaunchDarkly returned no true flags.
  */
 export const fetchFlagsFromLaunchDarkly: FeatureFlagFetcher = async (identity) => {
   const clientSideId = resolveLaunchDarklyClientSideId();
   if (!clientSideId) {
-    return {};
+    return null;
   }
 
   const context = buildLaunchDarklyContext(identity);
   if (!context) {
-    return {};
+    return null;
   }
 
   const client = initialize(clientSideId, context, {
@@ -141,7 +143,7 @@ export const fetchFlagsFromLaunchDarkly: FeatureFlagFetcher = async (identity) =
     return toBooleanFlagMap(client.allFlags());
   } catch (err) {
     logger.debug(`LaunchDarkly flag refresh failed: ${(err as Error).message}`);
-    return {};
+    return null;
   } finally {
     await client.close().catch(() => undefined);
   }
@@ -186,8 +188,14 @@ function selectFlagDecisions(
  *
  * Returns an empty map when there are no declared flag keys, auth is missing,
  * identity is incomplete, the client-side ID is missing, or the fetch fails —
+<<<<<<< HEAD
  * callers treat missing keys as false. Uses a 2-hour local cache under
  * `~/.sonar/sonarqube-cli/launch-darkly/`.
+=======
+ * callers treat missing keys as false. Uses a 12-hour local cache under
+ * `~/.sonar/sonarqube-cli/launch-darkly/`. Fetch failures are not written to
+ * the cache so a transient LaunchDarkly outage cannot lock users out for the TTL.
+>>>>>>> b47090ee (CLI-935 Avoid caching LaunchDarkly fetch failures)
  */
 export async function resolvePrivateBetaFlags(
   auth: ResolvedAuth | null,
@@ -217,7 +225,12 @@ export async function resolvePrivateBetaFlags(
       return cached;
     }
 
-    const decisions = selectFlagDecisions(await fetchFlags(identity), flagKeys);
+    const fetched = await fetchFlags(identity);
+    if (fetched === null) {
+      return {};
+    }
+
+    const decisions = selectFlagDecisions(fetched, flagKeys);
     writeFlagDecisions(identity, decisions, clientSideId, nowMs);
     return decisions;
   } catch (err) {
