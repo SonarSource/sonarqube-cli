@@ -29,10 +29,12 @@ import { ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR_FROM_AGENTS } from '@/core/config-c
 import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
 
 import { version as CLI_VERSION } from '../../../../package.json';
+import { VORTEX_FEATURE_ID } from '../../../../src/commands/integrate/_common/vortex';
 import {
   formatAntigravityHookCommand,
   hookScriptName,
 } from '../../../../src/commands/integrate/antigravity/hooks';
+import { claudeIntegration } from '../../../../src/commands/integrate/claude/declaration';
 import { IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
 
 function baseState(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -1421,12 +1423,47 @@ describe('system status', () => {
     }
 
     it(
-      'shows Not entitled and flips the command unhealthy on genuine entitlement loss',
+      'shows Not entitled but stays healthy when Vortex is not installed',
       async () => {
         const { extraEnv } = await setupVortex({
           sqaa: { allowed: false, hasEntitlement: false },
           cag: { allowed: false, hasEntitlement: false },
         });
+
+        const result = await harness.run('system status', { extraEnv });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('VORTEX');
+        expect(result.stdout).toContain('Not entitled');
+        expect(result.stdout).toContain('SYSTEM CHECK: Healthy');
+        expect(result.stdout).not.toContain("Re-enable Vortex for organization 'my-org'");
+
+        const jsonResult = await harness.run('system status --json', { extraEnv });
+        const json = JSON.parse(jsonResult.stdout) as {
+          healthy: boolean;
+          vortex: { applicable: boolean; status: string };
+        };
+        expect(json.vortex).toEqual({ applicable: true, status: 'not_entitled' });
+        expect(json.healthy).toBe(true);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'flips the command unhealthy on entitlement loss when Vortex is installed',
+      async () => {
+        const { extraEnv } = await setupVortex({
+          sqaa: { allowed: false, hasEntitlement: false },
+          cag: { allowed: false, hasEntitlement: false },
+        });
+        harness
+          .state()
+          .withInstalledIntegrationFeature(
+            claudeIntegration,
+            VORTEX_FEATURE_ID,
+            'project',
+            harness.cwd.path,
+          );
 
         const result = await harness.run('system status', { extraEnv });
 

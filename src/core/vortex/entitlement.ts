@@ -57,6 +57,9 @@ export async function resolveVortexEntitlement(
   return queryVortexEntitlement(auth);
 }
 
-export function isVortexEntitlementLoss(vortex: VortexEntitlementResult): boolean {
-  return vortex.status === 'not_entitled';
+export function isVortexEntitlementLoss(
+  vortexEntitlement: VortexEntitlementResult,
+  vortexInstalled: boolean,
+): boolean {
+  return vortexInstalled && vortexEntitlement.status === 'not_entitled';
 }
