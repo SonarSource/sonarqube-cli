@@ -107,7 +107,7 @@ const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
 
 /** Build the CLI command tree for this invocation. */
 export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime()): SonarCommand {
-  const COMMAND_TREE = new SonarCommand(undefined, undefined, runtime);
+  const COMMAND_TREE = new SonarCommand({ runtime });
 
   COMMAND_TREE.name('sonar')
     .description('SonarQube CLI')

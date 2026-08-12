@@ -557,9 +557,11 @@ describe('SonarCommand', () => {
 
     it('stores an optional LaunchDarkly flag key for Private Beta', () => {
       const open = new SonarCommand('open').stage(Stage.Beta());
-      const gated = new SonarCommand('gated', undefined, {
-        auth: null,
-        isPrivateBetaEnabled: () => true,
+      const gated = new SonarCommand('gated', {
+        runtime: {
+          auth: null,
+          isPrivateBetaEnabled: () => true,
+        },
       }).stage(Stage.Beta('cli.beta.preview'));
 
       expect(open.isBeta).toBe(true);
@@ -572,16 +574,20 @@ describe('SonarCommand', () => {
     });
 
     it('registers Private Beta only when the runtime gate allows it', () => {
-      const enabled = new SonarCommand('root', undefined, {
-        auth: null,
-        isPrivateBetaEnabled: (key) => key === 'cli.beta.preview',
+      const enabled = new SonarCommand('root', {
+        runtime: {
+          auth: null,
+          isPrivateBetaEnabled: (key) => key === 'cli.beta.preview',
+        },
       });
       enabled.command('gated').stage(Stage.Beta('cli.beta.preview'));
       expect(enabled.commands.map((c) => c.name())).toContain('gated');
 
-      const denied = new SonarCommand('root', undefined, {
-        auth: null,
-        isPrivateBetaEnabled: () => false,
+      const denied = new SonarCommand('root', {
+        runtime: {
+          auth: null,
+          isPrivateBetaEnabled: () => false,
+        },
       });
       denied.command('gated').stage(Stage.Beta('cli.beta.preview'));
       expect(denied.commands.map((c) => c.name())).not.toContain('gated');

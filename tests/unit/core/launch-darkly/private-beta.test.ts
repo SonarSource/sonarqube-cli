@@ -241,11 +241,9 @@ describe('Private Beta command registration', () => {
   }
 
   it('registers Private Beta commands only when the flag is enabled', () => {
-    const enabled = new SonarCommand(
-      'sonar',
-      undefined,
-      runtimeWithFlags({ 'cli.beta.private': true }),
-    );
+    const enabled = new SonarCommand('sonar', {
+      runtime: runtimeWithFlags({ 'cli.beta.private': true }),
+    });
     enabled.command('stable').description('Stable command');
     enabled.command('open-beta').description('Open beta').stage(Stage.Beta());
     enabled
@@ -255,11 +253,9 @@ describe('Private Beta command registration', () => {
 
     expect(enabled.commands.map((c) => c.name())).toEqual(['stable', 'open-beta', 'private-beta']);
 
-    const denied = new SonarCommand(
-      'sonar',
-      undefined,
-      runtimeWithFlags({ 'cli.beta.private': false }),
-    );
+    const denied = new SonarCommand('sonar', {
+      runtime: runtimeWithFlags({ 'cli.beta.private': false }),
+    });
     denied.command('stable').description('Stable command');
     denied.command('open-beta').description('Open beta').stage(Stage.Beta());
     denied
@@ -281,9 +277,11 @@ describe('Private Beta command registration', () => {
   });
 
   it('collects Private Beta flag keys from Stage.Beta declarations', () => {
-    const root = new SonarCommand('sonar', undefined, {
-      auth: null,
-      isPrivateBetaEnabled: () => true,
+    const root = new SonarCommand('sonar', {
+      runtime: {
+        auth: null,
+        isPrivateBetaEnabled: () => true,
+      },
     });
     root.command('stable');
     root.command('open').stage(Stage.Beta());

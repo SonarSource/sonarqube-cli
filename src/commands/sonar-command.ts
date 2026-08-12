@@ -93,6 +93,12 @@ export interface RootHelpMetadata {
   label?: string;
 }
 
+/** Optional shared state for a SonarCommand and its subtree. */
+export interface SonarCommandOptions {
+  updateNotifier?: UpdateNotifier;
+  runtime?: CliRuntime;
+}
+
 type CommandArgs = unknown[];
 type CommandResult = void | Promise<void>;
 
@@ -153,10 +159,18 @@ export class SonarCommand extends Command {
    * `updateNotifier` / `runtime` default so the root command owns the instances
    * the whole tree shares; every subcommand inherits them via createCommand().
    */
-  constructor(name?: string, updateNotifier?: UpdateNotifier, runtime?: CliRuntime) {
+  constructor(options?: SonarCommandOptions);
+  constructor(name?: string, options?: SonarCommandOptions);
+  constructor(
+    nameOrOptions?: string | SonarCommandOptions,
+    maybeOptions: SonarCommandOptions = {},
+  ) {
+    const hasName = typeof nameOrOptions === 'string';
+    const name = hasName ? nameOrOptions : undefined;
+    const options = (hasName ? maybeOptions : nameOrOptions) ?? {};
     super(name);
-    this._updateNotifier = updateNotifier ?? new UpdateNotifier();
-    this._runtime = runtime ?? createDefaultCliRuntime();
+    this._updateNotifier = options.updateNotifier ?? new UpdateNotifier();
+    this._runtime = options.runtime ?? createDefaultCliRuntime();
     this.hook('preAction', () => {
       if (this.isAlpha) {
         info(`'${this.name()}' is in alpha; may change or be removed without notice.`, 'stderr');
@@ -166,7 +180,10 @@ export class SonarCommand extends Command {
 
   /** Ensures subcommands created via .command() are also SonarCommand instances. */
   createCommand(name?: string): SonarCommand {
-    return new SonarCommand(name, this._updateNotifier, this._runtime);
+    return new SonarCommand(name, {
+      updateNotifier: this._updateNotifier,
+      runtime: this._runtime,
+    });
   }
 
   createHelp(): Help {
