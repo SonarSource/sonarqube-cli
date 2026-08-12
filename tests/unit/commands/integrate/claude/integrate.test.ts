@@ -22,7 +22,7 @@ import { homedir } from 'node:os';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
-import type { VortexDisposition } from '@/commands/integrate/_common/vortex.ts';
+import type { VortexDisposition } from '@/commands/integrate/_common/types.ts';
 import { integrateClaude } from '@/commands/integrate/claude';
 import * as hooks from '@/commands/integrate/claude/hooks.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';

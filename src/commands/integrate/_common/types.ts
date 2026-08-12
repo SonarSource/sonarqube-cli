@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { VortexDisposition } from './vortex.ts';
+export type VortexDisposition = 'install' | 'preserve' | 'remove';
 
 export interface IntegrateAgentOptions {
   project?: string;

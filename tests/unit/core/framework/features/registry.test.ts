@@ -668,8 +668,9 @@ describe('declarative integration framework', () => {
     expect(selected.declined).toEqual([]);
   });
 
-  for (const nonInteractive of [true, false]) {
-    it(`selects an installed feature for removal when shouldInstall returns uninstall (nonInteractive: ${nonInteractive})`, async () => {
+  it.each([true, false])(
+    'selects an installed feature for removal when shouldInstall returns uninstall (nonInteractive: %p)',
+    async (nonInteractive) => {
       setMockUi(true);
       const integration = makeIntegration({
         features: [
@@ -697,8 +698,8 @@ describe('declarative integration framework', () => {
       expect(selected.toInstall).toEqual([]);
       expect(getMockUiCalls().filter((call) => call.method === 'confirmPrompt')).toEqual([]);
       expect(findMockUiCall('info', 'Removing feature')).toBeDefined();
-    });
-  }
+    },
+  );
 
   it('leaves an absent feature absent when its decision is uninstall', async () => {
     setMockUi(true);

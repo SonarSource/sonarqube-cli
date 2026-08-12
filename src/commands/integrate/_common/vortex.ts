@@ -34,10 +34,9 @@ import { resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 import { isContextAugmentationSkipped } from './context-augmentation.ts';
 import { VORTEX_FEATURE_BENEFIT, VORTEX_FEATURE_PREVIEW } from './feature-constants.ts';
-import type { IntegrateAgentOptions } from './types.ts';
+import type { IntegrateAgentOptions, VortexDisposition } from './types.ts';
 
 export const VORTEX_FEATURE_ID = 'vortex';
-export type VortexDisposition = 'install' | 'preserve' | 'remove';
 
 /** Vortex is project-scoped, so only these records carry usable project metadata. */
 export function isProjectVortexFeature(feature: InstalledIntegrationFeature): boolean {
