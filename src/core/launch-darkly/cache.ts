@@ -64,12 +64,15 @@ function isCacheEntry(value: unknown): value is CacheEntry {
     return false;
   }
   const record = value as { fetchedAt?: unknown; flags?: unknown };
-  return (
-    Number.isFinite(record.fetchedAt) &&
-    typeof record.flags === 'object' &&
-    record.flags !== null &&
-    !Array.isArray(record.flags)
-  );
+  if (
+    !Number.isFinite(record.fetchedAt) ||
+    typeof record.flags !== 'object' ||
+    record.flags === null ||
+    Array.isArray(record.flags)
+  ) {
+    return false;
+  }
+  return Object.values(record.flags).every((flagValue) => typeof flagValue === 'boolean');
 }
 
 function readCacheFile(): CacheFile {

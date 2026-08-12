@@ -186,7 +186,7 @@ function selectFlagDecisions(
  *
  * Returns an empty map when there are no declared flag keys, auth is missing,
  * identity is incomplete, the client-side ID is missing, or the fetch fails —
- * callers treat missing keys as false. Uses a 12-hour local cache under
+ * callers treat missing keys as false. Uses a 2-hour local cache under
  * `~/.sonar/sonarqube-cli/launch-darkly/`.
  */
 export async function resolvePrivateBetaFlags(

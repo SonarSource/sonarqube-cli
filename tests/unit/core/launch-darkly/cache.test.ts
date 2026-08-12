@@ -85,4 +85,18 @@ describe('readFreshFlagDecisions', () => {
 
     expect(readFreshFlagDecisions(identity, ['cli.beta.private'], 'client-id', 1_000)).toBeNull();
   });
+
+  it('ignores entries whose flag values are not booleans', () => {
+    writeRawCache(tempHome, {
+      clientSideId: 'client-id',
+      entries: {
+        [identityCacheKey(identity)]: {
+          fetchedAt: 1_000,
+          flags: { 'cli.beta.private': 'yes' },
+        },
+      },
+    });
+
+    expect(readFreshFlagDecisions(identity, ['cli.beta.private'], 'client-id', 1_000)).toBeNull();
+  });
 });
