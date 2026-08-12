@@ -35,6 +35,7 @@ import {
   resolveTelemetryIdentity,
 } from '@/core/telemetry/identity-fetch.ts';
 
+import { readFreshFlagDecisions, writeFlagDecisions } from './cache.ts';
 import {
   getLaunchDarklyDir,
   LAUNCHDARKLY_INIT_TIMEOUT_SECONDS,
@@ -45,6 +46,7 @@ import type { FeatureFlagFetcher, FeatureFlagIdentity } from './types.ts';
 export type { LaunchDarklyEnvironment } from './constants.ts';
 export {
   ENV_LAUNCHDARKLY_ENVIRONMENT,
+  FEATURE_FLAG_CACHE_TTL_MS,
   getLaunchDarklyDir,
   LAUNCHDARKLY_CLIENT_SIDE_IDS,
   LAUNCHDARKLY_PROJECT_KEY,
@@ -57,6 +59,7 @@ export interface ResolvePrivateBetaFlagsOptions {
   fetchFlags?: FeatureFlagFetcher;
   /** Required Private Beta flag keys discovered from the command tree. */
   flagKeys?: readonly string[];
+  nowMs?: number;
   clientSideId?: string;
 }
 
@@ -183,7 +186,8 @@ function selectFlagDecisions(
  *
  * Returns an empty map when there are no declared flag keys, auth is missing,
  * identity is incomplete, the client-side ID is missing, or the fetch fails —
- * callers treat missing keys as false.
+ * callers treat missing keys as false. Uses a 12-hour local cache under
+ * `~/.sonar/sonarqube-cli/launch-darkly/`.
  */
 export async function resolvePrivateBetaFlags(
   auth: ResolvedAuth | null,
@@ -199,6 +203,7 @@ export async function resolvePrivateBetaFlags(
     return {};
   }
 
+  const nowMs = options.nowMs ?? Date.now();
   const fetchFlags = options.fetchFlags ?? fetchFlagsFromLaunchDarkly;
 
   try {
@@ -207,7 +212,14 @@ export async function resolvePrivateBetaFlags(
       return {};
     }
 
-    return selectFlagDecisions(await fetchFlags(identity), flagKeys);
+    const cached = readFreshFlagDecisions(identity, flagKeys, clientSideId, nowMs);
+    if (cached) {
+      return cached;
+    }
+
+    const decisions = selectFlagDecisions(await fetchFlags(identity), flagKeys);
+    writeFlagDecisions(identity, decisions, clientSideId, nowMs);
+    return decisions;
   } catch (err) {
     logger.debug(`Private Beta flag resolution failed: ${(err as Error).message}`);
     return {};

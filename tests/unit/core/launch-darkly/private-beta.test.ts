@@ -25,7 +25,13 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { type FeatureFlagFetcher, resolvePrivateBetaFlags } from '@/core/launch-darkly';
+import {
+  FEATURE_FLAG_CACHE_TTL_MS,
+  type FeatureFlagFetcher,
+  type FeatureFlagIdentity,
+  resolvePrivateBetaFlags,
+} from '@/core/launch-darkly';
+import * as featureFlagCache from '@/core/launch-darkly/cache.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as identityFetch from '@/core/telemetry/identity-fetch.ts';
@@ -46,6 +52,13 @@ describe('resolvePrivateBetaFlags', () => {
   let previousUserHome: string | undefined;
   let tryLoadStateSpy: ReturnType<typeof spyOn>;
   let resolveTelemetryIdentitySpy: ReturnType<typeof spyOn>;
+
+  const cloudIdentity: FeatureFlagIdentity = {
+    connectionType: 'cloud',
+    userUuid: 'user-1',
+    organizationUuidV4: 'org-1',
+    sqsInstallationId: null,
+  };
 
   const cliVersion = String(VERSION);
 
@@ -134,7 +147,7 @@ describe('resolvePrivateBetaFlags', () => {
     expect(fetchFlags).toHaveBeenCalledTimes(1);
   });
 
-  it('treats flags missing from the LaunchDarkly response as false', async () => {
+  it('treats flags missing from the LaunchDarkly response as false and caches them', async () => {
     const fetchFlags = mock(() => Promise.resolve({})) as FeatureFlagFetcher;
 
     expect(
@@ -142,6 +155,17 @@ describe('resolvePrivateBetaFlags', () => {
         fetchFlags,
         flagKeys: FLAG_KEYS,
         clientSideId: 'client-id',
+        nowMs: 1_000,
+      }),
+    ).toEqual({ 'cli.beta.private': false });
+    expect(fetchFlags).toHaveBeenCalledTimes(1);
+
+    expect(
+      await resolvePrivateBetaFlags(cloudAuth, {
+        fetchFlags,
+        flagKeys: FLAG_KEYS,
+        clientSideId: 'client-id',
+        nowMs: 1_000 + FEATURE_FLAG_CACHE_TTL_MS - 1,
       }),
     ).toEqual({ 'cli.beta.private': false });
     expect(fetchFlags).toHaveBeenCalledTimes(1);
@@ -240,6 +264,72 @@ describe('resolvePrivateBetaFlags', () => {
         flagKeys: FLAG_KEYS,
       }),
     ).toEqual({ 'cli.beta.private': true });
+    expect(fetchFlags).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses a fresh cache entry without calling LaunchDarkly', async () => {
+    featureFlagCache.writeFlagDecisions(
+      cloudIdentity,
+      { 'cli.beta.private': true },
+      'client-id',
+      1_000,
+    );
+    const fetchFlags = mock(() =>
+      Promise.resolve({ 'cli.beta.private': false }),
+    ) as FeatureFlagFetcher;
+
+    expect(
+      await resolvePrivateBetaFlags(cloudAuth, {
+        fetchFlags,
+        flagKeys: FLAG_KEYS,
+        clientSideId: 'client-id',
+        nowMs: 1_000 + FEATURE_FLAG_CACHE_TTL_MS - 1,
+      }),
+    ).toEqual({ 'cli.beta.private': true });
+    expect(fetchFlags).not.toHaveBeenCalled();
+  });
+
+  it('refreshes after the cache TTL and does not reuse an expired true', async () => {
+    featureFlagCache.writeFlagDecisions(
+      cloudIdentity,
+      { 'cli.beta.private': true },
+      'client-id',
+      1_000,
+    );
+    const fetchFlags = mock(() =>
+      Promise.resolve({ 'cli.beta.private': false }),
+    ) as FeatureFlagFetcher;
+
+    expect(
+      await resolvePrivateBetaFlags(cloudAuth, {
+        fetchFlags,
+        flagKeys: FLAG_KEYS,
+        clientSideId: 'client-id',
+        nowMs: 1_000 + FEATURE_FLAG_CACHE_TTL_MS,
+      }),
+    ).toEqual({ 'cli.beta.private': false });
+    expect(fetchFlags).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops cached entries when the client-side ID changes', async () => {
+    featureFlagCache.writeFlagDecisions(
+      cloudIdentity,
+      { 'cli.beta.private': true },
+      'old-client-id',
+      1_000,
+    );
+    const fetchFlags = mock(() =>
+      Promise.resolve({ 'cli.beta.private': false }),
+    ) as FeatureFlagFetcher;
+
+    expect(
+      await resolvePrivateBetaFlags(cloudAuth, {
+        fetchFlags,
+        flagKeys: FLAG_KEYS,
+        clientSideId: 'new-client-id',
+        nowMs: 1_000 + FEATURE_FLAG_CACHE_TTL_MS - 1,
+      }),
+    ).toEqual({ 'cli.beta.private': false });
     expect(fetchFlags).toHaveBeenCalledTimes(1);
   });
 });

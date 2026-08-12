@@ -22,7 +22,7 @@ import { join } from 'node:path';
 
 import { getCliDir } from '@/core/config-constants.ts';
 
-/** Directory for LaunchDarkly SDK local storage. */
+/** Disk cache for LaunchDarkly Private Beta flag decisions and SDK local storage. */
 export function getLaunchDarklyDir(): string {
   return join(getCliDir(), 'launch-darkly');
 }
@@ -62,6 +62,9 @@ export function resolveLaunchDarklyEnvironment(
 export function resolveLaunchDarklyClientSideId(env: NodeJS.ProcessEnv = process.env): string {
   return LAUNCHDARKLY_CLIENT_SIDE_IDS[resolveLaunchDarklyEnvironment(env)];
 }
+
+/** How long cached Private Beta flag decisions remain valid. */
+export const FEATURE_FLAG_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 
 /** Short timeout so a LaunchDarkly refresh does not stall CLI startup. */
 export const LAUNCHDARKLY_INIT_TIMEOUT_SECONDS = 2;
