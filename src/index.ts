@@ -26,6 +26,7 @@ import { createCommandTree } from '@/commands/command-tree.ts';
 import { supportedIntegrations } from '@/commands/integrate';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import { installHooks } from '@/commands/integrate/claude/hooks.ts';
+import { isAlphaEnabledFromEnv } from '@/commands/sonar-command.ts';
 import { resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { collectPrivateBetaFlagKeys, resolvePrivateBetaFlags } from '@/core/launch-darkly';
 import logger from '@/core/observability/logger.ts';
@@ -62,10 +63,13 @@ async function resolveStartupAuth(): Promise<ResolvedAuth | null> {
   }
 }
 
+const isAlphaEnabled = isAlphaEnabledFromEnv();
+
 // Probe with all Private Beta commands registered so we can discover flag keys
 // from Stage.Beta('…') declarations alone — no parallel key registry.
 const probe = createCommandTree({
   auth: null,
+  isAlphaEnabled,
   isPrivateBetaEnabled: () => true,
 });
 const flagKeys = collectPrivateBetaFlagKeys(probe);
@@ -76,6 +80,7 @@ if (flagKeys.length > 0) {
   const privateBetaFlags = await resolvePrivateBetaFlags(auth, { flagKeys });
   tree = createCommandTree({
     auth,
+    isAlphaEnabled,
     isPrivateBetaEnabled: (flagKey) => privateBetaFlags[flagKey],
   });
 }

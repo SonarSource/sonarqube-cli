@@ -560,6 +560,7 @@ describe('SonarCommand', () => {
       const gated = new SonarCommand('gated', {
         runtime: {
           auth: null,
+          isAlphaEnabled: false,
           isPrivateBetaEnabled: () => true,
         },
       }).stage(Stage.Beta('cli.beta.preview'));
@@ -577,6 +578,7 @@ describe('SonarCommand', () => {
       const enabled = new SonarCommand('root', {
         runtime: {
           auth: null,
+          isAlphaEnabled: false,
           isPrivateBetaEnabled: (key) => key === 'cli.beta.preview',
         },
       });
@@ -586,6 +588,7 @@ describe('SonarCommand', () => {
       const denied = new SonarCommand('root', {
         runtime: {
           auth: null,
+          isAlphaEnabled: false,
           isPrivateBetaEnabled: () => false,
         },
       });

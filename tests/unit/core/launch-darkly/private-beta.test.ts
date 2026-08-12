@@ -236,6 +236,7 @@ describe('Private Beta command registration', () => {
   function runtimeWithFlags(flags: Record<string, boolean>): CliRuntime {
     return {
       auth: cloudAuth,
+      isAlphaEnabled: false,
       isPrivateBetaEnabled: (flagKey) => flags[flagKey] === true,
     };
   }
@@ -280,6 +281,7 @@ describe('Private Beta command registration', () => {
     const root = new SonarCommand('sonar', {
       runtime: {
         auth: null,
+        isAlphaEnabled: false,
         isPrivateBetaEnabled: () => true,
       },
     });

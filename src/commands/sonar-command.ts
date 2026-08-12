@@ -71,20 +71,24 @@ export type CommandCategory = (typeof COMMAND_CATEGORIES)[number];
 export interface CliRuntime {
   /** Auth resolved once at startup; `null` when unauthenticated. */
   auth: ResolvedAuth | null;
+  /** Whether Alpha commands are visible for this invocation. */
+  isAlphaEnabled: boolean;
   /** Private Beta registration gate; Open Beta ignores this. */
   isPrivateBetaEnabled: (flagKey: string) => boolean;
+}
+
+/** Reads {@link ALPHA_ENV_VAR} (`true` / `1` enable Alpha commands). */
+export function isAlphaEnabledFromEnv(env: NodeJS.ProcessEnv = process.env): boolean {
+  const value = env[ALPHA_ENV_VAR];
+  return value === 'true' || value === '1';
 }
 
 export function createDefaultCliRuntime(): CliRuntime {
   return {
     auth: null,
+    isAlphaEnabled: isAlphaEnabledFromEnv(),
     isPrivateBetaEnabled: () => false,
   };
-}
-
-function isAlphaEnabled(): boolean {
-  const value = process.env[ALPHA_ENV_VAR];
-  return value === 'true' || value === '1';
 }
 
 export interface RootHelpMetadata {
@@ -234,37 +238,33 @@ export class SonarCommand extends Command {
     this._stage = newStage;
     this._betaFlagKey = newFlagKey;
 
-    if (
-      newStage === 'beta' &&
-      newFlagKey !== undefined &&
-      !this._runtime.isPrivateBetaEnabled(newFlagKey)
-    ) {
-      if (this.helpGroup() === ALPHA_HELP_GROUP) {
-        this.helpGroup('');
-      }
-      this.unregisterFromParent();
-      return this;
+    if (newStage === 'alpha') {
+      this.helpGroup(ALPHA_HELP_GROUP);
+    } else if (this.helpGroup() === ALPHA_HELP_GROUP) {
+      this.helpGroup('');
     }
 
-    if (newStage !== 'alpha') {
-      if (this.helpGroup() === ALPHA_HELP_GROUP) {
-        this.helpGroup('');
-      }
-      this.registerWithParent();
-      return this;
+    // Commander already attached this command via .command(); keep or detach.
+    if (this.isStageVisible()) {
+      this.attachToParent();
+    } else {
+      this.detachFromParent();
     }
-
-    this.helpGroup(ALPHA_HELP_GROUP);
-    if (!isAlphaEnabled()) {
-      this.unregisterFromParent();
-      return this;
-    }
-
     return this;
   }
 
-  /** Re-attach this command to its parent if it was previously unregistered. */
-  registerWithParent(): void {
+  private isStageVisible(): boolean {
+    if (this._stage === 'alpha') {
+      return this._runtime.isAlphaEnabled;
+    }
+    if (this._stage === 'beta' && this._betaFlagKey !== undefined) {
+      return this._runtime.isPrivateBetaEnabled(this._betaFlagKey);
+    }
+    return true;
+  }
+
+  /** Re-attach after a stage change that makes this command visible again. */
+  private attachToParent(): void {
     const siblings = this.parent?.commands as Command[] | undefined;
     if (siblings && !siblings.includes(this)) {
       siblings.push(this);
@@ -273,9 +273,10 @@ export class SonarCommand extends Command {
 
   /**
    * Remove this command from its parent's registration array.
-   * Commander has no public command-removal API.
+   * Commander has no public command-removal API, and attaches eagerly on
+   * `.command()` before `.stage()` can decide visibility.
    */
-  unregisterFromParent(): void {
+  private detachFromParent(): void {
     const siblings = this.parent?.commands as Command[] | undefined;
     const commandIndex = siblings?.indexOf(this) ?? -1;
     if (commandIndex >= 0) {
