@@ -34,9 +34,9 @@ bun run test:e2e          # end-to-end tests
 
 ## Commands
 
-Each command lives in `src/commands/`. The command tree is defined in `src/commands/command-tree.ts` and the entry point is `src/index.ts`.
+Each command lives in `src/commands/`. The command tree is built by `createCommandTree()` in `src/commands/command-tree.ts` and the entry point is `src/index.ts`.
 
-To add a new command: add it to `src/commands/command-tree.ts` and implement the logic in a new folder under `src/commands/`.
+To add a new command: add it to `createCommandTree()` in `src/commands/command-tree.ts` and implement the logic in a new folder under `src/commands/`.
 Please declare commands using the type defined in `src/commands/sonar-command.ts`.
 By default, new commands should register a `authenticatedAction()`, only technical commands will use `anonymousAction()`.
 Mark lifecycle with `.stage(Stage.Stable)` (default), `.stage(Stage.Alpha)`, `.stage(Stage.Beta())` (Open Beta), or `.stage(Stage.Beta('cli.beta.flag-key'))` (Private Beta). Visibility is decided via `CliRuntime` passed to `createCommandTree({ auth, isAlphaEnabled, isPrivateBetaEnabled })`: Alpha follows `SONARQUBE_CLI_ALPHA`; Private Beta follows `isPrivateBetaEnabled(flagKey)` (default `false` until a later PR wires LaunchDarkly). `.stage()` keeps or detaches the command after Commander’s eager `.command()` attach. Open Beta appears in public docs; Private Beta and Alpha do not.
