@@ -150,10 +150,9 @@ export class SonarCommand extends Command {
 
   /**
    * The update-notification registry shared by this command and its whole subtree.
-   * command-tree.ts builds the whole tree as top-level side effects when the
-   * module loads, registering every .showUpdateNotification() call into this
-   * instance in the process. External code (the postAction hook, unit tests)
-   * reads that already-populated instance via this getter on the root command.
+   * createCommandTree() registers every .showUpdateNotification() call into this
+   * instance while building the tree. External code (the postAction hook, unit
+   * tests) reads that already-populated instance via this getter on the root.
    */
   get updateNotifier(): UpdateNotifier {
     return this._updateNotifier;
