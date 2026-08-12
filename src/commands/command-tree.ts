@@ -105,6 +105,16 @@ import { updateVersion, type UpdateVersionOptions } from './update';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
 
+const projectKeyExtraHelp = `
+Instead of providing an explicit --project, you can add sonar.projectKey to sonar-project.properties at the repository root.
+Alternatively, add SonarQube for IDE shared binding JSON under .sonarlint/ (for example .sonarlint/connectedMode.json) that includes projectKey.
+`;
+
+const dependencyRisksExtraHelp = `
+Dependency manifest files (e.g. package-lock.json, pom.xml) will be uploaded to SonarQube for analysis.
+Learn more: https://docs.sonarsource.com/sonarqube-server/advanced-security/analyzing-projects-for-dependencies#supported-languages-and-package-managers
+${projectKeyExtraHelp}`;
+
 /** Build the CLI command tree for this invocation. */
 export function createCommandTree(): SonarCommand {
   const COMMAND_TREE = new SonarCommand();
@@ -301,10 +311,6 @@ export function createCommandTree(): SonarCommand {
     )
     .authenticatedAction((auth, options: IntegrateGitOptions) => integrateGit(options, auth));
 
-  const projectKeyExtraHelp = `
-  Instead of providing an explicit --project, you can add sonar.projectKey to sonar-project.properties at the repository root.
-  Alternatively, add SonarQube for IDE shared binding JSON under .sonarlint/ (for example .sonarlint/connectedMode.json) that includes projectKey.
-  `;
   integrateCommand
     .command('claude')
     .description(
@@ -495,11 +501,6 @@ export function createCommandTree(): SonarCommand {
     }
     return upper;
   });
-
-  const dependencyRisksExtraHelp = `
-  Dependency manifest files (e.g. package-lock.json, pom.xml) will be uploaded to SonarQube for analysis.
-  Learn more: https://docs.sonarsource.com/sonarqube-server/advanced-security/analyzing-projects-for-dependencies#supported-languages-and-package-managers
-  ${projectKeyExtraHelp}`;
 
   analyze
     .command('dependency-risks')
