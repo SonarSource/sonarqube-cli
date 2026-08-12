@@ -18,7 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { install, jsonPatch, skip, wholeFile } from '@/core/framework/features';
+import {
+  install,
+  type InstallDecision,
+  jsonPatch,
+  skip,
+  uninstall,
+  wholeFile,
+} from '@/core/framework/features';
 import { normalizeDecision } from '@/core/framework/features/selection.ts';
 import type {
   FeatureContainer,
@@ -69,17 +76,21 @@ export interface ClaudeHookEventContainerConfig<TOptions = Record<string, unknow
   legacyCleanups?: (ResourceIdentity & RemovableResource)[];
 }
 
-async function anySubfeatureMightInstall<TOptions>(
+async function resolveContainerInstallDecision<TOptions>(
   subfeatures: SubfeatureDeclaration<TOptions>[],
   invocation: IntegrationInvocation<TOptions>,
-): Promise<boolean> {
+): Promise<InstallDecision> {
+  let uninstallCount = 0;
   for (const subfeature of subfeatures) {
     const decision = normalizeDecision(await subfeature.shouldInstall?.(invocation));
-    if (decision.action !== 'skip') {
-      return true;
+    if (decision.action === 'install' || decision.action === 'ask') {
+      return install();
+    }
+    if (decision.action === 'uninstall') {
+      uninstallCount += 1;
     }
   }
-  return false;
+  return subfeatures.length > 0 && uninstallCount === subfeatures.length ? uninstall() : skip();
 }
 
 export function createClaudeHookEventContainer<TOptions = Record<string, unknown>>(
@@ -133,8 +144,7 @@ export function createClaudeHookEventContainer<TOptions = Record<string, unknown
     displayName: config.displayName,
     benefitDescription: config.benefitDescription,
     previewDescription: config.previewDescription,
-    shouldInstall: async (invocation) =>
-      (await anySubfeatureMightInstall(config.subfeatures, invocation)) ? install() : skip(),
+    shouldInstall: (invocation) => resolveContainerInstallDecision(config.subfeatures, invocation),
     targetRoot: config.targetRoot,
     scope: config.scope,
     resources: [scriptResource, settingsResource],

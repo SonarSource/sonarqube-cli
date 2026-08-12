@@ -82,6 +82,7 @@ export async function runPostUpdateActions(deps: PostUpdateDependencies): Promis
     // updateSecretsBinaryIfNeeded) that load and save their own state copies.
     const state = loadState();
     state.config.cliVersion = CURRENT_VERSION;
+    delete state.config.betaCommandWarnings;
     cleanObsoleteFromState(state);
     saveState(state);
   } catch (error) {

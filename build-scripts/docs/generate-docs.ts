@@ -30,8 +30,8 @@ import { fileURLToPath } from 'node:url';
 
 import type { Option } from 'commander';
 
-import { COMMAND_TREE } from '@/commands/command-tree.ts';
-import type { SonarCommand } from '@/commands/sonar-command.ts';
+import { createCommandTree } from '@/commands/command-tree.ts';
+import { BETA_HELP_TAG, type SonarCommand } from '@/commands/sonar-command.ts';
 
 import { version } from '../../package.json';
 import { EXAMPLES } from './examples';
@@ -76,6 +76,7 @@ interface ClidocCommand {
   description: string;
   isGroup: boolean;
   isRoot: boolean;
+  stage: 'stable' | 'beta';
   requiresAuth: boolean;
   depth: number;
   parentId: string | null;
@@ -85,8 +86,24 @@ interface ClidocCommand {
   children: string[];
 }
 
+// Docs use the default runtime (Private Beta omitted; Open Beta included).
+const COMMAND_TREE = createCommandTree();
 const allCommands: ClidocCommand[] = [];
 const help = COMMAND_TREE.createHelp();
+
+function visibleDocumentedCommands(cmd: SonarCommand): SonarCommand[] {
+  return (help.visibleCommands(cmd) as SonarCommand[]).filter(
+    (child) => child.name() !== 'help' && !child.isAlpha && !child.isPrivateBeta,
+  );
+}
+
+function descriptionWithoutBetaTag(cmd: SonarCommand): string {
+  const description = cmd.description() ?? '';
+  const suffix = ` ${BETA_HELP_TAG}`;
+  return cmd.isBeta && description.endsWith(suffix)
+    ? description.slice(0, -suffix.length)
+    : description;
+}
 
 function serializeCommand(
   cmd: SonarCommand,
@@ -96,16 +113,16 @@ function serializeCommand(
 ) {
   const fullName = `${prefix} ${cmd.name()}`.trim();
   const id = fullName.replaceAll(/\s+/g, '-');
-  // we don't want to display implicit child help menus
-  const visibleChildren = help.visibleCommands(cmd).filter((c) => c.name() !== 'help');
+  const visibleChildren = visibleDocumentedCommands(cmd);
 
   const entry: ClidocCommand = {
     id,
     name: cmd.name(),
     fullName,
-    description: cmd.description() ?? '',
+    description: descriptionWithoutBetaTag(cmd),
     isGroup: visibleChildren.length > 0,
     isRoot: depth === 0,
+    stage: cmd.isBeta ? 'beta' : 'stable',
     requiresAuth: cmd.requiresAuth,
     depth,
     parentId,
@@ -134,13 +151,13 @@ function serializeCommand(
   allCommands.push(entry);
 
   for (const child of visibleChildren) {
-    serializeCommand(child as SonarCommand, fullName, depth + 1, id);
+    serializeCommand(child, fullName, depth + 1, id);
   }
 }
 
 // Root entry
 const rootId = 'sonar';
-const visibleTopLevel = help.visibleCommands(COMMAND_TREE);
+const visibleTopLevel = visibleDocumentedCommands(COMMAND_TREE);
 
 const rootEntry: ClidocCommand = {
   id: rootId,
@@ -149,6 +166,7 @@ const rootEntry: ClidocCommand = {
   description: COMMAND_TREE.description() ?? 'SonarQube CLI',
   isGroup: true,
   isRoot: true,
+  stage: 'stable',
   requiresAuth: false,
   depth: 0,
   parentId: null,
@@ -161,7 +179,7 @@ const rootEntry: ClidocCommand = {
 allCommands.push(rootEntry);
 
 for (const cmd of visibleTopLevel) {
-  serializeCommand(cmd as SonarCommand, 'sonar', 1, rootId);
+  serializeCommand(cmd, 'sonar', 1, rootId);
 }
 
 const data = {
@@ -184,7 +202,10 @@ function buildLlmsTxt(): string {
 
     const authMarker = cmd.requiresAuth ? ' *' : '';
     commandLines.push(`### ${cmd.fullName}${authMarker}`);
-    if (cmd.description) commandLines.push(cmd.description);
+    if (cmd.description) {
+      const betaTag = cmd.stage === 'beta' ? ` ${BETA_HELP_TAG}` : '';
+      commandLines.push(`${cmd.description}${betaTag}`);
+    }
 
     if (!cmd.isGroup) {
       // Usage line

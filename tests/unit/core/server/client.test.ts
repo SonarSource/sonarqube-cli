@@ -676,22 +676,22 @@ describe('SonarQubeClient', () => {
 
     it("returns 'enabled' when the org is currently allowed", async () => {
       fetchSpy = mockFetch({ id: UUID, allowed: true, hasEntitlement: true });
-      expect(await cloudClient['checkSqaaEntitlement'](UUID)).toBe('enabled');
+      expect((await cloudClient['checkSqaaEntitlement'](UUID)).status).toBe('enabled');
     });
 
     it("returns 'over_consumption' when entitled but over its usage limit", async () => {
       fetchSpy = mockFetch({ id: UUID, allowed: false, hasEntitlement: true });
-      expect(await cloudClient['checkSqaaEntitlement'](UUID)).toBe('over_consumption');
+      expect((await cloudClient['checkSqaaEntitlement'](UUID)).status).toBe('over_consumption');
     });
 
     it("returns 'not_entitled' when the org is not entitled at all", async () => {
       fetchSpy = mockFetch({ id: UUID, allowed: false, hasEntitlement: false });
-      expect(await cloudClient['checkSqaaEntitlement'](UUID)).toBe('not_entitled');
+      expect((await cloudClient['checkSqaaEntitlement'](UUID)).status).toBe('not_entitled');
     });
 
     it("returns 'check_failed' when the entitlement API errors out", async () => {
       fetchSpy = mockFetch({}, false, 403);
-      expect(await cloudClient['checkSqaaEntitlement'](UUID)).toBe('check_failed');
+      expect((await cloudClient['checkSqaaEntitlement'](UUID)).status).toBe('check_failed');
     });
 
     it('hits the SQAA entitlement endpoint with the given UUID', async () => {
@@ -705,7 +705,7 @@ describe('SonarQubeClient', () => {
     it('routes to the US API host for SonarQube Cloud US', async () => {
       const usClient = new SonarQubeClient(SONARCLOUD_US_URL, TOKEN);
       fetchSpy = mockFetch({ id: UUID, allowed: true, hasEntitlement: true });
-      expect(await usClient['checkSqaaEntitlement'](UUID)).toBe('enabled');
+      expect((await usClient['checkSqaaEntitlement'](UUID)).status).toBe('enabled');
       expect(lastFetchUrl(fetchSpy)).toContain(SONARCLOUD_US_API_URL);
     });
   });
@@ -724,33 +724,49 @@ describe('SonarQubeClient', () => {
 
     it("returns 'enabled' when the org is currently allowed", async () => {
       fetchSpy = mockFetch({ allowed: true, hasEntitlement: true });
-      expect(await cloudClient['checkCagEntitlement'](UUID)).toBe('enabled');
+      expect((await cloudClient['checkCagEntitlement'](UUID)).status).toBe('enabled');
     });
 
     it("returns 'over_consumption' when entitled but over its usage limit", async () => {
       fetchSpy = mockFetch({ allowed: false, hasEntitlement: true });
-      expect(await cloudClient['checkCagEntitlement'](UUID)).toBe('over_consumption');
+      expect((await cloudClient['checkCagEntitlement'](UUID)).status).toBe('over_consumption');
     });
 
     it("returns 'not_entitled' when hasEntitlement is false", async () => {
       fetchSpy = mockFetch({ allowed: false, hasEntitlement: false });
-      expect(await cloudClient['checkCagEntitlement'](UUID)).toBe('not_entitled');
+      expect((await cloudClient['checkCagEntitlement'](UUID)).status).toBe('not_entitled');
     });
 
     it("returns 'not_entitled' when hasEntitlement is absent", async () => {
       fetchSpy = mockFetch({});
-      expect(await cloudClient['checkCagEntitlement'](UUID)).toBe('not_entitled');
+      expect((await cloudClient['checkCagEntitlement'](UUID)).status).toBe('not_entitled');
     });
 
     it("returns 'check_failed' when the entitlement API errors out", async () => {
       fetchSpy = mockFetch({}, false, 500);
-      expect(await cloudClient['checkCagEntitlement'](UUID)).toBe('check_failed');
+      expect((await cloudClient['checkCagEntitlement'](UUID)).status).toBe('check_failed');
     });
 
     it('hits the CAG entitlement endpoint with the given UUID', async () => {
       fetchSpy = mockFetch({ allowed: true, hasEntitlement: true });
       await cloudClient['checkCagEntitlement'](UUID);
       expect(new URL(lastFetchUrl(fetchSpy)).pathname).toBe(`/cag/cag-entitlement/${UUID}`);
+    });
+
+    it('forwards the consumption payload when present', async () => {
+      fetchSpy = mockFetch({
+        allowed: true,
+        hasEntitlement: true,
+        consumption: { consumed: 15860, limit: 1000000 },
+      });
+      const result = await cloudClient['checkCagEntitlement'](UUID);
+      expect(result.consumption).toEqual({ consumed: 15860, limit: 1000000 });
+    });
+
+    it('omits consumption when the response does not include it', async () => {
+      fetchSpy = mockFetch({ allowed: true, hasEntitlement: true });
+      const result = await cloudClient['checkCagEntitlement'](UUID);
+      expect(result.consumption).toBeUndefined();
     });
   });
 
@@ -767,31 +783,90 @@ describe('SonarQubeClient', () => {
 
     it('returns not_entitled when organizationKey is not provided', async () => {
       fetchSpy = mockFetch({});
-      expect(await cloudClient.hasVortexEntitlement(undefined)).toBe('not_entitled');
+      expect((await cloudClient.hasVortexEntitlement(undefined)).status).toBe('not_entitled');
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
     it('returns not_entitled when organizationKey is empty string', async () => {
       fetchSpy = mockFetch({});
-      expect(await cloudClient.hasVortexEntitlement('')).toBe('not_entitled');
+      expect((await cloudClient.hasVortexEntitlement('')).status).toBe('not_entitled');
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
     it('returns not_entitled when server is not SonarQube Cloud', async () => {
       const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
       fetchSpy = mockFetch({});
-      expect(await serverClient.hasVortexEntitlement('my-org')).toBe('not_entitled');
+      expect((await serverClient.hasVortexEntitlement('my-org')).status).toBe('not_entitled');
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
     it('returns check_failed when org UUID cannot be resolved', async () => {
       fetchSpy = mockFetch({}, false, 404);
-      expect(await cloudClient.hasVortexEntitlement('unknown-org')).toBe('check_failed');
+      expect((await cloudClient.hasVortexEntitlement('unknown-org')).status).toBe('check_failed');
     });
 
     it('returns check_failed when org UUID list is empty', async () => {
       fetchSpy = mockFetch([]);
-      expect(await cloudClient.hasVortexEntitlement('my-org')).toBe('check_failed');
+      expect((await cloudClient.hasVortexEntitlement('my-org')).status).toBe('check_failed');
+    });
+
+    it('forwards CAG consumption when the combined status is enabled', async () => {
+      const uuid = 'org-uuid';
+      fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(((url: string | URL) => {
+        const pathname = new URL(url).pathname;
+        const body =
+          pathname === '/organizations/organizations'
+            ? [{ id: 'str-id', uuidV4: uuid }]
+            : pathname === `/a3s-analysis/org-entitlement/${uuid}`
+              ? { id: uuid, allowed: true, hasEntitlement: true }
+              : {
+                  allowed: true,
+                  hasEntitlement: true,
+                  consumption: { consumed: 15860, limit: 1000000 },
+                };
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve(body),
+          text: () => Promise.resolve(JSON.stringify(body)),
+        } as Response);
+      }) as typeof fetch);
+
+      const result = await cloudClient.hasVortexEntitlement('my-org');
+
+      expect(result).toEqual({
+        status: 'enabled',
+        consumption: { consumed: 15860, limit: 1000000 },
+      });
+    });
+
+    it('drops consumption when the combined status is over_consumption, even if CAG reports it', async () => {
+      const uuid = 'org-uuid';
+      fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(((url: string | URL) => {
+        const pathname = new URL(url).pathname;
+        const body =
+          pathname === '/organizations/organizations'
+            ? [{ id: 'str-id', uuidV4: uuid }]
+            : pathname === `/a3s-analysis/org-entitlement/${uuid}`
+              ? { id: uuid, allowed: true, hasEntitlement: true }
+              : {
+                  allowed: false,
+                  hasEntitlement: true,
+                  consumption: { consumed: 1000000, limit: 1000000 },
+                };
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve(body),
+          text: () => Promise.resolve(JSON.stringify(body)),
+        } as Response);
+      }) as typeof fetch);
+
+      const result = await cloudClient.hasVortexEntitlement('my-org');
+
+      expect(result).toEqual({ status: 'over_consumption' });
     });
   });
 

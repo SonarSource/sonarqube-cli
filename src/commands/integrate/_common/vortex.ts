@@ -18,17 +18,23 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
-import type { FeatureContainer, SubfeatureDeclaration } from '@/core/framework/features';
-import { askUser, skip } from '@/core/framework/features';
+import type {
+  FeatureContainer,
+  InstallDecision,
+  IntegrationInvocation,
+  SubfeatureDeclaration,
+} from '@/core/framework/features';
+import { askUser, skip, uninstall } from '@/core/framework/features';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
 import { info, warn } from '@/core/ui';
+import { resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 import { isContextAugmentationSkipped } from './context-augmentation.ts';
 import { VORTEX_FEATURE_BENEFIT, VORTEX_FEATURE_PREVIEW } from './feature-constants.ts';
-import type { IntegrateAgentOptions } from './types.ts';
+import type { IntegrateAgentOptions, VortexDisposition } from './types.ts';
 
 export const VORTEX_FEATURE_ID = 'vortex';
 
@@ -52,7 +58,7 @@ export function createVortexFeature<TOptions extends IntegrateAgentOptions>(
     displayName: 'Vortex',
     benefitDescription: VORTEX_FEATURE_BENEFIT,
     previewDescription: VORTEX_FEATURE_PREVIEW,
-    shouldInstall: ({ options }) => (options.installVortex === true ? askUser() : skip()),
+    shouldInstall: vortexShouldInstall,
     targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
     scope: 'project',
     replacedIds: subfeatureIds,
@@ -64,7 +70,22 @@ export function createVortexFeature<TOptions extends IntegrateAgentOptions>(
   };
 }
 
+export function vortexShouldInstall<TOptions extends IntegrateAgentOptions>({
+  options,
+}: IntegrationInvocation<TOptions>): InstallDecision {
+  if (options.vortexDisposition === 'install') {
+    return askUser();
+  }
+  if (options.vortexDisposition === 'remove') {
+    return uninstall(VORTEX_UNINSTALL_MESSAGE);
+  }
+  return skip();
+}
+
 export const VORTEX_PROMOTION_MESSAGE = `Vortex is available on SonarQube Cloud. Learn more: ${VORTEX_PRODUCT_URL}`;
+
+export const VORTEX_UNINSTALL_MESSAGE =
+  'Vortex is no longer available for this organization. Removing the existing Vortex integration.';
 
 export const VORTEX_CHECK_FAILED_MESSAGE = 'Could not determine Vortex entitlement — skipping.';
 
@@ -87,7 +108,8 @@ export interface ResolveVortexSetupParams {
 }
 
 export interface ResolvedVortexSetup {
-  scaEnabled: boolean;
+  disposition: VortexDisposition;
+  scaEnabled?: boolean;
 }
 
 /**
@@ -96,39 +118,39 @@ export interface ResolvedVortexSetup {
  */
 export async function resolveVortexSetup(
   params: ResolveVortexSetupParams,
-): Promise<ResolvedVortexSetup | null> {
-  if (!isSonarQubeCloud(params.auth.serverUrl)) {
-    info(VORTEX_PROMOTION_MESSAGE);
-    return null;
-  }
+): Promise<ResolvedVortexSetup> {
+  const { status } = await resolveVortexEntitlement(params.auth);
 
-  const client = new SonarQubeClient(params.auth.serverUrl, params.auth.token);
-  const status = await client.hasVortexEntitlement(params.auth.orgKey);
+  if (status === 'not_applicable') {
+    info(VORTEX_PROMOTION_MESSAGE);
+    return { disposition: 'preserve' };
+  }
 
   if (status === 'check_failed') {
     warn(VORTEX_CHECK_FAILED_MESSAGE);
-    return null;
+    return { disposition: 'preserve' };
   }
   if (status === 'not_entitled') {
     info(VORTEX_PROMOTION_MESSAGE);
-    return null;
+    return { disposition: 'remove' };
   }
   if (params.isGlobal) {
     warn(VORTEX_GLOBAL_SKIP_MESSAGE);
-    return null;
+    return { disposition: 'preserve' };
   }
   if (!params.projectKey || !params.auth.orgKey) {
     warn(VORTEX_MISSING_PROJECT_MESSAGE);
-    return null;
+    return { disposition: 'preserve' };
   }
   if (status === 'over_consumption') {
     warn(VORTEX_OVER_CONSUMPTION_MESSAGE);
   }
 
   if (isContextAugmentationSkipped()) {
-    return { scaEnabled: false };
+    return { disposition: 'install', scaEnabled: false };
   }
 
+  const client = new SonarQubeClient(params.auth.serverUrl, params.auth.token);
   // The rendered context augmentation skill advertises
   // SCA tools only when SCA is available on the connection.
   const scaStatus = await client.getScaEnablement(params.auth.connectionType, params.auth.orgKey);
@@ -136,5 +158,5 @@ export async function resolveVortexSetup(
     warn(VORTEX_SCA_CHECK_FAILED_MESSAGE);
   }
 
-  return { scaEnabled: scaStatus === 'enabled' };
+  return { disposition: 'install', scaEnabled: scaStatus === 'enabled' };
 }

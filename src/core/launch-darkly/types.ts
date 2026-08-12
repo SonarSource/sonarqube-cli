@@ -18,37 +18,17 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-export type VortexDisposition = 'install' | 'preserve' | 'remove';
+import type { ServerType } from '@/core/state/state.ts';
 
-export interface IntegrateAgentOptions {
-  project?: string;
-  nonInteractive?: boolean;
-  global?: boolean;
-  /** Set by the bare `sonar integrate` router; forwarded to telemetry only. */
-  isFromRouter?: boolean;
-  /** Used by Vortex. */
-  projectRoot?: string;
-  vortexDisposition?: VortexDisposition;
+/** Opaque identity keys sent to LaunchDarkly (no tokens, emails, org keys, or URLs). */
+export interface FeatureFlagIdentity {
+  connectionType: ServerType;
+  userUuid: string | null;
+  organizationUuidV4: string | null;
+  sqsInstallationId: string | null;
 }
 
-export interface HookCommand {
-  type: 'command';
-  command: string;
-  timeout: number;
-}
-
-export interface HookConfig {
-  matcher: string;
-  hooks: HookCommand[];
-}
-
-export interface HooksDocument {
-  hooks?: Record<string, HookConfig[] | undefined>;
-  [key: string]: unknown;
-}
-
-export interface ManagedHookEntry {
-  eventType: string;
-  marker: string;
-  hookConfig: HookConfig;
-}
+/** Fetches the boolean Private Beta flag map for the given identity. */
+export type FeatureFlagFetcher = (
+  identity: FeatureFlagIdentity,
+) => Promise<Record<string, boolean>>;

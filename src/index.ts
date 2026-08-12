@@ -22,7 +22,7 @@
 
 // Main CLI entry point
 
-import { COMMAND_TREE } from '@/commands/command-tree.ts';
+import { createCommandTree } from '@/commands/command-tree.ts';
 import { supportedIntegrations } from '@/commands/integrate';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import { installHooks } from '@/commands/integrate/claude/hooks.ts';
@@ -50,5 +50,6 @@ await postUpdate.runPostUpdateActions({
   installHooks,
 });
 
-await COMMAND_TREE.parseAsync(process.argv);
+const tree = createCommandTree();
+await tree.parseAsync(process.argv);
 await flushSentry();

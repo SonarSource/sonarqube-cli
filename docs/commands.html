@@ -153,7 +153,8 @@ function renderTree(filter) {
     const q = filter.toLowerCase();
     const matches = data.commands.filter(c =>
       c.fullName.toLowerCase().includes(q) ||
-      c.description.toLowerCase().includes(q)
+      c.description.toLowerCase().includes(q) ||
+      (c.stage && c.stage !== 'stable' && c.stage.toLowerCase().includes(q))
     );
     for (const cmd of matches) {
       treeEl.appendChild(viewMode === 'list'
@@ -195,7 +196,8 @@ function buildPillNode(cmd, flat) {
   const isOnPath    = ancestors.has(cmd.id);
   pill.className = 'pill ' + pillClass
     + (isSelected ? ' selected' : '')
-    + (!isSelected && isOnPath ? ' path-highlight' : '');
+    + (!isSelected && isOnPath ? ' path-highlight' : '')
+    + (cmd.stage === 'beta' ? ' stage-beta' : '');
   pill.textContent = cmd.name;
   row.appendChild(pill);
 
@@ -321,7 +323,8 @@ function buildColumnView(root) {
         const isOnPath   = !isSelected && pathIds.has(entry.id);
         pill.className = 'pill ' + pillClass
           + (isSelected ? ' selected' : '')
-          + (isOnPath   ? ' path-highlight' : '');
+          + (isOnPath   ? ' path-highlight' : '')
+          + (entry.stage === 'beta' ? ' stage-beta' : '');
         pill.textContent = entry.name;
         pill.dataset.id = entry.id;
 
@@ -481,7 +484,15 @@ function renderDetail(cmd) {
   // Header
   parts.push(`<div class="detail-header">`);
   parts.push(`<span class="detail-title"><code>${escHtml(cmd.fullName)}</code></span>`);
+  if (cmd.stage === 'beta') {
+    parts.push(`<span class="stage-badge stage-${escHtml(cmd.stage)}">${escHtml(cmd.stage)}</span>`);
+  }
   parts.push(`</div>`);
+
+  // Stage banner
+  if (cmd.stage === 'beta') {
+    parts.push(`<div class="stage-banner stage-banner-beta">This command is in beta. Its flags and behavior may change without notice.</div>`);
+  }
 
   // Description
   parts.push(`<p class="detail-desc">${escHtml(cmd.description)}</p>`);

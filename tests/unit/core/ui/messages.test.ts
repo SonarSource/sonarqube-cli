@@ -105,6 +105,37 @@ describe('messages: real output (non-mock)', () => {
     }
   });
 
+  it('info writes to stderr when an explicit stderr stream is passed', () => {
+    const output: string[] = [];
+    const spy = spyOn(process.stderr, 'write').mockImplementation((s) => {
+      output.push(String(s));
+      return true;
+    });
+    try {
+      info('test message', 'stderr');
+      expect(output.join('')).toContain('test message');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('info on stderr is not buffered in formatted-output mode', () => {
+    const output: string[] = [];
+    const spy = spyOn(process.stderr, 'write').mockImplementation((s) => {
+      output.push(String(s));
+      return true;
+    });
+    setFormattedOutputMode(true);
+    try {
+      info('test message', 'stderr');
+      expect(output.join('')).toContain('test message');
+      expect(getMessagesForFormattedOutput()).toEqual([]);
+    } finally {
+      setFormattedOutputMode(false);
+      spy.mockRestore();
+    }
+  });
+
   it('success writes to stdout with ✓ prefix', () => {
     const output: string[] = [];
     const spy = spyOn(process.stdout, 'write').mockImplementation((s) => {

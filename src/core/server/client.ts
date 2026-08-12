@@ -58,8 +58,18 @@ export const GENERIC_HTTP_METHODS = ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'] as
 export const METHODS_WITH_BODY = new Set<HttpMethod>(['POST', 'PATCH', 'PUT']);
 export type HttpMethod = (typeof GENERIC_HTTP_METHODS)[number];
 
+/**
+ * `not_applicable` is never returned by `hasVortexEntitlement()` itself — it's reserved for
+ * callers that pre-check whether Vortex applies to a connection before ever asking the
+ * entitlement API (see `resolveVortexEntitlement`).
+ */
 export type VortexEntitlementStatus =
-  'enabled' | 'over_consumption' | 'not_entitled' | 'check_failed';
+  'enabled' | 'over_consumption' | 'not_entitled' | 'check_failed' | 'not_applicable';
+
+export interface VortexEntitlementResult {
+  status: VortexEntitlementStatus;
+  consumption?: { consumed: number; limit: number };
+}
 
 export interface Organization {
   key: string;
@@ -430,7 +440,7 @@ export class SonarQubeClient {
    * over its current usage limit, `'not_entitled'` when not entitled, and
    * `'check_failed'` when the API call errors out.
    */
-  private async checkSqaaEntitlement(organizationUuid: string): Promise<VortexEntitlementStatus> {
+  private async checkSqaaEntitlement(organizationUuid: string): Promise<VortexEntitlementResult> {
     try {
       const endpoint = `/a3s-analysis/org-entitlement/${organizationUuid}`;
       const result = await this.get<{ id: string; allowed: boolean; hasEntitlement: boolean }>(
@@ -439,11 +449,11 @@ export class SonarQubeClient {
         resolveFromEndpoint(this.serverURL, endpoint),
       );
       if (result.allowed) {
-        return 'enabled';
+        return { status: 'enabled' };
       }
-      return result.hasEntitlement ? 'over_consumption' : 'not_entitled';
+      return { status: result.hasEntitlement ? 'over_consumption' : 'not_entitled' };
     } catch {
-      return 'check_failed';
+      return { status: 'check_failed' };
     }
   }
 
@@ -482,20 +492,23 @@ export class SonarQubeClient {
     return (await this.getScaEnablement(connectionType, orgKey)) === 'enabled';
   }
 
-  private async checkCagEntitlement(organizationUuid: string): Promise<VortexEntitlementStatus> {
+  private async checkCagEntitlement(organizationUuid: string): Promise<VortexEntitlementResult> {
     try {
       const endpoint = `/cag/cag-entitlement/${organizationUuid}`;
       const result = await this.get<{
         allowed?: boolean;
         hasEntitlement?: boolean;
-        consumption?: object;
+        consumption?: { consumed: number; limit: number };
       }>(endpoint, undefined, resolveFromEndpoint(this.serverURL, endpoint));
       if (result.allowed) {
-        return 'enabled';
+        return { status: 'enabled', consumption: result.consumption };
       }
-      return result.hasEntitlement ? 'over_consumption' : 'not_entitled';
+      return {
+        status: result.hasEntitlement ? 'over_consumption' : 'not_entitled',
+        consumption: result.consumption,
+      };
     } catch {
-      return 'check_failed';
+      return { status: 'check_failed' };
     }
   }
 
@@ -504,32 +517,36 @@ export class SonarQubeClient {
    * entitlement endpoint. Although both should eventually use one entitlement,
    * there is no shared Vortex backend yet. Require both checks so the CLI does not
    * enable both capabilities when only one is available, which would fail later.
+   *
+   * Usage `consumption` is CAG-specific (the SQAA endpoint does not report it) and is
+   * only forwarded for `enabled`: once over the limit the remaining headroom is no
+   * longer meaningful, and the API's consumption figures are not guaranteed there.
    */
-  async hasVortexEntitlement(organizationKey?: string): Promise<VortexEntitlementStatus> {
+  async hasVortexEntitlement(organizationKey?: string): Promise<VortexEntitlementResult> {
     try {
       if (!organizationKey || !isSonarQubeCloud(this.serverURL)) {
-        return 'not_entitled';
+        return { status: 'not_entitled' };
       }
       const uuid = await this.getOrganizationId(organizationKey);
       if (!uuid) {
-        return 'check_failed';
+        return { status: 'check_failed' };
       }
       const [sqaa, cag] = await Promise.all([
         this.checkSqaaEntitlement(uuid),
         this.checkCagEntitlement(uuid),
       ]);
-      if (sqaa === 'check_failed' || cag === 'check_failed') {
-        return 'check_failed';
+      if (sqaa.status === 'check_failed' || cag.status === 'check_failed') {
+        return { status: 'check_failed' };
       }
-      if (sqaa === 'not_entitled' || cag === 'not_entitled') {
-        return 'not_entitled';
+      if (sqaa.status === 'not_entitled' || cag.status === 'not_entitled') {
+        return { status: 'not_entitled' };
       }
-      if (sqaa === 'over_consumption' || cag === 'over_consumption') {
-        return 'over_consumption';
+      if (sqaa.status === 'over_consumption' || cag.status === 'over_consumption') {
+        return { status: 'over_consumption' };
       }
-      return 'enabled';
+      return { status: 'enabled', consumption: cag.consumption };
     } catch {
-      return 'check_failed';
+      return { status: 'check_failed' };
     }
   }
 

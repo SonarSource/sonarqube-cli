@@ -49,17 +49,25 @@ import {
   SONAR_CONTEXT_AUGMENTATION_VERSION,
 } from '@/core/host/install/signatures.ts';
 import { getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
+import type { VortexEntitlementResult } from '@/core/server/client.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { loadState } from '@/core/state/state-repository.ts';
 import { blank, print, success, text, warn } from '@/core/ui';
 import { isNewerVersion, stripBuildNumber } from '@/core/version.ts';
+import { isVortexEntitlementLoss, resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 import { version as VERSION } from '../../../package.json';
 import { supportedIntegrations } from '../integrate';
+import { isProjectVortexFeature } from '../integrate/_common/vortex.ts';
 import { checkAntigravitySecretsHookFile } from '../integrate/antigravity/health.ts';
 import { resolveAntigravityHooksJsonPathForScope } from '../integrate/antigravity/hooks.ts';
 import { getBanner } from '../root-help.ts';
 import { checkForUpdate, type UpdateCheckResult } from '../update/update-check.ts';
+import {
+  buildVortexJson,
+  buildVortexRecommendation,
+  renderVortexSection,
+} from './status-vortex.ts';
 
 const SCA_SCANNER_CACHE_DIR = join(CLI_DIR, 'sca-scanner-cache');
 
@@ -110,6 +118,11 @@ interface IntegrationInfo {
   path?: string;
   mcp?: McpStatus;
   hooks?: HooksStatus;
+}
+
+interface AuthenticatedChecks {
+  tokenStatus: TokenCheckResult | null;
+  vortex: VortexEntitlementResult;
 }
 
 type CliUpdateInfo = UpdateCheckResult;
@@ -375,18 +388,31 @@ async function getCliUpdateInfo(): Promise<CliUpdateInfo | null> {
   }
 }
 
+async function resolveAuthenticatedChecks(auth: ResolvedAuth | null): Promise<AuthenticatedChecks> {
+  if (!auth) {
+    return { tokenStatus: null, vortex: { status: 'not_applicable' } };
+  }
+
+  const [tokenStatus, vortex] = await Promise.all([
+    checkTokenStatus(auth.serverUrl, auth.token),
+    resolveVortexEntitlement(auth),
+  ]);
+  return { tokenStatus, vortex };
+}
+
 export async function systemStatus(options: SystemStatusOptions): Promise<void> {
   const state = loadState();
   const integrations = getInstalledIntegrations(state);
+  const vortexInstalled = state.integrations.installed.some((integration) =>
+    integration.features.some(isProjectVortexFeature),
+  );
 
   const [auth, updateResult] = await Promise.all([
     resolveAuth().catch(() => null),
     getCliUpdateInfo(),
   ]);
 
-  const tokenStatus: TokenCheckResult | null = auth
-    ? await checkTokenStatus(auth.serverUrl, auth.token)
-    : null;
+  const { tokenStatus, vortex } = await resolveAuthenticatedChecks(auth);
 
   const legacyBinaries = (state.tools?.installed ?? []).map((t) => {
     const pinned = PINNED_VERSIONS[t.name];
@@ -441,8 +467,17 @@ export async function systemStatus(options: SystemStatusOptions): Promise<void> 
     tokenStatus.status === 'invalid' ||
     hasMcpIssues ||
     hasHooksIssues ||
-    network.error !== undefined;
-  const recommendations = buildRecommendations(tokenStatus, updateResult, integrations, network);
+    network.error !== undefined ||
+    isVortexEntitlementLoss(vortex, vortexInstalled);
+  const recommendations = buildRecommendations(
+    tokenStatus,
+    updateResult,
+    integrations,
+    network,
+    vortex,
+    vortexInstalled,
+    auth?.orgKey,
+  );
 
   const data: StatusData = {
     auth,
@@ -451,6 +486,7 @@ export async function systemStatus(options: SystemStatusOptions): Promise<void> 
     cache,
     integrations,
     network,
+    vortex,
     hasIssues,
     recommendations,
   };
@@ -479,6 +515,7 @@ interface StatusData {
   cache: CacheInfo[];
   integrations: IntegrationInfo[];
   network: ResolvedNetworkConfig;
+  vortex: VortexEntitlementResult;
   hasIssues: boolean;
   recommendations: string[];
 }
@@ -488,6 +525,9 @@ function buildRecommendations(
   updateResult: UpdateCheckResult | null,
   integrations: IntegrationInfo[],
   network: ResolvedNetworkConfig,
+  vortexEntitlement: VortexEntitlementResult,
+  vortexInstalled: boolean,
+  orgKey: string | undefined,
 ): string[] {
   const recommendations: string[] = [];
   if (tokenStatus === null) recommendations.push("Run 'sonar auth login' to authenticate");
@@ -495,6 +535,12 @@ function buildRecommendations(
     recommendations.push("Run 'sonar auth login' to reauthenticate");
   if (network.error !== undefined)
     recommendations.push(`Fix client certificate configuration: ${network.error}`);
+  const vortexRecommendation = buildVortexRecommendation(
+    vortexEntitlement,
+    vortexInstalled,
+    orgKey,
+  );
+  if (vortexRecommendation) recommendations.push(vortexRecommendation);
   if (updateResult && !updateResult.upToDate) {
     recommendations.push(
       `Run 'sonar update' to update to v${updateResult.latest.version.noBuild.text}`,
@@ -547,8 +593,17 @@ function buildClientCertJson(network: ResolvedNetworkConfig) {
 }
 
 function printJsonStatus(version: string, data: StatusData): void {
-  const { auth, tokenStatus, binaries, cache, integrations, network, hasIssues, recommendations } =
-    data;
+  const {
+    auth,
+    tokenStatus,
+    binaries,
+    cache,
+    integrations,
+    network,
+    vortex,
+    hasIssues,
+    recommendations,
+  } = data;
   print(
     JSON.stringify(
       {
@@ -592,6 +647,7 @@ function printJsonStatus(version: string, data: StatusData): void {
               }
             : {}),
         })),
+        vortex: buildVortexJson(vortex),
         network: {
           proxy: network.proxy
             ? {
@@ -748,8 +804,17 @@ function renderNetworkSection(network: ResolvedNetworkConfig): void {
 }
 
 function renderTextStatus(version: string, data: StatusData): void {
-  const { auth, tokenStatus, binaries, cache, integrations, network, hasIssues, recommendations } =
-    data;
+  const {
+    auth,
+    tokenStatus,
+    binaries,
+    cache,
+    integrations,
+    network,
+    vortex,
+    hasIssues,
+    recommendations,
+  } = data;
   print(getBanner(version));
   blank();
 
@@ -765,5 +830,6 @@ function renderTextStatus(version: string, data: StatusData): void {
   renderBinariesSection(binaries);
   renderCacheSection(cache);
   renderIntegrationsSection(integrations);
+  renderVortexSection(vortex);
   renderRecommendationsSection(recommendations);
 }

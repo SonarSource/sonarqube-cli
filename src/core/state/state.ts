@@ -250,6 +250,8 @@ export interface CliConfig {
   updateCheck?: CliUpdateCheckState;
   /** Throttle for the Vortex entitlement-loss warning shown by per-edit hooks */
   vortexEntitlementLossNotice?: VortexEntitlementLossNoticeState;
+  /** Last CLI version that warned about each invoked Beta command */
+  betaCommandWarnings?: Record<string, string>;
 }
 
 export interface VortexEntitlementLossNoticeState {

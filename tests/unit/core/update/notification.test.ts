@@ -25,7 +25,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { Command } from 'commander';
 
-import { COMMAND_TREE } from '@/commands/command-tree.ts';
+import { createCommandTree } from '@/commands/command-tree.ts';
 import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { setFormattedOutputMode } from '@/core/ui';
 
@@ -35,9 +35,9 @@ const originalEnvForNotify = { ...process.env };
 const tempHome = mkdtempSync(join(tmpdir(), 'sonar-update-notify-'));
 process.env.SONAR_USER_HOME = tempHome;
 
-// Importing command-tree.ts already ran every .showUpdateNotification() call
-// as a top-level side effect, registering into COMMAND_TREE's UpdateNotifier —
-// reuse that same instance here rather than constructing a fresh one.
+// Building the tree registers every .showUpdateNotification() into the root's
+// UpdateNotifier — reuse that same instance here rather than constructing a fresh one.
+const COMMAND_TREE = createCommandTree();
 const updateNotifier = COMMAND_TREE.updateNotifier;
 
 function resolveCommand(path: string[]): Command {
