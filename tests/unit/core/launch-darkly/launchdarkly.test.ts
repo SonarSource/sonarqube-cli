@@ -91,4 +91,15 @@ describe('buildLaunchDarklyContext', () => {
       }),
     ).toBeNull();
   });
+
+  it('returns null when Server identity has no installation id', () => {
+    expect(
+      buildLaunchDarklyContext({
+        connectionType: 'on-premise',
+        userUuid: 'user-1',
+        organizationUuidV4: null,
+        sqsInstallationId: null,
+      }),
+    ).toBeNull();
+  });
 });

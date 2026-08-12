@@ -18,10 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { afterEach, describe, expect, it } from 'bun:test';
 
 import {
   ENV_LAUNCHDARKLY_ENVIRONMENT,
+  getLaunchDarklyDir,
   LAUNCHDARKLY_CLIENT_SIDE_IDS,
   resolveLaunchDarklyClientSideId,
   resolveLaunchDarklyEnvironment,
@@ -44,6 +49,12 @@ describe('resolveLaunchDarklyEnvironment', () => {
     expect(resolveLaunchDarklyEnvironment({ [ENV_LAUNCHDARKLY_ENVIRONMENT]: 'DEV' })).toBe('dev');
   });
 
+  it('trims surrounding whitespace before matching', () => {
+    expect(resolveLaunchDarklyEnvironment({ [ENV_LAUNCHDARKLY_ENVIRONMENT]: '  Dev  ' })).toBe(
+      'dev',
+    );
+  });
+
   it('falls back to production for unrecognized values', () => {
     expect(resolveLaunchDarklyEnvironment({ [ENV_LAUNCHDARKLY_ENVIRONMENT]: 'staging' })).toBe(
       'production',
@@ -57,5 +68,23 @@ describe('resolveLaunchDarklyClientSideId', () => {
     expect(resolveLaunchDarklyClientSideId({ [ENV_LAUNCHDARKLY_ENVIRONMENT]: 'dev' })).toBe(
       LAUNCHDARKLY_CLIENT_SIDE_IDS.dev,
     );
+  });
+});
+
+describe('getLaunchDarklyDir', () => {
+  it('resolves under SONAR_USER_HOME/sonarqube-cli/launch-darkly', () => {
+    const previous = process.env.SONAR_USER_HOME;
+    const tempHome = mkdtempSync(join(tmpdir(), 'sqcli-ld-dir-'));
+    process.env.SONAR_USER_HOME = tempHome;
+    try {
+      expect(getLaunchDarklyDir()).toBe(join(tempHome, 'sonarqube-cli', 'launch-darkly'));
+    } finally {
+      if (previous === undefined) {
+        delete process.env.SONAR_USER_HOME;
+      } else {
+        process.env.SONAR_USER_HOME = previous;
+      }
+      rmSync(tempHome, { recursive: true, force: true });
+    }
   });
 });

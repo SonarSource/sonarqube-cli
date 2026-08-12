@@ -161,4 +161,85 @@ describe('resolvePrivateBetaFlags', () => {
     ).toEqual({});
     expect(fetchFlags).not.toHaveBeenCalled();
   });
+
+  it('returns an empty map when identity is incomplete', async () => {
+    tryLoadStateSpy.mockReturnValue(getDefaultState(cliVersion));
+    resolveTelemetryIdentitySpy.mockResolvedValue({
+      user_uuid: null,
+      organization_uuid_v4: null,
+      sqs_installation_id: null,
+    });
+    const fetchFlags = mock(() =>
+      Promise.resolve({ 'cli.beta.private': true }),
+    ) as FeatureFlagFetcher;
+
+    expect(
+      await resolvePrivateBetaFlags(cloudAuth, {
+        fetchFlags,
+        flagKeys: FLAG_KEYS,
+        clientSideId: 'client-id',
+      }),
+    ).toEqual({});
+    expect(fetchFlags).not.toHaveBeenCalled();
+  });
+
+  it('enriches an incomplete connection identity before fetching flags', async () => {
+    const state = getDefaultState(cliVersion);
+    state.auth.isAuthenticated = true;
+    state.auth.activeConnectionId = 'conn-1';
+    state.auth.connections = [
+      {
+        id: 'conn-1',
+        type: 'cloud',
+        serverUrl: 'https://sonarcloud.io',
+        orgKey: 'my-org',
+        authenticatedAt: new Date().toISOString(),
+      },
+    ];
+    tryLoadStateSpy.mockReturnValue(state);
+    resolveTelemetryIdentitySpy.mockResolvedValue({
+      user_uuid: 'user-1',
+      organization_uuid_v4: 'org-1',
+      sqs_installation_id: null,
+    });
+    const fetchFlags = mock(() =>
+      Promise.resolve({ 'cli.beta.private': true }),
+    ) as FeatureFlagFetcher;
+
+    expect(
+      await resolvePrivateBetaFlags(cloudAuth, {
+        fetchFlags,
+        flagKeys: FLAG_KEYS,
+        clientSideId: 'client-id',
+      }),
+    ).toEqual({ 'cli.beta.private': true });
+    expect(resolveTelemetryIdentitySpy).toHaveBeenCalled();
+    expect(fetchFlags).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns an empty map when the flag fetcher throws', async () => {
+    const fetchFlags = mock(() => Promise.reject(new Error('network down'))) as FeatureFlagFetcher;
+
+    expect(
+      await resolvePrivateBetaFlags(cloudAuth, {
+        fetchFlags,
+        flagKeys: FLAG_KEYS,
+        clientSideId: 'client-id',
+      }),
+    ).toEqual({});
+  });
+
+  it('resolves the client-side ID from the environment when omitted', async () => {
+    const fetchFlags = mock(() =>
+      Promise.resolve({ 'cli.beta.private': true }),
+    ) as FeatureFlagFetcher;
+
+    expect(
+      await resolvePrivateBetaFlags(cloudAuth, {
+        fetchFlags,
+        flagKeys: FLAG_KEYS,
+      }),
+    ).toEqual({ 'cli.beta.private': true });
+    expect(fetchFlags).toHaveBeenCalledTimes(1);
+  });
 });
