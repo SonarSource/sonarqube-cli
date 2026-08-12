@@ -42,7 +42,7 @@ export interface FinalizeAgentInstallParams<TOptions extends IntegrateAgentOptio
   auth: ResolvedAuth;
   /**
    * Agent-specific feature flags merged into the integration options (e.g. the
-   * SQAA flag, whose name differs per agent). `projectRoot` and `installVortex`
+   * SQAA flag, whose name differs per agent). `projectRoot` and `vortexDisposition`
    * are derived here and must not be passed in.
    */
   featureOptions?: Partial<TOptions>;
@@ -58,8 +58,6 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
   params: FinalizeAgentInstallParams<TOptions>,
 ): Promise<void> {
   const { context, options, auth } = params;
-  // resolveVortexSetup owns the user-facing messaging for every skip reason:
-  // not entitled, check failed, --global, and a missing project key.
   const vortex = await resolveVortexSetup({
     auth,
     projectKey: context.projectKey,
@@ -83,7 +81,7 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
       ...options,
       ...params.featureOptions,
       projectRoot: context.project.rootDir,
-      installVortex: vortex !== null,
+      vortexDisposition: vortex.disposition,
     },
     targetRoot: installRoot,
     scope: installScope,

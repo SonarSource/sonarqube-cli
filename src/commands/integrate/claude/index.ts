@@ -90,7 +90,7 @@ export async function integrateClaude(
     ...options,
     projectRoot: ctx.project.rootDir,
     globalSecretsHookExists: skipSecretsHooks,
-    installVortex: vortex !== null,
+    vortexDisposition: vortex.disposition,
   } satisfies ClaudeIntegrationOptions;
   let installError: Error | undefined;
   try {

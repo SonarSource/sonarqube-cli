@@ -28,7 +28,7 @@ import type {
   IntegrationDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { install, jsonPatch, skip, wholeFile } from '@/core/framework/features';
+import { install, jsonPatch, skip, uninstall, wholeFile } from '@/core/framework/features';
 import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 
@@ -151,7 +151,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           id: 'sqaa-posttooluse',
           displayName: 'Vortex analysis',
           matcher: 'Edit|Write',
-          shouldInstall: ({ options }) => (options.installVortex === true ? install() : skip()),
+          shouldInstall: ({ options }) => shouldInstallSqaaHook(options),
         },
         {
           id: 'cag-posttooluse',
@@ -207,7 +207,22 @@ function shouldInstallCagHook(
   options: ClaudeIntegrationOptions,
   attrs: Record<string, IntegrationStateAttribute> | undefined,
 ): InstallDecision {
-  return options.installVortex === true && isCagHookAllowedForAttrs(attrs) ? install() : skip();
+  if (options.vortexDisposition === 'remove') {
+    return uninstall();
+  }
+  return options.vortexDisposition === 'install' && isCagHookAllowedForAttrs(attrs)
+    ? install()
+    : skip();
+}
+
+function shouldInstallSqaaHook(options: ClaudeIntegrationOptions): InstallDecision {
+  if (options.vortexDisposition === 'install') {
+    return install();
+  }
+  if (options.vortexDisposition === 'remove') {
+    return uninstall();
+  }
+  return skip();
 }
 
 function createContextAugmentationFailureHookSubfeature(): SubfeatureDeclaration<ClaudeIntegrationOptions> {

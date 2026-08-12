@@ -84,6 +84,7 @@ export {
   type InstallDecision,
   selectFeaturesForInvocation,
   skip,
+  uninstall,
 } from './selection.ts';
 export type {
   AppliedFeature,

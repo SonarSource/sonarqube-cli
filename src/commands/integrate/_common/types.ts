@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+export type VortexDisposition = 'install' | 'preserve' | 'remove';
+
 export interface IntegrateAgentOptions {
   project?: string;
   nonInteractive?: boolean;
@@ -26,7 +28,7 @@ export interface IntegrateAgentOptions {
   isFromRouter?: boolean;
   /** Used by Vortex. */
   projectRoot?: string;
-  installVortex?: boolean;
+  vortexDisposition?: VortexDisposition;
 }
 
 export interface HookCommand {
