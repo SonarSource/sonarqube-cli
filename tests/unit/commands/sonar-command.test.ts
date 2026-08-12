@@ -206,7 +206,7 @@ describe('SonarCommand', () => {
     });
 
     it('uses the last stage assigned after Stable was declared explicitly', () => {
-      const command = new SonarCommand('stable').stage(Stage.Stable).stage(Stage.Beta);
+      const command = new SonarCommand('stable').stage(Stage.Stable).stage(Stage.Beta());
 
       expect(command.isStable).toBe(false);
       expect(command.isBeta).toBe(true);
@@ -224,7 +224,7 @@ describe('SonarCommand', () => {
     });
 
     it('uses Alpha when it is assigned after Beta', () => {
-      const command = new SonarCommand('experimental').stage(Stage.Beta).stage(Stage.Alpha);
+      const command = new SonarCommand('experimental').stage(Stage.Beta()).stage(Stage.Alpha);
 
       expect(command.isAlpha).toBe(true);
       expect(command.isBeta).toBe(false);
@@ -401,15 +401,15 @@ describe('SonarCommand', () => {
     });
   });
 
-  // ─── stage(Stage.Beta) ────────────────────────────────────────────────────
+  // ─── stage(Stage.Beta()) ────────────────────────────────────────────────────
 
-  describe('stage(Stage.Beta)', () => {
+  describe('stage(Stage.Beta())', () => {
     it('marks the command as Beta and keeps it visible', () => {
       const parent = new SonarCommand('sonar');
       const betaCommand = parent
         .command('preview')
         .description('Run the preview')
-        .stage(Stage.Beta);
+        .stage(Stage.Beta());
 
       expect(betaCommand.isBeta).toBe(true);
       expect(parent.createHelp().visibleCommands(parent)).toContain(betaCommand);
@@ -422,7 +422,7 @@ describe('SonarCommand', () => {
 
       expect(parent.commands).not.toContain(command);
 
-      command.stage(Stage.Beta);
+      command.stage(Stage.Beta());
 
       expect(command.isAlpha).toBe(false);
       expect(command.isBeta).toBe(true);
@@ -436,14 +436,16 @@ describe('SonarCommand', () => {
     });
 
     it('adds the Beta tag to command help', () => {
-      const command = new SonarCommand('preview').description('Run the preview').stage(Stage.Beta);
+      const command = new SonarCommand('preview')
+        .description('Run the preview')
+        .stage(Stage.Beta());
 
       expect(command.helpInformation()).toContain('Run the preview [BETA]');
     });
 
     it('adds the Beta tag to a parent command subcommand list', () => {
       const parent = new SonarCommand('sonar');
-      parent.command('preview').description('Run the preview').stage(Stage.Beta);
+      parent.command('preview').description('Run the preview').stage(Stage.Beta());
 
       expect(parent.helpInformation()).toContain('Run the preview [BETA]');
     });
@@ -454,7 +456,7 @@ describe('SonarCommand', () => {
         .command('preview')
         .description('Long preview description')
         .summary('Preview summary')
-        .stage(Stage.Beta);
+        .stage(Stage.Beta());
 
       expect(parent.helpInformation()).toContain('Preview summary [BETA]');
     });
@@ -466,7 +468,7 @@ describe('SonarCommand', () => {
         .description('System commands')
         .rootHelp({ category: 'cli-management' });
       system.command('status').description('Stable status command');
-      system.command('preview').description('Preview command').stage(Stage.Beta);
+      system.command('preview').description('Preview command').stage(Stage.Beta());
 
       const help = getCustomRootHelp(root, root.createHelp());
 
@@ -480,7 +482,7 @@ describe('SonarCommand', () => {
         .command('preview')
         .description('Preview command')
         .rootHelp({ category: 'data' })
-        .stage(Stage.Beta);
+        .stage(Stage.Beta());
       root.command('last').description('Last command').rootHelp({ category: 'data' });
 
       const help = getCustomRootHelp(root, root.createHelp());
@@ -493,7 +495,7 @@ describe('SonarCommand', () => {
       const state = getDefaultState(VERSION);
       loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
       saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
-      const command = new SonarCommand('preview').stage(Stage.Beta).anonymousAction(() => {});
+      const command = new SonarCommand('preview').stage(Stage.Beta()).anonymousAction(() => {});
 
       await command.parseAsync([], { from: 'user' });
       await command.parseAsync([], { from: 'user' });
@@ -509,8 +511,8 @@ describe('SonarCommand', () => {
       const state = getDefaultState(VERSION);
       loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
       saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
-      const first = new SonarCommand('first').stage(Stage.Beta).anonymousAction(() => {});
-      const second = new SonarCommand('second').stage(Stage.Beta).anonymousAction(() => {});
+      const first = new SonarCommand('first').stage(Stage.Beta()).anonymousAction(() => {});
+      const second = new SonarCommand('second').stage(Stage.Beta()).anonymousAction(() => {});
 
       await first.parseAsync([], { from: 'user' });
       await second.parseAsync([], { from: 'user' });
@@ -527,7 +529,7 @@ describe('SonarCommand', () => {
       state.config.betaCommandWarnings = { preview: '0.0.1' };
       loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
       saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
-      const command = new SonarCommand('preview').stage(Stage.Beta).anonymousAction(() => {});
+      const command = new SonarCommand('preview').stage(Stage.Beta()).anonymousAction(() => {});
 
       await command.parseAsync([], { from: 'user' });
 
@@ -540,7 +542,7 @@ describe('SonarCommand', () => {
         throw new Error('State is unreadable');
       });
       const command = new SonarCommand('preview-with-unreadable-state')
-        .stage(Stage.Beta)
+        .stage(Stage.Beta())
         .anonymousAction(() => {});
 
       await command.parseAsync([], { from: 'user' });
@@ -551,6 +553,47 @@ describe('SonarCommand', () => {
       expect(warnings[0]?.args[0]).toBe(
         "'preview-with-unreadable-state' is in beta and may change.",
       );
+    });
+
+    it('stores an optional LaunchDarkly flag key for Private Beta', () => {
+      const open = new SonarCommand('open').stage(Stage.Beta());
+      const gated = new SonarCommand('gated', {
+        runtime: {
+          auth: null,
+          isAlphaEnabled: false,
+          isPrivateBetaEnabled: () => true,
+        },
+      }).stage(Stage.Beta('cli.beta.preview'));
+
+      expect(open.isBeta).toBe(true);
+      expect(open.isPrivateBeta).toBe(false);
+      expect(open.betaFlagKey).toBeUndefined();
+
+      expect(gated.isBeta).toBe(true);
+      expect(gated.isPrivateBeta).toBe(true);
+      expect(gated.betaFlagKey).toBe('cli.beta.preview');
+    });
+
+    it('registers Private Beta only when the runtime gate allows it', () => {
+      const enabled = new SonarCommand('root', {
+        runtime: {
+          auth: null,
+          isAlphaEnabled: false,
+          isPrivateBetaEnabled: (key) => key === 'cli.beta.preview',
+        },
+      });
+      enabled.command('gated').stage(Stage.Beta('cli.beta.preview'));
+      expect(enabled.commands.map((c) => c.name())).toContain('gated');
+
+      const denied = new SonarCommand('root', {
+        runtime: {
+          auth: null,
+          isAlphaEnabled: false,
+          isPrivateBetaEnabled: () => false,
+        },
+      });
+      denied.command('gated').stage(Stage.Beta('cli.beta.preview'));
+      expect(denied.commands.map((c) => c.name())).not.toContain('gated');
     });
   });
 
