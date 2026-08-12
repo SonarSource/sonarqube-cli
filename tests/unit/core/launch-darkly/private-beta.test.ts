@@ -28,6 +28,7 @@ import { createCommandTree } from '@/commands/command-tree.ts';
 import { type CliRuntime, SonarCommand, Stage } from '@/commands/sonar-command.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import {
+  collectPrivateBetaFlagKeys,
   FEATURE_FLAG_CACHE_TTL_MS,
   type FeatureFlagFetcher,
   type FeatureFlagIdentity,
@@ -277,5 +278,19 @@ describe('Private Beta command registration', () => {
     for (const command of tree.commands as SonarCommand[]) {
       expect(command.isPrivateBeta).toBe(false);
     }
+  });
+
+  it('collects Private Beta flag keys from Stage.Beta declarations', () => {
+    const root = new SonarCommand('sonar', undefined, {
+      auth: null,
+      isPrivateBetaEnabled: () => true,
+    });
+    root.command('stable');
+    root.command('open').stage(Stage.Beta());
+    root.command('private-a').stage(Stage.Beta('cli.beta.a'));
+    root.command('private-b').stage(Stage.Beta('cli.beta.b'));
+    root.command('private-a-dup').stage(Stage.Beta('cli.beta.a'));
+
+    expect(collectPrivateBetaFlagKeys(root).sort()).toEqual(['cli.beta.a', 'cli.beta.b']);
   });
 });

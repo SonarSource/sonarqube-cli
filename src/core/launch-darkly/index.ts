@@ -21,6 +21,7 @@
 import type { LDContext } from 'launchdarkly-node-client-sdk';
 import { initialize } from 'launchdarkly-node-client-sdk';
 
+import type { SonarCommand } from '@/commands/sonar-command.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import logger from '@/core/observability/logger.ts';
 import {
@@ -39,7 +40,6 @@ import { readFreshFlagDecisions, writeFlagDecisions } from './cache.ts';
 import {
   getLaunchDarklyDir,
   LAUNCHDARKLY_INIT_TIMEOUT_SECONDS,
-  PRIVATE_BETA_FLAG_KEYS,
   resolveLaunchDarklyClientSideId,
 } from './constants.ts';
 import type { FeatureFlagFetcher, FeatureFlagIdentity } from './types.ts';
@@ -51,7 +51,6 @@ export {
   getLaunchDarklyDir,
   LAUNCHDARKLY_CLIENT_SIDE_IDS,
   LAUNCHDARKLY_PROJECT_KEY,
-  PRIVATE_BETA_FLAG_KEYS,
   resolveLaunchDarklyClientSideId,
   resolveLaunchDarklyEnvironment,
 } from './constants.ts';
@@ -59,9 +58,28 @@ export type { FeatureFlagFetcher, FeatureFlagIdentity } from './types.ts';
 
 export interface ResolvePrivateBetaFlagsOptions {
   fetchFlags?: FeatureFlagFetcher;
+  /** Required Private Beta flag keys discovered from the command tree. */
   flagKeys?: readonly string[];
   nowMs?: number;
   clientSideId?: string;
+}
+
+/** Collects unique LaunchDarkly flag keys from Private Beta commands in the tree. */
+export function collectPrivateBetaFlagKeys(root: SonarCommand): string[] {
+  const keys = new Set<string>();
+
+  const visit = (command: SonarCommand): void => {
+    const flagKey = command.betaFlagKey;
+    if (command.isPrivateBeta && flagKey !== undefined) {
+      keys.add(flagKey);
+    }
+    for (const child of command.commands as SonarCommand[]) {
+      visit(child);
+    }
+  };
+
+  visit(root);
+  return [...keys];
 }
 
 export function buildLaunchDarklyContext(identity: FeatureFlagIdentity): LDContext | null {
@@ -193,7 +211,7 @@ export async function resolvePrivateBetaFlags(
   auth: ResolvedAuth | null,
   options: ResolvePrivateBetaFlagsOptions = {},
 ): Promise<Record<string, boolean>> {
-  const flagKeys = options.flagKeys ?? PRIVATE_BETA_FLAG_KEYS;
+  const flagKeys = options.flagKeys ?? [];
   if (!auth || flagKeys.length === 0) {
     return {};
   }

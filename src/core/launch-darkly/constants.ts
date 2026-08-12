@@ -68,10 +68,3 @@ export const FEATURE_FLAG_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 
 /** Short timeout so a LaunchDarkly refresh does not stall CLI startup. */
 export const LAUNCHDARKLY_INIT_TIMEOUT_SECONDS = 2;
-
-/**
- * LaunchDarkly flag keys used by `Stage.Beta('…')` Private Beta commands.
- * Keep in sync when adding or removing a Private Beta command: startup skips
- * auth + LaunchDarkly entirely when this list is empty.
- */
-export const PRIVATE_BETA_FLAG_KEYS: readonly string[] = [];

@@ -27,7 +27,7 @@ import { supportedIntegrations } from '@/commands/integrate';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import { installHooks } from '@/commands/integrate/claude/hooks.ts';
 import { resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { PRIVATE_BETA_FLAG_KEYS, resolvePrivateBetaFlags } from '@/core/launch-darkly';
+import { collectPrivateBetaFlagKeys, resolvePrivateBetaFlags } from '@/core/launch-darkly';
 import logger from '@/core/observability/logger.ts';
 import { flushSentry } from '@/core/observability/sentry.ts';
 import { setFormattedOutputMode } from '@/core/ui';
@@ -62,14 +62,23 @@ async function resolveStartupAuth(): Promise<ResolvedAuth | null> {
   }
 }
 
-// Skip auth + LaunchDarkly when no Private Beta commands are declared.
-const auth = PRIVATE_BETA_FLAG_KEYS.length > 0 ? await resolveStartupAuth() : null;
-const privateBetaFlags =
-  PRIVATE_BETA_FLAG_KEYS.length > 0 ? await resolvePrivateBetaFlags(auth) : {};
-const tree = createCommandTree({
-  auth,
-  isPrivateBetaEnabled: (flagKey) => privateBetaFlags[flagKey],
+// Probe with all Private Beta commands registered so we can discover flag keys
+// from Stage.Beta('…') declarations alone — no parallel key registry.
+const probe = createCommandTree({
+  auth: null,
+  isPrivateBetaEnabled: () => true,
 });
+const flagKeys = collectPrivateBetaFlagKeys(probe);
+
+let tree = probe;
+if (flagKeys.length > 0) {
+  const auth = await resolveStartupAuth();
+  const privateBetaFlags = await resolvePrivateBetaFlags(auth, { flagKeys });
+  tree = createCommandTree({
+    auth,
+    isPrivateBetaEnabled: (flagKey) => privateBetaFlags[flagKey],
+  });
+}
 
 await tree.parseAsync(process.argv);
 await flushSentry();
