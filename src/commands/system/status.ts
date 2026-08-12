@@ -58,6 +58,7 @@ import { isVortexEntitlementLoss, resolveVortexEntitlement } from '@/core/vortex
 
 import { version as VERSION } from '../../../package.json';
 import { supportedIntegrations } from '../integrate';
+import { isProjectVortexFeature } from '../integrate/_common/vortex.ts';
 import { checkAntigravitySecretsHookFile } from '../integrate/antigravity/health.ts';
 import { resolveAntigravityHooksJsonPathForScope } from '../integrate/antigravity/hooks.ts';
 import { getBanner } from '../root-help.ts';
@@ -402,6 +403,9 @@ async function resolveAuthenticatedChecks(auth: ResolvedAuth | null): Promise<Au
 export async function systemStatus(options: SystemStatusOptions): Promise<void> {
   const state = loadState();
   const integrations = getInstalledIntegrations(state);
+  const vortexInstalled = state.integrations.installed.some((integration) =>
+    integration.features.some(isProjectVortexFeature),
+  );
 
   const [auth, updateResult] = await Promise.all([
     resolveAuth().catch(() => null),
@@ -464,13 +468,14 @@ export async function systemStatus(options: SystemStatusOptions): Promise<void> 
     hasMcpIssues ||
     hasHooksIssues ||
     network.error !== undefined ||
-    isVortexEntitlementLoss(vortex);
+    isVortexEntitlementLoss(vortex, vortexInstalled);
   const recommendations = buildRecommendations(
     tokenStatus,
     updateResult,
     integrations,
     network,
     vortex,
+    vortexInstalled,
     auth?.orgKey,
   );
 
@@ -520,7 +525,8 @@ function buildRecommendations(
   updateResult: UpdateCheckResult | null,
   integrations: IntegrationInfo[],
   network: ResolvedNetworkConfig,
-  vortex: VortexEntitlementResult,
+  vortexEntitlement: VortexEntitlementResult,
+  vortexInstalled: boolean,
   orgKey: string | undefined,
 ): string[] {
   const recommendations: string[] = [];
@@ -529,7 +535,11 @@ function buildRecommendations(
     recommendations.push("Run 'sonar auth login' to reauthenticate");
   if (network.error !== undefined)
     recommendations.push(`Fix client certificate configuration: ${network.error}`);
-  const vortexRecommendation = buildVortexRecommendation(vortex, orgKey);
+  const vortexRecommendation = buildVortexRecommendation(
+    vortexEntitlement,
+    vortexInstalled,
+    orgKey,
+  );
   if (vortexRecommendation) recommendations.push(vortexRecommendation);
   if (updateResult && !updateResult.upToDate) {
     recommendations.push(

@@ -48,10 +48,11 @@ export function buildVortexJson(vortex: VortexEntitlementResult): object {
 }
 
 export function buildVortexRecommendation(
-  vortex: VortexEntitlementResult,
+  vortexEntitlement: VortexEntitlementResult,
+  vortexInstalled: boolean,
   orgKey: string | undefined,
 ): string | undefined {
-  if (!isVortexEntitlementLoss(vortex)) {
+  if (!isVortexEntitlementLoss(vortexEntitlement, vortexInstalled)) {
     return undefined;
   }
   const target = orgKey ? ` for organization '${orgKey}'` : '';
