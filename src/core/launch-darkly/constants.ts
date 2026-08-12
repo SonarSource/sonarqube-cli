@@ -64,7 +64,8 @@ export function resolveLaunchDarklyClientSideId(env: NodeJS.ProcessEnv = process
 }
 
 /** How long cached Private Beta flag decisions remain valid. */
-export const FEATURE_FLAG_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+const FEATURE_FLAG_CACHE_TTL_HOURS = 12;
+export const FEATURE_FLAG_CACHE_TTL_MS = FEATURE_FLAG_CACHE_TTL_HOURS * 60 * 60 * 1000;
 
 /** Short timeout so a LaunchDarkly refresh does not stall CLI startup. */
 export const LAUNCHDARKLY_INIT_TIMEOUT_SECONDS = 2;

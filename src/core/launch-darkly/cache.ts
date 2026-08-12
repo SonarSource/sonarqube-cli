@@ -59,6 +59,19 @@ function isCacheFile(value: unknown): value is CacheFile {
   return typeof record.entries === 'object' && record.entries !== null;
 }
 
+function isCacheEntry(value: unknown): value is CacheEntry {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const record = value as { fetchedAt?: unknown; flags?: unknown };
+  return (
+    Number.isFinite(record.fetchedAt) &&
+    typeof record.flags === 'object' &&
+    record.flags !== null &&
+    !Array.isArray(record.flags)
+  );
+}
+
 function readCacheFile(): CacheFile {
   const path = cacheFilePath();
   if (!existsSync(path)) {
@@ -110,17 +123,17 @@ export function readFreshFlagDecisions(
   }
 
   const entryKey = identityCacheKey(identity);
-  const entry = Object.hasOwn(cache.entries, entryKey) ? cache.entries[entryKey] : undefined;
-  if (entry === undefined || nowMs - entry.fetchedAt >= FEATURE_FLAG_CACHE_TTL_MS) {
+  const rawEntry = Object.hasOwn(cache.entries, entryKey) ? cache.entries[entryKey] : undefined;
+  if (!isCacheEntry(rawEntry) || nowMs - rawEntry.fetchedAt >= FEATURE_FLAG_CACHE_TTL_MS) {
     return null;
   }
 
   const decisions: Record<string, boolean> = {};
   for (const key of flagKeys) {
-    if (!(key in entry.flags)) {
+    if (!(key in rawEntry.flags)) {
       return null;
     }
-    decisions[key] = entry.flags[key];
+    decisions[key] = rawEntry.flags[key];
   }
   return decisions;
 }

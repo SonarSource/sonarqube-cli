@@ -253,7 +253,7 @@ describe('resolvePrivateBetaFlags', () => {
     ).toEqual({});
   });
 
-  it('resolves the client-side ID from the environment when omitted', async () => {
+  it('uses the default client-side ID when omitted', async () => {
     const fetchFlags = mock(() =>
       Promise.resolve({ 'cli.beta.private': true }),
     ) as FeatureFlagFetcher;
