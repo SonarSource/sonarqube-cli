@@ -98,7 +98,7 @@ import { listProjects, type ListProjectsOptions } from './list/projects.ts';
 import { remediate, type RemediateOptions } from './remediate';
 import { getBanner, getCustomRootHelp } from './root-help.ts';
 import { runMcp } from './run/mcp.ts';
-import { SonarCommand, Stage } from './sonar-command.ts';
+import { type CliRuntime, createDefaultCliRuntime, SonarCommand, Stage } from './sonar-command.ts';
 import { systemReset, type SystemResetOptions } from './system/reset.ts';
 import { systemStatus, type SystemStatusOptions } from './system/status.ts';
 import { updateVersion, type UpdateVersionOptions } from './update';
@@ -116,8 +116,8 @@ Learn more: https://docs.sonarsource.com/sonarqube-server/advanced-security/anal
 ${projectKeyExtraHelp}`;
 
 /** Build the CLI command tree for this invocation. */
-export function createCommandTree(): SonarCommand {
-  const COMMAND_TREE = new SonarCommand();
+export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime()): SonarCommand {
+  const COMMAND_TREE = new SonarCommand({ runtime });
 
   COMMAND_TREE.name('sonar')
     .description('SonarQube CLI')
@@ -348,7 +348,7 @@ export function createCommandTree(): SonarCommand {
       category: 'data',
       label: 'context [action] [args...]',
     })
-    .stage(Stage.Beta)
+    .stage(Stage.Beta())
     .argument('[action]', 'Action forwarded to sonar-context-augmentation')
     .argument('[args...]', 'Additional arguments forwarded to sonar-context-augmentation')
     .helpOption(false)

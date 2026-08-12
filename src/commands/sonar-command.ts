@@ -37,27 +37,70 @@ import { version as VERSION } from '../../package.json';
 export const ALPHA_ENV_VAR = 'SONARQUBE_CLI_ALPHA';
 export const ALPHA_HELP_TAG = '[ALPHA]';
 export const BETA_HELP_TAG = '[BETA]';
+
+export type StageName = 'stable' | 'alpha' | 'beta';
+
+/** Descriptor passed to {@link SonarCommand.stage}. */
+export type StageDescriptor =
+  | { readonly name: 'stable' }
+  | { readonly name: 'alpha' }
+  | { readonly name: 'beta'; readonly flagKey?: string };
+
+function betaStage(flagKey?: string): StageDescriptor {
+  return flagKey === undefined ? { name: 'beta' } : { name: 'beta', flagKey };
+}
+
+/**
+ * Command lifecycle stage.
+ * Stable/Alpha are constants; Beta is a function so an optional LaunchDarkly
+ * flag key can only be attached to Private Beta commands.
+ */
 export const Stage = {
-  Stable: 'stable',
-  Alpha: 'alpha',
-  Beta: 'beta',
-} as const;
-export type Stage = (typeof Stage)[keyof typeof Stage];
+  Stable: { name: 'stable' } as const satisfies StageDescriptor,
+  Alpha: { name: 'alpha' } as const satisfies StageDescriptor,
+  Beta: betaStage,
+};
+
 const ALPHA_HELP_GROUP = '__SONARQUBE_CLI_ALPHA_COMMANDS__';
 const betaWarningsShownWithoutState = new Set<string>();
 
 export const COMMAND_CATEGORIES = ['core', 'data', 'integrate', 'cli-management'] as const;
 export type CommandCategory = (typeof COMMAND_CATEGORIES)[number];
 
-function isAlphaEnabled(): boolean {
-  const value = process.env[ALPHA_ENV_VAR];
+/** Shared per-invocation context for command-tree construction and execution. */
+export interface CliRuntime {
+  /** Auth resolved once at startup; `null` when unauthenticated. */
+  auth: ResolvedAuth | null;
+  /** Whether Alpha commands are visible for this invocation. */
+  isAlphaEnabled: boolean;
+  /** Private Beta registration gate; Open Beta ignores this. */
+  isPrivateBetaEnabled: (flagKey: string) => boolean;
+}
+
+/** Reads {@link ALPHA_ENV_VAR} (`true` / `1` enable Alpha commands). */
+export function isAlphaEnabledFromEnv(env: NodeJS.ProcessEnv = process.env): boolean {
+  const value = env[ALPHA_ENV_VAR];
   return value === 'true' || value === '1';
+}
+
+export function createDefaultCliRuntime(): CliRuntime {
+  return {
+    auth: null,
+    isAlphaEnabled: isAlphaEnabledFromEnv(),
+    isPrivateBetaEnabled: () => false,
+  };
 }
 
 export interface RootHelpMetadata {
   category?: CommandCategory;
   expandSubcommands?: boolean;
   label?: string;
+}
+
+/** Optional shared state for a SonarCommand and its subtree. */
+export interface SonarCommandOptions {
+  updateNotifier?: UpdateNotifier;
+  runtime?: CliRuntime;
 }
 
 type CommandArgs = unknown[];
@@ -109,20 +152,29 @@ class SonarHelp extends Help {
  *                          availability, help, documentation, and warnings
  */
 export class SonarCommand extends Command {
-  private _stage: Stage = Stage.Stable;
+  private _stage: StageName = 'stable';
+  private _betaFlagKey: string | undefined;
   private _requiresAuth = false;
   private _rootHelp: RootHelpMetadata = {};
   private readonly _updateNotifier: UpdateNotifier;
+  private readonly _runtime: CliRuntime;
 
   /**
-   * `updateNotifier` defaults to a fresh instance so the root command (the only
-   * place `new SonarCommand()` is called without it) owns the one instance the
-   * whole tree shares; every subcommand inherits it via createCommand() below
-   * instead of reading a module-level singleton.
+   * `updateNotifier` / `runtime` default so the root command owns the instances
+   * the whole tree shares; every subcommand inherits them via createCommand().
    */
-  constructor(name?: string, updateNotifier: UpdateNotifier = new UpdateNotifier()) {
+  constructor(options?: SonarCommandOptions);
+  constructor(name?: string, options?: SonarCommandOptions);
+  constructor(
+    nameOrOptions?: string | SonarCommandOptions,
+    maybeOptions: SonarCommandOptions = {},
+  ) {
+    const hasName = typeof nameOrOptions === 'string';
+    const name = hasName ? nameOrOptions : undefined;
+    const options = (hasName ? maybeOptions : nameOrOptions) ?? {};
     super(name);
-    this._updateNotifier = updateNotifier;
+    this._updateNotifier = options.updateNotifier ?? new UpdateNotifier();
+    this._runtime = options.runtime ?? createDefaultCliRuntime();
     this.hook('preAction', () => {
       if (this.isAlpha) {
         info(`'${this.name()}' is in alpha; may change or be removed without notice.`, 'stderr');
@@ -132,7 +184,10 @@ export class SonarCommand extends Command {
 
   /** Ensures subcommands created via .command() are also SonarCommand instances. */
   createCommand(name?: string): SonarCommand {
-    return new SonarCommand(name, this._updateNotifier);
+    return new SonarCommand(name, {
+      updateNotifier: this._updateNotifier,
+      runtime: this._runtime,
+    });
   }
 
   createHelp(): Help {
@@ -158,6 +213,11 @@ export class SonarCommand extends Command {
     return this._updateNotifier;
   }
 
+  /** Startup auth / Private Beta gate shared by this command and its subtree. */
+  get runtime(): CliRuntime {
+    return this._runtime;
+  }
+
   /**
    * Configure how this command appears in the custom root help menu.
    * Top-level commands can control category, labels, and whether
@@ -168,35 +228,61 @@ export class SonarCommand extends Command {
     return this;
   }
 
-  /** Mark this command as Stable, Alpha, or Beta. */
-  stage(stage: Stage): this {
-    if (this._stage === stage) {
-      return this;
-    }
-    this._stage = stage;
-    const siblings = this.parent?.commands as Command[] | undefined;
-
-    if (stage !== Stage.Alpha) {
-      if (this.helpGroup() === ALPHA_HELP_GROUP) {
-        this.helpGroup('');
-      }
-      if (siblings && !siblings.includes(this)) {
-        siblings.push(this);
-      }
+  /** Mark this command as Stable, Alpha, or Beta (optionally Private Beta via a flag key). */
+  stage(stage: StageDescriptor): this {
+    const newStage = stage.name;
+    const newFlagKey = stage.name === 'beta' ? stage.flagKey : undefined;
+    if (this._stage === newStage && this._betaFlagKey === newFlagKey) {
       return this;
     }
 
-    this.helpGroup(ALPHA_HELP_GROUP);
-    if (!isAlphaEnabled()) {
-      // Commander has no public command-removal API, so remove it from the registration array.
-      const commandIndex = siblings?.indexOf(this) ?? -1;
-      if (commandIndex >= 0) {
-        siblings?.splice(commandIndex, 1);
-      }
-      return this;
+    this._stage = newStage;
+    this._betaFlagKey = newFlagKey;
+
+    if (newStage === 'alpha') {
+      this.helpGroup(ALPHA_HELP_GROUP);
+    } else if (this.helpGroup() === ALPHA_HELP_GROUP) {
+      this.helpGroup('');
     }
 
+    // Commander already attached this command via .command(); keep or detach.
+    if (this.isStageVisible()) {
+      this.attachToParent();
+    } else {
+      this.detachFromParent();
+    }
     return this;
+  }
+
+  private isStageVisible(): boolean {
+    if (this._stage === 'alpha') {
+      return this._runtime.isAlphaEnabled;
+    }
+    if (this._stage === 'beta' && this._betaFlagKey !== undefined) {
+      return this._runtime.isPrivateBetaEnabled(this._betaFlagKey);
+    }
+    return true;
+  }
+
+  /** Re-attach after a stage change that makes this command visible again. */
+  private attachToParent(): void {
+    const siblings = this.parent?.commands as Command[] | undefined;
+    if (siblings && !siblings.includes(this)) {
+      siblings.push(this);
+    }
+  }
+
+  /**
+   * Remove this command from its parent's registration array.
+   * Commander has no public command-removal API, and attaches eagerly on
+   * `.command()` before `.stage()` can decide visibility.
+   */
+  private detachFromParent(): void {
+    const siblings = this.parent?.commands as Command[] | undefined;
+    const commandIndex = siblings?.indexOf(this) ?? -1;
+    if (commandIndex >= 0) {
+      siblings?.splice(commandIndex, 1);
+    }
   }
 
   description(str: string, argsDescription?: Record<string, string>): this;
@@ -268,7 +354,8 @@ export class SonarCommand extends Command {
     this._requiresAuth = true;
     super.action((...args: TArgs) =>
       this.runCommand(async () => {
-        const auth = await resolveAuth();
+        // Prefer auth resolved once at startup; fall back for isolated unit tests.
+        const auth = this._runtime.auth ?? (await resolveAuth());
         if (!auth) {
           throw new CommandFailedError('Not authenticated.', {
             remediationHint: "Run 'sonar auth login' to authenticate.",
@@ -313,17 +400,27 @@ export class SonarCommand extends Command {
 
   /** True when this command is Stable. */
   get isStable(): boolean {
-    return this._stage === Stage.Stable;
+    return this._stage === 'stable';
   }
 
   /** True when this command is Alpha. */
   get isAlpha(): boolean {
-    return this._stage === Stage.Alpha;
+    return this._stage === 'alpha';
   }
 
-  /** True when this command is Beta. */
+  /** True when this command is Beta (Open or Private). */
   get isBeta(): boolean {
-    return this._stage === Stage.Beta;
+    return this._stage === 'beta';
+  }
+
+  /** True when this Beta command is gated by a LaunchDarkly flag key. */
+  get isPrivateBeta(): boolean {
+    return this._stage === 'beta' && this._betaFlagKey !== undefined;
+  }
+
+  /** LaunchDarkly flag key for Private Beta; undefined for Open Beta / non-Beta. */
+  get betaFlagKey(): string | undefined {
+    return this._betaFlagKey;
   }
 
   /** Metadata used by the custom root help menu. */
@@ -352,10 +449,10 @@ export class SonarCommand extends Command {
   }
 
   private withLifecycleTag(description: string): string {
-    if (this._stage === Stage.Alpha) {
+    if (this._stage === 'alpha') {
       return `${description} ${ALPHA_HELP_TAG}`;
     }
-    if (this._stage === Stage.Beta) {
+    if (this._stage === 'beta') {
       return `${description} ${BETA_HELP_TAG}`;
     }
     return description;
@@ -372,7 +469,7 @@ export class SonarCommand extends Command {
   }
 
   private warnIfBeta(): void {
-    if (this._stage !== Stage.Beta) {
+    if (this._stage !== 'beta') {
       return;
     }
 
