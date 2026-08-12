@@ -63,6 +63,7 @@ export function renderVortexSection(vortex: VortexEntitlementResult): void {
   if (vortex.status === 'not_applicable') {
     return;
   }
+
   blank();
   text('VORTEX');
   text(`  • Status: ${VORTEX_STATUS_LABELS[vortex.status]}`);
