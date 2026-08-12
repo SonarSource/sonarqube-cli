@@ -24,6 +24,14 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
+import { createCommandTree } from '@/commands/command-tree.ts';
+import * as sonarCommandModule from '@/commands/sonar-command.ts';
+import {
+  type CliRuntime,
+  collectPrivateBetaFlagKeys,
+  SonarCommand,
+  Stage,
+} from '@/commands/sonar-command.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import {
   FEATURE_FLAG_CACHE_TTL_MS,
@@ -331,5 +339,105 @@ describe('resolvePrivateBetaFlags', () => {
       }),
     ).toEqual({ 'cli.beta.private': false });
     expect(fetchFlags).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Private Beta command registration', () => {
+  function runtimeWithFlags(flags: Record<string, boolean>): CliRuntime {
+    return {
+      auth: cloudAuth,
+      isAlphaEnabled: false,
+      isPrivateBetaEnabled: (flagKey) => flags[flagKey] === true,
+    };
+  }
+
+  it('registers Private Beta commands only when the flag is enabled', () => {
+    const enabled = new SonarCommand('sonar', {
+      runtime: runtimeWithFlags({ 'cli.beta.private': true }),
+    });
+    enabled.command('stable').description('Stable command');
+    enabled.command('open-beta').description('Open beta').stage(Stage.Beta());
+    enabled
+      .command('private-beta')
+      .description('Private beta')
+      .stage(Stage.Beta('cli.beta.private'));
+
+    expect(enabled.commands.map((c) => c.name())).toEqual(['stable', 'open-beta', 'private-beta']);
+
+    const denied = new SonarCommand('sonar', {
+      runtime: runtimeWithFlags({ 'cli.beta.private': false }),
+    });
+    denied.command('stable').description('Stable command');
+    denied.command('open-beta').description('Open beta').stage(Stage.Beta());
+    denied
+      .command('private-beta')
+      .description('Private beta')
+      .stage(Stage.Beta('cli.beta.private'));
+
+    expect(denied.commands.map((c) => c.name())).toEqual(['stable', 'open-beta']);
+  });
+
+  it('omits Private Beta commands from createCommandTree by default', async () => {
+    const tree = await createCommandTree();
+    const names = tree.commands.map((c) => c.name());
+    expect(names).toContain('context');
+    // No Private Beta commands exist yet; default runtime keeps Open Beta and omits gated ones.
+    for (const command of tree.commands as SonarCommand[]) {
+      expect(command.isPrivateBeta).toBe(false);
+    }
+  });
+
+  it('does not call loadPrivateBetaContext when no Private Beta keys exist', async () => {
+    const loadPrivateBetaContext = mock(() =>
+      Promise.resolve({
+        auth: null,
+        flags: {},
+      }),
+    );
+
+    await createCommandTree({ loadPrivateBetaContext });
+
+    expect(loadPrivateBetaContext).not.toHaveBeenCalled();
+  });
+
+  it('calls loadPrivateBetaContext with discovered keys then rebuilds', async () => {
+    const collectSpy = spyOn(sonarCommandModule, 'collectPrivateBetaFlagKeys').mockReturnValue([
+      'cli.beta.lazy',
+    ]);
+
+    const loadPrivateBetaContext = mock((flagKeys: readonly string[]) => {
+      expect([...flagKeys]).toEqual(['cli.beta.lazy']);
+      return Promise.resolve({
+        auth: cloudAuth,
+        flags: { 'cli.beta.lazy': true },
+      });
+    });
+
+    try {
+      const tree = await createCommandTree({ loadPrivateBetaContext });
+      expect(loadPrivateBetaContext).toHaveBeenCalledTimes(1);
+      expect(tree.runtime.auth).toEqual(cloudAuth);
+      expect(tree.runtime.isPrivateBetaEnabled('cli.beta.lazy')).toBe(true);
+      expect(tree.runtime.isPrivateBetaEnabled('cli.beta.other')).toBe(false);
+    } finally {
+      collectSpy.mockRestore();
+    }
+  });
+
+  it('collects Private Beta flag keys from Stage.Beta declarations', () => {
+    const root = new SonarCommand('sonar', {
+      runtime: {
+        auth: null,
+        isAlphaEnabled: false,
+        isPrivateBetaEnabled: () => true,
+      },
+    });
+    root.command('stable');
+    root.command('open').stage(Stage.Beta());
+    root.command('private-a').stage(Stage.Beta('cli.beta.a'));
+    root.command('private-b').stage(Stage.Beta('cli.beta.b'));
+    root.command('private-a-dup').stage(Stage.Beta('cli.beta.a'));
+
+    expect(collectPrivateBetaFlagKeys(root).sort()).toEqual(['cli.beta.a', 'cli.beta.b']);
   });
 });

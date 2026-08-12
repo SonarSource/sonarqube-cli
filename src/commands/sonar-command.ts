@@ -504,3 +504,21 @@ export class SonarCommand extends Command {
     }
   }
 }
+
+/** Collects unique LaunchDarkly flag keys from Private Beta commands in the tree. */
+export function collectPrivateBetaFlagKeys(root: SonarCommand): string[] {
+  const keys = new Set<string>();
+
+  const visit = (command: SonarCommand): void => {
+    const flagKey = command.betaFlagKey;
+    if (command.isPrivateBeta && flagKey !== undefined) {
+      keys.add(flagKey);
+    }
+    for (const child of command.commands as SonarCommand[]) {
+      visit(child);
+    }
+  };
+
+  visit(root);
+  return [...keys];
+}

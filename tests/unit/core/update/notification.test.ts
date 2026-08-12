@@ -37,7 +37,7 @@ process.env.SONAR_USER_HOME = tempHome;
 
 // Building the tree registers every .showUpdateNotification() into the root's
 // UpdateNotifier — reuse that same instance here rather than constructing a fresh one.
-const COMMAND_TREE = createCommandTree();
+const COMMAND_TREE = await createCommandTree();
 const updateNotifier = COMMAND_TREE.updateNotifier;
 
 function resolveCommand(path: string[]): Command {

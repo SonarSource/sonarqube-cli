@@ -20,6 +20,7 @@
 
 import { type Command, Help, InvalidArgumentError, Option } from 'commander';
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
@@ -98,7 +99,14 @@ import { listProjects, type ListProjectsOptions } from './list/projects.ts';
 import { remediate, type RemediateOptions } from './remediate';
 import { getBanner, getCustomRootHelp } from './root-help.ts';
 import { runMcp } from './run/mcp.ts';
-import { type CliRuntime, createDefaultCliRuntime, SonarCommand, Stage } from './sonar-command.ts';
+import {
+  type CliRuntime,
+  collectPrivateBetaFlagKeys,
+  createDefaultCliRuntime,
+  isAlphaEnabledFromEnv,
+  SonarCommand,
+  Stage,
+} from './sonar-command.ts';
 import { systemReset, type SystemResetOptions } from './system/reset.ts';
 import { systemStatus, type SystemStatusOptions } from './system/status.ts';
 import { updateVersion, type UpdateVersionOptions } from './update';
@@ -115,8 +123,22 @@ Dependency manifest files (e.g. package-lock.json, pom.xml) will be uploaded to 
 Learn more: https://docs.sonarsource.com/sonarqube-server/advanced-security/analyzing-projects-for-dependencies#supported-languages-and-package-managers
 ${projectKeyExtraHelp}`;
 
-/** Build the CLI command tree for this invocation. */
-export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime()): SonarCommand {
+/**
+ * Loads auth + Private Beta flag decisions. Invoked at most once, only when the
+ * tree declares at least one Private Beta command.
+ */
+export type LoadPrivateBetaContext = (flagKeys: readonly string[]) => Promise<{
+  auth: ResolvedAuth | null;
+  flags: Record<string, boolean>;
+}>;
+
+export interface CreateCommandTreeOptions {
+  isAlphaEnabled?: boolean;
+  loadPrivateBetaContext?: LoadPrivateBetaContext;
+}
+
+/** Registers the full command tree for the given runtime (sync). */
+function buildCommandTree(runtime: CliRuntime): SonarCommand {
   const COMMAND_TREE = new SonarCommand({ runtime });
 
   COMMAND_TREE.name('sonar')
@@ -760,4 +782,45 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
   });
 
   return COMMAND_TREE;
+}
+
+/**
+ * Build the CLI command tree for this invocation.
+ *
+ * Probes for Private Beta flag keys first. Only when at least one exists does it
+ * call `loadPrivateBetaContext` (auth + LaunchDarkly). Otherwise the probe tree
+ * is returned and LaunchDarkly is never contacted.
+ */
+export async function createCommandTree(
+  options: CreateCommandTreeOptions = {},
+): Promise<SonarCommand> {
+  const isAlphaEnabled = options.isAlphaEnabled ?? isAlphaEnabledFromEnv();
+
+  const probe = buildCommandTree({
+    auth: null,
+    isAlphaEnabled,
+    // Allow all Private Beta commands so Stage.Beta('…') keys are discoverable.
+    isPrivateBetaEnabled: () => true,
+  });
+
+  const flagKeys = collectPrivateBetaFlagKeys(probe);
+  if (flagKeys.length === 0) {
+    return probe;
+  }
+
+  if (options.loadPrivateBetaContext) {
+    const { auth, flags } = await options.loadPrivateBetaContext(flagKeys);
+    return buildCommandTree({
+      auth,
+      isAlphaEnabled,
+      isPrivateBetaEnabled: (flagKey) => flags[flagKey] ?? false,
+    });
+  }
+
+  // Keys exist but no loader (e.g. docs generation): omit Private Beta commands.
+  return buildCommandTree({
+    ...createDefaultCliRuntime(),
+    isAlphaEnabled,
+    isPrivateBetaEnabled: () => false,
+  });
 }

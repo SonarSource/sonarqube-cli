@@ -26,6 +26,9 @@ import { createCommandTree } from '@/commands/command-tree.ts';
 import { supportedIntegrations } from '@/commands/integrate';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import { installHooks } from '@/commands/integrate/claude/hooks.ts';
+import { resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { resolvePrivateBetaFlags } from '@/core/launch-darkly';
+import logger from '@/core/observability/logger.ts';
 import { flushSentry } from '@/core/observability/sentry.ts';
 import { setFormattedOutputMode } from '@/core/ui';
 import * as postUpdate from '@/core/update/post-update.ts';
@@ -50,6 +53,22 @@ await postUpdate.runPostUpdateActions({
   installHooks,
 });
 
-const tree = createCommandTree();
+async function resolveStartupAuth(): Promise<ResolvedAuth | null> {
+  try {
+    return await resolveAuth({ silent: true });
+  } catch (err) {
+    logger.debug(`Startup auth resolution failed: ${(err as Error).message}`);
+    return null;
+  }
+}
+
+const tree = await createCommandTree({
+  loadPrivateBetaContext: async (flagKeys) => {
+    const auth = await resolveStartupAuth();
+    const flags = await resolvePrivateBetaFlags(auth, { flagKeys });
+    return { auth, flags };
+  },
+});
+
 await tree.parseAsync(process.argv);
 await flushSentry();
