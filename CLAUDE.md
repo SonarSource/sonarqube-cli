@@ -34,9 +34,9 @@ bun run test:e2e          # end-to-end tests
 
 ## Commands
 
-Each command lives in `src/commands/`. The command tree is defined in `src/commands/command-tree.ts` and the entry point is `src/index.ts`.
+Each command lives in `src/commands/`. The command tree is built by `createCommandTree()` in `src/commands/command-tree.ts` and the entry point is `src/index.ts`.
 
-To add a new command: add it to `src/commands/command-tree.ts` and implement the logic in a new folder under `src/commands/`.
+To add a new command: add it to `createCommandTree()` in `src/commands/command-tree.ts` and implement the logic in a new folder under `src/commands/`.
 Please declare commands using the type defined in `src/commands/sonar-command.ts`.
 By default, new commands should register a `authenticatedAction()`, only technical commands will use `anonymousAction()`.
 Visible top-level commands use their main `description()` as root help copy. Every visible top-level command should declare `rootHelp({ category })` so the custom root menu can group commands with blank lines between the `core`, `data`, `integrate`, and `cli-management` sections. The order within each group follows the declaration order in `src/commands/command-tree.ts`, so add or move top-level commands in the desired display order there. When a visible top-level command has visible subcommands, the custom root menu derives its label automatically as `name <sub1|sub2|...>` unless that command also sets `rootHelp({ expandSubcommands: true })`, in which case the parent command is rendered as just `name` and its visible subcommands are listed individually below it. Add `rootHelp({ label })` only when the default label is not enough. If a command should disappear from help entirely, declare it with Commander `{ hidden: true }` and leave an inline comment when hiding a public compatibility command.
