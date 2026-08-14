@@ -28,7 +28,9 @@ export interface FeatureFlagIdentity {
   sqsInstallationId: string | null;
 }
 
-/** Fetches the boolean Private Beta flag map for the given identity. */
+/** Fetches the boolean Private Beta flag map for the given identity.
+ * Returns `null` when the fetch fails so callers can avoid caching a false decision.
+ */
 export type FeatureFlagFetcher = (
   identity: FeatureFlagIdentity,
-) => Promise<Record<string, boolean>>;
+) => Promise<Record<string, boolean> | null>;

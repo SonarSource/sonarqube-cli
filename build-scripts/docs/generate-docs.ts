@@ -87,7 +87,7 @@ interface ClidocCommand {
 }
 
 // Docs use the default runtime (Private Beta omitted; Open Beta included).
-const COMMAND_TREE = createCommandTree();
+const COMMAND_TREE = await createCommandTree();
 const allCommands: ClidocCommand[] = [];
 const help = COMMAND_TREE.createHelp();
 

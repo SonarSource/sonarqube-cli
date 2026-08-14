@@ -99,4 +99,24 @@ describe('readFreshFlagDecisions', () => {
 
     expect(readFreshFlagDecisions(identity, ['cli.beta.private'], 'client-id', 1_000)).toBeNull();
   });
+
+  it('keeps valid entries while dropping malformed neighbors', () => {
+    writeRawCache(tempHome, {
+      clientSideId: 'client-id',
+      entries: {
+        'cloud|user:bad|organization:|installation:': {
+          fetchedAt: 'nope',
+          flags: { 'cli.beta.private': true },
+        },
+        [identityCacheKey(identity)]: {
+          fetchedAt: 1_000,
+          flags: { 'cli.beta.private': true, 'cli.beta.other': false },
+        },
+      },
+    });
+
+    expect(readFreshFlagDecisions(identity, ['cli.beta.private'], 'client-id', 1_000)).toEqual({
+      'cli.beta.private': true,
+    });
+  });
 });
