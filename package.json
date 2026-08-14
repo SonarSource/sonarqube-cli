@@ -135,7 +135,7 @@
     "typescript-eslint": "8.65.0"
   },
   "overrides": {
-    "flatted": "3.4.3"
+    "flatted": "3.4.4"
   },
   "lint-staged": {
     "*.ts": [
