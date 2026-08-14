@@ -552,9 +552,13 @@ describe('post-update migration', () => {
       expect(codex?.features.map((feature) => feature.featureId)).toEqual([VORTEX_FEATURE_ID]);
       expect(codex?.features[0].subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
         SQAA_HOOK_FEATURE_ID,
+        SQAA_INSTRUCTIONS_SUBFEATURE_ID,
         CONTEXT_AUGMENTATION_FEATURE_ID,
       ]);
       expect(harness.cwd.file('.codex', 'hooks.json').asJson().hooks?.PostToolUse).toBeDefined();
+      expect(harness.cwd.file('AGENTS.md').asText()).toContain(
+        '<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->',
+      );
       expect(
         harness.cwd.file('.agents', 'skills', 'sonar-context-augmentation', 'SKILL.md').exists(),
       ).toBe(true);

@@ -48,7 +48,11 @@ import {
 } from '../_common/feature-constants.ts';
 import { createContextAugmentationSubfeature } from '../_common/features/context-augmentation-feature.ts';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature.ts';
-import { SQAA_HOOK_FEATURE_ID } from '../_common/features/sqaa-instructions-feature.ts';
+import {
+  createSqaaInstructionsSnippet,
+  createSqaaInstructionsSubfeature,
+  SQAA_HOOK_FEATURE_ID,
+} from '../_common/features/sqaa-instructions-feature.ts';
 import {
   createAgentHookEntry,
   removeAgentHooks,
@@ -74,6 +78,7 @@ const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 const POSTTOOL_SQAA_SCRIPT_REL = 'sonar-sqaa/build-scripts/posttool-sqaa';
 
 export const CODEX_INTEGRATION_ID = 'codex';
+const CODEX_DISPLAY_NAME = 'Codex';
 
 export interface CodexIntegrationOptions extends IntegrateAgentOptions {
   globalSecretsHookExists?: boolean;
@@ -81,10 +86,10 @@ export interface CodexIntegrationOptions extends IntegrateAgentOptions {
 
 export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> = {
   id: CODEX_INTEGRATION_ID,
-  displayName: 'Codex',
+  displayName: CODEX_DISPLAY_NAME,
   features: [
     createSonarSecretsHooksFeature({
-      agentDisplayName: 'Codex',
+      agentDisplayName: CODEX_DISPLAY_NAME,
       integrationId: CODEX_INTEGRATION_ID,
       configDir: CODEX_CONFIG_DIR,
       hooksConfigFileName: HOOKS_FILE,
@@ -113,6 +118,12 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
     }),
     createVortexFeature<CodexIntegrationOptions>([
       createSqaaHookSubfeature(),
+      createSqaaInstructionsSubfeature([
+        createSqaaInstructionsSnippet({
+          agentDisplayName: CODEX_DISPLAY_NAME,
+          targetPath: resolveCodexAgentsMdPath,
+        }),
+      ]),
       createContextAugmentationSubfeature<CodexIntegrationOptions>({
         targetPath: resolveCodexSkillPath,
       }),
@@ -175,11 +186,7 @@ function createSqaaHookSubfeature(): SubfeatureDeclaration<CodexIntegrationOptio
         targetPath: (context) =>
           resolveAgentHookScriptPath(context, CODEX_CONFIG_DIR, POSTTOOL_SQAA_SCRIPT_REL),
         content: (context) => {
-          const projectKey = getRequiredStringAttr(
-            context,
-            'projectKey',
-            codexIntegration.displayName,
-          );
+          const projectKey = getRequiredStringAttr(context, 'projectKey', CODEX_DISPLAY_NAME);
           return process.platform === 'win32'
             ? getSqaaPostToolTemplateWindows(projectKey)
             : getSqaaPostToolTemplateUnix(projectKey);

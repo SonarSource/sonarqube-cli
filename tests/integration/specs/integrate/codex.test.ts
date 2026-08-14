@@ -28,7 +28,10 @@ import { isAbsolute } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/commands/integrate/_common/features/context-augmentation-feature';
-import { SQAA_HOOK_FEATURE_ID } from '../../../../src/commands/integrate/_common/features/sqaa-instructions-feature';
+import {
+  SQAA_HOOK_FEATURE_ID,
+  SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+} from '../../../../src/commands/integrate/_common/features/sqaa-instructions-feature';
 import { VORTEX_FEATURE_ID } from '../../../../src/commands/integrate/_common/vortex';
 import { codexIntegration } from '../../../../src/commands/integrate/codex/declaration';
 import {
@@ -451,7 +454,7 @@ describe('integrate codex', () => {
     );
 
     it(
-      'installs PostToolUse SQAA hook on apply_patch and omits AGENTS.md SQAA protocol when Vortex entitled',
+      'installs PostToolUse SQAA hook on apply_patch and writes the AGENTS.md SQAA protocol when Vortex entitled',
       async () => {
         harness.state().withContextAugmentationBinaryInstalled();
         const server = await harness
@@ -477,9 +480,17 @@ describe('integrate codex', () => {
         expect(result.exitCode).toBe(0);
         const body = harness.cwd.file(...PROJECT_AGENTS_MD_DIRS).asText();
         expect(body).toContain('<!-- sonar:begin:codex-secrets-on-read -->');
-        expect(body).not.toContain('<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->');
-        expect(body).not.toContain(SQAA_HEADING);
-        expect(body).not.toContain('sonar analyze agentic');
+        expect(body).toContain('<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->');
+        expect(body).toContain(SQAA_HEADING);
+        expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --depth DEEP`);
+        expect(
+          findInstalledSubfeature(
+            harness,
+            'codex',
+            VORTEX_FEATURE_ID,
+            SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+          ),
+        ).toBeDefined();
 
         const sqaaScript = harness.cwd.file(...SQAA_SCRIPT_DIRS, hookScriptName('posttool-sqaa'));
         expect(sqaaScript.exists()).toBe(true);
