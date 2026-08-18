@@ -34,6 +34,7 @@ import {
 } from '../../../../src/commands/integrate/_common/features/sqaa-instructions-feature';
 import { VORTEX_FEATURE_ID } from '../../../../src/commands/integrate/_common/vortex';
 import { codexIntegration } from '../../../../src/commands/integrate/codex/declaration';
+import { ENV_SONAR_USER_HOME } from '../../../../src/core/config-constants.ts';
 import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
@@ -272,6 +273,7 @@ describe('integrate codex', () => {
         expect(tomlBody).toContain('mcp');
         expect(tomlBody).toContain('--project');
         expect(tomlBody).toContain('my-project');
+        expect(tomlBody).not.toContain('[mcp_servers.sonarqube.env]');
 
         // Assert on the state
         const state = harness.stateJsonFile.asJson();
@@ -290,6 +292,30 @@ describe('integrate codex', () => {
             },
           ],
         });
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'forwards SONAR_USER_HOME into [mcp_servers.sonarqube.env] and refreshes a prior entry',
+      async () => {
+        harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=my-project\n');
+
+        const first = await harness.run('integrate codex --non-interactive');
+        expect(first.exitCode).toBe(0);
+        expect(harness.cwd.file(...CONFIG_TOML_DIRS).asText()).not.toContain(
+          '[mcp_servers.sonarqube.env]',
+        );
+
+        const customHome = harness.sonarUserHome.path;
+        const result = await harness.run('integrate codex --non-interactive', {
+          extraEnv: { [ENV_SONAR_USER_HOME]: customHome },
+        });
+
+        expect(result.exitCode).toBe(0);
+        const tomlBody = harness.cwd.file(...CONFIG_TOML_DIRS).asText();
+        expect(tomlBody).toContain('[mcp_servers.sonarqube.env]');
+        expect(tomlBody).toContain(customHome);
       },
       { timeout: 30000 },
     );

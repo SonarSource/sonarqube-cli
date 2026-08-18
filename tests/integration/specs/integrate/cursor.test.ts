@@ -28,6 +28,7 @@ import { isAbsolute } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { cursorIntegration } from '../../../../src/commands/integrate/cursor/declaration';
+import { ENV_SONAR_USER_HOME } from '../../../../src/core/config-constants.ts';
 import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
@@ -42,7 +43,7 @@ const HOOKS_JSON_DIRS = ['.cursor', 'hooks.json'];
 const CURSOR_PROMPT_STDIN_DELAY_MS = 1000;
 
 interface CursorMcpFile {
-  mcpServers?: Record<string, { command?: string; args?: string[] }>;
+  mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
 }
 
 type CursorHookEntry = { command?: string; matcher?: string };
@@ -99,6 +100,39 @@ describe('integrate cursor', () => {
         expect(mcp.mcpServers?.sonarqube).toBeDefined();
         expect(mcp.mcpServers?.sonarqube?.command).toBeDefined();
         expect(mcp.mcpServers?.sonarqube?.args).toContain('mcp');
+        expect(mcp.mcpServers?.sonarqube).not.toHaveProperty('env');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'forwards SONAR_USER_HOME into the MCP server env and refreshes a prior entry',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withProject('my-project')
+          .start();
+        harness.withAuth(server.baseUrl(), 'test-token');
+        harness.cwd.writeFile(
+          'sonar-project.properties',
+          [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
+        );
+
+        const first = await harness.run('integrate cursor --non-interactive');
+        expect(first.exitCode).toBe(0);
+        expect(
+          (harness.cwd.file(...MCP_JSON_DIRS).asJson() as CursorMcpFile).mcpServers?.sonarqube,
+        ).not.toHaveProperty('env');
+
+        const customHome = harness.sonarUserHome.path;
+        const result = await harness.run('integrate cursor --non-interactive', {
+          extraEnv: { [ENV_SONAR_USER_HOME]: customHome },
+        });
+
+        expect(result.exitCode).toBe(0);
+        const mcp: CursorMcpFile = harness.cwd.file(...MCP_JSON_DIRS).asJson();
+        expect(mcp.mcpServers?.sonarqube?.env?.[ENV_SONAR_USER_HOME]).toBe(customHome);
       },
       { timeout: 30000 },
     );
