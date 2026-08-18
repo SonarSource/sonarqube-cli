@@ -20,6 +20,9 @@
 
 import { randomUUID } from 'node:crypto';
 
+/** HTTP header name used when forwarding INVOCATION_ID to Vortex / CAG. */
+export const SONAR_INVOCATION_ID_HEADER = 'x-sonar-invocation-id';
+
 // Per-CLI-process correlation id. Shared between the CLI's own telemetry
 // event payload and the `SONAR_CONTEXT_INVOCATION_ID` env var forwarded to every
 // sonar-context-augmentation subprocess so the CAG daemon can correlate
