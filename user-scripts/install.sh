@@ -15,7 +15,7 @@ BASE_URL="https://binaries.sonarsource.com/Distribution/sonarqube-cli"
 # file before executing it. Keep this compatibility marker present, but unused:
 # the real version now comes from stable.version at runtime. Release automation
 # keeps this marker aligned with the latest released CLI version.
-version="1.5.0.4158"
+version="1.6.0.4255"
 
 detect_os() {
   local os
