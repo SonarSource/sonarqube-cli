@@ -140,12 +140,13 @@ describe('runMcp', () => {
 
       await runMcp(FAKE_AUTH);
 
-      expect(spawnSpy).toHaveBeenCalledWith(
-        'wsl.exe',
-        ['sh', '-c', expect.stringContaining(`${runtime} run`)],
-        expect.objectContaining({ stdio: 'inherit' }),
-      );
-      const spawnEnv = spawnSpy.mock.calls[0][2].env as Record<string, string>;
+      // Prefer the wsl.exe call: mock.module('node:child_process') in other
+      // suites (e.g. update-version) can leave earlier spawn calls on the shared mock.
+      const wslCall = spawnSpy.mock.calls.find((call) => call[0] === 'wsl.exe');
+      expect(wslCall).toBeDefined();
+      expect(wslCall![1]).toEqual(['sh', '-c', expect.stringContaining(`${runtime} run`)]);
+      expect(wslCall![2]).toEqual(expect.objectContaining({ stdio: 'inherit' }));
+      const spawnEnv = (wslCall![2] as { env: Record<string, string> }).env;
       expect(spawnEnv.WSLENV).toContain('SONARQUBE_TOKEN/u');
     },
   );
