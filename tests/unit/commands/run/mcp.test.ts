@@ -142,7 +142,9 @@ describe('runMcp', () => {
 
       // Prefer the wsl.exe call: mock.module('node:child_process') in other
       // suites (e.g. update-version) can leave earlier spawn calls on the shared mock.
-      const wslCall = spawnSpy.mock.calls.find((call) => call[0] === 'wsl.exe');
+      const wslCall = spawnSpy.mock.calls.find(
+        (call: unknown[]) => Array.isArray(call) && call[0] === 'wsl.exe',
+      );
       expect(wslCall).toBeDefined();
       expect(wslCall![1]).toEqual(['sh', '-c', expect.stringContaining(`${runtime} run`)]);
       expect(wslCall![2]).toEqual(expect.objectContaining({ stdio: 'inherit' }));
