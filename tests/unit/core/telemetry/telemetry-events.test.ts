@@ -42,6 +42,9 @@ import * as fetchGuardedModule from '@/core/server/fetch-guarded.ts';
 import type {
   AnalysisCompletedEventPayload,
   StoredAnalysisCompletedEvent,
+  StoredUserOnboardingCompletedEvent,
+  StoredUserOnboardingExitedEvent,
+  StoredUserOnboardingStartedEvent,
 } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
@@ -52,6 +55,9 @@ import {
   emitAnalysisCompleted,
   emitCommandExecuted,
   emitIntegrationConfigured,
+  emitUserOnboardingCompleted,
+  emitUserOnboardingExited,
+  emitUserOnboardingStarted,
   flushTelemetryEvents,
   type IntegrationConfiguredFields,
 } from '@/core/telemetry/telemetry-events.ts';
@@ -62,6 +68,7 @@ import {
   readAnalysisEvents,
   readCommandEvents,
   readIntegrationEvents,
+  readTelemetryEvents,
   telemetryEventsPath,
   writeTelemetryEvent,
 } from '../../../_common/telemetry-helpers.ts';
@@ -331,6 +338,139 @@ describe('emitIntegrationConfigured()', () => {
     await emitIntegrationConfigured(AUTH, makeIntegrationConfiguredFields());
 
     expect(readIntegrationEvents(testSonarUserHome)).toHaveLength(0);
+  });
+});
+
+// ─── emitUserOnboardingStarted ────────────────────────────────────────────────
+
+describe('emitUserOnboardingStarted()', () => {
+  it('writes a UserOnboardingStarted envelope with event_version 0 and lean payload', async () => {
+    await emitUserOnboardingStarted(AUTH, { devops_platform: 'github', plan: null });
+
+    const [event] = readTelemetryEvents<StoredUserOnboardingStartedEvent>(
+      testSonarUserHome,
+      'Analytics.Cli.UserOnboardingStarted',
+    );
+    expect(event.metadata.event_type).toBe('Analytics.Cli.UserOnboardingStarted');
+    expect(event.metadata.event_version).toBe('0');
+    expect(event.event_payload.source).toBe('cli');
+    expect(event.event_payload.devops_platform).toBe('github');
+    expect(event.event_payload.plan).toBeNull();
+    expect(typeof event.event_payload.version).toBe('string');
+    expect('cli_installation_id' in event.event_payload).toBe(false);
+  });
+
+  it('does not append when telemetry is disabled', async () => {
+    loadStateSpy.mockReturnValue(makeTelemetryState(false));
+
+    await emitUserOnboardingStarted(AUTH, { devops_platform: null, plan: null });
+
+    expect(
+      readTelemetryEvents(testSonarUserHome, 'Analytics.Cli.UserOnboardingStarted'),
+    ).toHaveLength(0);
+  });
+});
+
+// ─── emitUserOnboardingCompleted ──────────────────────────────────────────────
+
+describe('emitUserOnboardingCompleted()', () => {
+  it('writes a UserOnboardingCompleted envelope with import_method and project_count', async () => {
+    await emitUserOnboardingCompleted(AUTH, {
+      devops_platform: 'microsoft',
+      import_method: 'bulk',
+      plan: null,
+      project_count: 7,
+    });
+
+    const [event] = readTelemetryEvents<StoredUserOnboardingCompletedEvent>(
+      testSonarUserHome,
+      'Analytics.Cli.UserOnboardingCompleted',
+    );
+    expect(event.metadata.event_type).toBe('Analytics.Cli.UserOnboardingCompleted');
+    expect(event.metadata.event_version).toBe('0');
+    expect(event.event_payload.source).toBe('cli');
+    expect(event.event_payload.devops_platform).toBe('microsoft');
+    expect(event.event_payload.import_method).toBe('bulk');
+    expect(event.event_payload.project_count).toBe(7);
+    expect('cli_installation_id' in event.event_payload).toBe(false);
+  });
+
+  it('carries organization_uuid_v4 from the active connection', async () => {
+    getConnectionSpy.mockReturnValue({
+      id: 'conn-id',
+      type: 'cloud',
+      serverUrl: 'https://sonarcloud.io',
+      orgKey: 'my-org',
+      authenticatedAt: '2026-01-01T00:00:00.000Z',
+      userUuid: 'user-uuid-abc',
+      organizationUuidV4: 'org-uuid-xyz',
+      sqsInstallationId: null,
+    });
+
+    await emitUserOnboardingCompleted(AUTH, {
+      devops_platform: 'github',
+      import_method: 'single',
+      plan: null,
+      project_count: 1,
+    });
+
+    const [event] = readTelemetryEvents<StoredUserOnboardingCompletedEvent>(
+      testSonarUserHome,
+      'Analytics.Cli.UserOnboardingCompleted',
+    );
+    expect(event.event_payload.organization_uuid_v4).toBe('org-uuid-xyz');
+  });
+
+  it('does not append when telemetry is disabled', async () => {
+    loadStateSpy.mockReturnValue(makeTelemetryState(false));
+
+    await emitUserOnboardingCompleted(AUTH, {
+      devops_platform: null,
+      import_method: 'single',
+      plan: null,
+      project_count: 0,
+    });
+
+    expect(
+      readTelemetryEvents(testSonarUserHome, 'Analytics.Cli.UserOnboardingCompleted'),
+    ).toHaveLength(0);
+  });
+});
+
+// ─── emitUserOnboardingExited ─────────────────────────────────────────────────
+
+describe('emitUserOnboardingExited()', () => {
+  it('writes a UserOnboardingExited envelope with destination and devops_platform', async () => {
+    await emitUserOnboardingExited(AUTH, {
+      destination: 'error',
+      devops_platform: 'github',
+      plan: null,
+    });
+
+    const [event] = readTelemetryEvents<StoredUserOnboardingExitedEvent>(
+      testSonarUserHome,
+      'Analytics.Cli.UserOnboardingExited',
+    );
+    expect(event.metadata.event_type).toBe('Analytics.Cli.UserOnboardingExited');
+    expect(event.metadata.event_version).toBe('0');
+    expect(event.event_payload.source).toBe('cli');
+    expect(event.event_payload.destination).toBe('error');
+    expect(event.event_payload.devops_platform).toBe('github');
+    expect('cli_installation_id' in event.event_payload).toBe(false);
+  });
+
+  it('does not append when telemetry is disabled', async () => {
+    loadStateSpy.mockReturnValue(makeTelemetryState(false));
+
+    await emitUserOnboardingExited(AUTH, {
+      destination: 'error',
+      devops_platform: null,
+      plan: null,
+    });
+
+    expect(
+      readTelemetryEvents(testSonarUserHome, 'Analytics.Cli.UserOnboardingExited'),
+    ).toHaveLength(0);
   });
 });
 

@@ -42,7 +42,6 @@ import type {
 import {
   assertSupportedAlm,
   computeInstallationKey,
-  type RepoResolution,
   resolveAlmKey,
   type ResolvedRepo,
   resolveOrg,
@@ -56,39 +55,6 @@ const noop = () => undefined;
 
 /** Max number of `provision_projects` calls run concurrently. */
 const IMPORT_PROVISION_CONCURRENCY_LIMIT = 10;
-
-/** Resolves the org tied to the active connection, then the repos to import into it. */
-async function resolveOrgAndRepos(
-  client: SonarQubeClient,
-  orgKey: string | undefined,
-  options: ImportOptions,
-): Promise<{ orgKey: string; almKey: string | undefined } & RepoResolution> {
-  const {
-    key: resolvedOrgKey,
-    almKey: resolvedAlmKey,
-    onlyPrivateProjectsEnabled,
-  } = await resolveOrg(client, orgKey);
-
-  info(`Organization: ${resolvedOrgKey}`);
-
-  const [almKey, privateProjectsAvailable] = await Promise.all([
-    resolveAlmKey(client, resolvedOrgKey, resolvedAlmKey),
-    client.hasPrivateProjectsEntitlement(resolvedOrgKey),
-  ]);
-
-  // Before any repository is listed, so an unsupported org stops here rather than after a full
-  // paginated fetch.
-  assertSupportedAlm(resolvedOrgKey, almKey);
-
-  const onlyPrivateProjects: OnlyPrivateProjects = {
-    enabled: onlyPrivateProjectsEnabled ?? false,
-    available: privateProjectsAvailable,
-  };
-
-  const outcome = await resolveRepos(client, resolvedOrgKey, almKey, onlyPrivateProjects, options);
-
-  return { orgKey: resolvedOrgKey, almKey, ...outcome };
-}
 
 /** Builds the `runWithConcurrencyLimit` task that provisions one repo and updates `progress`. */
 function createProvisionTask(
@@ -240,23 +206,41 @@ export async function importHandler(options: ImportOptions, auth: ResolvedAuth):
 
   emitUserOnboardingStarted(auth, { devops_platform: null, plan: null }).catch(noop);
 
+  // almKey is set before assertSupportedAlm so UserOnboardingExited always carries the platform.
   let almKey: string | undefined;
   let completedEmitted = false;
   try {
-    const resolution = await resolveOrgAndRepos(client, auth.orgKey, options);
-    almKey = resolution.almKey;
+    const {
+      key: resolvedOrgKey,
+      almKey: orgRecordAlmKey,
+      onlyPrivateProjectsEnabled,
+    } = await resolveOrg(client, auth.orgKey);
+    info(`Organization: ${resolvedOrgKey}`);
+    const [resolvedAlmKey, privateProjectsAvailable] = await Promise.all([
+      resolveAlmKey(client, resolvedOrgKey, orgRecordAlmKey),
+      client.hasPrivateProjectsEntitlement(resolvedOrgKey),
+    ]);
+    almKey = resolvedAlmKey;
+
+    assertSupportedAlm(resolvedOrgKey, almKey);
+
+    const onlyPrivateProjects: OnlyPrivateProjects = {
+      enabled: onlyPrivateProjectsEnabled ?? false,
+      available: privateProjectsAvailable,
+    };
+    const resolution = await resolveRepos(client, resolvedOrgKey, almKey, onlyPrivateProjects, options);
 
     if (resolution.kind === 'streaming') {
       const { succeeded, failed, skipped } = await runBulkImportJob(
         client,
-        resolution.orgKey,
-        resolution.almKey,
+        resolvedOrgKey,
+        almKey,
         resolution.collection,
         resolution.regex,
       );
       reportSkipped(skipped);
       emitUserOnboardingCompleted(auth, {
-        devops_platform: resolution.almKey ?? null,
+        devops_platform: almKey ?? null,
         import_method: 'bulk',
         plan: null,
         project_count: succeeded,
@@ -266,7 +250,7 @@ export async function importHandler(options: ImportOptions, auth: ResolvedAuth):
         succeeded,
         failed,
         skipped.length,
-        buildOnboardingDashboardUrl(auth.serverUrl, resolution.orgKey),
+        buildOnboardingDashboardUrl(auth.serverUrl, resolvedOrgKey),
       );
       return;
     }
@@ -284,12 +268,12 @@ export async function importHandler(options: ImportOptions, auth: ResolvedAuth):
     await runWithConcurrencyLimit(
       repos,
       IMPORT_PROVISION_CONCURRENCY_LIMIT,
-      createProvisionTask(client, resolution.orgKey, progress),
+      createProvisionTask(client, resolvedOrgKey, progress),
     );
 
     const { succeeded, failed } = progress.finish();
     emitUserOnboardingCompleted(auth, {
-      devops_platform: resolution.almKey ?? null,
+      devops_platform: almKey ?? null,
       import_method: 'single',
       plan: null,
       project_count: succeeded,
@@ -299,7 +283,7 @@ export async function importHandler(options: ImportOptions, auth: ResolvedAuth):
       succeeded,
       failed,
       skipped.length,
-      buildOnboardingDashboardUrl(auth.serverUrl, resolution.orgKey),
+      buildOnboardingDashboardUrl(auth.serverUrl, resolvedOrgKey),
     );
   } catch (err) {
     if (!completedEmitted) {
