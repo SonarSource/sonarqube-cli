@@ -52,6 +52,8 @@ import type { ImportOptions } from './_common/types';
 
 export { type ImportOptions } from './_common/types';
 
+const noop = () => undefined;
+
 /** Max number of `provision_projects` calls run concurrently. */
 const IMPORT_PROVISION_CONCURRENCY_LIMIT = 10;
 
@@ -236,7 +238,7 @@ export async function importHandler(options: ImportOptions, auth: ResolvedAuth):
 
   intro('Import repositories', 'SonarQube');
 
-  emitUserOnboardingStarted(auth, { devops_platform: null, plan: null }).catch(() => {});
+  emitUserOnboardingStarted(auth, { devops_platform: null, plan: null }).catch(noop);
 
   let almKey: string | undefined;
   let completedEmitted = false;
@@ -258,7 +260,7 @@ export async function importHandler(options: ImportOptions, auth: ResolvedAuth):
         import_method: 'bulk',
         plan: null,
         project_count: succeeded,
-      }).catch(() => {});
+      }).catch(noop);
       completedEmitted = true;
       reportOutcome(
         succeeded,
@@ -291,7 +293,7 @@ export async function importHandler(options: ImportOptions, auth: ResolvedAuth):
       import_method: 'single',
       plan: null,
       project_count: succeeded,
-    }).catch(() => {});
+    }).catch(noop);
     completedEmitted = true;
     reportOutcome(
       succeeded,
@@ -305,7 +307,7 @@ export async function importHandler(options: ImportOptions, auth: ResolvedAuth):
         destination: 'error',
         devops_platform: almKey ?? null,
         plan: null,
-      }).catch(() => {});
+      }).catch(noop);
     }
     throw err;
   }
