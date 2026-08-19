@@ -26,6 +26,11 @@ import {
   type ProvisionedProject,
   SonarQubeClient,
 } from '@/core/server/client.ts';
+import {
+  emitUserOnboardingCompleted,
+  emitUserOnboardingExited,
+  emitUserOnboardingStarted,
+} from '@/core/telemetry/telemetry-events.ts';
 import { info, intro, outro } from '@/core/ui';
 import { ImportProgress } from '@/core/ui/components/import-progress.ts';
 
@@ -231,47 +236,77 @@ export async function importHandler(options: ImportOptions, auth: ResolvedAuth):
 
   intro('Import repositories', 'SonarQube');
 
-  const resolution = await resolveOrgAndRepos(client, auth.orgKey, options);
+  emitUserOnboardingStarted(auth, { devops_platform: null, plan: null }).catch(() => {});
 
-  if (resolution.kind === 'streaming') {
-    const { succeeded, failed, skipped } = await runBulkImportJob(
-      client,
-      resolution.orgKey,
-      resolution.almKey,
-      resolution.collection,
-      resolution.regex,
-    );
+  let almKey: string | undefined;
+  let completedEmitted = false;
+  try {
+    const resolution = await resolveOrgAndRepos(client, auth.orgKey, options);
+    almKey = resolution.almKey;
+
+    if (resolution.kind === 'streaming') {
+      const { succeeded, failed, skipped } = await runBulkImportJob(
+        client,
+        resolution.orgKey,
+        resolution.almKey,
+        resolution.collection,
+        resolution.regex,
+      );
+      reportSkipped(skipped);
+      emitUserOnboardingCompleted(auth, {
+        devops_platform: resolution.almKey ?? null,
+        import_method: 'bulk',
+        plan: null,
+        project_count: succeeded,
+      }).catch(() => {});
+      completedEmitted = true;
+      reportOutcome(
+        succeeded,
+        failed,
+        skipped.length,
+        buildOnboardingDashboardUrl(auth.serverUrl, resolution.orgKey),
+      );
+      return;
+    }
+
+    const { repos, skipped } = resolution;
+
+    info(`Repositories to import: ${repos.length}`);
     reportSkipped(skipped);
+
+    const progress = new ImportProgress({ maxVisible: IMPORT_PROVISION_CONCURRENCY_LIMIT });
+    progress.setTotal(repos.length);
+    progress.addRepos(repos.map((repo) => repo.slug));
+    progress.start();
+
+    await runWithConcurrencyLimit(
+      repos,
+      IMPORT_PROVISION_CONCURRENCY_LIMIT,
+      createProvisionTask(client, resolution.orgKey, progress),
+    );
+
+    const { succeeded, failed } = progress.finish();
+    emitUserOnboardingCompleted(auth, {
+      devops_platform: resolution.almKey ?? null,
+      import_method: 'single',
+      plan: null,
+      project_count: succeeded,
+    }).catch(() => {});
+    completedEmitted = true;
     reportOutcome(
       succeeded,
       failed,
       skipped.length,
       buildOnboardingDashboardUrl(auth.serverUrl, resolution.orgKey),
     );
-    return;
+  } catch (err) {
+    if (!completedEmitted) {
+      emitUserOnboardingExited(auth, {
+        destination: 'error',
+        devops_platform: almKey ?? null,
+        plan: null,
+      }).catch(() => {});
+    }
+    throw err;
   }
-
-  const { repos, skipped } = resolution;
-
-  info(`Repositories to import: ${repos.length}`);
-  reportSkipped(skipped);
-
-  const progress = new ImportProgress({ maxVisible: IMPORT_PROVISION_CONCURRENCY_LIMIT });
-  progress.setTotal(repos.length);
-  progress.addRepos(repos.map((repo) => repo.slug));
-  progress.start();
-
-  await runWithConcurrencyLimit(
-    repos,
-    IMPORT_PROVISION_CONCURRENCY_LIMIT,
-    createProvisionTask(client, resolution.orgKey, progress),
-  );
-
-  const { succeeded, failed } = progress.finish();
-  reportOutcome(
-    succeeded,
-    failed,
-    skipped.length,
-    buildOnboardingDashboardUrl(auth.serverUrl, resolution.orgKey),
-  );
 }

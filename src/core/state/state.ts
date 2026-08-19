@@ -573,9 +573,66 @@ export interface StoredCommandExecutedEvent {
   event_payload: CommandExecutedEventPayload;
 }
 
+export interface UserOnboardingStartedEventPayload {
+  devops_platform: string | null;
+  plan: string | null;
+  source: 'cli';
+  user_uuid: string | null;
+  version: string;
+}
+
+export interface StoredUserOnboardingStartedEvent {
+  metadata: TelemetryEventMetadataBase & {
+    event_type: 'Analytics.Cli.UserOnboardingStarted';
+    event_version: '0';
+  };
+  event_payload: UserOnboardingStartedEventPayload;
+}
+
+export interface UserOnboardingCompletedEventPayload {
+  devops_platform: string | null;
+  import_method: 'bulk' | 'single';
+  organization_uuid_v4: string | null;
+  plan: string | null;
+  project_count: number;
+  source: 'cli';
+  user_uuid: string | null;
+  version: string;
+}
+
+export interface StoredUserOnboardingCompletedEvent {
+  metadata: TelemetryEventMetadataBase & {
+    event_type: 'Analytics.Cli.UserOnboardingCompleted';
+    event_version: '0';
+  };
+  event_payload: UserOnboardingCompletedEventPayload;
+}
+
+export interface UserOnboardingExitedEventPayload {
+  destination: string;
+  devops_platform: string | null;
+  plan: string | null;
+  source: 'cli';
+  user_uuid: string | null;
+  version: string;
+}
+
+export interface StoredUserOnboardingExitedEvent {
+  metadata: TelemetryEventMetadataBase & {
+    event_type: 'Analytics.Cli.UserOnboardingExited';
+    event_version: '0';
+  };
+  event_payload: UserOnboardingExitedEventPayload;
+}
+
 /** Any event stored in telemetry-events.ndjson and drained by flushTelemetryEvents. */
 export type StoredTelemetryEvent =
-  StoredAnalysisCompletedEvent | StoredIntegrationConfiguredEvent | StoredCommandExecutedEvent;
+  | StoredAnalysisCompletedEvent
+  | StoredIntegrationConfiguredEvent
+  | StoredCommandExecutedEvent
+  | StoredUserOnboardingStartedEvent
+  | StoredUserOnboardingCompletedEvent
+  | StoredUserOnboardingExitedEvent;
 
 /**
  * Telemetry configuration and pending event batch
