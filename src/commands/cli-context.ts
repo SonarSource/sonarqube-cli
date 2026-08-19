@@ -72,21 +72,11 @@ export class CliContext {
    * Beta with the user entitled for the command's LaunchDarkly flag.
    */
   isBeta(): boolean {
-    return this.isOpenBeta() || this.isPrivateBeta();
-  }
-
-  /** True when this command is Open Beta (beta without a LaunchDarkly gate). */
-  isOpenBeta(): boolean {
-    return this.stage.isBeta && !this.stage.isPrivateBeta;
-  }
-
-  /**
-   * True when this command is Private Beta and the user is entitled for its
-   * flag.
-   */
-  isPrivateBeta(): boolean {
-    if (!this.stage.isPrivateBeta) {
+    if (!this.stage.isBeta) {
       return false;
+    }
+    if (!this.stage.isPrivateBeta) {
+      return true;
     }
     const flagKey = this.stage.betaFlagKey;
     return flagKey !== undefined && this.runtime.isPrivateBetaEnabled(flagKey);

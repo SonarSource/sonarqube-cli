@@ -27,8 +27,6 @@ describe('CliContext stage accessors', () => {
     const ctx = new CliContext();
     expect(ctx.isAlpha()).toBe(false);
     expect(ctx.isBeta()).toBe(false);
-    expect(ctx.isOpenBeta()).toBe(false);
-    expect(ctx.isPrivateBeta()).toBe(false);
   });
 
   it('isAlpha requires both Alpha stage and alpha enabled', () => {
@@ -47,37 +45,32 @@ describe('CliContext stage accessors', () => {
     ).toBe(true);
   });
 
-  it('isOpenBeta / isBeta are true for Open Beta without consulting entitlement', () => {
+  it('isBeta is true for Open Beta without consulting entitlement', () => {
     const ctx = new CliContext(
       { isAlpha: false, isBeta: true, isPrivateBeta: false },
       { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
     );
-    expect(ctx.isOpenBeta()).toBe(true);
-    expect(ctx.isPrivateBeta()).toBe(false);
     expect(ctx.isBeta()).toBe(true);
   });
 
-  it('isPrivateBeta / isBeta require Private Beta entitlement', () => {
+  it('isBeta for Private Beta requires entitlement', () => {
     const stage = {
       isAlpha: false,
       isBeta: true,
       isPrivateBeta: true,
       betaFlagKey: 'cli.beta.demo',
     };
-    const denied = new CliContext(stage, {
-      isAlphaEnabled: false,
-      isPrivateBetaEnabled: () => false,
-    });
-    expect(denied.isOpenBeta()).toBe(false);
-    expect(denied.isPrivateBeta()).toBe(false);
-    expect(denied.isBeta()).toBe(false);
-
-    const entitled = new CliContext(stage, {
-      isAlphaEnabled: false,
-      isPrivateBetaEnabled: (key) => key === 'cli.beta.demo',
-    });
-    expect(entitled.isOpenBeta()).toBe(false);
-    expect(entitled.isPrivateBeta()).toBe(true);
-    expect(entitled.isBeta()).toBe(true);
+    expect(
+      new CliContext(stage, {
+        isAlphaEnabled: false,
+        isPrivateBetaEnabled: () => false,
+      }).isBeta(),
+    ).toBe(false);
+    expect(
+      new CliContext(stage, {
+        isAlphaEnabled: false,
+        isPrivateBetaEnabled: (key) => key === 'cli.beta.demo',
+      }).isBeta(),
+    ).toBe(true);
   });
 });

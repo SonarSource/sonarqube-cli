@@ -680,7 +680,6 @@ describe('SonarCommand', () => {
       await cmd.parseAsync([], { from: 'user' });
       const receivedContext = handler.mock.calls[0][0];
       expect(receivedContext.isAlpha()).toBe(false);
-      expect(receivedContext.isOpenBeta()).toBe(true);
       expect(receivedContext.isBeta()).toBe(true);
     });
 
@@ -696,8 +695,6 @@ describe('SonarCommand', () => {
       cmd.stage(Stage.Beta('cli.beta.demo')).anonymousAction(handler);
       await cmd.parseAsync([], { from: 'user' });
       const receivedContext = handler.mock.calls[0][0];
-      expect(receivedContext.isOpenBeta()).toBe(false);
-      expect(receivedContext.isPrivateBeta()).toBe(true);
       expect(receivedContext.isBeta()).toBe(true);
     });
 
@@ -799,7 +796,6 @@ describe('SonarCommand', () => {
       expect(handler).toHaveBeenCalledTimes(1);
       const receivedContext = handler.mock.calls[0][0];
       expect(receivedContext.isAlpha()).toBe(false);
-      expect(receivedContext.isOpenBeta()).toBe(true);
       expect(receivedContext.isBeta()).toBe(true);
     });
   });
