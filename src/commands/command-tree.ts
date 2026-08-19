@@ -160,7 +160,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
         return getBanner(VERSION) + '\n' + Help.prototype.formatHelp.call(helper, cmd, helper);
       },
     })
-    .anonymousAction(function (this: Command, command?: string) {
+    .anonymousAction(function (this: Command, _ctx, command?: string) {
       if (command) {
         throw new CommandFailedError(`unknown command '${command}'`, {
           remediationHint: "Run 'sonar --help' to see the list of available commands.",
@@ -189,17 +189,17 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       'SonarQube Server URL, SonarQube Cloud EU (https://sonarcloud.io), or SonarQube Cloud US (https://sonarqube.us). Defaults to SonarQube Cloud EU.',
     )
     .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
-    .anonymousAction((options: AuthLoginOptions) => authLogin(options));
+    .anonymousAction((_ctx, options: AuthLoginOptions) => authLogin(options));
 
   auth
     .command('logout')
     .description('Remove active connection token from keychain')
-    .anonymousAction(() => authLogout());
+    .anonymousAction((_ctx) => authLogout());
 
   auth
     .command('status')
     .description('Show active authentication connection with token verification')
-    .anonymousAction(() => authStatus());
+    .anonymousAction((_ctx) => authStatus());
 
   // List Sonar resources
   const list = COMMAND_TREE.command('list')
@@ -376,7 +376,12 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .helpOption(false)
     .passThroughOptions()
     .allowUnknownOption()
-    .anonymousAction(function (this: SonarCommand, action: string | undefined, args: string[]) {
+    .anonymousAction(function (
+      this: SonarCommand,
+      _ctx,
+      action: string | undefined,
+      args: string[],
+    ) {
       setPassthroughSubcommand(this, derivePassthroughSubcommand(action, args));
       return runContextPassthrough(action, args);
     });
@@ -583,7 +588,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .description('Configure telemetry settings')
     .option('--enabled', 'Enable collection of anonymous usage statistics')
     .option('--disabled', 'Disable collection of anonymous usage statistics')
-    .anonymousAction((options: ConfigureTelemetryOptions) => configureTelemetry(options));
+    .anonymousAction((_ctx, options: ConfigureTelemetryOptions) => configureTelemetry(options));
 
   // System diagnostics and maintenance
   const system = COMMAND_TREE.command('system')
@@ -597,7 +602,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .description('Show overall system status: authentication, installed binaries, and integrations')
     .showUpdateNotification((opts) => !opts.json)
     .option('--json', 'Output as JSON for machine consumption')
-    .anonymousAction((options: SystemStatusOptions) => systemStatus(options));
+    .anonymousAction((_ctx, options: SystemStatusOptions) => systemStatus(options));
 
   system
     .command('reset')
@@ -609,7 +614,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       '--force',
       'Skip the interactive confirmation prompt (required for non-interactive use)',
     )
-    .anonymousAction((options: SystemResetOptions) => systemReset(options));
+    .anonymousAction((_ctx, options: SystemResetOptions) => systemReset(options));
 
   // Update the CLI to the latest version
   if (CURRENT_DISTRIBUTION.enableSelfUpdate) {
@@ -620,7 +625,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       })
       .option('--status', 'Check for a newer version without installing')
       .option('--force', 'Install the latest version even if already up to date')
-      .anonymousAction((options: UpdateVersionOptions) => updateVersion(options));
+      .anonymousAction((_ctx, options: UpdateVersionOptions) => updateVersion(options));
 
     // `self-update` is deprecated in favour of `sonar update`.
     const selfUpdateCmd = COMMAND_TREE.command('self-update', { hidden: true })
@@ -629,7 +634,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       )
       .option('--status', 'Check for a newer version without installing')
       .option('--force', 'Install the latest version even if already up to date')
-      .anonymousAction((options: UpdateVersionOptions) => updateVersion(options));
+      .anonymousAction((_ctx, options: UpdateVersionOptions) => updateVersion(options));
     selfUpdateCmd.hook('preAction', () => {
       warn(
         "sonar self-update is deprecated and will be removed in one of the upcoming versions. Use 'sonar update' instead.",
@@ -665,70 +670,70 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
   const hookCommand = COMMAND_TREE.command('hook', { hidden: true })
     .description('Internal hook handlers for agent and git hooks')
     .enablePositionalOptions()
-    .anonymousAction(function (this: Command) {
+    .anonymousAction(function (this: Command, _ctx) {
       this.outputHelp();
     });
 
   hookCommand
     .command('claude-pre-tool-use')
     .description('PreToolUse handler: scan files for secrets before agent reads them')
-    .anonymousAction(() => claudePreToolUse());
+    .anonymousAction((_ctx) => claudePreToolUse());
 
   hookCommand
     .command('copilot-pre-tool-use')
     .description(
       'PreToolUse handler for GitHub Copilot CLI: scan files for secrets before agent reads them',
     )
-    .anonymousAction(() => copilotPreToolUse());
+    .anonymousAction((_ctx) => copilotPreToolUse());
 
   hookCommand
     .command('antigravity-pre-tool-use')
     .description(
       'PreToolUse handler for Antigravity: scan files for secrets before agent reads them',
     )
-    .anonymousAction(() => antigravityPreToolUse());
+    .anonymousAction((_ctx) => antigravityPreToolUse());
 
   hookCommand
     .command('claude-prompt-submit')
     .description('UserPromptSubmit handler: scan prompts for secrets before sending')
-    .anonymousAction(() => agentPromptSubmit());
+    .anonymousAction((_ctx) => agentPromptSubmit());
 
   hookCommand
     .command('codex-prompt-submit')
     .description('UserPromptSubmit handler for Codex: scan prompts for secrets before sending')
-    .anonymousAction(() => codexPromptSubmit());
+    .anonymousAction((_ctx) => codexPromptSubmit());
 
   hookCommand
     .command('cursor-prompt-submit')
     .description('beforeSubmitPrompt handler for Cursor: scan prompts for secrets before sending')
-    .anonymousAction(() => cursorPromptSubmit());
+    .anonymousAction((_ctx) => cursorPromptSubmit());
 
   hookCommand
     .command('cursor-pre-file-read')
     .description(
       'beforeReadFile handler for Cursor: scan files for secrets before agent reads them',
     )
-    .anonymousAction(() => cursorPreFileRead());
+    .anonymousAction((_ctx) => cursorPreFileRead());
 
   hookCommand
     .command('cursor-pre-tool-use')
     .description(
       'preToolUse handler for Cursor: scan Read tool targets for secrets before execution',
     )
-    .anonymousAction(() => cursorPreToolUse());
+    .anonymousAction((_ctx) => cursorPreToolUse());
 
   hookCommand
     .command('claude-post-tool-use')
     .description('PostToolUse handler: run Vortex analysis after agent edits or writes a file')
     .requiredOption('--project <key>', 'SonarQube Cloud project key')
-    .anonymousAction((options: AgentPostToolUseOptions) => agentPostToolUse(options));
+    .anonymousAction((_ctx, options: AgentPostToolUseOptions) => agentPostToolUse(options));
 
   hookCommand
     .command('claude-post-tool-use-failure')
     .description(
       'PostToolUseFailure handler: forward the failed tool call to Vortex context augmentation',
     )
-    .anonymousAction(() => claudePostToolUseFailure());
+    .anonymousAction((_ctx) => claudePostToolUseFailure());
 
   hookCommand
     .command('codex-post-tool-use')
@@ -736,7 +741,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       'PostToolUse handler for Codex: run Vortex analysis on the git change set after apply_patch',
     )
     .requiredOption('--project <key>', 'SonarQube Cloud project key')
-    .anonymousAction((options: CodexPostToolUseOptions) => codexPostToolUse(options));
+    .anonymousAction((_ctx, options: CodexPostToolUseOptions) => codexPostToolUse(options));
 
   hookCommand
     .command('git-pre-commit')
@@ -749,7 +754,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       'Also run a dependency-risks scan after the secrets scan (requires -p)',
     )
     .argument('[files...]', 'Changed files passed by pre-commit (pass_filenames: true)')
-    .anonymousAction((files: string[], options: GitPreCommitOptions) =>
+    .anonymousAction((_ctx, files: string[], options: GitPreCommitOptions) =>
       gitPreCommit(options, files),
     );
 
@@ -757,11 +762,13 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .command('git-pre-push')
     .description('git pre-push handler: scan files in new commits for secrets')
     .argument('[files...]', 'Changed files passed by pre-commit (pass_filenames: true)')
-    .anonymousAction((files: string[]) => gitPrePush(files));
+    .anonymousAction((_ctx, files: string[]) => gitPrePush(files));
 
   // Hidden flush command — only registered when running as a telemetry worker.
   if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {
-    COMMAND_TREE.command('flush-telemetry', { hidden: true }).anonymousAction(flushTelemetry);
+    COMMAND_TREE.command('flush-telemetry', { hidden: true }).anonymousAction((_ctx) =>
+      flushTelemetry(),
+    );
   }
 
   // Defer Sentry initialization until a command action is about to run, so that

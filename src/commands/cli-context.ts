@@ -18,22 +18,17 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-
-import { CliContext } from './cli-context.ts';
-
 /**
- * Per-command invocation context for authenticated handlers.
+ * Per-command invocation context for handlers that do not require auth.
  *
- * Built by `SonarCommand.authenticatedAction`. Extends {@link CliContext} with
- * resolved auth for this invocation.
+ * Built by `SonarCommand.anonymousAction`: `isAlpha` / `isBeta` reflect this
+ * command's stage for the current run (Private Beta is already gated when the
+ * tree is built). Prefer adding methods here over ambient state when handlers
+ * need more invocation-scoped facts later.
  */
-export class CliAuthenticatedContext extends CliContext {
+export class CliContext {
   constructor(
-    readonly auth: ResolvedAuth,
-    isAlpha: boolean,
-    isBeta: boolean,
-  ) {
-    super(isAlpha, isBeta);
-  }
+    readonly isAlpha: boolean,
+    readonly isBeta: boolean,
+  ) {}
 }

@@ -34,6 +34,7 @@ import { UpdateNotifier } from '@/core/update/notification.ts';
 
 import { version as VERSION } from '../../package.json';
 import { CliAuthenticatedContext } from './cli-authenticated-context.ts';
+import { CliContext } from './cli-context.ts';
 
 export const ALPHA_ENV_VAR = 'SONARQUBE_CLI_ALPHA';
 export const ALPHA_HELP_TAG = '[ALPHA]';
@@ -327,15 +328,20 @@ export class SonarCommand extends Command {
    * process.exitCode is set on failure. Wraps Commander's action() so callers
    * do not need to invoke runCommand() themselves.
    *
+   * A {@link CliContext} is passed as the first argument to fn (this command's
+   * resolved `isAlpha` / `isBeta`); Commander's own arguments follow.
+   *
    * The `this` context set by Commander is forwarded to the handler, so
-   * `function(this: Command) { this.outputHelp(); }` works as expected.
+   * `function(this: Command, _ctx: CliContext) { this.outputHelp(); }` works.
    */
   anonymousAction<TArgs extends CommandArgs>(
     this: this & { __commandArgs?: TArgs },
-    fn: (...args: TArgs) => CommandResult,
+    fn: (ctx: CliContext, ...args: TArgs) => CommandResult,
   ): this {
     super.action(function (this: SonarCommand, ...args: TArgs) {
-      return this.runCommand(() => Promise.resolve(fn.apply(this, args)));
+      return this.runCommand(() =>
+        Promise.resolve(fn.call(this, new CliContext(this.isAlpha, this.isBeta), ...args)),
+      );
     });
     return this;
   }

@@ -23,6 +23,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import type { CliAuthenticatedContext } from '@/commands/cli-authenticated-context.ts';
+import { CliContext } from '@/commands/cli-context.ts';
 import { getCustomRootHelp } from '@/commands/root-help.ts';
 import { ALPHA_ENV_VAR, SonarCommand, Stage } from '@/commands/sonar-command.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
@@ -252,14 +253,14 @@ describe('SonarCommand', () => {
     );
 
     it('does not execute an unregistered alpha command', async () => {
-      const rootHandler = mock((_command?: string) => {});
-      const alphaHandler = mock(() => {});
+      const rootHandler = mock((_ctx: CliContext, _command?: string) => {});
+      const alphaHandler = mock((_ctx: CliContext) => {});
       const root = new SonarCommand('sonar').argument('[command]').anonymousAction(rootHandler);
       root.command('experimental').stage(Stage.Alpha).anonymousAction(alphaHandler);
 
       await root.parseAsync(['experimental'], { from: 'user' });
 
-      expect(rootHandler.mock.calls[0]?.[0]).toBe('experimental');
+      expect(rootHandler.mock.calls[0]?.[1]).toBe('experimental');
       expect(alphaHandler).not.toHaveBeenCalled();
     });
 
@@ -391,7 +392,7 @@ describe('SonarCommand', () => {
 
     it('is false after anonymousAction()', () => {
       const cmd = new SonarCommand();
-      cmd.anonymousAction(() => {});
+      cmd.anonymousAction((_ctx) => {});
       expect(cmd.requiresAuth).toBe(false);
     });
 
@@ -496,7 +497,7 @@ describe('SonarCommand', () => {
       const state = getDefaultState(VERSION);
       loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
       saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
-      const command = new SonarCommand('preview').stage(Stage.Beta()).anonymousAction(() => {});
+      const command = new SonarCommand('preview').stage(Stage.Beta()).anonymousAction((_ctx) => {});
 
       await command.parseAsync([], { from: 'user' });
       await command.parseAsync([], { from: 'user' });
@@ -512,8 +513,8 @@ describe('SonarCommand', () => {
       const state = getDefaultState(VERSION);
       loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
       saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
-      const first = new SonarCommand('first').stage(Stage.Beta()).anonymousAction(() => {});
-      const second = new SonarCommand('second').stage(Stage.Beta()).anonymousAction(() => {});
+      const first = new SonarCommand('first').stage(Stage.Beta()).anonymousAction((_ctx) => {});
+      const second = new SonarCommand('second').stage(Stage.Beta()).anonymousAction((_ctx) => {});
 
       await first.parseAsync([], { from: 'user' });
       await second.parseAsync([], { from: 'user' });
@@ -530,7 +531,7 @@ describe('SonarCommand', () => {
       state.config.betaCommandWarnings = { preview: '0.0.1' };
       loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
       saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
-      const command = new SonarCommand('preview').stage(Stage.Beta()).anonymousAction(() => {});
+      const command = new SonarCommand('preview').stage(Stage.Beta()).anonymousAction((_ctx) => {});
 
       await command.parseAsync([], { from: 'user' });
 
@@ -544,7 +545,7 @@ describe('SonarCommand', () => {
       });
       const command = new SonarCommand('preview-with-unreadable-state')
         .stage(Stage.Beta())
-        .anonymousAction(() => {});
+        .anonymousAction((_ctx) => {});
 
       await command.parseAsync([], { from: 'user' });
       await command.parseAsync([], { from: 'user' });
@@ -648,17 +649,44 @@ describe('SonarCommand', () => {
   // ─── anonymousAction() ────────────────────────────────────────────────────
 
   describe('anonymousAction()', () => {
-    it('calls the handler when the command is invoked', async () => {
-      const handler = mock(() => {});
+    it('calls the handler with CliContext as first argument', async () => {
+      const handler = mock((_ctx: CliContext) => {});
       const cmd = new SonarCommand();
       cmd.anonymousAction(handler);
       await cmd.parseAsync([], { from: 'user' });
       expect(handler).toHaveBeenCalledTimes(1);
+      const receivedContext = handler.mock.calls[0][0];
+      expect(receivedContext).toBeInstanceOf(CliContext);
+      expect(receivedContext.isAlpha).toBe(false);
+      expect(receivedContext.isBeta).toBe(false);
+    });
+
+    it('sets isAlpha=true when command has Stage.Alpha', async () => {
+      process.env[ALPHA_ENV_VAR] = 'true';
+      const handler = mock((_ctx: CliContext) => {});
+      const cmd = new SonarCommand({
+        runtime: { auth: null, isAlphaEnabled: true, isPrivateBetaEnabled: () => false },
+      });
+      cmd.stage(Stage.Alpha).anonymousAction(handler);
+      await cmd.parseAsync([], { from: 'user' });
+      const receivedContext = handler.mock.calls[0][0];
+      expect(receivedContext.isAlpha).toBe(true);
+      expect(receivedContext.isBeta).toBe(false);
+    });
+
+    it('sets isBeta=true when command has Stage.Beta', async () => {
+      const handler = mock((_ctx: CliContext) => {});
+      const cmd = new SonarCommand();
+      cmd.stage(Stage.Beta()).anonymousAction(handler);
+      await cmd.parseAsync([], { from: 'user' });
+      const receivedContext = handler.mock.calls[0][0];
+      expect(receivedContext.isAlpha).toBe(false);
+      expect(receivedContext.isBeta).toBe(true);
     });
 
     it('catches handler errors and sets process.exitCode to 1', async () => {
       const cmd = new SonarCommand();
-      cmd.anonymousAction(() => {
+      cmd.anonymousAction((_ctx) => {
         throw new Error('handler error');
       });
       await cmd.parseAsync([], { from: 'user' });
@@ -667,7 +695,7 @@ describe('SonarCommand', () => {
 
     it('catches handler errors and outputs the error message', async () => {
       const cmd = new SonarCommand();
-      cmd.anonymousAction(() => {
+      cmd.anonymousAction((_ctx) => {
         throw new Error('handler error');
       });
       await cmd.parseAsync([], { from: 'user' });
