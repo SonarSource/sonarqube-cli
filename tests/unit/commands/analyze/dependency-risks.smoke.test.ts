@@ -20,6 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CliAuthenticatedContext } from '@/commands/cli-authenticated-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockTty, setMockUi } from '@/core/ui';
 
@@ -33,6 +34,8 @@ const FAKE_AUTH: ResolvedAuth = {
   orgKey: 'my-org',
   connectionType: 'cloud',
 };
+
+const FAKE_AUTHENTICATED_CONTEXT = new CliAuthenticatedContext(FAKE_AUTH, false, false);
 
 const SCAN_RESULT_STUB: AnalyzeProjectResponse = {
   releases: [
@@ -262,7 +265,7 @@ describe('analyzeDependencyRisks - output format', () => {
   it('serializes as JSON for --format json', async () => {
     await analyzeDependencyRisks(
       { project: 'my-project', format: 'json', statuses: 'all' },
-      FAKE_AUTH,
+      FAKE_AUTHENTICATED_CONTEXT,
     );
 
     expect(getPrinted()).toBe(EXPECTED_JSON);
@@ -271,7 +274,7 @@ describe('analyzeDependencyRisks - output format', () => {
   it('serializes as TOON for --format toon', async () => {
     await analyzeDependencyRisks(
       { project: 'my-project', format: 'toon', statuses: 'all' },
-      FAKE_AUTH,
+      FAKE_AUTHENTICATED_CONTEXT,
     );
 
     expect(getPrinted()).toBe(EXPECTED_TOON);
@@ -280,7 +283,7 @@ describe('analyzeDependencyRisks - output format', () => {
   it('serializes as a table for the default format', async () => {
     await analyzeDependencyRisks(
       { project: 'my-project', format: 'table', statuses: 'all' },
-      FAKE_AUTH,
+      FAKE_AUTHENTICATED_CONTEXT,
     );
 
     expect(getPrinted()).toBe(EXPECTED_TABLE);

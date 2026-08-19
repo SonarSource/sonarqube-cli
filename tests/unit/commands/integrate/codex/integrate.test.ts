@@ -20,6 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
 
+import { CliAuthenticatedContext } from '@/commands/cli-authenticated-context.ts';
 import * as vortex from '@/commands/integrate/_common/vortex.ts';
 import { integrateCodex } from '@/commands/integrate/codex';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
@@ -35,6 +36,8 @@ const SERVER_AUTH: ResolvedAuth = {
   serverUrl: 'https://sonar.example.com',
   connectionType: 'on-premise',
 };
+
+const SERVER_CTX = new CliAuthenticatedContext(SERVER_AUTH, false, false);
 
 const BASE_PROJECT: DiscoveredProject = {
   rootDir: '/project/root',
@@ -96,7 +99,7 @@ describe('integrateCodex', () => {
     checkTokenStatusSpy.mockResolvedValue({ status: 'invalid' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(integrateCodex({}, SERVER_AUTH)).rejects.toThrow('Token is invalid.');
+    await expect(integrateCodex({}, SERVER_CTX)).rejects.toThrow('Token is invalid.');
     expect(installIntegrationSpy).not.toHaveBeenCalled();
   });
 
@@ -104,12 +107,12 @@ describe('integrateCodex', () => {
     checkTokenStatusSpy.mockResolvedValue({ status: 'unreachable' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(integrateCodex({}, SERVER_AUTH)).rejects.toThrow('Server is unreachable.');
+    await expect(integrateCodex({}, SERVER_CTX)).rejects.toThrow('Server is unreachable.');
     expect(installIntegrationSpy).not.toHaveBeenCalled();
   });
 
   it('validates token against the auth server URL before installing', async () => {
-    await integrateCodex({}, SERVER_AUTH);
+    await integrateCodex({}, SERVER_CTX);
 
     expect(checkTokenStatusSpy).toHaveBeenCalledWith(SERVER_AUTH.serverUrl, SERVER_AUTH.token);
   });

@@ -22,6 +22,7 @@ import { homedir } from 'node:os';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
+import { CliAuthenticatedContext } from '@/commands/cli-authenticated-context.ts';
 import type { VortexDisposition } from '@/commands/integrate/_common/types.ts';
 import { integrateClaude } from '@/commands/integrate/claude';
 import * as hooks from '@/commands/integrate/claude/hooks.ts';
@@ -50,6 +51,9 @@ const CLOUD_AUTH: ResolvedAuth = {
   serverUrl: 'https://sonarcloud.io',
   connectionType: 'cloud',
 };
+
+const SERVER_CTX = new CliAuthenticatedContext(SERVER_AUTH, false, false);
+const CLOUD_CTX = new CliAuthenticatedContext(CLOUD_AUTH, false, false);
 
 function getPhaseItems(title: string): PhaseItem[] {
   const call = getMockUiCalls().find((c) => c.method === 'phase' && c.args[0] === title);
@@ -133,7 +137,7 @@ describe('integrateCommand', () => {
   });
 
   it('shows intro message', async () => {
-    await integrateClaude({}, SERVER_AUTH);
+    await integrateClaude({}, SERVER_CTX);
 
     const introText = getMockUiCalls().find(
       (c) =>
@@ -143,7 +147,7 @@ describe('integrateCommand', () => {
   });
 
   it('shows discovering project spinner', async () => {
-    await integrateClaude({}, SERVER_AUTH);
+    await integrateClaude({}, SERVER_CTX);
 
     expect(
       getMockUiCalls().some(
@@ -153,7 +157,7 @@ describe('integrateCommand', () => {
   });
 
   it('shows Connection and Project setup summary sections', async () => {
-    await integrateClaude({}, CLOUD_AUTH);
+    await integrateClaude({}, CLOUD_CTX);
 
     expect(getPhaseItems('Connection').some((i) => i.text === 'Server')).toBe(true);
     expect(getPhaseItems('Connection').some((i) => i.text === 'Organization')).toBe(true);
@@ -164,7 +168,7 @@ describe('integrateCommand', () => {
   });
 
   it('validates token against the auth server URL', async () => {
-    await integrateClaude({}, SERVER_AUTH);
+    await integrateClaude({}, SERVER_CTX);
 
     expect(checkTokenStatusSpy).toHaveBeenCalledWith(SERVER_AUTH.serverUrl, SERVER_AUTH.token);
   });
@@ -172,7 +176,7 @@ describe('integrateCommand', () => {
   it('shows warning when resolved server does not match discovered server', async () => {
     mockDiscoveredProject({ serverUrl: 'https://example-sonarqube.com' });
 
-    await integrateClaude({}, CLOUD_AUTH);
+    await integrateClaude({}, CLOUD_CTX);
 
     const warnText = getMockUiCalls().find(
       (c) => c.method === 'warn' && String(c.args[0]).includes('Server URL mismatch'),
@@ -183,7 +187,7 @@ describe('integrateCommand', () => {
   it('shows warning when resolved organization does not match discovered organization', async () => {
     mockDiscoveredProject({ organization: 'an-org' });
 
-    await integrateClaude({}, CLOUD_AUTH);
+    await integrateClaude({}, CLOUD_CTX);
 
     const warnText = getMockUiCalls().find(
       (c) => c.method === 'warn' && String(c.args[0]).includes('organization mismatch'),
@@ -200,7 +204,9 @@ describe('integrateCommand', () => {
     };
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(integrateClaude({}, cloudAuthNoOrg)).rejects.toThrow(CommandFailedError);
+    await expect(
+      integrateClaude({}, new CliAuthenticatedContext(cloudAuthNoOrg, false, false)),
+    ).rejects.toThrow(CommandFailedError);
   });
 
   it('shows config source from discovered files', async () => {
@@ -209,7 +215,7 @@ describe('integrateCommand', () => {
       configSources: ['sonar-project.properties'],
     });
 
-    await integrateClaude({}, SERVER_AUTH);
+    await integrateClaude({}, SERVER_CTX);
 
     const configSource = getPhaseItems('Project').find((i) => i.text === 'Config source');
     expect(configSource?.status).toBe('done');
@@ -222,7 +228,7 @@ describe('integrateCommand', () => {
       configSources: ['sonar-project.properties'],
     });
 
-    await integrateClaude({ project: 'cli-key' }, SERVER_AUTH);
+    await integrateClaude({ project: 'cli-key' }, SERVER_CTX);
 
     const configSource = getPhaseItems('Project').find((i) => i.text === 'Config source');
     expect(configSource?.status).toBe('info');
@@ -231,7 +237,7 @@ describe('integrateCommand', () => {
   });
 
   it('shows config source as none detected when no config file contributed', async () => {
-    await integrateClaude({}, SERVER_AUTH);
+    await integrateClaude({}, SERVER_CTX);
 
     const configSource = getPhaseItems('Project').find((i) => i.text === 'Config source');
     expect(configSource?.status).toBe('warn');
@@ -241,7 +247,7 @@ describe('integrateCommand', () => {
   it('project key defaults to discovered project key', async () => {
     mockDiscoveredProject({ projectKey: 'project' });
 
-    await integrateClaude({}, SERVER_AUTH);
+    await integrateClaude({}, SERVER_CTX);
 
     expect(getPhaseItems('Project').find((i) => i.text === 'Key')?.detail).toBe('project');
   });
@@ -249,7 +255,7 @@ describe('integrateCommand', () => {
   it('project key overrides discovered project key', async () => {
     mockDiscoveredProject({ projectKey: 'project' });
 
-    await integrateClaude({ project: 'override-project' }, SERVER_AUTH);
+    await integrateClaude({ project: 'override-project' }, SERVER_CTX);
 
     expect(getPhaseItems('Project').find((i) => i.text === 'Key')?.detail).toBe('override-project');
   });
@@ -258,7 +264,7 @@ describe('integrateCommand', () => {
     checkTokenStatusSpy.mockResolvedValue({ status: 'invalid' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(integrateClaude({}, SERVER_AUTH)).rejects.toThrow('Token is invalid.');
+    await expect(integrateClaude({}, SERVER_CTX)).rejects.toThrow('Token is invalid.');
     expect(installIntegrationSpy).not.toHaveBeenCalled();
   });
 
@@ -266,14 +272,14 @@ describe('integrateCommand', () => {
     checkTokenStatusSpy.mockResolvedValue({ status: 'unreachable' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(integrateClaude({}, SERVER_AUTH)).rejects.toThrow('Server is unreachable.');
+    await expect(integrateClaude({}, SERVER_CTX)).rejects.toThrow('Server is unreachable.');
     expect(installIntegrationSpy).not.toHaveBeenCalled();
   });
 
   it('checks Vortex entitlement', async () => {
     hasVortexEntitlementSpy.mockResolvedValue({ status: 'enabled' });
 
-    await integrateClaude({}, CLOUD_AUTH);
+    await integrateClaude({}, CLOUD_CTX);
 
     expect(hasVortexEntitlementSpy).toHaveBeenCalledTimes(1);
   });
@@ -283,7 +289,7 @@ describe('integrateCommand', () => {
     mockVortexEntitlement(true);
     getScaEnablementSpy.mockResolvedValue('enabled');
 
-    await integrateClaude({}, CLOUD_AUTH);
+    await integrateClaude({}, CLOUD_CTX);
 
     expect(installIntegrationSpy).toHaveBeenCalledTimes(1);
     expect(installIntegrationSpy).toHaveBeenCalledWith(
@@ -312,7 +318,7 @@ describe('integrateCommand', () => {
     mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
     mockVortexEntitlement(false);
 
-    await integrateClaude({}, CLOUD_AUTH);
+    await integrateClaude({}, CLOUD_CTX);
 
     expectClaudeInstallCall({
       targetRoot: '/project/root',
@@ -332,7 +338,7 @@ describe('integrateCommand', () => {
 
     let thrown: unknown;
     try {
-      await integrateClaude({}, CLOUD_AUTH);
+      await integrateClaude({}, CLOUD_CTX);
     } catch (error) {
       thrown = error;
     }
@@ -349,7 +355,7 @@ describe('integrateCommand', () => {
     mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
     mockVortexEntitlement(true);
 
-    await integrateClaude({}, CLOUD_AUTH);
+    await integrateClaude({}, CLOUD_CTX);
 
     assertMigrationAndHookInstallationRan(
       'a-project',
@@ -364,7 +370,7 @@ describe('integrateCommand', () => {
     mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
     mockVortexEntitlement(true);
 
-    await integrateClaude({ global: true }, CLOUD_AUTH);
+    await integrateClaude({ global: true }, CLOUD_CTX);
 
     // Vortex is project-scoped, so a global install never enables it even when
     // the org is entitled.
@@ -382,7 +388,7 @@ describe('integrateCommand', () => {
     mockVortexEntitlement(true);
     checkOrganizationSpy.mockResolvedValue(false);
 
-    await integrateClaude({}, CLOUD_AUTH);
+    await integrateClaude({}, CLOUD_CTX);
 
     assertMigrationAndHookInstallationRan(
       'a-project',
@@ -397,7 +403,7 @@ describe('integrateCommand', () => {
     mockDiscoveredProject({ rootDir: '/projectB/root' });
     mockVortexEntitlement(false);
 
-    await integrateClaude({}, CLOUD_AUTH);
+    await integrateClaude({}, CLOUD_CTX);
 
     assertMigrationAndHookInstallationRan(undefined, '/projectB/root', undefined, false, 'remove');
   });
@@ -407,7 +413,7 @@ describe('integrateCommand', () => {
 
     let error: unknown;
     try {
-      await integrateClaude({}, SERVER_AUTH);
+      await integrateClaude({}, SERVER_CTX);
     } catch (err) {
       error = err;
     }
@@ -426,7 +432,7 @@ describe('integrateCommand', () => {
     it('forwards skipSecretsHooks: true to migrations and skips the declarative secrets-hooks feature', async () => {
       mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
 
-      await integrateClaude({}, SERVER_AUTH);
+      await integrateClaude({}, SERVER_CTX);
 
       expectClaudeInstallCall({
         targetRoot: '/project/root',
@@ -443,7 +449,7 @@ describe('integrateCommand', () => {
       mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
       mockVortexEntitlement(true);
 
-      await integrateClaude({}, CLOUD_AUTH);
+      await integrateClaude({}, CLOUD_CTX);
 
       expectClaudeInstallCall({
         targetRoot: '/project/root',
@@ -465,7 +471,7 @@ describe('integrateCommand', () => {
     it('falls back to a project-level install (does not skip secrets hooks)', async () => {
       mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
 
-      await integrateClaude({}, SERVER_AUTH);
+      await integrateClaude({}, SERVER_CTX);
 
       expectClaudeInstallCall({
         targetRoot: '/project/root',
@@ -481,13 +487,13 @@ describe('integrateCommand', () => {
 
   describe('when -g (global) is used', () => {
     it('does not probe for a pre-existing global hook', async () => {
-      await integrateClaude({ global: true }, SERVER_AUTH);
+      await integrateClaude({ global: true }, SERVER_CTX);
 
       expect(detectGlobalSecretsHookSpy).not.toHaveBeenCalled();
     });
 
     it('does not print the "already configured globally" skip notice (no probe is run)', async () => {
-      await integrateClaude({ global: true }, SERVER_AUTH);
+      await integrateClaude({ global: true }, SERVER_CTX);
 
       const skipNotice = getMockUiCalls().find(
         (c) =>
@@ -500,7 +506,7 @@ describe('integrateCommand', () => {
       mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
       mockVortexEntitlement(true);
 
-      await integrateClaude({ global: true }, CLOUD_AUTH);
+      await integrateClaude({ global: true }, CLOUD_CTX);
 
       // Vortex is project-scoped, so a global run never installs it.
       expectClaudeInstallCall({
@@ -523,7 +529,7 @@ describe('integrateCommand', () => {
       mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
       mockVortexEntitlement(false);
 
-      await integrateClaude({ global: true }, CLOUD_AUTH);
+      await integrateClaude({ global: true }, CLOUD_CTX);
 
       expectClaudeInstallCall({
         targetRoot: homedir(),

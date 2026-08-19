@@ -24,6 +24,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CliAuthenticatedContext } from '@/commands/cli-authenticated-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 import * as processLib from '@/core/process/process.ts';
@@ -39,6 +40,8 @@ const FAKE_AUTH: ResolvedAuth = {
   orgKey: 'myorg',
   connectionType: 'cloud',
 };
+
+const FAKE_AUTHENTICATED_CONTEXT = new CliAuthenticatedContext(FAKE_AUTH, false, false);
 
 describe('analyzeAll --format json: SecretsReport.warnings', () => {
   let spawnSpy: ReturnType<typeof spyOn>;
@@ -86,7 +89,7 @@ describe('analyzeAll --format json: SecretsReport.warnings', () => {
       stderr: '',
     });
 
-    await analyzeAll({ file: ['test.ts'], format: 'json' }, FAKE_AUTH);
+    await analyzeAll({ file: ['test.ts'], format: 'json' }, FAKE_AUTHENTICATED_CONTEXT);
 
     const prints = getMockUiCalls()
       .filter((c) => c.method === 'print')
@@ -105,7 +108,7 @@ describe('analyzeAll --format json: SecretsReport.warnings', () => {
       stderr: '',
     });
 
-    await analyzeAll({ file: ['test.ts'], format: 'json' }, FAKE_AUTH);
+    await analyzeAll({ file: ['test.ts'], format: 'json' }, FAKE_AUTHENTICATED_CONTEXT);
 
     const prints = getMockUiCalls()
       .filter((c) => c.method === 'print')
@@ -132,7 +135,7 @@ describe('analyzeAll --format json: SecretsReport.warnings', () => {
       stderr: '',
     });
 
-    await analyzeAll({ file: ['test.ts'], format: 'json' }, FAKE_AUTH);
+    await analyzeAll({ file: ['test.ts'], format: 'json' }, FAKE_AUTHENTICATED_CONTEXT);
 
     const prints = getMockUiCalls()
       .filter((c) => c.method === 'print')

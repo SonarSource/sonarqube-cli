@@ -236,7 +236,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .option('--pull-request <pull-request>', 'Pull request ID')
     .addOption(pageSizeOption)
     .addOption(pageOption)
-    .authenticatedAction((auth, options: ListIssuesOptions) => listIssues(options, auth));
+    .authenticatedAction((ctx, options: ListIssuesOptions) => listIssues(options, ctx));
 
   list
     .command('projects')
@@ -245,7 +245,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .option('-q, --query <query>', 'Search query to filter projects by name or key')
     .addOption(pageOption)
     .addOption(pageSizeOption)
-    .authenticatedAction((auth, options: ListProjectsOptions) => listProjects(options, auth));
+    .authenticatedAction((ctx, options: ListProjectsOptions) => listProjects(options, ctx));
 
   // Import repositories from DevOps platforms into SonarQube (hidden while in development)
   COMMAND_TREE.command('import', { hidden: true })
@@ -270,7 +270,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
         '                       --regex "/^archived-/i"\n',
     )
     .option('--non-interactive', 'Skip all prompts; require explicit flags')
-    .authenticatedAction((auth, options: ImportOptions) => importHandler(options, auth));
+    .authenticatedAction((ctx, options: ImportOptions) => importHandler(options, ctx));
 
   COMMAND_TREE.command('api')
     .rootHelp({
@@ -292,8 +292,8 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .option('-v, --verbose', 'Print request and response details for debugging.')
     .description('Make authenticated API requests to SonarQube')
     .addHelpText('after', apiExtraHelpText())
-    .authenticatedAction((auth, method: string, endpoint: string, options: ApiCommandOptions) =>
-      apiCommand(auth, method, endpoint, options),
+    .authenticatedAction((ctx, method: string, endpoint: string, options: ApiCommandOptions) =>
+      apiCommand(ctx, method, endpoint, options),
     );
 
   // Setup SonarQube integration for AI coding agent
@@ -306,7 +306,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
     .option('-g, --global', 'Install integrations globally.')
     .rejectUnknownSubcommands()
-    .authenticatedAction((auth, options: IntegrateBareOptions) => integrateBare(auth, options));
+    .authenticatedAction((ctx, options: IntegrateBareOptions) => integrateBare(ctx, options));
 
   integrateCommand
     .command('git')
@@ -331,7 +331,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       '-p, --project <project>',
       'Project key baked into the dependency-risks hook (required with --dependency-risks)',
     )
-    .authenticatedAction((auth, options: IntegrateGitOptions) => integrateGit(options, auth));
+    .authenticatedAction((ctx, options: IntegrateGitOptions) => integrateGit(options, ctx));
 
   integrateCommand
     .command('claude')
@@ -345,7 +345,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       'Install hooks and config globally to ~/.claude instead of project directory',
     )
     .addHelpText('after', projectKeyExtraHelp)
-    .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateClaude(options, auth));
+    .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateClaude(options, ctx));
 
   integrateCommand
     .command('copilot')
@@ -359,7 +359,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
     .addHelpText('after', projectKeyExtraHelp)
-    .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCopilot(options, auth));
+    .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCopilot(options, ctx));
 
   // `sonar context` — passthrough wrapper for sonar-context-augmentation.
   // Forwards arguments verbatim to the locally-installed CAG binary; install via
@@ -393,7 +393,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
     .addHelpText('after', projectKeyExtraHelp)
-    .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCodex(options, auth));
+    .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCodex(options, ctx));
 
   integrateCommand
     .command('antigravity')
@@ -407,8 +407,8 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       'Install hooks and config globally under ~/.gemini/config instead of the project .agents/ directory',
     )
     .addHelpText('after', projectKeyExtraHelp)
-    .authenticatedAction((auth, options: IntegrateAgentOptions) =>
-      integrateAntigravity(options, auth),
+    .authenticatedAction((ctx, options: IntegrateAgentOptions) =>
+      integrateAntigravity(options, ctx),
     );
 
   integrateCommand
@@ -423,7 +423,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       "Install config globally to ~/.cursor instead of project directory. Note: Cursor's cloud/background agents only pick up project-level hooks, not global ones.",
     )
     .addHelpText('after', projectKeyExtraHelp)
-    .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCursor(options, auth));
+    .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCursor(options, ctx));
 
   // Analyze code for quality and security issues
   const analyze = COMMAND_TREE.command('analyze')
@@ -441,8 +441,8 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .description('Scan files or stdin for hardcoded secrets')
     .argument('[paths...]', 'File or directory paths to scan for secrets')
     .option('--stdin', 'Read from standard input instead of paths')
-    .authenticatedAction((auth, paths: string[], options: AnalyzeSecretsOptions) =>
-      analyzeSecrets({ paths: Array.isArray(paths) ? paths : [], stdin: options.stdin }, auth),
+    .authenticatedAction((ctx, paths: string[], options: AnalyzeSecretsOptions) =>
+      analyzeSecrets({ paths: Array.isArray(paths) ? paths : [], stdin: options.stdin }, ctx),
     );
 
   // Shared option set for `analyze agentic` and `verify`.
@@ -481,14 +481,14 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
   ): SonarCommand {
     return applyBaseAgenticOptions(cmd)
       .option('--branch <branch>', 'Branch name for analysis context')
-      .authenticatedAction((auth, options: AnalyzeSqaaOptions) =>
-        analyzeSqaa(options, auth, runOptions),
+      .authenticatedAction((ctx, options: AnalyzeSqaaOptions) =>
+        analyzeSqaa(options, ctx, runOptions),
       );
   }
 
   // Default action for `sonar analyze` (no subcommand): run all analyses (secrets + agentic).
-  applyBaseAgenticOptions(analyze).authenticatedAction((auth, options: AnalyzeAllOptions) =>
-    analyzeAll(options, auth),
+  applyBaseAgenticOptions(analyze).authenticatedAction((ctx, options: AnalyzeAllOptions) =>
+    analyzeAll(options, ctx),
   );
 
   const dependencyRisksFormatOption = new Option('--format <format>', 'Output format')
@@ -532,8 +532,8 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .addOption(dependencyRisksStatusFilterOption)
     .addOption(dependencyRisksMinSeverityOption)
     .addHelpText('after', dependencyRisksExtraHelp)
-    .authenticatedAction((auth, options: AnalyzeDependencyRisksOptions) =>
-      analyzeDependencyRisks(options, auth),
+    .authenticatedAction((ctx, options: AnalyzeDependencyRisksOptions) =>
+      analyzeDependencyRisks(options, ctx),
     );
 
   applySqaaOptions(
@@ -570,7 +570,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       '--issues <issueIds>',
       'Comma-separated issue keys to remediate non-interactively (max 20). Required when stdin is not a TTY.',
     )
-    .authenticatedAction((auth, options: RemediateOptions) => remediate(options, auth));
+    .authenticatedAction((ctx, options: RemediateOptions) => remediate(options, ctx));
 
   // Configure things related to the CLI
   const configure = COMMAND_TREE.command('config').description('Configure CLI settings');
@@ -655,9 +655,9 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .addHelpText(`after`, projectKeyExtraHelp)
     .authenticatedAction(
       (
-        auth,
+        ctx,
         options: { debug?: boolean; readOnly?: boolean; toolsets?: string; project?: string },
-      ) => runMcp(auth, options),
+      ) => runMcp(ctx, options),
     );
 
   // Hidden callback command — internal handlers for agent and git hooks.

@@ -20,7 +20,7 @@
 
 // Integrate command — setup SonarQube integration for Cursor.
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { CliAuthenticatedContext } from '@/commands/cli-authenticated-context.ts';
 import { warn } from '@/core/ui';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 
@@ -31,8 +31,9 @@ import { CURSOR_INTEGRATION_ID, type CursorIntegrationOptions } from './declarat
 
 export async function integrateCursor(
   options: IntegrateAgentOptions,
-  auth: ResolvedAuth,
+  ctx: CliAuthenticatedContext,
 ): Promise<void> {
+  const { auth } = ctx;
   if (!options.nonInteractive) {
     printAgentNonInteractiveAlternativeHint(
       'sonar integrate cursor --non-interactive',
@@ -40,9 +41,9 @@ export async function integrateCursor(
     );
   }
 
-  const ctx = await displayAgentIntegratePrelude('Cursor', 'cursor', options, auth);
+  const integrateCtx = await displayAgentIntegratePrelude('Cursor', 'cursor', options, auth);
 
-  if (ctx.isGlobal) {
+  if (integrateCtx.isGlobal) {
     warn(
       "Cursor's cloud/background agents only pick up project-level hooks, not global ones. Re-run without --global from a project directory for full hook coverage.",
     );
@@ -50,7 +51,7 @@ export async function integrateCursor(
 
   await finalizeAgentInstall<CursorIntegrationOptions>({
     integrationId: CURSOR_INTEGRATION_ID,
-    context: ctx,
+    context: integrateCtx,
     options,
     auth,
   });

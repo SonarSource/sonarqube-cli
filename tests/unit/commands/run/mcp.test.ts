@@ -28,6 +28,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CliAuthenticatedContext } from '@/commands/cli-authenticated-context.ts';
 import { runMcp } from '@/commands/run/mcp.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
@@ -52,6 +53,8 @@ const FAKE_AUTH: ResolvedAuth = {
   serverUrl: 'http://localhost:9000',
   connectionType: 'on-premise',
 };
+
+const FAKE_CTX = new CliAuthenticatedContext(FAKE_AUTH, false, false);
 
 const NO_NETWORK: ResolvedNetworkConfig = { proxy: null, caCert: null, clientCert: null };
 
@@ -126,7 +129,7 @@ describe('runMcp', () => {
     });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-    await expect(runMcp(FAKE_AUTH, {}, NO_NETWORK)).rejects.toBeInstanceOf(CommandFailedError);
+    await expect(runMcp(FAKE_CTX, {}, NO_NETWORK)).rejects.toBeInstanceOf(CommandFailedError);
   });
 
   it.each(['docker', 'podman', 'nerdctl'] as const)(
@@ -138,7 +141,7 @@ describe('runMcp', () => {
       });
       spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
-      await runMcp(FAKE_AUTH);
+      await runMcp(FAKE_CTX);
 
       expect(spawnSpy).toHaveBeenCalledWith(
         'wsl.exe',
@@ -157,7 +160,7 @@ describe('runMcp', () => {
     });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
-    await runMcp(FAKE_AUTH, {}, NO_NETWORK);
+    await runMcp(FAKE_CTX, {}, NO_NETWORK);
 
     expect(spawnSpy).toHaveBeenCalledWith(
       'podman',
@@ -173,7 +176,7 @@ describe('runMcp', () => {
     });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
-    await runMcp(FAKE_AUTH, { debug: true }, NO_NETWORK);
+    await runMcp(FAKE_CTX, { debug: true }, NO_NETWORK);
 
     const spawnEnv = spawnSpy.mock.calls[0][2].env as Record<string, string>;
     expect(spawnEnv.SONARQUBE_DEBUG_ENABLED).toBe('true');
@@ -188,7 +191,7 @@ describe('runMcp', () => {
     });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
-    await runMcp(FAKE_AUTH, { readOnly: true }, NO_NETWORK);
+    await runMcp(FAKE_CTX, { readOnly: true }, NO_NETWORK);
 
     const spawnEnv = spawnSpy.mock.calls[0][2].env as Record<string, string>;
     expect(spawnEnv.SONARQUBE_READ_ONLY).toBe('true');
@@ -202,7 +205,7 @@ describe('runMcp', () => {
     });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
-    await runMcp(FAKE_AUTH, { toolsets: 'issues,rules' }, NO_NETWORK);
+    await runMcp(FAKE_CTX, { toolsets: 'issues,rules' }, NO_NETWORK);
 
     const spawnEnv = spawnSpy.mock.calls[0][2].env as Record<string, string>;
     expect(spawnEnv.SONARQUBE_TOOLSETS).toBe('issues,rules');
@@ -216,7 +219,7 @@ describe('runMcp', () => {
     });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
-    await runMcp(FAKE_AUTH, { project: 'my-project' }, NO_NETWORK);
+    await runMcp(FAKE_CTX, { project: 'my-project' }, NO_NETWORK);
 
     const spawnEnv = spawnSpy.mock.calls[0][2].env as Record<string, string>;
     expect(spawnEnv.SONARQUBE_PROJECT_KEY).toBe('my-project');
@@ -237,7 +240,7 @@ describe('runMcp', () => {
     });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
-    await runMcp(FAKE_AUTH, { project: 'my-project' }, NO_NETWORK);
+    await runMcp(FAKE_CTX, { project: 'my-project' }, NO_NETWORK);
 
     expect(spawnSpy.mock.calls[0][1]).toContain('SONARQUBE_PROJECT_KEY');
     expect(spawnSpy.mock.calls[0][1]).toContain('-v');
@@ -253,7 +256,7 @@ describe('runMcp', () => {
     });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
-    await runMcp(FAKE_AUTH, { project: 'my-project' }, NO_NETWORK);
+    await runMcp(FAKE_CTX, { project: 'my-project' }, NO_NETWORK);
 
     expect(discoverProjectSpy).not.toHaveBeenCalled();
     expect(spawnSpy.mock.calls[0][1]).toContain('SONARQUBE_PROJECT_KEY');
@@ -283,7 +286,7 @@ describe('runMcp', () => {
     const cachedPath = clientCertCachePath(clientCert);
 
     try {
-      await runMcp(FAKE_AUTH, {}, { proxy: null, caCert: null, clientCert });
+      await runMcp(FAKE_CTX, {}, { proxy: null, caCert: null, clientCert });
 
       expect(existsSync(cachedPath)).toBe(false);
     } finally {

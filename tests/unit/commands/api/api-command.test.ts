@@ -20,6 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CliAuthenticatedContext } from '@/commands/cli-authenticated-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
@@ -35,6 +36,8 @@ const FAKE_AUTH: ResolvedAuth = {
   orgKey: TEST_ORG,
   connectionType: 'on-premise',
 };
+
+const FAKE_CTX = new CliAuthenticatedContext(FAKE_AUTH, false, false);
 
 let genericRequestSpy: ReturnType<typeof spyOn>;
 
@@ -55,14 +58,14 @@ describe('apiCommand', () => {
 
   it('throws InvalidOptionError for invalid HTTP method', async () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(apiCommand(FAKE_AUTH, 'TRACE', '/api/system/status', {})).rejects.toThrow(
+    await expect(apiCommand(FAKE_CTX, 'TRACE', '/api/system/status', {})).rejects.toThrow(
       "Invalid HTTP method 'TRACE'",
     );
   });
 
   it('throws InvalidOptionError when endpoint does not start with /', async () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(apiCommand(FAKE_AUTH, 'get', 'api/system/status', {})).rejects.toThrow(
+    await expect(apiCommand(FAKE_CTX, 'get', 'api/system/status', {})).rejects.toThrow(
       "Endpoint must start with '/'",
     );
   });
@@ -70,26 +73,26 @@ describe('apiCommand', () => {
   it('throws InvalidOptionError when --data is used with GET', async () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      apiCommand(FAKE_AUTH, 'get', '/api/system/status', { data: '{"k":"v"}' }),
+      apiCommand(FAKE_CTX, 'get', '/api/system/status', { data: '{"k":"v"}' }),
     ).rejects.toThrow('--data is only valid for');
   });
 
   it('throws InvalidOptionError when --data is used with DELETE', async () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      apiCommand(FAKE_AUTH, 'delete', '/api/system/status', { data: '{"k":"v"}' }),
+      apiCommand(FAKE_CTX, 'delete', '/api/system/status', { data: '{"k":"v"}' }),
     ).rejects.toThrow('--data is only valid for');
   });
 
   it('throws InvalidOptionError when --data is not valid JSON', async () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      apiCommand(FAKE_AUTH, 'post', '/api/system/status', { data: 'not-json' }),
+      apiCommand(FAKE_CTX, 'post', '/api/system/status', { data: 'not-json' }),
     ).rejects.toThrow('--data must be valid JSON');
   });
 
   it('makes a GET request and prints the response', async () => {
-    await apiCommand(FAKE_AUTH, 'get', '/api/system/status', {});
+    await apiCommand(FAKE_CTX, 'get', '/api/system/status', {});
 
     expect(genericRequestSpy).toHaveBeenCalledTimes(1);
     const [method, endpoint, data, contentType] = genericRequestSpy.mock.calls[0];
@@ -103,7 +106,7 @@ describe('apiCommand', () => {
   });
 
   it('uppercases the method', async () => {
-    await apiCommand(FAKE_AUTH, 'post', '/api/system/status', { data: '{"k":"v"}' });
+    await apiCommand(FAKE_CTX, 'post', '/api/system/status', { data: '{"k":"v"}' });
 
     const [method] = genericRequestSpy.mock.calls[0];
     expect(method).toBe('POST');
@@ -111,28 +114,28 @@ describe('apiCommand', () => {
 
   it('sends POST request with --data body', async () => {
     const body = '{"key":"value"}';
-    await apiCommand(FAKE_AUTH, 'post', '/api/issues/search', { data: body });
+    await apiCommand(FAKE_CTX, 'post', '/api/issues/search', { data: body });
 
     const [, , data] = genericRequestSpy.mock.calls[0];
     expect(data).toBe(body);
   });
 
   it('uses json content type for /api/v2/ endpoints', async () => {
-    await apiCommand(FAKE_AUTH, 'get', '/api/v2/issues/search', {});
+    await apiCommand(FAKE_CTX, 'get', '/api/v2/issues/search', {});
 
     const [, , , contentType] = genericRequestSpy.mock.calls[0];
     expect(contentType).toBe('json');
   });
 
   it('uses form content type for /api/ endpoints', async () => {
-    await apiCommand(FAKE_AUTH, 'get', '/api/issues/search', {});
+    await apiCommand(FAKE_CTX, 'get', '/api/issues/search', {});
 
     const [, , , contentType] = genericRequestSpy.mock.calls[0];
     expect(contentType).toBe('form');
   });
 
   it('makes a DELETE request without data', async () => {
-    await apiCommand(FAKE_AUTH, 'delete', '/api/authentication/validate', {});
+    await apiCommand(FAKE_CTX, 'delete', '/api/authentication/validate', {});
 
     expect(genericRequestSpy).toHaveBeenCalledTimes(1);
     const [method, , data] = genericRequestSpy.mock.calls[0];
@@ -141,7 +144,7 @@ describe('apiCommand', () => {
   });
 
   it('passes the endpoint to genericRequest', async () => {
-    await apiCommand(FAKE_AUTH, 'get', '/api/system/status', {});
+    await apiCommand(FAKE_CTX, 'get', '/api/system/status', {});
 
     const [, endpoint] = genericRequestSpy.mock.calls[0];
     expect(endpoint).toBe('/api/system/status');
@@ -149,7 +152,7 @@ describe('apiCommand', () => {
 
   it('passes valid JSON data through to genericRequest for PUT', async () => {
     const body = '{"key":"val"}';
-    await apiCommand(FAKE_AUTH, 'put', '/api/v2/settings/set', { data: body });
+    await apiCommand(FAKE_CTX, 'put', '/api/v2/settings/set', { data: body });
 
     const [method, , data, contentType] = genericRequestSpy.mock.calls[0];
     expect(method).toBe('PUT');
