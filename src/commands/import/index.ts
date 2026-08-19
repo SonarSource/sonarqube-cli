@@ -216,11 +216,10 @@ export async function importHandler(options: ImportOptions, auth: ResolvedAuth):
       onlyPrivateProjectsEnabled,
     } = await resolveOrg(client, auth.orgKey);
     info(`Organization: ${resolvedOrgKey}`);
-    const [resolvedAlmKey, privateProjectsAvailable] = await Promise.all([
-      resolveAlmKey(client, resolvedOrgKey, orgRecordAlmKey),
-      client.hasPrivateProjectsEntitlement(resolvedOrgKey),
-    ]);
-    almKey = resolvedAlmKey;
+    const almKeyPromise = resolveAlmKey(client, resolvedOrgKey, orgRecordAlmKey);
+    const entitlementPromise = client.hasPrivateProjectsEntitlement(resolvedOrgKey);
+    almKey = await almKeyPromise;
+    const privateProjectsAvailable = await entitlementPromise;
 
     assertSupportedAlm(resolvedOrgKey, almKey);
 
@@ -228,7 +227,13 @@ export async function importHandler(options: ImportOptions, auth: ResolvedAuth):
       enabled: onlyPrivateProjectsEnabled ?? false,
       available: privateProjectsAvailable,
     };
-    const resolution = await resolveRepos(client, resolvedOrgKey, almKey, onlyPrivateProjects, options);
+    const resolution = await resolveRepos(
+      client,
+      resolvedOrgKey,
+      almKey,
+      onlyPrivateProjects,
+      options,
+    );
 
     if (resolution.kind === 'streaming') {
       const { succeeded, failed, skipped } = await runBulkImportJob(

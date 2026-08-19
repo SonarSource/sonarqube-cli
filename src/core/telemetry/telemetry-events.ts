@@ -181,9 +181,10 @@ export async function emitIntegrationConfigured(
   });
 }
 
-export async function emitUserOnboardingStarted(
+async function appendLeanOnboardingEvent(
   auth: ResolvedAuth,
-  fields: UserOnboardingStartedFields,
+  eventType: 'Analytics.Cli.UserOnboardingStarted' | 'Analytics.Cli.UserOnboardingExited',
+  fields: UserOnboardingStartedFields | UserOnboardingExitedFields,
 ): Promise<void> {
   const base = await buildIdentityBase((conn) => resolveCommandTelemetryIdentity(conn, auth));
   if (!base) return;
@@ -191,7 +192,7 @@ export async function emitUserOnboardingStarted(
     metadata: {
       event_id: randomUUID(),
       source: { domain: 'CLI' },
-      event_type: 'Analytics.Cli.UserOnboardingStarted',
+      event_type: eventType,
       event_version: '0',
       event_timestamp: String(Date.now()),
     },
@@ -201,7 +202,14 @@ export async function emitUserOnboardingStarted(
       version: VERSION,
       ...fields,
     },
-  });
+  } as StoredTelemetryEvent);
+}
+
+export async function emitUserOnboardingStarted(
+  auth: ResolvedAuth,
+  fields: UserOnboardingStartedFields,
+): Promise<void> {
+  await appendLeanOnboardingEvent(auth, 'Analytics.Cli.UserOnboardingStarted', fields);
 }
 
 export async function emitUserOnboardingCompleted(
@@ -232,23 +240,7 @@ export async function emitUserOnboardingExited(
   auth: ResolvedAuth,
   fields: UserOnboardingExitedFields,
 ): Promise<void> {
-  const base = await buildIdentityBase((conn) => resolveCommandTelemetryIdentity(conn, auth));
-  if (!base) return;
-  appendTelemetryEvent({
-    metadata: {
-      event_id: randomUUID(),
-      source: { domain: 'CLI' },
-      event_type: 'Analytics.Cli.UserOnboardingExited',
-      event_version: '0',
-      event_timestamp: String(Date.now()),
-    },
-    event_payload: {
-      source: 'cli' as const,
-      user_uuid: base.user_uuid,
-      version: VERSION,
-      ...fields,
-    },
-  });
+  await appendLeanOnboardingEvent(auth, 'Analytics.Cli.UserOnboardingExited', fields);
 }
 
 /**
