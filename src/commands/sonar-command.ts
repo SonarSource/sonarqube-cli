@@ -33,8 +33,7 @@ import type { UpdateNotificationCondition } from '@/core/update/notification.ts'
 import { UpdateNotifier } from '@/core/update/notification.ts';
 
 import { version as VERSION } from '../../package.json';
-import { CliAuthenticatedContext } from './cli-authenticated-context.ts';
-import { CliContext } from './cli-context.ts';
+import { CliAuthenticatedContext, CliContext } from './cli-context.ts';
 
 export const ALPHA_ENV_VAR = 'SONARQUBE_CLI_ALPHA';
 export const ALPHA_HELP_TAG = '[ALPHA]';

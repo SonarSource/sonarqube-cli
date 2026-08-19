@@ -24,7 +24,7 @@ import { spawn } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 
-import type { CliAuthenticatedContext } from '@/commands/cli-authenticated-context.ts';
+import type { CliAuthenticatedContext } from '@/commands/cli-context.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { getNetworkConfigOrThrow } from '@/core/host/connectivity/network-config.ts';
 import type { ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';

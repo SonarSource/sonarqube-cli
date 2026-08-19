@@ -22,8 +22,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-import type { CliAuthenticatedContext } from '@/commands/cli-authenticated-context.ts';
-import { CliContext } from '@/commands/cli-context.ts';
+import { CliAuthenticatedContext, CliContext } from '@/commands/cli-context.ts';
 import { getCustomRootHelp } from '@/commands/root-help.ts';
 import { ALPHA_ENV_VAR, SonarCommand, Stage } from '@/commands/sonar-command.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';

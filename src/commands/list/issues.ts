@@ -22,7 +22,7 @@
 
 import { encode as encodeToToon } from '@toon-format/toon';
 
-import type { CliAuthenticatedContext } from '@/commands/cli-authenticated-context.ts';
+import type { CliAuthenticatedContext } from '@/commands/cli-context.ts';
 import { InvalidOptionError } from '@/core/command-error.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';

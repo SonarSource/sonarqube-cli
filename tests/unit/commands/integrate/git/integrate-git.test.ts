@@ -23,7 +23,7 @@ import { isAbsolute, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { CliAuthenticatedContext } from '@/commands/cli-authenticated-context.ts';
+import { CliAuthenticatedContext } from '@/commands/cli-context.ts';
 import * as preflightSummary from '@/commands/integrate/_common/preflight-summary.ts';
 import {
   detectSonarHookInstallation as detectHookInstallation,

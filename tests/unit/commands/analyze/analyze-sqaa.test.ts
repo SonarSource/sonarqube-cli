@@ -25,7 +25,7 @@ import * as fs from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { CliAuthenticatedContext } from '@/commands/cli-authenticated-context.ts';
+import { CliAuthenticatedContext } from '@/commands/cli-context.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import * as processLib from '@/core/process/process.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';

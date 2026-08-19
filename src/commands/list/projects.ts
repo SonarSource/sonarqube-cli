@@ -20,7 +20,7 @@
 
 // Issues command - search for SonarQube issues
 
-import type { CliAuthenticatedContext } from '@/commands/cli-authenticated-context.ts';
+import type { CliAuthenticatedContext } from '@/commands/cli-context.ts';
 import { InvalidOptionError } from '@/core/command-error.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { MAX_PAGE_SIZE, ProjectsClient } from '@/core/server/projects.ts';

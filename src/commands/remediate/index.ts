@@ -20,7 +20,7 @@
 
 // Remediate command - triggers AI agent remediation for eligible issues
 
-import type { CliAuthenticatedContext } from '@/commands/cli-authenticated-context.ts';
+import type { CliAuthenticatedContext } from '@/commands/cli-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import {

@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { CliAuthenticatedContext } from '@/commands/cli-authenticated-context.ts';
+import type { CliAuthenticatedContext } from '@/commands/cli-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { InvalidOptionError } from '@/core/command-error.ts';
 import type { SqaaAnalysisDepth } from '@/core/server/client.ts';

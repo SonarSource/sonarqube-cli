@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { CliAuthenticatedContext } from '@/commands/cli-authenticated-context.ts';
+import { CliAuthenticatedContext } from '@/commands/cli-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';

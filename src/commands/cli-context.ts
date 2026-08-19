@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+
 /**
  * Per-command invocation context for handlers that do not require auth.
  *
@@ -31,4 +33,20 @@ export class CliContext {
     readonly isAlpha: boolean,
     readonly isBeta: boolean,
   ) {}
+}
+
+/**
+ * Per-command invocation context for authenticated handlers.
+ *
+ * Built by `SonarCommand.authenticatedAction`. Extends {@link CliContext} with
+ * resolved auth for this invocation.
+ */
+export class CliAuthenticatedContext extends CliContext {
+  constructor(
+    readonly auth: ResolvedAuth,
+    isAlpha: boolean,
+    isBeta: boolean,
+  ) {
+    super(isAlpha, isBeta);
+  }
 }

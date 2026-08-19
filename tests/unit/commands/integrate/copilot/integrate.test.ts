@@ -20,7 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
 
-import { CliAuthenticatedContext } from '@/commands/cli-authenticated-context.ts';
+import { CliAuthenticatedContext } from '@/commands/cli-context.ts';
 import * as vortex from '@/commands/integrate/_common/vortex.ts';
 import { integrateCopilot } from '@/commands/integrate/copilot';
 import * as hooks from '@/commands/integrate/copilot/hooks.ts';

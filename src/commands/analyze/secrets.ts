@@ -20,7 +20,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 
-import type { CliAuthenticatedContext } from '@/commands/cli-authenticated-context.ts';
+import type { CliAuthenticatedContext } from '@/commands/cli-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { buildSubprocessNetworkEnv } from '@/core/host/connectivity/network-config.ts';
