@@ -19,6 +19,11 @@
  */
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import {
+  type AgentSessionSlot,
+  createAgentSessionSlot,
+  resolveAgentSessionId as resolveAgentSessionIdFromSlot,
+} from '@/core/telemetry/agent-session.ts';
 
 /** Command stage snapshot used to resolve invocation-scoped alpha/beta flags. */
 export type CommandInvocationContextStage = {
@@ -54,12 +59,14 @@ const DISABLED_RUNTIME: CommandInvocationContextRuntime = {
  *
  * Built by `SonarCommand.anonymousAction`. Stage accessors are methods so they
  * can combine the command's `.stage()` with runtime entitlement (alpha env /
- * Private Beta LaunchDarkly), not merely echo the stage name.
+ * Private Beta LaunchDarkly), not merely echo the stage name. Also owns
+ * agent-session note/resolve for telemetry correlation.
  */
 export class CommandInvocationContext {
   constructor(
     private readonly stage: CommandInvocationContextStage = STABLE_STAGE,
     private readonly runtime: CommandInvocationContextRuntime = DISABLED_RUNTIME,
+    private readonly agentSession: AgentSessionSlot = createAgentSessionSlot(),
   ) {}
 
   /** True when this command is Alpha and alpha is enabled for this run. */
@@ -81,6 +88,21 @@ export class CommandInvocationContext {
     const flagKey = this.stage.betaFlagKey;
     return flagKey !== undefined && this.runtime.isPrivateBetaEnabled(flagKey);
   }
+
+  /** Record a raw agent-native session id from a hook payload (normalize at resolve). */
+  noteAgentSessionId(id: string | null | undefined): void {
+    if (id != null) {
+      this.agentSession.id = id;
+    }
+  }
+
+  /**
+   * Lazily identify the agent session id for telemetry. Prefers a hook-captured
+   * id on the shared slot; otherwise resolves from env and caches on the slot.
+   */
+  resolveAgentSessionId(env: NodeJS.ProcessEnv = process.env): string | null {
+    return resolveAgentSessionIdFromSlot(this.agentSession, env);
+  }
 }
 
 /**
@@ -94,7 +116,8 @@ export class CommandAuthenticatedInvocationContext extends CommandInvocationCont
     readonly auth: ResolvedAuth,
     stage?: CommandInvocationContextStage,
     runtime?: CommandInvocationContextRuntime,
+    agentSession?: AgentSessionSlot,
   ) {
-    super(stage, runtime);
+    super(stage, runtime, agentSession);
   }
 }

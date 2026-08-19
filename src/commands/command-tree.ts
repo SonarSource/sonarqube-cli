@@ -33,6 +33,7 @@ import {
   storeEvent,
   TELEMETRY_FLUSH_MODE_ENV,
 } from '@/core/telemetry';
+import { createAgentSessionSlot } from '@/core/telemetry/agent-session.ts';
 import {
   SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
   SQAA_VERIFY_CALLER_COMMAND,
@@ -62,14 +63,15 @@ import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './api/api.
 import { authLogin, type AuthLoginOptions } from './auth/login.ts';
 import { authLogout } from './auth/logout.ts';
 import { authStatus } from './auth/status.ts';
+import { CommandInvocationContext } from './command-invocation-context.ts';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
-import { agentPostToolUse, type AgentPostToolUseOptions } from './hook/agent-post-tool-use.ts';
+import { agentPostToolUse } from './hook/agent-post-tool-use.ts';
 import { agentPromptSubmit } from './hook/agent-prompt-submit.ts';
 import { antigravityPreToolUse } from './hook/antigravity-pre-tool-use.ts';
 import { claudePostToolUseFailure } from './hook/claude-post-tool-use-failure.ts';
 import { claudePreToolUse } from './hook/claude-pre-tool-use.ts';
-import { codexPostToolUse, type CodexPostToolUseOptions } from './hook/codex-post-tool-use.ts';
+import { codexPostToolUse } from './hook/codex-post-tool-use.ts';
 import { codexPromptSubmit } from './hook/codex-prompt-submit.ts';
 import { copilotPreToolUse } from './hook/copilot-pre-tool-use.ts';
 import { cursorPreFileRead } from './hook/cursor-pre-file-read.ts';
@@ -77,6 +79,7 @@ import { cursorPreToolUse } from './hook/cursor-pre-tool-use.ts';
 import { cursorPromptSubmit } from './hook/cursor-prompt-submit.ts';
 import { gitPreCommit, type GitPreCommitOptions } from './hook/git-pre-commit.ts';
 import { gitPrePush } from './hook/git-pre-push.ts';
+import type { HookCommandResult } from './hook/hook-command-result.ts';
 import { importHandler, type ImportOptions } from './import';
 import { collectRepoOption } from './import/_common/repo-option.ts';
 import type { IntegrateAgentOptions } from './integrate/_common/types.ts';
@@ -139,7 +142,19 @@ export interface CreateCommandTreeOptions {
 
 /** Registers the full command tree for the given runtime (sync). */
 function buildCommandTree(runtime: CliRuntime): SonarCommand {
-  const COMMAND_TREE = new SonarCommand({ runtime });
+  // Per-tree slot for agent session correlation. Shared via SonarCommand into every
+  // CommandInvocationContext; hook handlers note ids when present; postAction resolves (env fallback).
+  const agentSession = createAgentSessionSlot();
+  const COMMAND_TREE = new SonarCommand({ runtime, agentSession });
+
+  const captureAgentSession =
+    <TArgs extends unknown[]>(
+      run: (...args: TArgs) => Promise<HookCommandResult>,
+    ): ((ctx: CommandInvocationContext, ...args: TArgs) => Promise<void>) =>
+    async (ctx, ...args) => {
+      const { agentSessionId } = await run(...args);
+      ctx.noteAgentSessionId(agentSessionId);
+    };
 
   COMMAND_TREE.name('sonar')
     .description('SonarQube CLI')
@@ -677,7 +692,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
   hookCommand
     .command('claude-pre-tool-use')
     .description('PreToolUse handler: scan files for secrets before agent reads them')
-    .anonymousAction((_ctx) => claudePreToolUse());
+    .anonymousAction(captureAgentSession(() => claudePreToolUse()));
 
   hookCommand
     .command('copilot-pre-tool-use')
@@ -696,37 +711,37 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
   hookCommand
     .command('claude-prompt-submit')
     .description('UserPromptSubmit handler: scan prompts for secrets before sending')
-    .anonymousAction((_ctx) => agentPromptSubmit());
+    .anonymousAction(captureAgentSession(() => agentPromptSubmit()));
 
   hookCommand
     .command('codex-prompt-submit')
     .description('UserPromptSubmit handler for Codex: scan prompts for secrets before sending')
-    .anonymousAction((_ctx) => codexPromptSubmit());
+    .anonymousAction(captureAgentSession(() => codexPromptSubmit()));
 
   hookCommand
     .command('cursor-prompt-submit')
     .description('beforeSubmitPrompt handler for Cursor: scan prompts for secrets before sending')
-    .anonymousAction((_ctx) => cursorPromptSubmit());
+    .anonymousAction(captureAgentSession(() => cursorPromptSubmit()));
 
   hookCommand
     .command('cursor-pre-file-read')
     .description(
       'beforeReadFile handler for Cursor: scan files for secrets before agent reads them',
     )
-    .anonymousAction((_ctx) => cursorPreFileRead());
+    .anonymousAction(captureAgentSession(() => cursorPreFileRead()));
 
   hookCommand
     .command('cursor-pre-tool-use')
     .description(
       'preToolUse handler for Cursor: scan Read tool targets for secrets before execution',
     )
-    .anonymousAction((_ctx) => cursorPreToolUse());
+    .anonymousAction(captureAgentSession(() => cursorPreToolUse()));
 
   hookCommand
     .command('claude-post-tool-use')
     .description('PostToolUse handler: run Vortex analysis after agent edits or writes a file')
     .requiredOption('--project <key>', 'SonarQube Cloud project key')
-    .anonymousAction((_ctx, options: AgentPostToolUseOptions) => agentPostToolUse(options));
+    .anonymousAction(captureAgentSession(agentPostToolUse));
 
   hookCommand
     .command('claude-post-tool-use-failure')
@@ -741,7 +756,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       'PostToolUse handler for Codex: run Vortex analysis on the git change set after apply_patch',
     )
     .requiredOption('--project <key>', 'SonarQube Cloud project key')
-    .anonymousAction((_ctx, options: CodexPostToolUseOptions) => codexPostToolUse(options));
+    .anonymousAction(captureAgentSession(codexPostToolUse));
 
   hookCommand
     .command('git-pre-commit')
@@ -784,6 +799,8 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
 
   // Collect a telemetry event after every command action.
   COMMAND_TREE.hook('postAction', async (_thisCommand, actionCommand) => {
+    // Identify the agent session for this invocation (env fallback when no hook id).
+    new CommandInvocationContext(undefined, undefined, agentSession).resolveAgentSessionId();
     await storeEvent(actionCommand, (process.exitCode ?? 0) === 0);
     await COMMAND_TREE.updateNotifier.maybeNotify(actionCommand);
   });

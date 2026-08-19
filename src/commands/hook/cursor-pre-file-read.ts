@@ -36,6 +36,7 @@ import {
   scanTextForSecrets,
   secretsFoundInScan,
 } from './cursor-secrets-block.ts';
+import type { HookCommandResult } from './hook-command-result.ts';
 import {
   type HookDependencies,
   MissingDependenciesError,
@@ -46,19 +47,22 @@ import { readStdinJson } from './stdin.ts';
 interface CursorBeforeReadFilePayload {
   file_path?: string;
   content?: string;
+  conversation_id?: string;
 }
 
-export async function cursorPreFileRead(): Promise<void> {
+export async function cursorPreFileRead(): Promise<HookCommandResult> {
   let payload: CursorBeforeReadFilePayload;
   try {
     payload = await readStdinJson<CursorBeforeReadFilePayload>();
   } catch {
-    return; // unparseable stdin — allow
+    return { agentSessionId: null }; // unparseable stdin — allow
   }
+
+  const agentSessionId = payload.conversation_id ?? null;
 
   const filePath = payload.file_path;
   const content = await resolveFileContent(payload, filePath);
-  if (content === undefined) return;
+  if (content === undefined) return { agentSessionId };
 
   let deps: HookDependencies;
   try {
@@ -66,7 +70,7 @@ export async function cursorPreFileRead(): Promise<void> {
   } catch (err) {
     if (err instanceof MissingDependenciesError) {
       await denyCursor(err.message);
-      return;
+      return { agentSessionId };
     }
     throw err;
   }
@@ -78,12 +82,14 @@ export async function cursorPreFileRead(): Promise<void> {
     );
   } catch (err) {
     logger.debug(`cursorPreFileRead secrets scan failed: ${(err as Error).message}`);
-    return;
+    return { agentSessionId };
   }
 
   if (secretsFoundInScan(scan.result)) {
     await denyCursorFileAccess(filePath);
   }
+
+  return { agentSessionId };
 }
 
 async function resolveFileContent(

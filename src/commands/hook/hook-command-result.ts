@@ -18,18 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// UserPromptSubmit callback handler for Codex.
-//
-// Codex's UserPromptSubmit stdin payload exposes the user prompt at the same
-// top-level `prompt` field as Claude, and Codex accepts the same
-// `{ decision: "block", reason: "..." }` block-output shape. The agnostic
-// `agentPromptSubmit` handler therefore works as-is. This file exists to give
-// Codex a named entry point that can diverge later if the wire format ever
-// changes.
-
-import { agentPromptSubmit } from './agent-prompt-submit.ts';
-import type { HookCommandResult } from './hook-command-result.ts';
-
-export function codexPromptSubmit(): Promise<HookCommandResult> {
-  return agentPromptSubmit();
-}
+/** Returned by session-capturing hook handlers for the command tree to store. */
+export type HookCommandResult = {
+  /** Agent-native field value; normalized when resolved for telemetry. */
+  agentSessionId: string | null;
+};

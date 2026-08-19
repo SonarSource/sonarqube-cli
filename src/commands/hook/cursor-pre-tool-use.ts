@@ -36,6 +36,7 @@ import {
   scanTextForSecrets,
   secretsFoundInScan,
 } from './cursor-secrets-block.ts';
+import type { HookCommandResult } from './hook-command-result.ts';
 import {
   type HookDependencies,
   MissingDependenciesError,
@@ -46,20 +47,23 @@ import { readStdinJson } from './stdin.ts';
 interface CursorPreToolUsePayload {
   tool_name?: string;
   tool_input?: { file_path?: string; path?: string };
+  conversation_id?: string;
 }
 
-export async function cursorPreToolUse(): Promise<void> {
+export async function cursorPreToolUse(): Promise<HookCommandResult> {
   let payload: CursorPreToolUsePayload;
   try {
     payload = await readStdinJson<CursorPreToolUsePayload>();
   } catch {
-    return; // unparseable stdin — allow
+    return { agentSessionId: null }; // unparseable stdin — allow
   }
 
-  if (payload.tool_name !== 'Read') return;
+  const agentSessionId = payload.conversation_id ?? null;
+
+  if (payload.tool_name !== 'Read') return { agentSessionId };
 
   const filePath = payload.tool_input?.file_path ?? payload.tool_input?.path;
-  if (!filePath || !existsSync(filePath)) return;
+  if (!filePath || !existsSync(filePath)) return { agentSessionId };
 
   let deps: HookDependencies;
   try {
@@ -67,7 +71,7 @@ export async function cursorPreToolUse(): Promise<void> {
   } catch (err) {
     if (err instanceof MissingDependenciesError) {
       await denyCursor(err.message);
-      return;
+      return { agentSessionId };
     }
     throw err;
   }
@@ -80,10 +84,12 @@ export async function cursorPreToolUse(): Promise<void> {
     );
   } catch (err) {
     logger.debug(`cursorPreToolUse secrets scan failed: ${(err as Error).message}`);
-    return;
+    return { agentSessionId };
   }
 
   if (secretsFoundInScan(scan.result)) {
     await denyCursorFileAccess(filePath);
   }
+
+  return { agentSessionId };
 }

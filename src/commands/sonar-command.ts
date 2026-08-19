@@ -28,6 +28,7 @@ import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { CliError, CommandFailedError, remediationHintFor } from '@/core/command-error.ts';
 import logger from '@/core/observability/logger.ts';
 import { loadState, saveState } from '@/core/state/state-manager.ts';
+import { type AgentSessionSlot, createAgentSessionSlot } from '@/core/telemetry/agent-session.ts';
 import { blank, error, info, print } from '@/core/ui';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
 import { UpdateNotifier } from '@/core/update/notification.ts';
@@ -106,6 +107,8 @@ export interface RootHelpMetadata {
 export interface SonarCommandOptions {
   updateNotifier?: UpdateNotifier;
   runtime?: CliRuntime;
+  /** Shared across the command tree; used by CommandInvocationContext session resolution. */
+  agentSession?: AgentSessionSlot;
 }
 
 type CommandArgs = unknown[];
@@ -163,10 +166,11 @@ export class SonarCommand extends Command {
   private _rootHelp: RootHelpMetadata = {};
   private readonly _updateNotifier: UpdateNotifier;
   private readonly _runtime: CliRuntime;
+  private readonly _agentSession: AgentSessionSlot;
 
   /**
-   * `updateNotifier` / `runtime` default so the root command owns the instances
-   * the whole tree shares; every subcommand inherits them via createCommand().
+   * `updateNotifier` / `runtime` / `agentSession` default so the root command owns
+   * the instances the whole tree shares; every subcommand inherits them via createCommand().
    */
   constructor(options?: SonarCommandOptions);
   constructor(name?: string, options?: SonarCommandOptions);
@@ -180,6 +184,7 @@ export class SonarCommand extends Command {
     super(name);
     this._updateNotifier = options.updateNotifier ?? new UpdateNotifier();
     this._runtime = options.runtime ?? createDefaultCliRuntime();
+    this._agentSession = options.agentSession ?? createAgentSessionSlot();
     this.hook('preAction', () => {
       if (this.isAlpha) {
         info(`'${this.name()}' is in alpha; may change or be removed without notice.`, 'stderr');
@@ -192,6 +197,7 @@ export class SonarCommand extends Command {
     return new SonarCommand(name, {
       updateNotifier: this._updateNotifier,
       runtime: this._runtime,
+      agentSession: this._agentSession,
     });
   }
 
@@ -379,7 +385,11 @@ export class SonarCommand extends Command {
   }
 
   private createCommandInvocationContext(): CommandInvocationContext {
-    return new CommandInvocationContext(this.commandInvocationContextStage(), this._runtime);
+    return new CommandInvocationContext(
+      this.commandInvocationContextStage(),
+      this._runtime,
+      this._agentSession,
+    );
   }
 
   private createCommandAuthenticatedInvocationContext(
@@ -389,6 +399,7 @@ export class SonarCommand extends Command {
       auth,
       this.commandInvocationContextStage(),
       this._runtime,
+      this._agentSession,
     );
   }
 
