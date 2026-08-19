@@ -26,6 +26,7 @@
 import { isAbsolute } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { parse as parseToml } from 'smol-toml';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/commands/integrate/_common/features/context-augmentation-feature';
 import {
@@ -315,7 +316,10 @@ describe('integrate codex', () => {
         expect(result.exitCode).toBe(0);
         const tomlBody = harness.cwd.file(...CONFIG_TOML_DIRS).asText();
         expect(tomlBody).toContain('[mcp_servers.sonarqube.env]');
-        expect(tomlBody).toContain(customHome);
+        const parsed = parseToml(tomlBody) as {
+          mcp_servers?: { sonarqube?: { env?: Record<string, string> } };
+        };
+        expect(parsed.mcp_servers?.sonarqube?.env?.[ENV_SONAR_USER_HOME]).toBe(customHome);
       },
       { timeout: 30000 },
     );
