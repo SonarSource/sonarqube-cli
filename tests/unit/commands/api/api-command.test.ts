@@ -37,7 +37,7 @@ const FAKE_AUTH: ResolvedAuth = {
   connectionType: 'on-premise',
 };
 
-const FAKE_CTX = new CliAuthenticatedContext(FAKE_AUTH, false, false);
+const FAKE_CTX = new CliAuthenticatedContext(FAKE_AUTH);
 
 let genericRequestSpy: ReturnType<typeof spyOn>;
 

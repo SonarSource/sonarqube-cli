@@ -340,7 +340,7 @@ const MOCK_AUTH = {
   connectionType: 'on-premise' as const,
 };
 
-const MOCK_AUTH_CTX = new CliAuthenticatedContext(MOCK_AUTH, false, false);
+const MOCK_AUTH_CTX = new CliAuthenticatedContext(MOCK_AUTH);
 
 describe('integrateGit', () => {
   let findGitRootSpy: ReturnType<typeof spyOn>;

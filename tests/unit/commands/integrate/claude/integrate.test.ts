@@ -52,8 +52,8 @@ const CLOUD_AUTH: ResolvedAuth = {
   connectionType: 'cloud',
 };
 
-const SERVER_CTX = new CliAuthenticatedContext(SERVER_AUTH, false, false);
-const CLOUD_CTX = new CliAuthenticatedContext(CLOUD_AUTH, false, false);
+const SERVER_CTX = new CliAuthenticatedContext(SERVER_AUTH);
+const CLOUD_CTX = new CliAuthenticatedContext(CLOUD_AUTH);
 
 function getPhaseItems(title: string): PhaseItem[] {
   const call = getMockUiCalls().find((c) => c.method === 'phase' && c.args[0] === title);
@@ -204,9 +204,9 @@ describe('integrateCommand', () => {
     };
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(
-      integrateClaude({}, new CliAuthenticatedContext(cloudAuthNoOrg, false, false)),
-    ).rejects.toThrow(CommandFailedError);
+    await expect(integrateClaude({}, new CliAuthenticatedContext(cloudAuthNoOrg))).rejects.toThrow(
+      CommandFailedError,
+    );
   });
 
   it('shows config source from discovered files', async () => {

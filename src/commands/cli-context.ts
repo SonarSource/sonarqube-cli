@@ -20,19 +20,77 @@
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 
+/** Command stage snapshot used to resolve invocation-scoped alpha/beta flags. */
+export type CliContextStage = {
+  isAlpha: boolean;
+  isBeta: boolean;
+  isPrivateBeta: boolean;
+  betaFlagKey?: string;
+};
+
+/**
+ * Runtime gates consulted when answering whether this execution should be
+ * treated as alpha / beta (mirrors {@link CliRuntime} fields used by stage
+ * visibility, without importing `SonarCommand`).
+ */
+export type CliContextRuntime = {
+  isAlphaEnabled: boolean;
+  isPrivateBetaEnabled: (flagKey: string) => boolean;
+};
+
+const STABLE_STAGE: CliContextStage = {
+  isAlpha: false,
+  isBeta: false,
+  isPrivateBeta: false,
+};
+
+const DISABLED_RUNTIME: CliContextRuntime = {
+  isAlphaEnabled: false,
+  isPrivateBetaEnabled: () => false,
+};
+
 /**
  * Per-command invocation context for handlers that do not require auth.
  *
- * Built by `SonarCommand.anonymousAction`: `isAlpha` / `isBeta` reflect this
- * command's stage for the current run (Private Beta is already gated when the
- * tree is built). Prefer adding methods here over ambient state when handlers
- * need more invocation-scoped facts later.
+ * Built by `SonarCommand.anonymousAction`. Stage accessors are methods so they
+ * can combine the command's `.stage()` with runtime entitlement (alpha env /
+ * Private Beta LaunchDarkly), not merely echo the stage name.
  */
 export class CliContext {
   constructor(
-    readonly isAlpha: boolean,
-    readonly isBeta: boolean,
+    private readonly stage: CliContextStage = STABLE_STAGE,
+    private readonly runtime: CliContextRuntime = DISABLED_RUNTIME,
   ) {}
+
+  /** True when this command is Alpha and alpha is enabled for this run. */
+  isAlpha(): boolean {
+    return this.stage.isAlpha && this.runtime.isAlphaEnabled;
+  }
+
+  /**
+   * True when this execution should be treated as beta: Open Beta, or Private
+   * Beta with the user entitled for the command's LaunchDarkly flag.
+   */
+  isBeta(): boolean {
+    return this.isOpenBeta() || this.isPrivateBeta();
+  }
+
+  /** True when this command is Open Beta (beta without a LaunchDarkly gate). */
+  isOpenBeta(): boolean {
+    return this.stage.isBeta && !this.stage.isPrivateBeta;
+  }
+
+  /**
+   * True when this command is Private Beta and the user is entitled for its
+   * flag.
+   */
+  isPrivateBeta(): boolean {
+    if (!this.stage.isPrivateBeta) {
+      return false;
+    }
+    const flagKey = this.stage.betaFlagKey;
+    return flagKey !== undefined && this.runtime.isPrivateBetaEnabled(flagKey);
+  }
 }
 
 /**
@@ -44,9 +102,9 @@ export class CliContext {
 export class CliAuthenticatedContext extends CliContext {
   constructor(
     readonly auth: ResolvedAuth,
-    isAlpha: boolean,
-    isBeta: boolean,
+    stage?: CliContextStage,
+    runtime?: CliContextRuntime,
   ) {
-    super(isAlpha, isBeta);
+    super(stage, runtime);
   }
 }

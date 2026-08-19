@@ -33,6 +33,7 @@ import type { UpdateNotificationCondition } from '@/core/update/notification.ts'
 import { UpdateNotifier } from '@/core/update/notification.ts';
 
 import { version as VERSION } from '../../package.json';
+import type { CliContextStage } from './cli-context.ts';
 import { CliAuthenticatedContext, CliContext } from './cli-context.ts';
 
 export const ALPHA_ENV_VAR = 'SONARQUBE_CLI_ALPHA';
@@ -327,8 +328,8 @@ export class SonarCommand extends Command {
    * process.exitCode is set on failure. Wraps Commander's action() so callers
    * do not need to invoke runCommand() themselves.
    *
-   * A {@link CliContext} is passed as the first argument to fn (this command's
-   * resolved `isAlpha` / `isBeta`); Commander's own arguments follow.
+   * A {@link CliContext} is passed as the first argument to fn (stage accessors
+   * resolve alpha/beta for this execution); Commander's own arguments follow.
    *
    * The `this` context set by Commander is forwarded to the handler, so
    * `function(this: Command, _ctx: CliContext) { this.outputHelp(); }` works.
@@ -339,7 +340,7 @@ export class SonarCommand extends Command {
   ): this {
     super.action(function (this: SonarCommand, ...args: TArgs) {
       return this.runCommand(() =>
-        Promise.resolve(fn.call(this, new CliContext(this.isAlpha, this.isBeta), ...args)),
+        Promise.resolve(fn.call(this, this.createCliContext(), ...args)),
       );
     });
     return this;
@@ -349,8 +350,8 @@ export class SonarCommand extends Command {
    * Register an action that requires authentication. Auth is resolved before
    * the handler is invoked; if no auth is configured the command fails with a
    * clear message. A {@link CliAuthenticatedContext} is passed as the first
-   * argument to fn (auth plus this command's resolved `isAlpha` / `isBeta`);
-   * Commander's own arguments (options, positional args) follow.
+   * argument to fn (auth plus stage accessors for this execution); Commander's
+   * own arguments (options, positional args) follow.
    *
    * Sets requiresAuth = true on this command for documentation purposes.
    */
@@ -368,10 +369,27 @@ export class SonarCommand extends Command {
             remediationHint: "Run 'sonar auth login' to authenticate.",
           });
         }
-        await fn(new CliAuthenticatedContext(auth, this.isAlpha, this.isBeta), ...args);
+        await fn(this.createAuthenticatedContext(auth), ...args);
       }),
     );
     return this;
+  }
+
+  private createCliContext(): CliContext {
+    return new CliContext(this.cliContextStage(), this._runtime);
+  }
+
+  private createAuthenticatedContext(auth: ResolvedAuth): CliAuthenticatedContext {
+    return new CliAuthenticatedContext(auth, this.cliContextStage(), this._runtime);
+  }
+
+  private cliContextStage(): CliContextStage {
+    return {
+      isAlpha: this.isAlpha,
+      isBeta: this.isBeta,
+      isPrivateBeta: this.isPrivateBeta,
+      betaFlagKey: this.betaFlagKey,
+    };
   }
 
   action(_: (...args: CommandArgs) => CommandResult): this {

@@ -38,7 +38,7 @@ const SERVER_AUTH: ResolvedAuth = {
   connectionType: 'on-premise',
 };
 
-const SERVER_CTX = new CliAuthenticatedContext(SERVER_AUTH, false, false);
+const SERVER_CTX = new CliAuthenticatedContext(SERVER_AUTH);
 
 const BASE_PROJECT: DiscoveredProject = {
   rootDir: '/project/root',

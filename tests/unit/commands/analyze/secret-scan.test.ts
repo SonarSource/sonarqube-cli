@@ -52,7 +52,7 @@ const FAKE_AUTH: ResolvedAuth = {
   connectionType: 'cloud',
 };
 
-const FAKE_AUTHENTICATED_CONTEXT = new CliAuthenticatedContext(FAKE_AUTH, false, false);
+const FAKE_AUTHENTICATED_CONTEXT = new CliAuthenticatedContext(FAKE_AUTH);
 
 // Helper: make binary exist, file exist (or not), by controlling existsSync
 function mockBinaryExists(fileAlsoExists = true) {

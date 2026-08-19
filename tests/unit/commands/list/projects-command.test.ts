@@ -24,7 +24,7 @@ const mockAuth: ResolvedAuth = {
   connectionType: 'on-premise',
 };
 
-const mockCtx = new CliAuthenticatedContext(mockAuth, false, false);
+const mockCtx = new CliAuthenticatedContext(mockAuth);
 
 function makeProjectsResponse(
   components: { key: string; name: string }[],
@@ -208,7 +208,7 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await listProjects(DEFAULT_OPTIONS, new CliAuthenticatedContext(cloudAuth, false, false));
+      await listProjects(DEFAULT_OPTIONS, new CliAuthenticatedContext(cloudAuth));
 
       expect(capturedParams?.organization).toBe('my-org');
     });
@@ -226,7 +226,7 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await listProjects(DEFAULT_OPTIONS, new CliAuthenticatedContext(onPremAuth, false, false));
+      await listProjects(DEFAULT_OPTIONS, new CliAuthenticatedContext(onPremAuth));
 
       expect(capturedParams?.organization).toBeUndefined();
     });

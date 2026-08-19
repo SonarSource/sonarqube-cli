@@ -53,7 +53,7 @@ const FAKE_AUTH: import('@/core/auth/auth-resolver.ts').ResolvedAuth = {
   connectionType: 'cloud',
 };
 
-const FAKE_AUTHENTICATED_CONTEXT = new CliAuthenticatedContext(FAKE_AUTH, false, false);
+const FAKE_AUTHENTICATED_CONTEXT = new CliAuthenticatedContext(FAKE_AUTH);
 
 let loadStateSpy: ReturnType<typeof spyOn>;
 let saveStateSpy: ReturnType<typeof spyOn>;
@@ -380,7 +380,7 @@ describe('analyzeSqaa: explicit --project option', () => {
       connectionType: 'on-premise' as const,
     };
 
-    const onPremiseContext = new CliAuthenticatedContext(onPremiseAuth, false, false);
+    const onPremiseContext = new CliAuthenticatedContext(onPremiseAuth);
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(

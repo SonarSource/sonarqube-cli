@@ -399,7 +399,7 @@ describe('issuesSearchCommand', () => {
     connectionType: 'cloud',
   };
 
-  const mockCtx = new CliAuthenticatedContext(mockAuth, false, false);
+  const mockCtx = new CliAuthenticatedContext(mockAuth);
 
   const emptyApiResponse = {
     issues: [],
