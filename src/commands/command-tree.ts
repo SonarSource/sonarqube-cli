@@ -801,7 +801,8 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
 
   // Collect a telemetry event after every command action.
   COMMAND_TREE.hook('postAction', async (_thisCommand, actionCommand) => {
-    // Identify the agent session for this invocation (env fallback when no hook id).
+    // Resolve/cache the agent session id for this invocation (env fallback when
+    // no hook id). Emitting it on telemetry is CLI-959.
     resolveAgentSessionId(agentSession);
     await storeEvent(actionCommand, (process.exitCode ?? 0) === 0);
     await COMMAND_TREE.updateNotifier.maybeNotify(actionCommand);
