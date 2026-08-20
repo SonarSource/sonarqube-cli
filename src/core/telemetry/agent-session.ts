@@ -23,7 +23,7 @@
 //
 // buildCommandTree owns an AgentSessionSlot closed over by hook capture and
 // postAction. Hook handlers return the agent-native field value as-is
-// (Claude/Codex session_id, Cursor conversation_id); captureAgentSession
+// (Claude/Codex session_id, Cursor conversation_id); handleHookInvocation
 // writes non-null returns onto the slot. resolveAgentSessionId (and
 // resolveAgentSessionIdForEmit) trim and reject empty values once at resolve
 // time (and fill from env when the slot is still empty).

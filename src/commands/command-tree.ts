@@ -147,7 +147,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
   const agentSession = createAgentSessionSlot();
   const COMMAND_TREE = new SonarCommand({ runtime });
 
-  const captureAgentSession =
+  const handleHookInvocation =
     <TArgs extends unknown[]>(
       run: (...args: TArgs) => Promise<HookCommandResult>,
     ): ((_ctx: CommandInvocationContext, ...args: TArgs) => Promise<void>) =>
@@ -694,7 +694,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
   hookCommand
     .command('claude-pre-tool-use')
     .description('PreToolUse handler: scan files for secrets before agent reads them')
-    .anonymousAction(captureAgentSession(() => claudePreToolUse()));
+    .anonymousAction(handleHookInvocation(() => claudePreToolUse()));
 
   hookCommand
     .command('copilot-pre-tool-use')
@@ -713,37 +713,37 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
   hookCommand
     .command('claude-prompt-submit')
     .description('UserPromptSubmit handler: scan prompts for secrets before sending')
-    .anonymousAction(captureAgentSession(() => agentPromptSubmit()));
+    .anonymousAction(handleHookInvocation(() => agentPromptSubmit()));
 
   hookCommand
     .command('codex-prompt-submit')
     .description('UserPromptSubmit handler for Codex: scan prompts for secrets before sending')
-    .anonymousAction(captureAgentSession(() => codexPromptSubmit()));
+    .anonymousAction(handleHookInvocation(() => codexPromptSubmit()));
 
   hookCommand
     .command('cursor-prompt-submit')
     .description('beforeSubmitPrompt handler for Cursor: scan prompts for secrets before sending')
-    .anonymousAction(captureAgentSession(() => cursorPromptSubmit()));
+    .anonymousAction(handleHookInvocation(() => cursorPromptSubmit()));
 
   hookCommand
     .command('cursor-pre-file-read')
     .description(
       'beforeReadFile handler for Cursor: scan files for secrets before agent reads them',
     )
-    .anonymousAction(captureAgentSession(() => cursorPreFileRead()));
+    .anonymousAction(handleHookInvocation(() => cursorPreFileRead()));
 
   hookCommand
     .command('cursor-pre-tool-use')
     .description(
       'preToolUse handler for Cursor: scan Read tool targets for secrets before execution',
     )
-    .anonymousAction(captureAgentSession(() => cursorPreToolUse()));
+    .anonymousAction(handleHookInvocation(() => cursorPreToolUse()));
 
   hookCommand
     .command('claude-post-tool-use')
     .description('PostToolUse handler: run Vortex analysis after agent edits or writes a file')
     .requiredOption('--project <key>', 'SonarQube Cloud project key')
-    .anonymousAction(captureAgentSession(agentPostToolUse));
+    .anonymousAction(handleHookInvocation(agentPostToolUse));
 
   hookCommand
     .command('claude-post-tool-use-failure')
@@ -758,7 +758,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       'PostToolUse handler for Codex: run Vortex analysis on the git change set after apply_patch',
     )
     .requiredOption('--project <key>', 'SonarQube Cloud project key')
-    .anonymousAction(captureAgentSession(codexPostToolUse));
+    .anonymousAction(handleHookInvocation(codexPostToolUse));
 
   hookCommand
     .command('git-pre-commit')
