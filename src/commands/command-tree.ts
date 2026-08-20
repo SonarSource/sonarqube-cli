@@ -33,7 +33,7 @@ import {
   storeEvent,
   TELEMETRY_FLUSH_MODE_ENV,
 } from '@/core/telemetry';
-import { createAgentSessionSlot } from '@/core/telemetry/agent-session.ts';
+import { createAgentSessionSlot, resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
 import {
   SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
   SQAA_VERIFY_CALLER_COMMAND,
@@ -63,7 +63,7 @@ import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './api/api.
 import { authLogin, type AuthLoginOptions } from './auth/login.ts';
 import { authLogout } from './auth/logout.ts';
 import { authStatus } from './auth/status.ts';
-import { CommandInvocationContext } from './command-invocation-context.ts';
+import { type CommandInvocationContext } from './command-invocation-context.ts';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
 import { agentPostToolUse } from './hook/agent-post-tool-use.ts';
@@ -142,18 +142,20 @@ export interface CreateCommandTreeOptions {
 
 /** Registers the full command tree for the given runtime (sync). */
 function buildCommandTree(runtime: CliRuntime): SonarCommand {
-  // Per-tree slot for agent session correlation. Shared via SonarCommand into every
-  // CommandInvocationContext; hook handlers note ids when present; postAction resolves (env fallback).
+  // Per-tree slot for agent session correlation. Hook handlers write ids when
+  // present; postAction resolves (env fallback) before telemetry flush.
   const agentSession = createAgentSessionSlot();
-  const COMMAND_TREE = new SonarCommand({ runtime, agentSession });
+  const COMMAND_TREE = new SonarCommand({ runtime });
 
   const captureAgentSession =
     <TArgs extends unknown[]>(
       run: (...args: TArgs) => Promise<HookCommandResult>,
-    ): ((ctx: CommandInvocationContext, ...args: TArgs) => Promise<void>) =>
-    async (ctx, ...args) => {
+    ): ((_ctx: CommandInvocationContext, ...args: TArgs) => Promise<void>) =>
+    async (_ctx, ...args) => {
       const { agentSessionId } = await run(...args);
-      ctx.noteAgentSessionId(agentSessionId);
+      if (agentSessionId != null) {
+        agentSession.id = agentSessionId;
+      }
     };
 
   COMMAND_TREE.name('sonar')
@@ -800,7 +802,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
   // Collect a telemetry event after every command action.
   COMMAND_TREE.hook('postAction', async (_thisCommand, actionCommand) => {
     // Identify the agent session for this invocation (env fallback when no hook id).
-    new CommandInvocationContext(undefined, undefined, agentSession).resolveAgentSessionId();
+    resolveAgentSessionId(agentSession);
     await storeEvent(actionCommand, (process.exitCode ?? 0) === 0);
     await COMMAND_TREE.updateNotifier.maybeNotify(actionCommand);
   });

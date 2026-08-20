@@ -21,11 +21,11 @@
 // Resolves an opaque agent session id from agent-native sources only.
 // Never invents IDs; never reinterprets thread vs session semantics.
 //
-// buildCommandTree owns an AgentSessionSlot shared into every CommandInvocationContext.
-// Hook handlers return the agent-native field value as-is (Claude/Codex session_id,
-// Cursor conversation_id); captureAgentSession notes non-null returns on the slot
-// via CommandInvocationContext.noteAgentSessionId. CommandInvocationContext.resolveAgentSessionId (and the
-// free function of the same name) trim and reject empty values once at resolve
+// buildCommandTree owns an AgentSessionSlot closed over by hook capture and
+// postAction. Hook handlers return the agent-native field value as-is
+// (Claude/Codex session_id, Cursor conversation_id); captureAgentSession
+// writes non-null returns onto the slot. resolveAgentSessionId (and
+// resolveAgentSessionIdForEmit) trim and reject empty values once at resolve
 // time (and fill from env when the slot is still empty).
 
 import { tryLoadState } from '@/core/state/state-manager.ts';
