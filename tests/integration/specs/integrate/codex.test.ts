@@ -23,7 +23,8 @@
 // hook-agent-prompt-submit.test.ts; this spec only exercises the integrate
 // command — script + hooks.json layout, scope semantics, and idempotency.
 
-import { isAbsolute } from 'node:path';
+import { cpSync } from 'node:fs';
+import { isAbsolute, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { parse as parseToml } from 'smol-toml';
@@ -308,7 +309,10 @@ describe('integrate codex', () => {
           '[mcp_servers.sonarqube.env]',
         );
 
-        const customHome = harness.sonarUserHome.path;
+        // Distinct from $HOME/.sonar. Copy cliHome because harness.run() always
+        // writes state there, and the child with a custom home must still find auth.
+        const customHome = join(harness.userHome.path, 'custom-sonar');
+        cpSync(harness.cliHome.path, join(customHome, 'sonarqube-cli'), { recursive: true });
         const result = await harness.run('integrate codex --non-interactive', {
           extraEnv: { [ENV_SONAR_USER_HOME]: customHome },
         });

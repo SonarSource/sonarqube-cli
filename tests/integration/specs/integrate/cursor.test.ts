@@ -22,8 +22,8 @@
 // PR 1 (CLI-619): covers MCP server setup, scope semantics, idempotency, and
 // state recording. Hook and CAG tests are added in subsequent PRs.
 
-import { readFileSync } from 'node:fs';
-import { isAbsolute } from 'node:path';
+import { cpSync, readFileSync } from 'node:fs';
+import { isAbsolute, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -125,7 +125,10 @@ describe('integrate cursor', () => {
           (harness.cwd.file(...MCP_JSON_DIRS).asJson() as CursorMcpFile).mcpServers?.sonarqube,
         ).not.toHaveProperty('env');
 
-        const customHome = harness.sonarUserHome.path;
+        // Distinct from $HOME/.sonar. Copy cliHome because harness.run() always
+        // writes state there, and the child with a custom home must still find auth.
+        const customHome = join(harness.userHome.path, 'custom-sonar');
+        cpSync(harness.cliHome.path, join(customHome, 'sonarqube-cli'), { recursive: true });
         const result = await harness.run('integrate cursor --non-interactive', {
           extraEnv: { [ENV_SONAR_USER_HOME]: customHome },
         });
