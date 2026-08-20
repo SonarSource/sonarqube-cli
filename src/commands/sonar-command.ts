@@ -33,6 +33,11 @@ import type { UpdateNotificationCondition } from '@/core/update/notification.ts'
 import { UpdateNotifier } from '@/core/update/notification.ts';
 
 import { version as VERSION } from '../../package.json';
+import type { CommandInvocationContextStage } from './command-invocation-context.ts';
+import {
+  CommandAuthenticatedInvocationContext,
+  CommandInvocationContext,
+} from './command-invocation-context.ts';
 
 export const ALPHA_ENV_VAR = 'SONARQUBE_CLI_ALPHA';
 export const ALPHA_HELP_TAG = '[ALPHA]';
@@ -326,15 +331,20 @@ export class SonarCommand extends Command {
    * process.exitCode is set on failure. Wraps Commander's action() so callers
    * do not need to invoke runCommand() themselves.
    *
+   * A {@link CommandInvocationContext} is passed as the first argument to fn (stage accessors
+   * resolve alpha/beta for this execution); Commander's own arguments follow.
+   *
    * The `this` context set by Commander is forwarded to the handler, so
-   * `function(this: Command) { this.outputHelp(); }` works as expected.
+   * `function(this: Command, _ctx: CommandInvocationContext) { this.outputHelp(); }` works.
    */
   anonymousAction<TArgs extends CommandArgs>(
     this: this & { __commandArgs?: TArgs },
-    fn: (...args: TArgs) => CommandResult,
+    fn: (ctx: CommandInvocationContext, ...args: TArgs) => CommandResult,
   ): this {
     super.action(function (this: SonarCommand, ...args: TArgs) {
-      return this.runCommand(() => Promise.resolve(fn.apply(this, args)));
+      return this.runCommand(() =>
+        Promise.resolve(fn.call(this, this.createCommandInvocationContext(), ...args)),
+      );
     });
     return this;
   }
@@ -342,14 +352,15 @@ export class SonarCommand extends Command {
   /**
    * Register an action that requires authentication. Auth is resolved before
    * the handler is invoked; if no auth is configured the command fails with a
-   * clear message. Auth is passed as the first argument to fn; Commander's own
-   * arguments (options, positional args) follow.
+   * clear message. A {@link CommandAuthenticatedInvocationContext} is passed as the first
+   * argument to fn (auth plus stage accessors for this execution); Commander's
+   * own arguments (options, positional args) follow.
    *
    * Sets requiresAuth = true on this command for documentation purposes.
    */
   authenticatedAction<TArgs extends CommandArgs>(
     this: this & { __commandArgs?: TArgs },
-    fn: (auth: ResolvedAuth, ...args: TArgs) => Promise<void>,
+    fn: (ctx: CommandAuthenticatedInvocationContext, ...args: TArgs) => Promise<void>,
   ): this {
     this._requiresAuth = true;
     super.action((...args: TArgs) =>
@@ -361,10 +372,33 @@ export class SonarCommand extends Command {
             remediationHint: "Run 'sonar auth login' to authenticate.",
           });
         }
-        await fn(auth, ...args);
+        await fn(this.createCommandAuthenticatedInvocationContext(auth), ...args);
       }),
     );
     return this;
+  }
+
+  private createCommandInvocationContext(): CommandInvocationContext {
+    return new CommandInvocationContext(this.commandInvocationContextStage(), this._runtime);
+  }
+
+  private createCommandAuthenticatedInvocationContext(
+    auth: ResolvedAuth,
+  ): CommandAuthenticatedInvocationContext {
+    return new CommandAuthenticatedInvocationContext(
+      auth,
+      this.commandInvocationContextStage(),
+      this._runtime,
+    );
+  }
+
+  private commandInvocationContextStage(): CommandInvocationContextStage {
+    return {
+      isAlpha: this.isAlpha,
+      isBeta: this.isBeta,
+      isPrivateBeta: this.isPrivateBeta,
+      betaFlagKey: this.betaFlagKey,
+    };
   }
 
   action(_: (...args: CommandArgs) => CommandResult): this {

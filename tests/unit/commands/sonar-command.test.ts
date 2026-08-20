@@ -22,6 +22,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
+import {
+  CommandAuthenticatedInvocationContext,
+  CommandInvocationContext,
+} from '@/commands/command-invocation-context.ts';
 import { getCustomRootHelp } from '@/commands/root-help.ts';
 import { ALPHA_ENV_VAR, SonarCommand, Stage } from '@/commands/sonar-command.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
@@ -251,14 +255,14 @@ describe('SonarCommand', () => {
     );
 
     it('does not execute an unregistered alpha command', async () => {
-      const rootHandler = mock((_command?: string) => {});
-      const alphaHandler = mock(() => {});
+      const rootHandler = mock((_ctx: CommandInvocationContext, _command?: string) => {});
+      const alphaHandler = mock((_ctx: CommandInvocationContext) => {});
       const root = new SonarCommand('sonar').argument('[command]').anonymousAction(rootHandler);
       root.command('experimental').stage(Stage.Alpha).anonymousAction(alphaHandler);
 
       await root.parseAsync(['experimental'], { from: 'user' });
 
-      expect(rootHandler.mock.calls[0]?.[0]).toBe('experimental');
+      expect(rootHandler.mock.calls[0]?.[1]).toBe('experimental');
       expect(alphaHandler).not.toHaveBeenCalled();
     });
 
@@ -390,7 +394,7 @@ describe('SonarCommand', () => {
 
     it('is false after anonymousAction()', () => {
       const cmd = new SonarCommand();
-      cmd.anonymousAction(() => {});
+      cmd.anonymousAction((_ctx) => {});
       expect(cmd.requiresAuth).toBe(false);
     });
 
@@ -495,7 +499,7 @@ describe('SonarCommand', () => {
       const state = getDefaultState(VERSION);
       loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
       saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
-      const command = new SonarCommand('preview').stage(Stage.Beta()).anonymousAction(() => {});
+      const command = new SonarCommand('preview').stage(Stage.Beta()).anonymousAction((_ctx) => {});
 
       await command.parseAsync([], { from: 'user' });
       await command.parseAsync([], { from: 'user' });
@@ -511,8 +515,8 @@ describe('SonarCommand', () => {
       const state = getDefaultState(VERSION);
       loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
       saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
-      const first = new SonarCommand('first').stage(Stage.Beta()).anonymousAction(() => {});
-      const second = new SonarCommand('second').stage(Stage.Beta()).anonymousAction(() => {});
+      const first = new SonarCommand('first').stage(Stage.Beta()).anonymousAction((_ctx) => {});
+      const second = new SonarCommand('second').stage(Stage.Beta()).anonymousAction((_ctx) => {});
 
       await first.parseAsync([], { from: 'user' });
       await second.parseAsync([], { from: 'user' });
@@ -529,7 +533,7 @@ describe('SonarCommand', () => {
       state.config.betaCommandWarnings = { preview: '0.0.1' };
       loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
       saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
-      const command = new SonarCommand('preview').stage(Stage.Beta()).anonymousAction(() => {});
+      const command = new SonarCommand('preview').stage(Stage.Beta()).anonymousAction((_ctx) => {});
 
       await command.parseAsync([], { from: 'user' });
 
@@ -543,7 +547,7 @@ describe('SonarCommand', () => {
       });
       const command = new SonarCommand('preview-with-unreadable-state')
         .stage(Stage.Beta())
-        .anonymousAction(() => {});
+        .anonymousAction((_ctx) => {});
 
       await command.parseAsync([], { from: 'user' });
       await command.parseAsync([], { from: 'user' });
@@ -647,17 +651,59 @@ describe('SonarCommand', () => {
   // ─── anonymousAction() ────────────────────────────────────────────────────
 
   describe('anonymousAction()', () => {
-    it('calls the handler when the command is invoked', async () => {
-      const handler = mock(() => {});
+    it('calls the handler with CommandInvocationContext as first argument', async () => {
+      const handler = mock((_ctx: CommandInvocationContext) => {});
       const cmd = new SonarCommand();
       cmd.anonymousAction(handler);
       await cmd.parseAsync([], { from: 'user' });
       expect(handler).toHaveBeenCalledTimes(1);
+      const receivedContext = handler.mock.calls[0][0];
+      expect(receivedContext).toBeInstanceOf(CommandInvocationContext);
+      expect(receivedContext.isAlphaEligible()).toBe(false);
+      expect(receivedContext.isBetaEligible()).toBe(false);
+    });
+
+    it('sets isAlphaEligible() when command has Stage.Alpha and alpha is enabled', async () => {
+      process.env[ALPHA_ENV_VAR] = 'true';
+      const handler = mock((_ctx: CommandInvocationContext) => {});
+      const cmd = new SonarCommand({
+        runtime: { auth: null, isAlphaEnabled: true, isPrivateBetaEnabled: () => false },
+      });
+      cmd.stage(Stage.Alpha).anonymousAction(handler);
+      await cmd.parseAsync([], { from: 'user' });
+      const receivedContext = handler.mock.calls[0][0];
+      expect(receivedContext.isAlphaEligible()).toBe(true);
+      expect(receivedContext.isBetaEligible()).toBe(false);
+    });
+
+    it('sets isBetaEligible() for Open Beta', async () => {
+      const handler = mock((_ctx: CommandInvocationContext) => {});
+      const cmd = new SonarCommand();
+      cmd.stage(Stage.Beta()).anonymousAction(handler);
+      await cmd.parseAsync([], { from: 'user' });
+      const receivedContext = handler.mock.calls[0][0];
+      expect(receivedContext.isAlphaEligible()).toBe(false);
+      expect(receivedContext.isBetaEligible()).toBe(true);
+    });
+
+    it('sets isBetaEligible() for Private Beta when the user is entitled', async () => {
+      const handler = mock((_ctx: CommandInvocationContext) => {});
+      const cmd = new SonarCommand({
+        runtime: {
+          auth: null,
+          isAlphaEnabled: false,
+          isPrivateBetaEnabled: (key) => key === 'cli.beta.demo',
+        },
+      });
+      cmd.stage(Stage.Beta('cli.beta.demo')).anonymousAction(handler);
+      await cmd.parseAsync([], { from: 'user' });
+      const receivedContext = handler.mock.calls[0][0];
+      expect(receivedContext.isBetaEligible()).toBe(true);
     });
 
     it('catches handler errors and sets process.exitCode to 1', async () => {
       const cmd = new SonarCommand();
-      cmd.anonymousAction(() => {
+      cmd.anonymousAction((_ctx) => {
         throw new Error('handler error');
       });
       await cmd.parseAsync([], { from: 'user' });
@@ -666,7 +712,7 @@ describe('SonarCommand', () => {
 
     it('catches handler errors and outputs the error message', async () => {
       const cmd = new SonarCommand();
-      cmd.anonymousAction(() => {
+      cmd.anonymousAction((_ctx) => {
         throw new Error('handler error');
       });
       await cmd.parseAsync([], { from: 'user' });
@@ -678,14 +724,17 @@ describe('SonarCommand', () => {
   // ─── authenticatedAction() ────────────────────────────────────────────────
 
   describe('authenticatedAction()', () => {
-    it('calls handler with resolved auth as first argument', async () => {
+    it('calls handler with CommandAuthenticatedInvocationContext as first argument', async () => {
       resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
-      const handler = mock((_auth: typeof FAKE_AUTH) => Promise.resolve());
+      const handler = mock((_ctx: CommandAuthenticatedInvocationContext) => Promise.resolve());
       const cmd = new SonarCommand();
       cmd.authenticatedAction(handler);
       await cmd.parseAsync([], { from: 'user' });
       expect(handler).toHaveBeenCalledTimes(1);
-      expect(handler.mock.calls[0][0]).toBe(FAKE_AUTH);
+      const receivedContext = handler.mock.calls[0][0];
+      expect(receivedContext.auth).toBe(FAKE_AUTH);
+      expect(receivedContext.isAlphaEligible()).toBe(false);
+      expect(receivedContext.isBetaEligible()).toBe(false);
     });
 
     it('does not call handler when not authenticated', async () => {
@@ -724,6 +773,33 @@ describe('SonarCommand', () => {
       });
       await cmd.parseAsync([], { from: 'user' });
       expect(process.exitCode).toBe(5);
+    });
+
+    it('sets isAlphaEligible() when command has Stage.Alpha and alpha is enabled', async () => {
+      process.env[ALPHA_ENV_VAR] = 'true';
+      resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
+      const handler = mock((_ctx: CommandAuthenticatedInvocationContext) => Promise.resolve());
+      const cmd = new SonarCommand({
+        runtime: { auth: null, isAlphaEnabled: true, isPrivateBetaEnabled: () => false },
+      });
+      cmd.stage(Stage.Alpha).authenticatedAction(handler);
+      await cmd.parseAsync([], { from: 'user' });
+      expect(handler).toHaveBeenCalledTimes(1);
+      const receivedContext = handler.mock.calls[0][0];
+      expect(receivedContext.isAlphaEligible()).toBe(true);
+      expect(receivedContext.isBetaEligible()).toBe(false);
+    });
+
+    it('sets isBetaEligible() for Open Beta', async () => {
+      resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
+      const handler = mock((_ctx: CommandAuthenticatedInvocationContext) => Promise.resolve());
+      const cmd = new SonarCommand();
+      cmd.stage(Stage.Beta()).authenticatedAction(handler);
+      await cmd.parseAsync([], { from: 'user' });
+      expect(handler).toHaveBeenCalledTimes(1);
+      const receivedContext = handler.mock.calls[0][0];
+      expect(receivedContext.isAlphaEligible()).toBe(false);
+      expect(receivedContext.isBetaEligible()).toBe(true);
     });
   });
 });

@@ -22,7 +22,7 @@
 
 import { encode as encodeToToon } from '@toon-format/toon';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { InvalidOptionError } from '@/core/command-error.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
@@ -73,7 +73,11 @@ function parseSeverities(
 /**
  * Issues search command handler
  */
-export async function listIssues(options: ListIssuesOptions, auth: ResolvedAuth): Promise<void> {
+export async function listIssues(
+  options: ListIssuesOptions,
+  ctx: CommandAuthenticatedInvocationContext,
+): Promise<void> {
+  const { auth } = ctx;
   if (!options.project) {
     throw new InvalidOptionError('--project is required.', 'Add --project <key>.');
   }
