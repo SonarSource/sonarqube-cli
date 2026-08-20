@@ -201,10 +201,6 @@ export class SonarOption extends Option {
   }
 }
 
-export function isSonarOption(option: Option): option is SonarOption {
-  return option instanceof SonarOption;
-}
-
 export interface RootHelpMetadata {
   category?: CommandCategory;
   expandSubcommands?: boolean;
@@ -265,7 +261,8 @@ class SonarHelp extends Help {
  *  - stage()               marks a command as Stable, Alpha, or Beta, controlling its
  *                          availability, help, documentation, and warnings
  *  - createOption()        returns {@link SonarOption}; stage via addOption(), not .option()
- *  - addOption()           omits Alpha/Private Beta options the caller is not entitled to use
+ *  - addOption()           accepts {@link SonarOption} only; omits Alpha/Private Beta options
+ *                          the caller is not entitled to use
  */
 export class SonarCommand extends Command {
   private _stage: StageName = 'stable';
@@ -313,17 +310,15 @@ export class SonarCommand extends Command {
   }
 
   /**
-   * Register an option. Alpha and Private Beta options are omitted when the caller
+   * Register a {@link SonarOption}. Alpha and Private Beta options are omitted when the caller
    * is not entitled, so they do not appear in help and parse as unknown.
    */
-  addOption(option: Option): this {
-    if (isSonarOption(option)) {
-      if (!option.isStable && option.mandatory) {
-        throw new Error(`Cannot stage a required option as Alpha or Beta: '${option.flags}'`);
-      }
-      if (!isStageVisible(option.lifecycleStage, option.betaFlagKey, this._runtime)) {
-        return this;
-      }
+  addOption(option: SonarOption): this {
+    if (!option.isStable && option.mandatory) {
+      throw new Error(`Cannot stage a required option as Alpha or Beta: '${option.flags}'`);
+    }
+    if (!isStageVisible(option.lifecycleStage, option.betaFlagKey, this._runtime)) {
+      return this;
     }
     return super.addOption(option);
   }
@@ -630,8 +625,8 @@ export class SonarCommand extends Command {
   }
 
   private warnIfStagedOptionsUsed(): void {
-    for (const option of this.options) {
-      if (!isSonarOption(option) || option.isStable) {
+    for (const option of this.options as SonarOption[]) {
+      if (option.isStable) {
         continue;
       }
       if (this.getOptionValueSource(option.attributeName()) !== 'cli') {
@@ -700,8 +695,8 @@ export function collectPrivateBetaFlagKeys(root: SonarCommand): string[] {
     if (command.isPrivateBeta && flagKey !== undefined) {
       keys.add(flagKey);
     }
-    for (const option of command.options) {
-      if (isSonarOption(option) && option.isPrivateBeta && option.betaFlagKey !== undefined) {
+    for (const option of command.options as SonarOption[]) {
+      if (option.isPrivateBeta && option.betaFlagKey !== undefined) {
         keys.add(option.betaFlagKey);
       }
     }
