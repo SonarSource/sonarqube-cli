@@ -451,6 +451,8 @@ export interface TelemetryEventIdentityPayload {
   organization_uuid_v4: string | null;
   sqs_installation_id: string | null;
   caller_agent: CallerAgent | null;
+  /** Opaque agent conversation/session id when known; null when unknown (omitted on flush). */
+  agent_session_id: string | null;
 }
 
 export type AnalysisTelemetryAnalyzer = 'sonar-secrets' | 'sqaa' | 'sca-scanner-cli';

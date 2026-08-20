@@ -83,6 +83,7 @@ type IdentityResolver = (
  */
 async function buildIdentityBase(
   resolve: IdentityResolver,
+  identityOptions?: IdentityEmitOptions,
 ): Promise<TelemetryEventIdentityPayload | null> {
   const state = tryLoadState();
   if (!state || !isTelemetryEnabled(state)) return null;
@@ -103,6 +104,7 @@ async function buildIdentityBase(
     organization_uuid_v4: identity.organization_uuid_v4,
     sqs_installation_id: identity.sqs_installation_id,
     caller_agent: detectCallerAgent(),
+    agent_session_id: identityOptions?.agentSessionId ?? null,
   };
 }
 
@@ -121,6 +123,11 @@ export type CommandExecutedFields = Omit<
   keyof TelemetryEventIdentityPayload
 >;
 
+export type IdentityEmitOptions = {
+  /** Agent session id for this emit (hook-noted or env-resolved); null/omit when unknown. */
+  agentSessionId?: string | null;
+};
+
 /**
  * Emits one CliAnalysisCompleted event when telemetry is enabled.
  * Resolves identity from state + auth; no-ops on opt-out or missing installationId.
@@ -128,8 +135,12 @@ export type CommandExecutedFields = Omit<
 export async function emitAnalysisCompleted(
   auth: ResolvedAuth,
   fields: AnalysisCompletedFields,
+  identityOptions?: IdentityEmitOptions,
 ): Promise<void> {
-  const base = await buildIdentityBase((conn) => resolveCommandTelemetryIdentity(conn, auth));
+  const base = await buildIdentityBase(
+    (conn) => resolveCommandTelemetryIdentity(conn, auth),
+    identityOptions,
+  );
   if (!base) return;
   appendTelemetryEvent({
     metadata: {
@@ -167,8 +178,11 @@ export async function emitIntegrationConfigured(
  * Emits one CliCommandExecuted event when telemetry is enabled.
  * Resolves identity from the active connection; no-ops on opt-out or missing installationId.
  */
-export async function emitCommandExecuted(fields: CommandExecutedFields): Promise<void> {
-  const base = await buildIdentityBase(resolveStoreEventTelemetryIdentitySafely);
+export async function emitCommandExecuted(
+  fields: CommandExecutedFields,
+  identityOptions?: IdentityEmitOptions,
+): Promise<void> {
+  const base = await buildIdentityBase(resolveStoreEventTelemetryIdentitySafely, identityOptions);
   if (!base) return;
   appendTelemetryEvent({
     metadata: {

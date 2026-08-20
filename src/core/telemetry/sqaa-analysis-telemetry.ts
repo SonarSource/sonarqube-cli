@@ -60,6 +60,7 @@ export async function emitSqaaHookFailureTelemetry(
   callerCommand: SqaaTelemetryCallerCommand,
   auth: ResolvedAuth,
   durationMs: number,
+  agentSessionId?: string | null,
 ): Promise<void> {
   await emitSqaaAnalysisTelemetry(
     callerCommand,
@@ -67,6 +68,7 @@ export async function emitSqaaHookFailureTelemetry(
     { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 1 },
     durationMs,
     SQAA_HOOK_TELEMETRY_EXIT_CODE,
+    agentSessionId,
   );
 }
 
@@ -150,6 +152,7 @@ export async function emitSqaaAnalysisTelemetry(
   tally: RunTally,
   durationMs: number,
   exitCode?: number | null,
+  agentSessionId?: string | null,
 ): Promise<void> {
   try {
     const analysisId = randomUUID();
@@ -157,17 +160,21 @@ export async function emitSqaaAnalysisTelemetry(
     const details =
       findingsCount > 0 ? JSON.stringify(collectRuleCounts(collectIssuesFromTally(tally))) : '';
 
-    await emitAnalysisCompleted(auth, {
-      caller_command: callerCommand,
-      analyzer: 'sqaa',
-      analysis_id: analysisId,
-      findings_count: findingsCount,
-      exit_code: exitCode ?? null,
-      errors_count: tally.totalErrors,
-      failures_count: tally.totalFailures,
-      scan_duration_ms: durationMs,
-      details,
-    });
+    await emitAnalysisCompleted(
+      auth,
+      {
+        caller_command: callerCommand,
+        analyzer: 'sqaa',
+        analysis_id: analysisId,
+        findings_count: findingsCount,
+        exit_code: exitCode ?? null,
+        errors_count: tally.totalErrors,
+        failures_count: tally.totalFailures,
+        scan_duration_ms: durationMs,
+        details,
+      },
+      { agentSessionId },
+    );
   } catch {
     // Telemetry is strictly fire-and-forget; never surface to the command handler.
   }

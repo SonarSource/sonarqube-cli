@@ -56,6 +56,7 @@ function makeLegacyCommandEvent(command: string): StoredCommandExecutedEvent {
       organization_uuid_v4: null,
       sqs_installation_id: null,
       caller_agent: null,
+      agent_session_id: null,
       command,
       subcommand: null,
       result: 'success',

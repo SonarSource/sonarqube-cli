@@ -80,6 +80,7 @@ function makeIdentityPayload() {
     organization_uuid_v4: null,
     sqs_installation_id: null,
     caller_agent: null,
+    agent_session_id: null,
   } as const;
 }
 
@@ -267,6 +268,20 @@ describe('emitAnalysisCompleted()', () => {
 
     const payload = readAnalysisEvents(testSonarUserHome)[0].event_payload;
     expect(payload.caller_agent).toBe('cursor');
+  });
+
+  it('sets agent_session_id from identityOptions', async () => {
+    await emitAnalysisCompleted(AUTH, makeCompletedFields(), { agentSessionId: 'sess-abc' });
+
+    const payload = readAnalysisEvents(testSonarUserHome)[0].event_payload;
+    expect(payload.agent_session_id).toBe('sess-abc');
+  });
+
+  it('sets agent_session_id to null when identityOptions omit a session', async () => {
+    await emitAnalysisCompleted(AUTH, makeCompletedFields());
+
+    const payload = readAnalysisEvents(testSonarUserHome)[0].event_payload;
+    expect(payload.agent_session_id).toBeNull();
   });
 
   it('creates the telemetry directory if it does not exist', async () => {

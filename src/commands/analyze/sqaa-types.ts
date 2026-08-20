@@ -33,6 +33,8 @@ export interface AnalyzeSqaaRunOptions {
   telemetryCallerCommand?: SqaaTelemetryCallerCommand;
   /** Overrides computed CLI exit for telemetry only (e.g. non-blocking hooks always exit 0). */
   telemetryProcessExitCode?: number | null;
+  /** Hook-derived agent session id; merged into telemetry identity when present. */
+  agentSessionId?: string | null;
 }
 
 export interface AnalyzeSqaaOptions {
@@ -61,6 +63,7 @@ export interface SqaaBatchRunOptions {
   wireDepth?: SqaaDeepWireDepth;
   displayDepth?: SqaaAnalysisDepth;
   telemetryCallerCommand?: SqaaTelemetryCallerCommand;
+  agentSessionId?: string | null;
 }
 
 export interface SingleFileRunOptions {

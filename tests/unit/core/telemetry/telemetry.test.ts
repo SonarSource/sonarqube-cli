@@ -29,8 +29,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import type { Command } from 'commander';
 
+import { SonarCommand } from '@/commands/sonar-command.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
 import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/auth/auth-resolver.ts';
 import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
@@ -62,14 +62,16 @@ import { mockIdentityGetSafe } from './identity-api-mock.ts';
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
- * Build a fake Commander command chain from a space-separated command path.
- * e.g. makeCommand('auth login') produces: root ← auth ← login
+ * Build a SonarCommand chain from a space-separated command path.
+ * e.g. makeCommand('auth login') produces leaf `login` under `auth` under root.
  */
-function makeCommand(path: string): Command {
-  const root = { name: () => '', parent: null } as unknown as Command;
-  return path
-    .split(' ')
-    .reduce((parent, name) => ({ name: () => name, parent }) as unknown as Command, root);
+function makeCommand(path: string): SonarCommand {
+  const root = new SonarCommand('sonar');
+  let current: SonarCommand = root;
+  for (const name of path.split(' ')) {
+    current = current.command(name);
+  }
+  return current;
 }
 
 function mockFetch(ok = true, status = 200): ReturnType<typeof spyOn> {
@@ -249,6 +251,16 @@ describe('storeEvent', () => {
       } finally {
         spy.mockRestore();
       }
+    });
+
+    it('sets event_payload.agent_session_id from the storeEvent argument', async () => {
+      await storeEvent(makeCommand('auth login'), true, 'claude-sess-1');
+      expect(readCommandEvents(testDir)[0].event_payload.agent_session_id).toBe('claude-sess-1');
+    });
+
+    it('sets event_payload.agent_session_id to null when omitted', async () => {
+      await storeEvent(makeCommand('auth login'), true);
+      expect(readCommandEvents(testDir)[0].event_payload.agent_session_id).toBeNull();
     });
 
     it('uses the machine_id returned by getOrCreateUserId', async () => {
@@ -647,6 +659,7 @@ function makeCompletedFinding(): StoredAnalysisCompletedEvent {
       organization_uuid_v4: null,
       sqs_installation_id: null,
       caller_agent: null,
+      agent_session_id: null,
       caller_command: 'analyze secrets',
       analyzer: 'sonar-secrets',
       analysis_id: 'analysis-id',
