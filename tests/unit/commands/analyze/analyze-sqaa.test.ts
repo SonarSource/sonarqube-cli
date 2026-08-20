@@ -25,7 +25,7 @@ import * as fs from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { CliAuthenticatedContext } from '@/commands/cli-context.ts';
+import { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import * as processLib from '@/core/process/process.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
@@ -53,7 +53,7 @@ const FAKE_AUTH: import('@/core/auth/auth-resolver.ts').ResolvedAuth = {
   connectionType: 'cloud',
 };
 
-const FAKE_AUTHENTICATED_CONTEXT = new CliAuthenticatedContext(FAKE_AUTH);
+const FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(FAKE_AUTH);
 
 let loadStateSpy: ReturnType<typeof spyOn>;
 let saveStateSpy: ReturnType<typeof spyOn>;
@@ -380,7 +380,7 @@ describe('analyzeSqaa: explicit --project option', () => {
       connectionType: 'on-premise' as const,
     };
 
-    const onPremiseContext = new CliAuthenticatedContext(onPremiseAuth);
+    const onPremiseContext = new CommandAuthenticatedInvocationContext(onPremiseAuth);
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(

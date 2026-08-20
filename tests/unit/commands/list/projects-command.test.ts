@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { CliAuthenticatedContext } from '@/commands/cli-context.ts';
+import { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
@@ -24,7 +24,7 @@ const mockAuth: ResolvedAuth = {
   connectionType: 'on-premise',
 };
 
-const mockCtx = new CliAuthenticatedContext(mockAuth);
+const mockCtx = new CommandAuthenticatedInvocationContext(mockAuth);
 
 function makeProjectsResponse(
   components: { key: string; name: string }[],
@@ -208,7 +208,7 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await listProjects(DEFAULT_OPTIONS, new CliAuthenticatedContext(cloudAuth));
+      await listProjects(DEFAULT_OPTIONS, new CommandAuthenticatedInvocationContext(cloudAuth));
 
       expect(capturedParams?.organization).toBe('my-org');
     });
@@ -226,7 +226,7 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await listProjects(DEFAULT_OPTIONS, new CliAuthenticatedContext(onPremAuth));
+      await listProjects(DEFAULT_OPTIONS, new CommandAuthenticatedInvocationContext(onPremAuth));
 
       expect(capturedParams?.organization).toBeUndefined();
     });

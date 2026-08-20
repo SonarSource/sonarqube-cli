@@ -23,7 +23,7 @@ import { isAbsolute, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { CliAuthenticatedContext } from '@/commands/cli-context.ts';
+import { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import * as preflightSummary from '@/commands/integrate/_common/preflight-summary.ts';
 import {
   detectSonarHookInstallation as detectHookInstallation,
@@ -340,7 +340,7 @@ const MOCK_AUTH = {
   connectionType: 'on-premise' as const,
 };
 
-const MOCK_AUTH_CTX = new CliAuthenticatedContext(MOCK_AUTH);
+const MOCK_AUTH_CTX = new CommandAuthenticatedInvocationContext(MOCK_AUTH);
 
 describe('integrateGit', () => {
   let findGitRootSpy: ReturnType<typeof spyOn>;

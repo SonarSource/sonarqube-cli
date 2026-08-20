@@ -21,7 +21,7 @@
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 
 /** Command stage snapshot used to resolve invocation-scoped alpha/beta flags. */
-export type CliContextStage = {
+export type CommandInvocationContextStage = {
   isAlpha: boolean;
   isBeta: boolean;
   isPrivateBeta: boolean;
@@ -33,18 +33,18 @@ export type CliContextStage = {
  * treated as alpha / beta (mirrors {@link CliRuntime} fields used by stage
  * visibility, without importing `SonarCommand`).
  */
-export type CliContextRuntime = {
+export type CommandInvocationContextRuntime = {
   isAlphaEnabled: boolean;
   isPrivateBetaEnabled: (flagKey: string) => boolean;
 };
 
-const STABLE_STAGE: CliContextStage = {
+const STABLE_STAGE: CommandInvocationContextStage = {
   isAlpha: false,
   isBeta: false,
   isPrivateBeta: false,
 };
 
-const DISABLED_RUNTIME: CliContextRuntime = {
+const DISABLED_RUNTIME: CommandInvocationContextRuntime = {
   isAlphaEnabled: false,
   isPrivateBetaEnabled: () => false,
 };
@@ -56,14 +56,14 @@ const DISABLED_RUNTIME: CliContextRuntime = {
  * can combine the command's `.stage()` with runtime entitlement (alpha env /
  * Private Beta LaunchDarkly), not merely echo the stage name.
  */
-export class CliContext {
+export class CommandInvocationContext {
   constructor(
-    private readonly stage: CliContextStage = STABLE_STAGE,
-    private readonly runtime: CliContextRuntime = DISABLED_RUNTIME,
+    private readonly stage: CommandInvocationContextStage = STABLE_STAGE,
+    private readonly runtime: CommandInvocationContextRuntime = DISABLED_RUNTIME,
   ) {}
 
   /** True when this command is Alpha and alpha is enabled for this run. */
-  isAlpha(): boolean {
+  isAlphaEligible(): boolean {
     return this.stage.isAlpha && this.runtime.isAlphaEnabled;
   }
 
@@ -71,7 +71,7 @@ export class CliContext {
    * True when this execution should be treated as beta: Open Beta, or Private
    * Beta with the user entitled for the command's LaunchDarkly flag.
    */
-  isBeta(): boolean {
+  isBetaEligible(): boolean {
     if (!this.stage.isBeta) {
       return false;
     }
@@ -86,14 +86,14 @@ export class CliContext {
 /**
  * Per-command invocation context for authenticated handlers.
  *
- * Built by `SonarCommand.authenticatedAction`. Extends {@link CliContext} with
+ * Built by `SonarCommand.authenticatedAction`. Extends {@link CommandInvocationContext} with
  * resolved auth for this invocation.
  */
-export class CliAuthenticatedContext extends CliContext {
+export class CommandAuthenticatedInvocationContext extends CommandInvocationContext {
   constructor(
     readonly auth: ResolvedAuth,
-    stage?: CliContextStage,
-    runtime?: CliContextRuntime,
+    stage?: CommandInvocationContextStage,
+    runtime?: CommandInvocationContextRuntime,
   ) {
     super(stage, runtime);
   }

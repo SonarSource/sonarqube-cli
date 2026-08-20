@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { CliAuthenticatedContext } from '@/commands/cli-context.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { selectPrompt } from '@/core/ui';
 
@@ -42,7 +42,10 @@ export interface IntegrateBareOptions {
   isFromRouter?: boolean;
 }
 
-type Handler = (options: IntegrateBareOptions, ctx: CliAuthenticatedContext) => Promise<void>;
+type Handler = (
+  options: IntegrateBareOptions,
+  ctx: CommandAuthenticatedInvocationContext,
+) => Promise<void>;
 
 const TOOLS: { label: string; handler: Handler }[] = [
   { label: claudeIntegration.displayName, handler: integrateClaude },
@@ -56,7 +59,7 @@ const TOOLS: { label: string; handler: Handler }[] = [
 ];
 
 export async function integrateBare(
-  ctx: CliAuthenticatedContext,
+  ctx: CommandAuthenticatedInvocationContext,
   options: IntegrateBareOptions,
 ): Promise<void> {
   assertIntegrateScopeOptions(options);

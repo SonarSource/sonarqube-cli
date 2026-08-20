@@ -28,7 +28,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { CliAuthenticatedContext } from '@/commands/cli-context.ts';
+import { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { runMcp } from '@/commands/run/mcp.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
@@ -54,7 +54,7 @@ const FAKE_AUTH: ResolvedAuth = {
   connectionType: 'on-premise',
 };
 
-const FAKE_CTX = new CliAuthenticatedContext(FAKE_AUTH);
+const FAKE_CTX = new CommandAuthenticatedInvocationContext(FAKE_AUTH);
 
 const NO_NETWORK: ResolvedNetworkConfig = { proxy: null, caCert: null, clientCert: null };
 

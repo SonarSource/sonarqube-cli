@@ -22,7 +22,7 @@
 
 import { encode as encodeToToon } from '@toon-format/toon';
 
-import type { CliAuthenticatedContext } from '@/commands/cli-context.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { InvalidOptionError } from '@/core/command-error.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
@@ -75,7 +75,7 @@ function parseSeverities(
  */
 export async function listIssues(
   options: ListIssuesOptions,
-  ctx: CliAuthenticatedContext,
+  ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   const { auth } = ctx;
   if (!options.project) {

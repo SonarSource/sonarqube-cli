@@ -20,7 +20,7 @@
 
 // Integrate command — setup SonarQube integration for Codex.
 
-import type { CliAuthenticatedContext } from '@/commands/cli-context.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 
 import { finalizeAgentInstall } from '../_common/agent-integrate-postlude.ts';
@@ -30,7 +30,7 @@ import { CODEX_INTEGRATION_ID, type CodexIntegrationOptions } from './declaratio
 
 export async function integrateCodex(
   options: IntegrateAgentOptions,
-  ctx: CliAuthenticatedContext,
+  ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   const { auth } = ctx;
   if (!options.nonInteractive) {

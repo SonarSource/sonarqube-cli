@@ -20,7 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
 
-import { CliAuthenticatedContext } from '@/commands/cli-context.ts';
+import { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import * as vortex from '@/commands/integrate/_common/vortex.ts';
 import { integrateCopilot } from '@/commands/integrate/copilot';
 import * as hooks from '@/commands/integrate/copilot/hooks.ts';
@@ -38,7 +38,7 @@ const SERVER_AUTH: ResolvedAuth = {
   connectionType: 'on-premise',
 };
 
-const SERVER_CTX = new CliAuthenticatedContext(SERVER_AUTH);
+const SERVER_CTX = new CommandAuthenticatedInvocationContext(SERVER_AUTH);
 
 const BASE_PROJECT: DiscoveredProject = {
   rootDir: '/project/root',

@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { CliAuthenticatedContext } from '@/commands/cli-context.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 
 import { finalizeAgentInstall } from '../_common/agent-integrate-postlude.ts';
@@ -29,7 +29,7 @@ import { detectGlobalSecretsHook } from './hooks.ts';
 
 export async function integrateCopilot(
   options: IntegrateAgentOptions,
-  ctx: CliAuthenticatedContext,
+  ctx: CommandAuthenticatedInvocationContext,
 ) {
   const { auth } = ctx;
   if (!options.nonInteractive) {

@@ -22,7 +22,7 @@
 
 import { homedir } from 'node:os';
 
-import type { CliAuthenticatedContext } from '@/commands/cli-context.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { installIntegration } from '@/core/framework/features';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
@@ -51,7 +51,7 @@ export interface ConfigurationData {
  */
 export async function integrateClaude(
   options: IntegrateAgentOptions,
-  ctx: CliAuthenticatedContext,
+  ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   const { auth } = ctx;
   if (!options.nonInteractive) {

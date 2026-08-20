@@ -33,8 +33,11 @@ import type { UpdateNotificationCondition } from '@/core/update/notification.ts'
 import { UpdateNotifier } from '@/core/update/notification.ts';
 
 import { version as VERSION } from '../../package.json';
-import type { CliContextStage } from './cli-context.ts';
-import { CliAuthenticatedContext, CliContext } from './cli-context.ts';
+import type { CommandInvocationContextStage } from './command-invocation-context.ts';
+import {
+  CommandAuthenticatedInvocationContext,
+  CommandInvocationContext,
+} from './command-invocation-context.ts';
 
 export const ALPHA_ENV_VAR = 'SONARQUBE_CLI_ALPHA';
 export const ALPHA_HELP_TAG = '[ALPHA]';
@@ -328,19 +331,19 @@ export class SonarCommand extends Command {
    * process.exitCode is set on failure. Wraps Commander's action() so callers
    * do not need to invoke runCommand() themselves.
    *
-   * A {@link CliContext} is passed as the first argument to fn (stage accessors
+   * A {@link CommandInvocationContext} is passed as the first argument to fn (stage accessors
    * resolve alpha/beta for this execution); Commander's own arguments follow.
    *
    * The `this` context set by Commander is forwarded to the handler, so
-   * `function(this: Command, _ctx: CliContext) { this.outputHelp(); }` works.
+   * `function(this: Command, _ctx: CommandInvocationContext) { this.outputHelp(); }` works.
    */
   anonymousAction<TArgs extends CommandArgs>(
     this: this & { __commandArgs?: TArgs },
-    fn: (ctx: CliContext, ...args: TArgs) => CommandResult,
+    fn: (ctx: CommandInvocationContext, ...args: TArgs) => CommandResult,
   ): this {
     super.action(function (this: SonarCommand, ...args: TArgs) {
       return this.runCommand(() =>
-        Promise.resolve(fn.call(this, this.createCliContext(), ...args)),
+        Promise.resolve(fn.call(this, this.createCommandInvocationContext(), ...args)),
       );
     });
     return this;
@@ -349,7 +352,7 @@ export class SonarCommand extends Command {
   /**
    * Register an action that requires authentication. Auth is resolved before
    * the handler is invoked; if no auth is configured the command fails with a
-   * clear message. A {@link CliAuthenticatedContext} is passed as the first
+   * clear message. A {@link CommandAuthenticatedInvocationContext} is passed as the first
    * argument to fn (auth plus stage accessors for this execution); Commander's
    * own arguments (options, positional args) follow.
    *
@@ -357,7 +360,7 @@ export class SonarCommand extends Command {
    */
   authenticatedAction<TArgs extends CommandArgs>(
     this: this & { __commandArgs?: TArgs },
-    fn: (ctx: CliAuthenticatedContext, ...args: TArgs) => Promise<void>,
+    fn: (ctx: CommandAuthenticatedInvocationContext, ...args: TArgs) => Promise<void>,
   ): this {
     this._requiresAuth = true;
     super.action((...args: TArgs) =>
@@ -369,21 +372,27 @@ export class SonarCommand extends Command {
             remediationHint: "Run 'sonar auth login' to authenticate.",
           });
         }
-        await fn(this.createAuthenticatedContext(auth), ...args);
+        await fn(this.createCommandAuthenticatedInvocationContext(auth), ...args);
       }),
     );
     return this;
   }
 
-  private createCliContext(): CliContext {
-    return new CliContext(this.cliContextStage(), this._runtime);
+  private createCommandInvocationContext(): CommandInvocationContext {
+    return new CommandInvocationContext(this.commandInvocationContextStage(), this._runtime);
   }
 
-  private createAuthenticatedContext(auth: ResolvedAuth): CliAuthenticatedContext {
-    return new CliAuthenticatedContext(auth, this.cliContextStage(), this._runtime);
+  private createCommandAuthenticatedInvocationContext(
+    auth: ResolvedAuth,
+  ): CommandAuthenticatedInvocationContext {
+    return new CommandAuthenticatedInvocationContext(
+      auth,
+      this.commandInvocationContextStage(),
+      this._runtime,
+    );
   }
 
-  private cliContextStage(): CliContextStage {
+  private commandInvocationContextStage(): CommandInvocationContextStage {
     return {
       isAlpha: this.isAlpha,
       isBeta: this.isBeta,

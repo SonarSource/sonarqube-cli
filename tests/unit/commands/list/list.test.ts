@@ -24,7 +24,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-import { CliAuthenticatedContext } from '@/commands/cli-context.ts';
+import { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
@@ -399,7 +399,7 @@ describe('issuesSearchCommand', () => {
     connectionType: 'cloud',
   };
 
-  const mockCtx = new CliAuthenticatedContext(mockAuth);
+  const mockCtx = new CommandAuthenticatedInvocationContext(mockAuth);
 
   const emptyApiResponse = {
     issues: [],

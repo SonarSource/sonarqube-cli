@@ -20,40 +20,40 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { CliContext } from '@/commands/cli-context.ts';
+import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 
-describe('CliContext stage accessors', () => {
+describe('CommandInvocationContext stage accessors', () => {
   it('defaults to non-alpha / non-beta', () => {
-    const ctx = new CliContext();
-    expect(ctx.isAlpha()).toBe(false);
-    expect(ctx.isBeta()).toBe(false);
+    const ctx = new CommandInvocationContext();
+    expect(ctx.isAlphaEligible()).toBe(false);
+    expect(ctx.isBetaEligible()).toBe(false);
   });
 
-  it('isAlpha requires both Alpha stage and alpha enabled', () => {
+  it('isAlphaEligible requires both Alpha stage and alpha enabled', () => {
     const stage = { isAlpha: true, isBeta: false, isPrivateBeta: false };
     expect(
-      new CliContext(stage, {
+      new CommandInvocationContext(stage, {
         isAlphaEnabled: false,
         isPrivateBetaEnabled: () => false,
-      }).isAlpha(),
+      }).isAlphaEligible(),
     ).toBe(false);
     expect(
-      new CliContext(stage, {
+      new CommandInvocationContext(stage, {
         isAlphaEnabled: true,
         isPrivateBetaEnabled: () => false,
-      }).isAlpha(),
+      }).isAlphaEligible(),
     ).toBe(true);
   });
 
-  it('isBeta is true for Open Beta without consulting entitlement', () => {
-    const ctx = new CliContext(
+  it('isBetaEligible is true for Open Beta without consulting entitlement', () => {
+    const ctx = new CommandInvocationContext(
       { isAlpha: false, isBeta: true, isPrivateBeta: false },
       { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
     );
-    expect(ctx.isBeta()).toBe(true);
+    expect(ctx.isBetaEligible()).toBe(true);
   });
 
-  it('isBeta for Private Beta requires entitlement', () => {
+  it('isBetaEligible for Private Beta requires entitlement', () => {
     const stage = {
       isAlpha: false,
       isBeta: true,
@@ -61,16 +61,16 @@ describe('CliContext stage accessors', () => {
       betaFlagKey: 'cli.beta.demo',
     };
     expect(
-      new CliContext(stage, {
+      new CommandInvocationContext(stage, {
         isAlphaEnabled: false,
         isPrivateBetaEnabled: () => false,
-      }).isBeta(),
+      }).isBetaEligible(),
     ).toBe(false);
     expect(
-      new CliContext(stage, {
+      new CommandInvocationContext(stage, {
         isAlphaEnabled: false,
         isPrivateBetaEnabled: (key) => key === 'cli.beta.demo',
-      }).isBeta(),
+      }).isBetaEligible(),
     ).toBe(true);
   });
 });

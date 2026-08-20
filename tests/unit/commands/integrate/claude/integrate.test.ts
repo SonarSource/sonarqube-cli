@@ -22,7 +22,7 @@ import { homedir } from 'node:os';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
-import { CliAuthenticatedContext } from '@/commands/cli-context.ts';
+import { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { VortexDisposition } from '@/commands/integrate/_common/types.ts';
 import { integrateClaude } from '@/commands/integrate/claude';
 import * as hooks from '@/commands/integrate/claude/hooks.ts';
@@ -52,8 +52,8 @@ const CLOUD_AUTH: ResolvedAuth = {
   connectionType: 'cloud',
 };
 
-const SERVER_CTX = new CliAuthenticatedContext(SERVER_AUTH);
-const CLOUD_CTX = new CliAuthenticatedContext(CLOUD_AUTH);
+const SERVER_CTX = new CommandAuthenticatedInvocationContext(SERVER_AUTH);
+const CLOUD_CTX = new CommandAuthenticatedInvocationContext(CLOUD_AUTH);
 
 function getPhaseItems(title: string): PhaseItem[] {
   const call = getMockUiCalls().find((c) => c.method === 'phase' && c.args[0] === title);
@@ -204,9 +204,9 @@ describe('integrateCommand', () => {
     };
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(integrateClaude({}, new CliAuthenticatedContext(cloudAuthNoOrg))).rejects.toThrow(
-      CommandFailedError,
-    );
+    await expect(
+      integrateClaude({}, new CommandAuthenticatedInvocationContext(cloudAuthNoOrg)),
+    ).rejects.toThrow(CommandFailedError);
   });
 
   it('shows config source from discovered files', async () => {

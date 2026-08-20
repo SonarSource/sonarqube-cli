@@ -20,7 +20,7 @@
 
 // Remediate command - triggers AI agent remediation for eligible issues
 
-import type { CliAuthenticatedContext } from '@/commands/cli-context.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import {
@@ -60,7 +60,7 @@ const MAX_REMEDIATION_ISSUES = 20;
 
 export async function remediate(
   options: RemediateOptions,
-  ctx: CliAuthenticatedContext,
+  ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   const { auth } = ctx;
   // Pure validation first (no I/O): catches malformed --issues with zero round-trips.
