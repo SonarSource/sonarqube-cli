@@ -30,6 +30,7 @@ import {
   type CliRuntime,
   collectPrivateBetaFlagKeys,
   SonarCommand,
+  SonarOption,
   Stage,
 } from '@/commands/sonar-command.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
@@ -466,7 +467,14 @@ describe('Private Beta command registration', () => {
     root.command('private-a').stage(Stage.Beta('cli.beta.a'));
     root.command('private-b').stage(Stage.Beta('cli.beta.b'));
     root.command('private-a-dup').stage(Stage.Beta('cli.beta.a'));
+    root
+      .command('with-option')
+      .addOption(new SonarOption('--gated', 'Gated option').stage(Stage.Beta('cli.beta.option')));
 
-    expect(collectPrivateBetaFlagKeys(root).sort()).toEqual(['cli.beta.a', 'cli.beta.b']);
+    expect(collectPrivateBetaFlagKeys(root).sort()).toEqual([
+      'cli.beta.a',
+      'cli.beta.b',
+      'cli.beta.option',
+    ]);
   });
 });

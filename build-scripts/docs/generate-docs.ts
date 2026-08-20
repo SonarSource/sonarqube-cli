@@ -31,7 +31,12 @@ import { fileURLToPath } from 'node:url';
 import type { Option } from 'commander';
 
 import { createCommandTree } from '@/commands/command-tree.ts';
-import { BETA_HELP_TAG, type SonarCommand } from '@/commands/sonar-command.ts';
+import {
+  BETA_HELP_TAG,
+  isSonarOption,
+  type SonarCommand,
+  stripLifecycleHelpTag,
+} from '@/commands/sonar-command.ts';
 
 import { version } from '../../package.json';
 import { EXAMPLES } from './examples';
@@ -67,6 +72,7 @@ interface ClidocOption {
   required: boolean;
   defaultValue: unknown;
   allowedValues?: string[];
+  stage?: 'stable' | 'beta';
 }
 
 interface ClidocCommand {
@@ -105,6 +111,34 @@ function descriptionWithoutBetaTag(cmd: SonarCommand): string {
     : description;
 }
 
+function serializeOptions(cmd: SonarCommand): ClidocOption[] {
+  return cmd.options
+    .filter((option) => {
+      if (option.hidden || option.long === '--help') {
+        return false;
+      }
+      // Alpha/Private Beta options are already detached from the default docs runtime;
+      // skip them explicitly so generating with SONARQUBE_CLI_ALPHA set cannot leak them.
+      return !isSonarOption(option) || (!option.isAlpha && !option.isPrivateBeta);
+    })
+    .map((option) => {
+      const serialized: ClidocOption = {
+        flags: option.flags,
+        long: option.long ?? '',
+        short: option.short,
+        description: stripLifecycleHelpTag(option.description ?? ''),
+        type: optionType(option),
+        required: option.mandatory,
+        defaultValue: option.defaultValue,
+        allowedValues: option.argChoices?.length ? option.argChoices : undefined,
+      };
+      if (isSonarOption(option) && option.isBeta) {
+        serialized.stage = 'beta';
+      }
+      return serialized;
+    });
+}
+
 function serializeCommand(
   cmd: SonarCommand,
   prefix: string,
@@ -132,18 +166,7 @@ function serializeCommand(
       required: a.required,
       variadic: a.variadic,
     })),
-    options: cmd.options
-      .filter((o) => !o.hidden && o.long !== '--help')
-      .map((o) => ({
-        flags: o.flags,
-        long: o.long ?? '',
-        short: o.short,
-        description: o.description ?? '',
-        type: optionType(o),
-        required: o.mandatory,
-        defaultValue: o.defaultValue,
-        allowedValues: o.argChoices?.length ? o.argChoices : undefined,
-      })),
+    options: serializeOptions(cmd),
     examples: EXAMPLES[fullName] ?? [],
     children: visibleChildren.map((c) => `${id}-${c.name()}`),
   };
@@ -225,7 +248,8 @@ function buildLlmsTxt(): string {
         for (const opt of cmd.options) {
           const flagPart = opt.short ? `${opt.long}, ${opt.short}` : opt.long;
           const typePart = opt.type === 'boolean' ? '' : `  <${opt.type}>`;
-          commandLines.push(`  ${flagPart}${typePart}   ${opt.description}`);
+          const betaTag = opt.stage === 'beta' ? ` ${BETA_HELP_TAG}` : '';
+          commandLines.push(`  ${flagPart}${typePart}   ${opt.description}${betaTag}`);
         }
       }
     }

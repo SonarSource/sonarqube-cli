@@ -27,7 +27,7 @@ import {
   CommandInvocationContext,
 } from '@/commands/command-invocation-context.ts';
 import { getCustomRootHelp } from '@/commands/root-help.ts';
-import { ALPHA_ENV_VAR, SonarCommand, Stage } from '@/commands/sonar-command.ts';
+import { ALPHA_ENV_VAR, SonarCommand, SonarOption, Stage } from '@/commands/sonar-command.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
@@ -800,6 +800,158 @@ describe('SonarCommand', () => {
       const receivedContext = handler.mock.calls[0][0];
       expect(receivedContext.isAlphaEligible()).toBe(false);
       expect(receivedContext.isBetaEligible()).toBe(true);
+    });
+  });
+
+  // ─── staged options ───────────────────────────────────────────────────────
+
+  describe('staged options', () => {
+    function commandWithStagedOption(
+      option: SonarOption,
+      runtime?: { isAlphaEnabled?: boolean; isPrivateBetaEnabled?: (flagKey: string) => boolean },
+    ): SonarCommand {
+      const cmd = new SonarCommand('cmd', {
+        runtime: {
+          auth: null,
+          isAlphaEnabled: runtime?.isAlphaEnabled ?? false,
+          isPrivateBetaEnabled: runtime?.isPrivateBetaEnabled ?? (() => false),
+        },
+      });
+      cmd.addOption(option).anonymousAction(() => {});
+      cmd.exitOverride().configureOutput({ writeErr: () => {}, writeOut: () => {} });
+      return cmd;
+    }
+
+    async function parseUnknownOption(
+      cmd: SonarCommand,
+      args: string[],
+    ): Promise<{ code?: string; message?: string }> {
+      try {
+        await cmd.parseAsync(args, { from: 'user' });
+        return {};
+      } catch (err) {
+        return err as { code?: string; message?: string };
+      }
+    }
+
+    it('creates SonarOption instances from .option()', () => {
+      const cmd = new SonarCommand('cmd').option('--plain', 'A plain option');
+      expect(cmd.options[0]).toBeInstanceOf(SonarOption);
+      expect((cmd.options[0] as SonarOption).isStable).toBe(true);
+    });
+
+    it('throws when staging a mandatory option', () => {
+      expect(() =>
+        new SonarOption('--need', 'Required').makeOptionMandatory().stage(Stage.Alpha),
+      ).toThrow("Cannot stage a required option as Alpha or Beta: '--need'");
+    });
+
+    it('throws when adding a staged option that was later made mandatory', () => {
+      const option = new SonarOption('--need', 'Required').stage(Stage.Alpha).makeOptionMandatory();
+      expect(() =>
+        new SonarCommand('cmd', {
+          runtime: { auth: null, isAlphaEnabled: true, isPrivateBetaEnabled: () => false },
+        }).addOption(option),
+      ).toThrow("Cannot stage a required option as Alpha or Beta: '--need'");
+    });
+
+    it('allows staging an option that takes a required argument', () => {
+      const cmd = commandWithStagedOption(
+        new SonarOption('--file <path>', 'File to preview').stage(Stage.Alpha),
+        { isAlphaEnabled: true },
+      );
+
+      expect(cmd.options.map((option) => option.long)).toContain('--file');
+    });
+
+    it('omits an Alpha option from help and treats it as unknown when alpha is disabled', async () => {
+      const cmd = commandWithStagedOption(
+        new SonarOption('--preview', 'Preview the plan').stage(Stage.Alpha),
+      );
+
+      expect(cmd.helpInformation()).not.toContain('--preview');
+      const caught = await parseUnknownOption(cmd, ['--preview']);
+      expect(caught.code).toBe('commander.unknownOption');
+      expect(caught.message).toContain("unknown option '--preview'");
+    });
+
+    it('registers an Alpha option with an [ALPHA] tag when alpha is enabled', async () => {
+      const handler = mock(() => {});
+      const cmd = new SonarCommand('cmd', {
+        runtime: { auth: null, isAlphaEnabled: true, isPrivateBetaEnabled: () => false },
+      });
+      cmd
+        .addOption(new SonarOption('--preview', 'Preview the plan').stage(Stage.Alpha))
+        .anonymousAction(handler);
+
+      expect(cmd.helpInformation()).toContain('--preview');
+      expect(cmd.helpInformation()).toContain('Preview the plan [ALPHA]');
+
+      await cmd.parseAsync(['--preview'], { from: 'user' });
+      expect(handler).toHaveBeenCalledTimes(1);
+      const warning = getMockUiCalls().find((call) => call.method === 'info');
+      expect(warning?.args[0]).toBe(
+        "'--preview' is in alpha; may change or be removed without notice.",
+      );
+    });
+
+    it('lists Alpha options in a separate group at the bottom of help', () => {
+      const cmd = new SonarCommand('cmd', {
+        runtime: { auth: null, isAlphaEnabled: true, isPrivateBetaEnabled: () => false },
+      });
+      cmd.option('--stable', 'A stable option');
+      cmd.addOption(new SonarOption('--preview', 'Preview the plan').stage(Stage.Alpha));
+
+      expect(cmd.helpInformation()).toBe(
+        [
+          'Usage: cmd [options]',
+          '',
+          'Options:',
+          '  --stable    A stable option',
+          '  -h, --help  display help for command',
+          '',
+          '  --preview   Preview the plan [ALPHA]',
+          '',
+        ].join('\n'),
+      );
+    });
+
+    it('keeps Open Beta options visible with a [BETA] tag and warns once on use', async () => {
+      const state = getDefaultState(VERSION);
+      loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
+      saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
+      const cmd = commandWithStagedOption(
+        new SonarOption('--preview', 'Preview the plan').stage(Stage.Beta()),
+      );
+
+      expect(cmd.helpInformation()).toContain('Preview the plan [BETA]');
+
+      await cmd.parseAsync(['--preview'], { from: 'user' });
+      await cmd.parseAsync(['--preview'], { from: 'user' });
+
+      const warnings = getMockUiCalls().filter((call) => call.method === 'info');
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]?.args[0]).toBe("'--preview' is in beta and may change.");
+      expect(state.config.betaCommandWarnings).toEqual({ 'cmd --preview': VERSION });
+    });
+
+    it('omits a Private Beta option when the flag is off', async () => {
+      const cmd = commandWithStagedOption(
+        new SonarOption('--preview', 'Preview the plan').stage(Stage.Beta('cli.beta.preview')),
+      );
+
+      expect(cmd.helpInformation()).not.toContain('--preview');
+      const caught = await parseUnknownOption(cmd, ['--preview']);
+      expect(caught.code).toBe('commander.unknownOption');
+    });
+
+    it('registers a Private Beta option when the flag is on', () => {
+      const cmd = commandWithStagedOption(
+        new SonarOption('--preview', 'Preview the plan').stage(Stage.Beta('cli.beta.preview')),
+        { isPrivateBetaEnabled: (key) => key === 'cli.beta.preview' },
+      );
+
+      expect(cmd.helpInformation()).toContain('Preview the plan [BETA]');
     });
   });
 });
