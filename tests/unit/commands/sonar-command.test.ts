@@ -837,7 +837,7 @@ describe('SonarCommand', () => {
     it('creates SonarOption instances from .option()', () => {
       const cmd = new SonarCommand('cmd').option('--plain', 'A plain option');
       expect(cmd.options[0]).toBeInstanceOf(SonarOption);
-      expect((cmd.options[0] as SonarOption).isStable).toBe(true);
+      expect((cmd.options[0]).isStable).toBe(true);
     });
 
     it('throws when staging a mandatory option', () => {
@@ -886,6 +886,7 @@ describe('SonarCommand', () => {
 
       expect(cmd.helpInformation()).toContain('--preview');
       expect(cmd.helpInformation()).toContain('Preview the plan [ALPHA]');
+      expect(cmd.options[0]?.description).toBe('Preview the plan');
 
       await cmd.parseAsync(['--preview'], { from: 'user' });
       expect(handler).toHaveBeenCalledTimes(1);

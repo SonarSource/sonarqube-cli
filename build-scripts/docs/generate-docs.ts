@@ -31,11 +31,7 @@ import { fileURLToPath } from 'node:url';
 import type { Option } from 'commander';
 
 import { createCommandTree } from '@/commands/command-tree.ts';
-import {
-  BETA_HELP_TAG,
-  type SonarCommand,
-  stripLifecycleHelpTag,
-} from '@/commands/sonar-command.ts';
+import { BETA_HELP_TAG, type SonarCommand } from '@/commands/sonar-command.ts';
 
 import { version } from '../../package.json';
 import { EXAMPLES } from './examples';
@@ -125,7 +121,7 @@ function serializeOptions(cmd: SonarCommand): ClidocOption[] {
         flags: option.flags,
         long: option.long ?? '',
         short: option.short,
-        description: stripLifecycleHelpTag(option.description ?? ''),
+        description: option.description ?? '',
         type: optionType(option),
         required: option.mandatory,
         defaultValue: option.defaultValue,

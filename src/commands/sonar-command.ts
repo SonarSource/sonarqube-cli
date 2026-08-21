@@ -111,25 +111,14 @@ export function isStageVisible(
   return true;
 }
 
-export function stripLifecycleHelpTag(description: string): string {
-  for (const tag of [ALPHA_HELP_TAG, BETA_HELP_TAG]) {
-    const suffix = ` ${tag}`;
-    if (description.endsWith(suffix)) {
-      return description.slice(0, -suffix.length);
-    }
-  }
-  return description;
-}
-
-function taggedDescription(description: string, stage: StageName): string {
-  const stripped = stripLifecycleHelpTag(description);
+function withLifecycleTag(description: string, stage: StageName): string {
   if (stage === 'alpha') {
-    return `${stripped} ${ALPHA_HELP_TAG}`;
+    return `${description} ${ALPHA_HELP_TAG}`;
   }
   if (stage === 'beta') {
-    return `${stripped} ${BETA_HELP_TAG}`;
+    return `${description} ${BETA_HELP_TAG}`;
   }
-  return stripped;
+  return description;
 }
 
 /**
@@ -166,7 +155,6 @@ export class SonarOption extends Option {
 
     this._stage = newStage;
     this._betaFlagKey = newFlagKey;
-    this.description = taggedDescription(this.description, newStage);
 
     if (newStage === 'alpha') {
       this.helpGroup(ALPHA_HELP_GROUP);
@@ -244,6 +232,13 @@ class SonarHelp extends Help {
       return items.length === 0 ? [] : [...items, ''];
     }
     return super.formatItemList(heading, items, helper);
+  }
+
+  override optionDescription(option: Option): string {
+    const description = super.optionDescription(option);
+    return option instanceof SonarOption
+      ? withLifecycleTag(description, option.lifecycleStage)
+      : description;
   }
 }
 
@@ -425,7 +420,7 @@ export class SonarCommand extends Command {
           super.description(str, argsDescription);
     }
 
-    return this.withLifecycleTag(super.description());
+    return withLifecycleTag(super.description(), this._stage);
   }
 
   summary(str: string): this;
@@ -436,7 +431,7 @@ export class SonarCommand extends Command {
     }
 
     const summary = super.summary();
-    return summary ? this.withLifecycleTag(summary) : summary;
+    return summary ? withLifecycleTag(summary, this._stage) : summary;
   }
 
   /**
@@ -604,16 +599,6 @@ export class SonarCommand extends Command {
       logger.error(thrownError.message);
       process.exitCode = cliError?.exitCode ?? 1;
     }
-  }
-
-  private withLifecycleTag(description: string): string {
-    if (this._stage === 'alpha') {
-      return `${description} ${ALPHA_HELP_TAG}`;
-    }
-    if (this._stage === 'beta') {
-      return `${description} ${BETA_HELP_TAG}`;
-    }
-    return description;
   }
 
   private commandPath(): string {
