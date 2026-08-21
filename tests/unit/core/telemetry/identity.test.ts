@@ -42,7 +42,10 @@ import {
   resolveCommandTelemetryIdentity,
   resolveStoreEventTelemetryIdentitySafely,
 } from '@/core/telemetry/identity.ts';
-import { resolveTelemetryIdentity } from '@/core/telemetry/identity-fetch.ts';
+import {
+  needsIdentityEnrichment,
+  resolveTelemetryIdentity,
+} from '@/core/telemetry/identity-fetch.ts';
 
 import { mockIdentityGetSafe } from './identity-api-mock.ts';
 
@@ -107,17 +110,24 @@ describe('identityFromConnection()', () => {
     expect(identityFromConnection(undefined)).toEqual({
       user_uuid: null,
       organization_uuid_v4: null,
+      enterprise_uuid: null,
       sqs_installation_id: null,
     });
   });
 
   it('maps connection UUID fields into the identity payload', () => {
     const identity = identityFromConnection(
-      cloudConn({ userUuid: 'u', organizationUuidV4: 'o', sqsInstallationId: 's' }),
+      cloudConn({
+        userUuid: 'u',
+        organizationUuidV4: 'o',
+        enterpriseUuid: 'e',
+        sqsInstallationId: 's',
+      }),
     );
     expect(identity).toEqual({
       user_uuid: 'u',
       organization_uuid_v4: 'o',
+      enterprise_uuid: 'e',
       sqs_installation_id: 's',
     });
   });
@@ -127,7 +137,12 @@ describe('isIdentityCompleteForConnection()', () => {
   it('requires user_uuid for cloud', () => {
     expect(
       isIdentityCompleteForConnection(
-        { user_uuid: null, organization_uuid_v4: 'o', sqs_installation_id: null },
+        {
+          user_uuid: null,
+          organization_uuid_v4: 'o',
+          enterprise_uuid: null,
+          sqs_installation_id: null,
+        },
         'cloud',
       ),
     ).toBe(false);
@@ -136,13 +151,37 @@ describe('isIdentityCompleteForConnection()', () => {
   it('requires organization_uuid_v4 for cloud', () => {
     expect(
       isIdentityCompleteForConnection(
-        { user_uuid: 'u', organization_uuid_v4: null, sqs_installation_id: null },
+        {
+          user_uuid: 'u',
+          organization_uuid_v4: null,
+          enterprise_uuid: null,
+          sqs_installation_id: null,
+        },
         'cloud',
       ),
     ).toBe(false);
     expect(
       isIdentityCompleteForConnection(
-        { user_uuid: 'u', organization_uuid_v4: 'o', sqs_installation_id: null },
+        {
+          user_uuid: 'u',
+          organization_uuid_v4: 'o',
+          enterprise_uuid: null,
+          sqs_installation_id: null,
+        },
+        'cloud',
+      ),
+    ).toBe(true);
+  });
+
+  it('does not require enterprise_uuid for cloud completeness', () => {
+    expect(
+      isIdentityCompleteForConnection(
+        {
+          user_uuid: 'u',
+          organization_uuid_v4: 'o',
+          enterprise_uuid: null,
+          sqs_installation_id: null,
+        },
         'cloud',
       ),
     ).toBe(true);
@@ -151,16 +190,38 @@ describe('isIdentityCompleteForConnection()', () => {
   it('requires sqs_installation_id for on-premise', () => {
     expect(
       isIdentityCompleteForConnection(
-        { user_uuid: null, organization_uuid_v4: null, sqs_installation_id: null },
+        {
+          user_uuid: null,
+          organization_uuid_v4: null,
+          enterprise_uuid: null,
+          sqs_installation_id: null,
+        },
         'on-premise',
       ),
     ).toBe(false);
     expect(
       isIdentityCompleteForConnection(
-        { user_uuid: null, organization_uuid_v4: null, sqs_installation_id: 's' },
+        {
+          user_uuid: null,
+          organization_uuid_v4: null,
+          enterprise_uuid: null,
+          sqs_installation_id: 's',
+        },
         'on-premise',
       ),
     ).toBe(true);
+  });
+});
+
+describe('needsIdentityEnrichment()', () => {
+  it('is true for a complete cloud connection that has never resolved enterpriseUuid', () => {
+    const conn = cloudConn({ userUuid: 'u', organizationUuidV4: 'o' });
+    expect(needsIdentityEnrichment(identityFromConnection(conn), 'cloud', conn)).toBe(true);
+  });
+
+  it('is false when cloud enterpriseUuid is confirmed absent', () => {
+    const conn = cloudConn({ userUuid: 'u', organizationUuidV4: 'o', enterpriseUuid: null });
+    expect(needsIdentityEnrichment(identityFromConnection(conn), 'cloud', conn)).toBe(false);
   });
 });
 
@@ -214,6 +275,45 @@ describe('resolveCommandTelemetryIdentity()', () => {
     expect(identity.sqs_installation_id).toBe('s');
     expect(identity.user_uuid).toBe('server-user');
     expect(getSafeSpy).not.toHaveBeenCalled();
+    getSafeSpy.mockRestore();
+  });
+
+  it('skips enrichment when cloud connection has user, org, and resolved enterprise', async () => {
+    const conn = cloudConn({
+      userUuid: 'u',
+      organizationUuidV4: 'o',
+      enterpriseUuid: null,
+    });
+    const getSafeSpy = mockIdentityGetSafe();
+
+    const { identity } = await resolveCommandTelemetryIdentity(conn, cloudAuth('cloud-complete'));
+
+    expect(identity.user_uuid).toBe('u');
+    expect(identity.organization_uuid_v4).toBe('o');
+    expect(identity.enterprise_uuid).toBeNull();
+    expect(getSafeSpy).not.toHaveBeenCalled();
+    getSafeSpy.mockRestore();
+  });
+
+  it('fetches enterprise when cloud connection has user and org but enterpriseUuid is unset', async () => {
+    const conn = cloudConn({ userUuid: 'u', organizationUuidV4: 'o' });
+    const getSafeSpy = mockIdentityGetSafe({
+      org: [{ ok: true, uuidV4: 'o', id: 'legacy-org' }],
+      enterprise: [{ ok: true, enterpriseId: 'ent-1' }],
+    });
+
+    const { identity } = await resolveCommandTelemetryIdentity(
+      conn,
+      cloudAuth('cloud-missing-enterprise'),
+    );
+
+    expect(identity.user_uuid).toBe('u');
+    expect(identity.enterprise_uuid).toBe('ent-1');
+    expect(
+      getSafeSpy.mock.calls.filter(
+        (call: [string]) => call[0] === '/enterprises/enterprise-organizations',
+      ),
+    ).toHaveLength(1);
     getSafeSpy.mockRestore();
   });
 
@@ -278,7 +378,11 @@ describe('resolveTelemetryIdentity()', () => {
 
   it('serves a complete identity from the disk cache without hitting the API', async () => {
     const auth = cloudAuth('disk-complete-token');
-    seedDiskCache(auth, { userUuid: 'disk-user', organizationUuidV4: 'disk-org' });
+    seedDiskCache(auth, {
+      userUuid: 'disk-user',
+      organizationUuidV4: 'disk-org',
+      enterpriseUuid: null,
+    });
 
     const getSafeSpy = mockIdentityGetSafe();
 
@@ -286,7 +390,74 @@ describe('resolveTelemetryIdentity()', () => {
 
     expect(identity.user_uuid).toBe('disk-user');
     expect(identity.organization_uuid_v4).toBe('disk-org');
+    expect(identity.enterprise_uuid).toBeNull();
     expect(getSafeSpy).not.toHaveBeenCalled();
+    getSafeSpy.mockRestore();
+  });
+
+  it('fetches enterprise UUID using the org legacy id even when user and org are cached', async () => {
+    const auth = cloudAuth('enterprise-fetch-token');
+    seedDiskCache(auth, { userUuid: 'disk-user', organizationUuidV4: 'disk-org' });
+    const getSafeSpy = mockIdentityGetSafe({
+      org: [{ ok: true, uuidV4: 'disk-org', id: 'legacy-org' }],
+      enterprise: [{ ok: true, enterpriseId: 'ent-1' }],
+    });
+
+    const identity = await resolveTelemetryIdentity(auth);
+
+    expect(identity.user_uuid).toBe('disk-user');
+    expect(identity.organization_uuid_v4).toBe('disk-org');
+    expect(identity.enterprise_uuid).toBe('ent-1');
+    expect(
+      getSafeSpy.mock.calls.filter(
+        (call: [string]) => call[0] === '/enterprises/enterprise-organizations',
+      ),
+    ).toHaveLength(1);
+    getSafeSpy.mockRestore();
+  });
+
+  it('caches confirmed-absent enterprise UUID and stops re-fetching', async () => {
+    const auth = cloudAuth('enterprise-absent-token');
+    const getSafeSpy = mockIdentityGetSafe({
+      user: [{ ok: true, id: 'cloud-user' }],
+      org: [{ ok: true, uuidV4: 'cloud-org', id: 'legacy-org' }],
+      enterprise: [{ ok: true }],
+    });
+
+    const first = await resolveTelemetryIdentity(auth);
+    const second = await resolveTelemetryIdentity(cloudAuth('enterprise-absent-token'));
+
+    expect(first.enterprise_uuid).toBeNull();
+    expect(second.enterprise_uuid).toBeNull();
+    expect(
+      getSafeSpy.mock.calls.filter(
+        (call: [string]) => call[0] === '/enterprises/enterprise-organizations',
+      ),
+    ).toHaveLength(1);
+    getSafeSpy.mockRestore();
+  });
+
+  it('retries enterprise UUID fetch after a transient API failure', async () => {
+    const auth = cloudAuth('transient-enterprise-token');
+    const getSafeSpy = mockIdentityGetSafe({
+      user: [{ ok: true, id: 'cloud-user' }],
+      org: [
+        { ok: true, uuidV4: 'cloud-org', id: 'legacy-org' },
+        { ok: true, uuidV4: 'cloud-org', id: 'legacy-org' },
+      ],
+      enterprise: [{ ok: false }, { ok: true, enterpriseId: 'ent-after-retry' }],
+    });
+
+    const first = await resolveTelemetryIdentity(auth);
+    const second = await resolveTelemetryIdentity(cloudAuth('transient-enterprise-token'));
+
+    expect(first.enterprise_uuid).toBeNull();
+    expect(second.enterprise_uuid).toBe('ent-after-retry');
+    expect(
+      getSafeSpy.mock.calls.filter(
+        (call: [string]) => call[0] === '/enterprises/enterprise-organizations',
+      ),
+    ).toHaveLength(2);
     getSafeSpy.mockRestore();
   });
 

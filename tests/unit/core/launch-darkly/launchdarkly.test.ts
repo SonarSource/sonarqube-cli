@@ -42,6 +42,7 @@ describe('buildLaunchDarklyContext', () => {
       connectionType: 'cloud',
       userUuid: 'user-1',
       organizationUuidV4: 'org-1',
+      enterpriseUuid: null,
       sqsInstallationId: null,
     };
 
@@ -52,11 +53,29 @@ describe('buildLaunchDarklyContext', () => {
     });
   });
 
+  it('adds an enterprise context when the Cloud enterprise UUID is known', () => {
+    const identity: FeatureFlagIdentity = {
+      connectionType: 'cloud',
+      userUuid: 'user-1',
+      organizationUuidV4: 'org-1',
+      enterpriseUuid: 'ent-1',
+      sqsInstallationId: null,
+    };
+
+    expect(buildLaunchDarklyContext(identity)).toEqual({
+      kind: 'multi',
+      user: { key: 'user-1' },
+      organization: { key: 'org-1' },
+      enterprise: { key: 'ent-1' },
+    });
+  });
+
   it('builds a Server multi-context when both installation and user are known', () => {
     const identity: FeatureFlagIdentity = {
       connectionType: 'on-premise',
       userUuid: 'user-1',
       organizationUuidV4: null,
+      enterpriseUuid: null,
       sqsInstallationId: 'install-1',
     };
 
@@ -72,6 +91,7 @@ describe('buildLaunchDarklyContext', () => {
       connectionType: 'on-premise',
       userUuid: null,
       organizationUuidV4: null,
+      enterpriseUuid: null,
       sqsInstallationId: 'install-1',
     };
 
@@ -87,6 +107,7 @@ describe('buildLaunchDarklyContext', () => {
         connectionType: 'cloud',
         userUuid: 'user-1',
         organizationUuidV4: null,
+        enterpriseUuid: null,
         sqsInstallationId: null,
       }),
     ).toBeNull();
@@ -98,6 +119,7 @@ describe('buildLaunchDarklyContext', () => {
         connectionType: 'on-premise',
         userUuid: 'user-1',
         organizationUuidV4: null,
+        enterpriseUuid: null,
         sqsInstallationId: null,
       }),
     ).toBeNull();

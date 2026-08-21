@@ -129,18 +129,20 @@ The two inputs are separate because the single boolean made _collect but do not 
 
 **Resolution order** (per auth token, keyed by connection type + server URL + org key + token fingerprint):
 
-1. **Connection seed** — `identityFromConnection()` maps `AuthConnection.userUuid`, `organizationUuidV4`, and `sqsInstallationId` — kept in sync for both keychain and env-var auth by `recordConnectionFromAuth()` (see CLI-866 below), not just at `sonar auth login`.
+1. **Connection seed** — `identityFromConnection()` maps `AuthConnection.userUuid`, `organizationUuidV4`, `enterpriseUuid`, and `sqsInstallationId` — kept in sync for both keychain and env-var auth by `recordConnectionFromAuth()` (see CLI-866 below), not just at `sonar auth login`.
 2. **Disk cache** — `{SONAR_USER_HOME}/sonarqube-cli/telemetry/identity-cache.json`, one entry per auth fingerprint (`src/core/telemetry/identity-fetch.ts`). Avoids repeat API calls across CLI invocations, independently of the connection seed.
-3. **API enrichment** — `SonarQubeClient.getSafe()` fetches only missing fields: `/api/users/current` (cloud and server), `/organizations/organizations` (cloud only, when `orgKey` is set), `/api/system/status` (server only).
+3. **API enrichment** — `SonarQubeClient.getSafe()` fetches only missing fields: `/api/users/current` (cloud and server), `/organizations/organizations` (cloud only, when `orgKey` is set), `/enterprises/enterprise-organizations` (cloud only, keyed by the org's legacy `id` from that lookup), `/api/system/status` (server only).
 
 **Fast path** (skip resolving auth entirely, in `resolveStoreEventTelemetryIdentity`): when `conn` (the currently active `AuthConnection`, read fresh from state) already satisfies `needsIdentityEnrichment() === false`. This check is source-agnostic — it is not gated on `isEnvBasedAuth()` — because `resolveAuth()`'s env branch keeps `state.auth.connections` synced before this ever runs (see CLI-866 below), so a fully-populated `conn` is trustworthy regardless of which auth source produced it. When the fast path doesn't apply, telemetry calls `resolveAuth({ silent: true })` — `silent` suppresses the "partial env vars" warning so this best-effort, source-agnostic shadow resolution never prints a diagnostic the command's own `resolveAuth()` call would already have shown (or wouldn't have shown at all, for a non-authenticated command).
 
 **Field completeness** (`isIdentityCompleteForConnection`, in `src/core/telemetry/identity-fetch.ts`):
 
-- **Cloud** — requires `user_uuid` and `organization_uuid_v4`.
-- **Server** — requires `sqs_installation_id` only; `user_uuid` is optional on older SonarQube Server versions that do not return it (see `TelemetryEventPayload`).
+- **Cloud** — requires `user_uuid` and `organization_uuid_v4`. `enterprise_uuid` is optional: orgs that are not in an enterprise still evaluate LaunchDarkly with user + organization. A Cloud connection that already has user+org but `enterpriseUuid === undefined` (state written before this field existed) is still enriched once.
+- **Server** — requires `sqs_installation_id` only; `user_uuid` is optional on older SonarQube Server versions that do not return it (see `TelemetryEventPayload`). SonarQube Server has no enterprise context.
 
 **`user_uuid` policy** — always attempted for cloud and server (login and env-var auth) whenever not already known. `recordConnectionFromAuth()` persists `userUuid` on the connection (`string` or explicit `null` after a successful fetch), for both auth sources. Telemetry skips re-fetch when `conn.userUuid !== undefined`. A successful API response with no user id is cached as confirmed-absent (`userUuid: null` in the disk entry) so old servers do not cause infinite re-fetch; transient API failures are not cached and retry on the next command.
+
+**`enterprise_uuid` policy** — Cloud only, when `orgKey` is set. After resolving the org (for its `uuidV4` and legacy `id`), `GET /enterprises/enterprise-organizations?organizationId=<legacy id>` maps the org to an enterprise. An empty list is confirmed-absent (`enterpriseUuid: null` on the connection and disk cache) so flags still evaluate without an `enterprise` context. Transient failures are not persisted, so the next command retries. Private Beta LaunchDarkly evaluation sends a Cloud multi-context of `user` + `organization`, plus `enterprise` when the UUID is known. `enterprise_uuid` is **not** added to telemetry event payloads.
 
 **Caching rules** — disk entries are written only when the API call succeeded (`response.ok`). Non-null values and confirmed-absent nulls are persisted; failed/transient responses are omitted so the next run retries. The `'fieldName' in entry` check in `planFieldsToFetch()` distinguishes “not yet tried” from “confirmed absent”.
 

@@ -47,6 +47,7 @@ export function identityCacheKey(identity: FeatureFlagIdentity): string {
     identity.connectionType,
     `user:${identity.userUuid ?? ''}`,
     `organization:${identity.organizationUuidV4 ?? ''}`,
+    `enterprise:${identity.enterpriseUuid ?? ''}`,
     `installation:${identity.sqsInstallationId ?? ''}`,
   ].join('|');
 }
