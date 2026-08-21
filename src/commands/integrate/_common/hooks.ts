@@ -188,27 +188,51 @@ export function resolveAgentHookScriptPath(
   return join(context.targetRoot, configDir, HOOKS_DIR, `${scriptPath}${extension}`);
 }
 
+function resolveHookCommandPath(
+  context: IntegrationContext,
+  relativePath: string,
+  projectDirPlaceholder?: string,
+): string {
+  if (context.scope === 'global') {
+    return join(context.targetRoot, relativePath);
+  }
+  if (projectDirPlaceholder) {
+    return `${projectDirPlaceholder}/${relativePath.replaceAll('\\', '/')}`;
+  }
+  return relativePath;
+}
+
 /**
  * Hook `command` string: `powershell -NoProfile -ExecutionPolicy Bypass -File "<path>"` on
  * Windows, single-quoted path on Unix. The path is quoted so it stays a single
  * argument when the agent runs the command through a shell, even when the
  * project root or `$HOME` contains spaces or (on Unix) other shell
  * metacharacters (`$`, backticks, apostrophes, globs). Absolute path for global
- * scope, relative path (portable when the project is moved) for project scope.
+ * scope. For project scope, `projectDirPlaceholder` (e.g. Claude Code's
+ * `${CLAUDE_PROJECT_DIR}`) anchors the path to the agent's own project-root
+ * variable instead of the process cwd, so the hook still resolves when cwd
+ * diverges from the project root (worktrees, cwd changes); omit it for agents
+ * with no such placeholder, which keeps the plain cwd-relative path.
  */
 export function resolveAgentHookCommand(
   context: IntegrationContext,
   configDir: string,
   scriptPath: string,
+  projectDirPlaceholder?: string,
 ): string {
   const extension = process.platform === 'win32' ? '.ps1' : '.sh';
   const relativePath = join(configDir, HOOKS_DIR, `${scriptPath}${extension}`);
-  const commandPath =
-    context.scope === 'global' ? join(context.targetRoot, relativePath) : relativePath;
+  const commandPath = resolveHookCommandPath(context, relativePath, projectDirPlaceholder);
 
   return process.platform === 'win32'
     ? `powershell -NoProfile -ExecutionPolicy Bypass -File ${quoteWindowsHookScriptPath(commandPath.replaceAll('\\', '/'))}`
     : shellQuoteBash(commandPath);
+}
+
+export interface AgentHookEntryOptions {
+  /** e.g. Claude Code's `${CLAUDE_PROJECT_DIR}`; see {@link resolveAgentHookCommand}. */
+  projectDirPlaceholder?: string;
+  timeoutSec?: number;
 }
 
 export function createAgentHookEntry(
@@ -218,8 +242,9 @@ export function createAgentHookEntry(
   matcher: string,
   marker: string,
   scriptPath: string,
-  timeoutSec: number = HOOK_TIMEOUT_SEC,
+  options: AgentHookEntryOptions = {},
 ): ManagedHookEntry {
+  const { projectDirPlaceholder, timeoutSec = HOOK_TIMEOUT_SEC } = options;
   return {
     eventType,
     marker,
@@ -228,7 +253,7 @@ export function createAgentHookEntry(
       hooks: [
         {
           type: 'command',
-          command: resolveAgentHookCommand(context, configDir, scriptPath),
+          command: resolveAgentHookCommand(context, configDir, scriptPath, projectDirPlaceholder),
           timeout: timeoutSec,
         },
       ],

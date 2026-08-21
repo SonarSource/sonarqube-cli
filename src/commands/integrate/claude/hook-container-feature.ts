@@ -50,6 +50,7 @@ import {
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../_common/hooks.ts';
+import { CLAUDE_PROJECT_DIR_PLACEHOLDER } from './hooks.ts';
 
 export interface ClaudeHookSubfeature<
   TOptions = Record<string, unknown>,
@@ -133,6 +134,9 @@ export function createClaudeHookEventContainer<TOptions = Record<string, unknown
           matcher,
           config.marker,
           config.scriptPath,
+          {
+            projectDirPlaceholder: CLAUDE_PROJECT_DIR_PLACEHOLDER,
+          },
         ),
       ]);
     },

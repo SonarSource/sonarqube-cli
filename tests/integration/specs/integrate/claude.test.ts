@@ -538,10 +538,12 @@ describe('integrate claude', () => {
       const command = String(
         spacedDir.file('.claude', 'settings.json').asJson().hooks.PreToolUse[0].hooks[0].command,
       );
-      // Project scope emits a relative, fully-quoted path (double quotes on
+      // Project scope anchors the path to Claude Code's own `${CLAUDE_PROJECT_DIR}`
+      // placeholder (cwd-independent) and fully quotes it (double quotes on
       // Windows, single quotes on Unix) — deterministic regardless of the
       // spaced project directory, so assert the exact command.
-      const scriptRel = '.claude/hooks/sonar-secrets/build-scripts/pretool-secrets';
+      const scriptRel =
+        '${CLAUDE_PROJECT_DIR}/.claude/hooks/sonar-secrets/build-scripts/pretool-secrets';
       expect(command).toBe(
         IS_WINDOWS
           ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptRel}.ps1"`
@@ -1067,7 +1069,7 @@ describe('integrate claude — file placement (local vs global)', () => {
     );
 
     it(
-      'registers hook commands with relative paths in settings.json',
+      'registers hook commands anchored to ${CLAUDE_PROJECT_DIR} in settings.json',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -1088,11 +1090,13 @@ describe('integrate claude — file placement (local vs global)', () => {
           String(settings.hooks.UserPromptSubmit[0].hooks[0].command),
         );
 
-        // Must be relative (not absolute) so they resolve from the project root
+        // Must not be a real absolute path, and anchored to Claude Code's own
+        // project-root placeholder (not cwd) so they still resolve when cwd
+        // diverges from the project root (worktrees, cwd changes).
         expect(isAbsolute(preToolPath)).toBe(false);
-        expect(preToolPath.startsWith('.claude')).toBe(true);
+        expect(preToolPath.startsWith('${CLAUDE_PROJECT_DIR}/.claude')).toBe(true);
         expect(isAbsolute(promptPath)).toBe(false);
-        expect(promptPath.startsWith('.claude')).toBe(true);
+        expect(promptPath.startsWith('${CLAUDE_PROJECT_DIR}/.claude')).toBe(true);
       },
       { timeout: 30000 },
     );
@@ -1510,7 +1514,8 @@ describe.skipIf(IS_WINDOWS)('integrate claude — legacy state without agentExte
       expect(pretoolContent).toContain('sonar hook claude-pre-tool-use');
       expect(pretoolContent).not.toContain('sonar analyze');
 
-      // settings.json must have correctly structured hook entries (relative paths, project-level)
+      // settings.json must have correctly structured hook entries (project-level,
+      // anchored to Claude Code's ${CLAUDE_PROJECT_DIR} placeholder rather than cwd)
       const settings = harness.cwd.file('.claude', 'settings.json').asJson();
       const preToolEntry = settings.hooks?.PreToolUse?.[0];
       const promptEntry = settings.hooks?.UserPromptSubmit?.[0];
@@ -1519,13 +1524,13 @@ describe.skipIf(IS_WINDOWS)('integrate claude — legacy state without agentExte
       expect(preToolEntry?.hooks?.[0]?.timeout).toBe(60);
       // Command is shell-quoted; compare the unquoted path.
       expect(hookScriptPath(String(preToolEntry?.hooks?.[0]?.command))).toBe(
-        '.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh',
+        '${CLAUDE_PROJECT_DIR}/.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh',
       );
       expect(promptEntry?.matcher).toBe('*');
       expect(promptEntry?.hooks?.[0]?.type).toBe('command');
       expect(promptEntry?.hooks?.[0]?.timeout).toBe(60);
       expect(hookScriptPath(String(promptEntry?.hooks?.[0]?.command))).toBe(
-        '.claude/hooks/sonar-secrets/build-scripts/prompt-secrets.sh',
+        '${CLAUDE_PROJECT_DIR}/.claude/hooks/sonar-secrets/build-scripts/prompt-secrets.sh',
       );
     },
     { timeout: 30000 },

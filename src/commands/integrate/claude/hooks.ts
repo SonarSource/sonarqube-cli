@@ -50,6 +50,16 @@ const AGENT_CONFIG_DIR: Record<string, string> = {
   claude: '.claude',
 };
 
+/**
+ * Claude Code substitutes this literal token with the real project root as
+ * plain-text substitution before the command ever reaches a shell — see
+ * https://code.claude.com/docs/en/hooks#reference-scripts-by-path. Anchoring
+ * project-scope hook commands to it (instead of a bare relative path) keeps
+ * them resolvable when Claude Code's cwd diverges from the project root
+ * (worktrees, cwd changes).
+ */
+export const CLAUDE_PROJECT_DIR_PLACEHOLDER = '${CLAUDE_PROJECT_DIR}';
+
 interface HookConfig {
   matcher: string;
   hooks: Array<{
@@ -118,7 +128,12 @@ async function installHook(params: HookInstallParams): Promise<void> {
   );
 
   const hookContext = { targetRoot: installDir, scope } as IntegrationContext;
-  const command = resolveAgentHookCommand(hookContext, configDir, scriptPath);
+  const command = resolveAgentHookCommand(
+    hookContext,
+    configDir,
+    scriptPath,
+    CLAUDE_PROJECT_DIR_PLACEHOLDER,
+  );
 
   // Marker derived from first path segment (e.g. 'sonar-secrets' from 'sonar-secrets/build-scripts/pretool-secrets')
   const marker = scriptPath.split('/')[0];
