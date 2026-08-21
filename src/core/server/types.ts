@@ -119,3 +119,27 @@ export interface ProjectsSearchResponse {
   };
   components: SonarQubeProject[];
 }
+
+export interface ProjectStatusParams {
+  projectKey: string;
+}
+
+export type QualityGateStatus = 'OK' | 'WARN' | 'ERROR' | 'NONE';
+
+export interface QualityGateCondition {
+  status: string;
+  metricKey: string;
+  comparator: string;
+  errorThreshold?: string;
+  actualValue?: string;
+}
+
+export interface ProjectStatus {
+  status: QualityGateStatus;
+  ignoredConditions?: boolean;
+  conditions: QualityGateCondition[];
+}
+
+export interface ProjectStatusResponse {
+  projectStatus: ProjectStatus;
+}

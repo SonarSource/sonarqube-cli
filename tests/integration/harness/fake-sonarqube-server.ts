@@ -22,7 +22,7 @@
 
 import type { Organization } from '@/core/server/client.ts';
 import type { SettingsValue } from '@/core/server/settings-value.ts';
-import type { SonarQubeIssue } from '@/core/server/types.ts';
+import type { QualityGateStatus, SonarQubeIssue } from '@/core/server/types.ts';
 
 import type { RecordedRequest } from './types.js';
 
@@ -55,6 +55,7 @@ interface ProjectData {
   key: string;
   name: string;
   issues: Required<IssueConfig>[];
+  qualityGateStatus?: QualityGateStatus;
 }
 
 export interface DopRepositoryConfig {
@@ -70,6 +71,7 @@ export interface DopRepositoryConfig {
 export class ProjectBuilder {
   private readonly projectKey: string;
   private readonly issues: Required<IssueConfig>[] = [];
+  private qualityGateStatus?: QualityGateStatus;
 
   constructor(projectKey: string) {
     this.projectKey = projectKey;
@@ -90,11 +92,22 @@ export class ProjectBuilder {
     return this;
   }
 
+  /**
+   * Configure `GET /api/qualitygates/project_status`'s verdict for this project. A project
+   * with no configured status defaults to `NONE` at response time, matching the real API's
+   * "analyzed project, no quality gate" behavior.
+   */
+  withProjectStatus(status: QualityGateStatus): this {
+    this.qualityGateStatus = status;
+    return this;
+  }
+
   getData(): ProjectData {
     return {
       key: this.projectKey,
       name: this.projectKey,
       issues: this.issues,
+      qualityGateStatus: this.qualityGateStatus,
     };
   }
 }
@@ -639,6 +652,26 @@ export class FakeSonarQubeServerBuilder {
               ps: pageSize,
               paging: { pageIndex: page, pageSize, total: issues.length },
               issues: pagedIssues,
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path === '/api/qualitygates/project_status') {
+          const projectKey = query.projectKey;
+          const projectData = projectKey ? projects.get(projectKey) : undefined;
+          if (!projectData) {
+            return new Response(
+              JSON.stringify({ errors: [{ msg: `Component key '${projectKey}' not found` }] }),
+              { status: 404, headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+          return new Response(
+            JSON.stringify({
+              projectStatus: {
+                status: projectData.qualityGateStatus ?? 'NONE',
+                conditions: [],
+              },
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );

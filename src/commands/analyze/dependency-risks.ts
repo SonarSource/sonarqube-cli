@@ -19,11 +19,10 @@
  */
 
 import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
+import { InvalidOptionError } from '@/core/command-error.ts';
 import { DefaultScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import { DefaultSecretsInstaller } from '@/core/host/install/secrets.ts';
-import { discoverProject } from '@/core/project-info.ts';
+import { resolveProjectKey } from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import {
@@ -108,27 +107,6 @@ export async function analyzeDependencyRisks(
     scan.scanDurationMs,
     typeof process.exitCode === 'number' ? process.exitCode : null,
   );
-}
-
-async function resolveProjectKey(
-  explicitProject: string | undefined,
-  auth: ResolvedAuth,
-): Promise<string> {
-  if (explicitProject) {
-    print(`     Using project key: ${explicitProject}`, 'stderr');
-    return explicitProject;
-  }
-
-  const discovered = await discoverProject(process.cwd(), true, { auth });
-  if (discovered.projectKey) {
-    print(`     Using auto-detected project key: ${discovered.projectKey}`, 'stderr');
-    return discovered.projectKey;
-  }
-
-  throw new CommandFailedError('Could not determine project key.', {
-    remediationHint:
-      'Use --project <key>, add sonar.projectKey to sonar-project.properties, or configure a .sonarlint/ binding.',
-  });
 }
 
 function handleResult(unresolvedRisksCount: number, errorCount: number) {

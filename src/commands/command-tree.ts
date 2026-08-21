@@ -66,6 +66,7 @@ import { authStatus } from './auth/status.ts';
 import { type CommandInvocationContext } from './command-invocation-context.ts';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
+import { getQualityGate, type GetQualityGateOptions } from './get/quality-gate.ts';
 import { agentPostToolUse } from './hook/agent-post-tool-use.ts';
 import { agentPromptSubmit } from './hook/agent-prompt-submit.ts';
 import { antigravityPreToolUse } from './hook/antigravity-pre-tool-use.ts';
@@ -265,6 +266,19 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .addOption(pageOption)
     .addOption(pageSizeOption)
     .authenticatedAction((ctx, options: ListProjectsOptions) => listProjects(options, ctx));
+
+  const get = COMMAND_TREE.command('get')
+    .description('Fetch quality gate status from SonarQube Cloud or Server')
+    .rootHelp({
+      category: 'data',
+    });
+
+  get
+    .command('quality-gate')
+    .description('Show the quality gate verdict for a project')
+    .showUpdateNotification()
+    .option('-p, --project <project>', 'Project key')
+    .authenticatedAction((ctx, options: GetQualityGateOptions) => getQualityGate(options, ctx));
 
   // Import repositories from DevOps platforms into SonarQube (hidden while in development)
   COMMAND_TREE.command('import', { hidden: true })

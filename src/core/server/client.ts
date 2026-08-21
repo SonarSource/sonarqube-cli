@@ -58,6 +58,7 @@ const HTTP_STATUS_SERVICE_UNAVAILABLE = 503;
 export const GENERIC_HTTP_METHODS = ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'] as const;
 export const METHODS_WITH_BODY = new Set<HttpMethod>(['POST', 'PATCH', 'PUT']);
 export type HttpMethod = (typeof GENERIC_HTTP_METHODS)[number];
+export type QueryParams = Record<string, string | number | boolean>;
 
 /**
  * `not_applicable` is never returned by `hasVortexEntitlement()` itself — it's reserved for
@@ -217,12 +218,31 @@ export class SonarQubeClient {
   /**
    * Make GET request to SonarQube API
    */
-  async get<T>(
-    endpoint: string,
-    params?: Record<string, string | number | boolean>,
-    baseUrl?: string,
-  ): Promise<T> {
+  async get<T>(endpoint: string, params?: QueryParams, baseUrl?: string): Promise<T> {
     const result = await this.getSafe<T>(endpoint, params, baseUrl);
+
+    await this.raiseForStatus(result.response, 'GET');
+
+    if (result.value === undefined) {
+      throw new Error('SonarQube API error: empty response body');
+    }
+    return result.value;
+  }
+
+  /**
+   * Like `get`, but returns `null` instead of throwing when the server responds 404.
+   * Every other non-2xx status still raises its normal typed error.
+   */
+  async getOrNotFound<T>(
+    endpoint: string,
+    params?: QueryParams,
+    baseUrl?: string,
+  ): Promise<T | null> {
+    const result = await this.getSafe<T>(endpoint, params, baseUrl);
+
+    if (result.response.status === HTTP_STATUS_NOT_FOUND) {
+      return null;
+    }
 
     await this.raiseForStatus(result.response, 'GET');
 
@@ -236,7 +256,7 @@ export class SonarQubeClient {
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
   async getSafe<TValue>(
     endpoint: string,
-    params?: Record<string, string | number | boolean>,
+    params?: QueryParams,
     baseUrl?: string,
     timeoutMs: number = GET_REQUEST_TIMEOUT_MS,
   ): Promise<{ response: Response; value: TValue | undefined }> {
@@ -364,12 +384,8 @@ export class SonarQubeClient {
 
   async getServerMode(): Promise<'mqr' | 'standard'> {
     if (this.isCloud) return 'mqr';
-    const { response, value } = await this.getSafe<{ mode: string }>(
-      '/api/v2/clean-code-policy/mode',
-    );
-    if (response.status === HTTP_STATUS_NOT_FOUND) return 'standard';
-    await this.raiseForStatus(response, 'GET');
-    return value?.mode === 'MQR' ? 'mqr' : 'standard';
+    const result = await this.getOrNotFound<{ mode: string }>('/api/v2/clean-code-policy/mode');
+    return result?.mode === 'MQR' ? 'mqr' : 'standard';
   }
 
   /**
@@ -715,17 +731,16 @@ export class SonarQubeClient {
    * shape they need (e.g. `parseAnalysisProperties` for SCA).
    */
   async getProjectSettings(projectKey: string): Promise<SettingsValue[]> {
-    const result = await this.getSafe<{ settings?: SettingsValue[] }>('/api/settings/values', {
-      component: projectKey,
-    });
+    const result = await this.getOrNotFound<{ settings?: SettingsValue[] }>(
+      '/api/settings/values',
+      { component: projectKey },
+    );
 
-    if (result.response.status === HTTP_STATUS_NOT_FOUND) {
+    if (result === null) {
       throw new Error(`Project '${projectKey}' not found`);
     }
 
-    await this.raiseForStatus(result.response, 'GET');
-
-    return result.value?.settings ?? [];
+    return result.settings ?? [];
   }
 
   /**
