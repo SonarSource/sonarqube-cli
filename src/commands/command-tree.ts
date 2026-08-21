@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { type Command, Help, InvalidArgumentError, Option } from 'commander';
+import { type Command, Help, InvalidArgumentError } from 'commander';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
@@ -105,6 +105,7 @@ import {
   createDefaultCliRuntime,
   isAlphaEnabledFromEnv,
   SonarCommand,
+  SonarOption,
   Stage,
 } from './sonar-command.ts';
 import { systemReset, type SystemResetOptions } from './system/reset.ts';
@@ -208,11 +209,13 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       category: 'data',
     });
 
-  const pageOption = new Option('--page <page>', 'Page number').default(1).argParser(parseInteger);
-  const pageSizeOption = new Option('--page-size <page-size>', 'Page size (1-500)')
+  const pageOption = new SonarOption('--page <page>', 'Page number')
+    .default(1)
+    .argParser(parseInteger);
+  const pageSizeOption = new SonarOption('--page-size <page-size>', 'Page size (1-500)')
     .default(DEFAULT_PAGE_SIZE)
     .argParser(parseInteger);
-  const listIssuesFormatOption = new Option('--format <format>', 'Output format')
+  const listIssuesFormatOption = new SonarOption('--format <format>', 'Output format')
     .choices(VALID_FORMATS)
     .default('json');
   list
@@ -451,11 +454,11 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     );
 
   // Shared option set for `analyze agentic` and `verify`.
-  const sqaaFormatOption = new Option('--format <format>', 'Output format')
+  const sqaaFormatOption = new SonarOption('--format <format>', 'Output format')
     .choices(SQAA_FORMATS)
     .default('text');
 
-  const sqaaDepthOption = new Option(
+  const sqaaDepthOption = new SonarOption(
     '--depth <depth>',
     'Analysis depth: STANDARD (fast) or DEEP (cross-file). Default: STANDARD for one --file; DEEP otherwise.',
   ).choices(SQAA_DEPTH_CHOICES);
@@ -496,11 +499,11 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     analyzeAll(options, ctx),
   );
 
-  const dependencyRisksFormatOption = new Option('--format <format>', 'Output format')
+  const dependencyRisksFormatOption = new SonarOption('--format <format>', 'Output format')
     .choices(DEPENDENCY_RISKS_FORMATS)
     .default('table');
 
-  const dependencyRisksStatusFilterOption = new Option(
+  const dependencyRisksStatusFilterOption = new SonarOption(
     '--statuses <statuses>',
     'Filter issues by status\n' +
       '\n' +
@@ -518,7 +521,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       '    --statuses active,safe\n',
   ).default('active');
 
-  const dependencyRisksMinSeverityOption = new Option(
+  const dependencyRisksMinSeverityOption = new SonarOption(
     '--min-severity <severity>',
     `Minimum severity level to include. Allowed values: ${SEVERITIES.join(', ')} (default: all severities)`,
   ).argParser((v) => {

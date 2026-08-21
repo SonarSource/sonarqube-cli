@@ -177,7 +177,7 @@ function getRootOptionEntries(rootCommand: SonarCommand, helper: Help): HelpMenu
     .sort(compareRootOptions)
     .map((option) => ({
       label: option.flags,
-      summary: ROOT_OPTION_SUMMARIES.get(option.long ?? '') ?? option.description,
+      summary: ROOT_OPTION_SUMMARIES.get(option.long ?? '') ?? helper.optionDescription(option),
     }));
 }
 
