@@ -97,7 +97,7 @@ export function createDefaultCliRuntime(): CliRuntime {
 }
 
 /** Whether a command or option at this stage should be registered for this runtime. */
-export function isStageVisible(
+function isStageVisible(
   stage: StageName,
   flagKey: string | undefined,
   runtime: CliRuntime,
