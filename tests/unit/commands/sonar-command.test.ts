@@ -837,7 +837,7 @@ describe('SonarCommand', () => {
     it('creates SonarOption instances from .option()', () => {
       const cmd = new SonarCommand('cmd').option('--plain', 'A plain option');
       expect(cmd.options[0]).toBeInstanceOf(SonarOption);
-      expect((cmd.options[0]).isStable).toBe(true);
+      expect(cmd.options[0].isStable).toBe(true);
     });
 
     it('throws when staging a mandatory option', () => {
