@@ -954,5 +954,12 @@ describe('SonarCommand', () => {
 
       expect(cmd.helpInformation()).toContain('Preview the plan [BETA]');
     });
+
+    it('tags staged options in the custom root help menu', () => {
+      const root = new SonarCommand('sonar');
+      root.addOption(new SonarOption('--preview', 'Preview the plan').stage(Stage.Beta()));
+
+      expect(getCustomRootHelp(root, root.createHelp())).toContain('Preview the plan [BETA]');
+    });
   });
 });
