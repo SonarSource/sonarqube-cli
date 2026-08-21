@@ -110,7 +110,7 @@ describe('identityFromConnection()', () => {
     expect(identityFromConnection(undefined)).toEqual({
       user_uuid: null,
       organization_uuid_v4: null,
-      enterprise_uuid: null,
+      enterprise_uuid: undefined,
       sqs_installation_id: null,
     });
   });
@@ -451,7 +451,7 @@ describe('resolveTelemetryIdentity()', () => {
     const first = await resolveTelemetryIdentity(auth);
     const second = await resolveTelemetryIdentity(cloudAuth('transient-enterprise-token'));
 
-    expect(first.enterprise_uuid).toBeNull();
+    expect(first.enterprise_uuid).toBeUndefined();
     expect(second.enterprise_uuid).toBe('ent-after-retry');
     expect(
       getSafeSpy.mock.calls.filter(

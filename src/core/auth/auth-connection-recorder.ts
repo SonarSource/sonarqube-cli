@@ -33,7 +33,7 @@ import { loadState, saveState } from '../state/state-repository.ts';
 import {
   identityFromConnection,
   needsIdentityEnrichment,
-  resolveTelemetryIdentityResolution,
+  resolveTelemetryIdentity,
   type TelemetryIdentity,
 } from '../telemetry/identity-fetch.ts';
 
@@ -72,11 +72,8 @@ export async function recordConnectionFromAuth(
     envOnly: options.envOnly,
   });
 
-  const { identity, persistEnterprise } = await resolveTelemetryIdentityResolution(
-    auth,
-    seedIdentity,
-  );
-  applyIdentityToConnection(connection, auth, identity, persistEnterprise);
+  const identity = await resolveTelemetryIdentity(auth, seedIdentity);
+  applyIdentityToConnection(connection, auth, identity);
 
   saveState(state);
   return connection;
@@ -87,12 +84,11 @@ function applyIdentityToConnection(
   connection: AuthConnection,
   auth: ResolvedAuth,
   identity: TelemetryIdentity,
-  persistEnterprise: boolean,
 ): void {
   connection.userUuid = identity.user_uuid;
   if (auth.connectionType === 'cloud' && auth.orgKey) {
     connection.organizationUuidV4 = identity.organization_uuid_v4;
-    if (persistEnterprise) {
+    if (identity.enterprise_uuid !== undefined) {
       connection.enterpriseUuid = identity.enterprise_uuid;
     }
   } else if (auth.connectionType === 'on-premise') {

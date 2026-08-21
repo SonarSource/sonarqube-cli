@@ -168,7 +168,7 @@ async function resolveFeatureFlagIdentity(auth: ResolvedAuth): Promise<FeatureFl
     connectionType: auth.connectionType,
     userUuid: identity.user_uuid,
     organizationUuidV4: identity.organization_uuid_v4,
-    enterpriseUuid: identity.enterprise_uuid,
+    enterpriseUuid: identity.enterprise_uuid ?? null,
     sqsInstallationId: identity.sqs_installation_id,
   };
 }

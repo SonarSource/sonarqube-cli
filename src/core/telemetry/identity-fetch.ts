@@ -37,14 +37,14 @@ const ENTERPRISE_ORGANIZATIONS_ENDPOINT = '/enterprises/enterprise-organizations
 export interface TelemetryIdentity {
   user_uuid: string | null;
   organization_uuid_v4: string | null;
-  enterprise_uuid: string | null;
+  /** `undefined` = not resolved yet; `null` = confirmed the org is not in an enterprise. */
+  enterprise_uuid?: string | null;
   sqs_installation_id: string | null;
 }
 
 export const EMPTY_IDENTITY: TelemetryIdentity = {
   user_uuid: null,
   organization_uuid_v4: null,
-  enterprise_uuid: null,
   sqs_installation_id: null,
 };
 
@@ -52,7 +52,7 @@ export function identityFromConnection(conn: AuthConnection | undefined): Teleme
   return {
     user_uuid: conn?.userUuid ?? null,
     organization_uuid_v4: conn?.organizationUuidV4 ?? null,
-    enterprise_uuid: conn?.enterpriseUuid ?? null,
+    enterprise_uuid: conn?.enterpriseUuid,
     sqs_installation_id: conn?.sqsInstallationId ?? null,
   };
 }
@@ -120,7 +120,8 @@ export function mergeIdentity(
   return {
     user_uuid: partial.user_uuid ?? base.user_uuid,
     organization_uuid_v4: partial.organization_uuid_v4 ?? base.organization_uuid_v4,
-    enterprise_uuid: partial.enterprise_uuid ?? base.enterprise_uuid,
+    enterprise_uuid:
+      partial.enterprise_uuid !== undefined ? partial.enterprise_uuid : base.enterprise_uuid,
     sqs_installation_id: partial.sqs_installation_id ?? base.sqs_installation_id,
   };
 }
@@ -133,13 +134,16 @@ function cacheKey(auth: ResolvedAuth): string {
   return [auth.connectionType, auth.serverUrl, auth.orgKey ?? '', fingerprint].join('|');
 }
 
-function cacheEntryToIdentity(entry: CacheEntry): TelemetryIdentity {
-  return {
+function cacheEntryToIdentity(entry: CacheEntry): Partial<TelemetryIdentity> {
+  const identity: Partial<TelemetryIdentity> = {
     user_uuid: entry.userUuid ?? null,
     organization_uuid_v4: entry.organizationUuidV4 ?? null,
-    enterprise_uuid: entry.enterpriseUuid ?? null,
     sqs_installation_id: entry.sqsInstallationId ?? null,
   };
+  if ('enterpriseUuid' in entry) {
+    identity.enterprise_uuid = entry.enterpriseUuid ?? null;
+  }
+  return identity;
 }
 
 function fetchPlanIsComplete(plan: IdentityFetchPlan): boolean {
@@ -308,14 +312,14 @@ async function fetchMissingFromApi(
     }
     if (fetchPlan.enterprise) {
       if (!org.resolved) {
-        enterprise_uuid = null;
+        enterprise_uuid = undefined;
         resolved.enterprise = false;
       } else if (!org.id) {
         enterprise_uuid = null;
         resolved.enterprise = true;
       } else {
         const enterprise = await fetchEnterpriseUuid(client, auth.serverUrl, org.id);
-        enterprise_uuid = enterprise.value;
+        enterprise_uuid = enterprise.resolved ? enterprise.value : undefined;
         resolved.enterprise = enterprise.resolved;
       }
     }
@@ -332,29 +336,11 @@ async function fetchMissingFromApi(
   };
 }
 
-interface TelemetryIdentityResolution {
-  identity: TelemetryIdentity;
-  /** True when enterprise UUID is known, including confirmed-absent `null`. */
-  persistEnterprise: boolean;
-}
-
 /** Never throws — a failed fetch just leaves the field null and is retried next call. */
 export async function resolveTelemetryIdentity(
   auth: ResolvedAuth,
   seed: TelemetryIdentity = EMPTY_IDENTITY,
 ): Promise<TelemetryIdentity> {
-  return (await resolveTelemetryIdentityResolution(auth, seed)).identity;
-}
-
-/**
- * Like {@link resolveTelemetryIdentity}, plus whether `enterpriseUuid` is safe to
- * persist on the connection. Transient enterprise lookup failures must not be
- * written as confirmed-absent `null`, or later commands would skip the retry.
- */
-export async function resolveTelemetryIdentityResolution(
-  auth: ResolvedAuth,
-  seed: TelemetryIdentity = EMPTY_IDENTITY,
-): Promise<TelemetryIdentityResolution> {
   const entryKey = cacheKey(auth);
   const diskCache = readDiskCache();
   const diskEntry = entryKey in diskCache.entries ? diskCache.entries[entryKey] : undefined;
@@ -366,7 +352,7 @@ export async function resolveTelemetryIdentityResolution(
 
   const fetchPlan = planFieldsToFetch(auth, identity, diskEntry);
   if (fetchPlanIsComplete(fetchPlan)) {
-    return { identity, persistEnterprise: !fetchPlan.enterprise };
+    return identity;
   }
 
   const fetchResult = await fetchMissingFromApi(auth, identity, fetchPlan);
@@ -380,7 +366,7 @@ export async function resolveTelemetryIdentityResolution(
     updatedEntry.organizationUuidV4 = identity.organization_uuid_v4;
   }
   if (fetchPlan.enterprise && fetchResult.resolved.enterprise) {
-    updatedEntry.enterpriseUuid = identity.enterprise_uuid;
+    updatedEntry.enterpriseUuid = identity.enterprise_uuid ?? null;
   }
   if (fetchPlan.sqs && fetchResult.resolved.sqs) {
     updatedEntry.sqsInstallationId = identity.sqs_installation_id;
@@ -390,8 +376,5 @@ export async function resolveTelemetryIdentityResolution(
     writeDiskCache(diskCache);
   }
 
-  return {
-    identity,
-    persistEnterprise: !fetchPlan.enterprise || fetchResult.resolved.enterprise,
-  };
+  return identity;
 }
