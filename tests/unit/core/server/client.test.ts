@@ -29,6 +29,7 @@ import {
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { ForbiddenApiError } from '@/core/server/errors.ts';
 import { fetchGuarded } from '@/core/server/fetch-guarded.ts';
+import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { version as VERSION } from '../../../../package.json';
@@ -1133,6 +1134,16 @@ describe('SonarQubeClient', () => {
 
       const init = lastFetchInit(fetchSpy);
       expect((init.headers as Record<string, string>)['Authorization']).toBe(`Bearer ${TOKEN}`);
+    });
+
+    it('sends x-sonar-invocation-id header from INVOCATION_ID', async () => {
+      fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
+
+      await client.createAnalysis(singleFileRequest);
+
+      expect(lastFetchInit(fetchSpy).headers).toMatchObject({
+        'x-sonar-invocation-id': INVOCATION_ID,
+      });
     });
 
     it('sends request body as JSON with files[]', async () => {
