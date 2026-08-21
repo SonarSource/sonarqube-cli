@@ -265,6 +265,8 @@ class SonarHelp extends Help {
  *                          the caller is not entitled to use
  */
 export class SonarCommand extends Command {
+  // Valid because Commander declares `options` as readonly (covariant), so we can narrow Option to SonarOption.
+  declare readonly options: readonly SonarOption[];
   private _stage: StageName = 'stable';
   private _betaFlagKey: string | undefined;
   private _requiresAuth = false;
@@ -625,7 +627,7 @@ export class SonarCommand extends Command {
   }
 
   private warnIfStagedOptionsUsed(): void {
-    for (const option of this.options as SonarOption[]) {
+    for (const option of this.options) {
       if (option.isStable) {
         continue;
       }
@@ -695,7 +697,7 @@ export function collectPrivateBetaFlagKeys(root: SonarCommand): string[] {
     if (command.isPrivateBeta && flagKey !== undefined) {
       keys.add(flagKey);
     }
-    for (const option of command.options as SonarOption[]) {
+    for (const option of command.options) {
       if (option.isPrivateBeta && option.betaFlagKey !== undefined) {
         keys.add(option.betaFlagKey);
       }

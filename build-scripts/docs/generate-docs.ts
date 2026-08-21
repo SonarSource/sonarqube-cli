@@ -34,7 +34,6 @@ import { createCommandTree } from '@/commands/command-tree.ts';
 import {
   BETA_HELP_TAG,
   type SonarCommand,
-  SonarOption,
   stripLifecycleHelpTag,
 } from '@/commands/sonar-command.ts';
 
@@ -112,7 +111,7 @@ function descriptionWithoutBetaTag(cmd: SonarCommand): string {
 }
 
 function serializeOptions(cmd: SonarCommand): ClidocOption[] {
-  return (cmd.options as SonarOption[])
+  return cmd.options
     .filter((option) => {
       if (option.hidden || option.long === '--help') {
         return false;
