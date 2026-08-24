@@ -106,7 +106,6 @@ import {
   isAlphaEnabledFromEnv,
   SonarCommand,
   SonarOption,
-  Stage,
 } from './sonar-command.ts';
 import { systemReset, type SystemResetOptions } from './system/reset.ts';
 import { systemStatus, type SystemStatusOptions } from './system/status.ts';
@@ -373,7 +372,6 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       category: 'data',
       label: 'context [action] [args...]',
     })
-    .stage(Stage.Beta())
     .argument('[action]', 'Action forwarded to sonar-context-augmentation')
     .argument('[args...]', 'Additional arguments forwarded to sonar-context-augmentation')
     .helpOption(false)
