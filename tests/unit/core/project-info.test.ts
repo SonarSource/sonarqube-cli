@@ -22,7 +22,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
@@ -34,9 +34,13 @@ import {
   discoverProject,
   discoverProjectInfo,
   discoverServer,
+  KNOWN_SERVER_PROJECT_MAPPING_SOURCE,
 } from '@/core/project-info.ts';
 import * as discoverByRemote from '@/core/server/discover-project-by-remote.ts';
 import { GIT_REMOTE_BINDING_SOURCE } from '@/core/server/discover-project-by-remote.ts';
+import type { KnownServerProjectMapping } from '@/core/state/state.ts';
+import { getDefaultState } from '@/core/state/state.ts';
+import * as stateRepository from '@/core/state/state-repository.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
@@ -47,6 +51,28 @@ async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
   } finally {
     process.chdir(prev);
   }
+}
+
+function makeKnownMapping(
+  overrides: Partial<KnownServerProjectMapping> = {},
+): KnownServerProjectMapping {
+  return {
+    folder: '',
+    projectKey: 'known-project',
+    serverUrl: 'https://known.example.com',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function mockKnownMappings(
+  loadStateSpy: Mock<typeof stateRepository.loadState>,
+  mappings: KnownServerProjectMapping[],
+): void {
+  loadStateSpy.mockReturnValue({
+    ...getDefaultState('1.0.0'),
+    knownServerProjectMappings: mappings,
+  });
 }
 
 it('discoverProjectInfo: parses sonar-project.properties (comments, empty lines, all keys)', async () => {
@@ -206,16 +232,21 @@ it('discoverProjectInfo: git remote is empty when git returns non-zero exit', as
 
 describe('discoverProject', () => {
   let testDir: string;
+  let loadStateSpy: Mock<typeof stateRepository.loadState>;
 
   beforeEach(() => {
     testDir = join(tmpdir(), `sonarqube-cli-test-discover-project-${Date.now()}`);
     mkdirSync(testDir, { recursive: true });
     setMockUi(true);
+    // Isolate from the real ~/.sonar state.json — most tests here don't care about
+    // known-project-mapping lookups, only the dedicated tests below do.
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('1.0.0'));
   });
 
   afterEach(() => {
     clearMockUiCalls();
     setMockUi(false);
+    loadStateSpy.mockRestore();
     rmSync(testDir, { recursive: true, force: true });
   });
 
@@ -421,6 +452,112 @@ describe('discoverProject', () => {
     } finally {
       remoteSpy.mockRestore();
     }
+  });
+
+  describe('known server project mapping', () => {
+    it('uses a known project mapping when no local config provides one', async () => {
+      mockKnownMappings(loadStateSpy, [
+        makeKnownMapping({ folder: canonicalizePath(testDir), orgKey: 'known-org' }),
+      ]);
+
+      const result = await discoverProject(testDir);
+
+      expect(result.projectKey).toBe('known-project');
+      expect(result.serverUrl).toBe('https://known.example.com');
+      expect(result.organization).toBe('known-org');
+      expect(result.configSources).toEqual([KNOWN_SERVER_PROJECT_MAPPING_SOURCE]);
+    });
+
+    it('matches from a subdirectory of the mapped folder', async () => {
+      const subDir = join(testDir, 'nested', 'sub');
+      mkdirSync(subDir, { recursive: true });
+      mockKnownMappings(loadStateSpy, [makeKnownMapping({ folder: canonicalizePath(testDir) })]);
+
+      const result = await discoverProject(subDir);
+
+      expect(result.projectKey).toBe('known-project');
+    });
+
+    it('does not match an unrelated folder', async () => {
+      mockKnownMappings(loadStateSpy, [
+        makeKnownMapping({
+          folder: join(tmpdir(), 'some-other-project'),
+          projectKey: 'other-project',
+        }),
+      ]);
+
+      const result = await discoverProject(testDir);
+
+      expect(result.projectKey).toBeUndefined();
+    });
+
+    it('a known project mapping wins over sonar-project.properties and skips reading it', async () => {
+      writeFileSync(
+        join(testDir, 'sonar-project.properties'),
+        'sonar.host.url=https://props-server.io\nsonar.projectKey=props_project\n',
+      );
+      mockKnownMappings(loadStateSpy, [makeKnownMapping({ folder: canonicalizePath(testDir) })]);
+
+      const result = await discoverProject(testDir);
+
+      expect(result.projectKey).toBe('known-project');
+      expect(result.serverUrl).toBe('https://known.example.com');
+      expect(result.configSources).toEqual([KNOWN_SERVER_PROJECT_MAPPING_SOURCE]);
+    });
+
+    it('is checked before, and short-circuits, the git-remote binding network lookup', async () => {
+      mkdirSync(join(testDir, '.git'), { recursive: true });
+      mockKnownMappings(loadStateSpy, [makeKnownMapping({ folder: canonicalizePath(testDir) })]);
+      const remoteSpy = spyOn(discoverByRemote, 'discoverProjectKeyByGitRemote').mockResolvedValue({
+        projectKey: 'from-remote',
+        serverUrl: 'https://sonarcloud.io',
+      });
+
+      try {
+        const result = await discoverProject(testDir, false, {
+          auth: { token: 't', serverUrl: 'https://sonarcloud.io', connectionType: 'cloud' },
+        });
+
+        expect(result.projectKey).toBe('known-project');
+        expect(remoteSpy).not.toHaveBeenCalled();
+      } finally {
+        remoteSpy.mockRestore();
+      }
+    });
+
+    it('falls through to git-remote binding when no known mapping matches', async () => {
+      mkdirSync(join(testDir, '.git'), { recursive: true });
+      const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+        exitCode: 0,
+        stdout: 'https://github.com/example/remote-bound.git',
+        stderr: '',
+      });
+      const remoteSpy = spyOn(discoverByRemote, 'discoverProjectKeyByGitRemote').mockResolvedValue({
+        projectKey: 'from-remote',
+        serverUrl: 'https://sonarcloud.io',
+      });
+
+      try {
+        const result = await discoverProject(testDir, false, {
+          auth: { token: 't', serverUrl: 'https://sonarcloud.io', connectionType: 'cloud' },
+        });
+
+        expect(result.projectKey).toBe('from-remote');
+      } finally {
+        spawnSpy.mockRestore();
+        remoteSpy.mockRestore();
+      }
+    });
+
+    it('gracefully skips when loadState throws', async () => {
+      loadStateSpy.mockImplementation(() => {
+        throw new Error('state read failed');
+      });
+
+      const result = await discoverProject(testDir);
+
+      expect(result.projectKey).toBeUndefined();
+    });
   });
 });
 

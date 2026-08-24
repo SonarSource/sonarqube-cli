@@ -432,6 +432,28 @@ export interface IntegrationsState {
 }
 
 /**
+ * A folder known to be bound to a SonarQube project, derived from project-scoped
+ * integration feature attrs.
+ */
+export interface KnownServerProjectMapping {
+  /** Repository's main working tree root (worktree-normalized), or the feature's targetRoot outside a git repo. */
+  folder: string;
+  /** SonarQube project key bound to this folder. */
+  projectKey: string;
+  /**
+   * Server URL for this binding. Read from the feature's own `serverUrl` attr when
+   * recorded (Vortex-entitled agent integrations); otherwise backfilled from
+   * whichever connection was active at migration time, since some feature types
+   * (e.g. `git` integrate) never record it at all.
+   */
+  serverUrl: string;
+  /** Organization key (SonarQube Cloud only), same recorded-or-backfilled precedence as `serverUrl`. */
+  orgKey?: string;
+  /** ISO timestamp of the contributing feature's last update; used to resolve conflicts when merging. */
+  updatedAt: string;
+}
+
+/**
  * Product code sent on telemetry events: SonarQube Cloud or SonarQube Server.
  * Distinct from {@link ServerType} (`cloud` / `on-premise`), which the CLI uses for auth routing.
  */
@@ -615,6 +637,8 @@ export interface CliState {
   agentExtensions: AgentExtension[];
   /** Registry of all declarative integrations installed per project */
   integrations: IntegrationsState;
+  /** Folder -> SonarQube project key mappings derived from project-scoped integration attrs */
+  knownServerProjectMappings?: KnownServerProjectMapping[];
 }
 
 /**
@@ -660,5 +684,6 @@ export function getDefaultState(cliVersion: string): CliState {
     integrations: {
       installed: [],
     },
+    knownServerProjectMappings: [],
   };
 }

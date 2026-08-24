@@ -27,14 +27,22 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { findGitRoot, getGitRemote } from '@/core/host/git/discover.ts';
 import {
+  type RecordedFeatureCandidate,
+  selectRecordedFeatureForDir,
+} from '@/core/host/recorded-feature-resolver.ts';
+import {
   discoverProjectKeyByGitRemote,
   GIT_REMOTE_BINDING_SOURCE,
 } from '@/core/server/discover-project-by-remote.ts';
+import type { KnownServerProjectMapping } from '@/core/state/state.ts';
+import { loadState } from '@/core/state/state-repository.ts';
 import { print } from '@/core/ui';
 
 import { loadSonarLintConfig, type SonarLintConfig } from './host/sonarlint-connected-mode.ts';
 import { canonicalizePath } from './io/fs-utils.ts';
 import logger from './observability/logger.ts';
+
+export const KNOWN_SERVER_PROJECT_MAPPING_SOURCE = 'known project mapping';
 
 export interface ProjectInfo {
   root: string;
@@ -156,50 +164,128 @@ export async function discoverProject(
   silent = false,
   options: DiscoverProjectOptions = {},
 ): Promise<DiscoveredProject> {
-  const projectInfo = await discoverProjectInfo(startDir);
+  const { gitRoot, isGit } = findGitRoot(startDir);
   const config: DiscoveredProject = {
-    rootDir: projectInfo.root,
-    isGitRepo: projectInfo.isGitRepo,
+    rootDir: canonicalizePath(isGit ? gitRoot : startDir),
+    isGitRepo: isGit,
     configSources: [],
   };
 
-  if (projectInfo.hasSonarProps && projectInfo.sonarPropsData) {
-    config.configSources.push('sonar-project.properties');
-    config.serverUrl = projectInfo.sonarPropsData.hostURL;
-    config.projectKey = projectInfo.sonarPropsData.projectKey;
-    config.organization = projectInfo.sonarPropsData.organization;
-    if (!silent) {
-      const fields = formatConfigFields(config.serverUrl, config.projectKey, config.organization);
-      if (fields) {
-        print(`Found sonar-project.properties: ${fields}`);
-      }
-    }
+  if (await applyKnownServerProjectMapping(config, config.rootDir, silent)) {
+    return config;
   }
 
-  if (
-    projectInfo.hasSonarLintConfig &&
-    projectInfo.sonarLintData &&
-    projectInfo.sonarLintConfigPath
-  ) {
-    config.configSources.push(projectInfo.sonarLintConfigPath);
-    config.serverUrl = config.serverUrl || projectInfo.sonarLintData.serverURL;
-    config.projectKey = config.projectKey || projectInfo.sonarLintData.projectKey;
-    config.organization = config.organization || projectInfo.sonarLintData.organization;
-    if (!silent) {
-      const fields = formatConfigFields(
-        projectInfo.sonarLintData.serverURL,
-        projectInfo.sonarLintData.projectKey,
-        projectInfo.sonarLintData.organization,
-      );
-      if (fields) {
-        print(`Found ${projectInfo.sonarLintConfigPath}: ${fields}`);
-      }
-    }
+  const projectInfo = await discoverProjectInfo(startDir);
+  applyLocalSonarProperties(config, projectInfo, silent);
+  if (applySonarLintConfig(config, projectInfo, silent)) {
+    return config;
   }
 
   await applyGitRemoteBindingFromRemote(config, projectInfo, options, silent);
-
   return config;
+}
+
+function applyLocalSonarProperties(
+  config: DiscoveredProject,
+  projectInfo: ProjectInfo,
+  silent: boolean,
+): void {
+  if (!projectInfo.hasSonarProps || !projectInfo.sonarPropsData) {
+    return;
+  }
+
+  config.configSources.push('sonar-project.properties');
+  config.serverUrl = projectInfo.sonarPropsData.hostURL;
+  config.projectKey = projectInfo.sonarPropsData.projectKey;
+  config.organization = projectInfo.sonarPropsData.organization;
+
+  if (silent) {
+    return;
+  }
+  const fields = formatConfigFields(config.serverUrl, config.projectKey, config.organization);
+  if (fields) {
+    print(`Found sonar-project.properties: ${fields}`);
+  }
+}
+
+/** Returns true once `config.projectKey` is resolved, so the caller can stop checking further sources. */
+function applySonarLintConfig(
+  config: DiscoveredProject,
+  projectInfo: ProjectInfo,
+  silent: boolean,
+): boolean {
+  if (
+    !projectInfo.hasSonarLintConfig ||
+    !projectInfo.sonarLintData ||
+    !projectInfo.sonarLintConfigPath
+  ) {
+    return !!config.projectKey;
+  }
+
+  config.configSources.push(projectInfo.sonarLintConfigPath);
+  config.serverUrl = config.serverUrl || projectInfo.sonarLintData.serverURL;
+  config.projectKey = config.projectKey || projectInfo.sonarLintData.projectKey;
+  config.organization = config.organization || projectInfo.sonarLintData.organization;
+
+  if (!silent) {
+    const fields = formatConfigFields(
+      projectInfo.sonarLintData.serverURL,
+      projectInfo.sonarLintData.projectKey,
+      projectInfo.sonarLintData.organization,
+    );
+    if (fields) {
+      print(`Found ${projectInfo.sonarLintConfigPath}: ${fields}`);
+    }
+  }
+
+  return !!config.projectKey;
+}
+
+/**
+ * Fast, local cache checked before anything else in `discoverProject`, filled from known project-level integrations
+ */
+async function applyKnownServerProjectMapping(
+  config: DiscoveredProject,
+  projectRoot: string,
+  silent: boolean,
+): Promise<boolean> {
+  let mappings: KnownServerProjectMapping[];
+  try {
+    mappings = loadState().knownServerProjectMappings ?? [];
+  } catch (error) {
+    logger.debug(`Known project mapping lookup skipped: ${(error as Error).message}`);
+    return false;
+  }
+  if (mappings.length === 0) {
+    return false;
+  }
+
+  const candidates: RecordedFeatureCandidate<KnownServerProjectMapping>[] = mappings.map(
+    (mapping) => ({
+      feature: mapping,
+      targetRoot: mapping.folder,
+      updatedAt: mapping.updatedAt,
+    }),
+  );
+
+  const match = await selectRecordedFeatureForDir(projectRoot, candidates);
+  if (!match) {
+    return false;
+  }
+
+  config.configSources.push(KNOWN_SERVER_PROJECT_MAPPING_SOURCE);
+  config.projectKey = match.projectKey;
+  config.serverUrl = match.serverUrl;
+  config.organization = match.orgKey;
+
+  if (!silent) {
+    const fields = formatConfigFields(config.serverUrl, config.projectKey, config.organization);
+    if (fields) {
+      print(`Found ${KNOWN_SERVER_PROJECT_MAPPING_SOURCE}: ${fields}`);
+    }
+  }
+
+  return true;
 }
 
 async function applyGitRemoteBindingFromRemote(
@@ -209,7 +295,7 @@ async function applyGitRemoteBindingFromRemote(
   silent: boolean,
 ): Promise<void> {
   const tryGitRemoteBinding = options.tryGitRemoteBinding !== false;
-  if (!tryGitRemoteBinding || config.projectKey || !projectInfo.gitRemote) {
+  if (!tryGitRemoteBinding || !projectInfo.gitRemote) {
     return;
   }
 

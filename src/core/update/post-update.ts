@@ -33,6 +33,7 @@ import {
   type InstallHooksFn,
   migrateClaudeCodeHooks,
 } from './claude-hooks-migration.ts';
+import { migrateKnownServerKeyMappingsForProjectLevelFeatures } from './known-project-mappings-migration.ts';
 import { migrateLegacyTelemetryEvents } from './telemetry-migration.ts';
 
 /**
@@ -92,6 +93,8 @@ export async function runPostUpdateActions(deps: PostUpdateDependencies): Promis
 
 async function runActions(deps: PostUpdateDependencies): Promise<void> {
   migrateLegacyTelemetryEvents();
+  // Must run before migrateDeclarativeIntegrations
+  await migrateKnownServerKeyMappingsForProjectLevelFeatures();
   await migrateDeclarativeIntegrations(deps.supportedIntegrations);
   await migrateClaudeCodeHooks(deps.installHooks, deps.claudeIntegrationId);
   await updateSecretsBinaryIfNeeded();
