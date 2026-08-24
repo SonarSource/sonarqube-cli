@@ -2273,7 +2273,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
   );
 
   it(
-    'uninstalls the sonar-secrets binary when the removed feature was its last referrer',
+    'keeps the sonar-secrets binary when the removed feature was its last referrer',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
       harness.withAuth(server.baseUrl(), 'tok');
@@ -2284,8 +2284,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       // Project scope, decline keeping the secrets hooks ('n') then confirm removal
-      // (default Yes); keep the MCP server (default Yes). No other feature references
-      // sonar-secrets, so the binary is orphaned and uninstalled.
+      // (default Yes); keep the MCP server (default Yes).
       const result = await harness.run('integrate claude', {
         stdinChunks: ['\r', 'n', '\r', '\r'],
         stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
@@ -2296,14 +2295,14 @@ describe('integrate claude — keep/remove already-installed features', () => {
       expect(output).toContain('secret scanning hooks (currently installed)  Keep?');
       expect(output).toContain('secret scanning hooks will be removed.');
 
-      // The feature is gone and, being the last referrer, so is the binary.
+      // The feature is gone, but the binary and its record survive.
       expect(findClaudeFeature(harness, 'sonar-secrets-hooks')).toBeUndefined();
       const state = harness.stateJsonFile.asJson();
       expect(
         state.dependencies.installed.find((dep: { id: string }) => dep.id === 'sonar-secrets'),
-      ).toBeUndefined();
+      ).toBeDefined();
       expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
-        false,
+        true,
       );
     },
     { timeout: 30000 },
@@ -2408,14 +2407,14 @@ describe('integrate claude — keep/remove already-installed features', () => {
       expect(result.exitCode).toBe(0);
 
       // With no features left, the whole claude-code integration entry is pruned,
-      // and the orphaned sonar-secrets binary is uninstalled with it.
+      // while the sonar-secrets binary and its record stay behind.
       expect(getInstalledIntegration(harness, 'claude-code')).toBeUndefined();
       const state = harness.stateJsonFile.asJson();
       expect(
         state.dependencies.installed.find((dep: { id: string }) => dep.id === 'sonar-secrets'),
-      ).toBeUndefined();
+      ).toBeDefined();
       expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
-        false,
+        true,
       );
     },
     { timeout: 30000 },

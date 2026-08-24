@@ -369,7 +369,7 @@ describe('declarative integration framework - resources and state recording', ()
     ]);
   });
 
-  it('prunes stale shared dependency state when no installed feature references it', async () => {
+  it('keeps shared dependency state when no installed feature references it', async () => {
     const state = getDefaultState('test');
     const context = makeContext(state, tempDir);
     const legacyFeature: FeatureDeclaration = {
@@ -408,7 +408,7 @@ describe('declarative integration framework - resources and state recording', ()
     );
 
     expect(installed.dependencies).toEqual([]);
-    expect(state.dependencies.installed).toEqual([]);
+    expect(state.dependencies.installed.map((dependency) => dependency.id)).toEqual(['binary']);
   });
 
   it('checks SonarSource binary dependencies by their descriptor', async () => {
@@ -520,31 +520,29 @@ describe('declarative integration framework - resources and state recording', ()
     ).toBe(true);
   });
 
-  it('removeInstalledFeature returns [] without mutation when the integration is not recorded', () => {
+  it('removeInstalledFeature does not mutate state when the integration is not recorded', () => {
     const integration = makeIntegration();
     const state = getDefaultState('test');
 
-    const removed = removeInstalledFeature(
+    removeInstalledFeature(
       state,
       { scope: 'project', targetRoot: tempDir },
       integration,
       integration.features[0],
     );
 
-    expect(removed).toEqual([]);
     expect(state.integrations.installed).toEqual([]);
   });
 
-  it('removeInstalledFeature returns [] and leaves other features intact when the target feature is not recorded', async () => {
+  it('removeInstalledFeature leaves other features intact when the target feature is not recorded', async () => {
     const integration = makeIntegration();
     const state = getDefaultState('test');
     const context = makeContext(state, tempDir);
     // Record a different feature; the one we ask to remove was never installed.
     await applyAndRecord(installer, context, integration, { id: 'other', displayName: 'Other' });
 
-    const removed = removeInstalledFeature(state, context, integration, integration.features[0]);
+    removeInstalledFeature(state, context, integration, integration.features[0]);
 
-    expect(removed).toEqual([]);
     expect(state.integrations.installed[0]?.features.map((f) => f.featureId)).toEqual(['other']);
   });
 });
