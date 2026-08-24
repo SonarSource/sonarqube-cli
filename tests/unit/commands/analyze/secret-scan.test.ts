@@ -564,6 +564,11 @@ describe('secretCheckCommand: stdin scan', () => {
     } finally {
       existsSpy.mockRestore();
     }
+
+    const successes = getMockUiCalls()
+      .filter((c) => c.method === 'success')
+      .map((c) => String(c.args[0]));
+    expect(successes.some((m) => m.includes('No issues found'))).toBe(true);
   });
 
   it('throws when binary exits 51 during stdin scan (secrets found)', async () => {
