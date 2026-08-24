@@ -411,7 +411,7 @@ describe('Private Beta command registration', () => {
     const tree = await createCommandTree();
     const names = tree.commands.map((c) => c.name());
     expect(names).toContain('context');
-    // No Private Beta commands exist yet; default runtime keeps Open Beta and omits gated ones.
+    // No Private Beta commands exist yet; default runtime omits gated ones.
     for (const command of tree.commands as SonarCommand[]) {
       expect(command.isPrivateBeta).toBe(false);
     }
