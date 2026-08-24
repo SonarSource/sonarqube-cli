@@ -28,7 +28,6 @@ import {
   agentDisplayName,
   detectInstalledAgents,
   isDetectedAgentId,
-  isSupportedAgentId,
   SUPPORTED_AGENT_IDS,
 } from '@/core/host/environment/installed-agent-detector.ts';
 
@@ -92,18 +91,6 @@ describe('agentDisplayName', () => {
     expect(agentDisplayName('codex')).toBe('Codex');
     expect(agentDisplayName('copilot')).toBe('Copilot');
     expect(agentDisplayName('antigravity')).toBe('Antigravity');
-  });
-});
-
-describe('isSupportedAgentId', () => {
-  it('accepts every supported agent id, regardless of whether it is actually installed', () => {
-    for (const agentId of SUPPORTED_AGENT_IDS) {
-      expect(isSupportedAgentId(agentId)).toBe(true);
-    }
-  });
-
-  it('rejects a value that is not a supported agent id', () => {
-    expect(isSupportedAgentId('not-an-agent')).toBe(false);
   });
 });
 

@@ -67,10 +67,6 @@ export function detectInstalledAgents(home: string = homedir()): DetectedAgentId
   );
 }
 
-export function isSupportedAgentId(value: string): value is DetectedAgentId {
-  return (SUPPORTED_AGENT_IDS as readonly string[]).includes(value);
-}
-
 /** True when `value` is one of the agents actually detected as installed on this machine. */
 export function isDetectedAgentId(
   value: string,
