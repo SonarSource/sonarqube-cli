@@ -539,15 +539,16 @@ describe('integrate claude', () => {
         spacedDir.file('.claude', 'settings.json').asJson().hooks.PreToolUse[0].hooks[0].command,
       );
       // Project scope anchors the path to Claude Code's own `${CLAUDE_PROJECT_DIR}`
-      // placeholder (cwd-independent) and fully quotes it (double quotes on
-      // Windows, single quotes on Unix) — deterministic regardless of the
-      // spaced project directory, so assert the exact command.
+      // placeholder (cwd-independent) and fully double-quotes it on both platforms —
+      // single-quoting on Unix would suppress the shell's `${var}` expansion and leave the
+      // placeholder unexpanded — deterministic regardless of the spaced project directory, so
+      // assert the exact command.
       const scriptRel =
         '${CLAUDE_PROJECT_DIR}/.claude/hooks/sonar-secrets/build-scripts/pretool-secrets';
       expect(command).toBe(
         IS_WINDOWS
           ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptRel}.ps1"`
-          : `'${scriptRel}.sh'`,
+          : `"${scriptRel}.sh"`,
       );
     },
     { timeout: 30000 },

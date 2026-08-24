@@ -206,15 +206,17 @@ describe('installHooks', () => {
   const IS_WINDOWS = process.platform === 'win32';
   // On Windows the registered command is
   // `powershell -NoProfile -ExecutionPolicy Bypass -File "${CLAUDE_PROJECT_DIR}/.claude/..."`
-  // (forward slashes via replaceAll, path double-quoted); on Unix it is the single-quoted
-  // `'${CLAUDE_PROJECT_DIR}/.claude/...'` path. Project scope is anchored to Claude Code's own
+  // (forward slashes via replaceAll, path double-quoted); on Unix it is also double-quoted —
+  // `"${CLAUDE_PROJECT_DIR}/.claude/..."` — rather than the usual single-quoted Bash literal,
+  // because single quotes would suppress the shell's `${var}` expansion and leave the literal,
+  // unexpanded placeholder in the path. Project scope is anchored to Claude Code's own
   // project-root placeholder rather than a bare cwd-relative path.
   const isProjectScopedCommand = (command: string): boolean =>
     IS_WINDOWS
       ? command.includes(
           'powershell -NoProfile -ExecutionPolicy Bypass -File "${CLAUDE_PROJECT_DIR}/.claude/',
         )
-      : command.startsWith("'${CLAUDE_PROJECT_DIR}/.claude/");
+      : command.startsWith('"${CLAUDE_PROJECT_DIR}/.claude/');
 
   let existsSyncSpy: Mock<Extract<(typeof nodeFs)['existsSync'], (...args: any[]) => any>>;
   let mkdirSyncSpy: Mock<Extract<(typeof nodeFs)['mkdirSync'], (...args: any[]) => any>>;

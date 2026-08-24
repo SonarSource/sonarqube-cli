@@ -42,6 +42,7 @@ import {
   quoteWindowsHookScriptPath,
   readOrInitJson,
   resolveAgentHookCommand,
+  shellDoubleQuoteBash,
   shellQuoteBash,
   UNIX_SONAR_COMMAND_GUARD,
   unixTemplate,
@@ -143,6 +144,16 @@ describe('shellQuoteBash', () => {
   });
 });
 
+describe('shellDoubleQuoteBash', () => {
+  it('wraps values in double quotes without escaping $', () => {
+    expect(shellDoubleQuoteBash('${CLAUDE_PROJECT_DIR}/a.sh')).toBe('"${CLAUDE_PROJECT_DIR}/a.sh"');
+  });
+
+  it('escapes embedded double quotes, backslashes, and backticks', () => {
+    expect(shellDoubleQuoteBash('a"b\\c`d')).toBe('"a\\"b\\\\c\\`d"');
+  });
+});
+
 describe('quoteWindowsHookScriptPath', () => {
   it('wraps the path in double quotes so spaces survive PowerShell -File parsing', () => {
     expect(quoteWindowsHookScriptPath('C:/Users/Jane Doe/.claude/hooks/x.ps1')).toBe(
@@ -201,7 +212,10 @@ describe('resolveAgentHookCommand', () => {
   });
 
   it.skipIf(IS_WINDOWS)(
-    'anchors the project-scope path to the given placeholder instead of cwd (Unix)',
+    // Double-quoted, not single-quoted: single quotes would suppress the shell's own
+    // `$var`/`${var}` expansion, leaving the literal, unexpanded token in the path instead of
+    // letting Claude Code's substitution take effect.
+    'anchors the project-scope path to the given placeholder instead of cwd, double-quoted so it can still expand (Unix)',
     () => {
       const command = resolveAgentHookCommand(
         fakeContext('/tmp/proj', 'project'),
@@ -210,7 +224,7 @@ describe('resolveAgentHookCommand', () => {
         '${CLAUDE_PROJECT_DIR}',
       );
       expect(command).toBe(
-        "'${CLAUDE_PROJECT_DIR}/.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh'",
+        '"${CLAUDE_PROJECT_DIR}/.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh"',
       );
     },
   );

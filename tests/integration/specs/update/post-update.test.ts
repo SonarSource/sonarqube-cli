@@ -601,16 +601,17 @@ describe('post-update migration', () => {
       const promptScriptRel = `.claude/hooks/sonar-secrets/build-scripts/${hookScriptName('prompt-secrets')}`;
       const settingsRel = '.claude/settings.json';
       // Project scope anchors the path to Claude Code's ${CLAUDE_PROJECT_DIR} placeholder
-      // (cwd-independent) and shell-quotes it so it survives spaces/metacharacters:
-      // double-quoted on Windows, single-quoted on Unix.
+      // (cwd-independent) and shell-quotes it so it survives spaces/metacharacters. Double-quoted
+      // on both platforms — single-quoting on Unix would suppress the shell's `${var}` expansion
+      // and leave the placeholder unexpanded.
       const pretoolCommandPath = '${CLAUDE_PROJECT_DIR}/' + pretoolScriptRel;
       const promptCommandPath = '${CLAUDE_PROJECT_DIR}/' + promptScriptRel;
       const expectedPretoolCommand = IS_WINDOWS
         ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${pretoolCommandPath}"`
-        : `'${pretoolCommandPath}'`;
+        : `"${pretoolCommandPath}"`;
       const expectedPromptCommand = IS_WINDOWS
         ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${promptCommandPath}"`
-        : `'${promptCommandPath}'`;
+        : `"${promptCommandPath}"`;
 
       harness.cwd.writeFile(
         pretoolScriptRel,

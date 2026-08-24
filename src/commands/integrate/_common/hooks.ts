@@ -125,6 +125,18 @@ export function shellQuoteBash(value: string): string {
   return "'" + value.replaceAll("'", BASH_EMBEDDED_SINGLE_QUOTE) + "'";
 }
 
+/**
+ * Double-quoted Bash literal that still allows `$var`/`${var}` expansion, unlike
+ * {@link shellQuoteBash}. Needed when `value` embeds an agent-substituted placeholder (e.g.
+ * Claude Code's `${CLAUDE_PROJECT_DIR}`) that must still expand — single-quoting it would leave
+ * the literal, unexpanded token in the path. Only escapes what remains meaningful inside double
+ * quotes (`\`, `"`, `` ` ``); `$` is left alone on purpose.
+ */
+export function shellDoubleQuoteBash(value: string): string {
+  const escaped = value.replaceAll(/[\\"`]/g, String.raw`\$&`);
+  return `"${escaped}"`;
+}
+
 /** Single-quoted PowerShell literal (double single-quotes escape embedded quotes). */
 export function shellQuotePowerShell(value: string): string {
   return "'" + value.replaceAll("'", POWERSHELL_EMBEDDED_SINGLE_QUOTE) + "'";
@@ -204,7 +216,7 @@ function resolveHookCommandPath(
 
 /**
  * Hook `command` string: `powershell -NoProfile -ExecutionPolicy Bypass -File "<path>"` on
- * Windows, single-quoted path on Unix. The path is quoted so it stays a single
+ * Windows, quoted path on Unix. The path is quoted so it stays a single
  * argument when the agent runs the command through a shell, even when the
  * project root or `$HOME` contains spaces or (on Unix) other shell
  * metacharacters (`$`, backticks, apostrophes, globs). Absolute path for global
@@ -213,6 +225,12 @@ function resolveHookCommandPath(
  * variable instead of the process cwd, so the hook still resolves when cwd
  * diverges from the project root (worktrees, cwd changes); omit it for agents
  * with no such placeholder, which keeps the plain cwd-relative path.
+ *
+ * Windows already double-quotes unconditionally, which lets `${CLAUDE_PROJECT_DIR}` expand.
+ * On Unix, a path using the placeholder is double-quoted too (`shellDoubleQuoteBash`) for the
+ * same reason — single-quoting it (Bash's usual, stricter default) would leave the literal,
+ * unexpanded token in the path instead of the real project root. Every other Unix path (global
+ * scope, or project scope with no placeholder) keeps the stricter single-quoting.
  */
 export function resolveAgentHookCommand(
   context: IntegrationContext,
@@ -224,9 +242,11 @@ export function resolveAgentHookCommand(
   const relativePath = join(configDir, HOOKS_DIR, `${scriptPath}${extension}`);
   const commandPath = resolveHookCommandPath(context, relativePath, projectDirPlaceholder);
 
-  return process.platform === 'win32'
-    ? `powershell -NoProfile -ExecutionPolicy Bypass -File ${quoteWindowsHookScriptPath(commandPath.replaceAll('\\', '/'))}`
-    : shellQuoteBash(commandPath);
+  if (process.platform === 'win32') {
+    return `powershell -NoProfile -ExecutionPolicy Bypass -File ${quoteWindowsHookScriptPath(commandPath.replaceAll('\\', '/'))}`;
+  }
+  const usesPlaceholder = context.scope !== 'global' && Boolean(projectDirPlaceholder);
+  return usesPlaceholder ? shellDoubleQuoteBash(commandPath) : shellQuoteBash(commandPath);
 }
 
 export interface AgentHookEntryOptions {
