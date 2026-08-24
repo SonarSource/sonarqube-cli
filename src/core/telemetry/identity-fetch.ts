@@ -120,6 +120,7 @@ export function mergeIdentity(
   return {
     user_uuid: partial.user_uuid ?? base.user_uuid,
     organization_uuid_v4: partial.organization_uuid_v4 ?? base.organization_uuid_v4,
+    // `??` would treat confirmed-absent `null` as missing and fall back to base.
     enterprise_uuid:
       partial.enterprise_uuid !== undefined ? partial.enterprise_uuid : base.enterprise_uuid,
     sqs_installation_id: partial.sqs_installation_id ?? base.sqs_installation_id,
@@ -146,8 +147,9 @@ function cacheEntryToIdentity(entry: CacheEntry): Partial<TelemetryIdentity> {
   return identity;
 }
 
+/** True when no identity fields remain to fetch. */
 function fetchPlanIsComplete(plan: IdentityFetchPlan): boolean {
-  return !plan.user && !plan.org && !plan.enterprise && !plan.sqs;
+  return !(plan.user || plan.org || plan.enterprise || plan.sqs);
 }
 
 function planFieldsToFetch(
@@ -273,6 +275,25 @@ async function fetchEnterpriseUuid(
   }
 }
 
+/** Unresolved stays `undefined` so the next command retries; `null` is confirmed-absent. */
+async function resolveEnterpriseUuid(
+  client: SonarQubeClient,
+  serverUrl: string,
+  org: OrganizationLookupResult,
+): Promise<{ value: string | null | undefined; resolved: boolean }> {
+  if (!org.resolved) {
+    return { value: undefined, resolved: false };
+  }
+  if (!org.id) {
+    return { value: null, resolved: true };
+  }
+  const enterprise = await fetchEnterpriseUuid(client, serverUrl, org.id);
+  return {
+    value: enterprise.resolved ? enterprise.value : undefined,
+    resolved: enterprise.resolved,
+  };
+}
+
 async function fetchSqsInstallationId(client: SonarQubeClient): Promise<FieldFetchResult> {
   try {
     const { response, value } = await client.getSafe<{ id?: string }>('/api/system/status');
@@ -311,17 +332,9 @@ async function fetchMissingFromApi(
       resolved.org = org.resolved;
     }
     if (fetchPlan.enterprise) {
-      if (!org.resolved) {
-        enterprise_uuid = undefined;
-        resolved.enterprise = false;
-      } else if (!org.id) {
-        enterprise_uuid = null;
-        resolved.enterprise = true;
-      } else {
-        const enterprise = await fetchEnterpriseUuid(client, auth.serverUrl, org.id);
-        enterprise_uuid = enterprise.resolved ? enterprise.value : undefined;
-        resolved.enterprise = enterprise.resolved;
-      }
+      const enterprise = await resolveEnterpriseUuid(client, auth.serverUrl, org);
+      enterprise_uuid = enterprise.value;
+      resolved.enterprise = enterprise.resolved;
     }
   }
   if (fetchPlan.sqs) {
