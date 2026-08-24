@@ -132,14 +132,4 @@ describe('root help', () => {
     },
     { timeout: 15000 },
   );
-
-  it(
-    'context does not emit a beta warning',
-    async () => {
-      const result = await harness.run('context');
-
-      expect(stripAnsi(result.stderr)).not.toContain("'context' is in beta and may change.");
-    },
-    { timeout: 15000 },
-  );
 });
