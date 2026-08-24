@@ -24,7 +24,12 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { detectInstalledAgents } from '@/core/host/environment/installed-agent-detector.ts';
+import {
+  agentDisplayName,
+  DETECTED_AGENT_IDS,
+  detectInstalledAgents,
+  isDetectedAgentId,
+} from '@/core/host/environment/installed-agent-detector.ts';
 
 let home: string;
 
@@ -66,5 +71,33 @@ describe('detectInstalledAgents', () => {
     mkdirSync(join(home, '.gemini', 'config'), { recursive: true });
 
     expect(detectInstalledAgents(home)).toEqual(['antigravity']);
+  });
+});
+
+describe('agentDisplayName', () => {
+  it('has a non-empty label for every detectable agent', () => {
+    for (const agentId of DETECTED_AGENT_IDS) {
+      expect(agentDisplayName(agentId)).toBeTruthy();
+    }
+  });
+
+  it('returns the expected label for each agent', () => {
+    expect(agentDisplayName('cursor')).toBe('Cursor');
+    expect(agentDisplayName('claude')).toBe('Claude Code');
+    expect(agentDisplayName('codex')).toBe('Codex');
+    expect(agentDisplayName('copilot')).toBe('Copilot');
+    expect(agentDisplayName('antigravity')).toBe('Antigravity');
+  });
+});
+
+describe('isDetectedAgentId', () => {
+  it('accepts every detectable agent id', () => {
+    for (const agentId of DETECTED_AGENT_IDS) {
+      expect(isDetectedAgentId(agentId)).toBe(true);
+    }
+  });
+
+  it('rejects a value that is not a detectable agent id', () => {
+    expect(isDetectedAgentId('not-an-agent')).toBe(false);
   });
 });
