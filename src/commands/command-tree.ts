@@ -40,6 +40,7 @@ import {
 } from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 import { blank, error, warn } from '@/core/ui';
 import { parseInteger } from '@/core/ui/parsing.ts';
+import { isTableFormatOption } from '@/core/update/notification.ts';
 
 import { version as VERSION } from '../../package.json';
 import { analyzeAll, type AnalyzeAllOptions } from './analyze/analyze-all.ts';
@@ -66,7 +67,11 @@ import { authStatus } from './auth/status.ts';
 import { type CommandInvocationContext } from './command-invocation-context.ts';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
-import { getQualityGate, type GetQualityGateOptions } from './get/quality-gate.ts';
+import {
+  getQualityGate,
+  type GetQualityGateOptions,
+  VALID_FORMATS as QUALITY_GATE_VALID_FORMATS,
+} from './get/quality-gate.ts';
 import { agentPostToolUse } from './hook/agent-post-tool-use.ts';
 import { agentPromptSubmit } from './hook/agent-prompt-submit.ts';
 import { antigravityPreToolUse } from './hook/antigravity-pre-tool-use.ts';
@@ -238,10 +243,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
   list
     .command('issues')
     .description('Search for issues in SonarQube')
-    .showUpdateNotification((opts) => {
-      const format = typeof opts.format === 'string' ? opts.format : 'json';
-      return format.toLowerCase() === 'table';
-    })
+    .showUpdateNotification(isTableFormatOption)
     .requiredOption('-p, --project <project>', 'Project key')
     .option(
       '--statuses <statuses>',
@@ -276,8 +278,13 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
   get
     .command('quality-gate')
     .description('Show the quality gate verdict for a project')
-    .showUpdateNotification()
+    .showUpdateNotification(isTableFormatOption)
     .option('-p, --project <project>', 'Project key')
+    .addOption(
+      new SonarOption('--format <format>', 'Output format')
+        .choices(QUALITY_GATE_VALID_FORMATS)
+        .default('json'),
+    )
     .authenticatedAction((ctx, options: GetQualityGateOptions) => getQualityGate(options, ctx));
 
   // Import repositories from DevOps platforms into SonarQube (hidden while in development)

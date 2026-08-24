@@ -35,6 +35,15 @@ import { BACKGROUND_UPDATE_CHECK_TIMEOUT_MS, fetchLatestVersion } from './check.
 export type UpdateNotificationCondition = (opts: Record<string, unknown>) => boolean;
 
 /**
+ * Condition for commands with a `--format` option: only notify for `table`,
+ * since JSON (and other machine-readable formats) stdout must stay pure.
+ */
+export const isTableFormatOption: UpdateNotificationCondition = (opts) => {
+  const format = typeof opts.format === 'string' ? opts.format : 'json';
+  return format.toLowerCase() === 'table';
+};
+
+/**
  * Owns the per-command opt-in registry for the post-command "new version
  * available" stderr notice, plus the eligibility/suppression checks and the
  * actual throttled version check. There is no shared singleton here: the root

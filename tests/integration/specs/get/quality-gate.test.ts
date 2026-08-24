@@ -49,7 +49,7 @@ describe('get quality-gate', () => {
 
       expect(result.exitCode).toBe(0);
       const parsed = JSON.parse(result.stdout);
-      expect(parsed.qualityGate).toEqual({ status: 'OK', project: 'my-project' });
+      expect(parsed.qualityGate).toEqual({ status: 'OK', project: 'my-project', conditions: [] });
     },
     { timeout: 15000 },
   );
@@ -77,7 +77,17 @@ describe('get quality-gate', () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken('test-token')
-        .withProject('my-project', (p) => p.withProjectStatus('ERROR'))
+        .withProject('my-project', (p) =>
+          p.withProjectStatus('ERROR').withConditions([
+            {
+              status: 'ERROR',
+              metricKey: 'new_coverage',
+              comparator: 'LT',
+              errorThreshold: '80',
+              actualValue: '62.4',
+            },
+          ]),
+        )
         .start();
       harness.withAuth(server.baseUrl(), 'test-token');
 
@@ -85,7 +95,132 @@ describe('get quality-gate', () => {
 
       expect(result.exitCode).toBe(51);
       const parsed = JSON.parse(result.stdout);
-      expect(parsed.qualityGate).toEqual({ status: 'ERROR', project: 'my-project' });
+      expect(parsed.qualityGate).toEqual({
+        status: 'ERROR',
+        project: 'my-project',
+        conditions: [
+          {
+            status: 'ERROR',
+            metric: 'new_coverage',
+            comparator: 'LT',
+            threshold: '80',
+            actualValue: '62.4',
+          },
+        ],
+      });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'omits passing conditions from the default (failing-only) conditions list',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withProjectStatus('ERROR').withConditions([
+            {
+              status: 'OK',
+              metricKey: 'new_bugs',
+              comparator: 'GT',
+              errorThreshold: '0',
+              actualValue: '0',
+            },
+            {
+              status: 'ERROR',
+              metricKey: 'new_coverage',
+              comparator: 'LT',
+              errorThreshold: '80',
+              actualValue: '62.4',
+            },
+          ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`get quality-gate --project my-project`);
+
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.conditions).toEqual([
+        {
+          status: 'ERROR',
+          metric: 'new_coverage',
+          comparator: 'LT',
+          threshold: '80',
+          actualValue: '62.4',
+        },
+      ]);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'renders a table with the bracket verdict and failing conditions',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withProjectStatus('ERROR').withConditions([
+            {
+              status: 'ERROR',
+              metricKey: 'new_coverage',
+              comparator: 'LT',
+              errorThreshold: '80',
+              actualValue: '62.4',
+            },
+          ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`get quality-gate --project my-project --format table`);
+
+      expect(result.exitCode).toBe(51);
+      expect(result.stdout).toContain('Quality Gate: [✗ Failed]');
+      expect(result.stdout).toContain('Project:      my-project');
+      expect(result.stdout).toContain('Conditions:');
+      expect(result.stdout).toContain('new_coverage');
+      expect(result.stdout).toContain('62.4');
+      expect(result.stdout).toContain('(required ≥ 80)');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'renders a passing table verdict with no conditions section',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK'))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`get quality-gate --project my-project --format table`);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Quality Gate: [✓ Passed]');
+      expect(result.stdout).not.toContain('Conditions:');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'rejects an invalid --format value',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK'))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`get quality-gate --project my-project --format yaml`);
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain('yaml');
     },
     { timeout: 15000 },
   );
@@ -104,7 +239,11 @@ describe('get quality-gate', () => {
 
       expect(result.exitCode).toBe(1);
       const parsed = JSON.parse(result.stdout);
-      expect(parsed.qualityGate).toEqual({ status: 'NOT_COMPUTED', project: 'my-project' });
+      expect(parsed.qualityGate).toEqual({
+        status: 'NOT_COMPUTED',
+        project: 'my-project',
+        conditions: [],
+      });
     },
     { timeout: 15000 },
   );

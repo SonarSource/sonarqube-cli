@@ -22,7 +22,11 @@
 
 import type { Organization } from '@/core/server/client.ts';
 import type { SettingsValue } from '@/core/server/settings-value.ts';
-import type { QualityGateStatus, SonarQubeIssue } from '@/core/server/types.ts';
+import type {
+  QualityGateCondition,
+  QualityGateStatus,
+  SonarQubeIssue,
+} from '@/core/server/types.ts';
 
 import type { RecordedRequest } from './types.js';
 
@@ -56,6 +60,7 @@ interface ProjectData {
   name: string;
   issues: Required<IssueConfig>[];
   qualityGateStatus?: QualityGateStatus;
+  qualityGateConditions?: QualityGateCondition[];
 }
 
 export interface DopRepositoryConfig {
@@ -72,6 +77,7 @@ export class ProjectBuilder {
   private readonly projectKey: string;
   private readonly issues: Required<IssueConfig>[] = [];
   private qualityGateStatus?: QualityGateStatus;
+  private qualityGateConditions?: QualityGateCondition[];
 
   constructor(projectKey: string) {
     this.projectKey = projectKey;
@@ -102,12 +108,19 @@ export class ProjectBuilder {
     return this;
   }
 
+  /** Configure the `conditions` array `GET /api/qualitygates/project_status` returns for this project. */
+  withConditions(conditions: QualityGateCondition[]): this {
+    this.qualityGateConditions = conditions;
+    return this;
+  }
+
   getData(): ProjectData {
     return {
       key: this.projectKey,
       name: this.projectKey,
       issues: this.issues,
       qualityGateStatus: this.qualityGateStatus,
+      qualityGateConditions: this.qualityGateConditions,
     };
   }
 }
@@ -670,7 +683,7 @@ export class FakeSonarQubeServerBuilder {
             JSON.stringify({
               projectStatus: {
                 status: projectData.qualityGateStatus ?? 'NONE',
-                conditions: [],
+                conditions: projectData.qualityGateConditions ?? [],
               },
             }),
             { headers: { 'Content-Type': 'application/json' } },

@@ -27,34 +27,16 @@ import { QualityGatesClient } from '@/core/server/quality-gates.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { print } from '@/core/ui';
 
-export const EXIT_CODE_QUALITY_GATE_FAILED = 51;
+import { selectConditions } from './quality-gate-helpers/condition-summary.ts';
+import { formatQualityGateJson } from './quality-gate-helpers/format-json.ts';
+import { formatQualityGateTable } from './quality-gate-helpers/format-table.ts';
+import { exitCodeFor, toVerdict } from './quality-gate-helpers/verdict.ts';
+
+export const VALID_FORMATS = ['json', 'table'];
 
 export interface GetQualityGateOptions {
   project?: string;
-}
-
-type QualityGateVerdict = 'OK' | 'ERROR' | 'NOT_COMPUTED';
-
-/**
- * `WARN` is a legacy status; it and `ERROR` both bucket to "failed" since the CLI only
- * surfaces the three-way pass/fail/not-computed verdict at this stage.
- */
-function toVerdict(status: 'OK' | 'WARN' | 'ERROR' | 'NONE' | undefined): QualityGateVerdict {
-  if (!status || status === 'NONE') {
-    return 'NOT_COMPUTED';
-  }
-  return status === 'OK' ? 'OK' : 'ERROR';
-}
-
-function exitCodeFor(verdict: QualityGateVerdict): number {
-  switch (verdict) {
-    case 'OK':
-      return 0;
-    case 'ERROR':
-      return EXIT_CODE_QUALITY_GATE_FAILED;
-    case 'NOT_COMPUTED':
-      return 1;
-  }
+  format?: string;
 }
 
 export async function getQualityGate(
@@ -70,8 +52,14 @@ export async function getQualityGate(
   const projectStatus = await qualityGatesClient.getProjectStatus({ projectKey });
 
   const verdict = toVerdict(projectStatus?.status);
+  const conditions = selectConditions(projectStatus?.conditions ?? [], false);
 
-  print(JSON.stringify({ qualityGate: { status: verdict, project: projectKey } }, null, 2));
+  const format = options.format ?? 'json';
+  const message =
+    format === 'table'
+      ? formatQualityGateTable({ verdict, project: projectKey, conditions })
+      : formatQualityGateJson({ verdict, project: projectKey, conditions });
+  print(message);
 
   process.exitCode = exitCodeFor(verdict);
 }
