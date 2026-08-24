@@ -27,10 +27,14 @@ import {
   VORTEX_FEATURE_ID,
   VORTEX_OVER_CONSUMPTION_MESSAGE,
   VORTEX_PROMOTION_MESSAGE,
+  VORTEX_SERVER_UNAVAILABLE_MESSAGE,
   VORTEX_UNINSTALL_MESSAGE,
 } from '@/commands/integrate/_common/vortex.js';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
-import type { VortexEntitlementStatus } from '@/core/server/client.js';
+import {
+  SERVER_ORGANIZATION_ID_PLACEHOLDER,
+  type VortexEntitlementStatus,
+} from '@/core/server/client.js';
 import type { CliState } from '@/core/state/state.ts';
 
 import { TestHarness } from '../../harness';
@@ -96,18 +100,22 @@ describe('integrate claude — Vortex entitlement', () => {
     if (scaEnabled !== undefined) {
       builder.withScaEnabled(scaEnabled);
     }
-    if (sqaa !== 'check_failed') {
+    if (cloud && sqaa !== 'check_failed') {
       builder.withSqaaEntitlement(ORG_KEY, ORG_UUID, entitlementBody(sqaa));
     }
     if (cag === 'check_failed') {
       builder.withCagEntitlementStatusCode(500);
+    } else if (cag === 'not_applicable') {
+      builder.withCagEntitlementStatusCode(404);
     } else {
-      builder.withCagEntitlement(ORG_KEY, ORG_UUID, entitlementBody(cag));
+      const uuid = cloud ? ORG_UUID : SERVER_ORGANIZATION_ID_PLACEHOLDER;
+      builder.withCagEntitlement(ORG_KEY, uuid, entitlementBody(cag));
     }
 
     const server = await builder.start();
     const serverUrl = server.baseUrl();
-    harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+    // withAuth infers connectionType from whether an org is supplied.
+    harness.withAuth(serverUrl, TOKEN, cloud ? ORG_KEY : undefined);
     if (persistedState) {
       const activeConnection = persistedState.auth.connections.find(
         (connection) => connection.id === persistedState.auth.activeConnectionId,
@@ -118,14 +126,11 @@ describe('integrate claude — Vortex entitlement', () => {
       harness.state().withRawState(JSON.stringify(persistedState));
     }
     harness.state().withContextAugmentationBinaryInstalled();
-    harness.cwd.writeFile(
-      'sonar-project.properties',
-      [
-        `sonar.host.url=${serverUrl}`,
-        `sonar.projectKey=${PROJECT_KEY}`,
-        `sonar.organization=${ORG_KEY}`,
-      ].join('\n'),
-    );
+    const projectProperties = [`sonar.host.url=${serverUrl}`, `sonar.projectKey=${PROJECT_KEY}`];
+    if (cloud) {
+      projectProperties.push(`sonar.organization=${ORG_KEY}`);
+    }
+    harness.cwd.writeFile('sonar-project.properties', projectProperties.join('\n'));
     return harness.run('integrate claude --non-interactive', {
       extraEnv: cloud
         ? {
@@ -222,13 +227,39 @@ describe('integrate claude — Vortex entitlement', () => {
   );
 
   it(
-    'skips Vortex on a SonarQube Server connection',
+    'skips Vortex on a SonarQube Server without the CAG Hub and does not mention Cloud',
     async () => {
-      const result = await runIntegrateClaude({ sqaa: 'enabled', cag: 'enabled', cloud: false });
+      const result = await runIntegrateClaude({
+        sqaa: 'enabled',
+        cag: 'not_applicable',
+        cloud: false,
+      });
 
       expect(result.exitCode).toBe(0);
       expect(isVortexInstalled()).toBe(false);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_PROMOTION_MESSAGE);
+      const output = `${result.stdout}\n${result.stderr}`;
+      expect(output).toContain(VORTEX_SERVER_UNAVAILABLE_MESSAGE);
+      expect(output).not.toContain(VORTEX_PROMOTION_MESSAGE);
+      expect(output).not.toContain(VORTEX_CHECK_FAILED_MESSAGE);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'installs Vortex on a licensed SonarQube Server',
+    async () => {
+      const result = await runIntegrateClaude({
+        sqaa: 'enabled',
+        cag: 'enabled',
+        scaEnabled: true,
+        cloud: false,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(isVortexInstalled()).toBe(true);
+      const output = `${result.stdout}\n${result.stderr}`;
+      expect(output).not.toContain(VORTEX_PROMOTION_MESSAGE);
+      expect(output).not.toContain(VORTEX_CHECK_FAILED_MESSAGE);
     },
     { timeout: 30000 },
   );

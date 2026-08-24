@@ -60,12 +60,14 @@ export const METHODS_WITH_BODY = new Set<HttpMethod>(['POST', 'PATCH', 'PUT']);
 export type HttpMethod = (typeof GENERIC_HTTP_METHODS)[number];
 
 /**
- * `not_applicable` is never returned by `hasVortexEntitlement()` itself — it's reserved for
- * callers that pre-check whether Vortex applies to a connection before ever asking the
- * entitlement API (see `resolveVortexEntitlement`).
+ * `not_applicable` is returned when Vortex cannot apply to this connection: Cloud without
+ * an organization (see `resolveVortexEntitlement`), or a Server whose Hub is absent (HTTP 404).
  */
 export type VortexEntitlementStatus =
   'enabled' | 'over_consumption' | 'not_entitled' | 'check_failed' | 'not_applicable';
+
+/** Placeholder org id the Server Hub expects — Server has no organizations. */
+export const SERVER_ORGANIZATION_ID_PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
 
 export interface VortexEntitlementResult {
   status: VortexEntitlementStatus;
@@ -499,20 +501,32 @@ export class SonarQubeClient {
     return (await this.getScaEnablement(connectionType, orgKey)) === 'enabled';
   }
 
+  private cagEntitlementEndpoint(organizationUuid: string): string {
+    return this.isCloud
+      ? `/cag/cag-entitlement/${organizationUuid}`
+      : `/api/v2/cag/cag-entitlement/${organizationUuid}`;
+  }
+
   private async checkCagEntitlement(organizationUuid: string): Promise<VortexEntitlementResult> {
     try {
-      const endpoint = `/cag/cag-entitlement/${organizationUuid}`;
-      const result = await this.get<{
+      const endpoint = this.cagEntitlementEndpoint(organizationUuid);
+      const { response, value } = await this.getSafe<{
         allowed?: boolean;
         hasEntitlement?: boolean;
         consumption?: { consumed: number; limit: number };
       }>(endpoint, undefined, resolveFromEndpoint(this.serverURL, endpoint));
-      if (result.allowed) {
-        return { status: 'enabled', consumption: result.consumption };
+      if (response.status === HTTP_STATUS_NOT_FOUND) {
+        return { status: 'not_applicable' };
+      }
+      if (!response.ok || value === undefined) {
+        return { status: 'check_failed' };
+      }
+      if (value.allowed) {
+        return { status: 'enabled', consumption: value.consumption };
       }
       return {
-        status: result.hasEntitlement ? 'over_consumption' : 'not_entitled',
-        consumption: result.consumption,
+        status: value.hasEntitlement ? 'over_consumption' : 'not_entitled',
+        consumption: value.consumption,
       };
     } catch {
       return { status: 'check_failed' };
@@ -522,8 +536,10 @@ export class SonarQubeClient {
   /**
    * Vortex is exposed through separate SQAA and CAG services, each with its own
    * entitlement endpoint. Although both should eventually use one entitlement,
-   * there is no shared Vortex backend yet. Require both checks so the CLI does not
-   * enable both capabilities when only one is available, which would fail later.
+   * there is no shared Vortex backend yet. On Cloud, require both checks so the
+   * CLI does not enable both capabilities when only one is available.
+   *
+   * On Server there is no SQAA/A3S service, so CAG stands alone.
    *
    * Usage `consumption` is CAG-specific (the SQAA endpoint does not report it) and is
    * only forwarded for `enabled`: once over the limit the remaining headroom is no
@@ -531,7 +547,10 @@ export class SonarQubeClient {
    */
   async hasVortexEntitlement(organizationKey?: string): Promise<VortexEntitlementResult> {
     try {
-      if (!organizationKey || !isSonarQubeCloud(this.serverURL)) {
+      if (!this.isCloud) {
+        return await this.checkCagEntitlement(SERVER_ORGANIZATION_ID_PLACEHOLDER);
+      }
+      if (!organizationKey) {
         return { status: 'not_entitled' };
       }
       const uuid = await this.getOrganizationId(organizationKey);
@@ -542,6 +561,9 @@ export class SonarQubeClient {
         this.checkSqaaEntitlement(uuid),
         this.checkCagEntitlement(uuid),
       ]);
+      if (cag.status === 'not_applicable') {
+        return { status: 'not_applicable' };
+      }
       if (sqaa.status === 'check_failed' || cag.status === 'check_failed') {
         return { status: 'check_failed' };
       }

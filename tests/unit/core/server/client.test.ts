@@ -26,7 +26,7 @@ import {
   SONARCLOUD_US_API_URL,
   SONARCLOUD_US_URL,
 } from '@/core/config-constants.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { SERVER_ORGANIZATION_ID_PLACEHOLDER, SonarQubeClient } from '@/core/server/client.ts';
 import { ForbiddenApiError } from '@/core/server/errors.ts';
 import { fetchGuarded } from '@/core/server/fetch-guarded.ts';
 import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
@@ -748,10 +748,26 @@ describe('SonarQubeClient', () => {
       expect((await cloudClient['checkCagEntitlement'](UUID)).status).toBe('check_failed');
     });
 
+    it("returns 'not_applicable' when the Hub is absent (HTTP 404)", async () => {
+      fetchSpy = mockFetch({}, false, 404);
+      expect((await cloudClient['checkCagEntitlement'](UUID)).status).toBe('not_applicable');
+    });
+
+    it("returns 'check_failed' when the Hub is unavailable (HTTP 503)", async () => {
+      fetchSpy = mockFetch({}, false, 503);
+      expect((await cloudClient['checkCagEntitlement'](UUID)).status).toBe('check_failed');
+    });
+
     it('hits the CAG entitlement endpoint with the given UUID', async () => {
       fetchSpy = mockFetch({ allowed: true, hasEntitlement: true });
       await cloudClient['checkCagEntitlement'](UUID);
       expect(new URL(lastFetchUrl(fetchSpy)).pathname).toBe(`/cag/cag-entitlement/${UUID}`);
+    });
+
+    it('uses the /api/v2 prefix on SonarQube Server', async () => {
+      fetchSpy = mockFetch({ allowed: true, hasEntitlement: true });
+      await client['checkCagEntitlement'](UUID);
+      expect(new URL(lastFetchUrl(fetchSpy)).pathname).toBe(`/api/v2/cag/cag-entitlement/${UUID}`);
     });
 
     it('forwards the consumption payload when present', async () => {
@@ -794,11 +810,33 @@ describe('SonarQubeClient', () => {
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
-    it('returns not_entitled when server is not SonarQube Cloud', async () => {
+    it('queries CAG only on SonarQube Server, using the placeholder org id', async () => {
       const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
-      fetchSpy = mockFetch({});
-      expect((await serverClient.hasVortexEntitlement('my-org')).status).toBe('not_entitled');
-      expect(fetchSpy).not.toHaveBeenCalled();
+      fetchSpy = mockFetch({ allowed: true, hasEntitlement: true });
+      expect((await serverClient.hasVortexEntitlement()).status).toBe('enabled');
+      expect(new URL(lastFetchUrl(fetchSpy)).pathname).toBe(
+        `/api/v2/cag/cag-entitlement/${SERVER_ORGANIZATION_ID_PLACEHOLDER}`,
+      );
+    });
+
+    it('does not call the Cloud-only SQAA endpoint on SonarQube Server', async () => {
+      const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
+      fetchSpy = mockFetch({ allowed: true, hasEntitlement: true });
+      await serverClient.hasVortexEntitlement();
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(lastFetchUrl(fetchSpy)).not.toContain('a3s-analysis');
+    });
+
+    it("returns 'not_applicable' when the Server Hub is absent", async () => {
+      const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
+      fetchSpy = mockFetch({}, false, 404);
+      expect((await serverClient.hasVortexEntitlement()).status).toBe('not_applicable');
+    });
+
+    it("returns 'check_failed' when the Server Hub is unavailable", async () => {
+      const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
+      fetchSpy = mockFetch({}, false, 503);
+      expect((await serverClient.hasVortexEntitlement()).status).toBe('check_failed');
     });
 
     it('returns check_failed when org UUID cannot be resolved', async () => {

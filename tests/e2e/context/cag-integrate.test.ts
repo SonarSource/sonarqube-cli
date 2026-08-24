@@ -23,7 +23,7 @@
  * pre-flight checks, against a fake SonarQube server. Asserts that the CLI
  * never reaches the real CAG binary on connections where CAG must be skipped:
  *
- *   - SonarQube Server (non-Cloud) connections.
+ *   - SonarQube Server connections without the CAG Hub.
  *   - Cloud connections where the org is not allowed to use CAG.
  *
  * Both paths must exit before `installContextAugmentationBinary()` runs, so
@@ -97,7 +97,8 @@ describe('sonar integrate <agent> — CAG pre-flight skip paths (real CLI, fake 
     });
 
     expect(result.exitCode, result.stderr).toBe(0);
-    expect(result.stdout).toContain('Vortex is available on SonarQube Cloud.');
+    expect(result.stdout).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
+    expect(result.stdout).not.toContain('Vortex is available on SonarQube Cloud.');
     expect(existsSync(cagBinaryPath), 'no CAG download on SonarQube Server').toBe(false);
     expect(findRecordedCagFeature(harness.stateJsonFile.asJson() as CliState)).toBeUndefined();
   });
@@ -153,7 +154,8 @@ describe('sonar integrate <agent> — CAG pre-flight skip paths (real CLI, fake 
     });
 
     expect(result.exitCode, result.stderr).toBe(0);
-    expect(result.stdout).toContain('Vortex is available on SonarQube Cloud.');
+    expect(result.stdout).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
+    expect(result.stdout).not.toContain('Vortex is available on SonarQube Cloud.');
     expect(existsSync(cagBinaryPath), 'no CAG download on SonarQube Server').toBe(false);
     expect(findRecordedCagFeature(harness.stateJsonFile.asJson() as CliState)).toBeUndefined();
   });

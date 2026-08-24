@@ -43,15 +43,18 @@ export async function recheckVortexEntitlement(
 }
 
 /**
- * `not_applicable` (unauthenticated, or not SonarQube Cloud with an organization) is
- * decided here, before ever calling the entitlement API — deliberately distinct from a
- * real `not_entitled` result, so callers never tell a SonarQube Server user to re-enable
- * a feature they can never reach.
+ * `not_applicable` is decided here for connections that cannot ask the Hub at all
+ * (unauthenticated, or Cloud without an organization). On-premise connections are
+ * queried: a missing Hub returns `not_applicable` from the 404, distinct from a
+ * real `not_entitled` licence refusal.
  */
 export async function resolveVortexEntitlement(
   auth: ResolvedAuth | null,
 ): Promise<VortexEntitlementResult> {
-  if (auth?.connectionType !== 'cloud' || !auth.orgKey) {
+  if (!auth) {
+    return { status: 'not_applicable' };
+  }
+  if (auth.connectionType === 'cloud' && !auth.orgKey) {
     return { status: 'not_applicable' };
   }
   return queryVortexEntitlement(auth);

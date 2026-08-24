@@ -22,7 +22,7 @@ import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { SonarQubeClient, type VortexEntitlementStatus } from '@/core/server/client.ts';
-import { recheckVortexEntitlement } from '@/core/vortex/entitlement.ts';
+import { recheckVortexEntitlement, resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 function cloudAuth(orgKey = 'my-org'): ResolvedAuth {
   return { token: 'tok', serverUrl: 'https://sonarcloud.io', orgKey, connectionType: 'cloud' };
@@ -56,4 +56,42 @@ describe('recheckVortexEntitlement', () => {
       expect(await recheckVortexEntitlement(cloudAuth())).toBe(verdict);
     },
   );
+});
+
+function serverAuth(): ResolvedAuth {
+  return {
+    token: 'tok',
+    serverUrl: 'https://sonarqube.example.com',
+    connectionType: 'on-premise',
+  };
+}
+
+describe('resolveVortexEntitlement', () => {
+  let entitlementSpy: ReturnType<typeof spyOn>;
+
+  afterEach(() => {
+    entitlementSpy?.mockRestore();
+  });
+
+  it('returns not_applicable without calling the API when unauthenticated', async () => {
+    entitlementSpy = spyOn(SonarQubeClient.prototype, 'hasVortexEntitlement');
+    expect(await resolveVortexEntitlement(null)).toEqual({ status: 'not_applicable' });
+    expect(entitlementSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns not_applicable without calling the API for Cloud without an org', async () => {
+    entitlementSpy = spyOn(SonarQubeClient.prototype, 'hasVortexEntitlement');
+    expect(await resolveVortexEntitlement({ ...cloudAuth(), orgKey: undefined })).toEqual({
+      status: 'not_applicable',
+    });
+    expect(entitlementSpy).not.toHaveBeenCalled();
+  });
+
+  it('queries entitlement on a Server connection', async () => {
+    entitlementSpy = spyOn(SonarQubeClient.prototype, 'hasVortexEntitlement').mockResolvedValue({
+      status: 'enabled',
+    });
+    expect(await resolveVortexEntitlement(serverAuth())).toEqual({ status: 'enabled' });
+    expect(entitlementSpy).toHaveBeenCalled();
+  });
 });

@@ -389,8 +389,9 @@ export class FakeSonarQubeServerBuilder {
   }
 
   /**
-   * Force GET /cag/cag-entitlement/{uuid} to return a specific HTTP
-   * status code. Useful for testing entitlement check failure paths.
+   * Force GET /cag/cag-entitlement/{uuid} (and the Server /api/v2 prefix) to
+   * return a specific HTTP status code. Useful for testing entitlement check
+   * failure paths.
    */
   withCagEntitlementStatusCode(status: number, body?: string): this {
     this.cagEntitlementStatusCode = status;
@@ -983,7 +984,7 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
-        const cagEntitlementMatch = /^\/cag\/cag-entitlement\/(.+)$/.exec(path);
+        const cagEntitlementMatch = /^(?:\/api\/v2)?\/cag\/cag-entitlement\/(.+)$/.exec(path);
         if (cagEntitlementMatch) {
           if (cagEntitlementStatusCode !== undefined) {
             return new Response(

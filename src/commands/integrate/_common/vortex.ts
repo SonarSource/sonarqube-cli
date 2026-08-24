@@ -84,6 +84,12 @@ export function vortexShouldInstall<TOptions extends IntegrateAgentOptions>({
 
 export const VORTEX_PROMOTION_MESSAGE = `Vortex is available on SonarQube Cloud. Learn more: ${VORTEX_PRODUCT_URL}`;
 
+export const VORTEX_SERVER_UNAVAILABLE_MESSAGE =
+  'Vortex requires SonarQube Server 2026.5 Enterprise or later.';
+
+export const VORTEX_SERVER_NOT_ENTITLED_MESSAGE =
+  'Vortex is not licensed on this SonarQube Server. Ask your administrator to enable the Vortex add-on.';
+
 export const VORTEX_UNINSTALL_MESSAGE =
   'Vortex is no longer available for this organization. Removing the existing Vortex integration.';
 
@@ -93,6 +99,9 @@ export const VORTEX_GLOBAL_SKIP_MESSAGE =
   'Skipping Vortex: not supported with --global. Re-run without --global from a project directory to install it there.';
 
 export const VORTEX_MISSING_PROJECT_MESSAGE =
+  'Skipping Vortex: a project key is required (configure your project or pass --project).';
+
+export const VORTEX_MISSING_CLOUD_CONTEXT_MESSAGE =
   'Skipping Vortex: a project key and organization are required (configure your project or pass --project).';
 
 export const VORTEX_OVER_CONSUMPTION_MESSAGE =
@@ -120,9 +129,10 @@ export async function resolveVortexSetup(
   params: ResolveVortexSetupParams,
 ): Promise<ResolvedVortexSetup> {
   const { status } = await resolveVortexEntitlement(params.auth);
+  const isServer = params.auth.connectionType === 'on-premise';
 
   if (status === 'not_applicable') {
-    info(VORTEX_PROMOTION_MESSAGE);
+    info(isServer ? VORTEX_SERVER_UNAVAILABLE_MESSAGE : VORTEX_PROMOTION_MESSAGE);
     return { disposition: 'preserve' };
   }
 
@@ -131,15 +141,15 @@ export async function resolveVortexSetup(
     return { disposition: 'preserve' };
   }
   if (status === 'not_entitled') {
-    info(VORTEX_PROMOTION_MESSAGE);
+    info(isServer ? VORTEX_SERVER_NOT_ENTITLED_MESSAGE : VORTEX_PROMOTION_MESSAGE);
     return { disposition: 'remove' };
   }
   if (params.isGlobal) {
     warn(VORTEX_GLOBAL_SKIP_MESSAGE);
     return { disposition: 'preserve' };
   }
-  if (!params.projectKey || !params.auth.orgKey) {
-    warn(VORTEX_MISSING_PROJECT_MESSAGE);
+  if (!params.projectKey || (!isServer && !params.auth.orgKey)) {
+    warn(isServer ? VORTEX_MISSING_PROJECT_MESSAGE : VORTEX_MISSING_CLOUD_CONTEXT_MESSAGE);
     return { disposition: 'preserve' };
   }
   if (status === 'over_consumption') {
