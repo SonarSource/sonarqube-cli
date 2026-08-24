@@ -51,12 +51,7 @@ const AGENT_CONFIG_DIR: Record<string, string> = {
 };
 
 /**
- * Claude Code substitutes this literal token with the real project root as
- * plain-text substitution before the command ever reaches a shell — see
- * https://code.claude.com/docs/en/hooks#reference-scripts-by-path. Anchoring
- * project-scope hook commands to it (instead of a bare relative path) keeps
- * them resolvable when Claude Code's cwd diverges from the project root
- * (worktrees, cwd changes).
+ * Claude Code's environment variable for project root in case the agent changes cwd durign the run
  */
 export const CLAUDE_PROJECT_DIR_PLACEHOLDER = '${CLAUDE_PROJECT_DIR}';
 
