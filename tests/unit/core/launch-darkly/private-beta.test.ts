@@ -66,6 +66,7 @@ describe('resolvePrivateBetaFlags', () => {
     connectionType: 'cloud',
     userUuid: 'user-1',
     organizationUuidV4: 'org-1',
+    enterpriseUuid: null,
     sqsInstallationId: null,
   };
 
@@ -88,6 +89,7 @@ describe('resolvePrivateBetaFlags', () => {
         authenticatedAt: new Date().toISOString(),
         userUuid: 'user-1',
         organizationUuidV4: 'org-1',
+        enterpriseUuid: null,
       },
     ];
     tryLoadStateSpy = spyOn(stateManager, 'tryLoadState').mockReturnValue(state);
@@ -200,6 +202,7 @@ describe('resolvePrivateBetaFlags', () => {
     resolveTelemetryIdentitySpy.mockResolvedValue({
       user_uuid: null,
       organization_uuid_v4: null,
+      enterprise_uuid: null,
       sqs_installation_id: null,
     });
     const fetchFlags = mock(() =>
@@ -233,6 +236,7 @@ describe('resolvePrivateBetaFlags', () => {
     resolveTelemetryIdentitySpy.mockResolvedValue({
       user_uuid: 'user-1',
       organization_uuid_v4: 'org-1',
+      enterprise_uuid: null,
       sqs_installation_id: null,
     });
     const fetchFlags = mock(() =>

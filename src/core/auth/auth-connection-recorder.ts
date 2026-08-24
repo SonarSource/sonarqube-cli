@@ -88,6 +88,9 @@ function applyIdentityToConnection(
   connection.userUuid = identity.user_uuid;
   if (auth.connectionType === 'cloud' && auth.orgKey) {
     connection.organizationUuidV4 = identity.organization_uuid_v4;
+    if (identity.enterprise_uuid !== undefined) {
+      connection.enterpriseUuid = identity.enterprise_uuid;
+    }
   } else if (auth.connectionType === 'on-premise') {
     connection.sqsInstallationId = identity.sqs_installation_id;
   }

@@ -25,6 +25,7 @@ export interface FeatureFlagIdentity {
   connectionType: ServerType;
   userUuid: string | null;
   organizationUuidV4: string | null;
+  enterpriseUuid: string | null;
   sqsInstallationId: string | null;
 }
 

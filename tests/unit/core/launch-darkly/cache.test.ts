@@ -31,6 +31,7 @@ const identity: FeatureFlagIdentity = {
   connectionType: 'cloud',
   userUuid: 'user-1',
   organizationUuidV4: 'org-1',
+  enterpriseUuid: null,
   sqsInstallationId: null,
 };
 
@@ -118,5 +119,13 @@ describe('readFreshFlagDecisions', () => {
     expect(readFreshFlagDecisions(identity, ['cli.beta.private'], 'client-id', 1_000)).toEqual({
       'cli.beta.private': true,
     });
+  });
+});
+
+describe('identityCacheKey', () => {
+  it('changes when the enterprise UUID changes', () => {
+    expect(identityCacheKey({ ...identity, enterpriseUuid: 'ent-1' })).not.toBe(
+      identityCacheKey(identity),
+    );
   });
 });

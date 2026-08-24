@@ -59,6 +59,7 @@ const cloudIdentity: FeatureFlagIdentity = {
   connectionType: 'cloud',
   userUuid: 'user-1',
   organizationUuidV4: 'org-1',
+  enterpriseUuid: null,
   sqsInstallationId: null,
 };
 
@@ -120,6 +121,21 @@ describe('fetchFlagsFromLaunchDarkly', () => {
     options.logger.error('e');
   });
 
+  it('sends an enterprise context to LaunchDarkly when the UUID is known', async () => {
+    await fetchFlagsFromLaunchDarkly({
+      ...cloudIdentity,
+      enterpriseUuid: 'ent-1',
+    });
+
+    const [, context] = initialize.mock.calls[0];
+    expect(context).toEqual({
+      kind: 'multi',
+      user: { key: 'user-1' },
+      organization: { key: 'org-1' },
+      enterprise: { key: 'ent-1' },
+    });
+  });
+
   it('returns null when SDK initialization fails', async () => {
     waitForInitialization.mockImplementation(() => Promise.reject(new Error('timeout')));
 
@@ -140,6 +156,7 @@ describe('fetchFlagsFromLaunchDarkly', () => {
         connectionType: 'cloud',
         userUuid: 'user-1',
         organizationUuidV4: null,
+        enterpriseUuid: null,
         sqsInstallationId: null,
       }),
     ).toBeNull();
