@@ -45,6 +45,7 @@ import type {
 import { runClaudePostToolUseDispatch } from './claude-hook-dispatch.ts';
 import { contextAugmentationPostToolUseSubscriber } from './context-augmentation-hook-subscriber.ts';
 import { formatSqaaIssuesForHook } from './format-sqaa-hook-context.ts';
+import type { HookCommandResult } from './hook-command-result.ts';
 import { readStdinJsonWithRaw } from './stdin.ts';
 import { emitVortexUnavailableHookNotice } from './vortex-unavailable-hook-notice.ts';
 
@@ -150,17 +151,23 @@ function createSqaaPostToolUseSubscriber(
   };
 }
 
-export async function agentPostToolUse(options: AgentPostToolUseOptions): Promise<void> {
+export async function agentPostToolUse(
+  options: AgentPostToolUseOptions,
+): Promise<HookCommandResult> {
   let raw: string;
   let payload: ClaudePostToolUsePayload;
   try {
     ({ raw, parsed: payload } = await readStdinJsonWithRaw<ClaudePostToolUsePayload>());
   } catch {
-    return; // unparseable stdin — non-blocking
+    return { agentSessionId: null }; // unparseable stdin — non-blocking
   }
+
+  const agentSessionId = payload.session_id ?? null;
 
   await runClaudePostToolUseDispatch(payload, raw, [
     createSqaaPostToolUseSubscriber(options.project),
     contextAugmentationPostToolUseSubscriber,
   ]);
+
+  return { agentSessionId };
 }

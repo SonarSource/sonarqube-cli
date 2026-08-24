@@ -25,6 +25,7 @@ import logger from '@/core/observability/logger.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 
 import { EXIT_CODE_SECRETS_FOUND } from '../analyze/secrets.ts';
+import type { HookCommandResult } from './hook-command-result.ts';
 import {
   type HookDependencies,
   MissingDependenciesError,
@@ -35,23 +36,26 @@ import { readStdinJson } from './stdin.ts';
 
 interface PromptSubmitPayload {
   prompt?: string;
+  session_id?: string;
 }
 
 function denyPrompt(reason: string): void {
   process.stdout.write(JSON.stringify({ decision: 'block', reason }) + '\n');
 }
 
-export async function agentPromptSubmit(): Promise<void> {
+export async function agentPromptSubmit(): Promise<HookCommandResult> {
   let payload: PromptSubmitPayload;
   try {
     payload = await readStdinJson<PromptSubmitPayload>();
   } catch (err) {
     logger.debug(`UserPromptSubmit: failed to parse stdin — ${(err as Error).message}`);
-    return; // unparseable stdin — allow
+    return { agentSessionId: null }; // unparseable stdin — allow
   }
 
+  const agentSessionId = payload.session_id ?? null;
+
   const prompt = payload.prompt;
-  if (!prompt) return;
+  if (!prompt) return { agentSessionId };
 
   let deps: HookDependencies;
   try {
@@ -59,7 +63,7 @@ export async function agentPromptSubmit(): Promise<void> {
   } catch (err) {
     if (err instanceof MissingDependenciesError) {
       denyPrompt(err.message);
-      return;
+      return { agentSessionId };
     }
     throw err;
   }
@@ -76,4 +80,6 @@ export async function agentPromptSubmit(): Promise<void> {
   } catch (err) {
     logger.debug(`UserPromptSubmit secrets scan failed: ${(err as Error).message}`);
   }
+
+  return { agentSessionId };
 }
