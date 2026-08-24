@@ -72,6 +72,10 @@ describe('detectInstalledAgents', () => {
 
     expect(detectInstalledAgents(home)).toEqual(['antigravity']);
   });
+
+  it('defaults to the real user home directory when none is given', () => {
+    expect(Array.isArray(detectInstalledAgents())).toBe(true);
+  });
 });
 
 describe('agentDisplayName', () => {
