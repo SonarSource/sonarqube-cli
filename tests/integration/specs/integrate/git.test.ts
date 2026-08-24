@@ -895,8 +895,12 @@ describe('integrate git (native hooks)', () => {
   describe('global hook chains to a pre-existing local hook (CLI-971)', () => {
     const OLD_HOOK_MARKER_FILE = 'old-hook-ran.txt';
 
-    function writePreExistingHook(harness: TestHarness, script: string): void {
-      const hookPath = join(harness.cwd.path, '.git', 'hooks', 'pre-commit');
+    function writePreExistingHook(
+      harness: TestHarness,
+      script: string,
+      hook: 'pre-commit' | 'pre-push' = 'pre-commit',
+    ): void {
+      const hookPath = join(harness.cwd.path, '.git', 'hooks', hook);
       mkdirSync(join(harness.cwd.path, '.git', 'hooks'), { recursive: true });
       writeFileSync(hookPath, script, { mode: 0o755 });
       chmodSync(hookPath, 0o755);
@@ -993,6 +997,60 @@ describe('integrate git (native hooks)', () => {
         expect(output).toContain('Secrets detected');
         // ...but the old marked-as-Sonar hook was recognized and skipped, not executed again.
         expect(harness.cwd.exists(OLD_HOOK_MARKER_FILE)).toBe(false);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'pre-push: chains to a hook that reads stdin, and Sonar still detects a secret afterward',
+      async () => {
+        await setupAuthenticated(harness, { withSecretsBinary: true });
+        initGitRepo(harness);
+        // A realistic pre-push hook actually reads the ref list from stdin — this is exactly the
+        // scenario that would silently disable Sonar's scan without the stdin capture-and-replay.
+        writePreExistingHook(
+          harness,
+          [
+            '#!/bin/sh',
+            `LINES=$(cat | wc -l)`,
+            `echo "ran-saw-$LINES-lines" >> ${OLD_HOOK_MARKER_FILE}`,
+            'exit 0',
+            '',
+          ].join('\n'),
+          'pre-push',
+        );
+
+        const install = await harness.run(
+          'integrate git --global --hook pre-push --non-interactive',
+        );
+        expect(install.exitCode).toBe(0);
+
+        const { hookEnv } = setupSonarBinDir(harness);
+        setupGitUser(harness.cwd.path);
+
+        // First commit + push: clean file, should succeed and still run the chained old hook.
+        harness.cwd.writeFile('clean.js', 'const x = 1;\n');
+        Bun.spawnSync(['git', 'add', 'clean.js'], { cwd: harness.cwd.path });
+        gitCommit(harness.cwd.path, hookEnv, 'initial');
+        addBareRemote(harness.cwd.path);
+        const firstPush = gitPush(harness.cwd.path, hookEnv, true);
+        expect(firstPush.exitCode).toBe(0);
+        // The chained hook actually read a non-empty ref list — proves stdin wasn't already
+        // drained empty before it ran.
+        const oldHookLog = readFileSync(join(harness.cwd.path, OLD_HOOK_MARKER_FILE), 'utf-8');
+        expect(oldHookLog).toMatch(/ran-saw-\s*[1-9]\d*-lines/);
+
+        // Second commit + push: file with a secret. If Sonar's scan lost its stdin (the bug this
+        // capture-and-replay fixes), this would wrongly succeed instead of being blocked.
+        harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+        Bun.spawnSync(['git', 'add', 'secret.js'], { cwd: harness.cwd.path });
+        gitCommit(harness.cwd.path, hookEnv, 'wip');
+        const secondPush = gitPush(harness.cwd.path, hookEnv, false);
+
+        expect(secondPush.exitCode).not.toBe(0);
+        const output =
+          (secondPush.stdout?.toString() ?? '') + (secondPush.stderr?.toString() ?? '');
+        expect(output).toContain('Secrets detected');
       },
       { timeout: 30000 },
     );

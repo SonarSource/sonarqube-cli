@@ -157,6 +157,23 @@ describe('native git hook chaining (CLI-971)', () => {
     expect(script).toContain('sonar pre-push hook - installed by sonar integrate git');
   });
 
+  it('captures stdin once and replays it to both the chained hook and the sonar command, for pre-push', () => {
+    const script = getHookScript('pre-push', context({ scope: 'global' }));
+
+    expect(script).toContain('SONAR_STDIN_CACHE=$(mktemp)');
+    expect(script).toContain('cat > "$SONAR_STDIN_CACHE"');
+    expect(script).toContain('"$SONAR_LOCAL_HOOK" "$@" < "$SONAR_STDIN_CACHE" || exit $?');
+    expect(script).toContain('hook git-pre-push < "$SONAR_STDIN_CACHE"');
+  });
+
+  it('does not add stdin capture for pre-commit, which reads no stdin', () => {
+    const script = getHookScript('pre-commit', context({ scope: 'global' }));
+
+    expect(script).not.toContain('SONAR_STDIN_CACHE');
+    expect(script).toContain('"$SONAR_LOCAL_HOOK" "$@" || exit $?');
+    expect(script).toContain('hook git-pre-commit\n');
+  });
+
   it('checks for both the current and legacy Sonar markers, so an old per-repo install is not double-chained', () => {
     const script = getHookScript('pre-commit', context({ scope: 'global' }));
 
