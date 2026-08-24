@@ -27,17 +27,22 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-export const DETECTED_AGENT_IDS = ['cursor', 'claude', 'codex', 'copilot', 'antigravity'] as const;
+import { CURSOR_CONFIG_DIR } from '@/core/config-constants.ts';
 
-export type DetectedAgentId = (typeof DETECTED_AGENT_IDS)[number];
+import type { CallerAgent } from './agent-detector.ts';
 
-const AGENT_LABELS: Record<DetectedAgentId, string> = {
+/** Same id set as `CallerAgent` — reused, not redeclared, so adding a new agent can't let the two drift apart. */
+export type DetectedAgentId = CallerAgent;
+
+const AGENT_LABELS: Record<CallerAgent, string> = {
   cursor: 'Cursor',
   claude: 'Claude Code',
   codex: 'Codex',
   copilot: 'Copilot',
   antigravity: 'Antigravity',
 };
+
+export const DETECTED_AGENT_IDS = Object.keys(AGENT_LABELS) as CallerAgent[];
 
 export function agentDisplayName(agentId: DetectedAgentId): string {
   return AGENT_LABELS[agentId];
@@ -49,7 +54,7 @@ export function agentDisplayName(agentId: DetectedAgentId): string {
  * `~/.agents`, which several agents write to and so identifies none of them.
  */
 const AGENT_HOME_MARKERS: Record<DetectedAgentId, string[]> = {
-  cursor: ['.cursor'],
+  cursor: [CURSOR_CONFIG_DIR],
   claude: ['.claude', '.claude.json'],
   codex: ['.codex'],
   copilot: ['.copilot'],
