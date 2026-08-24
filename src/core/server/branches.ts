@@ -18,30 +18,22 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { QualityGateConditionSummary } from './condition-summary.ts';
-import type { QualityGateScope } from './scope.ts';
-import type { QualityGateVerdict } from './verdict.ts';
+// SonarQube Project Branches API wrapper
 
-export interface QualityGateJsonViewModel {
-  verdict: QualityGateVerdict;
-  project: string;
-  scope: QualityGateScope;
-  conditions: QualityGateConditionSummary[];
-}
+import { type SonarQubeClient } from './client.ts';
+import type { ProjectBranch, ProjectBranchesResponse } from './types.ts';
 
-export function formatQualityGateJson(vm: QualityGateJsonViewModel): string {
-  const isPullRequest = vm.scope.kind === 'pullRequest';
-  return JSON.stringify(
-    {
-      qualityGate: {
-        status: vm.verdict,
-        project: vm.project,
-        branch: isPullRequest ? undefined : vm.scope.value,
-        pullRequest: isPullRequest ? vm.scope.value : undefined,
-        conditions: vm.conditions,
-      },
-    },
-    null,
-    2,
-  );
+export class BranchesClient {
+  private readonly client: SonarQubeClient;
+
+  constructor(client: SonarQubeClient) {
+    this.client = client;
+  }
+
+  async listBranches(projectKey: string): Promise<ProjectBranch[]> {
+    const result = await this.client.get<ProjectBranchesResponse>('/api/project_branches/list', {
+      project: projectKey,
+    });
+    return result.branches;
+  }
 }

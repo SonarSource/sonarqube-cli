@@ -37,9 +37,16 @@ export class QualityGatesClient {
    * quality gate associated. Callers treat both as "not computed".
    */
   async getProjectStatus(params: ProjectStatusParams): Promise<ProjectStatus | null> {
+    const queryParams: Record<string, string> = { projectKey: params.projectKey };
+    if (params.branch) {
+      queryParams.branch = params.branch;
+    }
+    if (params.pullRequest) {
+      queryParams.pullRequest = params.pullRequest;
+    }
     const result = await this.client.getOrNotFound<ProjectStatusResponse>(
       '/api/qualitygates/project_status',
-      { projectKey: params.projectKey },
+      queryParams,
     );
     return result?.projectStatus ?? null;
   }

@@ -30,6 +30,7 @@ import { print } from '@/core/ui';
 import { selectConditions } from './quality-gate-helpers/condition-summary.ts';
 import { formatQualityGateJson } from './quality-gate-helpers/format-json.ts';
 import { formatQualityGateTable } from './quality-gate-helpers/format-table.ts';
+import { resolveQualityGateScope, scopeQueryParams } from './quality-gate-helpers/scope.ts';
 import { exitCodeFor, toVerdict } from './quality-gate-helpers/verdict.ts';
 
 export const VALID_FORMATS = ['json', 'table'];
@@ -37,6 +38,8 @@ export const VALID_FORMATS = ['json', 'table'];
 export interface GetQualityGateOptions {
   project?: string;
   format?: string;
+  branch?: string;
+  pullRequest?: string;
 }
 
 export async function getQualityGate(
@@ -48,8 +51,13 @@ export async function getQualityGate(
   noteProject(auth, projectKey);
 
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  const scope = await resolveQualityGateScope(client, projectKey, options);
+
   const qualityGatesClient = new QualityGatesClient(client);
-  const projectStatus = await qualityGatesClient.getProjectStatus({ projectKey });
+  const projectStatus = await qualityGatesClient.getProjectStatus({
+    projectKey,
+    ...scopeQueryParams(scope),
+  });
 
   const verdict = toVerdict(projectStatus?.status);
   const conditions = selectConditions(projectStatus?.conditions ?? [], false);
@@ -57,8 +65,8 @@ export async function getQualityGate(
   const format = options.format ?? 'json';
   const message =
     format === 'table'
-      ? formatQualityGateTable({ verdict, project: projectKey, conditions })
-      : formatQualityGateJson({ verdict, project: projectKey, conditions });
+      ? formatQualityGateTable({ verdict, project: projectKey, scope, conditions })
+      : formatQualityGateJson({ verdict, project: projectKey, scope, conditions });
   print(message);
 
   process.exitCode = exitCodeFor(verdict);

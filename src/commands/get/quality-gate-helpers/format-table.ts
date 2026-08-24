@@ -21,6 +21,7 @@
 import { green, red, yellow } from '@/core/ui/colors.ts';
 
 import type { QualityGateConditionSummary } from './condition-summary.ts';
+import type { QualityGateScope } from './scope.ts';
 import type { QualityGateVerdict } from './verdict.ts';
 
 const CONDITION_LABEL_WIDTH = 36;
@@ -36,7 +37,7 @@ const VERDICT_BRACKETS: Record<QualityGateVerdict, string> = {
  * The API only ever returns `LT`/`GT` (strict "less than"/"greater than" — the comparator
  * describes when the condition *fails*), so passing requires the inclusive opposite bound.
  */
-const MIRROR_COMPARATOR_SYMBOLS: Record<string, string> = {
+const COMPARATOR_SYMBOLS: Record<string, string> = {
   LT: '≥',
   GT: '≤',
 };
@@ -44,6 +45,7 @@ const MIRROR_COMPARATOR_SYMBOLS: Record<string, string> = {
 export interface QualityGateTableViewModel {
   verdict: QualityGateVerdict;
   project: string;
+  scope: QualityGateScope;
   conditions: QualityGateConditionSummary[];
 }
 
@@ -51,6 +53,7 @@ export function formatQualityGateTable(vm: QualityGateTableViewModel): string {
   const lines: string[] = [
     `=== Quality Gate: ${formatVerdictBracket(vm.verdict)} ===`,
     `Project:      ${vm.project}`,
+    formatScopeLine(vm.scope),
   ];
 
   if (vm.conditions.length > 0) {
@@ -61,6 +64,13 @@ export function formatQualityGateTable(vm: QualityGateTableViewModel): string {
   }
 
   return lines.join('\n');
+}
+
+function formatScopeLine(scope: QualityGateScope): string {
+  if (scope.kind === 'pullRequest') {
+    return `Pull Request: ${scope.value}`;
+  }
+  return `Branch:       ${scope.value}${scope.kind === 'default' ? ' (default)' : ''}`;
 }
 
 function formatVerdictBracket(verdict: QualityGateVerdict): string {
@@ -81,7 +91,7 @@ function formatConditionLine(condition: QualityGateConditionSummary): string {
   const value = (condition.actualValue ?? '—').padEnd(CONDITION_VALUE_WIDTH);
   const requirement =
     condition.threshold !== undefined
-      ? `(required ${MIRROR_COMPARATOR_SYMBOLS[condition.comparator] ?? condition.comparator} ${condition.threshold})`
+      ? `(required ${COMPARATOR_SYMBOLS[condition.comparator] ?? condition.comparator} ${condition.threshold})`
       : '';
   return `    ${marker}  ${label}${value}${requirement}`;
 }

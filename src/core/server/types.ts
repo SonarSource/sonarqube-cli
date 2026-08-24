@@ -122,6 +122,8 @@ export interface ProjectsSearchResponse {
 
 export interface ProjectStatusParams {
   projectKey: string;
+  branch?: string;
+  pullRequest?: string;
 }
 
 export type QualityGateStatus = 'OK' | 'WARN' | 'ERROR' | 'NONE';
@@ -142,4 +144,14 @@ export interface ProjectStatus {
 
 export interface ProjectStatusResponse {
   projectStatus: ProjectStatus;
+}
+
+export interface ProjectBranch {
+  name: string;
+  isMain: boolean;
+  type: string;
+}
+
+export interface ProjectBranchesResponse {
+  branches: ProjectBranch[];
 }

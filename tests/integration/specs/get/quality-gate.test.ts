@@ -49,7 +49,12 @@ describe('get quality-gate', () => {
 
       expect(result.exitCode).toBe(0);
       const parsed = JSON.parse(result.stdout);
-      expect(parsed.qualityGate).toEqual({ status: 'OK', project: 'my-project', conditions: [] });
+      expect(parsed.qualityGate).toEqual({
+        status: 'OK',
+        project: 'my-project',
+        branch: 'main',
+        conditions: [],
+      });
     },
     { timeout: 15000 },
   );
@@ -98,6 +103,7 @@ describe('get quality-gate', () => {
       expect(parsed.qualityGate).toEqual({
         status: 'ERROR',
         project: 'my-project',
+        branch: 'main',
         conditions: [
           {
             status: 'ERROR',
@@ -180,10 +186,123 @@ describe('get quality-gate', () => {
       expect(result.exitCode).toBe(51);
       expect(result.stdout).toContain('Quality Gate: [✗ Failed]');
       expect(result.stdout).toContain('Project:      my-project');
+      expect(result.stdout).toContain('Branch:       main (default)');
       expect(result.stdout).toContain('Conditions:');
       expect(result.stdout).toContain('new_coverage');
       expect(result.stdout).toContain('62.4');
       expect(result.stdout).toContain('(required ≥ 80)');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'resolves the actual default branch name instead of assuming "main"',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK').withDefaultBranchName('master'))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const jsonResult = await harness.run(`get quality-gate --project my-project`);
+      const parsed = JSON.parse(jsonResult.stdout);
+      expect(parsed.qualityGate.branch).toBe('master');
+
+      const tableResult = await harness.run(`get quality-gate --project my-project --format table`);
+      expect(tableResult.stdout).toContain('Branch:       master (default)');
+      expect(tableResult.stdout).not.toContain('main');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows the given branch without the default annotation',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK'))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `get quality-gate --project my-project --format table --branch feature-x`,
+      );
+
+      expect(result.stdout).toContain('Branch:       feature-x');
+      expect(result.stdout).not.toContain('(default)');
+
+      const requests = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/qualitygates/project_status');
+      expect(requests).toHaveLength(1);
+      expect(requests[0].query.branch).toBe('feature-x');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows the given pull request instead of a branch',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK'))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `get quality-gate --project my-project --format table --pull-request 42`,
+      );
+
+      expect(result.stdout).toContain('Pull Request: 42');
+      expect(result.stdout).not.toContain('Branch:');
+
+      const requests = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/qualitygates/project_status');
+      expect(requests).toHaveLength(1);
+      expect(requests[0].query.pullRequest).toBe('42');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'rejects --branch combined with --pull-request',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK'))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `get quality-gate --project my-project --branch feature-x --pull-request 42`,
+      );
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('--branch and --pull-request cannot be used together');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'fails with a hint when the project has no branch flagged as default',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK').withNoDefaultBranch())
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`get quality-gate --project my-project`);
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('Could not determine the default branch');
+      expect(result.stderr).toContain('Specify --branch <name> or --pull-request <id> instead.');
     },
     { timeout: 15000 },
   );
@@ -242,6 +361,7 @@ describe('get quality-gate', () => {
       expect(parsed.qualityGate).toEqual({
         status: 'NOT_COMPUTED',
         project: 'my-project',
+        branch: 'main',
         conditions: [],
       });
     },

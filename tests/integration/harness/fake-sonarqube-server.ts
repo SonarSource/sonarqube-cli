@@ -61,6 +61,7 @@ interface ProjectData {
   issues: Required<IssueConfig>[];
   qualityGateStatus?: QualityGateStatus;
   qualityGateConditions?: QualityGateCondition[];
+  defaultBranchName: string | null;
 }
 
 export interface DopRepositoryConfig {
@@ -78,6 +79,7 @@ export class ProjectBuilder {
   private readonly issues: Required<IssueConfig>[] = [];
   private qualityGateStatus?: QualityGateStatus;
   private qualityGateConditions?: QualityGateCondition[];
+  private defaultBranchName: string | null = 'main';
 
   constructor(projectKey: string) {
     this.projectKey = projectKey;
@@ -114,6 +116,22 @@ export class ProjectBuilder {
     return this;
   }
 
+  /**
+   * Name of the branch `GET /api/project_branches/list` flags `isMain: true` for this project.
+   * Defaults to `main`, but real servers use whatever name the repo's default branch has
+   * (`master`, `trunk`, ...) — override this to prove callers don't assume a fixed name.
+   */
+  withDefaultBranchName(name: string): this {
+    this.defaultBranchName = name;
+    return this;
+  }
+
+  /** No branch flagged `isMain: true` — `GET /api/project_branches/list` returns an empty array. */
+  withNoDefaultBranch(): this {
+    this.defaultBranchName = null;
+    return this;
+  }
+
   getData(): ProjectData {
     return {
       key: this.projectKey,
@@ -121,6 +139,7 @@ export class ProjectBuilder {
       issues: this.issues,
       qualityGateStatus: this.qualityGateStatus,
       qualityGateConditions: this.qualityGateConditions,
+      defaultBranchName: this.defaultBranchName,
     };
   }
 }
@@ -705,9 +724,16 @@ export class FakeSonarQubeServerBuilder {
           }
           return new Response(
             JSON.stringify({
-              branches: [
-                { name: 'main', isMain: true, type: 'LONG', status: { qualityGateStatus: 'OK' } },
-              ],
+              branches: projectData.defaultBranchName
+                ? [
+                    {
+                      name: projectData.defaultBranchName,
+                      isMain: true,
+                      type: 'LONG',
+                      status: { qualityGateStatus: 'OK' },
+                    },
+                  ]
+                : [],
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );

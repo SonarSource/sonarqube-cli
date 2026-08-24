@@ -285,6 +285,8 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
         .choices(QUALITY_GATE_VALID_FORMATS)
         .default('json'),
     )
+    .option('--branch <branch>', 'Branch name. Cannot be combined with --pull-request.')
+    .option('--pull-request <pull-request>', 'Pull request ID. Cannot be combined with --branch.')
     .authenticatedAction((ctx, options: GetQualityGateOptions) => getQualityGate(options, ctx));
 
   // Import repositories from DevOps platforms into SonarQube (hidden while in development)
