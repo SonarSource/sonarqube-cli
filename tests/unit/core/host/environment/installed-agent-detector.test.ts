@@ -27,6 +27,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   agentDisplayName,
   detectInstalledAgents,
+  isDetectedAgentId,
   isSupportedAgentId,
   SUPPORTED_AGENT_IDS,
 } from '@/core/host/environment/installed-agent-detector.ts';
@@ -95,7 +96,7 @@ describe('agentDisplayName', () => {
 });
 
 describe('isSupportedAgentId', () => {
-  it('accepts every supported agent id', () => {
+  it('accepts every supported agent id, regardless of whether it is actually installed', () => {
     for (const agentId of SUPPORTED_AGENT_IDS) {
       expect(isSupportedAgentId(agentId)).toBe(true);
     }
@@ -103,5 +104,28 @@ describe('isSupportedAgentId', () => {
 
   it('rejects a value that is not a supported agent id', () => {
     expect(isSupportedAgentId('not-an-agent')).toBe(false);
+  });
+});
+
+describe('isDetectedAgentId', () => {
+  it('returns true only for an agent actually installed in the given home directory', () => {
+    mkdirSync(join(home, '.cursor'));
+
+    expect(isDetectedAgentId('cursor', home)).toBe(true);
+    expect(isDetectedAgentId('claude', home)).toBe(false);
+  });
+
+  it('returns false for a supported agent id that is not installed anywhere', () => {
+    expect(isDetectedAgentId('cursor', home)).toBe(false);
+  });
+
+  it('returns false for a value that is not a supported agent id at all', () => {
+    mkdirSync(join(home, '.cursor'));
+
+    expect(isDetectedAgentId('not-an-agent', home)).toBe(false);
+  });
+
+  it('defaults to the real user home directory when none is given', () => {
+    expect(typeof isDetectedAgentId('cursor')).toBe('boolean');
   });
 });
