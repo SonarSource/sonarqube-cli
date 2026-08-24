@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { shellQuoteBash } from '@/commands/integrate/_common/hooks.ts';
 import type { IntegrationContext } from '@/core/framework/features/types.ts';
 
 import type { GitHookType } from '../../options.ts';
@@ -50,12 +51,38 @@ function nativeBinBlock(): string {
   ].join('\n');
 }
 
+/**
+ * Chains to a pre-existing local hook that a global `core.hooksPath` override would otherwise
+ * silently disable. `git rev-parse --git-dir` always resolves the physical `.git` directory,
+ * ignoring any `core.hooksPath` override — unlike `git rev-parse --git-path hooks`, which follows
+ * it (verified by hand: https://sonarsource.atlassian.net/browse/CLI-971). The old hook runs
+ * first; a non-zero exit aborts immediately with the same code, preserving the abort semantics the
+ * repo had before Sonar's hook existed. The marker grep (reusing the same markers `wholeFile`
+ * already checks for overwrite/removal) skips chaining when the "pre-existing" hook is actually a
+ * Sonar hook from an earlier install, avoiding a double scan.
+ */
+function nativeChainBlock(hook: GitHookType): string {
+  const markerArgs = getRecognizedNativeMarkers(hook)
+    .map((marker) => `-e ${shellQuoteBash(marker)}`)
+    .join(' ');
+  return [
+    'SONAR_GIT_DIR=$(git rev-parse --git-dir 2>/dev/null || :)',
+    'if [ -n "$SONAR_GIT_DIR" ]; then',
+    `  SONAR_LOCAL_HOOK="$SONAR_GIT_DIR/hooks/${hook}"`,
+    `  if [ -x "$SONAR_LOCAL_HOOK" ] && ! grep -qF ${markerArgs} "$SONAR_LOCAL_HOOK" 2>/dev/null; then`,
+    '    "$SONAR_LOCAL_HOOK" "$@" || exit $?',
+    '  fi',
+    'fi',
+  ].join('\n');
+}
+
 /** Returns the hook script. For pre-commit, bakes `--dependency-risks -p <key>` when `context` carries dep-risks attrs. */
 export function getHookScript(hook: GitHookType, context: IntegrationContext): string {
   const depRisksArgs = hook === 'pre-commit' ? resolveDepRisksArgs(context) : '';
   return [
     '#!/bin/sh',
     `# ${getNativeHookMarker(hook)}`,
+    ...(context.scope === 'global' ? [nativeChainBlock(hook)] : []),
     nativeBinBlock(),
     `"$SONAR_BIN" hook ${resolveSonarHookCommand(hook)}${depRisksArgs}`,
     '',

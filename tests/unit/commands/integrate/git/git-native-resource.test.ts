@@ -140,3 +140,34 @@ describe('native git hook resource (wholeFile)', () => {
     expect(existsSync(hookPath)).toBe(true);
   });
 });
+
+describe('native git hook chaining (CLI-971)', () => {
+  it('includes the chain block for a global-scope pre-commit hook', () => {
+    const script = getHookScript('pre-commit', context({ scope: 'global' }));
+
+    expect(script).toContain('git rev-parse --git-dir');
+    expect(script).toContain('SONAR_LOCAL_HOOK="$SONAR_GIT_DIR/hooks/pre-commit"');
+    expect(script).toContain('"$SONAR_LOCAL_HOOK" "$@" || exit $?');
+  });
+
+  it('includes the chain block for a global-scope pre-push hook, using the pre-push path and marker', () => {
+    const script = getHookScript('pre-push', context({ scope: 'global' }));
+
+    expect(script).toContain('SONAR_LOCAL_HOOK="$SONAR_GIT_DIR/hooks/pre-push"');
+    expect(script).toContain('sonar pre-push hook - installed by sonar integrate git');
+  });
+
+  it('checks for both the current and legacy Sonar markers, so an old per-repo install is not double-chained', () => {
+    const script = getHookScript('pre-commit', context({ scope: 'global' }));
+
+    expect(script).toContain('sonar pre-commit hook - installed by sonar integrate git');
+    expect(script).toContain(LEGACY_HOOK_MARKER);
+  });
+
+  it('omits the chain block entirely for a project-scope hook', () => {
+    const script = getHookScript('pre-commit', context({ scope: 'project' }));
+
+    expect(script).not.toContain('git rev-parse --git-dir');
+    expect(script).not.toContain('SONAR_LOCAL_HOOK');
+  });
+});
