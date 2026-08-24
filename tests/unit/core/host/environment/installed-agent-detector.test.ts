@@ -26,9 +26,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import {
   agentDisplayName,
-  DETECTED_AGENT_IDS,
   detectInstalledAgents,
-  isDetectedAgentId,
+  isSupportedAgentId,
+  SUPPORTED_AGENT_IDS,
 } from '@/core/host/environment/installed-agent-detector.ts';
 
 let home: string;
@@ -79,8 +79,8 @@ describe('detectInstalledAgents', () => {
 });
 
 describe('agentDisplayName', () => {
-  it('has a non-empty label for every detectable agent', () => {
-    for (const agentId of DETECTED_AGENT_IDS) {
+  it('has a non-empty label for every supported agent', () => {
+    for (const agentId of SUPPORTED_AGENT_IDS) {
       expect(agentDisplayName(agentId)).toBeTruthy();
     }
   });
@@ -94,14 +94,14 @@ describe('agentDisplayName', () => {
   });
 });
 
-describe('isDetectedAgentId', () => {
-  it('accepts every detectable agent id', () => {
-    for (const agentId of DETECTED_AGENT_IDS) {
-      expect(isDetectedAgentId(agentId)).toBe(true);
+describe('isSupportedAgentId', () => {
+  it('accepts every supported agent id', () => {
+    for (const agentId of SUPPORTED_AGENT_IDS) {
+      expect(isSupportedAgentId(agentId)).toBe(true);
     }
   });
 
-  it('rejects a value that is not a detectable agent id', () => {
-    expect(isDetectedAgentId('not-an-agent')).toBe(false);
+  it('rejects a value that is not a supported agent id', () => {
+    expect(isSupportedAgentId('not-an-agent')).toBe(false);
   });
 });

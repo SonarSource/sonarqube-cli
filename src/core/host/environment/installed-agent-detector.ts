@@ -42,7 +42,7 @@ const AGENT_LABELS: Record<CallerAgent, string> = {
   antigravity: 'Antigravity',
 };
 
-export const DETECTED_AGENT_IDS = Object.keys(AGENT_LABELS) as CallerAgent[];
+export const SUPPORTED_AGENT_IDS = Object.keys(AGENT_LABELS) as CallerAgent[];
 
 export function agentDisplayName(agentId: DetectedAgentId): string {
   return AGENT_LABELS[agentId];
@@ -62,11 +62,11 @@ const AGENT_HOME_MARKERS: Record<DetectedAgentId, string[]> = {
 };
 
 export function detectInstalledAgents(home: string = homedir()): DetectedAgentId[] {
-  return DETECTED_AGENT_IDS.filter((agentId) =>
+  return SUPPORTED_AGENT_IDS.filter((agentId) =>
     AGENT_HOME_MARKERS[agentId].some((marker) => existsSync(join(home, marker))),
   );
 }
 
-export function isDetectedAgentId(value: string): value is DetectedAgentId {
-  return (DETECTED_AGENT_IDS as readonly string[]).includes(value);
+export function isSupportedAgentId(value: string): value is DetectedAgentId {
+  return (SUPPORTED_AGENT_IDS as readonly string[]).includes(value);
 }
