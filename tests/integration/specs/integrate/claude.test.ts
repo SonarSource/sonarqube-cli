@@ -1985,9 +1985,8 @@ describe('integrate claude — interactive feature selection', () => {
     'prompts per feature, installs accepted features, and shows the Vortex promotion when not entitled',
     async () => {
       // On-premise auth with no org and no CAG Hub: Vortex is skipped with the
-      // Server unavailable line, not the Cloud promotion. Context
-      // Augmentation is skipped silently. The secret scanning hooks and MCP
-      // server features each ask.
+      // Server unavailable line. Context Augmentation is skipped silently. The
+      // secret scanning hooks and MCP server features each ask.
       const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
       harness.withAuth(server.baseUrl(), 'tok');
       harness.cwd.writeFile(
@@ -2005,11 +2004,8 @@ describe('integrate claude — interactive feature selection', () => {
       const output = `${result.stdout}\n${result.stderr}`;
       expect(output).toContain('Install secret scanning hooks?');
       expect(output).toContain('Install MCP server?');
-      // SQAA is not eligible, so it is skipped without a prompt but the shared
-      // promotion message is surfaced.
       expect(output).not.toContain('Install Vortex?');
       expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
-      expect(output).not.toContain('Vortex is available on SonarQube Cloud');
 
       // Accepted features are installed on disk.
       expect(

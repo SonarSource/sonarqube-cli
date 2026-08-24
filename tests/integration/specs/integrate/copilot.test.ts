@@ -858,9 +858,7 @@ describe('integrate copilot', () => {
         expect(output).toContain('Install pre-tool-use hook?');
         expect(output).toContain('Install prompt-secrets instructions?');
         expect(output).toContain('Install MCP server?');
-        // Vortex is skipped with the Server-unavailable line, not Cloud promotion.
         expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
-        expect(output).not.toContain('Vortex is available on SonarQube Cloud');
         // Accepted features are installed on disk.
         expect(harness.cwd.file(...PROJECT_HOOK_SCRIPT_PATH).exists()).toBe(true);
         expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(true);

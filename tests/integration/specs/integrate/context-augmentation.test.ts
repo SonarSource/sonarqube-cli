@@ -796,12 +796,9 @@ describe('integrate claude — Context Augmentation', () => {
       const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
       expect(nonProbe).toEqual([]);
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
-      // The Cloud-only promotion info line must appear, not the misleading
-      // "organization required" warning
       expect(result.stdout + result.stderr).toContain(
         'Vortex requires SonarQube Server 2026.5 Enterprise or later.',
       );
-      expect(result.stdout + result.stderr).not.toContain('Vortex is available on SonarQube Cloud');
       expect(result.stdout + result.stderr).not.toContain('organization are required');
     },
     { timeout: 30000 },

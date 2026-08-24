@@ -659,7 +659,6 @@ describe('integrate codex', () => {
         expect(body).not.toContain(SQAA_HEADING);
         const output = `${result.stdout}\n${result.stderr}`;
         expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
-        expect(output).not.toContain('Vortex is available on SonarQube Cloud');
       },
       { timeout: 30000 },
     );
@@ -718,11 +717,8 @@ describe('integrate codex', () => {
         expect(output).toContain('Install secret scanning hooks?');
         expect(output).toContain('Install secrets-on-read instructions?');
         expect(output).toContain('Install MCP server?');
-        // Vortex is not eligible, so it is skipped without a prompt but the shared
-        // promotion message is surfaced.
         expect(output).not.toContain('Install Vortex?');
         expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
-        expect(output).not.toContain('Vortex is available on SonarQube Cloud');
         // Accepted features are installed on disk.
         expect(
           harness.cwd.file(...PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')).exists(),

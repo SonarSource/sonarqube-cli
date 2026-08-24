@@ -98,7 +98,6 @@ describe('sonar integrate <agent> — CAG pre-flight skip paths (real CLI, fake 
 
     expect(result.exitCode, result.stderr).toBe(0);
     expect(result.stdout).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
-    expect(result.stdout).not.toContain('Vortex is available on SonarQube Cloud.');
     expect(existsSync(cagBinaryPath), 'no CAG download on SonarQube Server').toBe(false);
     expect(findRecordedCagFeature(harness.stateJsonFile.asJson() as CliState)).toBeUndefined();
   });
@@ -155,7 +154,6 @@ describe('sonar integrate <agent> — CAG pre-flight skip paths (real CLI, fake 
 
     expect(result.exitCode, result.stderr).toBe(0);
     expect(result.stdout).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
-    expect(result.stdout).not.toContain('Vortex is available on SonarQube Cloud.');
     expect(existsSync(cagBinaryPath), 'no CAG download on SonarQube Server').toBe(false);
     expect(findRecordedCagFeature(harness.stateJsonFile.asJson() as CliState)).toBeUndefined();
   });

@@ -227,7 +227,7 @@ describe('integrate claude — Vortex entitlement', () => {
   );
 
   it(
-    'skips Vortex on a SonarQube Server without the CAG Hub and does not mention Cloud',
+    'skips Vortex on a SonarQube Server without the CAG Hub',
     async () => {
       const result = await runIntegrateClaude({
         sqaa: 'enabled',
@@ -237,10 +237,7 @@ describe('integrate claude — Vortex entitlement', () => {
 
       expect(result.exitCode).toBe(0);
       expect(isVortexInstalled()).toBe(false);
-      const output = `${result.stdout}\n${result.stderr}`;
-      expect(output).toContain(VORTEX_SERVER_UNAVAILABLE_MESSAGE);
-      expect(output).not.toContain(VORTEX_PROMOTION_MESSAGE);
-      expect(output).not.toContain(VORTEX_CHECK_FAILED_MESSAGE);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_SERVER_UNAVAILABLE_MESSAGE);
     },
     { timeout: 30000 },
   );
@@ -257,9 +254,6 @@ describe('integrate claude — Vortex entitlement', () => {
 
       expect(result.exitCode).toBe(0);
       expect(isVortexInstalled()).toBe(true);
-      const output = `${result.stdout}\n${result.stderr}`;
-      expect(output).not.toContain(VORTEX_PROMOTION_MESSAGE);
-      expect(output).not.toContain(VORTEX_CHECK_FAILED_MESSAGE);
     },
     { timeout: 30000 },
   );

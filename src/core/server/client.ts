@@ -515,7 +515,7 @@ export class SonarQubeClient {
         hasEntitlement?: boolean;
         consumption?: { consumed: number; limit: number };
       }>(endpoint, undefined, resolveFromEndpoint(this.serverURL, endpoint));
-      if (response.status === HTTP_STATUS_NOT_FOUND) {
+      if (response.status === HTTP_STATUS_NOT_FOUND && !this.isCloud) {
         return { status: 'not_applicable' };
       }
       if (!response.ok || value === undefined) {
@@ -561,9 +561,6 @@ export class SonarQubeClient {
         this.checkSqaaEntitlement(uuid),
         this.checkCagEntitlement(uuid),
       ]);
-      if (cag.status === 'not_applicable') {
-        return { status: 'not_applicable' };
-      }
       if (sqaa.status === 'check_failed' || cag.status === 'check_failed') {
         return { status: 'check_failed' };
       }

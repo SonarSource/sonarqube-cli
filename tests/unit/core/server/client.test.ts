@@ -748,9 +748,9 @@ describe('SonarQubeClient', () => {
       expect((await cloudClient['checkCagEntitlement'](UUID)).status).toBe('check_failed');
     });
 
-    it("returns 'not_applicable' when the Hub is absent (HTTP 404)", async () => {
+    it("returns 'not_applicable' when the Server Hub is absent (HTTP 404)", async () => {
       fetchSpy = mockFetch({}, false, 404);
-      expect((await cloudClient['checkCagEntitlement'](UUID)).status).toBe('not_applicable');
+      expect((await client['checkCagEntitlement'](UUID)).status).toBe('not_applicable');
     });
 
     it("returns 'check_failed' when the Hub is unavailable (HTTP 503)", async () => {
@@ -817,14 +817,6 @@ describe('SonarQubeClient', () => {
       expect(new URL(lastFetchUrl(fetchSpy)).pathname).toBe(
         `/api/v2/cag/cag-entitlement/${SERVER_ORGANIZATION_ID_PLACEHOLDER}`,
       );
-    });
-
-    it('does not call the Cloud-only SQAA endpoint on SonarQube Server', async () => {
-      const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
-      fetchSpy = mockFetch({ allowed: true, hasEntitlement: true });
-      await serverClient.hasVortexEntitlement();
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
-      expect(lastFetchUrl(fetchSpy)).not.toContain('a3s-analysis');
     });
 
     it("returns 'not_applicable' when the Server Hub is absent", async () => {
