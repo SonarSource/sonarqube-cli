@@ -431,6 +431,7 @@ describe('integrateCommand', () => {
 
     it('forwards skipSecretsHooks: true to migrations and skips the declarative secrets-hooks feature', async () => {
       mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+      hasVortexEntitlementSpy.mockResolvedValue({ status: 'not_applicable' });
 
       await integrateClaude({}, SERVER_CTX);
 
@@ -470,6 +471,7 @@ describe('integrateCommand', () => {
 
     it('falls back to a project-level install (does not skip secrets hooks)', async () => {
       mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+      hasVortexEntitlementSpy.mockResolvedValue({ status: 'not_applicable' });
 
       await integrateClaude({}, SERVER_CTX);
 
