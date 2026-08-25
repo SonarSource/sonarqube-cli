@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { InvalidOptionError } from '@/core/command-error.ts';
 import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
@@ -57,9 +58,10 @@ export {
 
 export async function analyzeSqaa(
   options: AnalyzeSqaaOptions,
-  auth: ResolvedAuth,
+  ctx: CommandAuthenticatedInvocationContext,
   runOptions: AnalyzeSqaaRunOptions = {},
 ): Promise<void> {
+  const { auth } = ctx;
   const { requireProject = true, telemetryCallerCommand } = runOptions;
   const {
     file: rawFiles,

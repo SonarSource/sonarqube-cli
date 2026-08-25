@@ -50,6 +50,11 @@ const AGENT_CONFIG_DIR: Record<string, string> = {
   claude: '.claude',
 };
 
+/**
+ * Claude Code's environment variable for project root in case the agent changes cwd durign the run
+ */
+export const CLAUDE_PROJECT_DIR_PLACEHOLDER = '${CLAUDE_PROJECT_DIR}';
+
 interface HookConfig {
   matcher: string;
   hooks: Array<{
@@ -118,7 +123,12 @@ async function installHook(params: HookInstallParams): Promise<void> {
   );
 
   const hookContext = { targetRoot: installDir, scope } as IntegrationContext;
-  const command = resolveAgentHookCommand(hookContext, configDir, scriptPath);
+  const command = resolveAgentHookCommand(
+    hookContext,
+    configDir,
+    scriptPath,
+    CLAUDE_PROJECT_DIR_PLACEHOLDER,
+  );
 
   // Marker derived from first path segment (e.g. 'sonar-secrets' from 'sonar-secrets/build-scripts/pretool-secrets')
   const marker = scriptPath.split('/')[0];

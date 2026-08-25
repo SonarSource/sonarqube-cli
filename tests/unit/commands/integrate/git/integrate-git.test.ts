@@ -23,6 +23,7 @@ import { isAbsolute, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import * as preflightSummary from '@/commands/integrate/_common/preflight-summary.ts';
 import {
   detectSonarHookInstallation as detectHookInstallation,
@@ -339,6 +340,8 @@ const MOCK_AUTH = {
   connectionType: 'on-premise' as const,
 };
 
+const MOCK_AUTH_CTX = new CommandAuthenticatedInvocationContext(MOCK_AUTH);
+
 describe('integrateGit', () => {
   let findGitRootSpy: ReturnType<typeof spyOn>;
   let discoverProjectSpy: ReturnType<typeof spyOn>;
@@ -389,13 +392,13 @@ describe('integrateGit', () => {
     await expect(
       integrateGit(
         { nonInteractive: true, hook: 'typo' } as unknown as IntegrateGitOptions,
-        MOCK_AUTH,
+        MOCK_AUTH_CTX,
       ),
     ).rejects.toBeInstanceOf(InvalidOptionError);
     await expect(
       integrateGit(
         { nonInteractive: true, hook: 'typo' } as unknown as IntegrateGitOptions,
-        MOCK_AUTH,
+        MOCK_AUTH_CTX,
       ),
     ).rejects.toThrow('--hook must be pre-commit or pre-push');
   });
@@ -408,7 +411,7 @@ describe('integrateGit', () => {
           nonInteractive: true,
           hook: 'typo',
         } as unknown as IntegrateGitOptions,
-        MOCK_AUTH,
+        MOCK_AUTH_CTX,
       ),
     ).rejects.toBeInstanceOf(InvalidOptionError);
     await expect(
@@ -418,7 +421,7 @@ describe('integrateGit', () => {
           nonInteractive: true,
           hook: 'typo',
         } as unknown as IntegrateGitOptions,
-        MOCK_AUTH,
+        MOCK_AUTH_CTX,
       ),
     ).rejects.toThrow('--hook must be pre-commit or pre-push');
   });
@@ -427,20 +430,20 @@ describe('integrateGit', () => {
     await expect(
       integrateGit(
         { global: true, nonInteractive: true, dependencyRisks: true, project: 'k' },
-        MOCK_AUTH,
+        MOCK_AUTH_CTX,
       ),
     ).rejects.toBeInstanceOf(InvalidOptionError);
     await expect(
       integrateGit(
         { global: true, nonInteractive: true, dependencyRisks: true, project: 'k' },
-        MOCK_AUTH,
+        MOCK_AUTH_CTX,
       ),
     ).rejects.toThrow('--dependency-risks and -p are not supported with --global');
   });
 
   it('throws InvalidOptionError when --global is combined with -p alone', async () => {
     await expect(
-      integrateGit({ global: true, nonInteractive: true, project: 'k' }, MOCK_AUTH),
+      integrateGit({ global: true, nonInteractive: true, project: 'k' }, MOCK_AUTH_CTX),
     ).rejects.toBeInstanceOf(InvalidOptionError);
   });
   /* eslint-enable @typescript-eslint/await-thenable */
@@ -448,7 +451,7 @@ describe('integrateGit', () => {
   it('throws CommandFailedError when not inside a git repository', async () => {
     findGitRootSpy.mockReturnValue({ gitRoot: '/not-a-repo', isGit: false });
     /* eslint-disable @typescript-eslint/await-thenable */
-    await expect(integrateGit({ nonInteractive: true }, MOCK_AUTH)).rejects.toThrow(
+    await expect(integrateGit({ nonInteractive: true }, MOCK_AUTH_CTX)).rejects.toThrow(
       'No git repository found',
     );
     /* eslint-enable @typescript-eslint/await-thenable */
@@ -460,7 +463,7 @@ describe('integrateGit', () => {
     queueMockResponse('project');
     queueMockResponse(null); // user cancels at the hook-type prompt
     try {
-      await integrateGit({}, MOCK_AUTH);
+      await integrateGit({}, MOCK_AUTH_CTX);
     } catch {
       // expected cancellation
     }
@@ -476,7 +479,7 @@ describe('integrateGit', () => {
       stderr: '',
     });
     try {
-      await integrateGit({ nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH);
+      await integrateGit({ nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH_CTX);
       const feature = state.integrations.installed[0]?.features[0];
       expect(state.integrations.installed[0]?.integrationId).toBe('husky');
       expect(feature).toMatchObject({
@@ -520,7 +523,7 @@ describe('integrateGit', () => {
       throw new Error(`Unexpected command: ${command} ${args.join(' ')}`);
     });
     try {
-      await integrateGit({ nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH);
+      await integrateGit({ nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH_CTX);
       const feature = state.integrations.installed[0]?.features[0];
       expect(state.integrations.installed[0]?.integrationId).toBe('pre-commit');
       expect(feature).toMatchObject({
@@ -553,7 +556,7 @@ describe('integrateGit', () => {
     findGitRootSpy.mockReturnValue({ gitRoot: TEMP_DIR, isGit: true });
     const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
     try {
-      await integrateGit({ nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH);
+      await integrateGit({ nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH_CTX);
       expect(existsSync(join(TEMP_DIR, '.git', 'hooks', 'pre-commit'))).toBe(true);
       const feature = state.integrations.installed[0]?.features[0];
       expect(state.integrations.installed[0]?.integrationId).toBe('native-git');
@@ -597,7 +600,7 @@ describe('integrateGit', () => {
     queueMockResponse(null);
     let caughtError: unknown;
     try {
-      await integrateGit({}, MOCK_AUTH);
+      await integrateGit({}, MOCK_AUTH_CTX);
     } catch (err) {
       caughtError = err;
     } finally {
@@ -642,7 +645,10 @@ describe('integrateGitGlobal', () => {
     queueMockResponse(null);
     let caughtMessage = '';
     try {
-      await integrateGit({ global: true, nonInteractive: false, hook: 'pre-commit' }, MOCK_AUTH);
+      await integrateGit(
+        { global: true, nonInteractive: false, hook: 'pre-commit' },
+        MOCK_AUTH_CTX,
+      );
     } catch (e) {
       caughtMessage = e instanceof Error ? e.message : '';
     }
@@ -653,7 +659,7 @@ describe('integrateGitGlobal', () => {
     installBinarySpy.mockRejectedValue(new Error('download failed'));
     let caughtMessage = '';
     try {
-      await integrateGit({ global: true, nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH);
+      await integrateGit({ global: true, nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH_CTX);
     } catch (e) {
       caughtMessage = e instanceof Error ? e.message : '';
     }
@@ -667,7 +673,7 @@ describe('integrateGitGlobal', () => {
       stderr: '',
     });
     try {
-      await integrateGit({ global: true, nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH);
+      await integrateGit({ global: true, nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH_CTX);
       const calls = getMockUiCalls();
       const summaryCall = calls.find((c) => c.method === 'phase' && c.args[0] === 'Installed');
       expect(summaryCall).toBeDefined();
@@ -689,7 +695,10 @@ describe('integrateGitGlobal', () => {
     try {
       let caughtError: unknown;
       try {
-        await integrateGit({ global: true, nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH);
+        await integrateGit(
+          { global: true, nonInteractive: true, hook: 'pre-commit' },
+          MOCK_AUTH_CTX,
+        );
       } catch (e) {
         caughtError = e;
       }
@@ -711,7 +720,10 @@ describe('integrateGitGlobal', () => {
     try {
       let caughtError: unknown;
       try {
-        await integrateGit({ global: true, nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH);
+        await integrateGit(
+          { global: true, nonInteractive: true, hook: 'pre-commit' },
+          MOCK_AUTH_CTX,
+        );
       } catch (e) {
         caughtError = e;
       }

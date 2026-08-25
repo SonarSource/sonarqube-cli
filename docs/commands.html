@@ -518,7 +518,11 @@ function renderDetail(cmd) {
       const allowedHtml = opt.allowedValues && opt.allowedValues.length
         ? `<div class="opt-allowed">${opt.allowedValues.map(v => `<code class="opt-allowed-val">${escHtml(v)}</code>`).join('')}</div>`
         : '';
-      parts.push(`<tr><td data-label="Option">${flags}</td><td data-label="Type">${typeBadge}</td><td data-label="Required">${req}</td><td data-label="Description">${escHtml(opt.description)}${allowedHtml}</td><td data-label="Default">${def}</td></tr>`);
+      const stageBadge =
+        opt.stage === 'beta'
+          ? ` <span class="stage-badge stage-beta">beta</span>`
+          : '';
+      parts.push(`<tr><td data-label="Option">${flags}</td><td data-label="Type">${typeBadge}</td><td data-label="Required">${req}</td><td data-label="Description">${escHtml(opt.description)}${stageBadge}${allowedHtml}</td><td data-label="Default">${def}</td></tr>`);
     }
     parts.push(`</tbody></table></div>`);
   }

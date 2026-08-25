@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Fetches and disk-caches server-side identity fields (user/org/installation UUIDs) for a resolved auth.
+// Fetches and disk-caches server-side identity fields (user/org/enterprise/installation UUIDs) for a resolved auth.
 
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -31,9 +31,14 @@ import { resolveFromEndpoint } from '@/core/server/sonarcloud-region.ts';
 import { getTelemetryDir } from '../config-constants.ts';
 import type { AuthConnection, ServerType } from '../state/state.ts';
 
+const ORGANIZATIONS_ENDPOINT = '/organizations/organizations';
+const ENTERPRISE_ORGANIZATIONS_ENDPOINT = '/enterprises/enterprise-organizations';
+
 export interface TelemetryIdentity {
   user_uuid: string | null;
   organization_uuid_v4: string | null;
+  /** `undefined` = not resolved yet; `null` = confirmed the org is not in an enterprise. */
+  enterprise_uuid?: string | null;
   sqs_installation_id: string | null;
 }
 
@@ -47,6 +52,7 @@ export function identityFromConnection(conn: AuthConnection | undefined): Teleme
   return {
     user_uuid: conn?.userUuid ?? null,
     organization_uuid_v4: conn?.organizationUuidV4 ?? null,
+    enterprise_uuid: conn?.enterpriseUuid,
     sqs_installation_id: conn?.sqsInstallationId ?? null,
   };
 }
@@ -67,6 +73,11 @@ function connectionUserUuidResolved(conn: AuthConnection | undefined): boolean {
   return conn?.userUuid !== undefined;
 }
 
+/** Login persists `enterpriseUuid` (string or null); undefined means we have not tried yet. */
+function connectionEnterpriseUuidResolved(conn: AuthConnection | undefined): boolean {
+  return conn?.enterpriseUuid !== undefined;
+}
+
 export function needsIdentityEnrichment(
   identity: TelemetryIdentity,
   connectionType: ServerType,
@@ -75,12 +86,16 @@ export function needsIdentityEnrichment(
   if (!isIdentityCompleteForConnection(identity, connectionType)) {
     return true;
   }
-  return !identity.user_uuid && !connectionUserUuidResolved(conn);
+  if (!identity.user_uuid && !connectionUserUuidResolved(conn)) {
+    return true;
+  }
+  return connectionType === 'cloud' && !connectionEnterpriseUuidResolved(conn);
 }
 
 interface CacheEntry {
   userUuid?: string | null;
   organizationUuidV4?: string | null;
+  enterpriseUuid?: string | null;
   sqsInstallationId?: string | null;
 }
 
@@ -91,6 +106,7 @@ interface IdentityCacheFile {
 interface IdentityFetchPlan {
   user: boolean;
   org: boolean;
+  enterprise: boolean;
   sqs: boolean;
 }
 
@@ -104,6 +120,9 @@ export function mergeIdentity(
   return {
     user_uuid: partial.user_uuid ?? base.user_uuid,
     organization_uuid_v4: partial.organization_uuid_v4 ?? base.organization_uuid_v4,
+    // `??` would treat confirmed-absent `null` as missing and fall back to base.
+    enterprise_uuid:
+      partial.enterprise_uuid !== undefined ? partial.enterprise_uuid : base.enterprise_uuid,
     sqs_installation_id: partial.sqs_installation_id ?? base.sqs_installation_id,
   };
 }
@@ -116,16 +135,21 @@ function cacheKey(auth: ResolvedAuth): string {
   return [auth.connectionType, auth.serverUrl, auth.orgKey ?? '', fingerprint].join('|');
 }
 
-function cacheEntryToIdentity(entry: CacheEntry): TelemetryIdentity {
-  return {
+function cacheEntryToIdentity(entry: CacheEntry): Partial<TelemetryIdentity> {
+  const identity: Partial<TelemetryIdentity> = {
     user_uuid: entry.userUuid ?? null,
     organization_uuid_v4: entry.organizationUuidV4 ?? null,
     sqs_installation_id: entry.sqsInstallationId ?? null,
   };
+  if ('enterpriseUuid' in entry) {
+    identity.enterprise_uuid = entry.enterpriseUuid ?? null;
+  }
+  return identity;
 }
 
+/** True when no identity fields remain to fetch. */
 function fetchPlanIsComplete(plan: IdentityFetchPlan): boolean {
-  return !plan.user && !plan.org && !plan.sqs;
+  return !(plan.user || plan.org || plan.enterprise || plan.sqs);
 }
 
 function planFieldsToFetch(
@@ -140,6 +164,11 @@ function planFieldsToFetch(
       !!auth.orgKey &&
       !identity.organization_uuid_v4 &&
       !(entry && 'organizationUuidV4' in entry),
+    enterprise:
+      auth.connectionType === 'cloud' &&
+      !!auth.orgKey &&
+      !identity.enterprise_uuid &&
+      !(entry && 'enterpriseUuid' in entry),
     sqs:
       auth.connectionType === 'on-premise' &&
       !identity.sqs_installation_id &&
@@ -182,6 +211,17 @@ interface FieldFetchResult {
   resolved: boolean;
 }
 
+interface OrganizationRecord {
+  id?: string;
+  uuidV4?: string;
+}
+
+interface OrganizationLookupResult {
+  uuidV4: string | null;
+  id: string | null;
+  resolved: boolean;
+}
+
 async function fetchUserUuid(client: SonarQubeClient): Promise<FieldFetchResult> {
   try {
     const { response, value } = await client.getSafe<{ id: string }>('/api/users/current');
@@ -194,25 +234,64 @@ async function fetchUserUuid(client: SonarQubeClient): Promise<FieldFetchResult>
   }
 }
 
-async function fetchOrganizationUuid(
+async function fetchOrganizationRecord(
   client: SonarQubeClient,
   serverUrl: string,
   orgKey: string,
+): Promise<OrganizationLookupResult> {
+  try {
+    const { response, value } = await client.getSafe<OrganizationRecord[]>(
+      ORGANIZATIONS_ENDPOINT,
+      { organizationKey: orgKey, excludeEligibility: 'true' },
+      resolveFromEndpoint(serverUrl, ORGANIZATIONS_ENDPOINT),
+    );
+    if (!response.ok) {
+      return { uuidV4: null, id: null, resolved: false };
+    }
+    const org = value?.[0];
+    return { uuidV4: org?.uuidV4 ?? null, id: org?.id ?? null, resolved: true };
+  } catch {
+    return { uuidV4: null, id: null, resolved: false };
+  }
+}
+
+async function fetchEnterpriseUuid(
+  client: SonarQubeClient,
+  serverUrl: string,
+  organizationId: string,
 ): Promise<FieldFetchResult> {
   try {
-    const endpoint = '/organizations/organizations';
-    const { response, value } = await client.getSafe<Array<{ uuidV4: string }>>(
-      endpoint,
-      { organizationKey: orgKey, excludeEligibility: 'true' },
-      resolveFromEndpoint(serverUrl, endpoint),
+    const { response, value } = await client.getSafe<Array<{ enterpriseId?: string }>>(
+      ENTERPRISE_ORGANIZATIONS_ENDPOINT,
+      { organizationId },
+      resolveFromEndpoint(serverUrl, ENTERPRISE_ORGANIZATIONS_ENDPOINT),
     );
     if (!response.ok) {
       return { value: null, resolved: false };
     }
-    return { value: value?.[0]?.uuidV4 ?? null, resolved: true };
+    return { value: value?.[0]?.enterpriseId ?? null, resolved: true };
   } catch {
     return { value: null, resolved: false };
   }
+}
+
+/** Unresolved stays `undefined` so the next command retries; `null` is confirmed-absent. */
+async function resolveEnterpriseUuid(
+  client: SonarQubeClient,
+  serverUrl: string,
+  org: OrganizationLookupResult,
+): Promise<{ value: string | null | undefined; resolved: boolean }> {
+  if (!org.resolved) {
+    return { value: undefined, resolved: false };
+  }
+  if (!org.id) {
+    return { value: null, resolved: true };
+  }
+  const enterprise = await fetchEnterpriseUuid(client, serverUrl, org.id);
+  return {
+    value: enterprise.resolved ? enterprise.value : undefined,
+    resolved: enterprise.resolved,
+  };
 }
 
 async function fetchSqsInstallationId(client: SonarQubeClient): Promise<FieldFetchResult> {
@@ -238,18 +317,25 @@ async function fetchMissingFromApi(
   fetchPlan: IdentityFetchPlan,
 ): Promise<IdentityFetchResult> {
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
-  let { user_uuid, organization_uuid_v4, sqs_installation_id } = identity;
-  const resolved: IdentityFetchPlan = { user: false, org: false, sqs: false };
+  let { user_uuid, organization_uuid_v4, enterprise_uuid, sqs_installation_id } = identity;
+  const resolved: IdentityFetchPlan = { user: false, org: false, enterprise: false, sqs: false };
 
   if (fetchPlan.user) {
     const user = await fetchUserUuid(client);
     user_uuid = user.value;
     resolved.user = user.resolved;
   }
-  if (fetchPlan.org && auth.orgKey) {
-    const org = await fetchOrganizationUuid(client, auth.serverUrl, auth.orgKey);
-    organization_uuid_v4 = org.value;
-    resolved.org = org.resolved;
+  if ((fetchPlan.org || fetchPlan.enterprise) && auth.orgKey) {
+    const org = await fetchOrganizationRecord(client, auth.serverUrl, auth.orgKey);
+    if (fetchPlan.org) {
+      organization_uuid_v4 = org.uuidV4;
+      resolved.org = org.resolved;
+    }
+    if (fetchPlan.enterprise) {
+      const enterprise = await resolveEnterpriseUuid(client, auth.serverUrl, org);
+      enterprise_uuid = enterprise.value;
+      resolved.enterprise = enterprise.resolved;
+    }
   }
   if (fetchPlan.sqs) {
     const sqs = await fetchSqsInstallationId(client);
@@ -258,7 +344,7 @@ async function fetchMissingFromApi(
   }
 
   return {
-    identity: { user_uuid, organization_uuid_v4, sqs_installation_id },
+    identity: { user_uuid, organization_uuid_v4, enterprise_uuid, sqs_installation_id },
     resolved,
   };
 }
@@ -291,6 +377,9 @@ export async function resolveTelemetryIdentity(
   }
   if (fetchPlan.org && fetchResult.resolved.org) {
     updatedEntry.organizationUuidV4 = identity.organization_uuid_v4;
+  }
+  if (fetchPlan.enterprise && fetchResult.resolved.enterprise) {
+    updatedEntry.enterpriseUuid = identity.enterprise_uuid ?? null;
   }
   if (fetchPlan.sqs && fetchResult.resolved.sqs) {
     updatedEntry.sqsInstallationId = identity.sqs_installation_id;

@@ -35,6 +35,8 @@ import {
   formatSqaaJsonReportForHook,
   writePostToolUseHookOutput,
 } from './format-sqaa-hook-context.ts';
+import type { HookCommandResult } from './hook-command-result.ts';
+import { readStdinJson } from './stdin.ts';
 import { emitVortexUnavailableHookNotice } from './vortex-unavailable-hook-notice.ts';
 
 export interface CodexPostToolUseOptions {
@@ -46,12 +48,31 @@ const CODEX_HOOK_TELEMETRY_OPTIONS = {
   telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
 } as const;
 
-export async function codexPostToolUse(options: CodexPostToolUseOptions): Promise<void> {
+interface CodexPostToolUsePayload {
+  session_id?: string;
+}
+
+export async function codexPostToolUse(
+  options: CodexPostToolUseOptions,
+): Promise<HookCommandResult> {
+  // Best-effort: when Codex pipes PostToolUse JSON, capture session_id. Skip when
+  // stdin is a TTY — otherwise readStdinJson waits up to 5s for data that never
+  // arrives. Env-based CODEX_* ids still resolve later via resolveAgentSessionId.
+  let agentSessionId: string | null = null;
+  if (!process.stdin.isTTY) {
+    try {
+      const payload = await readStdinJson<CodexPostToolUsePayload>();
+      agentSessionId = payload.session_id ?? null;
+    } catch {
+      // ignore
+    }
+  }
+
   const projectKey = options.project;
-  if (!projectKey) return;
+  if (!projectKey) return { agentSessionId };
 
   const auth = await resolveAuth().catch(() => null);
-  if (auth?.connectionType !== 'cloud' || !auth.orgKey) return;
+  if (auth?.connectionType !== 'cloud' || !auth.orgKey) return { agentSessionId };
 
   noteProject(auth, projectKey);
 
@@ -70,14 +91,14 @@ export async function codexPostToolUse(options: CodexPostToolUseOptions): Promis
       Math.round(performance.now() - runStart),
     ).catch(() => undefined);
     logger.debug(`Codex PostToolUse SQAA analysis failed: ${(err as Error).message}`);
-    return;
+    return { agentSessionId };
   }
 
-  if (!report) return;
+  if (!report) return { agentSessionId };
 
   if (report.globalError?.kind === 'forbidden') {
     await emitVortexUnavailableHookNotice(auth);
-    return;
+    return { agentSessionId };
   }
 
   try {
@@ -88,4 +109,6 @@ export async function codexPostToolUse(options: CodexPostToolUseOptions): Promis
   } catch (err) {
     logger.debug(`Codex PostToolUse SQAA hook output failed: ${(err as Error).message}`);
   }
+
+  return { agentSessionId };
 }

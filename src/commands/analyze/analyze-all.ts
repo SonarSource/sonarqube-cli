@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
@@ -83,7 +84,11 @@ function printCombinedReport(secrets: SecretsReport | null, agentic: SqaaJsonRep
  * In json mode, outputs a single combined JSON report including any informational messages.
  * In text mode, each analysis prints its own output sequentially.
  */
-export async function analyzeAll(options: AnalyzeAllOptions, auth: ResolvedAuth): Promise<void> {
+export async function analyzeAll(
+  options: AnalyzeAllOptions,
+  ctx: CommandAuthenticatedInvocationContext,
+): Promise<void> {
+  const { auth } = ctx;
   if (options.format === 'json') {
     return analyzeAllJson(options, auth);
   }
@@ -93,8 +98,8 @@ export async function analyzeAll(options: AnalyzeAllOptions, auth: ResolvedAuth)
   if (rawFiles?.length) {
     const entries = resolveSqaaFileArgs(rawFiles);
     const paths = entries.map((e) => e.absolutePath);
-    await analyzeSecrets({ paths, telemetryCallerCommand: SECRETS_CALLER_COMMANDS.analyze }, auth);
-    await analyzeSqaa({ file: paths, project, force, format, depth }, auth, {
+    await analyzeSecrets({ paths, telemetryCallerCommand: SECRETS_CALLER_COMMANDS.analyze }, ctx);
+    await analyzeSqaa({ file: paths, project, force, format, depth }, ctx, {
       requireProject: false,
       telemetryCallerCommand: SQAA_ANALYZE_CALLER_COMMAND,
     });
@@ -114,13 +119,13 @@ export async function analyzeAll(options: AnalyzeAllOptions, auth: ResolvedAuth)
 
   await analyzeSecrets(
     { paths: changeSet.files, telemetryCallerCommand: SECRETS_CALLER_COMMANDS.analyze },
-    auth,
+    ctx,
   );
   // analyzeSqaa resolves the change set again internally. The two resolutions may
   // cover slightly different sets if the working tree changes between calls — this
   // is acceptable since the analyses are independent and best-effort.
   // requireProject: false → bare `analyze` skips agentic gracefully when unconfigured.
-  await analyzeSqaa({ staged, base, project, force, format, depth }, auth, {
+  await analyzeSqaa({ staged, base, project, force, format, depth }, ctx, {
     requireProject: false,
     telemetryCallerCommand: SQAA_ANALYZE_CALLER_COMMAND,
   });

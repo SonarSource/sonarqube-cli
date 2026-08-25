@@ -600,14 +600,18 @@ describe('post-update migration', () => {
       const pretoolScriptRel = `.claude/hooks/sonar-secrets/build-scripts/${hookScriptName('pretool-secrets')}`;
       const promptScriptRel = `.claude/hooks/sonar-secrets/build-scripts/${hookScriptName('prompt-secrets')}`;
       const settingsRel = '.claude/settings.json';
-      // The path is shell-quoted so it survives spaces/metacharacters:
-      // double-quoted on Windows, single-quoted on Unix.
+      // Project scope anchors the path to Claude Code's ${CLAUDE_PROJECT_DIR} placeholder
+      // (cwd-independent) and shell-quotes it so it survives spaces/metacharacters. Double-quoted
+      // on both platforms — single-quoting on Unix would suppress the shell's `${var}` expansion
+      // and leave the placeholder unexpanded.
+      const pretoolCommandPath = '${CLAUDE_PROJECT_DIR}/' + pretoolScriptRel;
+      const promptCommandPath = '${CLAUDE_PROJECT_DIR}/' + promptScriptRel;
       const expectedPretoolCommand = IS_WINDOWS
-        ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${pretoolScriptRel}"`
-        : `'${pretoolScriptRel}'`;
+        ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${pretoolCommandPath}"`
+        : `"${pretoolCommandPath}"`;
       const expectedPromptCommand = IS_WINDOWS
-        ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${promptScriptRel}"`
-        : `'${promptScriptRel}'`;
+        ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${promptCommandPath}"`
+        : `"${promptCommandPath}"`;
 
       harness.cwd.writeFile(
         pretoolScriptRel,

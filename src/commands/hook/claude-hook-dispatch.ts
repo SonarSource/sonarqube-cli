@@ -26,6 +26,7 @@ export interface ClaudePostToolUsePayload {
   tool_name?: string;
   tool_input?: { file_path?: string };
   tool_response?: unknown;
+  session_id?: string;
 }
 
 /** `handled`: the subscriber already wrote its own hook JSON to stdout. */
