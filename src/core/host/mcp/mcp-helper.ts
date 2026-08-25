@@ -34,7 +34,7 @@ import { pemToPkcs12 } from '@/core/host/crypto/pkcs12.ts';
 
 import {
   ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
-  CLI_COMMAND,
+  CLI_COMMAND_NAME,
   CLI_TMP_DIR,
   ENV_SONAR_USER_HOME,
   getSonarUserHome,
@@ -100,7 +100,9 @@ export function getMcpConfig(
   }
 
   const env = mcpServerEnv();
-  return env === undefined ? { command: CLI_COMMAND, args } : { command: CLI_COMMAND, args, env };
+  return env === undefined
+    ? { command: CLI_COMMAND_NAME, args }
+    : { command: CLI_COMMAND_NAME, args, env };
 }
 
 // Path where update-ca-certificates picks up custom CA certs inside the MCP container (Debian/Alpine convention).

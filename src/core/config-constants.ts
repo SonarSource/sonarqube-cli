@@ -36,8 +36,8 @@ import { join } from 'node:path';
 
 export const APP_NAME = 'sonarqube-cli';
 
-/** PATH command name. Windows PATHEXT resolves `sonar` to `sonar.exe`. */
-export const CLI_COMMAND = 'sonar';
+/** Name used to invoke the CLI on PATH (`sonar`), not the on-disk Windows filename (`sonar.exe`). */
+export const CLI_COMMAND_NAME = 'sonar';
 
 // ---------------------------------------------------------------------------
 // CLI data directory
