@@ -93,6 +93,18 @@ export function resolveAgentSessionId(
 }
 
 /**
+ * Prefers a hook-payload id (normalized); otherwise falls back to env.
+ * Callers that have not already verified telemetry is on should use
+ * {@link resolveAgentSessionIdForEmit} instead.
+ */
+export function resolveAgentSessionIdFromHookOrEnv(
+  hookSessionId: string | null,
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  return normalizeAgentSessionId(hookSessionId) ?? resolveAgentSessionIdFromEnv(env);
+}
+
+/**
  * Session id for an in-command telemetry emit (e.g. SQAA during a hook).
  * Prefers a hook-payload id (normalized); otherwise falls back to env when
  * collection is on. Does not touch the command-tree slot — postAction owns that.
@@ -102,5 +114,5 @@ export function resolveAgentSessionIdForEmit(
   env: NodeJS.ProcessEnv = process.env,
 ): string | null {
   if (!shouldIdentifyAgentSession()) return null;
-  return normalizeAgentSessionId(hookSessionId) ?? resolveAgentSessionIdFromEnv(env);
+  return resolveAgentSessionIdFromHookOrEnv(hookSessionId, env);
 }

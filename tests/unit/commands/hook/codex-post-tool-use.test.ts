@@ -21,6 +21,7 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import * as authResolver from '@/core/auth/auth-resolver.ts';
+import * as agentSession from '@/core/telemetry/agent-session.ts';
 import * as sqaaTelemetry from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 import {
   SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
@@ -64,6 +65,7 @@ describe('codexPostToolUse', () => {
       sqaaTelemetry,
       'emitSqaaAnalysisTelemetry',
     ).mockImplementation(() => Promise.resolve());
+    spyOn(agentSession, 'resolveAgentSessionIdForEmit').mockReturnValue(null);
   });
 
   afterEach(() => {
@@ -105,6 +107,7 @@ describe('codexPostToolUse', () => {
       {
         telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
         telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
+        agentSessionId: null,
       },
     );
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
@@ -213,6 +216,7 @@ describe('codexPostToolUse', () => {
       expect.objectContaining({ totalIssues: 0, totalFailures: 1 }),
       expect.any(Number),
       SQAA_HOOK_TELEMETRY_EXIT_CODE,
+      null,
     );
   });
 

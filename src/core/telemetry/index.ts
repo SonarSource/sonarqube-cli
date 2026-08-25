@@ -44,8 +44,15 @@ export function setPassthroughSubcommand(command: Command, subcommand: string | 
  *
  * No-ops when called from within a flush worker (prevents infinite recursion) or when
  * telemetry is disabled.
+ *
+ * `agentSessionId` is resolved by the caller (buildCommandTree postAction) so session
+ * identification stays outside SonarCommand / CliRuntime.
  */
-export async function storeEvent(command: Command, success: boolean): Promise<void> {
+export async function storeEvent(
+  command: Command,
+  success: boolean,
+  agentSessionId: string | null = null,
+): Promise<void> {
   if (process.env[TELEMETRY_FLUSH_MODE_ENV]) return;
   const state = tryLoadState();
   if (!state || !isTelemetryEnabled(state)) return;
@@ -65,16 +72,19 @@ export async function storeEvent(command: Command, success: boolean): Promise<vo
   } else {
     subcommand = fallbackSubcommand;
   }
-  await emitCommandExecuted({
-    command: topCommand,
-    subcommand,
-    result: success ? 'success' : 'failure',
-    distribution: DISTRIBUTION,
-    // Per-invocation, published by whichever command resolved a project key (see
-    // noteProject). `null` for commands that never resolve one; the other telemetry
-    // events recover it by joining on the shared invocation_id.
-    project_uuid: await currentProjectUuid(),
-  });
+  await emitCommandExecuted(
+    {
+      command: topCommand,
+      subcommand,
+      result: success ? 'success' : 'failure',
+      distribution: DISTRIBUTION,
+      // Per-invocation, published by whichever command resolved a project key (see
+      // noteProject). `null` for commands that never resolve one; the other telemetry
+      // events recover it by joining on the shared invocation_id.
+      project_uuid: await currentProjectUuid(),
+    },
+    { agentSessionId },
+  );
 
   // Gated at the spawn rather than in the worker: a process that is never created cannot
   // transmit, whatever the drain does.

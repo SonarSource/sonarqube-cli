@@ -27,6 +27,7 @@ import {
   resolveAgentSessionId,
   resolveAgentSessionIdForEmit,
   resolveAgentSessionIdFromEnv,
+  resolveAgentSessionIdFromHookOrEnv,
 } from '@/core/telemetry/agent-session.ts';
 
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
@@ -173,5 +174,19 @@ describe('resolveAgentSessionIdForEmit', () => {
     expect(
       resolveAgentSessionIdForEmit('hook-id', { CLAUDE_CODE_SESSION_ID: 'env-id' }),
     ).toBeNull();
+  });
+});
+
+describe('resolveAgentSessionIdFromHookOrEnv', () => {
+  it('prefers the hook id over env without consulting telemetry state', () => {
+    expect(
+      resolveAgentSessionIdFromHookOrEnv('hook-id', { CLAUDE_CODE_SESSION_ID: 'env-id' }),
+    ).toBe('hook-id');
+  });
+
+  it('falls back to env when the hook id is null', () => {
+    expect(resolveAgentSessionIdFromHookOrEnv(null, { CODEX_SESSION_ID: 'codex-id' })).toBe(
+      'codex-id',
+    );
   });
 });

@@ -29,8 +29,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import type { Command } from 'commander';
 
+import { SonarCommand } from '@/commands/sonar-command.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
 import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/auth/auth-resolver.ts';
 import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
@@ -62,14 +62,16 @@ import { mockIdentityGetSafe } from './identity-api-mock.ts';
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
- * Build a fake Commander command chain from a space-separated command path.
- * e.g. makeCommand('auth login') produces: root ← auth ← login
+ * Build a SonarCommand chain from a space-separated command path.
+ * e.g. makeCommand('auth login') produces leaf `login` under `auth` under root.
  */
-function makeCommand(path: string): Command {
-  const root = { name: () => '', parent: null } as unknown as Command;
-  return path
-    .split(' ')
-    .reduce((parent, name) => ({ name: () => name, parent }) as unknown as Command, root);
+function makeCommand(path: string): SonarCommand {
+  const root = new SonarCommand('sonar');
+  let current: SonarCommand = root;
+  for (const name of path.split(' ')) {
+    current = current.command(name);
+  }
+  return current;
 }
 
 function mockFetch(ok = true, status = 200): ReturnType<typeof spyOn> {
@@ -94,17 +96,29 @@ let testDir: string;
 let savedSonarUserHome: string | undefined;
 let savedDoNotTrack: string | undefined;
 let savedEgress: string | undefined;
+let savedClaudeCodeSessionId: string | undefined;
+let savedCodexSessionId: string | undefined;
+let savedCodexThreadId: string | undefined;
+let savedGeminiSessionId: string | undefined;
 
 beforeEach(() => {
   savedSonarUserHome = process.env[ENV_SONAR_USER_HOME];
   savedDoNotTrack = process.env[ENV_DO_NOT_TRACK];
   savedEgress = process.env[ENV_TELEMETRY_EGRESS];
+  savedClaudeCodeSessionId = process.env.CLAUDE_CODE_SESSION_ID;
+  savedCodexSessionId = process.env.CODEX_SESSION_ID;
+  savedCodexThreadId = process.env.CODEX_THREAD_ID;
+  savedGeminiSessionId = process.env.GEMINI_SESSION_ID;
   testDir = mkdtempSync(join(tmpdir(), 'telemetry-test-'));
   process.env[ENV_SONAR_USER_HOME] = testDir;
   // Enable telemetry for these tests; writes land in the isolated testDir.
   delete process.env[ENV_DO_NOT_TRACK];
   // Cleared so the spawn and drain paths run; Bun.spawn and fetch are mocked below.
   delete process.env[ENV_TELEMETRY_EGRESS];
+  delete process.env.CLAUDE_CODE_SESSION_ID;
+  delete process.env.CODEX_SESSION_ID;
+  delete process.env.CODEX_THREAD_ID;
+  delete process.env.GEMINI_SESSION_ID;
   loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('1.0.0'));
   saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
   getUserIdSpy = spyOn(userModule, 'getOrCreateUserId').mockReturnValue('test-machine-id');
@@ -121,6 +135,10 @@ afterEach(() => {
   restoreEnv(ENV_SONAR_USER_HOME, savedSonarUserHome);
   restoreEnv(ENV_DO_NOT_TRACK, savedDoNotTrack);
   restoreEnv(ENV_TELEMETRY_EGRESS, savedEgress);
+  restoreEnv('CLAUDE_CODE_SESSION_ID', savedClaudeCodeSessionId);
+  restoreEnv('CODEX_SESSION_ID', savedCodexSessionId);
+  restoreEnv('CODEX_THREAD_ID', savedCodexThreadId);
+  restoreEnv('GEMINI_SESSION_ID', savedGeminiSessionId);
   delete process.env[TELEMETRY_FLUSH_MODE_ENV];
   delete process.env.CLAUDECODE;
   delete process.env.CLAUDE_CODE_ENTRYPOINT;
@@ -249,6 +267,28 @@ describe('storeEvent', () => {
       } finally {
         spy.mockRestore();
       }
+    });
+
+    it('sets event_payload.agent_session_id from the storeEvent argument', async () => {
+      await storeEvent(makeCommand('auth login'), true, 'claude-sess-1');
+      expect(readCommandEvents(testDir)[0].event_payload.agent_session_id).toBe('claude-sess-1');
+    });
+
+    it('sets event_payload.agent_session_id from env when the argument is omitted', async () => {
+      process.env.CLAUDE_CODE_SESSION_ID = 'env-command-session';
+      try {
+        await storeEvent(makeCommand('auth login'), true);
+        expect(readCommandEvents(testDir)[0].event_payload.agent_session_id).toBe(
+          'env-command-session',
+        );
+      } finally {
+        delete process.env.CLAUDE_CODE_SESSION_ID;
+      }
+    });
+
+    it('sets event_payload.agent_session_id to null when omitted and env has no session', async () => {
+      await storeEvent(makeCommand('auth login'), true);
+      expect(readCommandEvents(testDir)[0].event_payload.agent_session_id).toBeNull();
     });
 
     it('uses the machine_id returned by getOrCreateUserId', async () => {
@@ -647,6 +687,7 @@ function makeCompletedFinding(): StoredAnalysisCompletedEvent {
       organization_uuid_v4: null,
       sqs_installation_id: null,
       caller_agent: null,
+      agent_session_id: null,
       caller_command: 'analyze secrets',
       analyzer: 'sonar-secrets',
       analysis_id: 'analysis-id',

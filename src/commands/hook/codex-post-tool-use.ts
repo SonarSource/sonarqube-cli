@@ -24,6 +24,7 @@ import { buildSqaaJsonReport } from '@/commands/analyze/sqaa.ts';
 import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import logger from '@/core/observability/logger.ts';
+import { resolveAgentSessionIdForEmit } from '@/core/telemetry/agent-session.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import {
   emitSqaaHookFailureTelemetry,
@@ -43,10 +44,13 @@ export interface CodexPostToolUseOptions {
   project?: string;
 }
 
-const CODEX_HOOK_TELEMETRY_OPTIONS = {
-  telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
-  telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
-} as const;
+function codexHookTelemetryOptions(agentSessionId: string | null) {
+  return {
+    telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
+    telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
+    agentSessionId,
+  } as const;
+}
 
 interface CodexPostToolUsePayload {
   session_id?: string;
@@ -57,22 +61,23 @@ export async function codexPostToolUse(
 ): Promise<HookCommandResult> {
   // Best-effort: when Codex pipes PostToolUse JSON, capture session_id. Skip when
   // stdin is a TTY — otherwise readStdinJson waits up to 5s for data that never
-  // arrives. Env-based CODEX_* ids still resolve later via resolveAgentSessionId.
-  let agentSessionId: string | null = null;
+  // arrives. Env-based CODEX_* ids still resolve for mid-command SQAA without this.
+  let fromHook: string | null = null;
   if (!process.stdin.isTTY) {
     try {
       const payload = await readStdinJson<CodexPostToolUsePayload>();
-      agentSessionId = payload.session_id ?? null;
+      fromHook = payload.session_id ?? null;
     } catch {
       // ignore
     }
   }
+  const agentSessionId = resolveAgentSessionIdForEmit(fromHook);
 
   const projectKey = options.project;
-  if (!projectKey) return { agentSessionId };
+  if (!projectKey) return { agentSessionId: fromHook };
 
   const auth = await resolveAuth().catch(() => null);
-  if (auth?.connectionType !== 'cloud' || !auth.orgKey) return { agentSessionId };
+  if (auth?.connectionType !== 'cloud' || !auth.orgKey) return { agentSessionId: fromHook };
 
   noteProject(auth, projectKey);
 
@@ -82,23 +87,24 @@ export async function codexPostToolUse(
     report = await buildSqaaJsonReport(
       { project: projectKey, force: true, format: 'json', forcedDepth: 'STANDARD' },
       auth,
-      CODEX_HOOK_TELEMETRY_OPTIONS,
+      codexHookTelemetryOptions(agentSessionId),
     );
   } catch (err) {
     await emitSqaaHookFailureTelemetry(
       SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
       auth,
       Math.round(performance.now() - runStart),
+      agentSessionId,
     ).catch(() => undefined);
     logger.debug(`Codex PostToolUse SQAA analysis failed: ${(err as Error).message}`);
-    return { agentSessionId };
+    return { agentSessionId: fromHook };
   }
 
-  if (!report) return { agentSessionId };
+  if (!report) return { agentSessionId: fromHook };
 
   if (report.globalError?.kind === 'forbidden') {
     await emitVortexUnavailableHookNotice(auth);
-    return { agentSessionId };
+    return { agentSessionId: fromHook };
   }
 
   try {
@@ -110,5 +116,5 @@ export async function codexPostToolUse(
     logger.debug(`Codex PostToolUse SQAA hook output failed: ${(err as Error).message}`);
   }
 
-  return { agentSessionId };
+  return { agentSessionId: fromHook };
 }

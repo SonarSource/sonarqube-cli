@@ -77,9 +77,17 @@ async function emitSqaaTelemetryIfRequested(
   tally: RunTally,
   durationMs: number,
   exitCode: number,
+  agentSessionId?: string | null,
 ): Promise<void> {
   if (!telemetryCallerCommand) return;
-  await emitSqaaAnalysisTelemetry(telemetryCallerCommand, auth, tally, durationMs, exitCode);
+  await emitSqaaAnalysisTelemetry(
+    telemetryCallerCommand,
+    auth,
+    tally,
+    durationMs,
+    exitCode,
+    agentSessionId,
+  );
 }
 
 export async function finishSqaaTelemetryFromReport(
@@ -102,6 +110,7 @@ export async function finishSqaaTelemetryFromReport(
     tallyFromSqaaJsonReport(report),
     durationMs,
     exitCode,
+    runOptions.agentSessionId,
   );
 }
 
@@ -123,6 +132,7 @@ async function finishSqaaRun(
     tally,
     durationMs,
     exitCode,
+    options.agentSessionId,
   );
 }
 

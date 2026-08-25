@@ -111,6 +111,7 @@ describe('agentPostToolUse', () => {
       expect.objectContaining({ totalIssues: 0, totalFailures: 0 }),
       expect.any(Number),
       SQAA_HOOK_TELEMETRY_EXIT_CODE,
+      null,
     );
   });
 
@@ -135,6 +136,7 @@ describe('agentPostToolUse', () => {
       expect.objectContaining({ totalIssues: 1, totalFailures: 0 }),
       expect.any(Number),
       SQAA_HOOK_TELEMETRY_EXIT_CODE,
+      null,
     );
   });
 
@@ -288,6 +290,7 @@ describe('agentPostToolUse', () => {
       expect.objectContaining({ totalIssues: 0, totalFailures: 1 }),
       expect.any(Number),
       SQAA_HOOK_TELEMETRY_EXIT_CODE,
+      null,
     );
   });
 
@@ -306,6 +309,7 @@ describe('agentPostToolUse', () => {
       expect.objectContaining({ totalIssues: 0, totalFailures: 1 }),
       expect.any(Number),
       SQAA_HOOK_TELEMETRY_EXIT_CODE,
+      null,
     );
   });
 
@@ -321,6 +325,7 @@ describe('agentPostToolUse', () => {
       expect.objectContaining({ totalIssues: 0, totalFailures: 1 }),
       expect.any(Number),
       SQAA_HOOK_TELEMETRY_EXIT_CODE,
+      null,
     );
   });
 
