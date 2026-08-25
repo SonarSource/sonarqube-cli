@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import {
   SonarQubeClient,
   type VortexEntitlementResult,
@@ -44,9 +44,10 @@ export async function recheckVortexEntitlement(
 
 /**
  * `not_applicable` is decided here for connections that cannot ask the Hub at all
- * (unauthenticated, or Cloud without an organization). On-premise connections are
+ * (unauthenticated, or Cloud without an organization). Server connections are
  * queried: a missing Hub returns `not_applicable` from the 404, distinct from a
- * real `not_entitled` licence refusal.
+ * real `not_entitled` licence refusal. Cloud vs Server follows the URL
+ * (`isSonarQubeCloud`), same as `SonarQubeClient`, not the stored connection type.
  */
 export async function resolveVortexEntitlement(
   auth: ResolvedAuth | null,
@@ -54,7 +55,7 @@ export async function resolveVortexEntitlement(
   if (!auth) {
     return { status: 'not_applicable' };
   }
-  if (auth.connectionType === 'cloud' && !auth.orgKey) {
+  if (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey) {
     return { status: 'not_applicable' };
   }
   return queryVortexEntitlement(auth);

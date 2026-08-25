@@ -47,6 +47,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
+import { VORTEX_PROMOTION_MESSAGE } from '@/commands/integrate/_common/vortex.ts';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalCagBinaryName } from '@/core/host/install/context-augmentation.ts';
 import type { CliState } from '@/core/state/state.ts';
@@ -130,7 +131,7 @@ describe('sonar integrate <agent> — CAG pre-flight skip paths (real CLI, fake 
     });
 
     expect(result.exitCode, result.stderr).toBe(0);
-    expect(result.stdout).toContain('Vortex is available on SonarQube Cloud.');
+    expect(result.stdout).toContain(VORTEX_PROMOTION_MESSAGE);
     expect(existsSync(cagBinaryPath), 'no CAG download when access is denied').toBe(false);
     expect(findRecordedCagFeature(harness.stateJsonFile.asJson() as CliState)).toBeUndefined();
   });

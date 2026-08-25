@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
 import type {
   FeatureContainer,
@@ -82,7 +82,7 @@ export function vortexShouldInstall<TOptions extends IntegrateAgentOptions>({
   return skip();
 }
 
-export const VORTEX_PROMOTION_MESSAGE = `Vortex is available on SonarQube Cloud. Learn more: ${VORTEX_PRODUCT_URL}`;
+export const VORTEX_PROMOTION_MESSAGE = `Vortex is not enabled for this organization. Learn more: ${VORTEX_PRODUCT_URL}`;
 
 export const VORTEX_SERVER_UNAVAILABLE_MESSAGE =
   'Vortex requires SonarQube Server 2026.5 Enterprise or later.';
@@ -129,7 +129,7 @@ export async function resolveVortexSetup(
   params: ResolveVortexSetupParams,
 ): Promise<ResolvedVortexSetup> {
   const { status } = await resolveVortexEntitlement(params.auth);
-  const isServer = params.auth.connectionType === 'on-premise';
+  const isServer = !isSonarQubeCloud(params.auth.serverUrl);
 
   if (status === 'not_applicable') {
     info(isServer ? VORTEX_SERVER_UNAVAILABLE_MESSAGE : VORTEX_PROMOTION_MESSAGE);

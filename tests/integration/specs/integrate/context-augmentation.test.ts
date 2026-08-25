@@ -27,7 +27,10 @@ import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.js';
-import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.js';
+import {
+  VORTEX_FEATURE_ID,
+  VORTEX_PROMOTION_MESSAGE,
+} from '@/commands/integrate/_common/vortex.js';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.js';
 import { CODEX_INTEGRATION_ID } from '@/commands/integrate/codex/declaration.js';
 import { COPILOT_INTEGRATION_ID } from '@/commands/integrate/copilot/declaration.js';
@@ -496,9 +499,7 @@ describe('integrate claude — Context Augmentation', () => {
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeUndefined();
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(
-        'Vortex is available on SonarQube Cloud',
-      );
+      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_PROMOTION_MESSAGE);
     },
     { timeout: 30000 },
   );
@@ -1016,9 +1017,7 @@ describe('integrate codex — Context Augmentation', () => {
       const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
       expect(nonProbe).toEqual([]);
       expect(harness.cwd.file(CODEX_SKILL_PATH).exists()).toBe(false);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(
-        'Vortex is available on SonarQube Cloud',
-      );
+      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_PROMOTION_MESSAGE);
     },
     { timeout: 30000 },
   );
