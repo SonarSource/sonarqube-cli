@@ -51,9 +51,13 @@ export function buildVortexRecommendation(
   vortexEntitlement: VortexEntitlementResult,
   vortexInstalled: boolean,
   orgKey: string | undefined,
+  isServer: boolean,
 ): string | undefined {
   if (!isVortexEntitlementLoss(vortexEntitlement, vortexInstalled)) {
     return undefined;
+  }
+  if (isServer) {
+    return "Ask your administrator to enable the Vortex add-on, or run 'sonar integrate' to remove the Vortex integration";
   }
   const target = orgKey ? ` for organization '${orgKey}'` : '';
   return `Re-enable Vortex${target}, or run 'sonar integrate' to remove the Vortex integration`;

@@ -121,6 +121,10 @@ export interface ResolvedVortexSetup {
   scaEnabled?: boolean;
 }
 
+function scaEnablementConnection(isServer: boolean): 'cloud' | 'on-premise' {
+  return isServer ? 'on-premise' : 'cloud';
+}
+
 /**
  * One entitlement check for all Vortex capabilities, resolving whether the
  * Vortex feature can be installed and the SCA flag its content depends on.
@@ -163,7 +167,10 @@ export async function resolveVortexSetup(
   const client = new SonarQubeClient(params.auth.serverUrl, params.auth.token);
   // The rendered context augmentation skill advertises
   // SCA tools only when SCA is available on the connection.
-  const scaStatus = await client.getScaEnablement(params.auth.connectionType, params.auth.orgKey);
+  const scaStatus = await client.getScaEnablement(
+    scaEnablementConnection(isServer),
+    params.auth.orgKey,
+  );
   if (scaStatus === 'check_failed') {
     warn(VORTEX_SCA_CHECK_FAILED_MESSAGE);
   }

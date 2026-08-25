@@ -540,8 +540,7 @@ export class SonarQubeClient {
    * CLI does not enable both capabilities when only one is available.
    *
    * Cloud A3S (`/a3s-analysis/...`) lives on the Cloud API host, not on a
-   * Server instance. A Server connection therefore only calls CAG Hub. Server
-   * SQAA analysis, if it ships later, is a different API — not this check.
+   * Server instance. A Server connection therefore only calls CAG Hub.
    *
    * Usage `consumption` is CAG-specific (the SQAA endpoint does not report it) and is
    * only forwarded for `enabled`: once over the limit the remaining headroom is no
