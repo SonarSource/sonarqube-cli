@@ -62,7 +62,9 @@ function nativeBinBlock(): string {
  */
 function stdinCaptureBlock(): string {
   return [
-    'SONAR_STDIN_CACHE=$(mktemp)',
+    // A failed mktemp leaves SONAR_STDIN_CACHE empty; `cat >` into that empty path would
+    // otherwise fail with a raw, confusing shell error instead of a clear one.
+    'SONAR_STDIN_CACHE=$(mktemp) || { echo "sonarqube-cli: mktemp failed, skipping secrets scan"; exit 0; }',
     'trap \'rm -f "$SONAR_STDIN_CACHE"\' EXIT',
     'cat > "$SONAR_STDIN_CACHE"',
   ].join('\n');
@@ -70,12 +72,17 @@ function stdinCaptureBlock(): string {
 
 /**
  * Chains to a pre-existing local hook that a global `core.hooksPath` override would otherwise
- * silently disable. `git rev-parse --git-dir` always resolves the physical `.git` directory,
- * ignoring any `core.hooksPath` override — unlike `git rev-parse --git-path hooks`, which follows
- * it. The old hook runs first; a non-zero exit aborts immediately with the same code, preserving
- * the abort semantics the repo had before Sonar's hook existed. The marker grep (reusing the same
- * markers `wholeFile` already checks for overwrite/removal) skips chaining when the "pre-existing"
- * hook is actually a Sonar hook from an earlier install, avoiding a double scan.
+ * silently disable. `git rev-parse --git-common-dir` always resolves the physical, *shared* `.git`
+ * directory, ignoring any `core.hooksPath` override — unlike `git rev-parse --git-path hooks`,
+ * which follows it. `--git-common-dir` (not `--git-dir`) matters specifically for linked worktrees
+ * (`git worktree add`): `--git-dir` there resolves to the worktree-private admin directory (e.g.
+ * `.git/worktrees/<name>`), which has no `hooks/` of its own — hooks are only ever read from the
+ * common dir. In the main worktree `--git-common-dir` and `--git-dir` are the same path, so this is
+ * a strict superset, not a behavior change there. The old hook runs first; a non-zero exit aborts
+ * immediately with the same code, preserving the abort semantics the repo had before Sonar's hook
+ * existed. The marker grep (reusing the same markers `wholeFile` already checks for
+ * overwrite/removal) skips chaining when the "pre-existing" hook is actually a Sonar hook from an
+ * earlier install, avoiding a double scan.
  *
  * When `stdinFromCache` is set (pre-push only — see `stdinCaptureBlock`), the chained hook reads
  * from the captured copy instead of the hook's own stdin, which was already drained by the capture.
@@ -86,7 +93,7 @@ function nativeChainBlock(hook: GitHookType, stdinFromCache: boolean): string {
     .join(' ');
   const stdinRedirect = stdinFromCache ? ' < "$SONAR_STDIN_CACHE"' : '';
   return [
-    'SONAR_GIT_DIR=$(git rev-parse --git-dir 2>/dev/null || :)',
+    'SONAR_GIT_DIR=$(git rev-parse --git-common-dir 2>/dev/null || :)',
     'if [ -n "$SONAR_GIT_DIR" ]; then',
     `  SONAR_LOCAL_HOOK="$SONAR_GIT_DIR/hooks/${hook}"`,
     `  if [ -x "$SONAR_LOCAL_HOOK" ] && ! grep -qF ${markerArgs} "$SONAR_LOCAL_HOOK" 2>/dev/null; then`,

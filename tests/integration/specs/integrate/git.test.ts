@@ -20,7 +20,14 @@
 
 // Integration tests for `sonar integrate git`
 
-import { chmodSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -1051,6 +1058,45 @@ describe('integrate git (native hooks)', () => {
         const output =
           (secondPush.stdout?.toString() ?? '') + (secondPush.stderr?.toString() ?? '');
         expect(output).toContain('Secrets detected');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'chains to the pre-existing hook when committing from a linked worktree',
+      async () => {
+        await setupAuthenticated(harness, { withSecretsBinary: true });
+        initGitRepo(harness);
+        writePreExistingHook(harness, `#!/bin/sh\necho ran >> ${OLD_HOOK_MARKER_FILE}\nexit 0\n`);
+
+        const install = await harness.run('integrate git --global --non-interactive');
+        expect(install.exitCode).toBe(0);
+
+        const { hookEnv } = setupSonarBinDir(harness);
+        setupGitUser(harness.cwd.path);
+        // A worktree needs an existing commit to branch from.
+        harness.cwd.writeFile('initial.js', 'const x = 1;\n');
+        Bun.spawnSync(['git', 'add', 'initial.js'], { cwd: harness.cwd.path });
+        gitCommit(harness.cwd.path, hookEnv, 'initial');
+
+        const worktreePath = join(harness.cwd.path, '..', 'linked-worktree');
+        const worktreeAdd = Bun.spawnSync(
+          ['git', 'worktree', 'add', worktreePath, '-b', 'linked-branch'],
+          { cwd: harness.cwd.path, env: hookEnv },
+        );
+        expect(worktreeAdd.exitCode).toBe(0);
+
+        writeFileSync(join(worktreePath, 'secret.js'), `const token = "${GITHUB_TEST_TOKEN}";`);
+        Bun.spawnSync(['git', 'add', 'secret.js'], { cwd: worktreePath });
+
+        const commit = gitCommit(worktreePath, hookEnv, 'wip');
+
+        expect(commit.exitCode).not.toBe(0);
+        const output = (commit.stdout?.toString() ?? '') + (commit.stderr?.toString() ?? '');
+        expect(output).toContain('Secrets detected');
+        // The old hook's marker lands in the worktree (git hooks run with the invoking
+        // worktree as cwd) — proves --git-common-dir found the shared hook from there.
+        expect(existsSync(join(worktreePath, OLD_HOOK_MARKER_FILE))).toBe(true);
       },
       { timeout: 30000 },
     );

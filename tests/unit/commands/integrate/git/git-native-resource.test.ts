@@ -145,7 +145,7 @@ describe('native git hook chaining to a pre-existing local hook', () => {
   it('includes the chain block for a global-scope pre-commit hook', () => {
     const script = getHookScript('pre-commit', context({ scope: 'global' }));
 
-    expect(script).toContain('git rev-parse --git-dir');
+    expect(script).toContain('git rev-parse --git-common-dir');
     expect(script).toContain('SONAR_LOCAL_HOOK="$SONAR_GIT_DIR/hooks/pre-commit"');
     expect(script).toContain('"$SONAR_LOCAL_HOOK" "$@" || exit $?');
   });
@@ -184,7 +184,14 @@ describe('native git hook chaining to a pre-existing local hook', () => {
   it('omits the chain block entirely for a project-scope hook', () => {
     const script = getHookScript('pre-commit', context({ scope: 'project' }));
 
-    expect(script).not.toContain('git rev-parse --git-dir');
+    expect(script).not.toContain('git rev-parse --git-common-dir');
     expect(script).not.toContain('SONAR_LOCAL_HOOK');
+  });
+
+  it('uses --git-common-dir, not --git-dir, so chaining also finds hooks from a linked worktree', () => {
+    const script = getHookScript('pre-commit', context({ scope: 'global' }));
+
+    expect(script).toContain('git rev-parse --git-common-dir');
+    expect(script).not.toContain('git rev-parse --git-dir');
   });
 });
