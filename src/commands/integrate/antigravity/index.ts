@@ -60,7 +60,7 @@ export async function integrateAntigravity(
 
   const { installRoot: targetRoot, installScope: scope } = resolveAntigravityInstallTarget(
     integrateCtx.isGlobal,
-    integrateCtx.project.rootDir,
+    integrateCtx.project.projectRoot,
   );
   const existingGlobalHookPath = integrateCtx.isGlobal
     ? undefined
@@ -69,14 +69,15 @@ export async function integrateAntigravity(
 
   const integrationOptions: AntigravityIntegrationOptions = {
     ...options,
-    projectRoot: integrateCtx.project.rootDir,
+    projectRoot: integrateCtx.project.projectRoot,
     globalSecretsHookExists,
     vortexDisposition: vortex.disposition,
   };
 
-  const attrs = await buildRecordedIntegrationAttrs({
+  const attrs = buildRecordedIntegrationAttrs({
     baseAttrs: buildIntegrationAttrs(integrateCtx),
-    projectRoot: integrateCtx.project.rootDir,
+    projectRoot: integrateCtx.project.projectRoot,
+    mainRepoRoot: integrateCtx.project.mainRepoRoot,
     serverUrl: integrateCtx.serverUrl,
     orgKey: integrateCtx.organization,
     contextAugmentation: vortex,

@@ -20,7 +20,6 @@
 
 // Unit tests for analyzeSqaa command
 
-import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
@@ -28,16 +27,15 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import * as processLib from '@/core/process/process.ts';
+import * as projectInfo from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
-import { CliState, getDefaultState } from '@/core/state/state.ts';
+import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockTty, setMockUi } from '@/core/ui';
 
 import { analyzeSqaa, buildSqaaJsonReport } from '../../../../src/commands/analyze/sqaa.ts';
 import * as changesetModule from '../../../../src/commands/analyze/sqaa-changeset.ts';
-import { SQAA_HOOK_FEATURE_ID } from '../../../../src/commands/integrate/_common/features/sqaa-instructions-feature.ts';
-import { CLAUDE_INTEGRATION_ID } from '../../../../src/commands/integrate/claude/declaration.ts';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const TEST_ORG = 'test-org';
@@ -62,46 +60,25 @@ let statSyncSpy: ReturnType<typeof spyOn>;
 let readFileSpy: ReturnType<typeof spyOn>;
 let createAnalysisSpy: ReturnType<typeof spyOn>;
 let spawnProcessSpy: ReturnType<typeof spyOn>;
+let discoverProjectSpy: ReturnType<typeof spyOn>;
 
-/**
- * Seed a declarative Claude Code integration whose project-scoped
- * `sonar-sqaa-hook` feature carries the given `projectKey` attr (or none).
- */
-function seedClaudeSqaaFeature(state: CliState, projectKey: string | undefined) {
-  const now = new Date().toISOString();
-  state.integrations.installed.push({
-    id: randomUUID(),
-    integrationId: CLAUDE_INTEGRATION_ID,
-    installedByCliVersion: '1.0.0',
-    installedAt: now,
-    updatedByCliVersion: '1.0.0',
-    updatedAt: now,
-    features: [
-      {
-        featureId: SQAA_HOOK_FEATURE_ID,
-        scope: 'project',
-        targetRoot: process.cwd(),
-        installedByCliVersion: '1.0.0',
-        installedAt: now,
-        updatedByCliVersion: '1.0.0',
-        updatedAt: now,
-        dependencies: [],
-        resources: [],
-        operations: [],
-        attrs: projectKey === undefined ? {} : { projectKey },
-      },
-    ],
-  });
-}
-
-/** Cloud state WITH a sonar-sqaa hook feature for the current project root */
+/** Cloud state (project-key resolution is mocked separately via discoverProjectSpy) */
 function makeCloudState() {
   const state = getDefaultState('test');
   stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', {
     orgKey: TEST_ORG,
   });
-  seedClaudeSqaaFeature(state, TEST_PROJECT);
   return state;
+}
+
+/** discoverProject result carrying just enough for resolveSqaaProjectKey to resolve `projectKey`. */
+function makeDiscoveredProject(projectKey: string | undefined) {
+  return {
+    repoRoot: process.cwd(),
+    projectRoot: process.cwd(),
+    projectKey,
+    configSources: [],
+  };
 }
 
 beforeEach(() => {
@@ -115,6 +92,10 @@ beforeEach(() => {
   existsSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
   statSyncSpy = spyOn(fs, 'statSync').mockReturnValue({ isFile: () => true } as fs.Stats);
   readFileSpy = spyOn(fs, 'readFileSync').mockReturnValue(FILE_CONTENT);
+
+  discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue(
+    makeDiscoveredProject(TEST_PROJECT),
+  );
 
   createAnalysisSpy = spyOn(SonarQubeClient.prototype, 'createAnalysis').mockResolvedValue({
     id: 'analysis-1',
@@ -144,6 +125,7 @@ afterEach(() => {
   existsSpy.mockRestore();
   statSyncSpy.mockRestore();
   readFileSpy.mockRestore();
+  discoverProjectSpy.mockRestore();
   createAnalysisSpy.mockRestore();
   spawnProcessSpy.mockRestore();
 });
@@ -165,19 +147,9 @@ describe('analyzeSqaa: input validation', () => {
   });
 });
 
-function stateWithSqaaFeatureMissingProjectKey() {
-  const state = getDefaultState('test');
-  stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', {
-    orgKey: TEST_ORG,
-  });
-  // Feature exists but projectKey attr is absent
-  seedClaudeSqaaFeature(state, undefined);
-  return state;
-}
-
 describe('analyzeSqaa: auth resolution', () => {
-  it('throws CommandFailedError when the SQAA feature has no projectKey (explicit agentic)', async () => {
-    loadStateSpy.mockReturnValue(stateWithSqaaFeatureMissingProjectKey());
+  it('throws CommandFailedError when no project can be discovered (explicit agentic)', async () => {
+    discoverProjectSpy.mockResolvedValue(makeDiscoveredProject(undefined));
 
     let thrown: unknown;
     await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT).catch(
@@ -193,8 +165,8 @@ describe('analyzeSqaa: auth resolution', () => {
     expect(createAnalysisSpy).not.toHaveBeenCalled();
   });
 
-  it('skips SQAA and warns when the SQAA feature has no projectKey and requireProject is false (bare analyze)', async () => {
-    loadStateSpy.mockReturnValue(stateWithSqaaFeatureMissingProjectKey());
+  it('skips SQAA and warns when no project can be discovered and requireProject is false (bare analyze)', async () => {
+    discoverProjectSpy.mockResolvedValue(makeDiscoveredProject(undefined));
 
     await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT, {
       requireProject: false,
@@ -210,62 +182,10 @@ describe('analyzeSqaa: auth resolution', () => {
   });
 });
 
-/**
- * Cloud state with two project-scoped SQAA features that both resolve to the
- * current directory, but via different signals: the first (array order) matches
- * only on `repoRoot` (as if a sibling worktree integrated with a different key
- * shares this main working tree); the second matches exactly on `targetRoot`
- * (the install actually rooted here). The exact targetRoot match must win.
- */
-function stateWithTargetAndRepoRootSqaaFeatures(
-  repoRootOnlyKey: string,
-  targetRootKey: string,
-): CliState {
-  const state = getDefaultState('test');
-  stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', { orgKey: TEST_ORG });
-  const now = new Date().toISOString();
-  const makeFeature = (targetRoot: string, projectKey: string) => ({
-    featureId: SQAA_HOOK_FEATURE_ID,
-    scope: 'project' as const,
-    targetRoot,
-    installedByCliVersion: '1.0.0',
-    installedAt: now,
-    updatedByCliVersion: '1.0.0',
-    updatedAt: now,
-    dependencies: [],
-    resources: [],
-    operations: [],
-    attrs: { projectKey, repoRoot: process.cwd() },
-  });
-  state.integrations.installed.push({
-    id: randomUUID(),
-    integrationId: CLAUDE_INTEGRATION_ID,
-    installedByCliVersion: '1.0.0',
-    installedAt: now,
-    updatedByCliVersion: '1.0.0',
-    updatedAt: now,
-    features: [
-      // repoRoot-only match listed first — would win on array order under a
-      // combined targetRoot-OR-repoRoot search.
-      makeFeature('/some/other/worktree', repoRootOnlyKey),
-      makeFeature(process.cwd(), targetRootKey),
-    ],
-  });
-  return state;
-}
-
-describe('analyzeSqaa: project-key resolution across worktrees', () => {
-  it('prefers a targetRoot match over a repoRoot-only match regardless of feature order', async () => {
-    loadStateSpy.mockReturnValue(
-      stateWithTargetAndRepoRootSqaaFeatures('wrong-worktree-key', 'right-here-key'),
-    );
-
-    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
-
-    expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
-    expect(createAnalysisSpy.mock.calls[0][0].projectKey).toBe('right-here-key');
-  });
-});
+// Worktree-aware project-key resolution (targetRoot vs. repoRoot precedence) now
+// lives entirely inside discoverProject/selectFeatureForLookupPaths, which this
+// suite mocks away via discoverProjectSpy — see tests/unit/core/project-info.test.ts
+// and tests/unit/core/host/recorded-feature-resolver.test.ts for that coverage.
 
 describe('analyzeSqaa: API call and result display', () => {
   it('calls client.createAnalysis with correct parameters', async () => {

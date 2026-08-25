@@ -30,6 +30,7 @@ import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display.ts';
 import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import { isSonarQubeCloud, resolveAuth } from '@/core/auth/auth-resolver.ts';
 import logger from '@/core/observability/logger.ts';
+import { discoverProject } from '@/core/project-info.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
 import {
@@ -64,14 +65,16 @@ export async function codexPostToolUse(
       // ignore
     }
   }
-  const projectKey = options.project;
-  if (!projectKey) return { agentSessionId: fromHook };
 
   const auth = await resolveAuth().catch(() => null);
   // Cloud addresses an organization; Server has none and resolves it from the instance.
   if (!auth || (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey)) {
     return { agentSessionId: fromHook };
   }
+
+  const projectKey =
+    options.project ?? (await discoverProject(process.cwd(), true, { auth })).projectKey;
+  if (!projectKey) return { agentSessionId: fromHook };
 
   noteProject(auth, projectKey);
 

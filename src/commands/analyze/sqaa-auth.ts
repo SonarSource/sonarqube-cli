@@ -22,31 +22,11 @@
 
 import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
-import { selectRecordedFeatureForDir } from '@/core/host/recorded-feature-resolver.ts';
 import logger from '@/core/observability/logger.ts';
-import type { InstalledIntegrationFeature, IntegrationStateAttribute } from '@/core/state/state.ts';
-import { loadState } from '@/core/state/state-repository.ts';
+import { discoverProject } from '@/core/project-info.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { blank, confirmPrompt, text, warn } from '@/core/ui';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
-
-import { SQAA_HOOK_FEATURE_ID } from '../integrate/_common/features/sqaa-instructions-feature.ts';
-import { isProjectVortexFeature } from '../integrate/_common/vortex.ts';
-
-function isProjectSqaaFeature(feature: InstalledIntegrationFeature): boolean {
-  return (
-    isProjectVortexFeature(feature) ||
-    (feature.featureId === SQAA_HOOK_FEATURE_ID && feature.scope === 'project')
-  );
-}
-
-function getOptionalStringAttr(
-  attrs: Record<string, IntegrationStateAttribute> | undefined,
-  key: string,
-): string | undefined {
-  const value = attrs?.[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
 
 const LARGE_CHANGESET_HINT =
   'For faster feedback, try targeting your changes:\n' +
@@ -96,7 +76,7 @@ export async function resolveSqaaAuthAndProject(
   const sqaaAuth = resolveSqaaAuth(auth, explicitProject);
   if (!sqaaAuth) return { kind: 'no-org' };
 
-  const projectKey = explicitProject ?? (await resolveSqaaProjectKey(projectRoot));
+  const projectKey = explicitProject ?? (await resolveSqaaProjectKey(auth, projectRoot));
   if (!projectKey) return { kind: 'no-project' };
 
   noteProject(auth, projectKey);
@@ -134,40 +114,21 @@ export function resolveSqaaAuth(
 }
 
 /**
- * Look up the project key for the current project from the declarative
- * integration state (`integrations.installed`).
- *
- * Delegates the worktree-aware matching to the shared resolver (see
- * `selectRecordedFeatureForDir`): the current directory is mapped to its working
- * tree — and, from a linked worktree, to the main working tree — then matched
- * against the recorded Vortex features, preferring a `targetRoot` (physical
- * install dir) match over a `repoRoot`-only one. Falls back to `process.cwd()`
- * when no `projectRoot` is given so the single-file path still works, including
- * from a subdirectory or outside git.
+ * Look up the project key for the current project via the shared project-discovery
+ * pipeline (`discoverProject`): the known-server-project-mapping cache, local config
+ * files, then a git-remote-binding lookup against the server. Falls back to
+ * `process.cwd()` when no `projectRoot` is given so the single-file path still
+ * works, including from a subdirectory or outside git.
  */
-export async function resolveSqaaProjectKey(projectRoot?: string): Promise<string | null> {
-  try {
-    const candidates = loadState().integrations.installed.flatMap((integration) =>
-      integration.features.filter(isProjectSqaaFeature).map((feature) => ({
-        feature,
-        targetRoot: feature.targetRoot,
-        repoRoot: getOptionalStringAttr(feature.attrs, 'repoRoot'),
-        updatedAt: feature.updatedAt,
-      })),
-    );
-    const sqaaFeature = await selectRecordedFeatureForDir(projectRoot ?? process.cwd(), candidates);
-
-    const projectKey = sqaaFeature?.attrs?.projectKey;
-    if (typeof projectKey !== 'string' || projectKey.length === 0) {
-      logger.debug('Vortex analysis skipped: no project key found in integration state');
-      return null;
-    }
-
-    return projectKey;
-  } catch {
-    logger.debug('Vortex analysis skipped: failed to resolve integration state');
-    return null;
+export async function resolveSqaaProjectKey(
+  auth: ResolvedAuth,
+  projectRoot?: string,
+): Promise<string | null> {
+  const discovered = await discoverProject(projectRoot ?? process.cwd(), true, { auth });
+  if (!discovered.projectKey) {
+    logger.debug('Vortex analysis skipped: no project key found');
   }
+  return discovered.projectKey ?? null;
 }
 
 /**

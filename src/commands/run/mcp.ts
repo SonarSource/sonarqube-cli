@@ -78,8 +78,8 @@ export async function runMcp(
     );
   }
   const discoveredRootIsHomeDir =
-    discovered && canonicalizePath(discovered.rootDir) === canonicalizePath(homedir());
-  const projectRoot = discoveredRootIsHomeDir ? undefined : discovered?.rootDir;
+    discovered && canonicalizePath(discovered.projectRoot) === canonicalizePath(homedir());
+  const projectRoot = discoveredRootIsHomeDir ? undefined : discovered?.projectRoot;
 
   const context: McpServerContext = projectRoot
     ? { withFsMount: true, projectRoot, projectKey }

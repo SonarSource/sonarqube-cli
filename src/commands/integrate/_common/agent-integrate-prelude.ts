@@ -141,7 +141,7 @@ export async function displayAgentIntegratePrelude(
   });
   const scope = await resolveIntegrateScope({
     ...options,
-    projectRoot: project.rootDir,
+    projectRoot: project.projectRoot,
     projectKey: options.project,
   });
   const isGlobal = isGlobalIntegrateScope(scope);
