@@ -25,6 +25,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 
 import {
   APP_NAME,
+  CLI_COMMAND,
   ENV_SONAR_USER_HOME,
   ENV_SQAA_RETRY_BASE_DELAY_MS,
   getCliDir,
@@ -52,6 +53,10 @@ describe('config-constants', () => {
 
   it('LOG_FILE should have the correct filename', () => {
     expect(LOG_FILE).toBe(join(LOG_DIR, `${APP_NAME}.log`));
+  });
+
+  it('CLI_COMMAND is sonar on every platform', () => {
+    expect(CLI_COMMAND).toBe('sonar');
   });
 
   describe('path resolution', () => {
