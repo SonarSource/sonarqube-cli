@@ -539,8 +539,9 @@ export class SonarQubeClient {
    * there is no shared Vortex backend yet. On Cloud, require both checks so the
    * CLI does not enable both capabilities when only one is available.
    *
-   * On Server, A3S (`/a3s-analysis/...`) is Cloud-hosted today, so entitlement
-   * is CAG Hub only. SQAA analysis on Server is a separate LTA track.
+   * Cloud A3S (`/a3s-analysis/...`) lives on the Cloud API host, not on a
+   * Server instance. A Server connection therefore only calls CAG Hub. Server
+   * SQAA analysis, if it ships later, is a different API — not this check.
    *
    * Usage `consumption` is CAG-specific (the SQAA endpoint does not report it) and is
    * only forwarded for `enabled`: once over the limit the remaining headroom is no
