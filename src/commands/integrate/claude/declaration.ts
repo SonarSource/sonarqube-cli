@@ -21,7 +21,6 @@
 import { join } from 'node:path';
 
 import { CONTEXT_AUGMENTATION_TOOL_MATCHER } from '@/commands/hook/context-augmentation-hook-subscriber.ts';
-import { CLI_COMMAND } from '@/core/config-constants.ts';
 import type {
   InstallDecision,
   IntegrationContext,
@@ -293,7 +292,6 @@ function resolveClaudeSkillPath(context: IntegrationContext): string {
 
 function getDesiredClaudeMcpConfig(context: IntegrationContext) {
   return getMcpConfig(
-    CLI_COMMAND,
     context.scope === 'global'
       ? { withFsMount: false }
       : {

@@ -98,7 +98,7 @@ describe('integrate cursor', () => {
 
         const mcp: CursorMcpFile = harness.cwd.file(...MCP_JSON_DIRS).asJson();
         expect(mcp.mcpServers?.sonarqube).toBeDefined();
-        expect(mcp.mcpServers?.sonarqube?.command).toBeDefined();
+        expect(mcp.mcpServers?.sonarqube?.command).toBe('sonar');
         expect(mcp.mcpServers?.sonarqube?.args).toContain('mcp');
         expect(mcp.mcpServers?.sonarqube).not.toHaveProperty('env');
       },

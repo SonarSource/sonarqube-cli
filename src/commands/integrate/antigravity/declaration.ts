@@ -28,7 +28,6 @@ import {
   ANTIGRAVITY_PROJECT_RULES_DIR,
   ANTIGRAVITY_PROMPT_SECRETS_RULE_FILE,
   ANTIGRAVITY_SQAA_RULE_FILE,
-  CLI_COMMAND,
 } from '@/core/config-constants.ts';
 import type { IntegrationContext, IntegrationDeclaration } from '@/core/framework/features';
 import {
@@ -162,8 +161,7 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
           displayName: 'Antigravity MCP configuration',
           targetPath: () => ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
           defaultValue: {},
-          patch: (document) =>
-            upsertJsonMcpServer(document, getMcpConfig(CLI_COMMAND, { withFsMount: false })),
+          patch: (document) => upsertJsonMcpServer(document, getMcpConfig({ withFsMount: false })),
           removePatch: (document) => removeJsonMcpServer(document),
         }),
       ],

@@ -20,7 +20,6 @@
 
 import { join, relative } from 'node:path';
 
-import { CLI_COMMAND } from '@/core/config-constants.ts';
 import type { IntegrationContext, IntegrationDeclaration } from '@/core/framework/features';
 import {
   askUser,
@@ -241,7 +240,6 @@ function createHookCommandEntry(context: IntegrationContext): HookCommandEntry {
 
 function getDesiredCopilotMcpConfig(context: IntegrationContext) {
   return getMcpConfig(
-    CLI_COMMAND,
     context.scope === 'global'
       ? { withFsMount: false }
       : {

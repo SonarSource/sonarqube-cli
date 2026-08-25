@@ -30,7 +30,6 @@ import {
   VORTEX_FEATURE_ID,
   VORTEX_GLOBAL_SKIP_MESSAGE,
 } from '@/commands/integrate/_common/vortex.ts';
-import { CLI_COMMAND } from '@/core/config-constants.ts';
 
 import {
   expectAgentPromptHint,
@@ -115,7 +114,7 @@ describe('integrate antigravity', () => {
         const mcp = harness.userHome.file(...GLOBAL_MCP_CONFIG_PATH).asJson() as {
           mcpServers?: { sonarqube?: { command?: string; args?: string[] } };
         };
-        expect(mcp.mcpServers?.sonarqube?.command).toBe(CLI_COMMAND);
+        expect(mcp.mcpServers?.sonarqube?.command).toBe('sonar');
         expect(mcp.mcpServers?.sonarqube?.args?.slice(0, 2)).toEqual(['run', 'mcp']);
         expect(mcp.mcpServers?.sonarqube?.args ?? []).not.toContain('--project');
         expect(findAntigravityFeature(harness, 'mcp-server')).toBeDefined();
@@ -242,7 +241,7 @@ describe('integrate antigravity', () => {
         const mcp = harness.userHome.file(...GLOBAL_MCP_CONFIG_PATH).asJson() as {
           mcpServers?: { sonarqube?: { command?: string; args?: string[] } };
         };
-        expect(mcp.mcpServers?.sonarqube?.command).toBe(CLI_COMMAND);
+        expect(mcp.mcpServers?.sonarqube?.command).toBe('sonar');
         expect(mcp.mcpServers?.sonarqube?.args?.slice(0, 2)).toEqual(['run', 'mcp']);
         expect(mcp.mcpServers?.sonarqube?.args ?? []).not.toContain('--project');
         expect(findAntigravityFeature(harness, 'mcp-server', 'global')).toBeDefined();
@@ -624,7 +623,7 @@ describe('integrate antigravity', () => {
           mcpServers?: Record<string, { command?: string }>;
         };
         expect(mcp.mcpServers?.other?.command).toBe('other-mcp');
-        expect(mcp.mcpServers?.sonarqube?.command).toBe(CLI_COMMAND);
+        expect(mcp.mcpServers?.sonarqube?.command).toBe('sonar');
       },
       { timeout: 30000 },
     );
@@ -653,7 +652,7 @@ describe('integrate antigravity', () => {
           JSON.stringify({
             mcpServers: {
               sonarqube: {
-                command: CLI_COMMAND,
+                command: 'sonar.exe',
                 args: ['run', 'mcp', '--project', 'proj-a'],
               },
             },
@@ -667,9 +666,10 @@ describe('integrate antigravity', () => {
         expect(result.exitCode).toBe(0);
 
         const mcp = harness.userHome.file(...GLOBAL_MCP_CONFIG_PATH).asJson() as {
-          mcpServers?: { sonarqube?: { args?: string[] } };
+          mcpServers?: { sonarqube?: { command?: string; args?: string[] } };
         };
         expect(mcp.mcpServers?.sonarqube?.args).toEqual(['run', 'mcp']);
+        expect(mcp.mcpServers?.sonarqube?.command).toBe('sonar');
       },
       { timeout: 30000 },
     );

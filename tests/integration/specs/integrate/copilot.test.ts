@@ -22,8 +22,6 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { CLI_COMMAND } from '@/core/config-constants.ts';
-
 import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
@@ -90,11 +88,11 @@ describe('integrate copilot', () => {
         );
 
         // .mcp.json: present and registers the sonarqube MCP server using
-        // the platform CLI command.
+        // the PATH command `sonar` (Windows PATHEXT resolves sonar.exe).
         expect(harness.cwd.exists('.mcp.json')).toBe(true);
         const mcp: McpJson = harness.cwd.file('.mcp.json').asJson();
         const sonar = mcp.mcpServers?.sonarqube;
-        expect(sonar?.command).toBe(CLI_COMMAND);
+        expect(sonar?.command).toBe('sonar');
         expect(sonar?.args?.slice(0, 2)).toEqual(['run', 'mcp']);
 
         // Completion summary

@@ -21,7 +21,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
-import { getMcpConfig } from '@/core/host/mcp/mcp-helper.ts';
+import { getMcpConfig, MCP_CLI_COMMAND } from '@/core/host/mcp/mcp-helper.ts';
 
 import { restoreEnv } from '../../../../_common/isolated-cli-env.ts';
 
@@ -35,8 +35,8 @@ describe('getMcpConfig', () => {
   it('omits env when SONAR_USER_HOME is unset', () => {
     delete process.env[ENV_SONAR_USER_HOME];
 
-    expect(getMcpConfig('sonar', { withFsMount: false })).toEqual({
-      command: 'sonar',
+    expect(getMcpConfig({ withFsMount: false })).toEqual({
+      command: MCP_CLI_COMMAND,
       args: ['run', 'mcp'],
     });
   });
@@ -44,14 +44,21 @@ describe('getMcpConfig', () => {
   it('omits env when SONAR_USER_HOME is blank', () => {
     process.env[ENV_SONAR_USER_HOME] = '   ';
 
-    expect(getMcpConfig('sonar', { withFsMount: false })).not.toHaveProperty('env');
+    expect(getMcpConfig({ withFsMount: false })).not.toHaveProperty('env');
+  });
+
+  it('always uses sonar as the MCP command, not a platform-specific binary name', () => {
+    delete process.env[ENV_SONAR_USER_HOME];
+
+    expect(MCP_CLI_COMMAND).toBe('sonar');
+    expect(getMcpConfig({ withFsMount: false }).command).toBe('sonar');
   });
 
   it('forwards the resolved SONAR_USER_HOME path when set', () => {
     process.env[ENV_SONAR_USER_HOME] = '/custom/sonar-home';
 
-    expect(getMcpConfig('sonar', { withFsMount: false, projectKey: 'my-project' })).toEqual({
-      command: 'sonar',
+    expect(getMcpConfig({ withFsMount: false, projectKey: 'my-project' })).toEqual({
+      command: MCP_CLI_COMMAND,
       args: ['run', 'mcp', '--project', 'my-project'],
       env: { [ENV_SONAR_USER_HOME]: '/custom/sonar-home' },
     });

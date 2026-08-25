@@ -76,8 +76,10 @@ function mcpServerEnv(): Record<string, string> | undefined {
   return { [ENV_SONAR_USER_HOME]: getSonarUserHome() };
 }
 
+/** PATH command name written into MCP configs. Windows PATHEXT resolves `sonar` to `sonar.exe`. */
+export const MCP_CLI_COMMAND = 'sonar';
+
 export function getMcpConfig(
-  cliPath: string,
   context: McpServerContext,
   options: McpServerOptions = {},
 ): McpServerConfig {
@@ -100,7 +102,9 @@ export function getMcpConfig(
   }
 
   const env = mcpServerEnv();
-  return env === undefined ? { command: cliPath, args } : { command: cliPath, args, env };
+  return env === undefined
+    ? { command: MCP_CLI_COMMAND, args }
+    : { command: MCP_CLI_COMMAND, args, env };
 }
 
 // Path where update-ca-certificates picks up custom CA certs inside the MCP container (Debian/Alpine convention).
