@@ -20,7 +20,6 @@
 
 import { join } from 'node:path';
 
-import { CLI_COMMAND } from '@/core/config-constants.ts';
 import type {
   IntegrationContext,
   IntegrationDeclaration,
@@ -250,7 +249,6 @@ function upsertCodexMcpServer(
 
 function getDesiredCodexMcpConfig(context: IntegrationContext) {
   return getMcpConfig(
-    CLI_COMMAND,
     context.scope === 'global'
       ? { withFsMount: false }
       : {

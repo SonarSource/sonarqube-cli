@@ -20,7 +20,7 @@
 
 import { join } from 'node:path';
 
-import { CLI_COMMAND, CURSOR_CONFIG_DIR } from '@/core/config-constants.ts';
+import { CURSOR_CONFIG_DIR } from '@/core/config-constants.ts';
 import type { IntegrationContext, IntegrationDeclaration } from '@/core/framework/features';
 import {
   askUser,
@@ -85,7 +85,6 @@ function resolveCursorMcpConfigPath(context: IntegrationContext): string {
 
 function getDesiredCursorMcpConfig(context: IntegrationContext) {
   return getMcpConfig(
-    CLI_COMMAND,
     context.scope === 'global'
       ? { withFsMount: false }
       : {
