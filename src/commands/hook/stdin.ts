@@ -89,17 +89,32 @@ function parseStdinJson(raw: string): unknown {
 }
 
 export async function readRawStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const onData = (chunk: Buffer) => {
+    chunks.push(chunk);
+  };
+  let resolveRead!: (value: string) => void;
+  let rejectRead!: (reason: Error) => void;
+  const readPromise = new Promise<string>((resolve, reject) => {
+    resolveRead = resolve;
+    rejectRead = reject;
+  });
+  const onEnd = () => {
+    resolveRead(Buffer.concat(chunks).toString('utf-8'));
+  };
+  const onError = (err: Error) => {
+    rejectRead(err);
+  };
+
+  process.stdin.on('data', onData);
+  process.stdin.on('end', onEnd);
+  process.stdin.on('error', onError);
+
   try {
     return await Promise.race([
-      new Promise<string>((resolve, reject) => {
-        const chunks: Buffer[] = [];
-        process.stdin.on('data', (chunk: Buffer) => chunks.push(chunk));
-        process.stdin.on('end', () => {
-          resolve(Buffer.concat(chunks).toString('utf-8'));
-        });
-        process.stdin.on('error', reject);
-      }),
+      readPromise,
       new Promise<never>((_, reject) => {
         timeoutId = setTimeout(() => {
           reject(new Error(`stdin read timed out after ${STDIN_TIMEOUT_MS}ms`));
@@ -108,5 +123,11 @@ export async function readRawStdin(): Promise<string> {
     ]);
   } finally {
     clearTimeout(timeoutId);
+    process.stdin.off('data', onData);
+    process.stdin.off('end', onEnd);
+    process.stdin.off('error', onError);
+    process.stdin.pause();
+    // An idle pipe otherwise keeps the event loop alive after timeout.
+    process.stdin.destroy();
   }
 }
