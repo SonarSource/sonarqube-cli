@@ -57,7 +57,7 @@ export function buildVortexRecommendation(
     return undefined;
   }
   if (isServer) {
-    return "Ask your administrator to enable the Vortex add-on, or run 'sonar integrate' to remove the Vortex integration";
+    return "Ask your administrator, or run 'sonar integrate' to remove the Vortex integration";
   }
   const target = orgKey ? ` for organization '${orgKey}'` : '';
   return `Re-enable Vortex${target}, or run 'sonar integrate' to remove the Vortex integration`;

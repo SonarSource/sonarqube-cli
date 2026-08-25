@@ -88,7 +88,7 @@ export const VORTEX_SERVER_UNAVAILABLE_MESSAGE =
   'Vortex requires SonarQube Server 2026.5 Enterprise or later.';
 
 export const VORTEX_SERVER_NOT_ENTITLED_MESSAGE =
-  'Vortex is not licensed on this SonarQube Server. Ask your administrator to enable the Vortex add-on.';
+  'Vortex is not licensed on this SonarQube Server. Ask your administrator.';
 
 export const VORTEX_UNINSTALL_MESSAGE =
   'Vortex is no longer available for this organization. Removing the existing Vortex integration.';
@@ -121,8 +121,13 @@ export interface ResolvedVortexSetup {
   scaEnabled?: boolean;
 }
 
-function scaEnablementConnection(isServer: boolean): 'cloud' | 'on-premise' {
-  return isServer ? 'on-premise' : 'cloud';
+async function resolveScaEnabled(auth: ResolvedAuth, isServer: boolean): Promise<boolean> {
+  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  const scaStatus = await client.getScaEnablement(isServer ? 'on-premise' : 'cloud', auth.orgKey);
+  if (scaStatus === 'check_failed') {
+    warn(VORTEX_SCA_CHECK_FAILED_MESSAGE);
+  }
+  return scaStatus === 'enabled';
 }
 
 /**
@@ -164,16 +169,7 @@ export async function resolveVortexSetup(
     return { disposition: 'install', scaEnabled: false };
   }
 
-  const client = new SonarQubeClient(params.auth.serverUrl, params.auth.token);
   // The rendered context augmentation skill advertises
   // SCA tools only when SCA is available on the connection.
-  const scaStatus = await client.getScaEnablement(
-    scaEnablementConnection(isServer),
-    params.auth.orgKey,
-  );
-  if (scaStatus === 'check_failed') {
-    warn(VORTEX_SCA_CHECK_FAILED_MESSAGE);
-  }
-
-  return { disposition: 'install', scaEnabled: scaStatus === 'enabled' };
+  return { disposition: 'install', scaEnabled: await resolveScaEnabled(params.auth, isServer) };
 }
