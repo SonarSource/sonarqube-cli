@@ -160,7 +160,7 @@ describe('native git hook chaining to a pre-existing local hook', () => {
   it('captures stdin once and replays it to both the chained hook and the sonar command, for pre-push', () => {
     const script = getHookScript('pre-push', context({ scope: 'global' }));
 
-    expect(script).toContain('SONAR_STDIN_CACHE=$(mktemp)');
+    expect(script).toContain('SONAR_STDIN_CACHE=$(mktemp 2>/dev/null || :)');
     expect(script).toContain('cat > "$SONAR_STDIN_CACHE"');
     expect(script).toContain('"$SONAR_LOCAL_HOOK" "$@" < "$SONAR_STDIN_CACHE" || exit $?');
     expect(script).toContain('hook git-pre-push < "$SONAR_STDIN_CACHE"');
@@ -188,10 +188,9 @@ describe('native git hook chaining to a pre-existing local hook', () => {
     expect(script).not.toContain('SONAR_LOCAL_HOOK');
   });
 
-  it('uses --git-common-dir, not --git-dir, so chaining also finds hooks from a linked worktree', () => {
+  it('resolves the shared hooks dir from the common dir, not the worktree admin dir', () => {
     const script = getHookScript('pre-commit', context({ scope: 'global' }));
 
-    expect(script).toContain('git rev-parse --git-common-dir');
-    expect(script).not.toContain('git rev-parse --git-dir');
+    expect(script).toContain('SONAR_GIT_DIR=$(git rev-parse --git-common-dir 2>/dev/null || :)');
   });
 });

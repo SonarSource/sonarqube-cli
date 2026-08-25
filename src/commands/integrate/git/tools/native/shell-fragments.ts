@@ -62,11 +62,13 @@ function nativeBinBlock(): string {
  */
 function stdinCaptureBlock(): string {
   return [
-    // A failed mktemp leaves SONAR_STDIN_CACHE empty; `cat >` into that empty path would
-    // otherwise fail with a raw, confusing shell error instead of a clear one.
-    'SONAR_STDIN_CACHE=$(mktemp) || { echo "sonarqube-cli: mktemp failed, skipping secrets scan"; exit 0; }',
+    // mktemp can fail on an unwritable/full TMPDIR. Falling back to a pid-scoped path (rather
+    // than exiting here) matters because this block runs before nativeChainBlock() — bailing out
+    // here would skip the chained pre-existing hook too, not just Sonar's own scan.
+    'SONAR_STDIN_CACHE=$(mktemp 2>/dev/null || :)',
+    '[ -z "$SONAR_STDIN_CACHE" ] && SONAR_STDIN_CACHE="${TMPDIR:-/tmp}/sonar-stdin-$$"',
     'trap \'rm -f "$SONAR_STDIN_CACHE"\' EXIT',
-    'cat > "$SONAR_STDIN_CACHE"',
+    `cat > "$SONAR_STDIN_CACHE" || { echo "${SONAR_HOOK_SKIP_SECRETS_MESSAGE}"; exit 0; }`,
   ].join('\n');
 }
 
