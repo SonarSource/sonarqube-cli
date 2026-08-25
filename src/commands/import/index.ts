@@ -26,6 +26,11 @@ import {
   type ProvisionedProject,
   SonarQubeClient,
 } from '@/core/server/client.ts';
+import {
+  emitUserOnboardingCompleted,
+  emitUserOnboardingExited,
+  emitUserOnboardingStarted,
+} from '@/core/telemetry/telemetry-events.ts';
 import { info, intro, outro } from '@/core/ui';
 import { ImportProgress } from '@/core/ui/components/import-progress.ts';
 
@@ -37,7 +42,6 @@ import type {
 import {
   assertSupportedAlm,
   computeInstallationKey,
-  type RepoResolution,
   resolveAlmKey,
   type ResolvedRepo,
   resolveOrg,
@@ -47,41 +51,10 @@ import type { ImportOptions } from './_common/types';
 
 export { type ImportOptions } from './_common/types';
 
+const noop = () => undefined;
+
 /** Max number of `provision_projects` calls run concurrently. */
 const IMPORT_PROVISION_CONCURRENCY_LIMIT = 10;
-
-/** Resolves the org tied to the active connection, then the repos to import into it. */
-async function resolveOrgAndRepos(
-  client: SonarQubeClient,
-  orgKey: string | undefined,
-  options: ImportOptions,
-): Promise<{ orgKey: string; almKey: string | undefined } & RepoResolution> {
-  const {
-    key: resolvedOrgKey,
-    almKey: resolvedAlmKey,
-    onlyPrivateProjectsEnabled,
-  } = await resolveOrg(client, orgKey);
-
-  info(`Organization: ${resolvedOrgKey}`);
-
-  const [almKey, privateProjectsAvailable] = await Promise.all([
-    resolveAlmKey(client, resolvedOrgKey, resolvedAlmKey),
-    client.hasPrivateProjectsEntitlement(resolvedOrgKey),
-  ]);
-
-  // Before any repository is listed, so an unsupported org stops here rather than after a full
-  // paginated fetch.
-  assertSupportedAlm(resolvedOrgKey, almKey);
-
-  const onlyPrivateProjects: OnlyPrivateProjects = {
-    enabled: onlyPrivateProjectsEnabled ?? false,
-    available: privateProjectsAvailable,
-  };
-
-  const outcome = await resolveRepos(client, resolvedOrgKey, almKey, onlyPrivateProjects, options);
-
-  return { orgKey: resolvedOrgKey, almKey, ...outcome };
-}
 
 /** Builds the `runWithConcurrencyLimit` task that provisions one repo and updates `progress`. */
 function createProvisionTask(
@@ -235,47 +208,100 @@ export async function importHandler(
 
   intro('Import repositories', 'SonarQube');
 
-  const resolution = await resolveOrgAndRepos(client, auth.orgKey, options);
+  emitUserOnboardingStarted(auth, { devops_platform: null, plan: null }).catch(noop);
 
-  if (resolution.kind === 'streaming') {
-    const { succeeded, failed, skipped } = await runBulkImportJob(
+  // almKey is set before assertSupportedAlm so UserOnboardingExited always carries the platform.
+  let almKey: string | undefined;
+  let completedEmitted = false;
+  try {
+    const {
+      key: resolvedOrgKey,
+      almKey: orgRecordAlmKey,
+      onlyPrivateProjectsEnabled,
+    } = await resolveOrg(client, auth.orgKey);
+    info(`Organization: ${resolvedOrgKey}`);
+    const almKeyPromise = resolveAlmKey(client, resolvedOrgKey, orgRecordAlmKey);
+    const entitlementPromise = client.hasPrivateProjectsEntitlement(resolvedOrgKey);
+    almKey = await almKeyPromise;
+    const privateProjectsAvailable = await entitlementPromise;
+
+    assertSupportedAlm(resolvedOrgKey, almKey);
+
+    const onlyPrivateProjects: OnlyPrivateProjects = {
+      enabled: onlyPrivateProjectsEnabled ?? false,
+      available: privateProjectsAvailable,
+    };
+    const resolution = await resolveRepos(
       client,
-      resolution.orgKey,
-      resolution.almKey,
-      resolution.collection,
-      resolution.regex,
+      resolvedOrgKey,
+      almKey,
+      onlyPrivateProjects,
+      options,
     );
+
+    if (resolution.kind === 'streaming') {
+      const { succeeded, failed, skipped } = await runBulkImportJob(
+        client,
+        resolvedOrgKey,
+        almKey,
+        resolution.collection,
+        resolution.regex,
+      );
+      reportSkipped(skipped);
+      emitUserOnboardingCompleted(auth, {
+        devops_platform: almKey ?? null,
+        import_method: 'bulk',
+        plan: null,
+        project_count: succeeded,
+      }).catch(noop);
+      completedEmitted = true;
+      reportOutcome(
+        succeeded,
+        failed,
+        skipped.length,
+        buildOnboardingDashboardUrl(auth.serverUrl, resolvedOrgKey),
+      );
+      return;
+    }
+
+    const { repos, skipped } = resolution;
+
+    info(`Repositories to import: ${repos.length}`);
     reportSkipped(skipped);
+
+    const progress = new ImportProgress({ maxVisible: IMPORT_PROVISION_CONCURRENCY_LIMIT });
+    progress.setTotal(repos.length);
+    progress.addRepos(repos.map((repo) => repo.slug));
+    progress.start();
+
+    await runWithConcurrencyLimit(
+      repos,
+      IMPORT_PROVISION_CONCURRENCY_LIMIT,
+      createProvisionTask(client, resolvedOrgKey, progress),
+    );
+
+    const { succeeded, failed } = progress.finish();
+    emitUserOnboardingCompleted(auth, {
+      devops_platform: almKey ?? null,
+      import_method: 'single',
+      plan: null,
+      project_count: succeeded,
+    }).catch(noop);
+    completedEmitted = true;
     reportOutcome(
       succeeded,
       failed,
       skipped.length,
-      buildOnboardingDashboardUrl(auth.serverUrl, resolution.orgKey),
+      buildOnboardingDashboardUrl(auth.serverUrl, resolvedOrgKey),
     );
-    return;
+  } catch (err) {
+    if (!completedEmitted) {
+      emitUserOnboardingExited(auth, {
+        destination: 'error',
+        devops_platform: almKey ?? null,
+        plan: null,
+      }).catch(noop);
+    }
+    throw err;
   }
-
-  const { repos, skipped } = resolution;
-
-  info(`Repositories to import: ${repos.length}`);
-  reportSkipped(skipped);
-
-  const progress = new ImportProgress({ maxVisible: IMPORT_PROVISION_CONCURRENCY_LIMIT });
-  progress.setTotal(repos.length);
-  progress.addRepos(repos.map((repo) => repo.slug));
-  progress.start();
-
-  await runWithConcurrencyLimit(
-    repos,
-    IMPORT_PROVISION_CONCURRENCY_LIMIT,
-    createProvisionTask(client, resolution.orgKey, progress),
-  );
-
-  const { succeeded, failed } = progress.finish();
-  reportOutcome(
-    succeeded,
-    failed,
-    skipped.length,
-    buildOnboardingDashboardUrl(auth.serverUrl, resolution.orgKey),
-  );
 }

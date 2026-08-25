@@ -39,6 +39,9 @@ import type {
   StoredTelemetryEvent,
   TelemetryConnectionType,
   TelemetryEventIdentityPayload,
+  UserOnboardingCompletedEventPayload,
+  UserOnboardingExitedEventPayload,
+  UserOnboardingStartedEventPayload,
 } from '../state/state.ts';
 import { getActiveConnection, tryLoadState } from '../state/state-manager.ts';
 import { isTelemetryEnabled } from './enabled.ts';
@@ -121,6 +124,21 @@ export type CommandExecutedFields = Omit<
   keyof TelemetryEventIdentityPayload
 >;
 
+export type UserOnboardingStartedFields = Omit<
+  UserOnboardingStartedEventPayload,
+  'source' | 'version' | 'user_uuid'
+>;
+
+export type UserOnboardingCompletedFields = Omit<
+  UserOnboardingCompletedEventPayload,
+  'source' | 'version' | 'user_uuid' | 'organization_uuid_v4'
+>;
+
+export type UserOnboardingExitedFields = Omit<
+  UserOnboardingExitedEventPayload,
+  'source' | 'version' | 'user_uuid'
+>;
+
 /**
  * Emits one CliAnalysisCompleted event when telemetry is enabled.
  * Resolves identity from state + auth; no-ops on opt-out or missing installationId.
@@ -161,6 +179,68 @@ export async function emitIntegrationConfigured(
     },
     event_payload: { ...base, ...fields },
   });
+}
+
+async function appendLeanOnboardingEvent(
+  auth: ResolvedAuth,
+  eventType: 'Analytics.Cli.UserOnboardingStarted' | 'Analytics.Cli.UserOnboardingExited',
+  fields: UserOnboardingStartedFields | UserOnboardingExitedFields,
+): Promise<void> {
+  const base = await buildIdentityBase((conn) => resolveCommandTelemetryIdentity(conn, auth));
+  if (!base) return;
+  appendTelemetryEvent({
+    metadata: {
+      event_id: randomUUID(),
+      source: { domain: 'CLI' },
+      event_type: eventType,
+      event_version: '0',
+      event_timestamp: String(Date.now()),
+    },
+    event_payload: {
+      source: 'cli' as const,
+      user_uuid: base.user_uuid,
+      version: VERSION,
+      ...fields,
+    },
+  } as StoredTelemetryEvent);
+}
+
+export async function emitUserOnboardingStarted(
+  auth: ResolvedAuth,
+  fields: UserOnboardingStartedFields,
+): Promise<void> {
+  await appendLeanOnboardingEvent(auth, 'Analytics.Cli.UserOnboardingStarted', fields);
+}
+
+export async function emitUserOnboardingCompleted(
+  auth: ResolvedAuth,
+  fields: UserOnboardingCompletedFields,
+): Promise<void> {
+  const base = await buildIdentityBase((conn) => resolveCommandTelemetryIdentity(conn, auth));
+  if (!base) return;
+  appendTelemetryEvent({
+    metadata: {
+      event_id: randomUUID(),
+      source: { domain: 'CLI' },
+      event_type: 'Analytics.Cli.UserOnboardingCompleted',
+      event_version: '0',
+      event_timestamp: String(Date.now()),
+    },
+    event_payload: {
+      organization_uuid_v4: base.organization_uuid_v4,
+      source: 'cli' as const,
+      user_uuid: base.user_uuid,
+      version: VERSION,
+      ...fields,
+    },
+  });
+}
+
+export async function emitUserOnboardingExited(
+  auth: ResolvedAuth,
+  fields: UserOnboardingExitedFields,
+): Promise<void> {
+  await appendLeanOnboardingEvent(auth, 'Analytics.Cli.UserOnboardingExited', fields);
 }
 
 /**
