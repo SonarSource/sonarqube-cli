@@ -265,7 +265,7 @@ describe('integrate claude — Vortex entitlement', () => {
         state.dependencies.installed.some(
           (dependency) => dependency.id === CONTEXT_AUGMENTATION_BINARY_NAME,
         ),
-      ).toBe(false);
+      ).toBe(true);
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
       expect(
         harness.cwd.file('.claude', 'settings.json').asJson().hooks?.PostToolUse,
