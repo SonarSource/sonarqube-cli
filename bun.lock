@@ -9,7 +9,7 @@
         "@sentry/bun": "10.68.0",
         "@toon-format/toon": "2.3.1",
         "commander": "15.0.0",
-        "js-yaml": "5.3.0",
+        "js-yaml": "5.4.0",
         "launchdarkly-node-client-sdk": "3.4.3",
         "node-forge": "1.4.0",
         "openpgp": "6.3.1",
@@ -428,7 +428,7 @@
 
     "js-tokens": ["js-tokens@4.0.0", "https://repox.jfrog.io/artifactory/api/npm/npm/js-tokens/-/js-tokens-4.0.0.tgz", {}, "sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ=="],
 
-    "js-yaml": ["js-yaml@5.3.0", "https://repox.jfrog.io/artifactory/api/npm/npm/js-yaml/-/js-yaml-5.3.0.tgz", { "dependencies": { "argparse": "^2.0.1" }, "bin": { "js-yaml": "bin/js-yaml.mjs" } }, "sha512-muutsYr+e2+d3rTgUGslq5rxbBlUy3cJ61IsHag2QNDQV+7zXWjkUpmALIajhrlLlrgRUiymj6U3zUr/TMK84Q=="],
+    "js-yaml": ["js-yaml@5.4.0", "https://repox.jfrog.io/artifactory/api/npm/npm/js-yaml/-/js-yaml-5.4.0.tgz", {"dependencies": {"argparse": "^2.0.1"}, "bin": {"js-yaml": "bin/js-yaml.mjs"}}, "sha512-jE7vUJIebKzYQI5xu4co5CRBDlDEYnHrdzsxs4O2giCz4v2SbVMYKpmt1D9L38OKQAeCWmrOTRiCV93u0UkaJA=="],
 
     "jsesc": ["jsesc@3.1.0", "https://repox.jfrog.io/artifactory/api/npm/npm/jsesc/-/jsesc-3.1.0.tgz", { "bin": { "jsesc": "bin/jsesc" } }, "sha512-/sM3dO2FOzXjKQhJuo0Q173wf2KOo8t4I8vHy6lF9poUp7bKT0/NHE8fPX23PwfhnykfqnC2xRxOnVw5XuGIaA=="],
 

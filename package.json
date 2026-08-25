@@ -103,7 +103,7 @@
     "@sentry/bun": "10.68.0",
     "@toon-format/toon": "2.3.1",
     "commander": "15.0.0",
-    "js-yaml": "5.3.0",
+    "js-yaml": "5.4.0",
     "launchdarkly-node-client-sdk": "3.4.3",
     "node-forge": "1.4.0",
     "openpgp": "6.3.1",
