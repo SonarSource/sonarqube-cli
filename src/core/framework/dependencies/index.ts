@@ -22,9 +22,7 @@ export type { BaseDependencyOptions, DependencyDeclaration } from './common.ts';
 export {
   scaScannerBinaryDependency,
   sonarSecretsBinaryDependency,
-  SonarSourceBinary,
   sonarSourceBinary,
   SonarSourceBinaryDependency,
   type SonarSourceBinaryDependencyOptions,
-  type SonarSourceBinaryDescriptor,
 } from './sonarsource-binary.ts';

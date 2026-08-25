@@ -22,10 +22,8 @@ export {
   type DependencyDeclaration,
   scaScannerBinaryDependency,
   sonarSecretsBinaryDependency,
-  SonarSourceBinary,
   sonarSourceBinary,
   type SonarSourceBinaryDependencyOptions,
-  type SonarSourceBinaryDescriptor,
 } from '../dependencies';
 export {
   jsonPatch,
