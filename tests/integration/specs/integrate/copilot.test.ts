@@ -181,7 +181,6 @@ describe('integrate copilot', () => {
         expect(state.dependencies.installed).toMatchObject([
           {
             id: 'sonar-secrets',
-            dependencyType: 'sonarsource-binary',
           },
         ]);
       },

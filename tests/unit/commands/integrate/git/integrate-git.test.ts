@@ -497,7 +497,6 @@ describe('integrateGit', () => {
       expect(state.dependencies.installed).toMatchObject([
         {
           id: 'sonar-secrets',
-          dependencyType: 'sonarsource-binary',
         },
       ]);
     } finally {
@@ -542,7 +541,6 @@ describe('integrateGit', () => {
       expect(state.dependencies.installed).toMatchObject([
         {
           id: 'sonar-secrets',
-          dependencyType: 'sonarsource-binary',
         },
       ]);
     } finally {
@@ -576,7 +574,6 @@ describe('integrateGit', () => {
       expect(state.dependencies.installed).toMatchObject([
         {
           id: 'sonar-secrets',
-          dependencyType: 'sonarsource-binary',
         },
       ]);
     } finally {

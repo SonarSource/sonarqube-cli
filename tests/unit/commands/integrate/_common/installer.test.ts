@@ -175,11 +175,9 @@ describe('generic integration installer', () => {
     loadStateSpy.mockReturnValue(state);
     const dependency: DependencyDeclaration = {
       id: 'shared-binary',
-      dependencyType: 'binary',
       version: '2',
       installOrUpdate: () => ({
         id: 'shared-binary',
-        dependencyType: 'binary',
         version: '2',
         path: '/opt/sonar/shared-binary',
       }),
@@ -216,7 +214,6 @@ describe('generic integration installer', () => {
     expect(state.dependencies.installed).toMatchObject([
       {
         id: 'shared-binary',
-        dependencyType: 'binary',
         version: '2',
         path: '/opt/sonar/shared-binary',
       },
@@ -302,11 +299,9 @@ describe('generic integration installer', () => {
     loadStateSpy.mockReturnValue(state);
     const dependency: DependencyDeclaration = {
       id: 'unnamed-binary',
-      dependencyType: 'binary',
       version: '1',
       installOrUpdate: () => ({
         id: 'unnamed-binary',
-        dependencyType: 'binary',
         version: '1',
         path: '/opt/sonar/unnamed-binary',
       }),

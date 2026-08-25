@@ -494,7 +494,6 @@ export class EnvironmentBuilder {
       });
       installedDependencies.push({
         id: SECRETS_SPEC.name,
-        dependencyType: 'sonarsource-binary',
         version: SECRETS_SPEC.version,
         path: binaryPath,
         updatedAt: new Date().toISOString(),
@@ -512,7 +511,6 @@ export class EnvironmentBuilder {
       });
       installedDependencies.push({
         id: CONTEXT_AUGMENTATION_BINARY_NAME,
-        dependencyType: 'context-augmentation-binary',
         version: SONAR_CONTEXT_AUGMENTATION_VERSION,
         path: binaryPath,
         updatedAt: new Date().toISOString(),

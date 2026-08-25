@@ -160,7 +160,6 @@ describe('integrate claude', () => {
       expect(state.dependencies.installed).toMatchObject([
         {
           id: 'sonar-secrets',
-          dependencyType: 'sonarsource-binary',
         },
       ]);
     },

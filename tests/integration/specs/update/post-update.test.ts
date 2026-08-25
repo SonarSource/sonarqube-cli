@@ -261,7 +261,6 @@ describe('post-update migration', () => {
             installed: [
               {
                 id: CONTEXT_AUGMENTATION_BINARY_NAME,
-                dependencyType: 'context-augmentation-binary',
                 version: staleCagVersion,
                 path: installedBinaryPath,
                 updatedByCliVersion: '0.5.0',

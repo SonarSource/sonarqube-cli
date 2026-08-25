@@ -47,7 +47,6 @@ export function sonarSourceBinary(
 export class SonarSourceBinaryDependency implements DependencyDeclaration {
   readonly id: string;
   readonly displayName?: string;
-  readonly dependencyType = 'sonarsource-binary';
   readonly version: string;
 
   constructor(private readonly options: SonarSourceBinaryDependencyOptions) {
@@ -60,7 +59,6 @@ export class SonarSourceBinaryDependency implements DependencyDeclaration {
     const result = await installBinary(this.options.spec);
     return {
       id: this.id,
-      dependencyType: this.dependencyType,
       version: this.version,
       path: result.binaryPath,
     };

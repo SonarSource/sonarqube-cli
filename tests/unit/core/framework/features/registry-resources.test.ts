@@ -431,7 +431,6 @@ describe('declarative integration framework - resources and state recording', ()
     expect(installBinarySpy).toHaveBeenCalledWith(SECRETS_SPEC);
     expect(applied).toEqual({
       id: 'binary',
-      dependencyType: 'sonarsource-binary',
       version: SECRETS_SPEC.version,
       path: binaryPath,
     });
