@@ -24,7 +24,7 @@ import { spawn } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { getNetworkConfigOrThrow } from '@/core/host/connectivity/network-config.ts';
 import type { ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
@@ -52,10 +52,11 @@ function debugLog(message: string): void {
 }
 
 export async function runMcp(
-  auth: ResolvedAuth,
+  ctx: CommandAuthenticatedInvocationContext,
   options: McpRunOptions = {},
   network: ResolvedNetworkConfig = getNetworkConfigOrThrow(),
 ): Promise<void> {
+  const { auth } = ctx;
   const detection = await detectContainerRuntime();
   if (!detection.runtime) {
     throw new CommandFailedError('A container runtime (Docker/Podman/Nerdctl) is required.', {

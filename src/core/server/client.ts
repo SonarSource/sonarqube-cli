@@ -21,6 +21,7 @@
 // SonarQube API HTTP client
 
 import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
+import { INVOCATION_ID, SONAR_INVOCATION_ID_HEADER } from '@/core/telemetry/invocation-id.ts';
 import { print } from '@/core/ui';
 
 import { version as VERSION } from '../../../package.json';
@@ -267,14 +268,20 @@ export class SonarQubeClient {
   /**
    * Make POST request to SonarQube API using Bearer token
    */
-  async post<T>(endpoint: string, body: unknown, baseUrl?: string): Promise<T> {
+  async post<T>(
+    endpoint: string,
+    body: unknown,
+    baseUrl?: string,
+    extraHeaders?: Record<string, string>,
+  ): Promise<T> {
     const url = `${baseUrl ?? this.serverURL}${endpoint}`;
+    const headers = { ...this.commonHeaders('json'), ...extraHeaders };
 
     const response = await fetchGuarded(
       url,
       buildFetchInit(
         'POST',
-        this.commonHeaders('json'),
+        headers,
         POST_REQUEST_TIMEOUT_MS,
         JSON.stringify(body),
         buildFetchNetworkOptions(url),
@@ -896,6 +903,7 @@ export class SonarQubeClient {
         endpoint,
         request,
         resolveFromEndpoint(this.serverURL, endpoint),
+        { [SONAR_INVOCATION_ID_HEADER]: INVOCATION_ID },
       );
     } catch (err) {
       // 403 on this endpoint means Agentic Pack entitlement was revoked.

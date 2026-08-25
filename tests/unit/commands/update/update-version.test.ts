@@ -20,13 +20,16 @@
 
 import { EventEmitter } from 'node:events';
 
-import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
+import { afterAll, afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { clearNetworkConfigCache } from '@/core/host/connectivity/network-config.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
-// Mock node:child_process before importing self-update so that the named
-// imports (spawn, spawnSync) in self-update.ts resolve to the test doubles.
+// Spy on the real node:child_process / platform-detector modules rather than
+// mock.module()-ing them: mock.module() swaps the module in the global registry for the
+// rest of the test process (not just this file), so any later file that also imports
+// node:child_process observes these test doubles instead of the real functions. spyOn
+// mutates a property on the one real, shared module object and is restored per test.
 const childProcess = await import('node:child_process');
 type MockChildProcess = EventEmitter & { unref: () => void };
 type MockSpawnSyncResult = { status: number | null; error?: Error };
@@ -47,25 +50,25 @@ function createSpawnChild(
   return child;
 }
 
-const spawnMock = mock(() => createSpawnChild());
-const spawnSyncMock = mock((): MockSpawnSyncResult => ({ status: 0 }));
-void mock.module('node:child_process', () => ({
-  ...childProcess,
-  spawn: spawnMock as unknown as typeof childProcess.spawn,
-  spawnSync: spawnSyncMock as unknown as typeof childProcess.spawnSync,
-}));
+const spawnMock = spyOn(childProcess, 'spawn').mockImplementation((() =>
+  createSpawnChild()) as unknown as typeof childProcess.spawn);
+const spawnSyncMock = spyOn(childProcess, 'spawnSync').mockImplementation(
+  (() => ({ status: 0 }) as MockSpawnSyncResult) as unknown as typeof childProcess.spawnSync,
+);
 
-// Mock platform-detector so both Unix and Windows branches are reachable on any OS.
+// Both Unix and Windows branches must be reachable on any OS, hence the spy.
 const platformDetector = await import('@/core/host/environment/platform-detector.ts');
-const isWindowsMock = mock(() => false);
-void mock.module('@/core/host/environment/platform-detector.ts', () => ({
-  ...platformDetector,
-  isWindows: isWindowsMock,
-}));
+const isWindowsMock = spyOn(platformDetector, 'isWindows').mockImplementation(() => false);
 
 const { checkForUpdate } = await import('@/commands/update/update-check.ts');
 const { fetchLatestVersion } = await import('@/core/update/check.ts');
 const { updateVersion } = await import('@/commands/update');
+
+afterAll(() => {
+  spawnMock.mockRestore();
+  spawnSyncMock.mockRestore();
+  isWindowsMock.mockRestore();
+});
 
 function stableVersionResponse(version: string) {
   return {
@@ -254,7 +257,8 @@ describe('updateVersion --force', () => {
     setMockUi(true);
     clearMockUiCalls();
     spawnMock.mockClear();
-    spawnMock.mockImplementation(() => createSpawnChild());
+    spawnMock.mockImplementation((() =>
+      createSpawnChild()) as unknown as typeof childProcess.spawn);
     spawnSyncMock.mockClear();
     isWindowsMock.mockImplementation(() => false);
     fetchSpy = spyOn(globalThis, 'fetch');
@@ -310,7 +314,9 @@ describe('updateVersion --force', () => {
   });
 
   it('throws for non-Windows install when the update script exits with an error', async () => {
-    spawnSyncMock.mockReturnValue({ status: 12 });
+    spawnSyncMock.mockReturnValue({
+      status: 12,
+    } as unknown as ReturnType<typeof childProcess.spawnSync>);
 
     try {
       await runForce('2.0.0');
@@ -324,7 +330,7 @@ describe('updateVersion --force', () => {
     spawnSyncMock.mockReturnValue({
       status: null,
       error: new Error('spawnSync /bin/bash ENOENT'),
-    });
+    } as unknown as ReturnType<typeof childProcess.spawnSync>);
 
     try {
       await runForce('2.0.0');
@@ -355,7 +361,8 @@ describe('updateVersion --force', () => {
 
   it('throws when the Windows updater terminal cannot be launched', async () => {
     isWindowsMock.mockImplementation(() => true);
-    spawnMock.mockImplementation(() => createSpawnChild('error', 'spawn cmd.exe ENOENT'));
+    spawnMock.mockImplementation((() =>
+      createSpawnChild('error', 'spawn cmd.exe ENOENT')) as unknown as typeof childProcess.spawn);
 
     try {
       await runForce('2.0.0', 'Write-Host hi\n');

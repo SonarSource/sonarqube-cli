@@ -36,6 +36,8 @@ import { pemToPkcs12 } from '@/core/host/crypto/pkcs12.ts';
 import {
   ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
   CLI_TMP_DIR,
+  ENV_SONAR_USER_HOME,
+  getSonarUserHome,
   SONARQUBE_MCP_DOCKER_IMAGE_NAME,
 } from '../../config-constants.ts';
 import { normalizePath } from '../../io/fs-utils.ts';
@@ -45,6 +47,7 @@ import type { RedactedUrl } from '../redacted-url.ts';
 export interface McpServerConfig {
   command: string;
   args: string[];
+  env?: Record<string, string>;
 }
 
 export interface McpContainerCommand {
@@ -65,6 +68,14 @@ export type McpServerContext =
       projectRoot: string;
       projectKey?: string;
     };
+
+function mcpServerEnv(): Record<string, string> | undefined {
+  const customHome = process.env[ENV_SONAR_USER_HOME];
+  if (customHome === undefined || customHome.trim() === '') {
+    return undefined;
+  }
+  return { [ENV_SONAR_USER_HOME]: getSonarUserHome() };
+}
 
 export function getMcpConfig(
   cliPath: string,
@@ -89,7 +100,8 @@ export function getMcpConfig(
     args.push('--toolsets', options.toolsets);
   }
 
-  return { command: cliPath, args };
+  const env = mcpServerEnv();
+  return env === undefined ? { command: cliPath, args } : { command: cliPath, args, env };
 }
 
 // Path where update-ca-certificates picks up custom CA certs inside the MCP container (Debian/Alpine convention).

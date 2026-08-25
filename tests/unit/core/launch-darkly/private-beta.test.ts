@@ -30,6 +30,7 @@ import {
   type CliRuntime,
   collectPrivateBetaFlagKeys,
   SonarCommand,
+  SonarOption,
   Stage,
 } from '@/commands/sonar-command.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
@@ -65,6 +66,7 @@ describe('resolvePrivateBetaFlags', () => {
     connectionType: 'cloud',
     userUuid: 'user-1',
     organizationUuidV4: 'org-1',
+    enterpriseUuid: null,
     sqsInstallationId: null,
   };
 
@@ -87,6 +89,7 @@ describe('resolvePrivateBetaFlags', () => {
         authenticatedAt: new Date().toISOString(),
         userUuid: 'user-1',
         organizationUuidV4: 'org-1',
+        enterpriseUuid: null,
       },
     ];
     tryLoadStateSpy = spyOn(stateManager, 'tryLoadState').mockReturnValue(state);
@@ -199,6 +202,7 @@ describe('resolvePrivateBetaFlags', () => {
     resolveTelemetryIdentitySpy.mockResolvedValue({
       user_uuid: null,
       organization_uuid_v4: null,
+      enterprise_uuid: null,
       sqs_installation_id: null,
     });
     const fetchFlags = mock(() =>
@@ -232,6 +236,7 @@ describe('resolvePrivateBetaFlags', () => {
     resolveTelemetryIdentitySpy.mockResolvedValue({
       user_uuid: 'user-1',
       organization_uuid_v4: 'org-1',
+      enterprise_uuid: null,
       sqs_installation_id: null,
     });
     const fetchFlags = mock(() =>
@@ -410,7 +415,7 @@ describe('Private Beta command registration', () => {
     const tree = await createCommandTree();
     const names = tree.commands.map((c) => c.name());
     expect(names).toContain('context');
-    // No Private Beta commands exist yet; default runtime keeps Open Beta and omits gated ones.
+    // No Private Beta commands exist yet; default runtime omits gated ones.
     for (const command of tree.commands as SonarCommand[]) {
       expect(command.isPrivateBeta).toBe(false);
     }
@@ -466,7 +471,14 @@ describe('Private Beta command registration', () => {
     root.command('private-a').stage(Stage.Beta('cli.beta.a'));
     root.command('private-b').stage(Stage.Beta('cli.beta.b'));
     root.command('private-a-dup').stage(Stage.Beta('cli.beta.a'));
+    root
+      .command('with-option')
+      .addOption(new SonarOption('--gated', 'Gated option').stage(Stage.Beta('cli.beta.option')));
 
-    expect(collectPrivateBetaFlagKeys(root).sort()).toEqual(['cli.beta.a', 'cli.beta.b']);
+    expect(collectPrivateBetaFlagKeys(root).sort()).toEqual([
+      'cli.beta.a',
+      'cli.beta.b',
+      'cli.beta.option',
+    ]);
   });
 });

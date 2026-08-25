@@ -811,6 +811,13 @@ export class FakeSonarQubeServerBuilder {
           });
         }
 
+        if (path === '/enterprises/enterprise-organizations') {
+          // Orgs not in an enterprise map to an empty list; identity caches that as null.
+          return new Response(JSON.stringify([]), {
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
         if (path === '/dop-translation/dop-repositories') {
           const organizationId = query.organizationId;
           const allRepos = organizationId ? (dopRepositoriesByOrgId.get(organizationId) ?? []) : [];
