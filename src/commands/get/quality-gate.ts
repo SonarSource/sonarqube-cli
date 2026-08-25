@@ -40,6 +40,7 @@ export interface GetQualityGateOptions {
   format?: string;
   branch?: string;
   pullRequest?: string;
+  all?: boolean;
 }
 
 export async function getQualityGate(
@@ -60,7 +61,7 @@ export async function getQualityGate(
   });
 
   const verdict = toVerdict(projectStatus?.status);
-  const conditions = selectConditions(projectStatus?.conditions ?? [], false);
+  const conditions = selectConditions(projectStatus?.conditions, options.all);
 
   const format = options.format ?? 'json';
   const message =

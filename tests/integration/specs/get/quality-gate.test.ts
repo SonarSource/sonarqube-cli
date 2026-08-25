@@ -162,6 +162,97 @@ describe('get quality-gate', () => {
   );
 
   it(
+    'shows passing conditions too when --all is given, failing conditions first',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withProjectStatus('ERROR').withConditions([
+            {
+              status: 'OK',
+              metricKey: 'new_bugs',
+              comparator: 'GT',
+              errorThreshold: '0',
+              actualValue: '0',
+            },
+            {
+              status: 'ERROR',
+              metricKey: 'new_coverage',
+              comparator: 'LT',
+              errorThreshold: '80',
+              actualValue: '62.4',
+            },
+          ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`get quality-gate --project my-project --all`);
+
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.conditions).toEqual([
+        {
+          status: 'ERROR',
+          metric: 'new_coverage',
+          comparator: 'LT',
+          threshold: '80',
+          actualValue: '62.4',
+        },
+        {
+          status: 'OK',
+          metric: 'new_bugs',
+          comparator: 'GT',
+          threshold: '0',
+          actualValue: '0',
+        },
+      ]);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'renders passing conditions with a green marker in the table when --all is given',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withProjectStatus('ERROR').withConditions([
+            {
+              status: 'OK',
+              metricKey: 'new_bugs',
+              comparator: 'GT',
+              errorThreshold: '0',
+              actualValue: '0',
+            },
+            {
+              status: 'ERROR',
+              metricKey: 'new_coverage',
+              comparator: 'LT',
+              errorThreshold: '80',
+              actualValue: '62.4',
+            },
+          ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `get quality-gate --project my-project --all --format table`,
+      );
+
+      expect(result.stdout).toContain('new_coverage');
+      expect(result.stdout).toContain('new_bugs');
+      const coverageLine = result.stdout.split('\n').find((line) => line.includes('new_coverage'));
+      const bugsLine = result.stdout.split('\n').find((line) => line.includes('new_bugs'));
+      expect(coverageLine).toContain('✗');
+      expect(bugsLine).toContain('✓');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'renders a table with the bracket verdict and failing conditions',
     async () => {
       const server = await harness

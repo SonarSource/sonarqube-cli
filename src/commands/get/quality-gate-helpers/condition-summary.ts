@@ -49,8 +49,8 @@ function toSummary(condition: QualityGateCondition): QualityGateConditionSummary
  * always shows the conditions that matter most even before any filtering is applied.
  */
 export function selectConditions(
-  conditions: QualityGateCondition[],
-  includeAll: boolean,
+  conditions: QualityGateCondition[] = [],
+  includeAll = false,
 ): QualityGateConditionSummary[] {
   const summaries = conditions.map(toSummary);
   const selected = includeAll ? summaries : summaries.filter(isFailing);
