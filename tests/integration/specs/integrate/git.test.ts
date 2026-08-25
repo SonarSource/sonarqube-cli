@@ -892,7 +892,7 @@ describe('integrate git (native hooks)', () => {
     { timeout: 15000 },
   );
 
-  describe('global hook chains to a pre-existing local hook (CLI-971)', () => {
+  describe('global hook chains to a pre-existing local hook', () => {
     const OLD_HOOK_MARKER_FILE = 'old-hook-ran.txt';
 
     function writePreExistingHook(

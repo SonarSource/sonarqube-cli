@@ -141,7 +141,7 @@ describe('native git hook resource (wholeFile)', () => {
   });
 });
 
-describe('native git hook chaining (CLI-971)', () => {
+describe('native git hook chaining to a pre-existing local hook', () => {
   it('includes the chain block for a global-scope pre-commit hook', () => {
     const script = getHookScript('pre-commit', context({ scope: 'global' }));
 

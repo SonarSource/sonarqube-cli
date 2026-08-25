@@ -72,11 +72,10 @@ function stdinCaptureBlock(): string {
  * Chains to a pre-existing local hook that a global `core.hooksPath` override would otherwise
  * silently disable. `git rev-parse --git-dir` always resolves the physical `.git` directory,
  * ignoring any `core.hooksPath` override — unlike `git rev-parse --git-path hooks`, which follows
- * it (verified by hand: https://sonarsource.atlassian.net/browse/CLI-971). The old hook runs
- * first; a non-zero exit aborts immediately with the same code, preserving the abort semantics the
- * repo had before Sonar's hook existed. The marker grep (reusing the same markers `wholeFile`
- * already checks for overwrite/removal) skips chaining when the "pre-existing" hook is actually a
- * Sonar hook from an earlier install, avoiding a double scan.
+ * it. The old hook runs first; a non-zero exit aborts immediately with the same code, preserving
+ * the abort semantics the repo had before Sonar's hook existed. The marker grep (reusing the same
+ * markers `wholeFile` already checks for overwrite/removal) skips chaining when the "pre-existing"
+ * hook is actually a Sonar hook from an earlier install, avoiding a double scan.
  *
  * When `stdinFromCache` is set (pre-push only — see `stdinCaptureBlock`), the chained hook reads
  * from the captured copy instead of the hook's own stdin, which was already drained by the capture.
