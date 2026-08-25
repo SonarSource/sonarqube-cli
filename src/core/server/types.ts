@@ -155,3 +155,16 @@ export interface ProjectBranch {
 export interface ProjectBranchesResponse {
   branches: ProjectBranch[];
 }
+
+export interface Metric {
+  key: string;
+  type: string;
+  name: string;
+}
+
+export interface MetricsSearchResponse {
+  metrics: Metric[];
+  total: number;
+  p: number;
+  ps: number;
+}

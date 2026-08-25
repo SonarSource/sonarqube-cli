@@ -18,12 +18,18 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Normalizes and filters raw quality gate conditions for CLI output
+// Normalizes and filters raw quality gate conditions for CLI output, enriched with metric
+// metadata (human-readable name, type, and type-aware formatted values) looked up from the
+// server's metric catalog.
 
-import type { QualityGateCondition } from '@/core/server/types.ts';
+import type { Metric, QualityGateCondition } from '@/core/server/types.ts';
+
+import { formatMetricValue } from './format-metric-value.ts';
 
 export interface QualityGateConditionSummary {
   metric: string;
+  metricName: string;
+  metricType?: string;
   status: string;
   comparator: string;
   threshold?: string;
@@ -34,13 +40,34 @@ function isFailing(condition: QualityGateConditionSummary): boolean {
   return condition.status !== 'OK';
 }
 
-function toSummary(condition: QualityGateCondition): QualityGateConditionSummary {
+/**
+ * `metric` is undefined when a condition's key isn't found in the fetched catalog - shouldn't
+ * happen since both come from the same server, but the join degrades gracefully rather than
+ * throwing on a lookup miss.
+ */
+function formatOptionalValue(
+  rawValue: string | undefined,
+  metric: Metric | undefined,
+): string | undefined {
+  if (rawValue === undefined || metric === undefined) {
+    return rawValue;
+  }
+  return formatMetricValue(metric.type, rawValue);
+}
+
+function toSummary(
+  condition: QualityGateCondition,
+  metricsByKey: Map<string, Metric>,
+): QualityGateConditionSummary {
+  const metric = metricsByKey.get(condition.metricKey);
   return {
     metric: condition.metricKey,
+    metricName: metric?.name ?? condition.metricKey,
+    metricType: metric?.type,
     status: condition.status,
     comparator: condition.comparator,
-    threshold: condition.errorThreshold,
-    actualValue: condition.actualValue,
+    threshold: formatOptionalValue(condition.errorThreshold, metric),
+    actualValue: formatOptionalValue(condition.actualValue, metric),
   };
 }
 
@@ -50,9 +77,12 @@ function toSummary(condition: QualityGateCondition): QualityGateConditionSummary
  */
 export function selectConditions(
   conditions: QualityGateCondition[] = [],
+  metrics: Metric[] = [],
   includeAll = false,
 ): QualityGateConditionSummary[] {
-  const summaries = conditions.map(toSummary);
-  const selected = includeAll ? summaries : summaries.filter(isFailing);
-  return [...selected].sort((a, b) => Number(isFailing(b)) - Number(isFailing(a)));
+  const metricsByKey = new Map(metrics.map((metric) => [metric.key, metric]));
+  const summaries = conditions.map((condition) => toSummary(condition, metricsByKey));
+  const failing = summaries.filter(isFailing);
+  const passing = includeAll ? summaries.filter((condition) => !isFailing(condition)) : [];
+  return [...failing, ...passing];
 }

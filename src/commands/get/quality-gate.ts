@@ -23,6 +23,7 @@
 import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
+import { MetricsClient } from '@/core/server/metrics.ts';
 import { QualityGatesClient } from '@/core/server/quality-gates.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { print } from '@/core/ui';
@@ -60,8 +61,11 @@ export async function getQualityGate(
     ...scopeQueryParams(scope),
   });
 
+  const metricsClient = new MetricsClient(client);
+  const metrics = projectStatus?.conditions.length ? await metricsClient.searchMetrics() : [];
+
   const verdict = toVerdict(projectStatus?.status);
-  const conditions = selectConditions(projectStatus?.conditions, options.all);
+  const conditions = selectConditions(projectStatus?.conditions, metrics, options.all);
 
   const format = options.format ?? 'json';
   const message =

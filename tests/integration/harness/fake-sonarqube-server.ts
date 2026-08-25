@@ -23,6 +23,7 @@
 import type { Organization } from '@/core/server/client.ts';
 import type { SettingsValue } from '@/core/server/settings-value.ts';
 import type {
+  Metric,
   QualityGateCondition,
   QualityGateStatus,
   SonarQubeIssue,
@@ -241,6 +242,13 @@ export class FakeSonarQubeServerBuilder {
   private provisionProjectsDelayMs?: number;
   private autoscanEligibilityStatusCode?: number;
   private autoscanEligibilityStatusBody?: string;
+  private metrics: Metric[] = [];
+
+  /** Configure the server-wide metric catalog `GET /api/metrics/search` returns. */
+  withMetrics(metrics: Metric[]): this {
+    this.metrics = metrics;
+    return this;
+  }
 
   withMode(mode: 'MQR' | 'STANDARD'): this {
     this.serverMode = mode;
@@ -549,6 +557,7 @@ export class FakeSonarQubeServerBuilder {
       provisionProjectsDelayMs,
       autoscanEligibilityStatusCode,
       autoscanEligibilityStatusBody,
+      metrics,
     } = this;
     const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
@@ -707,6 +716,12 @@ export class FakeSonarQubeServerBuilder {
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );
+        }
+
+        if (path === '/api/metrics/search') {
+          return new Response(JSON.stringify({ metrics, total: metrics.length, p: 1, ps: 500 }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
 
         // sonar-context-augmentation calls /api/project_branches/list to

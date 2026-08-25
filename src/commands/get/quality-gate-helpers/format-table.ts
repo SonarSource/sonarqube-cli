@@ -19,13 +19,20 @@
  */
 
 import { green, red, yellow } from '@/core/ui/colors.ts';
+import { padColumns } from '@/core/ui/formatter/column-formatting.ts';
 
 import type { QualityGateConditionSummary } from './condition-summary.ts';
 import type { QualityGateScope } from './scope.ts';
 import type { QualityGateVerdict } from './verdict.ts';
 
-const CONDITION_LABEL_WIDTH = 36;
-const CONDITION_VALUE_WIDTH = 14;
+/**
+ * These are only the floors `padColumns` falls back to - a table of short names stays compact
+ * instead of always reserving space for a name long enough to never appear.
+ */
+const MIN_CONDITION_LABEL_WIDTH = 20;
+const MIN_CONDITION_VALUE_WIDTH = 14;
+/** Guarantees at least this much space after each column even when its content sets the width. */
+const CONDITION_GAP = 2;
 
 const VERDICT_BRACKETS: Record<QualityGateVerdict, string> = {
   OK: '[✓ Passed]',
@@ -57,10 +64,19 @@ export function formatQualityGateTable(vm: QualityGateTableViewModel): string {
   ];
 
   if (vm.conditions.length > 0) {
-    lines.push('', 'Conditions:');
-    for (const condition of vm.conditions) {
-      lines.push(formatConditionLine(condition));
-    }
+    const [labels, values] = padColumns(
+      [
+        vm.conditions.map((condition) => condition.metricName),
+        vm.conditions.map((condition) => condition.actualValue ?? '—'),
+      ],
+      [MIN_CONDITION_LABEL_WIDTH, MIN_CONDITION_VALUE_WIDTH],
+      CONDITION_GAP,
+    );
+    lines.push(
+      '',
+      'Conditions:',
+      ...vm.conditions.map((condition, i) => formatConditionLine(condition, labels[i], values[i])),
+    );
   }
 
   return lines.join('\n');
@@ -85,13 +101,15 @@ function formatVerdictBracket(verdict: QualityGateVerdict): string {
   }
 }
 
-function formatConditionLine(condition: QualityGateConditionSummary): string {
+function formatConditionLine(
+  condition: QualityGateConditionSummary,
+  paddedLabel: string,
+  paddedValue: string,
+): string {
   const marker = condition.status === 'OK' ? green('✓') : red('✗');
-  const label = condition.metric.padEnd(CONDITION_LABEL_WIDTH);
-  const value = (condition.actualValue ?? '—').padEnd(CONDITION_VALUE_WIDTH);
   const requirement =
     condition.threshold !== undefined
       ? `(required ${COMPARATOR_SYMBOLS[condition.comparator] ?? condition.comparator} ${condition.threshold})`
       : '';
-  return `    ${marker}  ${label}${value}${requirement}`;
+  return `    ${marker}  ${paddedLabel}${paddedValue}${requirement}`;
 }

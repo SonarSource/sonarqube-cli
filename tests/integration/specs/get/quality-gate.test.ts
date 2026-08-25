@@ -60,6 +60,26 @@ describe('get quality-gate', () => {
   );
 
   it(
+    'does not fetch the metric catalog when the gate has no conditions to enrich',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK'))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      await harness.run(`get quality-gate --project my-project`);
+
+      const metricsRequests = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/metrics/search');
+      expect(metricsRequests).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'prints nothing but the JSON payload — project key resolution stays silent',
     async () => {
       const server = await harness
@@ -108,6 +128,7 @@ describe('get quality-gate', () => {
           {
             status: 'ERROR',
             metric: 'new_coverage',
+            metricName: 'new_coverage',
             comparator: 'LT',
             threshold: '80',
             actualValue: '62.4',
@@ -152,6 +173,7 @@ describe('get quality-gate', () => {
         {
           status: 'ERROR',
           metric: 'new_coverage',
+          metricName: 'new_coverage',
           comparator: 'LT',
           threshold: '80',
           actualValue: '62.4',
@@ -195,6 +217,7 @@ describe('get quality-gate', () => {
         {
           status: 'ERROR',
           metric: 'new_coverage',
+          metricName: 'new_coverage',
           comparator: 'LT',
           threshold: '80',
           actualValue: '62.4',
@@ -202,11 +225,102 @@ describe('get quality-gate', () => {
         {
           status: 'OK',
           metric: 'new_bugs',
+          metricName: 'new_bugs',
           comparator: 'GT',
           threshold: '0',
           actualValue: '0',
         },
       ]);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'enriches conditions with metric name and type-aware formatted values (RATING/PERCENT/INT/WORK_DUR)',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([
+          { key: 'new_security_rating', type: 'RATING', name: 'Security Rating on New Code' },
+          { key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code' },
+          { key: 'new_violations', type: 'INT', name: 'New Issues' },
+          { key: 'sqale_index', type: 'WORK_DUR', name: 'Technical Debt' },
+        ])
+        .withProject('my-project', (p) =>
+          p.withProjectStatus('ERROR').withConditions([
+            {
+              status: 'ERROR',
+              metricKey: 'new_security_rating',
+              comparator: 'GT',
+              errorThreshold: '1',
+              actualValue: '3',
+            },
+            {
+              status: 'ERROR',
+              metricKey: 'new_coverage',
+              comparator: 'LT',
+              errorThreshold: '80',
+              actualValue: '62.4',
+            },
+            {
+              status: 'OK',
+              metricKey: 'new_violations',
+              comparator: 'GT',
+              errorThreshold: '0',
+              actualValue: '0',
+            },
+            {
+              status: 'OK',
+              metricKey: 'sqale_index',
+              comparator: 'GT',
+              errorThreshold: '480',
+              actualValue: '150',
+            },
+          ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`get quality-gate --project my-project --all`);
+
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.conditions).toContainEqual({
+        status: 'ERROR',
+        metric: 'new_security_rating',
+        metricName: 'Security Rating on New Code',
+        metricType: 'RATING',
+        comparator: 'GT',
+        threshold: 'A',
+        actualValue: 'C',
+      });
+      expect(parsed.qualityGate.conditions).toContainEqual({
+        status: 'ERROR',
+        metric: 'new_coverage',
+        metricName: 'Coverage on New Code',
+        metricType: 'PERCENT',
+        comparator: 'LT',
+        threshold: '80%',
+        actualValue: '62.4%',
+      });
+      expect(parsed.qualityGate.conditions).toContainEqual({
+        status: 'OK',
+        metric: 'new_violations',
+        metricName: 'New Issues',
+        metricType: 'INT',
+        comparator: 'GT',
+        threshold: '0',
+        actualValue: '0',
+      });
+      expect(parsed.qualityGate.conditions).toContainEqual({
+        status: 'OK',
+        metric: 'sqale_index',
+        metricName: 'Technical Debt',
+        metricType: 'WORK_DUR',
+        comparator: 'GT',
+        threshold: '480 min',
+        actualValue: '150 min',
+      });
     },
     { timeout: 15000 },
   );
@@ -282,6 +396,73 @@ describe('get quality-gate', () => {
       expect(result.stdout).toContain('new_coverage');
       expect(result.stdout).toContain('62.4');
       expect(result.stdout).toContain('(required ≥ 80)');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'renders the metric name and type-aware formatted value in the table, not the raw key/value',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([
+          { key: 'new_security_rating', type: 'RATING', name: 'Security Rating on New Code' },
+        ])
+        .withProject('my-project', (p) =>
+          p.withProjectStatus('ERROR').withConditions([
+            {
+              status: 'ERROR',
+              metricKey: 'new_security_rating',
+              comparator: 'GT',
+              errorThreshold: '1',
+              actualValue: '3',
+            },
+          ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`get quality-gate --project my-project --format table`);
+
+      expect(result.stdout).not.toContain('new_security_rating');
+      const conditionLine = result.stdout
+        .split('\n')
+        .find((line) => line.includes('Security Rating on New Code'));
+      expect(conditionLine).toContain('C');
+      expect(conditionLine).toContain('(required ≤ A)');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'keeps a gap between label and value when a metric name overflows the label column',
+    async () => {
+      const longName = 'Severity of a licensing dependency risk';
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'sca_severity_licensing', type: 'INT', name: longName }])
+        .withProject('my-project', (p) =>
+          p.withProjectStatus('OK').withConditions([
+            {
+              status: 'OK',
+              metricKey: 'sca_severity_licensing',
+              comparator: 'GT',
+              errorThreshold: '19',
+              actualValue: '0',
+            },
+          ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `get quality-gate --project my-project --all --format table`,
+      );
+
+      const conditionLine = result.stdout.split('\n').find((line) => line.includes(longName));
+      expect(conditionLine).toContain(`${longName}  0`);
     },
     { timeout: 15000 },
   );
