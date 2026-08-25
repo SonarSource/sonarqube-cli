@@ -22,7 +22,6 @@
 // is the sole caller, so SQAA and CAG project lookups share one selection policy.
 
 import { pathComparisonKey } from '../io/fs-utils.ts';
-import { parseTimestampMillis } from '../time/timestamp.ts';
 import type { LookupPath } from './git/lookup-path-resolver.ts';
 
 /**
@@ -36,15 +35,12 @@ export interface RecordedFeatureCandidate<T> {
   targetRoot: string;
   /** Recorded main-working-tree identity — the worktree-wide fallback (absent on older state). */
   repoRoot?: string;
-  /** ISO timestamp used as the final recency tie-break; absent/unparseable sorts last. */
-  updatedAt?: string;
 }
 
 interface KeyedCandidate<T> {
   feature: T;
   targetRoot: string;
   repoRoot: string | undefined;
-  updatedAt: string | undefined;
 }
 
 /** A selected candidate plus the project root to use — always in the caller's own worktree, never a different one. */
@@ -53,17 +49,10 @@ export interface FeatureMatch<T> {
   matchedPath: string;
 }
 
-/** Among candidates tied on an exact match, the most recently updated wins. */
-function pickBest<T>(matches: KeyedCandidate<T>[]): T | undefined {
-  return matches
-    .slice()
-    .sort((a, b) => parseTimestampMillis(b.updatedAt) - parseTimestampMillis(a.updatedAt))
-    .at(0)?.feature;
-}
-
 /**
  * Pure, git-free exact-match selection over an already-resolved, nearest-first lookup-path
- * list. Per path: exact `targetRoot` match wins over `repoRoot`-only; ties broken by recency.
+ * list. Per path: exact `targetRoot` match wins over `repoRoot`-only; ties broken by order
+ * (true duplicates are already deduped upstream — see `addMapping`).
  */
 export function selectFeatureForLookupPaths<T>(
   candidates: RecordedFeatureCandidate<T>[],
@@ -73,20 +62,19 @@ export function selectFeatureForLookupPaths<T>(
     feature: candidate.feature,
     targetRoot: pathComparisonKey(candidate.targetRoot),
     repoRoot: candidate.repoRoot === undefined ? undefined : pathComparisonKey(candidate.repoRoot),
-    updatedAt: candidate.updatedAt,
   }));
 
   for (const { checkPath, projectRoot } of lookupPaths) {
     const keyedPath = pathComparisonKey(checkPath);
 
-    const byTarget = pickBest(keyed.filter((candidate) => candidate.targetRoot === keyedPath));
+    const byTarget = keyed.find((candidate) => candidate.targetRoot === keyedPath);
     if (byTarget) {
-      return { feature: byTarget, matchedPath: projectRoot };
+      return { feature: byTarget.feature, matchedPath: projectRoot };
     }
 
-    const byRepo = pickBest(keyed.filter((candidate) => candidate.repoRoot === keyedPath));
+    const byRepo = keyed.find((candidate) => candidate.repoRoot === keyedPath);
     if (byRepo) {
-      return { feature: byRepo, matchedPath: projectRoot };
+      return { feature: byRepo.feature, matchedPath: projectRoot };
     }
   }
   return undefined;

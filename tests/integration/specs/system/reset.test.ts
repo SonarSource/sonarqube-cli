@@ -103,6 +103,7 @@ interface ResetStateSnapshot {
   dependencies: { installed: Array<{ id: string }> };
   agentExtensions: unknown[];
   integrations: { installed: unknown[] };
+  knownServerProjectMappings?: unknown[];
 }
 
 function readState(stateJsonPath: string): ResetStateSnapshot {
@@ -357,6 +358,24 @@ describe('system reset --force', () => {
         );
         expect(remaining).toHaveLength(0);
       }
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'clears the persisted known-server-project-mapping cache',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      harness
+        .state()
+        .withKnownServerProjectMapping(harness.cwd.path, 'my-project', server.baseUrl(), 'my-org');
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+
+      const state = readState(harness.stateJsonFile.path);
+      expect(state.knownServerProjectMappings ?? []).toHaveLength(0);
     },
     { timeout: 15000 },
   );

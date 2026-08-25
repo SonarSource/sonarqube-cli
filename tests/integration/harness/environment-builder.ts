@@ -44,6 +44,7 @@ import type {
   InstalledIntegration,
   InstalledIntegrationDependency,
   IntegrationScope,
+  KnownServerProjectMapping,
 } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 
@@ -189,6 +190,7 @@ export class EnvironmentBuilder {
   private readonly sqaaFeatures: SqaaFeatureConfig[] = [];
   private readonly contextAugmentationSkills: ContextAugmentationSkillConfig[] = [];
   private readonly installedFeatureSeeds: Array<(state: CliState) => void> = [];
+  private readonly knownServerProjectMappings: KnownServerProjectMapping[] = [];
 
   withActiveConnection(
     url: string,
@@ -425,6 +427,32 @@ export class EnvironmentBuilder {
   }
 
   /**
+   * Seeds `state.knownServerProjectMappings` directly — the fast path `discoverProject`
+   * (and thus SQAA/CAG project-key resolution) reads. Use this for scenarios
+   * `withSqaaFeature`/`withContextAugmentationSkill`'s auto-derived entry can't express
+   * (e.g. distinct targetRoots resolving via worktree precedence), independent of any
+   * declarative feature. `targetRoot` and `repoRoot` are kept distinct, matching the
+   * production schema — pass `repoRoot` only for scenarios exercising the worktree-wide
+   * fallback signal.
+   */
+  withKnownServerProjectMapping(
+    targetRoot: string,
+    projectKey: string,
+    serverUrl: string,
+    orgKey?: string,
+    repoRoot?: string,
+  ): this {
+    this.knownServerProjectMappings.push({
+      targetRoot: canonicalizePath(targetRoot),
+      repoRoot: repoRoot ? canonicalizePath(repoRoot) : undefined,
+      projectKey,
+      serverUrl,
+      orgKey,
+    });
+    return this;
+  }
+
+  /**
    * Seeds a previously-installed integration feature in the state file so
    * `shouldInstall` state probes (e.g. `isFeatureInstalledGloballyForProject`) see it as
    * already installed.
@@ -540,6 +568,15 @@ export class EnvironmentBuilder {
         serverUrl: skill.serverUrl ?? this.activeConnectionUrl,
         scaEnabled: skill.scaEnabled ?? false,
       });
+    }
+
+    // Explicit withKnownServerProjectMapping() calls seed the persisted table directly —
+    // deliberately NOT auto-derived from sqaaFeatures/contextAugmentationSkills above, since
+    // in production that table is populated only by the post-update migration; leaving it
+    // unpopulated here lets discoverProject's live fallback (buildKnownServerProjectMappings,
+    // reading integrations.installed) do the same job the feature seeds already exercise.
+    if (this.knownServerProjectMappings.length > 0) {
+      state.knownServerProjectMappings = [...this.knownServerProjectMappings];
     }
 
     for (const seed of this.installedFeatureSeeds) {

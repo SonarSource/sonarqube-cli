@@ -26,12 +26,7 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
-import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
-import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
-import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
-import { COPILOT_INTEGRATION_ID } from '@/commands/integrate/copilot/declaration.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
-import type { CliState, InstalledIntegrationFeature } from '@/core/state/state.ts';
 
 import { TestHarness } from '../../harness';
 import {
@@ -51,63 +46,6 @@ function findInvocation(invocations: CagInvocation[], argv: string[]): CagInvoca
     throw new Error(`Expected CAG invocation: ${JSON.stringify(argv)}`);
   }
   return match;
-}
-
-/**
- * Records a project-scoped installed feature so `discoverProject()`'s live known-mapping
- * derivation (`buildKnownServerProjectMappings`, reading `integrations.installed`) picks it
- * up — there is no persisted `state.knownServerProjectMappings` table on this branch.
- */
-function appendRecordedCagFeature(
-  state: CliState,
-  args: {
-    integrationId: string;
-    targetRoot: string;
-    updatedAt: string;
-    projectKey: string;
-    orgKey: string;
-    serverUrl: string;
-    repoRoot?: string;
-    /** Agents that deliver CAG through Vortex record the container instead. */
-    featureId?: string;
-  },
-): void {
-  let integration = state.integrations.installed.find(
-    (entry) => entry.integrationId === args.integrationId,
-  );
-  if (!integration) {
-    integration = {
-      id: `${args.integrationId}-integration`,
-      integrationId: args.integrationId,
-      installedByCliVersion: 'integration-test',
-      installedAt: args.updatedAt,
-      updatedByCliVersion: 'integration-test',
-      updatedAt: args.updatedAt,
-      features: [],
-    };
-    state.integrations.installed.push(integration);
-  }
-
-  const feature: InstalledIntegrationFeature = {
-    featureId: args.featureId ?? CONTEXT_AUGMENTATION_FEATURE_ID,
-    scope: 'project',
-    targetRoot: args.targetRoot,
-    installedByCliVersion: 'integration-test',
-    installedAt: args.updatedAt,
-    updatedByCliVersion: 'integration-test',
-    updatedAt: args.updatedAt,
-    dependencies: [],
-    resources: [],
-    operations: [],
-    attrs: {
-      orgKey: args.orgKey,
-      projectKey: args.projectKey,
-      scaEnabled: false,
-      serverUrl: args.serverUrl,
-      ...(args.repoRoot ? { repoRoot: args.repoRoot } : {}),
-    },
-  };
-  integration.features.push(feature);
 }
 
 const ORG_KEY = 'expected-org';
@@ -276,21 +214,11 @@ describe('sonar context passthrough', () => {
     async () => {
       const server = await harness.newFakeServer().start();
       const serverUrl = server.baseUrl();
-      const stateBuilder = harness
+      harness
         .state()
         .withAuth(serverUrl, 'project-token', ORG_KEY)
-        .withContextAugmentationBinaryInstalled();
-      const state = stateBuilder.build();
-      appendRecordedCagFeature(state, {
-        integrationId: CLAUDE_INTEGRATION_ID,
-        featureId: VORTEX_FEATURE_ID,
-        targetRoot: harness.cwd.path,
-        updatedAt: '2026-03-01T00:00:00.000Z',
-        projectKey: PROJECT_KEY,
-        orgKey: ORG_KEY,
-        serverUrl,
-      });
-      stateBuilder.withRawState(JSON.stringify(state, null, 2));
+        .withContextAugmentationBinaryInstalled()
+        .withKnownServerProjectMapping(harness.cwd.path, PROJECT_KEY, serverUrl, ORG_KEY);
 
       const result = await harness.run('context status');
 
@@ -317,21 +245,17 @@ describe('sonar context passthrough', () => {
       const worktreePath = join(dirname(harness.cwd.path), 'linked-worktree');
       git(['worktree', 'add', worktreePath, '-b', 'feature/repo-root-fallback'], harness.cwd.path);
 
-      const stateBuilder = harness
+      harness
         .state()
         .withAuth(serverUrl, 'main-token', ORG_KEY)
-        .withContextAugmentationBinaryInstalled();
-      const state = stateBuilder.build();
-      appendRecordedCagFeature(state, {
-        integrationId: CLAUDE_INTEGRATION_ID,
-        targetRoot: join(dirname(harness.cwd.path), 'other-physical-location'),
-        repoRoot: harness.cwd.path,
-        updatedAt: new Date().toISOString(),
-        projectKey: PROJECT_KEY,
-        orgKey: ORG_KEY,
-        serverUrl,
-      });
-      stateBuilder.withRawState(JSON.stringify(state, null, 2));
+        .withContextAugmentationBinaryInstalled()
+        .withKnownServerProjectMapping(
+          join(dirname(harness.cwd.path), 'other-physical-location'),
+          PROJECT_KEY,
+          serverUrl,
+          ORG_KEY,
+          harness.cwd.path,
+        );
 
       const result = await harness.run('context status', { cwd: worktreePath });
 
@@ -345,41 +269,27 @@ describe('sonar context passthrough', () => {
   );
 
   it(
-    'uses the latest recorded mapping when multiple entries share the same project root',
+    'uses the first recorded mapping when multiple entries with different project keys share the same project root',
     async () => {
+      // A genuine conflict (same folder, disagreeing projects), not a duplicate — resolved
+      // deterministically by keeping whichever was recorded first, not by recency.
       const server = await harness.newFakeServer().start();
       const serverUrl = server.baseUrl();
-      const stateBuilder = harness
+      harness
         .state()
-        .withAuth(serverUrl, 'current-token', 'current-org')
-        .withContextAugmentationBinaryInstalled();
-      const state = stateBuilder.build();
-      appendRecordedCagFeature(state, {
-        integrationId: CLAUDE_INTEGRATION_ID,
-        targetRoot: harness.cwd.path,
-        updatedAt: '2026-01-01T00:00:00.000Z',
-        projectKey: 'stale-project',
-        orgKey: 'stale-org',
-        serverUrl,
-      });
-      appendRecordedCagFeature(state, {
-        integrationId: COPILOT_INTEGRATION_ID,
-        targetRoot: harness.cwd.path,
-        updatedAt: '2026-02-01T00:00:00.000Z',
-        projectKey: 'current-project',
-        orgKey: 'current-org',
-        serverUrl,
-      });
-      stateBuilder.withRawState(JSON.stringify(state, null, 2));
+        .withAuth(serverUrl, 'first-token', 'first-org')
+        .withContextAugmentationBinaryInstalled()
+        .withKnownServerProjectMapping(harness.cwd.path, 'first-project', serverUrl, 'first-org')
+        .withKnownServerProjectMapping(harness.cwd.path, 'second-project', serverUrl, 'second-org');
 
       const result = await harness.run('context status');
 
       expect(result.exitCode).toBe(0);
       const invocation = findInvocation(readInvocations(harness), ['status']);
-      expect(invocation.env.SONAR_CONTEXT_TOKEN).toBe('current-token');
+      expect(invocation.env.SONAR_CONTEXT_TOKEN).toBe('first-token');
       expect(invocation.env.SONAR_CONTEXT_URL).toBe(serverUrl);
-      expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe('current-org');
-      expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe('current-project');
+      expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe('first-org');
+      expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe('first-project');
     },
     { timeout: 30000 },
   );

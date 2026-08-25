@@ -18,48 +18,60 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Derives targetRoot/repoRoot -> SonarQube project/server mappings live from every
-// currently project-scoped `integrations.installed` feature, for discoverProject()'s
-// known-mapping source. targetRoot/repoRoot are copied verbatim from the feature's
-// attrs (never collapsed into one value) so worktree-aware matching can prefer the
-// precise location over the worktree-wide fallback — see `resolveLookupPaths` /
-// `selectFeatureForLookupPaths`.
+// The targetRoot/repoRoot -> SonarQube project/server mapping table
+// (`state.knownServerProjectMappings`) that `discoverProject()`'s fast path reads, kept
+// current by the post-update migration and by discoverProject()'s own live fallback.
+// targetRoot/repoRoot are copied verbatim from the feature's attrs (never collapsed into
+// one value) so worktree-aware matching can prefer the precise location over the
+// worktree-wide fallback — see `resolveLookupPaths` / `selectFeatureForLookupPaths`.
 
 import { pathComparisonKey } from '@/core/io/fs-utils.ts';
 import type {
   CliState,
   InstalledIntegrationFeature,
   IntegrationStateAttribute,
+  KnownServerProjectMapping,
 } from '@/core/state/state.ts';
-import { parseTimestampMillis } from '@/core/time/timestamp.ts';
 
-/**
- * A folder known to be bound to a SonarQube project, derived from a project-scoped
- * integration feature's attrs. Keeps `targetRoot`/`repoRoot` as two distinct signals
- * (never collapsed into one) so worktree-aware matching can prefer the precise
- * physical location over a worktree-wide fallback — see `resolveLookupPaths` /
- * `selectFeatureForLookupPaths`.
- */
-export interface KnownServerProjectMapping {
-  /** Physical location this was recorded from — the precise, most-specific signal. */
-  targetRoot: string;
-  /** Repository's main working tree root, when known — the worktree-wide fallback signal. */
-  repoRoot?: string;
-  /** SonarQube project key bound to this mapping. */
-  projectKey: string;
-  /**
-   * Server URL for this binding, when the feature actually recorded one (Vortex-entitled
-   * agent integrations). Left undefined when it didn't (e.g. `git` integrate never records a
-   * connection) — deliberately NOT backfilled here from whichever connection happened to be
-   * active at derive time, since that is a point-in-time snapshot that can go stale (e.g.
-   * env-var auth switching server/org per invocation). Callers matching this mapping
-   * substitute the connection active *at match time* instead — see `discoverProject()`.
-   */
-  serverUrl?: string;
-  /** Organization key (SonarQube Cloud only), same recorded-only precedence as `serverUrl`. */
-  orgKey?: string;
-  /** ISO timestamp of the contributing feature's last update; used to resolve conflicts when merging. */
-  updatedAt: string;
+/** True when `incoming` has server info that `current` lacks — the only case a duplicate gets replaced. */
+function isMoreComplete(
+  incoming: KnownServerProjectMapping,
+  current: KnownServerProjectMapping,
+): boolean {
+  return incoming.serverUrl !== undefined && current.serverUrl === undefined;
+}
+
+/** Adds `mapping` into `mappings` in place; only collapses with an entry sharing both `targetRoot` and `projectKey` (a true duplicate) — a different `projectKey` at the same `targetRoot` is a conflict, kept as a separate candidate for `selectFeatureForLookupPaths` to resolve. */
+function addMapping(
+  mappings: KnownServerProjectMapping[],
+  mapping: KnownServerProjectMapping,
+): void {
+  const duplicateIndex = mappings.findIndex(
+    (entry) =>
+      pathComparisonKey(entry.targetRoot) === pathComparisonKey(mapping.targetRoot) &&
+      entry.projectKey === mapping.projectKey,
+  );
+  if (duplicateIndex === -1) {
+    mappings.push(mapping);
+    return;
+  }
+
+  if (isMoreComplete(mapping, mappings[duplicateIndex])) {
+    mappings[duplicateIndex] = mapping;
+  }
+}
+
+/** Merges `discovered` into `existing` (see `addMapping`); a `targetRoot` present only in `existing` is never dropped. */
+export function mergeKnownServerProjectMappings(
+  existing: KnownServerProjectMapping[],
+  discovered: KnownServerProjectMapping[],
+): KnownServerProjectMapping[] {
+  const mappings = [...existing];
+  for (const mapping of discovered) {
+    addMapping(mappings, mapping);
+  }
+
+  return mappings;
 }
 
 function getOptionalStringAttr(
@@ -91,7 +103,6 @@ function deriveMappingForFeature(
     projectKey,
     serverUrl: getOptionalStringAttr(feature.attrs, 'serverUrl'),
     orgKey: getOptionalStringAttr(feature.attrs, 'orgKey'),
-    updatedAt: feature.updatedAt,
   };
 }
 
@@ -101,27 +112,16 @@ function deriveMappingForFeature(
  * `discoverProject()`'s known-mapping source.
  */
 export function buildKnownServerProjectMappings(state: CliState): KnownServerProjectMapping[] {
-  const byTargetRoot = new Map<string, KnownServerProjectMapping>();
+  const mappings: KnownServerProjectMapping[] = [];
 
   for (const integration of state.integrations.installed) {
     for (const feature of integration.features) {
       const mapping = deriveMappingForFeature(feature);
-      if (!mapping) {
-        continue;
+      if (mapping) {
+        addMapping(mappings, mapping);
       }
-
-      const key = pathComparisonKey(mapping.targetRoot);
-      const existing = byTargetRoot.get(key);
-      if (
-        existing &&
-        parseTimestampMillis(existing.updatedAt) >= parseTimestampMillis(mapping.updatedAt)
-      ) {
-        continue;
-      }
-
-      byTargetRoot.set(key, mapping);
     }
   }
 
-  return [...byTargetRoot.values()];
+  return mappings;
 }
