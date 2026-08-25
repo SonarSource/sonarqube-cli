@@ -20,7 +20,6 @@
 
 import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -375,28 +374,6 @@ export function resolveMcpContainerCommand(
     : getMcpContainerCommand(auth, detection.runtime, context, options, network);
 }
 
-export async function writeMcpServerEntry(filePath: string, serverConfig: object): Promise<void> {
-  let existing: Record<string, unknown> = {};
-  if (existsSync(filePath)) {
-    const raw = await readFile(filePath, 'utf-8');
-    if (raw.trim().length === 0) {
-      existing = {};
-    } else {
-      try {
-        existing = JSON.parse(raw) as Record<string, unknown>;
-      } catch {
-        throw new Error(`'${filePath}' contains invalid JSON. Please fix or delete it and re-run.`);
-      }
-    }
-  }
-
-  const mcpServers = (existing.mcpServers as Record<string, unknown> | undefined) ?? {};
-  existing.mcpServers = { ...mcpServers, sonarqube: serverConfig };
-
-  mkdirSync(dirname(filePath), { recursive: true });
-  await writeFile(filePath, JSON.stringify(existing, null, 2), 'utf-8');
-}
-
 export function getMcpConfigFilePath(
   agent: string,
   isGlobal: boolean,
@@ -421,19 +398,4 @@ export function getMcpConfigFilePath(
     return ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON;
   }
   throw new Error(`Unsupported agent: ${agent}`);
-}
-
-export async function setupMcpServerForAgent(
-  agent: 'claude' | 'copilot',
-  projectRoot: string,
-  isGlobal: boolean,
-  projectKey: string | undefined,
-): Promise<void> {
-  const targetFile = getMcpConfigFilePath(agent, isGlobal, projectRoot);
-  const serverConfig = getMcpConfig(
-    normalizePath(process.execPath),
-    isGlobal ? { withFsMount: false } : { withFsMount: true, projectRoot, projectKey },
-  );
-
-  await writeMcpServerEntry(targetFile, serverConfig);
 }
