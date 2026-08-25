@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { DefaultScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import { DefaultSecretsInstaller } from '@/core/host/install/secrets.ts';
@@ -59,8 +60,9 @@ export interface AnalyzeDependencyRisksOptions {
 
 export async function analyzeDependencyRisks(
   options: AnalyzeDependencyRisksOptions,
-  auth: ResolvedAuth,
+  ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
+  const { auth } = ctx;
   const filter = buildRiskFilter(options.statuses, options.minSeverity);
   if (!filter) {
     throw new InvalidOptionError(

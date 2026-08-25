@@ -80,6 +80,7 @@ describe('recordConnectionFromAuth', () => {
     });
     existing.userUuid = 'u';
     existing.organizationUuidV4 = 'o';
+    existing.enterpriseUuid = null;
     saveState(state);
 
     const getSafeSpy = mockIdentityGetSafe();
@@ -107,6 +108,7 @@ describe('recordConnectionFromAuth', () => {
     expect(connection.serverUrl).toBe('https://sonarcloud.io');
     expect(connection.userUuid).toBe('fresh-user');
     expect(connection.organizationUuidV4).toBe('fresh-org');
+    expect(connection.enterpriseUuid).toBeNull();
 
     const reloaded = loadState();
     expect(reloaded.auth.connections).toHaveLength(1);
@@ -122,6 +124,7 @@ describe('recordConnectionFromAuth', () => {
     });
     existing.userUuid = 'u';
     existing.organizationUuidV4 = 'o';
+    existing.enterpriseUuid = null;
     saveState(state);
 
     const connection = await recordConnectionFromAuth(cloudAuth('t4'), {
@@ -139,14 +142,17 @@ describe('recordConnectionFromAuth', () => {
     });
     existing.userUuid = 'u';
     existing.organizationUuidV4 = 'o';
+    existing.enterpriseUuid = null;
     saveState(state);
 
+    const getSafeSpy = mockIdentityGetSafe();
     const connection = await recordConnectionFromAuth(cloudAuth('t4'), {
       tokenName: 'new-token-name',
       force: true,
     });
 
     expect(connection.tokenName).toBe('new-token-name');
+    getSafeSpy.mockRestore();
   });
 
   it('sets organizationUuidV4 only for cloud auth with an org key, and sqsInstallationId only for on-premise', async () => {
@@ -158,6 +164,7 @@ describe('recordConnectionFromAuth', () => {
     const onPremConnection = await recordConnectionFromAuth(serverAuth('t5'));
     expect(onPremConnection.sqsInstallationId).toBe('sqs-a');
     expect(onPremConnection.organizationUuidV4).toBeUndefined();
+    expect(onPremConnection.enterpriseUuid).toBeUndefined();
 
     getSafeSpy.mockRestore();
   });
@@ -180,6 +187,35 @@ describe('recordConnectionFromAuth', () => {
     });
 
     expect(connection.envOnly).toBeUndefined();
+    getSafeSpy.mockRestore();
+  });
+
+  it('persists enterpriseUuid for cloud auth with an org key', async () => {
+    const getSafeSpy = mockIdentityGetSafe({
+      user: [{ ok: true, id: 'user-a' }],
+      org: [{ ok: true, uuidV4: 'org-a', id: 'legacy-org-a' }],
+      enterprise: [{ ok: true, enterpriseId: 'ent-a' }],
+    });
+
+    const connection = await recordConnectionFromAuth(cloudAuth('t-ent'));
+
+    expect(connection.organizationUuidV4).toBe('org-a');
+    expect(connection.enterpriseUuid).toBe('ent-a');
+    expect(connection.sqsInstallationId).toBeUndefined();
+    getSafeSpy.mockRestore();
+  });
+
+  it('does not persist enterpriseUuid when the enterprise lookup fails transiently', async () => {
+    const getSafeSpy = mockIdentityGetSafe({
+      user: [{ ok: true, id: 'user-a' }],
+      org: [{ ok: true, uuidV4: 'org-a', id: 'legacy-org-a' }],
+      enterprise: [{ ok: false }],
+    });
+
+    const connection = await recordConnectionFromAuth(cloudAuth('t-ent-fail'));
+
+    expect(connection.organizationUuidV4).toBe('org-a');
+    expect(connection.enterpriseUuid).toBeUndefined();
     getSafeSpy.mockRestore();
   });
 });

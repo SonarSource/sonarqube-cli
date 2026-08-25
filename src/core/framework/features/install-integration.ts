@@ -134,9 +134,6 @@ export async function installIntegration<TOptions>({
           onFeatureRemoveStart: (feature) => {
             text(`     Removing ${feature.displayName}...`);
           },
-          onDependencyRemoved: (dependency) => {
-            text(`     ${dependency.displayName ?? dependency.id} removed`);
-          },
         },
       },
     );

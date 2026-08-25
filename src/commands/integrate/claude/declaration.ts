@@ -68,6 +68,7 @@ import {
   getSqaaPostToolTemplateUnix,
   getSqaaPostToolTemplateWindows,
 } from './hook-templates.ts';
+import { CLAUDE_PROJECT_DIR_PLACEHOLDER } from './hooks.ts';
 
 const CLAUDE_CONFIG_DIR = '.claude';
 const SETTINGS_FILE = 'settings.json';
@@ -96,6 +97,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       hooksPatchId: 'claude-settings-secrets-hooks',
       benefitDescription: SECRETS_COMBINED_FEATURE_BENEFIT,
       previewDescription: SECRETS_COMBINED_FEATURE_PREVIEW,
+      projectDirPlaceholder: CLAUDE_PROJECT_DIR_PLACEHOLDER,
       scripts: [
         {
           id: 'pretool-secrets-script',
@@ -258,6 +260,7 @@ function createContextAugmentationFailureHookSubfeature(): SubfeatureDeclaration
               CONTEXT_AUGMENTATION_TOOL_MATCHER,
               'sonar-posttoolusefailure',
               POSTTOOLUSEFAILURE_SCRIPT_REL,
+              { projectDirPlaceholder: CLAUDE_PROJECT_DIR_PLACEHOLDER },
             ),
           ]),
         removePatch: (document) => removeAgentHooks(document, ['sonar-posttoolusefailure']),

@@ -18,13 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { randomUUID } from 'node:crypto';
-
-/** HTTP header name used when forwarding INVOCATION_ID to Vortex / CAG. */
-export const SONAR_INVOCATION_ID_HEADER = 'x-sonar-invocation-id';
-
-// Per-CLI-process correlation id. Shared between the CLI's own telemetry
-// event payload and the `SONAR_CONTEXT_INVOCATION_ID` env var forwarded to every
-// sonar-context-augmentation subprocess so the CAG daemon can correlate
-// its requests back to the originating CLI invocation.
-export const INVOCATION_ID: string = randomUUID();
+/** Returned by session-capturing hook handlers for the command tree to store. */
+export type HookCommandResult = {
+  /** Agent-native field value; normalized when resolved for telemetry. */
+  agentSessionId: string | null;
+};

@@ -240,12 +240,14 @@ describe('pressEnterKeyPrompt: TTY path', () => {
 
   it('resolves when Enter (CR 0x0d) is pressed', async () => {
     setTimeout(() => process.stdin.emit('data', Buffer.from([0x0d])), 0);
-    await pressEnterKeyPrompt('Press Enter');
+    const result = await pressEnterKeyPrompt('Press Enter');
+    expect(result).toBeUndefined();
   });
 
   it('resolves when Enter (LF 0x0a) is pressed', async () => {
     setTimeout(() => process.stdin.emit('data', Buffer.from([0x0a])), 0);
-    await pressEnterKeyPrompt('Press Enter');
+    const result = await pressEnterKeyPrompt('Press Enter');
+    expect(result).toBeUndefined();
   });
 
   it('ignores non-Enter keys and resolves only on Enter', async () => {
@@ -254,7 +256,8 @@ describe('pressEnterKeyPrompt: TTY path', () => {
       process.stdin.emit('data', Buffer.from([0x1b])); // Escape — ignored
       process.stdin.emit('data', Buffer.from([0x0d])); // Enter — resolves
     }, 0);
-    await pressEnterKeyPrompt('Press Enter');
+    const result = await pressEnterKeyPrompt('Press Enter');
+    expect(result).toBeUndefined();
   });
 
   it('calls process.exit(130) on Ctrl+C', async () => {

@@ -28,7 +28,8 @@
 // changes.
 
 import { agentPromptSubmit } from './agent-prompt-submit.ts';
+import type { HookCommandResult } from './hook-command-result.ts';
 
-export function codexPromptSubmit(): Promise<void> {
+export function codexPromptSubmit(): Promise<HookCommandResult> {
   return agentPromptSubmit();
 }

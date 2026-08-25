@@ -580,6 +580,7 @@ describe('activatePreCommitFramework', () => {
 
     try {
       await activatePreCommitFramework(TEMP_DIR, 'pre-commit');
+      expect(spawnSpy).toHaveBeenCalled();
     } finally {
       spawnSpy.mockRestore();
     }

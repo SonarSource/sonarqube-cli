@@ -72,6 +72,7 @@ export function buildLaunchDarklyContext(identity: FeatureFlagIdentity): LDConte
       kind: 'multi',
       user: { key: identity.userUuid },
       organization: { key: identity.organizationUuidV4 },
+      ...(identity.enterpriseUuid ? { enterprise: { key: identity.enterpriseUuid } } : {}),
     };
   }
 
@@ -167,6 +168,7 @@ async function resolveFeatureFlagIdentity(auth: ResolvedAuth): Promise<FeatureFl
     connectionType: auth.connectionType,
     userUuid: identity.user_uuid,
     organizationUuidV4: identity.organization_uuid_v4,
+    enterpriseUuid: identity.enterprise_uuid ?? null,
     sqsInstallationId: identity.sqs_installation_id,
   };
 }

@@ -76,6 +76,8 @@ export interface AuthConnection {
   userUuid?: string | null;
   /** UUID of the SonarQube Cloud organization (fetched at auth time, SQC only) */
   organizationUuidV4?: string | null;
+  /** UUID of the SonarQube Cloud enterprise that owns the org (fetched at auth time, SQC only) */
+  enterpriseUuid?: string | null;
   /** Installation ID of the SonarQube Server (fetched at auth time, SQS only) */
   sqsInstallationId?: string | null;
   /**
