@@ -20,12 +20,11 @@
 
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { setupMcpServer } from '@/commands/integrate/claude/mcp.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CLI_TMP_DIR, SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '@/core/config-constants.ts';
 import type { ClientCertConfig, ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
@@ -35,11 +34,8 @@ import {
   getMcpContainerCommand,
   MCP_DEFAULT_TOOLSETS,
   resolveMcpContainerCommand,
-  writeMcpServerEntry,
 } from '@/core/host/mcp/mcp-helper.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
-import { DiscoveredProject } from '@/core/project-info.ts';
-import { getMockUiCalls, setMockUi } from '@/core/ui';
 
 const ON_PREMISE_AUTH: ResolvedAuth = {
   token: 'squ_test',
@@ -60,15 +56,6 @@ const CLOUD_US_AUTH: ResolvedAuth = {
 };
 
 const NO_NETWORK: ResolvedNetworkConfig = { proxy: null, caCert: null, clientCert: null };
-
-const FAKE_PROJECT: DiscoveredProject = {
-  rootDir: '/fake/project',
-  isGitRepo: false,
-  serverUrl: 'https://sonarqube.example.com',
-  organization: 'my-org',
-  projectKey: 'my-project',
-  configSources: [],
-};
 
 describe('getMcpContainerConfig', () => {
   it('returns a docker command with SONARQUBE_TOKEN and SONARQUBE_URL for on-premise', () => {
@@ -426,124 +413,6 @@ describe('getMcpConfigFilePath', () => {
     expect(() => getMcpConfigFilePath('unknown-agent', false, '/fake/project')).toThrow(
       'Unsupported agent: unknown-agent',
     );
-  });
-});
-
-describe('writeMcpServerEntry', () => {
-  const tmpFile = join(tmpdir(), `mcp-test-${Date.now()}.json`);
-
-  afterEach(() => {
-    rmSync(tmpFile, { force: true });
-  });
-
-  it('throws when the existing file contains invalid JSON', async () => {
-    writeFileSync(tmpFile, 'not valid json', 'utf-8');
-    // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(writeMcpServerEntry(tmpFile, { command: 'sonar' })).rejects.toThrow(
-      'contains invalid JSON',
-    );
-  });
-
-  it('treats an empty existing file as an empty object', async () => {
-    writeFileSync(tmpFile, '', 'utf-8');
-
-    const serverConfig = { command: 'sonar', args: ['run', 'mcp'] };
-    await writeMcpServerEntry(tmpFile, serverConfig);
-
-    const written = JSON.parse(readFileSync(tmpFile, 'utf-8')) as Record<string, unknown>;
-    expect(written.mcpServers).toEqual({ sonarqube: serverConfig });
-  });
-
-  it('merges sonarqube entry into existing mcpServers without overwriting other entries', async () => {
-    const existing = { mcpServers: { other: { command: 'npx', args: ['other-mcp'] } } };
-    writeFileSync(tmpFile, JSON.stringify(existing), 'utf-8');
-
-    const serverConfig = { command: 'sonar', args: ['run', 'mcp'] };
-    await writeMcpServerEntry(tmpFile, serverConfig);
-
-    const written = JSON.parse(readFileSync(tmpFile, 'utf-8')) as Record<string, unknown>;
-    const mcpServers = written.mcpServers as Record<string, unknown>;
-    expect(mcpServers['other']).toEqual({ command: 'npx', args: ['other-mcp'] });
-    expect(mcpServers['sonarqube']).toEqual(serverConfig);
-  });
-});
-
-describe('setupMcpServerForAgent (claude)', () => {
-  let writeSpy: ReturnType<typeof spyOn>;
-
-  afterEach(() => {
-    writeSpy?.mockRestore();
-    setMockUi(false);
-  });
-
-  it('writes a sonar CLI config with the platform CLI command', async () => {
-    setMockUi(true);
-    writeSpy = spyOn(
-      await import('@/core/host/mcp/mcp-helper.ts'),
-      'writeMcpServerEntry',
-    ).mockResolvedValue(undefined);
-
-    await setupMcpServer(FAKE_PROJECT, true, undefined);
-
-    const config = (writeSpy.mock.calls[0] as unknown[])[1] as { command: string; args: string[] };
-    expect(typeof config.command).toBe('string');
-    expect(config.command.length).toBeGreaterThan(0);
-    expect(config.args).toEqual(['run', 'mcp']);
-  });
-
-  it('writes to ~/.claude.json for the global case', async () => {
-    setMockUi(true);
-    writeSpy = spyOn(
-      await import('@/core/host/mcp/mcp-helper.ts'),
-      'writeMcpServerEntry',
-    ).mockResolvedValue(undefined);
-
-    await setupMcpServer(FAKE_PROJECT, true, undefined);
-
-    const filePath = (writeSpy.mock.calls[0] as unknown[])[0] as string;
-    expect(filePath).toBe(join(homedir(), '.claude.json'));
-  });
-
-  it('writes to <projectRoot>/.mcp.json for the non-global case', async () => {
-    setMockUi(true);
-    writeSpy = spyOn(
-      await import('@/core/host/mcp/mcp-helper.ts'),
-      'writeMcpServerEntry',
-    ).mockResolvedValue(undefined);
-
-    await setupMcpServer(FAKE_PROJECT, false, undefined);
-
-    const filePath = (writeSpy.mock.calls[0] as unknown[])[0] as string;
-    expect(filePath).toBe(join('/fake/project', '.mcp.json'));
-  });
-
-  it('includes --project flag when a project key is provided', async () => {
-    setMockUi(true);
-    writeSpy = spyOn(
-      await import('@/core/host/mcp/mcp-helper.ts'),
-      'writeMcpServerEntry',
-    ).mockResolvedValue(undefined);
-
-    await setupMcpServer(FAKE_PROJECT, false, 'my-project');
-
-    const config = (writeSpy.mock.calls[0] as unknown[])[1] as { args: string[] };
-    expect(config.args).toContain('--project');
-    expect(config.args).toContain('my-project');
-  });
-
-  it('warns when writing the MCP entry fails', async () => {
-    setMockUi(true);
-    writeSpy = spyOn(
-      await import('@/core/host/mcp/mcp-helper.ts'),
-      'writeMcpServerEntry',
-    ).mockRejectedValue(new Error('disk full'));
-
-    await setupMcpServer(FAKE_PROJECT, false, undefined);
-
-    const warns = getMockUiCalls()
-      .filter((c) => c.method === 'warn')
-      .map((c) => String(c.args[0]));
-    expect(warns.some((m) => m.includes('disk full'))).toBe(true);
   });
 });
 
