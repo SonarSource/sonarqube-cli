@@ -378,24 +378,13 @@ describe('emitIntegrationConfigured()', () => {
     expect(configured.event_payload.agent_session_id).toBeNull();
   });
 
-  it('sets agent_session_id from env when identityOptions omit a session', async () => {
+  it('sets agent_session_id from env when a session is present', async () => {
     process.env.CLAUDE_CODE_SESSION_ID = 'env-integrate-session';
 
     await emitIntegrationConfigured(AUTH, makeIntegrationConfiguredFields());
 
     const [event] = readIntegrationEvents(testSonarUserHome);
     expect(event.event_payload.agent_session_id).toBe('env-integrate-session');
-  });
-
-  it('sets agent_session_id from identityOptions', async () => {
-    process.env.CLAUDE_CODE_SESSION_ID = 'env-integrate-session';
-
-    await emitIntegrationConfigured(AUTH, makeIntegrationConfiguredFields(), {
-      agentSessionId: 'hook-integrate-session',
-    });
-
-    const [event] = readIntegrationEvents(testSonarUserHome);
-    expect(event.event_payload.agent_session_id).toBe('hook-integrate-session');
   });
 
   it('does not append when telemetry is disabled', async () => {

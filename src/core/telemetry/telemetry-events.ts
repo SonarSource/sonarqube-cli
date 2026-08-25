@@ -41,7 +41,7 @@ import type {
   TelemetryEventIdentityPayload,
 } from '../state/state.ts';
 import { getActiveConnection, tryLoadState } from '../state/state-manager.ts';
-import { resolveAgentSessionIdForEmit } from './agent-session.ts';
+import { resolveAgentSessionIdFromHookOrEnv } from './agent-session.ts';
 import { isTelemetryEnabled } from './enabled.ts';
 import {
   resolveCommandTelemetryIdentity,
@@ -105,7 +105,7 @@ async function buildIdentityBase(
     organization_uuid_v4: identity.organization_uuid_v4,
     sqs_installation_id: identity.sqs_installation_id,
     caller_agent: detectCallerAgent(),
-    agent_session_id: resolveAgentSessionIdForEmit(identityOptions?.agentSessionId ?? null),
+    agent_session_id: resolveAgentSessionIdFromHookOrEnv(identityOptions?.agentSessionId ?? null),
   };
 }
 
@@ -164,12 +164,8 @@ export async function emitAnalysisCompleted(
 export async function emitIntegrationConfigured(
   auth: ResolvedAuth,
   fields: IntegrationConfiguredFields,
-  identityOptions?: IdentityEmitOptions,
 ): Promise<void> {
-  const base = await buildIdentityBase(
-    (conn) => resolveCommandTelemetryIdentity(conn, auth),
-    identityOptions,
-  );
+  const base = await buildIdentityBase((conn) => resolveCommandTelemetryIdentity(conn, auth));
   if (!base) return;
   appendTelemetryEvent({
     metadata: {
