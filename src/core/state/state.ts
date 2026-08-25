@@ -291,8 +291,6 @@ export interface ToolsState {
 export interface InstalledIntegrationDependency {
   /** Stable dependency identifier from the integration declaration */
   id: string;
-  /** Dependency type from the integration declaration */
-  dependencyType: string;
   /** Dependency declaration version, when versioned */
   version?: string;
   /** Resolved path for dependencies materialized on disk */

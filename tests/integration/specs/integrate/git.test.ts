@@ -132,7 +132,6 @@ type InstalledStateJson = {
   dependencies: {
     installed: Array<{
       id: string;
-      dependencyType: string;
     }>;
   };
   integrations: {
@@ -170,14 +169,9 @@ function getInstalledIntegration(state: InstalledStateJson, integrationId: strin
   return integration!;
 }
 
-function expectInstalledDependency(
-  state: InstalledStateJson,
-  id: string,
-  dependencyType: string,
-): void {
+function expectInstalledDependency(state: InstalledStateJson, id: string): void {
   const dependency = state.dependencies.installed.find((entry) => entry.id === id);
   expect(dependency).toBeDefined();
-  expect(dependency?.dependencyType).toBe(dependencyType);
 }
 
 function expectFeatureDependency(feature: InstalledFeatureJson, id: string): void {
@@ -526,7 +520,7 @@ describe('integrate git (native hooks)', () => {
       expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
       expectInstalledResource(feature, 'hook-file', 'whole-file');
       expect(feature.operations).toEqual([]);
-      expectInstalledDependency(state, 'sonar-secrets', 'sonarsource-binary');
+      expectInstalledDependency(state, 'sonar-secrets');
     },
     { timeout: 15000 },
   );
@@ -776,8 +770,8 @@ describe('integrate git (native hooks)', () => {
       expect(feature.attrs?.projectKey).toBe('auto-project');
       expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
       expectSubfeatureHasDependency(feature, 'pre-commit-dependency-risks', 'sca-scanner-cli');
-      expectInstalledDependency(state, 'sonar-secrets', 'sonarsource-binary');
-      expectInstalledDependency(state, 'sca-scanner-cli', 'sonarsource-binary');
+      expectInstalledDependency(state, 'sonar-secrets');
+      expectInstalledDependency(state, 'sca-scanner-cli');
     },
     { timeout: 30000 },
   );
@@ -951,8 +945,8 @@ describe('integrate git (native hooks)', () => {
       expect(feature.featureId).toBe('pre-commit-hook');
       expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
       expectSubfeatureHasDependency(feature, 'pre-commit-dependency-risks', 'sca-scanner-cli');
-      expectInstalledDependency(state, 'sonar-secrets', 'sonarsource-binary');
-      expectInstalledDependency(state, 'sca-scanner-cli', 'sonarsource-binary');
+      expectInstalledDependency(state, 'sonar-secrets');
+      expectInstalledDependency(state, 'sca-scanner-cli');
     },
     { timeout: 15000 },
   );
@@ -1019,7 +1013,7 @@ describe('integrate git (husky)', () => {
       expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
       expectInstalledResource(feature, 'hook-file', 'text-snippet');
       expect(feature.operations).toEqual([]);
-      expectInstalledDependency(state, 'sonar-secrets', 'sonarsource-binary');
+      expectInstalledDependency(state, 'sonar-secrets');
     },
     { timeout: 15000 },
   );
@@ -1084,7 +1078,7 @@ describe('integrate git (husky)', () => {
       expectFeatureDependency(feature, 'sonar-secrets');
       expectInstalledResource(feature, 'hook-file', 'text-snippet');
       expect(feature.operations).toEqual([]);
-      expectInstalledDependency(state, 'sonar-secrets', 'sonarsource-binary');
+      expectInstalledDependency(state, 'sonar-secrets');
     },
     { timeout: 15000 },
   );
@@ -1112,7 +1106,7 @@ describe('integrate git (husky)', () => {
       expect(feature.featureId).toBe('pre-commit-hook');
       expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
       expectSubfeatureHasDependency(feature, 'pre-commit-dependency-risks', 'sca-scanner-cli');
-      expectInstalledDependency(state, 'sca-scanner-cli', 'sonarsource-binary');
+      expectInstalledDependency(state, 'sca-scanner-cli');
     },
     { timeout: 15000 },
   );
@@ -1207,7 +1201,7 @@ describe('integrate git (pre-commit framework)', () => {
       expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
       expectInstalledResource(feature, 'hook-config', 'yaml-patch');
       expectInstalledOperation(feature, 'activate-hook');
-      expectInstalledDependency(state, 'sonar-secrets', 'sonarsource-binary');
+      expectInstalledDependency(state, 'sonar-secrets');
     },
     { timeout: 15000 },
   );
@@ -1254,7 +1248,7 @@ describe('integrate git (pre-commit framework)', () => {
       expectFeatureDependency(feature, 'sonar-secrets');
       expectInstalledResource(feature, 'hook-config', 'yaml-patch');
       expectInstalledOperation(feature, 'activate-hook');
-      expectInstalledDependency(state, 'sonar-secrets', 'sonarsource-binary');
+      expectInstalledDependency(state, 'sonar-secrets');
     },
     { timeout: 15000 },
   );
@@ -1450,7 +1444,7 @@ describe('integrate git (pre-commit framework)', () => {
       expect(feature.featureId).toBe('pre-commit-hook');
       expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
       expectSubfeatureHasDependency(feature, 'pre-commit-dependency-risks', 'sca-scanner-cli');
-      expectInstalledDependency(state, 'sca-scanner-cli', 'sonarsource-binary');
+      expectInstalledDependency(state, 'sca-scanner-cli');
     },
     { timeout: 15000 },
   );

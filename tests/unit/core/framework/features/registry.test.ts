@@ -1298,7 +1298,6 @@ describe('declarative integration framework', () => {
     expect(state.dependencies.installed).toMatchObject([
       {
         id: 'binary',
-        dependencyType: 'sonarsource-binary',
         version: SECRETS_SPEC.version,
         path: join(tempDir, 'bin', 'sonar-secrets'),
       },

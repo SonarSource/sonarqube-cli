@@ -554,7 +554,6 @@ describe('system reset --force', () => {
             installed: [
               {
                 id: 'sonar-secrets',
-                dependencyType: 'binary',
                 path: outside,
                 updatedByCliVersion: '0.0.0',
                 updatedAt: new Date().toISOString(),
@@ -608,7 +607,6 @@ describe('system reset --force', () => {
             installed: [
               {
                 id: 'sonar-secrets',
-                dependencyType: 'binary',
                 path: stalePath,
                 updatedByCliVersion: '0.0.0',
                 updatedAt: new Date().toISOString(),
