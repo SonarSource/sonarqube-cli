@@ -41,6 +41,7 @@ import {
 import type { CliState } from '@/core/state/state.ts';
 
 import { TestHarness } from '../../harness';
+import { hookScriptName } from '../../harness/platform.ts';
 
 const PROJECT_KEY = 'my-project';
 const ORG_KEY = 'my-org';
@@ -77,6 +78,24 @@ describe('integrate claude — Vortex entitlement', () => {
       ),
     );
     return sqaaHook && recordedCag && harness.cwd.file(CLAUDE_SKILL_PATH).exists();
+  }
+
+  /** Hook entries are owned by the marker appearing in their command (see `ownsHookEntry`). */
+  function postToolUseHooks(): string {
+    const settingsFile = harness.cwd.file('.claude', 'settings.json');
+    return settingsFile.exists()
+      ? JSON.stringify(settingsFile.asJson().hooks?.PostToolUse ?? [])
+      : '';
+  }
+
+  function sqaaHookScriptExists(): boolean {
+    return harness.cwd.exists(
+      '.claude',
+      'hooks',
+      'sonar-sqaa',
+      'build-scripts',
+      hookScriptName('posttool-sqaa'),
+    );
   }
 
   function entitlementBody(status: Exclude<VortexEntitlementStatus, 'check_failed'>): {
@@ -125,6 +144,10 @@ describe('integrate claude — Vortex entitlement', () => {
       );
       if (activeConnection) {
         activeConnection.serverUrl = serverUrl;
+        if (!cloud) {
+          activeConnection.type = 'on-premise';
+          activeConnection.orgKey = undefined;
+        }
       }
       harness.state().withRawState(JSON.stringify(persistedState));
     }
@@ -257,15 +280,9 @@ describe('integrate claude — Vortex entitlement', () => {
 
       expect(result.exitCode).toBe(0);
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(true);
-      const claudeMd = harness.cwd.file('CLAUDE.md');
-      expect(claudeMd.exists() ? claudeMd.asText() : '').not.toContain(
-        '# Vortex analysis protocol',
-      );
-      const postToolUse = harness.cwd.file('.claude', 'settings.json').exists()
-        ? harness.cwd.file('.claude', 'settings.json').asJson().hooks?.PostToolUse
-        : undefined;
-      expect(JSON.stringify(postToolUse ?? '')).not.toContain('Edit');
-      expect(JSON.stringify(postToolUse ?? '')).not.toContain('Write');
+      expect(harness.cwd.file('CLAUDE.md').exists()).toBe(false);
+      expect(postToolUseHooks()).not.toContain('sonar-sqaa');
+      expect(sqaaHookScriptExists()).toBe(false);
 
       const state = harness.stateJsonFile.asJson() as CliState;
       const vortex = state.integrations.installed
@@ -281,6 +298,31 @@ describe('integrate claude — Vortex entitlement', () => {
           (subfeature) => subfeature.featureId === SQAA_INSTRUCTIONS_SUBFEATURE_ID,
         ),
       ).toBe(false);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'tears down the SQAA hook and instructions when a Cloud install is repointed at a Server',
+    async () => {
+      const installed = await runIntegrateClaude({ scaEnabled: true });
+      expect(installed.exitCode).toBe(0);
+      expect(postToolUseHooks()).toContain('sonar-sqaa');
+      expect(sqaaHookScriptExists()).toBe(true);
+      expect(harness.cwd.file('CLAUDE.md').asText()).toContain('# Vortex analysis protocol');
+
+      const repointed = await runIntegrateClaude({
+        scaEnabled: true,
+        cloud: false,
+        preserveState: true,
+      });
+
+      expect(repointed.exitCode).toBe(0);
+      expect(postToolUseHooks()).not.toContain('sonar-sqaa');
+      expect(sqaaHookScriptExists()).toBe(false);
+      // The snippet was CLAUDE.md's only content, so removing it drops the file.
+      expect(harness.cwd.file('CLAUDE.md').exists()).toBe(false);
+      expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(true);
     },
     { timeout: 30000 },
   );

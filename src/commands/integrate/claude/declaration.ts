@@ -228,7 +228,9 @@ function shouldInstallSqaaHook(
   if (options.vortexDisposition !== 'install') {
     return skip();
   }
-  return shouldInstallSqaa({ auth });
+  // Skipping would strand a hook written by an earlier Cloud install, leaving it
+  // to call the Cloud-only A3S API on every edit once the project points at a Server.
+  return shouldInstallSqaa({ auth }).action === 'install' ? install() : uninstall();
 }
 
 function createContextAugmentationFailureHookSubfeature(): SubfeatureDeclaration<ClaudeIntegrationOptions> {
