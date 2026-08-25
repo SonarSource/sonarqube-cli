@@ -21,7 +21,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.js';
-import { SQAA_HOOK_FEATURE_ID } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
+import {
+  SQAA_HOOK_FEATURE_ID,
+  SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+} from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
 import {
   VORTEX_CHECK_FAILED_MESSAGE,
   VORTEX_FEATURE_ID,
@@ -243,7 +246,7 @@ describe('integrate claude — Vortex entitlement', () => {
   );
 
   it(
-    'installs Vortex on a licensed SonarQube Server',
+    'installs CAG-only Vortex on a licensed SonarQube Server',
     async () => {
       const result = await runIntegrateClaude({
         sqaa: 'enabled',
@@ -253,7 +256,31 @@ describe('integrate claude — Vortex entitlement', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(isVortexInstalled()).toBe(true);
+      expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(true);
+      const claudeMd = harness.cwd.file('CLAUDE.md');
+      expect(claudeMd.exists() ? claudeMd.asText() : '').not.toContain(
+        '# Vortex analysis protocol',
+      );
+      const postToolUse = harness.cwd.file('.claude', 'settings.json').exists()
+        ? harness.cwd.file('.claude', 'settings.json').asJson().hooks?.PostToolUse
+        : undefined;
+      expect(JSON.stringify(postToolUse ?? '')).not.toContain('Edit');
+      expect(JSON.stringify(postToolUse ?? '')).not.toContain('Write');
+
+      const state = harness.stateJsonFile.asJson() as CliState;
+      const vortex = state.integrations.installed
+        .find((integration) => integration.integrationId === 'claude-code')
+        ?.features.find((feature) => feature.featureId === VORTEX_FEATURE_ID);
+      expect(
+        vortex?.subfeatures?.some(
+          (subfeature) => subfeature.featureId === CONTEXT_AUGMENTATION_FEATURE_ID,
+        ),
+      ).toBe(true);
+      expect(
+        vortex?.subfeatures?.some(
+          (subfeature) => subfeature.featureId === SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+        ),
+      ).toBe(false);
     },
     { timeout: 30000 },
   );

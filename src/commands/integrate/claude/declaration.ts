@@ -21,6 +21,7 @@
 import { join } from 'node:path';
 
 import { CONTEXT_AUGMENTATION_TOOL_MATCHER } from '@/commands/hook/context-augmentation-hook-subscriber.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type {
   InstallDecision,
   IntegrationContext,
@@ -45,6 +46,7 @@ import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secret
 import {
   createSqaaInstructionsSnippet,
   createSqaaInstructionsSubfeature,
+  shouldInstallSqaa,
   SQAA_HOOK_FEATURE_ID,
 } from '../_common/features/sqaa-instructions-feature.ts';
 import {
@@ -152,7 +154,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           id: 'sqaa-posttooluse',
           displayName: 'Vortex analysis',
           matcher: 'Edit|Write',
-          shouldInstall: ({ options }) => shouldInstallSqaaHook(options),
+          shouldInstall: ({ options, auth }) => shouldInstallSqaaHook(options, auth),
         },
         {
           id: 'cag-posttooluse',
@@ -216,14 +218,17 @@ function shouldInstallCagHook(
     : skip();
 }
 
-function shouldInstallSqaaHook(options: ClaudeIntegrationOptions): InstallDecision {
-  if (options.vortexDisposition === 'install') {
-    return install();
-  }
+function shouldInstallSqaaHook(
+  options: ClaudeIntegrationOptions,
+  auth: ResolvedAuth | undefined,
+): InstallDecision {
   if (options.vortexDisposition === 'remove') {
     return uninstall();
   }
-  return skip();
+  if (options.vortexDisposition !== 'install') {
+    return skip();
+  }
+  return shouldInstallSqaa({ auth });
 }
 
 function createContextAugmentationFailureHookSubfeature(): SubfeatureDeclaration<ClaudeIntegrationOptions> {

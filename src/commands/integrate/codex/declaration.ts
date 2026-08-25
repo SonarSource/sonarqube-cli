@@ -27,7 +27,6 @@ import type {
 } from '@/core/framework/features';
 import {
   askUser,
-  install,
   isFeatureInstalledGloballyForProject,
   jsonPatch,
   textSnippet,
@@ -50,6 +49,7 @@ import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secret
 import {
   createSqaaInstructionsSnippet,
   createSqaaInstructionsSubfeature,
+  shouldInstallSqaa,
   SQAA_HOOK_FEATURE_ID,
 } from '../_common/features/sqaa-instructions-feature.ts';
 import {
@@ -177,7 +177,7 @@ function createSqaaHookSubfeature(): SubfeatureDeclaration<CodexIntegrationOptio
   return {
     id: SQAA_HOOK_FEATURE_ID,
     displayName: 'Vortex analysis hook',
-    shouldInstall: () => install(),
+    shouldInstall: shouldInstallSqaa,
     resources: [
       wholeFile({
         id: 'posttool-sqaa-script',

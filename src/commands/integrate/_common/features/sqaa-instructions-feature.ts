@@ -18,12 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { isSonarQubeCloud } from '@/core/auth/auth-resolver.ts';
 import type {
+  InstallDecision,
   IntegrationContext,
+  IntegrationInvocation,
   ResourceDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { install, textSnippet } from '@/core/framework/features';
+import { install, skip, textSnippet } from '@/core/framework/features';
 
 import { getRequiredStringAttr } from '../attrs.ts';
 import {
@@ -36,6 +39,11 @@ export const SQAA_HOOK_FEATURE_ID = 'sonar-sqaa-hook';
 export const SQAA_INSTRUCTIONS_SUBFEATURE_ID = 'sqaa-instructions';
 const SQAA_INSTRUCTIONS_MARKER = 'sonarqube-agentic-analysis-protocol';
 
+/** A3S is a Cloud API; Server Vortex entitlement covers CAG only. */
+export function shouldInstallSqaa({ auth }: Pick<IntegrationInvocation, 'auth'>): InstallDecision {
+  return auth != null && isSonarQubeCloud(auth.serverUrl) ? install() : skip();
+}
+
 /** End-of-turn SQAA instructions, written by each agent into its own rules format. */
 export function createSqaaInstructionsSubfeature<TOptions>(
   resources: ResourceDeclaration[],
@@ -43,7 +51,7 @@ export function createSqaaInstructionsSubfeature<TOptions>(
   return {
     id: SQAA_INSTRUCTIONS_SUBFEATURE_ID,
     displayName: 'Vortex analysis instructions',
-    shouldInstall: () => install(),
+    shouldInstall: shouldInstallSqaa,
     resources,
   };
 }
