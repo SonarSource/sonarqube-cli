@@ -30,15 +30,22 @@ import {
 import * as sqaaModule from '../../../../src/commands/analyze/sqaa.ts';
 import { codexPostToolUse } from '../../../../src/commands/hook/codex-post-tool-use.ts';
 import * as hookOutput from '../../../../src/commands/hook/format-sqaa-hook-context.ts';
+import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
 
 describe('codexPostToolUse', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;
   let resolveAuthSpy: ReturnType<typeof spyOn>;
   let buildSqaaJsonReportSpy: ReturnType<typeof spyOn>;
   let emitSqaaAnalysisTelemetrySpy: ReturnType<typeof spyOn>;
+  let readStdinJsonSpy: ReturnType<typeof spyOn>;
+  const originalStdinIsTTY = process.stdin.isTTY;
 
   beforeEach(() => {
+    Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: false });
     stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
+    readStdinJsonSpy = spyOn(stdinModule, 'readStdinJson').mockRejectedValue(
+      new Error('no stdin in unit test'),
+    );
     resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue({
       token: 'tok',
       serverUrl: 'https://sonarcloud.io',
@@ -64,6 +71,29 @@ describe('codexPostToolUse', () => {
     resolveAuthSpy.mockRestore();
     buildSqaaJsonReportSpy.mockRestore();
     emitSqaaAnalysisTelemetrySpy.mockRestore();
+    readStdinJsonSpy.mockRestore();
+    Object.defineProperty(process.stdin, 'isTTY', {
+      configurable: true,
+      value: originalStdinIsTTY,
+    });
+  });
+
+  it('skips stdin when attached to a TTY', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: true });
+
+    await codexPostToolUse({ project: 'my-project' });
+
+    expect(readStdinJsonSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns session id from piped stdin JSON', async () => {
+    const payload = { session_id: 'codex-session-1' };
+    readStdinJsonSpy.mockResolvedValue(payload);
+
+    const returned = await codexPostToolUse({ project: 'my-project' });
+
+    expect(readStdinJsonSpy).toHaveBeenCalledTimes(1);
+    expect(returned).toEqual({ agentSessionId: 'codex-session-1' });
   });
 
   it('writes additionalContext when change-set analysis finds no issues', async () => {

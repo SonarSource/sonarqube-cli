@@ -24,6 +24,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
+import { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
@@ -398,6 +399,8 @@ describe('issuesSearchCommand', () => {
     connectionType: 'cloud',
   };
 
+  const mockCtx = new CommandAuthenticatedInvocationContext(mockAuth);
+
   const emptyApiResponse = {
     issues: [],
     total: 0,
@@ -416,7 +419,7 @@ describe('issuesSearchCommand', () => {
 
   it('throws when --project is missing', async () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(listIssues({ page: 1, pageSize: 500 }, mockAuth)).rejects.toThrow(
+    await expect(listIssues({ page: 1, pageSize: 500 }, mockCtx)).rejects.toThrow(
       '--project is required',
     );
   });
@@ -424,20 +427,20 @@ describe('issuesSearchCommand', () => {
   it('throws when --format is invalid', async () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      listIssues({ project: 'proj', format: 'xml', page: 1, pageSize: 500 }, mockAuth),
+      listIssues({ project: 'proj', format: 'xml', page: 1, pageSize: 500 }, mockCtx),
     ).rejects.toThrow('xml');
   });
 
   it('throws when --page is 0', async () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(listIssues({ project: 'proj', page: 0, pageSize: 500 }, mockAuth)).rejects.toThrow(
+    await expect(listIssues({ project: 'proj', page: 0, pageSize: 500 }, mockCtx)).rejects.toThrow(
       'page',
     );
   });
 
   it('throws when --page-size is 0', async () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(listIssues({ project: 'proj', page: 1, pageSize: 0 }, mockAuth)).rejects.toThrow(
+    await expect(listIssues({ project: 'proj', page: 1, pageSize: 0 }, mockCtx)).rejects.toThrow(
       'page-size',
     );
   });
@@ -445,14 +448,14 @@ describe('issuesSearchCommand', () => {
   it('throws when --page-size exceeds maximum', async () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      listIssues({ project: 'proj', page: 1, pageSize: MAX_PAGE_SIZE + 1 }, mockAuth),
+      listIssues({ project: 'proj', page: 1, pageSize: MAX_PAGE_SIZE + 1 }, mockCtx),
     ).rejects.toThrow('page-size');
   });
 
   it('throws when --severities is invalid', async () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      listIssues({ project: 'proj', severities: 'EXTREME', page: 1, pageSize: 500 }, mockAuth),
+      listIssues({ project: 'proj', severities: 'EXTREME', page: 1, pageSize: 500 }, mockCtx),
     ).rejects.toThrow('EXTREME');
   });
 
@@ -468,7 +471,7 @@ describe('issuesSearchCommand', () => {
     try {
       await listIssues(
         { project: 'my-project', severities: 'high', page: 1, pageSize: 500 },
-        mockAuth,
+        mockCtx,
       );
       expect(capturedParams?.impactSeverities).toBe('HIGH');
     } finally {
@@ -480,7 +483,7 @@ describe('issuesSearchCommand', () => {
     const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockResolvedValue(emptyApiResponse);
 
     try {
-      await listIssues({ project: 'my-project', page: 1, pageSize: 500 }, mockAuth);
+      await listIssues({ project: 'my-project', page: 1, pageSize: 500 }, mockCtx);
     } finally {
       getSpy.mockRestore();
     }
@@ -497,7 +500,7 @@ describe('issuesSearchCommand', () => {
     try {
       await listIssues(
         { project: 'my-project', severities: 'HIGH,MEDIUM', page: 1, pageSize: 500 },
-        mockAuth,
+        mockCtx,
       );
       expect(capturedParams?.impactSeverities).toBe('HIGH,MEDIUM');
       expect(capturedParams?.severities).toBeUndefined();
@@ -517,7 +520,7 @@ describe('issuesSearchCommand', () => {
     try {
       await listIssues(
         { project: 'my-project', severities: 'BLOCKER,INFO', page: 1, pageSize: 500 },
-        mockAuth,
+        mockCtx,
       );
       expect(capturedParams?.impactSeverities).toBe('BLOCKER,INFO');
       expect(capturedParams?.severities).toBeUndefined();
@@ -529,7 +532,7 @@ describe('issuesSearchCommand', () => {
   it('throws when Standard-only value is used on MQR server', async () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      listIssues({ project: 'proj', severities: 'MAJOR', page: 1, pageSize: 500 }, mockAuth),
+      listIssues({ project: 'proj', severities: 'MAJOR', page: 1, pageSize: 500 }, mockCtx),
     ).rejects.toThrow('Invalid severity');
   });
 
@@ -545,7 +548,7 @@ describe('issuesSearchCommand', () => {
     try {
       await listIssues(
         { project: 'my-project', severities: 'MAJOR,CRITICAL', page: 1, pageSize: 500 },
-        mockAuth,
+        mockCtx,
       );
       expect(capturedParams?.severities).toBe('MAJOR,CRITICAL');
       expect(capturedParams?.impactSeverities).toBeUndefined();
@@ -560,7 +563,7 @@ describe('issuesSearchCommand', () => {
     try {
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(
-        listIssues({ project: 'proj', severities: 'HIGH', page: 1, pageSize: 500 }, mockAuth),
+        listIssues({ project: 'proj', severities: 'HIGH', page: 1, pageSize: 500 }, mockCtx),
       ).rejects.toThrow('Invalid severity');
     } finally {
       modeSpy.mockRestore();
@@ -570,7 +573,7 @@ describe('issuesSearchCommand', () => {
   it('throws when --statuses is invalid', async () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      listIssues({ project: 'proj', statuses: 'UNKNOWN', page: 1, pageSize: 500 }, mockAuth),
+      listIssues({ project: 'proj', statuses: 'UNKNOWN', page: 1, pageSize: 500 }, mockCtx),
     ).rejects.toThrow('UNKNOWN');
   });
 });

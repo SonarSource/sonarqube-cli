@@ -113,6 +113,9 @@ describe('analyze (no subcommand)', () => {
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
       expect(sqaaCalls).toHaveLength(1);
+      expect(sqaaCalls[0].headers['x-sonar-invocation-id']).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      );
     },
     { timeout: 15000 },
   );

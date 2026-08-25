@@ -23,9 +23,11 @@
 // hook-agent-prompt-submit.test.ts; this spec only exercises the integrate
 // command — script + hooks.json layout, scope semantics, and idempotency.
 
-import { isAbsolute } from 'node:path';
+import { cpSync } from 'node:fs';
+import { isAbsolute, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { parse as parseToml } from 'smol-toml';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/commands/integrate/_common/features/context-augmentation-feature';
 import {
@@ -34,6 +36,7 @@ import {
 } from '../../../../src/commands/integrate/_common/features/sqaa-instructions-feature';
 import { VORTEX_FEATURE_ID } from '../../../../src/commands/integrate/_common/vortex';
 import { codexIntegration } from '../../../../src/commands/integrate/codex/declaration';
+import { ENV_SONAR_USER_HOME } from '../../../../src/core/config-constants.ts';
 import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
@@ -272,6 +275,7 @@ describe('integrate codex', () => {
         expect(tomlBody).toContain('mcp');
         expect(tomlBody).toContain('--project');
         expect(tomlBody).toContain('my-project');
+        expect(tomlBody).not.toContain('[mcp_servers.sonarqube.env]');
 
         // Assert on the state
         const state = harness.stateJsonFile.asJson();
@@ -290,6 +294,36 @@ describe('integrate codex', () => {
             },
           ],
         });
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'forwards SONAR_USER_HOME into [mcp_servers.sonarqube.env] and refreshes a prior entry',
+      async () => {
+        harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=my-project\n');
+
+        const first = await harness.run('integrate codex --non-interactive');
+        expect(first.exitCode).toBe(0);
+        expect(harness.cwd.file(...CONFIG_TOML_DIRS).asText()).not.toContain(
+          '[mcp_servers.sonarqube.env]',
+        );
+
+        // Distinct from $HOME/.sonar. Copy cliHome because harness.run() always
+        // writes state there, and the child with a custom home must still find auth.
+        const customHome = join(harness.userHome.path, 'custom-sonar');
+        cpSync(harness.cliHome.path, join(customHome, 'sonarqube-cli'), { recursive: true });
+        const result = await harness.run('integrate codex --non-interactive', {
+          extraEnv: { [ENV_SONAR_USER_HOME]: customHome },
+        });
+
+        expect(result.exitCode).toBe(0);
+        const tomlBody = harness.cwd.file(...CONFIG_TOML_DIRS).asText();
+        expect(tomlBody).toContain('[mcp_servers.sonarqube.env]');
+        const parsed = parseToml(tomlBody) as {
+          mcp_servers?: { sonarqube?: { env?: Record<string, string> } };
+        };
+        expect(parsed.mcp_servers?.sonarqube?.env?.[ENV_SONAR_USER_HOME]).toBe(customHome);
       },
       { timeout: 30000 },
     );

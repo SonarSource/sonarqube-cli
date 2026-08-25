@@ -26,11 +26,13 @@ interface ApiStep {
   ok: boolean;
   id?: string;
   uuidV4?: string;
+  enterpriseId?: string;
 }
 
 interface IdentityApiMockOptions {
   user?: ApiStep[];
   org?: ApiStep[];
+  enterprise?: ApiStep[];
   status?: ApiStep[];
 }
 
@@ -49,6 +51,7 @@ export function mockIdentityGetSafe(
 
   const userSteps = options.user ? [...options.user] : undefined;
   const orgSteps = options.org ? [...options.org] : undefined;
+  const enterpriseSteps = options.enterprise ? [...options.enterprise] : undefined;
   const statusSteps = options.status ? [...options.status] : undefined;
 
   return spyOn(SonarQubeClient.prototype, 'getSafe').mockImplementation(
@@ -68,7 +71,16 @@ export function mockIdentityGetSafe(
         const step = shiftStep(orgSteps, { ok: true });
         return Promise.resolve({
           response: { ok: step.ok } as Response,
-          value: (step.uuidV4 ? [{ uuidV4: step.uuidV4 }] : []) as TValue,
+          value: (step.uuidV4
+            ? [{ uuidV4: step.uuidV4, id: step.id ?? `id-${step.uuidV4}` }]
+            : []) as TValue,
+        });
+      }
+      if (endpoint === '/enterprises/enterprise-organizations') {
+        const step = shiftStep(enterpriseSteps, { ok: true });
+        return Promise.resolve({
+          response: { ok: step.ok } as Response,
+          value: (step.enterpriseId ? [{ enterpriseId: step.enterpriseId }] : []) as TValue,
         });
       }
       if (endpoint === '/api/system/status') {

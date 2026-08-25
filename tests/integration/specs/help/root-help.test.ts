@@ -54,7 +54,7 @@ function getExpectedRootHelp(): string {
     '',
     '    list <issues|projects>                                   List issues and projects from SonarQube Cloud or Server',
     '    api <method> <endpoint>                                  Make authenticated API requests to SonarQube',
-    '    context [action] [args...]                               Augment AI agents with context from your codebase [BETA]',
+    '    context [action] [args...]                               Augment AI agents with context from your codebase',
     '',
     '    integrate <git|claude|copilot|codex|antigravity|cursor>  Setup SonarQube integration for AI coding agents, git and others.',
     '',
@@ -129,18 +129,6 @@ describe('root help', () => {
       expect(result.stdout).toContain('Usage: sonar auth');
       expect(result.stdout).toContain('login');
       expect(result.stdout).toContain('logout');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'a Beta command warns on stderr only once for the current version',
-    async () => {
-      const firstResult = await harness.run('context');
-      const secondResult = await harness.run('context');
-
-      expect(stripAnsi(firstResult.stderr)).toContain("'context' is in beta and may change.");
-      expect(stripAnsi(secondResult.stderr)).not.toContain("'context' is in beta and may change.");
     },
     { timeout: 15000 },
   );
