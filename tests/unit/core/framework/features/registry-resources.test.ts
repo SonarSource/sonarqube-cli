@@ -42,11 +42,11 @@ const {
   IntegrationInstaller,
   jsonPatch,
   textSnippetRemover,
-  SonarSourceBinary,
   sonarSourceBinary,
   textSnippet,
   wholeFile,
 } = await import('@/core/framework/features');
+const { SECRETS_SPEC } = await import('@/core/host/install/secrets.ts');
 const { removeInstalledFeature } =
   await import('@/core/framework/features/installation-recorder.ts');
 
@@ -378,7 +378,7 @@ describe('declarative integration framework - resources and state recording', ()
       dependencies: [
         sonarSourceBinary({
           id: 'binary',
-          binary: SonarSourceBinary.SonarSecrets,
+          spec: SECRETS_SPEC,
         }),
       ],
     };
@@ -416,7 +416,7 @@ describe('declarative integration framework - resources and state recording', ()
     const binaryPath = join(tempDir, 'bin', 'sonar-secrets');
     const dependency = sonarSourceBinary({
       id: 'binary',
-      binary: SonarSourceBinary.SonarSecrets,
+      spec: SECRETS_SPEC,
     });
     const context = makeContext(state, tempDir);
 
@@ -428,11 +428,11 @@ describe('declarative integration framework - resources and state recording', ()
 
     const applied = await dependency.installOrUpdate(context);
 
-    expect(installBinarySpy).toHaveBeenCalledWith(SonarSourceBinary.SonarSecrets.spec);
+    expect(installBinarySpy).toHaveBeenCalledWith(SECRETS_SPEC);
     expect(applied).toEqual({
       id: 'binary',
       dependencyType: 'sonarsource-binary',
-      version: SonarSourceBinary.SonarSecrets.spec.version,
+      version: SECRETS_SPEC.version,
       path: binaryPath,
     });
   });
@@ -446,7 +446,7 @@ describe('declarative integration framework - resources and state recording', ()
         sonarSourceBinary({
           id: 'dependency',
           version: '1',
-          binary: SonarSourceBinary.SonarSecrets,
+          spec: SECRETS_SPEC,
         }),
       ],
       resources: [
@@ -487,7 +487,7 @@ describe('declarative integration framework - resources and state recording', ()
         sonarSourceBinary({
           id: 'dependency',
           version: '2',
-          binary: SonarSourceBinary.SonarSecrets,
+          spec: SECRETS_SPEC,
         }),
       ),
     ).toBe(true);
