@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { green, red, yellow } from '@/core/ui/colors.ts';
+import { cyan, green, red, yellow } from '@/core/ui/colors.ts';
 import { padColumns } from '@/core/ui/formatter/column-formatting.ts';
 
 import type { QualityGateConditionSummary } from './condition-summary.ts';
@@ -40,13 +40,11 @@ const VERDICT_BRACKETS: Record<QualityGateVerdict, string> = {
   NOT_COMPUTED: '[⚠ Not computed]',
 };
 
-/**
- * The API only ever returns `LT`/`GT` (strict "less than"/"greater than" — the comparator
- * describes when the condition *fails*), so passing requires the inclusive opposite bound.
- */
-const COMPARATOR_SYMBOLS: Record<string, string> = {
+const INVERSE_COMPARATOR_SYMBOLS: Record<string, string> = {
   LT: '≥',
   GT: '≤',
+  EQ: '≠',
+  NE: '=',
 };
 
 export interface QualityGateTableViewModel {
@@ -62,6 +60,10 @@ export function formatQualityGateTable(vm: QualityGateTableViewModel): string {
     `Project:      ${vm.project}`,
     formatScopeLine(vm.scope),
   ];
+
+  if (vm.verdict === 'NOT_COMPUTED') {
+    lines.push('', `${cyan('ℹ')}  ${notComputedHint(vm.scope)}`);
+  }
 
   if (vm.conditions.length > 0) {
     const [labels, values] = padColumns(
@@ -109,7 +111,12 @@ function formatConditionLine(
   const marker = condition.status === 'OK' ? green('✓') : red('✗');
   const requirement =
     condition.threshold !== undefined
-      ? `(required ${COMPARATOR_SYMBOLS[condition.comparator] ?? condition.comparator} ${condition.threshold})`
+      ? `(required ${INVERSE_COMPARATOR_SYMBOLS[condition.comparator] ?? condition.comparator} ${condition.threshold})`
       : '';
   return `    ${marker}  ${paddedLabel}${paddedValue}${requirement}`;
+}
+
+function notComputedHint(scope: QualityGateScope): string {
+  const subject = scope.kind === 'pullRequest' ? 'pull request' : 'branch';
+  return `This ${subject} either doesn't exist, hasn't been analyzed yet, or analysis ran but the quality gate status is not updated yet. You can run \`sonar analyze\` for local analysis.`;
 }

@@ -60,7 +60,7 @@ describe('get quality-gate', () => {
   );
 
   it(
-    'does not fetch the metric catalog when the gate has no conditions to enrich',
+    'does not fetch the metric catalog when the gate has no conditions at all',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -75,6 +75,73 @@ describe('get quality-gate', () => {
         .getRecordedRequests()
         .filter((r) => r.path === '/api/metrics/search');
       expect(metricsRequests).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'does not fetch the metric catalog when every condition passes and --all is not given',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withProjectStatus('OK').withConditions([
+            {
+              status: 'OK',
+              metricKey: 'new_bugs',
+              comparator: 'GT',
+              errorThreshold: '0',
+              actualValue: '0',
+            },
+            {
+              status: 'OK',
+              metricKey: 'new_coverage',
+              comparator: 'LT',
+              errorThreshold: '80',
+              actualValue: '95.0',
+            },
+          ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      await harness.run(`get quality-gate --project my-project`);
+
+      const metricsRequests = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/metrics/search');
+      expect(metricsRequests).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'fetches the metric catalog for an all-passing gate when --all is given',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withProjectStatus('OK').withConditions([
+            {
+              status: 'OK',
+              metricKey: 'new_bugs',
+              comparator: 'GT',
+              errorThreshold: '0',
+              actualValue: '0',
+            },
+          ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      await harness.run(`get quality-gate --project my-project --all`);
+
+      const metricsRequests = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/metrics/search');
+      expect(metricsRequests).toHaveLength(1);
     },
     { timeout: 15000 },
   );
@@ -617,6 +684,29 @@ describe('get quality-gate', () => {
   );
 
   it(
+    'fails fast with a clear error when the project does not exist',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK'))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`get quality-gate --project does-not-exist`);
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("Project 'does-not-exist' does not exist or not accessible.");
+
+      const statusRequests = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/qualitygates/project_status');
+      expect(statusRequests).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'reports NOT_COMPUTED and exits 1 when the project has no quality gate status yet',
     async () => {
       const server = await harness
@@ -636,6 +726,49 @@ describe('get quality-gate', () => {
         branch: 'main',
         conditions: [],
       });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows an info hint to analyze locally when the table verdict is NOT_COMPUTED',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project')
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`get quality-gate --project my-project --format table`);
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toContain('Quality Gate: [⚠ Not computed]');
+      expect(result.stdout).toContain(
+        "This branch either doesn't exist, hasn't been analyzed yet, or analysis ran but the quality gate status is not updated yet. You can run `sonar analyze` for local analysis.",
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'says "pull request" instead of "branch" in the NOT_COMPUTED hint when scoped to a pull request',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project')
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `get quality-gate --project my-project --pull-request 42 --format table`,
+      );
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toContain(
+        "This pull request either doesn't exist, hasn't been analyzed yet, or analysis ran but the quality gate status is not updated yet. You can run `sonar analyze` for local analysis.",
+      );
     },
     { timeout: 15000 },
   );

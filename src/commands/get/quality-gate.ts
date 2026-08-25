@@ -21,6 +21,7 @@
 // Get quality-gate command - fetch the quality gate verdict for a project
 
 import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
+import { CommandFailedError } from '@/core/command-error.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { MetricsClient } from '@/core/server/metrics.ts';
@@ -31,7 +32,7 @@ import { print } from '@/core/ui';
 import { selectConditions } from './quality-gate-helpers/condition-summary.ts';
 import { formatQualityGateJson } from './quality-gate-helpers/format-json.ts';
 import { formatQualityGateTable } from './quality-gate-helpers/format-table.ts';
-import { resolveQualityGateScope, scopeQueryParams } from './quality-gate-helpers/scope.ts';
+import { resolveDisplayScope, resolveScopeQueryParams } from './quality-gate-helpers/scope.ts';
 import { exitCodeFor, toVerdict } from './quality-gate-helpers/verdict.ts';
 
 export const VALID_FORMATS = ['json', 'table'];
@@ -53,19 +54,26 @@ export async function getQualityGate(
   noteProject(auth, projectKey);
 
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
-  const scope = await resolveQualityGateScope(client, projectKey, options);
+  await assertProjectExists(client, projectKey);
+
+  const queryParams = resolveScopeQueryParams(options);
 
   const qualityGatesClient = new QualityGatesClient(client);
-  const projectStatus = await qualityGatesClient.getProjectStatus({
-    projectKey,
-    ...scopeQueryParams(scope),
-  });
+  const [projectStatus, scope] = await Promise.all([
+    qualityGatesClient.getProjectStatus({ projectKey, ...queryParams }),
+    resolveDisplayScope(client, projectKey, options),
+  ]);
+
+  const rawConditions = projectStatus?.conditions ?? [];
+  const hasConditionsToRender = options.all
+    ? rawConditions.length > 0
+    : rawConditions.some((condition) => condition.status !== 'OK');
 
   const metricsClient = new MetricsClient(client);
-  const metrics = projectStatus?.conditions.length ? await metricsClient.searchMetrics() : [];
+  const metrics = hasConditionsToRender ? await metricsClient.searchMetrics() : [];
 
   const verdict = toVerdict(projectStatus?.status);
-  const conditions = selectConditions(projectStatus?.conditions, metrics, options.all);
+  const conditions = selectConditions(rawConditions, metrics, options.all);
 
   const format = options.format ?? 'json';
   const message =
@@ -75,4 +83,12 @@ export async function getQualityGate(
   print(message);
 
   process.exitCode = exitCodeFor(verdict);
+}
+
+async function assertProjectExists(client: SonarQubeClient, projectKey: string): Promise<void> {
+  if (!(await client.checkComponent(projectKey))) {
+    throw new CommandFailedError(`Project '${projectKey}' does not exist or not accessible.`, {
+      remediationHint: 'Check the project key and your access to the project on the server.',
+    });
+  }
 }

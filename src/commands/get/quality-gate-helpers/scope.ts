@@ -32,7 +32,7 @@ export interface GetQualityGateScopeOptions {
 /**
  * `branch` and `default` both hold a branch name in `value` — `default` only exists to
  * distinguish "resolved automatically" from "given explicitly" for display (the
- * "Branch main (default)" annotation). `value` is always populated: `resolveQualityGateScope`
+ * "Branch main (default)" annotation). `value` is always populated: `resolveDisplayScope`
  * throws rather than return a `default` scope with no resolvable branch name.
  */
 export type QualityGateScopeKind = 'branch' | 'pullRequest' | 'default';
@@ -43,19 +43,33 @@ export interface QualityGateScope {
 }
 
 /**
- * When neither `--branch` nor `--pull-request` is given, the project_status API already
- * defaults to the main branch server-side — the extra `/api/project_branches/list` call here
- * only resolves that branch's *name* for display (the "Branch main (default)" annotation), so
- * its result is never forwarded back into the project_status request itself.
+ * When neither `--branch` nor `--pull-request` is given, the project_status API already defaults
+ * to the main branch server-side, so `default` scope has nothing to forward here.
  */
-export async function resolveQualityGateScope(
+export function resolveScopeQueryParams(options: GetQualityGateScopeOptions): {
+  branch?: string;
+  pullRequest?: string;
+} {
+  if (options.branch && options.pullRequest) {
+    throw new InvalidOptionError('--branch and --pull-request cannot be used together.');
+  }
+  if (options.pullRequest) {
+    return { pullRequest: options.pullRequest };
+  }
+  if (options.branch) {
+    return { branch: options.branch };
+  }
+  return {};
+}
+
+/**
+ * Resolves the scope purely for display (the "Branch:"/"Pull Request:" line).
+ */
+export async function resolveDisplayScope(
   client: SonarQubeClient,
   projectKey: string,
   options: GetQualityGateScopeOptions,
 ): Promise<QualityGateScope> {
-  if (options.branch && options.pullRequest) {
-    throw new InvalidOptionError('--branch and --pull-request cannot be used together.');
-  }
   if (options.pullRequest) {
     return { kind: 'pullRequest', value: options.pullRequest };
   }
@@ -72,19 +86,4 @@ export async function resolveQualityGateScope(
     });
   }
   return { kind: 'default', value: defaultBranch.name };
-}
-
-/** API query params for the scope — `default` is never forwarded, since the server already
- * defaults to the main branch when neither param is given. */
-export function scopeQueryParams(scope: QualityGateScope): {
-  branch?: string;
-  pullRequest?: string;
-} {
-  if (scope.kind === 'branch') {
-    return { branch: scope.value };
-  }
-  if (scope.kind === 'pullRequest') {
-    return { pullRequest: scope.value };
-  }
-  return {};
 }

@@ -220,13 +220,7 @@ export class SonarQubeClient {
    */
   async get<T>(endpoint: string, params?: QueryParams, baseUrl?: string): Promise<T> {
     const result = await this.getSafe<T>(endpoint, params, baseUrl);
-
-    await this.raiseForStatus(result.response, 'GET');
-
-    if (result.value === undefined) {
-      throw new Error('SonarQube API error: empty response body');
-    }
-    return result.value;
+    return this.unwrapGetResult(result);
   }
 
   /**
@@ -244,6 +238,13 @@ export class SonarQubeClient {
       return null;
     }
 
+    return this.unwrapGetResult(result);
+  }
+
+  private async unwrapGetResult<T>(result: {
+    response: Response;
+    value: T | undefined;
+  }): Promise<T> {
     await this.raiseForStatus(result.response, 'GET');
 
     if (result.value === undefined) {
