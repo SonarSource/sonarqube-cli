@@ -57,6 +57,7 @@ import {
 } from '@/core/telemetry/telemetry-events.ts';
 import * as userModule from '@/core/telemetry/user.ts';
 
+import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
 import {
   makeTelemetryState,
   readAnalysisEvents,
@@ -144,6 +145,13 @@ const AUTH: ResolvedAuth = {
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
+const AGENT_SESSION_ENV_KEYS = [
+  'CLAUDE_CODE_SESSION_ID',
+  'CODEX_SESSION_ID',
+  'CODEX_THREAD_ID',
+  'GEMINI_SESSION_ID',
+] as const;
+
 let testSonarUserHome: string;
 const previousSonarUserHome = process.env[ENV_SONAR_USER_HOME];
 
@@ -153,6 +161,7 @@ let getUserIdSpy: ReturnType<typeof spyOn>;
 let detectAgentSpy: ReturnType<typeof spyOn>;
 let defaultFetchSpy: ReturnType<typeof spyOn>;
 let savedDoNotTrack: string | undefined;
+let savedAgentSessionEnv: Partial<Record<(typeof AGENT_SESSION_ENV_KEYS)[number], string>>;
 
 beforeEach(async () => {
   testSonarUserHome = await mkdtemp(join(tmpdir(), 'cli-telemetry-events-test-'));
@@ -160,6 +169,12 @@ beforeEach(async () => {
 
   savedDoNotTrack = process.env.DO_NOT_TRACK;
   delete process.env.DO_NOT_TRACK;
+
+  savedAgentSessionEnv = {};
+  for (const key of AGENT_SESSION_ENV_KEYS) {
+    savedAgentSessionEnv[key] = process.env[key];
+    delete process.env[key];
+  }
 
   loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeTelemetryState());
   getConnectionSpy = spyOn(stateManager, 'getActiveConnection').mockReturnValue(undefined);
@@ -178,6 +193,10 @@ afterEach(async () => {
     process.env.DO_NOT_TRACK = savedDoNotTrack;
   } else {
     delete process.env.DO_NOT_TRACK;
+  }
+
+  for (const key of AGENT_SESSION_ENV_KEYS) {
+    restoreEnv(key, savedAgentSessionEnv[key]);
   }
 
   loadStateSpy.mockRestore();
@@ -277,7 +296,25 @@ describe('emitAnalysisCompleted()', () => {
     expect(payload.agent_session_id).toBe('sess-abc');
   });
 
-  it('sets agent_session_id to null when identityOptions omit a session', async () => {
+  it('sets agent_session_id from env when identityOptions omit a session', async () => {
+    process.env.CLAUDE_CODE_SESSION_ID = 'env-session';
+
+    await emitAnalysisCompleted(AUTH, makeCompletedFields());
+
+    const payload = readAnalysisEvents(testSonarUserHome)[0].event_payload;
+    expect(payload.agent_session_id).toBe('env-session');
+  });
+
+  it('prefers identityOptions.agentSessionId over env', async () => {
+    process.env.CLAUDE_CODE_SESSION_ID = 'env-session';
+
+    await emitAnalysisCompleted(AUTH, makeCompletedFields(), { agentSessionId: 'hook-session' });
+
+    const payload = readAnalysisEvents(testSonarUserHome)[0].event_payload;
+    expect(payload.agent_session_id).toBe('hook-session');
+  });
+
+  it('sets agent_session_id to null when identityOptions and env omit a session', async () => {
     await emitAnalysisCompleted(AUTH, makeCompletedFields());
 
     const payload = readAnalysisEvents(testSonarUserHome)[0].event_payload;
@@ -338,6 +375,27 @@ describe('emitIntegrationConfigured()', () => {
     expect(configured.event_payload.is_from_router).toBe(true);
     // Identity base is merged in.
     expect(configured.event_payload.cli_installation_id).toBe('install-id');
+    expect(configured.event_payload.agent_session_id).toBeNull();
+  });
+
+  it('sets agent_session_id from env when identityOptions omit a session', async () => {
+    process.env.CLAUDE_CODE_SESSION_ID = 'env-integrate-session';
+
+    await emitIntegrationConfigured(AUTH, makeIntegrationConfiguredFields());
+
+    const [event] = readIntegrationEvents(testSonarUserHome);
+    expect(event.event_payload.agent_session_id).toBe('env-integrate-session');
+  });
+
+  it('sets agent_session_id from identityOptions', async () => {
+    process.env.CLAUDE_CODE_SESSION_ID = 'env-integrate-session';
+
+    await emitIntegrationConfigured(AUTH, makeIntegrationConfiguredFields(), {
+      agentSessionId: 'hook-integrate-session',
+    });
+
+    const [event] = readIntegrationEvents(testSonarUserHome);
+    expect(event.event_payload.agent_session_id).toBe('hook-integrate-session');
   });
 
   it('does not append when telemetry is disabled', async () => {

@@ -1140,6 +1140,35 @@ describe('analyze agentic — analysis telemetry', () => {
   );
 
   it(
+    'records agent_session_id from CLAUDE_CODE_SESSION_ID on CliAnalysisCompleted',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      enableFlushTelemetry();
+      harness
+        .state()
+        .withTelemetryEnabled()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+
+      const result = await harness.run('analyze agentic --file src/index.ts', {
+        extraEnv: { CLAUDE_CODE_SESSION_ID: 'claude-analyze-session' },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const [completed] = readAnalysisEvents(harness.sonarUserHome.path);
+      expect(completed.event_payload.agent_session_id).toBe('claude-analyze-session');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'writes a single CliAnalysisCompleted with populated details when issues are found',
     async () => {
       const server = await harness
