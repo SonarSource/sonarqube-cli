@@ -16,7 +16,7 @@ $Platform   = 'windows-x86-64'
 # this file before executing it. Keep this compatibility marker present, but unused:
 # the real version now comes from stable.version at runtime. Release automation
 # keeps this marker aligned with the latest released CLI version.
-$SonarVersion = "1.5.0.4158"
+$SonarVersion = "1.6.0.4255"
 
 function Resolve-LatestVersion {
     $Version = (Invoke-WebRequest -Uri "$BaseUrl/stable.version" -UseBasicParsing).Content.Trim()

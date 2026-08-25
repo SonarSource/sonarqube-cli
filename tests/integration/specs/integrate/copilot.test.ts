@@ -525,7 +525,9 @@ describe('integrate copilot', () => {
             .map((feature: { featureId: string }) => feature.featureId)
             .sort(),
         ).toEqual(['mcp-server', 'prompt-secrets-instructions']);
-        expect(state.dependencies.installed).toEqual([]);
+        expect(
+          state.dependencies.installed.map((dependency: { id: string }) => dependency.id),
+        ).toEqual(['sonar-secrets']);
       },
       { timeout: 30000 },
     );

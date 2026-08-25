@@ -45,7 +45,7 @@ export function getRecognizedNativeMarkers(hook: GitHookType): string[] {
 function nativeBinBlock(): string {
   return [
     // `|| :` avoids exiting under `sh -e` when `command -v` fails (missing sonar).
-    String.raw`SONAR_BIN=$(command -v sonar 2>/dev/null || :)`,
+    `SONAR_BIN=$(command -v sonar 2>/dev/null || :)`,
     `[ -z "$SONAR_BIN" ] && { echo "${SONAR_HOOK_SKIP_SECRETS_MESSAGE}"; exit 0; }`,
   ].join('\n');
 }

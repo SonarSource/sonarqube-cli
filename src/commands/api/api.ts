@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { InvalidOptionError } from '@/core/command-error.ts';
 import { CLOUD_API_DOCS_URL, SERVER_API_DOCS_URL } from '@/core/config-constants.ts';
 import {
@@ -70,11 +70,12 @@ API Usage Documentation:
 }
 
 export async function apiCommand(
-  auth: ResolvedAuth,
+  ctx: CommandAuthenticatedInvocationContext,
   method: string,
   endpoint: string,
   options: ApiCommandOptions,
 ): Promise<void> {
+  const { auth } = ctx;
   if (!VALID_METHODS.has(method.toUpperCase())) {
     const validMethods = Array.from(VALID_METHODS)
       .map((m) => m.toLowerCase())

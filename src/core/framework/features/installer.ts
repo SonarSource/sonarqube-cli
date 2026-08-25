@@ -116,7 +116,6 @@ export interface RemoveFeatureCallbacks<TOptions = Record<string, unknown>> {
   onResourceRemoved?: (resource: ResourceDeclaration) => void;
   onResourceSkipped?: (resource: ResourceDeclaration) => void;
   onOperationUndone?: (operation: FeatureOperation) => void;
-  onDependencyRemoved?: (dependency: DependencyDeclaration) => void;
 }
 
 export class IntegrationInstaller {
@@ -280,9 +279,8 @@ export class IntegrationInstaller {
 
   /**
    * Remove the given features and update state: tear down each feature's
-   * resources/operations, prune the recorded state entries, and uninstall any
-   * binary dependency that becomes orphaned. Returns the removed feature
-   * declarations.
+   * resources/operations and prune the recorded state entries.
+   * Returns the removed feature declarations.
    */
   async removeAndRecordFeatures<TOptions>(
     state: CliState,
@@ -299,15 +297,7 @@ export class IntegrationInstaller {
       options.callbacks?.onFeatureRemoveStart?.(feature);
       await this.removeFeature(context, feature, options.callbacks ?? {});
 
-      const orphanedDependencies = removeInstalledFeature(state, context, integration, feature);
-      const declaredDependencies = resolveAllDeps(feature);
-      for (const orphaned of orphanedDependencies) {
-        const declaration = declaredDependencies.find((dep) => dep.id === orphaned.id);
-        if (declaration) {
-          await declaration.remove(context);
-          options.callbacks?.onDependencyRemoved?.(declaration);
-        }
-      }
+      removeInstalledFeature(state, context, integration, feature);
 
       removed.push(feature);
     }

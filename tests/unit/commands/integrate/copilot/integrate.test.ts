@@ -20,6 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
 
+import { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import * as vortex from '@/commands/integrate/_common/vortex.ts';
 import { integrateCopilot } from '@/commands/integrate/copilot';
 import * as hooks from '@/commands/integrate/copilot/hooks.ts';
@@ -36,6 +37,8 @@ const SERVER_AUTH: ResolvedAuth = {
   serverUrl: 'https://sonar.example.com',
   connectionType: 'on-premise',
 };
+
+const SERVER_CTX = new CommandAuthenticatedInvocationContext(SERVER_AUTH);
 
 const BASE_PROJECT: DiscoveredProject = {
   rootDir: '/project/root',
@@ -104,7 +107,7 @@ describe('integrateCopilot', () => {
     checkTokenStatusSpy.mockResolvedValue({ status: 'invalid' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(integrateCopilot({}, SERVER_AUTH)).rejects.toThrow('Token is invalid.');
+    await expect(integrateCopilot({}, SERVER_CTX)).rejects.toThrow('Token is invalid.');
     expect(installIntegrationSpy).not.toHaveBeenCalled();
   });
 
@@ -112,12 +115,12 @@ describe('integrateCopilot', () => {
     checkTokenStatusSpy.mockResolvedValue({ status: 'unreachable' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(integrateCopilot({}, SERVER_AUTH)).rejects.toThrow('Server is unreachable.');
+    await expect(integrateCopilot({}, SERVER_CTX)).rejects.toThrow('Server is unreachable.');
     expect(installIntegrationSpy).not.toHaveBeenCalled();
   });
 
   it('validates token against the auth server URL before installing', async () => {
-    await integrateCopilot({}, SERVER_AUTH);
+    await integrateCopilot({}, SERVER_CTX);
 
     expect(checkTokenStatusSpy).toHaveBeenCalledWith(SERVER_AUTH.serverUrl, SERVER_AUTH.token);
   });

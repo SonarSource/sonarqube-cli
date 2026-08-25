@@ -4,6 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
@@ -22,6 +23,8 @@ const mockAuth: ResolvedAuth = {
   serverUrl: 'https://sonar.example.com',
   connectionType: 'on-premise',
 };
+
+const mockCtx = new CommandAuthenticatedInvocationContext(mockAuth);
 
 function makeProjectsResponse(
   components: { key: string; name: string }[],
@@ -54,23 +57,21 @@ describe('projectsSearchCommand', () => {
   describe('error conditions', () => {
     it('throws when page size is not positive', async () => {
       // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(listProjects({ page: 1, pageSize: 0 }, mockAuth)).rejects.toThrow(
+      await expect(listProjects({ page: 1, pageSize: 0 }, mockCtx)).rejects.toThrow(
         `Invalid --page-size option: '0'. Must be an integer between 1 and 500`,
       );
     });
 
     it('throws when page is not positive', async () => {
       // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(listProjects({ page: 0, pageSize: 500 }, mockAuth)).rejects.toThrow(
+      await expect(listProjects({ page: 0, pageSize: 500 }, mockCtx)).rejects.toThrow(
         `Invalid --page option: '0'. Must be an integer >= 1`,
       );
     });
 
     it('throws when page size exceeds the maximum', async () => {
       // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(
-        listProjects({ page: 1, pageSize: MAX_PAGE_SIZE + 1 }, mockAuth),
-      ).rejects.toThrow(
+      await expect(listProjects({ page: 1, pageSize: MAX_PAGE_SIZE + 1 }, mockCtx)).rejects.toThrow(
         `Invalid --page-size option: '${MAX_PAGE_SIZE + 1}'. Must be an integer between 1 and 500`,
       );
     });
@@ -79,7 +80,7 @@ describe('projectsSearchCommand', () => {
       getSpy.mockRejectedValue(new Error('SonarQube API error: 401 Unauthorized'));
 
       // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(listProjects(DEFAULT_OPTIONS, mockAuth)).rejects.toThrow(
+      await expect(listProjects(DEFAULT_OPTIONS, mockCtx)).rejects.toThrow(
         'SonarQube API error: 401 Unauthorized',
       );
     });
@@ -89,7 +90,7 @@ describe('projectsSearchCommand', () => {
     it('prints JSON with empty projects array when no results', async () => {
       clearMockUiCalls();
 
-      await listProjects(DEFAULT_OPTIONS, mockAuth);
+      await listProjects(DEFAULT_OPTIONS, mockCtx);
 
       const prints = getMockUiCalls()
         .filter((c) => c.method === 'print')
@@ -113,7 +114,7 @@ describe('projectsSearchCommand', () => {
         ]),
       );
 
-      await listProjects(DEFAULT_OPTIONS, mockAuth);
+      await listProjects(DEFAULT_OPTIONS, mockCtx);
 
       const prints = getMockUiCalls()
         .filter((c) => c.method === 'print')
@@ -130,7 +131,7 @@ describe('projectsSearchCommand', () => {
         makeProjectsResponse([{ key: 'proj-1', name: 'Project One' }], 1, 1, 5),
       );
 
-      await listProjects({ pageSize: 1, page: 1 }, mockAuth);
+      await listProjects({ pageSize: 1, page: 1 }, mockCtx);
 
       const prints = getMockUiCalls()
         .filter((c) => c.method === 'print')
@@ -149,7 +150,7 @@ describe('projectsSearchCommand', () => {
         makeProjectsResponse([{ key: 'proj-1', name: 'Project One' }], 2, 1, 2),
       );
 
-      await listProjects({ pageSize: 1, page: 2 }, mockAuth);
+      await listProjects({ pageSize: 1, page: 2 }, mockCtx);
 
       const prints = getMockUiCalls()
         .filter((c) => c.method === 'print')
@@ -164,7 +165,7 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await listProjects({ query: 'my-project', ...DEFAULT_OPTIONS }, mockAuth);
+      await listProjects({ query: 'my-project', ...DEFAULT_OPTIONS }, mockCtx);
 
       expect(capturedParams?.q).toBe('my-project');
     });
@@ -176,7 +177,7 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await listProjects({ page: 3, pageSize: 500 }, mockAuth);
+      await listProjects({ page: 3, pageSize: 500 }, mockCtx);
 
       expect(capturedParams?.p).toBe(3);
     });
@@ -188,7 +189,7 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await listProjects({ page: 1, pageSize: 50 }, mockAuth);
+      await listProjects({ page: 1, pageSize: 50 }, mockCtx);
 
       expect(capturedParams?.ps).toBe(50);
     });
@@ -207,7 +208,7 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await listProjects(DEFAULT_OPTIONS, cloudAuth);
+      await listProjects(DEFAULT_OPTIONS, new CommandAuthenticatedInvocationContext(cloudAuth));
 
       expect(capturedParams?.organization).toBe('my-org');
     });
@@ -225,7 +226,7 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await listProjects(DEFAULT_OPTIONS, onPremAuth);
+      await listProjects(DEFAULT_OPTIONS, new CommandAuthenticatedInvocationContext(onPremAuth));
 
       expect(capturedParams?.organization).toBeUndefined();
     });

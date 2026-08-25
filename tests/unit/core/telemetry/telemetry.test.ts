@@ -350,6 +350,7 @@ describe('storeEvent', () => {
       });
       conn.userUuid = 'user-uuid-abc';
       conn.organizationUuidV4 = 'org-uuid-xyz';
+      conn.enterpriseUuid = null;
       loadStateSpy.mockReturnValue(state);
 
       await storeEvent(makeCommand('auth login'), true);

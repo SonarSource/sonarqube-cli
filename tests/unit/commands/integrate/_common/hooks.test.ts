@@ -42,6 +42,7 @@ import {
   quoteWindowsHookScriptPath,
   readOrInitJson,
   resolveAgentHookCommand,
+  shellDoubleQuoteBash,
   shellQuoteBash,
   UNIX_SONAR_COMMAND_GUARD,
   unixTemplate,
@@ -143,6 +144,16 @@ describe('shellQuoteBash', () => {
   });
 });
 
+describe('shellDoubleQuoteBash', () => {
+  it('wraps values in double quotes without escaping $', () => {
+    expect(shellDoubleQuoteBash('${CLAUDE_PROJECT_DIR}/a.sh')).toBe('"${CLAUDE_PROJECT_DIR}/a.sh"');
+  });
+
+  it('escapes embedded double quotes, backslashes, and backticks', () => {
+    expect(shellDoubleQuoteBash('a"b\\c`d')).toBe('"a\\"b\\\\c\\`d"');
+  });
+});
+
 describe('quoteWindowsHookScriptPath', () => {
   it('wraps the path in double quotes so spaces survive PowerShell -File parsing', () => {
     expect(quoteWindowsHookScriptPath('C:/Users/Jane Doe/.claude/hooks/x.ps1')).toBe(
@@ -200,6 +211,51 @@ describe('resolveAgentHookCommand', () => {
     expect(command).toBe("'.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh'");
   });
 
+  it.skipIf(IS_WINDOWS)(
+    // Double-quoted, not single-quoted: single quotes would suppress the shell's own
+    // `$var`/`${var}` expansion, leaving the literal, unexpanded token in the path instead of
+    // letting Claude Code's substitution take effect.
+    'anchors the project-scope path to the given placeholder instead of cwd, double-quoted so it can still expand (Unix)',
+    () => {
+      const command = resolveAgentHookCommand(
+        fakeContext('/tmp/proj', 'project'),
+        '.claude',
+        SCRIPT,
+        '${CLAUDE_PROJECT_DIR}',
+      );
+      expect(command).toBe(
+        '"${CLAUDE_PROJECT_DIR}/.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh"',
+      );
+    },
+  );
+
+  it.skipIf(!IS_WINDOWS)(
+    'anchors the project-scope path to the given placeholder instead of cwd (Windows)',
+    () => {
+      const command = resolveAgentHookCommand(
+        fakeContext('C:/tmp/proj', 'project'),
+        '.claude',
+        SCRIPT,
+        '${CLAUDE_PROJECT_DIR}',
+      );
+      expect(command).toBe(
+        'powershell -NoProfile -ExecutionPolicy Bypass -File "${CLAUDE_PROJECT_DIR}/.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.ps1"',
+      );
+    },
+  );
+
+  it.skipIf(IS_WINDOWS)('ignores the placeholder for global scope (Unix)', () => {
+    const command = resolveAgentHookCommand(
+      fakeContext('/tmp/proj', 'global'),
+      '.claude',
+      SCRIPT,
+      '${CLAUDE_PROJECT_DIR}',
+    );
+    expect(command).toBe(
+      "'/tmp/proj/.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh'",
+    );
+  });
+
   it.skipIf(!IS_WINDOWS)(
     'double-quotes an absolute global path that contains a space (Windows)',
     () => {
@@ -248,6 +304,36 @@ describe('resolveAgentHookCommand', () => {
       }
     },
   );
+});
+
+describe('createAgentHookEntry with projectDirPlaceholder', () => {
+  const projectScopeContext = {
+    targetRoot: '/tmp/proj',
+    scope: 'project',
+    attrs: {},
+    state: {} as never,
+    executionMode: 'install',
+    resolvedDependencies: new Map(),
+  } as unknown as IntegrationContext;
+
+  it('embeds the placeholder while keeping the marker detectable for dedup', () => {
+    const entry = createAgentHookEntry(
+      projectScopeContext,
+      '.claude',
+      'PreToolUse',
+      'Read',
+      'sonar-secrets',
+      'sonar-secrets/build-scripts/pretool-secrets',
+      { projectDirPlaceholder: '${CLAUDE_PROJECT_DIR}' },
+    );
+
+    expect(entry.hookConfig.hooks[0].command).toContain('${CLAUDE_PROJECT_DIR}/');
+    expect(entry.hookConfig.hooks[0].command).toContain('sonar-secrets');
+
+    const first = upsertAgentHooks(null, [entry]);
+    const second = upsertAgentHooks(first, [entry]);
+    expect(second.hooks?.PreToolUse).toHaveLength(1);
+  });
 });
 
 describe('upsertAgentHooks idempotency', () => {
