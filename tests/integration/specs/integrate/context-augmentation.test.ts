@@ -533,7 +533,7 @@ describe('integrate claude — Context Augmentation', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(`${result.stdout}\n${result.stderr}`).toContain('reached its Vortex usage limit');
+      expect(`${result.stdout}\n${result.stderr}`).toContain('Vortex usage limit has been reached');
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeDefined();
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(true);

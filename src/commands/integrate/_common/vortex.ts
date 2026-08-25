@@ -91,7 +91,7 @@ export const VORTEX_SERVER_NOT_ENTITLED_MESSAGE =
   'Vortex is not licensed on this SonarQube Server. Ask your administrator.';
 
 export const VORTEX_UNINSTALL_MESSAGE =
-  'Vortex is no longer available for this organization. Removing the existing Vortex integration.';
+  'Vortex is no longer available. Removing the existing Vortex integration.';
 
 export const VORTEX_CHECK_FAILED_MESSAGE = 'Could not determine Vortex entitlement — skipping.';
 
@@ -105,7 +105,7 @@ export const VORTEX_MISSING_CLOUD_CONTEXT_MESSAGE =
   'Skipping Vortex: a project key and organization are required (configure your project or pass --project).';
 
 export const VORTEX_OVER_CONSUMPTION_MESSAGE =
-  'Your organization has reached its Vortex usage limit. Installing it anyway — Vortex will resume once your usage resets.';
+  'The Vortex usage limit has been reached. Installing it anyway — Vortex will resume once usage resets.';
 
 export const VORTEX_SCA_CHECK_FAILED_MESSAGE =
   'Could not verify SCA availability on the connected server. Proceeding with SCA disabled in the generated skill content.';
