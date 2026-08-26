@@ -445,8 +445,8 @@ export class SonarQubeClient {
   }
 
   /**
-   * Shared entitlement GET. SQAA and CAG expose the same `{ allowed, hasEntitlement,
-   * consumption? }` shape; only the path differs. A Server 404 means that hub is not
+   * Shared entitlement GET. Both hubs return `{ allowed, hasEntitlement }`; CAG may also
+   * send `consumption`. Only the path differs. A Server 404 means that hub is not
    * installed. A Cloud 404 is a fault — those services always exist.
    */
   private async checkHubEntitlement(endpoint: string): Promise<VortexEntitlementResult> {
@@ -917,9 +917,9 @@ export class SonarQubeClient {
  * loads. Priority among remaining outcomes: `check_failed > not_entitled >
  * over_consumption > enabled`.
  *
- * Usage `consumption` is CAG-specific (the SQAA endpoint does not report it) and is only
- * forwarded for `enabled`: once over the limit the remaining headroom is no longer
- * meaningful, and the API's consumption figures are not guaranteed there.
+ * Only the CAG hub's `consumption` is surfaced today (A3S is licensed instance-wide and
+ * reports no quota), and only for `enabled`: once over the limit the remaining headroom
+ * is no longer meaningful.
  */
 function mergeVortexEntitlement(
   sqaa: VortexEntitlementResult,
