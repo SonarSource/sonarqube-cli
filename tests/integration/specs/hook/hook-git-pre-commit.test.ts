@@ -189,11 +189,10 @@ describe('sonar hook git-pre-commit', () => {
   );
 
   it(
-    'exits 2 when --dependency-risks is set without -p',
+    'no longer hard-fails when --dependency-risks is set without -p (dynamic resolution skips gracefully)',
     async () => {
       const result = await harness.run('hook git-pre-commit --dependency-risks');
-      expect(result.exitCode).toBe(2);
-      expect(result.stderr).toContain('-p');
+      expect(result.exitCode).toBe(0);
     },
     { timeout: 15000 },
   );
@@ -350,6 +349,43 @@ describe('sonar hook git-pre-commit', () => {
         expect(result.stderr).toContain('commit not blocked');
       },
       { timeout: 60000 },
+    );
+
+    it(
+      'still runs and blocks on the secrets stage when no project key resolves for dependency-risks',
+      async () => {
+        initGitRepo(harness.cwd.path);
+        harness.state().withSecretsBinaryInstalled();
+        harness.state().withScaScannerBinaryInstalled();
+        harness.withAuth(FAKE_SERVER, VALID_TOKEN, TEST_ORG);
+        stageFile(harness.cwd.path, 'secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+
+        // No -p, and no sonar-project.properties/.sonarlint/git-remote for discoverProject
+        // to resolve — dependency-risks has no project to scan under, but that must not
+        // affect the (unrelated) secrets stage.
+        const result = await harness.run('hook git-pre-commit --dependency-risks');
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain('Secrets detected');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'exits 0 and warns when dependency-risks is requested but no project key resolves',
+      async () => {
+        initGitRepo(harness.cwd.path);
+        harness.state().withSecretsBinaryInstalled();
+        harness.state().withScaScannerBinaryInstalled();
+        harness.withAuth(FAKE_SERVER, VALID_TOKEN, TEST_ORG);
+        stageFile(harness.cwd.path, 'index.ts', CLEAN_CONTENT);
+
+        const result = await harness.run('hook git-pre-commit --dependency-risks');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stderr).toContain('no SonarQube project resolved for this repo');
+      },
+      { timeout: 30000 },
     );
   });
 });
