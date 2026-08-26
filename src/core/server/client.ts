@@ -66,8 +66,12 @@ export type HttpMethod = (typeof GENERIC_HTTP_METHODS)[number];
 export type VortexEntitlementStatus =
   'enabled' | 'over_consumption' | 'not_entitled' | 'check_failed' | 'not_applicable';
 
-/** Placeholder org id the Server Hub expects — Server has no organizations. */
-export const SERVER_ORGANIZATION_ID_PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
+/**
+ * Server has no organizations, but entitlement lives on `/…/{id}` — omitting the
+ * segment 404s. This is SonarQube Server's default-organization UUID (ADR-10).
+ * CAG's `@OrganizationId` overwrites it with that same id; A3S parses then ignores it.
+ */
+export const SERVER_ORGANIZATION_ID_PLACEHOLDER = '00000000-0000-4000-0000-000000000000';
 
 export interface VortexEntitlementResult {
   status: VortexEntitlementStatus;
@@ -517,8 +521,9 @@ export class SonarQubeClient {
 
   /**
    * Vortex is two hubs with no shared backend. Both are probed with the same GET mapper
-   * on every connection. Server uses the nil UUID placeholder — CAG rewrites it to the
-   * instance default org; A3S ignores it. See `mergeVortexEntitlement`: either hub
+   * on every connection. Server fills `{id}` with {@link SERVER_ORGANIZATION_ID_PLACEHOLDER}
+   * rather than a second org-less route — CAG's `@OrganizationId` rewrites that path to
+   * the instance default org; A3S ignores it. See `mergeVortexEntitlement`: either hub
    * missing or unlicensed means Vortex is not available.
    */
   async hasVortexEntitlement(organizationKey?: string): Promise<VortexEntitlementResult> {
@@ -539,8 +544,8 @@ export class SonarQubeClient {
 
   /**
    * The organization id both entitlement endpoints are keyed by, or the terminal result
-   * when it cannot be resolved. Server has no organizations and its hubs expect the
-   * placeholder instead.
+   * when it cannot be resolved. Server has no organizations; the path still requires
+   * `{id}`, so we send {@link SERVER_ORGANIZATION_ID_PLACEHOLDER}.
    */
   private async resolveEntitlementOrganizationId(
     organizationKey?: string,
