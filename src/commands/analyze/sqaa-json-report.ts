@@ -51,7 +51,7 @@ import type {
 async function buildSqaaJsonReportFromEntries(
   entries: ResolvedSqaaFileEntry[],
   resolved: SqaaResolvedContext,
-  auth: ResolvedAuth,
+  _auth: ResolvedAuth,
   branch: string | undefined,
   wireDepth: SqaaDeepWireDepth | undefined,
   displayDepth: SqaaAnalysisDepth,
@@ -71,7 +71,7 @@ async function buildSqaaJsonReportFromEntries(
         displayDepth,
       ),
     );
-    await finishSqaaTelemetryFromReport(fetchResult.report, auth, runOptions, durationMs);
+    finishSqaaTelemetryFromReport(fetchResult.report, runOptions, durationMs);
     return fetchResult.report;
   }
 
@@ -89,7 +89,7 @@ async function buildSqaaJsonReportFromEntries(
     ),
   );
   const report = buildJsonReport(tally, [], allPaths, cwd, displayDepth);
-  await finishSqaaTelemetryFromReport(report, auth, runOptions, durationMs);
+  finishSqaaTelemetryFromReport(report, runOptions, durationMs);
   return report;
 }
 
@@ -134,7 +134,7 @@ async function buildSqaaJsonReportFromChangeSet(
     ),
   );
   const report = buildJsonReport(tally, ignored, allPaths, repoRoot, displayDepth);
-  await finishSqaaTelemetryFromReport(report, auth, runOptions, durationMs);
+  finishSqaaTelemetryFromReport(report, runOptions, durationMs);
   return report;
 }
 

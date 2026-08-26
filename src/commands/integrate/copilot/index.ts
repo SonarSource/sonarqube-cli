@@ -50,6 +50,7 @@ export async function integrateCopilot(
     context: integrateCtx,
     options,
     auth,
+    ctx,
     featureOptions: {
       globalSecretsHookExists: existingGlobalHookPath !== undefined,
     },

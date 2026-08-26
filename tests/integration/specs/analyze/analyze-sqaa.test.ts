@@ -38,11 +38,8 @@ import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
-import {
-  readAnalysisEvents,
-  readCommandEvents,
-  type StoredAnalysisCompletedEvent,
-} from '../../../_common/telemetry-helpers';
+import type { StoredAnalysisCompletedEvent } from '../../../_common/telemetry-helpers';
+import { readAnalysisEvents, readCommandEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
 import { commitFile, git, initGitRepo, stageFile } from '../hook/git-test-helpers';
 import {

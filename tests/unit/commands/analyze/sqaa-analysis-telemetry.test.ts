@@ -27,12 +27,18 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { RunTally } from '@/commands/analyze/sqaa-analysis.ts';
 import {
   collectRuleCounts,
-  emitSqaaAnalysisTelemetry,
+  recordSqaaAnalysisTelemetry,
   SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
   SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
+  type SqaaTelemetryCallerCommand,
   tallyFromSqaaJsonReport,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display-json.ts';
+import {
+  CommandInvocationContext,
+  createTelemetryFactBuffer,
+} from '@/commands/command-invocation-context.ts';
+import { commitTelemetryFacts } from '@/commands/telemetry-facts.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import type { SqaaIssue } from '@/core/server/client.ts';
@@ -48,6 +54,23 @@ const AUTH: ResolvedAuth = {
   token: 'test-token',
   orgKey: 'my-org',
 };
+
+async function emitSqaaAnalysisTelemetry(
+  callerCommand: SqaaTelemetryCallerCommand,
+  _auth: ResolvedAuth,
+  tally: RunTally,
+  durationMs: number,
+  exitCode?: number | null,
+): Promise<void> {
+  const buffer = createTelemetryFactBuffer();
+  const ctx = new CommandInvocationContext(
+    { isAlpha: false, isBeta: false, isPrivateBeta: false },
+    { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
+    buffer,
+  );
+  recordSqaaAnalysisTelemetry(ctx, callerCommand, tally, durationMs, exitCode);
+  await commitTelemetryFacts(buffer.facts);
+}
 
 function makeIssue(rule: string, message = 'issue'): SqaaIssue {
   return {
@@ -145,7 +168,7 @@ describe('tallyFromSqaaJsonReport()', () => {
   });
 });
 
-describe('emitSqaaAnalysisTelemetry()', () => {
+describe('recordSqaaAnalysisTelemetry()', () => {
   it('writes a single CliAnalysisCompleted with details "" on a clean run', async () => {
     await emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, makeTally(), 123, 0);
 

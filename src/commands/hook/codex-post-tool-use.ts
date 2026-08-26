@@ -22,7 +22,7 @@
 
 import { buildSqaaJsonReport } from '@/commands/analyze/sqaa.ts';
 import {
-  emitSqaaHookFailureTelemetry,
+  recordSqaaAnalysisTelemetry,
   SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
   SQAA_HOOK_TELEMETRY_EXIT_CODE,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
@@ -30,7 +30,6 @@ import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display.ts';
 import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import logger from '@/core/observability/logger.ts';
-import { resolveAgentSessionIdForEmit } from '@/core/telemetry/agent-session.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
 import {
@@ -45,20 +44,12 @@ export interface CodexPostToolUseOptions {
   project?: string;
 }
 
-function codexHookTelemetryOptions(agentSessionId: string | null) {
-  return {
-    telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
-    telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
-    agentSessionId,
-  } as const;
-}
-
 interface CodexPostToolUsePayload {
   session_id?: string;
 }
 
 export async function codexPostToolUse(
-  _ctx: CommandInvocationContext,
+  ctx: CommandInvocationContext,
   options: CodexPostToolUseOptions,
 ): Promise<HookCommandResult> {
   // Best-effort: when Codex pipes PostToolUse JSON, capture session_id. Skip when
@@ -73,8 +64,6 @@ export async function codexPostToolUse(
       // ignore
     }
   }
-  const agentSessionId = resolveAgentSessionIdForEmit(fromHook);
-
   const projectKey = options.project;
   if (!projectKey) return { agentSessionId: fromHook };
 
@@ -89,15 +78,20 @@ export async function codexPostToolUse(
     report = await buildSqaaJsonReport(
       { project: projectKey, force: true, format: 'json', forcedDepth: 'STANDARD' },
       auth,
-      codexHookTelemetryOptions(agentSessionId),
+      {
+        telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
+        telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
+        telemetryCtx: ctx,
+      },
     );
   } catch (err) {
-    await emitSqaaHookFailureTelemetry(
+    recordSqaaAnalysisTelemetry(
+      ctx,
       SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
-      auth,
+      { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 1 },
       Math.round(performance.now() - runStart),
-      agentSessionId,
-    ).catch(() => undefined);
+      SQAA_HOOK_TELEMETRY_EXIT_CODE,
+    );
     logger.debug(`Codex PostToolUse SQAA analysis failed: ${(err as Error).message}`);
     return { agentSessionId: fromHook };
   }

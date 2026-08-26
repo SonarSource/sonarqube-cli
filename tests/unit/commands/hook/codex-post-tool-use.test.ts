@@ -27,14 +27,11 @@ import {
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
-import * as agentSession from '@/core/telemetry/agent-session.ts';
 
 import * as sqaaModule from '../../../../src/commands/analyze/sqaa.ts';
 import { codexPostToolUse } from '../../../../src/commands/hook/codex-post-tool-use.ts';
 import * as hookOutput from '../../../../src/commands/hook/format-sqaa-hook-context.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
-
-const ctx = new CommandInvocationContext();
 
 describe('codexPostToolUse', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;
@@ -42,9 +39,11 @@ describe('codexPostToolUse', () => {
   let buildSqaaJsonReportSpy: ReturnType<typeof spyOn>;
   let emitSqaaAnalysisTelemetrySpy: ReturnType<typeof spyOn>;
   let readStdinJsonSpy: ReturnType<typeof spyOn>;
+  let ctx: CommandInvocationContext;
   const originalStdinIsTTY = process.stdin.isTTY;
 
   beforeEach(() => {
+    ctx = new CommandInvocationContext();
     Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: false });
     stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
     readStdinJsonSpy = spyOn(stdinModule, 'readStdinJson').mockRejectedValue(
@@ -66,9 +65,8 @@ describe('codexPostToolUse', () => {
     });
     emitSqaaAnalysisTelemetrySpy = spyOn(
       sqaaTelemetry,
-      'emitSqaaAnalysisTelemetry',
-    ).mockImplementation(() => Promise.resolve());
-    spyOn(agentSession, 'resolveAgentSessionIdForEmit').mockReturnValue(null);
+      'recordSqaaAnalysisTelemetry',
+    ).mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -110,7 +108,7 @@ describe('codexPostToolUse', () => {
       {
         telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
         telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
-        agentSessionId: null,
+        telemetryCtx: ctx,
       },
     );
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
@@ -214,20 +212,15 @@ describe('codexPostToolUse', () => {
 
     expect(stdoutSpy).not.toHaveBeenCalled();
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
+      ctx,
       SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
-      expect.objectContaining({ connectionType: 'cloud' }),
       expect.objectContaining({ totalIssues: 0, totalFailures: 1 }),
       expect.any(Number),
       SQAA_HOOK_TELEMETRY_EXIT_CODE,
-      null,
     );
   });
 
   it('does not emit failure telemetry when hook output fails after analysis telemetry', async () => {
-    const emitSqaaHookFailureTelemetrySpy = spyOn(
-      sqaaTelemetry,
-      'emitSqaaHookFailureTelemetry',
-    ).mockImplementation(() => Promise.resolve());
     const writeHookOutputSpy = spyOn(hookOutput, 'writePostToolUseHookOutput').mockImplementation(
       () => {
         throw new Error('stdout closed');
@@ -236,10 +229,9 @@ describe('codexPostToolUse', () => {
 
     await codexPostToolUse(ctx, { project: 'my-project' });
 
-    expect(emitSqaaHookFailureTelemetrySpy).not.toHaveBeenCalled();
+    expect(emitSqaaAnalysisTelemetrySpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
 
-    emitSqaaHookFailureTelemetrySpy.mockRestore();
     writeHookOutputSpy.mockRestore();
   });
 

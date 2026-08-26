@@ -24,7 +24,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 
 import {
-  emitSqaaHookFailureTelemetry,
+  recordSqaaAnalysisTelemetry,
   SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
   SQAA_HOOK_TELEMETRY_EXIT_CODE,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
@@ -34,7 +34,6 @@ import { canonicalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import { timed } from '@/core/observability/timed.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
-import { resolveAgentSessionIdForEmit } from '@/core/telemetry/agent-session.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
 import { resolveSqaaBranch } from '../analyze/sqaa-changeset.ts';
@@ -55,18 +54,10 @@ export interface AgentPostToolUseOptions {
   project?: string;
 }
 
-function claudeHookTelemetryOptions(agentSessionId: string | null) {
-  return {
-    telemetryCallerCommand: SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
-    telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
-    agentSessionId,
-  } as const;
-}
-
 async function handleSqaaPostToolUse(
   payload: ClaudePostToolUsePayload,
   projectKey: string | undefined,
-  agentSessionId: string | null,
+  ctx: CommandInvocationContext,
 ): Promise<ClaudePostToolUseResult> {
   const filePath = payload.tool_input?.file_path;
   if (!filePath || !existsSync(filePath)) {
@@ -112,19 +103,23 @@ async function handleSqaaPostToolUse(
     );
     fetchResult = timedFetch.result;
 
-    await finishSqaaTelemetryFromReport(
+    finishSqaaTelemetryFromReport(
       fetchResult.report,
-      auth,
-      claudeHookTelemetryOptions(agentSessionId),
+      {
+        telemetryCallerCommand: SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
+        telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
+        telemetryCtx: ctx,
+      },
       timedFetch.durationMs,
-    ).catch(() => undefined);
+    );
   } catch (err) {
-    await emitSqaaHookFailureTelemetry(
+    recordSqaaAnalysisTelemetry(
+      ctx,
       SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
-      auth,
+      { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 1 },
       Math.round(performance.now() - runStart),
-      agentSessionId,
-    ).catch(() => undefined);
+      SQAA_HOOK_TELEMETRY_EXIT_CODE,
+    );
     logger.debug(`PostToolUse SQAA analysis failed: ${(err as Error).message}`);
     return { decision: 'none' };
   }
@@ -150,17 +145,17 @@ async function handleSqaaPostToolUse(
 
 function createSqaaPostToolUseSubscriber(
   projectKey: string | undefined,
-  agentSessionId: string | null,
+  ctx: CommandInvocationContext,
 ): ClaudePostToolUseSubscriber {
   return {
     id: 'sqaa',
     matches: (toolName) => toolName === 'Edit' || toolName === 'Write',
-    handle: (payload) => handleSqaaPostToolUse(payload, projectKey, agentSessionId),
+    handle: (payload) => handleSqaaPostToolUse(payload, projectKey, ctx),
   };
 }
 
 export async function agentPostToolUse(
-  _ctx: CommandInvocationContext,
+  ctx: CommandInvocationContext,
   options: AgentPostToolUseOptions,
 ): Promise<HookCommandResult> {
   let raw: string;
@@ -172,10 +167,9 @@ export async function agentPostToolUse(
   }
 
   const fromHook = payload.session_id ?? null;
-  const sessionId = resolveAgentSessionIdForEmit(fromHook);
 
   await runClaudePostToolUseDispatch(payload, raw, [
-    createSqaaPostToolUseSubscriber(options.project, sessionId),
+    createSqaaPostToolUseSubscriber(options.project, ctx),
     contextAugmentationPostToolUseSubscriber,
   ]);
 

@@ -25,7 +25,7 @@
 // configured filter are found.
 
 import {
-  emitScaAnalysisTelemetry,
+  recordScaAnalysisTelemetry,
   SCA_CALLER_COMMANDS,
 } from '@/commands/analyze/sca-analysis-telemetry.ts';
 import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
@@ -108,9 +108,9 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
   }
 
   // Hook has no analyze-style 0/1/51 exit code, so exit_code is null.
-  await emitScaAnalysisTelemetry(
+  recordScaAnalysisTelemetry(
+    options.ctx,
     SCA_CALLER_COMMANDS.gitPreCommit,
-    options.auth,
     scan.response,
     scan.scanDurationMs,
     null,

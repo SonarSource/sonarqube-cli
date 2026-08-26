@@ -22,7 +22,10 @@ import * as fs from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
+import {
+  CommandInvocationContext,
+  createTelemetryFactBuffer,
+} from '@/commands/command-invocation-context.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 
@@ -37,7 +40,15 @@ import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
 const TEST_FILE = '/sonar-test/test.ts';
 const { EXIT_CODE_SECRETS_FOUND } = analyzeSecrets;
 
-const ctx = new CommandInvocationContext();
+function makeCtx() {
+  const buffer = createTelemetryFactBuffer();
+  const ctx = new CommandInvocationContext(
+    { isAlpha: false, isBeta: false, isPrivateBeta: false },
+    { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
+    buffer,
+  );
+  return { ctx, buffer };
+}
 
 describe('claudePreToolUse', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;
@@ -82,7 +93,7 @@ describe('claudePreToolUse', () => {
   it('writes deny JSON to stdout when secrets are found', async () => {
     scanFilesSpy.mockResolvedValue({ exitCode: EXIT_CODE_SECRETS_FOUND, stdout: '', stderr: '' });
 
-    await claudePreToolUse(ctx);
+    await claudePreToolUse(makeCtx().ctx);
 
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
@@ -93,21 +104,21 @@ describe('claudePreToolUse', () => {
   it('includes the file path in the deny reason', async () => {
     scanFilesSpy.mockResolvedValue({ exitCode: EXIT_CODE_SECRETS_FOUND, stdout: '', stderr: '' });
 
-    await claudePreToolUse(ctx);
+    await claudePreToolUse(makeCtx().ctx);
 
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.hookSpecificOutput.permissionDecisionReason).toContain(TEST_FILE);
   });
 
   it('writes nothing when no secrets are found', async () => {
-    await claudePreToolUse(ctx);
+    await claudePreToolUse(makeCtx().ctx);
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
 
   it('returns without output when tool_name is not Read', async () => {
     readStdinJsonSpy.mockResolvedValue({ tool_name: 'Edit', tool_input: { file_path: TEST_FILE } });
 
-    await claudePreToolUse(ctx);
+    await claudePreToolUse(makeCtx().ctx);
 
     expect(scanFilesSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
@@ -116,7 +127,7 @@ describe('claudePreToolUse', () => {
   it('denies with the unauthenticated message when auth is unavailable', async () => {
     resolveAuthSpy.mockResolvedValue(null);
 
-    await claudePreToolUse(ctx);
+    await claudePreToolUse(makeCtx().ctx);
 
     expect(scanFilesSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
@@ -130,7 +141,7 @@ describe('claudePreToolUse', () => {
   it('denies with the binary-missing message when binary is not installed', async () => {
     resolveSecretsBinaryPathSpy.mockReturnValue(null);
 
-    await claudePreToolUse(ctx);
+    await claudePreToolUse(makeCtx().ctx);
 
     expect(scanFilesSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
@@ -144,7 +155,7 @@ describe('claudePreToolUse', () => {
   it('returns without output when file does not exist', async () => {
     existsSyncSpy.mockReturnValue(false);
 
-    await claudePreToolUse(ctx);
+    await claudePreToolUse(makeCtx().ctx);
 
     expect(scanFilesSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
@@ -153,7 +164,7 @@ describe('claudePreToolUse', () => {
   it('returns without output when stdin cannot be parsed', async () => {
     readStdinJsonSpy.mockRejectedValue(new Error('parse error'));
 
-    await claudePreToolUse(ctx);
+    await claudePreToolUse(makeCtx().ctx);
 
     expect(scanFilesSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();

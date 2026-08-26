@@ -26,7 +26,10 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
+import {
+  CommandInvocationContext,
+  createTelemetryFactBuffer,
+} from '@/commands/command-invocation-context.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
 import { CURSOR_IGNORE_FILE } from '@/core/config-constants.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
@@ -43,7 +46,15 @@ const TEST_FILE = '/sonar-test/secret.ts';
 const SECRET_CONTENT = 'const secret = "ghp_test";';
 const { EXIT_CODE_SECRETS_FOUND } = analyzeSecrets;
 
-const ctx = new CommandInvocationContext();
+function makeCtx() {
+  const buffer = createTelemetryFactBuffer();
+  const ctx = new CommandInvocationContext(
+    { isAlpha: false, isBeta: false, isPrivateBeta: false },
+    { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
+    buffer,
+  );
+  return { ctx, buffer };
+}
 
 describe('cursorPreToolUse', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;
@@ -103,6 +114,7 @@ describe('cursorPreToolUse', () => {
       stderr: '',
     });
 
+    const { ctx, buffer } = makeCtx();
     await cursorPreToolUse(ctx);
 
     expect(readFileSpy).toHaveBeenCalledWith(TEST_FILE, 'utf-8');
@@ -111,6 +123,7 @@ describe('cursorPreToolUse', () => {
     expect(output.permission).toBe('deny');
     expect(output.user_message).toContain(TEST_FILE);
     expect(exitSpy).toHaveBeenCalledWith(2);
+    expect(buffer.facts).toHaveLength(1);
   });
 
   it('returns without scanning when tool_name is not Read', async () => {
@@ -119,7 +132,7 @@ describe('cursorPreToolUse', () => {
       tool_input: { file_path: TEST_FILE },
     });
 
-    await cursorPreToolUse(ctx);
+    await cursorPreToolUse(makeCtx().ctx);
 
     expect(readFileSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
@@ -131,7 +144,7 @@ describe('cursorPreToolUse', () => {
       tool_input: { path: TEST_FILE },
     });
 
-    await cursorPreToolUse(ctx);
+    await cursorPreToolUse(makeCtx().ctx);
 
     expect(readFileSpy).toHaveBeenCalledWith(TEST_FILE, 'utf-8');
   });
@@ -139,7 +152,7 @@ describe('cursorPreToolUse', () => {
   it('denies with the unauthenticated message and exits 2 when auth is unavailable', async () => {
     resolveAuthSpy.mockResolvedValue(null);
 
-    await cursorPreToolUse(ctx);
+    await cursorPreToolUse(makeCtx().ctx);
 
     expect(readFileSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
@@ -152,7 +165,7 @@ describe('cursorPreToolUse', () => {
   it('denies with the binary-missing message and exits 2 when the analyzer is not installed', async () => {
     resolveSecretsBinaryPathSpy.mockReturnValue(null);
 
-    await cursorPreToolUse(ctx);
+    await cursorPreToolUse(makeCtx().ctx);
 
     expect(readFileSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
@@ -220,7 +233,7 @@ describe('cursorPreToolUse — .cursorignore side effect', () => {
       tool_input: { file_path: filePath },
     });
 
-    await cursorPreToolUse(ctx);
+    await cursorPreToolUse(makeCtx().ctx);
 
     const ignoreContent = readFileSync(join(projectRoot, CURSOR_IGNORE_FILE), 'utf-8');
     expect(ignoreContent).toContain('src/secret.ts');

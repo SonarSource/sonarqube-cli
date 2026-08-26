@@ -25,6 +25,8 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:te
 import {
   CommandAuthenticatedInvocationContext,
   CommandInvocationContext,
+  createTelemetryFactBuffer,
+  TelemetryFact,
 } from '@/commands/command-invocation-context.ts';
 import { getCustomRootHelp } from '@/commands/root-help.ts';
 import { ALPHA_ENV_VAR, SonarCommand, SonarOption, Stage } from '@/commands/sonar-command.ts';
@@ -718,6 +720,30 @@ describe('SonarCommand', () => {
       await cmd.parseAsync([], { from: 'user' });
       const errCall = getMockUiCalls().find((c) => c.method === 'error');
       expect(errCall?.args[0]).toBe('handler error');
+    });
+
+    it('ctx.recordTelemetry queues items before a thrown CommandFailedError', async () => {
+      const telemetryFactBuffer = createTelemetryFactBuffer();
+      const cmd = new SonarCommand({ telemetryFactBuffer });
+      cmd.anonymousAction((ctx) => {
+        ctx.recordTelemetry(
+          new TelemetryFact('CliAnalysisCompleted', {
+            caller_command: 'analyze secrets',
+            analyzer: 'sonar-secrets',
+            analysis_id: 'id-2',
+            findings_count: 1,
+            exit_code: 51,
+            errors_count: 0,
+            failures_count: 0,
+            scan_duration_ms: 2,
+            details: '',
+          }),
+        );
+        throw new CommandFailedError('secrets found', { exitCode: 51 });
+      });
+      await cmd.parseAsync([], { from: 'user' });
+      expect(process.exitCode).toBe(51);
+      expect(telemetryFactBuffer.facts).toHaveLength(1);
     });
   });
 

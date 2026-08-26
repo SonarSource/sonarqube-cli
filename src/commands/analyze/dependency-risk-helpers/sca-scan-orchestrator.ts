@@ -22,7 +22,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
-  emitScaAnalysisTelemetry,
+  recordScaAnalysisTelemetry,
   type ScaCallerCommand,
 } from '@/commands/analyze/sca-analysis-telemetry.ts';
 import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
@@ -105,9 +105,9 @@ export class ScaScanOrchestrator {
       const response = await this.analyzeDependencyRisks(invocation);
       return { response, scanDurationMs: Math.round(performance.now() - scanStart) };
     } catch (err) {
-      await emitScaAnalysisTelemetry(
+      recordScaAnalysisTelemetry(
+        ctx,
         callerCommand,
-        auth,
         null,
         Math.round(performance.now() - scanStart),
         null,

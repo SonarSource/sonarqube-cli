@@ -33,10 +33,16 @@ import type {
   Severity,
 } from '@/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import {
-  emitScaAnalysisTelemetry,
+  recordScaAnalysisTelemetry,
   SCA_CALLER_COMMANDS,
+  type ScaCallerCommand,
   summarizeScaFindings,
 } from '@/commands/analyze/sca-analysis-telemetry.ts';
+import {
+  CommandInvocationContext,
+  createTelemetryFactBuffer,
+} from '@/commands/command-invocation-context.ts';
+import { commitTelemetryFacts } from '@/commands/telemetry-facts.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
@@ -51,6 +57,23 @@ const AUTH: ResolvedAuth = {
   token: 'test-token',
   orgKey: 'my-org',
 };
+
+async function emitScaAnalysisTelemetry(
+  callerCommand: ScaCallerCommand,
+  _auth: ResolvedAuth,
+  response: AnalyzeProjectResponse | null,
+  durationMs: number,
+  exitCode: number | null,
+): Promise<void> {
+  const buffer = createTelemetryFactBuffer();
+  const ctx = new CommandInvocationContext(
+    { isAlpha: false, isBeta: false, isPrivateBeta: false },
+    { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
+    buffer,
+  );
+  recordScaAnalysisTelemetry(ctx, callerCommand, response, durationMs, exitCode);
+  await commitTelemetryFacts(buffer.facts);
+}
 
 function makeIssue(type: ScaIssueType, severity: Severity): AnalyzeProjectIssue {
   return {
@@ -188,7 +211,7 @@ describe('summarizeScaFindings()', () => {
   });
 });
 
-describe('emitScaAnalysisTelemetry()', () => {
+describe('recordScaAnalysisTelemetry()', () => {
   it('writes a single CliAnalysisCompleted with details "" on a clean run (no new findings)', async () => {
     const response = makeResponse([makeRelease(false, [makeIssue('VULNERABILITY', 'HIGH')])]);
 

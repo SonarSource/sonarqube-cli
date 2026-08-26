@@ -20,7 +20,7 @@
 
 /**
  * Tests for telemetry/telemetry-events.ts:
- *   emitTelemetryEvent — generic envelope + telemetry gate
+ *   emitAnalysisCompleted — CliAnalysisCompleted envelope + telemetry gate
  *   flushTelemetryEvents  — atomic rename, retention cap, send, re-queue, concurrent safety
  */
 
@@ -35,8 +35,12 @@ import type { AnalysisCompletedPayload } from '@/commands/analyze/analysis-compl
 import { scanAndEmitSecrets } from '@/commands/analyze/secrets.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import { SQAA_ANALYZE_AGENTIC_CALLER_COMMAND } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
-import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
+import {
+  CommandInvocationContext,
+  createTelemetryFactBuffer,
+} from '@/commands/command-invocation-context.ts';
 import type { IntegrationConfiguredPayload } from '@/commands/integrate/_common/integrate-telemetry.ts';
+import { commitTelemetryFacts } from '@/commands/telemetry-facts.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { ENV_SONAR_USER_HOME, TELEMETRY_ENDPOINT } from '@/core/config-constants.ts';
 import * as networkConfig from '@/core/host/connectivity/network-config.ts';
@@ -102,7 +106,7 @@ function makeIdentityPayload() {
   } as const;
 }
 
-function makeCompletedFields(
+function makeAnalysisCompletedPayload(
   overrides: Partial<AnalysisCompletedPayload> = {},
 ): AnalysisCompletedPayload {
   return {
@@ -124,7 +128,7 @@ function makeCompletedPayload(
 ): AnalysisCompletedEventPayload {
   return {
     ...makeIdentityPayload(),
-    ...makeCompletedFields(),
+    ...makeAnalysisCompletedPayload(),
     ...overrides,
   };
 }
@@ -234,7 +238,10 @@ afterEach(async () => {
 
 describe('emitAnalysisCompleted()', () => {
   it('writes a valid CliAnalysisCompleted envelope', async () => {
-    await emitAnalysisCompleted(AUTH, makeCompletedFields({ findings_count: 2, exit_code: 51 }));
+    await emitAnalysisCompleted(
+      AUTH,
+      makeAnalysisCompletedPayload({ findings_count: 2, exit_code: 51 }),
+    );
 
     const [event] = readAnalysisEvents(testSonarUserHome);
     expect(event.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
@@ -248,7 +255,7 @@ describe('emitAnalysisCompleted()', () => {
   it('does not append when telemetry is disabled', async () => {
     loadStateSpy.mockReturnValue(makeTelemetryState(false));
 
-    await emitAnalysisCompleted(AUTH, makeCompletedFields());
+    await emitAnalysisCompleted(AUTH, makeAnalysisCompletedPayload());
 
     expect(readAnalysisEvents(testSonarUserHome)).toHaveLength(0);
   });
@@ -258,20 +265,26 @@ describe('emitAnalysisCompleted()', () => {
     stateWithoutId.telemetry.installationId = undefined;
     loadStateSpy.mockReturnValue(stateWithoutId);
 
-    await emitAnalysisCompleted(AUTH, makeCompletedFields());
+    await emitAnalysisCompleted(AUTH, makeAnalysisCompletedPayload());
 
     expect(readAnalysisEvents(testSonarUserHome)).toHaveLength(0);
   });
 
   it('sets connection_type to sqc for cloud connections', async () => {
-    await emitAnalysisCompleted({ ...AUTH, connectionType: 'cloud' }, makeCompletedFields());
+    await emitAnalysisCompleted(
+      { ...AUTH, connectionType: 'cloud' },
+      makeAnalysisCompletedPayload(),
+    );
 
     const [event] = readAnalysisEvents(testSonarUserHome);
     expect(event.event_payload.connection_type).toBe('sqc');
   });
 
   it('sets connection_type to sqs for server connections', async () => {
-    await emitAnalysisCompleted({ ...AUTH, connectionType: 'on-premise' }, makeCompletedFields());
+    await emitAnalysisCompleted(
+      { ...AUTH, connectionType: 'on-premise' },
+      makeAnalysisCompletedPayload(),
+    );
 
     const [event] = readAnalysisEvents(testSonarUserHome);
     expect(event.event_payload.connection_type).toBe('sqs');
@@ -289,7 +302,7 @@ describe('emitAnalysisCompleted()', () => {
       sqsInstallationId: 'sqs-install-id-123',
     });
 
-    await emitAnalysisCompleted(AUTH, makeCompletedFields());
+    await emitAnalysisCompleted(AUTH, makeAnalysisCompletedPayload());
 
     const payload = readAnalysisEvents(testSonarUserHome)[0].event_payload;
     expect(payload.user_uuid).toBe('user-uuid-abc');
@@ -300,14 +313,16 @@ describe('emitAnalysisCompleted()', () => {
   it('sets caller_agent from detectCallerAgent', async () => {
     detectAgentSpy.mockReturnValue('cursor');
 
-    await emitAnalysisCompleted(AUTH, makeCompletedFields());
+    await emitAnalysisCompleted(AUTH, makeAnalysisCompletedPayload());
 
     const payload = readAnalysisEvents(testSonarUserHome)[0].event_payload;
     expect(payload.caller_agent).toBe('cursor');
   });
 
   it('sets agent_session_id from identityOptions', async () => {
-    await emitAnalysisCompleted(AUTH, makeCompletedFields(), { agentSessionId: 'sess-abc' });
+    await emitAnalysisCompleted(AUTH, makeAnalysisCompletedPayload(), {
+      agentSessionId: 'sess-abc',
+    });
 
     const payload = readAnalysisEvents(testSonarUserHome)[0].event_payload;
     expect(payload.agent_session_id).toBe('sess-abc');
@@ -316,7 +331,7 @@ describe('emitAnalysisCompleted()', () => {
   it('sets agent_session_id from env when identityOptions omit a session', async () => {
     process.env.CLAUDE_CODE_SESSION_ID = 'env-session';
 
-    await emitAnalysisCompleted(AUTH, makeCompletedFields());
+    await emitAnalysisCompleted(AUTH, makeAnalysisCompletedPayload());
 
     const payload = readAnalysisEvents(testSonarUserHome)[0].event_payload;
     expect(payload.agent_session_id).toBe('env-session');
@@ -325,14 +340,16 @@ describe('emitAnalysisCompleted()', () => {
   it('prefers identityOptions.agentSessionId over env', async () => {
     process.env.CLAUDE_CODE_SESSION_ID = 'env-session';
 
-    await emitAnalysisCompleted(AUTH, makeCompletedFields(), { agentSessionId: 'hook-session' });
+    await emitAnalysisCompleted(AUTH, makeAnalysisCompletedPayload(), {
+      agentSessionId: 'hook-session',
+    });
 
     const payload = readAnalysisEvents(testSonarUserHome)[0].event_payload;
     expect(payload.agent_session_id).toBe('hook-session');
   });
 
   it('sets agent_session_id to null when identityOptions and env omit a session', async () => {
-    await emitAnalysisCompleted(AUTH, makeCompletedFields());
+    await emitAnalysisCompleted(AUTH, makeAnalysisCompletedPayload());
 
     const payload = readAnalysisEvents(testSonarUserHome)[0].event_payload;
     expect(payload.agent_session_id).toBeNull();
@@ -342,7 +359,7 @@ describe('emitAnalysisCompleted()', () => {
     const telemetryDir = join(testSonarUserHome, 'sonarqube-cli', 'telemetry');
     expect(existsSync(telemetryDir)).toBe(false);
 
-    await emitAnalysisCompleted(AUTH, makeCompletedFields());
+    await emitAnalysisCompleted(AUTH, makeAnalysisCompletedPayload());
 
     expect(existsSync(telemetryDir)).toBe(true);
   });
@@ -350,7 +367,7 @@ describe('emitAnalysisCompleted()', () => {
 
 // ─── emitIntegrationConfigured ─────────────────────────────────────────────────
 
-function makeIntegrationConfiguredFields(
+function makeIntegrationConfiguredPayload(
   overrides: Partial<IntegrationConfiguredPayload> = {},
 ): IntegrationConfiguredPayload {
   return {
@@ -370,7 +387,7 @@ describe('emitIntegrationConfigured()', () => {
   it('writes a valid CliIntegrationConfigured envelope', async () => {
     await emitIntegrationConfigured(
       AUTH,
-      makeIntegrationConfiguredFields({
+      makeIntegrationConfiguredPayload({
         integration_id: 'git',
         features_installed: ['pre-commit-hook', 'pre-commit-secrets'],
         features_declined: ['pre-commit-dependency-risks'],
@@ -398,7 +415,7 @@ describe('emitIntegrationConfigured()', () => {
   it('sets agent_session_id from env when a session is present', async () => {
     process.env.CLAUDE_CODE_SESSION_ID = 'env-integrate-session';
 
-    await emitIntegrationConfigured(AUTH, makeIntegrationConfiguredFields());
+    await emitIntegrationConfigured(AUTH, makeIntegrationConfiguredPayload());
 
     const [event] = readIntegrationEvents(testSonarUserHome);
     expect(event.event_payload.agent_session_id).toBe('env-integrate-session');
@@ -407,7 +424,7 @@ describe('emitIntegrationConfigured()', () => {
   it('does not append when telemetry is disabled', async () => {
     loadStateSpy.mockReturnValue(makeTelemetryState(false));
 
-    await emitIntegrationConfigured(AUTH, makeIntegrationConfiguredFields());
+    await emitIntegrationConfigured(AUTH, makeIntegrationConfiguredPayload());
 
     expect(readIntegrationEvents(testSonarUserHome)).toHaveLength(0);
   });
@@ -823,31 +840,43 @@ describe('flushTelemetryEvents()', () => {
 // ─── scanAndEmitSecrets ────────────────────────────────────────────────────────
 
 // Resolves a spawn as if sonar-secrets ran to completion with the given exit code / stdout.
-const TELEMETRY_CTX = new CommandInvocationContext();
-
 function resolvedRun(exitCode: number | null, stdout: string): () => Promise<SpawnResult> {
   return () => Promise.resolve({ exitCode, stdout, stderr: '' });
+}
+
+function makeCtx() {
+  const buffer = createTelemetryFactBuffer();
+  const ctx = new CommandInvocationContext(
+    { isAlpha: false, isBeta: false, isPrivateBeta: false },
+    { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
+    buffer,
+  );
+  return { ctx, buffer };
 }
 
 describe('scanAndEmitSecrets() — emitted event fields', () => {
   it('does nothing when telemetry is disabled', async () => {
     loadStateSpy.mockReturnValue(makeTelemetryState(false));
+    const { ctx, buffer } = makeCtx();
     await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.analyzeSecrets,
       AUTH,
       resolvedRun(0, '{}'),
-      TELEMETRY_CTX,
+      ctx,
     );
+    await commitTelemetryFacts(buffer.facts);
     expect(readAnalysisEvents(testSonarUserHome)).toHaveLength(0);
   });
 
   it('emits a single CliAnalysisCompleted with details "" on a clean scan (exit 0, no issues)', async () => {
+    const { ctx, buffer } = makeCtx();
     await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.analyzeSecrets,
       AUTH,
       resolvedRun(0, JSON.stringify({ issues: [] })),
-      TELEMETRY_CTX,
+      ctx,
     );
+    await commitTelemetryFacts(buffer.facts);
 
     const lines = readAnalysisEvents(testSonarUserHome);
     expect(lines).toHaveLength(1);
@@ -871,12 +900,14 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
         { ruleKey: 'secrets:S1234', description: 'Other', file: 'src/other.ts' },
       ],
     });
+    const { ctx, buffer } = makeCtx();
     await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.gitPreCommit,
       AUTH,
       resolvedRun(51, stdout),
-      TELEMETRY_CTX,
+      ctx,
     );
+    await commitTelemetryFacts(buffer.facts);
 
     const lines = readAnalysisEvents(testSonarUserHome);
     expect(lines).toHaveLength(1);
@@ -903,12 +934,14 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
     const stdout = JSON.stringify({
       issues: [{ ruleKey: 'secrets:S6290', description: 'AWS key in prompt' }],
     });
+    const { ctx, buffer } = makeCtx();
     await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.agentPromptSubmit,
       AUTH,
       resolvedRun(51, stdout),
-      TELEMETRY_CTX,
+      ctx,
     );
+    await commitTelemetryFacts(buffer.facts);
 
     const lines = readAnalysisEvents(testSonarUserHome);
     const completed = lines[0];
@@ -921,12 +954,14 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
   });
 
   it('emits only CliAnalysisCompleted with failures_count 1 for a non-clean, non-findings exit code', async () => {
+    const { ctx, buffer } = makeCtx();
     await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.copilotPreToolUse,
       AUTH,
       resolvedRun(2, '{}'),
-      TELEMETRY_CTX,
+      ctx,
     );
+    await commitTelemetryFacts(buffer.facts);
 
     const lines = readAnalysisEvents(testSonarUserHome);
     expect(lines).toHaveLength(1);
@@ -937,12 +972,14 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
   });
 
   it('reports a resolved null exitCode as exit_code null with failures_count 1 (no coercion)', async () => {
+    const { ctx, buffer } = makeCtx();
     await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.agentPromptSubmit,
       AUTH,
       resolvedRun(null, '{}'),
-      TELEMETRY_CTX,
+      ctx,
     );
+    await commitTelemetryFacts(buffer.facts);
 
     const lines = readAnalysisEvents(testSonarUserHome);
     expect(lines).toHaveLength(1);
@@ -954,12 +991,14 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
   it('records errors_count from the errors field in stdout, independent of failures_count', async () => {
     const stdout = JSON.stringify({ issues: [], errors: ['auth failed', 'partial scan'] });
     // exit 2: run failed (failures_count 1) AND reported errors[] (errors_count 2) — not mutually exclusive
+    const { ctx, buffer } = makeCtx();
     await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.analyzeSecrets,
       AUTH,
       resolvedRun(2, stdout),
-      TELEMETRY_CTX,
+      ctx,
     );
+    await commitTelemetryFacts(buffer.facts);
 
     const lines = readAnalysisEvents(testSonarUserHome);
     const completed = lines[0];
@@ -975,12 +1014,14 @@ describe('scanAndEmitSecrets() — wrapper behavior', () => {
       stdout: JSON.stringify({ issues: [{ ruleKey: 'secrets:S6290', description: 'AWS key' }] }),
       stderr: '',
     };
+    const { ctx, buffer } = makeCtx();
     const out = await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.gitPreCommit,
       AUTH,
       () => Promise.resolve(result),
-      TELEMETRY_CTX,
+      ctx,
     );
+    await commitTelemetryFacts(buffer.facts);
 
     expect(out.result).toBe(result);
     expect(out.parsed.issues).toHaveLength(1);
@@ -997,16 +1038,18 @@ describe('scanAndEmitSecrets() — wrapper behavior', () => {
   it('emits a failures_count:1 event and re-throws when the scan fails to run', async () => {
     const boom = new Error('Scan timed out after 30000ms');
 
+    const { ctx, buffer } = makeCtx();
     let thrown: unknown;
     await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.gitPreCommit,
       AUTH,
       () => Promise.reject(boom),
-      TELEMETRY_CTX,
+      ctx,
     ).catch((err) => {
       thrown = err;
     });
     expect(thrown).toBe(boom);
+    await commitTelemetryFacts(buffer.facts);
 
     const lines = readAnalysisEvents(testSonarUserHome);
     expect(lines).toHaveLength(1);
@@ -1015,5 +1058,24 @@ describe('scanAndEmitSecrets() — wrapper behavior', () => {
     expect(completed.event_payload.failures_count).toBe(1);
     expect(completed.event_payload.exit_code).toBeNull();
     expect(completed.event_payload.findings_count).toBe(0);
+  });
+
+  it('defers NDJSON append when an invocation context is provided', async () => {
+    const { ctx, buffer } = makeCtx();
+    const result: SpawnResult = { exitCode: 0, stdout: '{}', stderr: '' };
+    await scanAndEmitSecrets(
+      SECRETS_CALLER_COMMANDS.analyzeSecrets,
+      AUTH,
+      () => Promise.resolve(result),
+      ctx,
+    );
+
+    expect(readAnalysisEvents(testSonarUserHome)).toHaveLength(0);
+    expect(buffer.facts).toHaveLength(1);
+    const pending = buffer.facts[0];
+    expect(pending?.name).toBe('CliAnalysisCompleted');
+    expect((pending?.payload as { caller_command?: string }).caller_command).toBe(
+      SECRETS_CALLER_COMMANDS.analyzeSecrets,
+    );
   });
 });

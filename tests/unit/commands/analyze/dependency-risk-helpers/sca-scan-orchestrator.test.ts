@@ -22,7 +22,10 @@ import { describe, expect, it, mock, spyOn } from 'bun:test';
 
 import * as scaTelemetry from '@/commands/analyze/sca-analysis-telemetry.ts';
 import { SCA_CALLER_COMMANDS } from '@/commands/analyze/sca-analysis-telemetry.ts';
-import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
+import {
+  CommandInvocationContext,
+  createTelemetryFactBuffer,
+} from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import type { SecretsInstaller } from '@/core/host/install/secrets.ts';
@@ -31,8 +34,6 @@ import type { SettingsValue } from '@/core/server/settings-value.ts';
 
 import { ScaScanOrchestrator } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
 import { okScaInstaller as okInstaller } from './_helpers.ts';
-
-const ctx = new CommandInvocationContext();
 
 const CLOUD_AUTH: ResolvedAuth = {
   connectionType: 'cloud',
@@ -69,6 +70,16 @@ function mockSpawner(payload: unknown) {
 // sonar-secrets is never resolved because discovery returns no manifests.
 const noopSecretsInstaller: SecretsInstaller = { install: () => Promise.resolve(null) };
 
+function makeCtx() {
+  const buffer = createTelemetryFactBuffer();
+  const ctx = new CommandInvocationContext(
+    { isAlpha: false, isBeta: false, isPrivateBeta: false },
+    { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
+    buffer,
+  );
+  return { ctx, buffer };
+}
+
 describe('ScaScanOrchestrator', () => {
   it('returns the scanner response on a successful scan', async () => {
     const orchestrator = new ScaScanOrchestrator(
@@ -82,7 +93,7 @@ describe('ScaScanOrchestrator', () => {
       CLOUD_AUTH,
       'my-project',
       SCA_CALLER_COMMANDS.analyzeDependencyRisks,
-      ctx,
+      makeCtx().ctx,
     );
 
     expect(result.response).toEqual(EMPTY_RESPONSE);
@@ -99,7 +110,12 @@ describe('ScaScanOrchestrator', () => {
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      orchestrator.run(CLOUD_AUTH, 'my-project', SCA_CALLER_COMMANDS.analyzeDependencyRisks, ctx),
+      orchestrator.run(
+        CLOUD_AUTH,
+        'my-project',
+        SCA_CALLER_COMMANDS.analyzeDependencyRisks,
+        makeCtx().ctx,
+      ),
     ).rejects.toBeInstanceOf(CommandFailedError);
   });
 
@@ -116,7 +132,7 @@ describe('ScaScanOrchestrator', () => {
       CLOUD_AUTH,
       'my-project',
       SCA_CALLER_COMMANDS.analyzeDependencyRisks,
-      ctx,
+      makeCtx().ctx,
     );
 
     const analyzeCall = spawn.mock.calls.find(([, args]) => args[0] === 'analyze-project');
@@ -128,7 +144,7 @@ describe('ScaScanOrchestrator', () => {
   });
 
   it('skips the analyze-project scan and emits no SCA telemetry when the manifest pre-scan throws', async () => {
-    const emitSpy = spyOn(scaTelemetry, 'emitScaAnalysisTelemetry').mockResolvedValue();
+    const emitSpy = spyOn(scaTelemetry, 'recordScaAnalysisTelemetry').mockImplementation(() => {});
     const spawn = mock((_binaryPath: string, args: string[]) => {
       if (args[0] === 'discover-manifests') {
         return Promise.reject(new Error('secrets pre-scan failed'));
@@ -145,7 +161,12 @@ describe('ScaScanOrchestrator', () => {
     try {
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(
-        orchestrator.run(CLOUD_AUTH, 'my-project', SCA_CALLER_COMMANDS.analyzeDependencyRisks, ctx),
+        orchestrator.run(
+          CLOUD_AUTH,
+          'my-project',
+          SCA_CALLER_COMMANDS.analyzeDependencyRisks,
+          makeCtx().ctx,
+        ),
       ).rejects.toThrow('secrets pre-scan failed');
 
       const subcommands = spawn.mock.calls.map(([, args]) => args[0]);
@@ -159,7 +180,7 @@ describe('ScaScanOrchestrator', () => {
   });
 
   it('emits an SCA failures_count:1 event when the analyze-project scan itself fails', async () => {
-    const emitSpy = spyOn(scaTelemetry, 'emitScaAnalysisTelemetry').mockResolvedValue();
+    const emitSpy = spyOn(scaTelemetry, 'recordScaAnalysisTelemetry').mockImplementation(() => {});
     const spawn = mock((_binaryPath: string, args: string[]) => {
       if (args[0] === 'discover-manifests') {
         return Promise.resolve({ exitCode: 0, stdout: JSON.stringify({ files: [] }), stderr: '' });
@@ -177,11 +198,17 @@ describe('ScaScanOrchestrator', () => {
     try {
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(
-        orchestrator.run(CLOUD_AUTH, 'my-project', SCA_CALLER_COMMANDS.analyzeDependencyRisks, ctx),
+        orchestrator.run(
+          CLOUD_AUTH,
+          'my-project',
+          SCA_CALLER_COMMANDS.analyzeDependencyRisks,
+          makeCtx().ctx,
+        ),
       ).rejects.toBeInstanceOf(CommandFailedError);
 
       expect(emitSpy).toHaveBeenCalledTimes(1);
-      const [callerCommand, , response, , exitCode] = emitSpy.mock.calls[0];
+      const [calledCtx, callerCommand, response, , exitCode] = emitSpy.mock.calls[0];
+      expect(calledCtx).toBeDefined();
       expect(callerCommand).toBe(SCA_CALLER_COMMANDS.analyzeDependencyRisks);
       expect(response).toBeNull(); // null response ⇒ failures_count:1
       expect(exitCode).toBeNull();

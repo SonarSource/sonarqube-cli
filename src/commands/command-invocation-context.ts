@@ -38,6 +38,34 @@ export type CommandInvocationContextRuntime = {
   isPrivateBetaEnabled: (flagKey: string) => boolean;
 };
 
+/**
+ * Named domain observation recorded by a command handler.
+ *
+ * Not the wire event: only the business-specific bits. Enrichment (identity,
+ * `invocation_id`, etc.) happens when the tree drains the buffer into a
+ * telemetry event.
+ *
+ * - `name` — short event name (no shared domain prefix)
+ * - `payload` — business data; typed at the producer, opaque here
+ * - `timestamp` — ms since epoch, defaulted at construction, overridable
+ */
+export class TelemetryFact<TPayload = unknown> {
+  constructor(
+    readonly name: string,
+    readonly payload: TPayload,
+    readonly timestamp: number = Date.now(),
+  ) {}
+}
+
+/** Mutable per-tree buffer owned by `buildCommandTree` and closed over by postAction. */
+export type TelemetryFactBuffer = {
+  facts: TelemetryFact[];
+};
+
+export function createTelemetryFactBuffer(): TelemetryFactBuffer {
+  return { facts: [] };
+}
+
 const STABLE_STAGE: CommandInvocationContextStage = {
   isAlpha: false,
   isBeta: false,
@@ -55,11 +83,15 @@ const DISABLED_RUNTIME: CommandInvocationContextRuntime = {
  * Built by `SonarCommand.anonymousAction`. Stage accessors are methods so they
  * can combine the command's `.stage()` with runtime entitlement (alpha env /
  * Private Beta LaunchDarkly), not merely echo the stage name.
+ *
+ * Facts are recorded with {@link recordTelemetry} and drained in `postAction`.
+ * Payload shapes inside {@link TelemetryFact.payload} are owned by producers.
  */
 export class CommandInvocationContext {
   constructor(
     private readonly stage: CommandInvocationContextStage = STABLE_STAGE,
     private readonly runtime: CommandInvocationContextRuntime = DISABLED_RUNTIME,
+    private readonly telemetryFactBuffer?: TelemetryFactBuffer,
   ) {}
 
   /** True when this command is Alpha and alpha is enabled for this run. */
@@ -81,6 +113,17 @@ export class CommandInvocationContext {
     const flagKey = this.stage.betaFlagKey;
     return flagKey !== undefined && this.runtime.isPrivateBetaEnabled(flagKey);
   }
+
+  /**
+   * Record telemetry facts for `postAction` drain. No-ops when the context was
+   * built without a tree buffer (unit-test fixtures).
+   */
+  recordTelemetry(...facts: TelemetryFact[]): void {
+    if (this.telemetryFactBuffer == null || facts.length === 0) {
+      return;
+    }
+    this.telemetryFactBuffer.facts.push(...facts);
+  }
 }
 
 /**
@@ -94,7 +137,8 @@ export class CommandAuthenticatedInvocationContext extends CommandInvocationCont
     readonly auth: ResolvedAuth,
     stage?: CommandInvocationContextStage,
     runtime?: CommandInvocationContextRuntime,
+    telemetryFactBuffer?: TelemetryFactBuffer,
   ) {
-    super(stage, runtime);
+    super(stage, runtime, telemetryFactBuffer);
   }
 }
