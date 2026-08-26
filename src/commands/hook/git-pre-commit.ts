@@ -24,10 +24,11 @@
 
 import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import { resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { InvalidOptionError } from '@/core/command-error.ts';
+import logger from '@/core/observability/logger.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
+import { warn } from '@/core/ui';
 
 import { runDepRisksStage } from './git-pre-commit-dependency-risks.ts';
 import { runCommitSecretsStage } from './git-pre-commit-secrets.ts';
@@ -64,14 +65,7 @@ export async function gitPreCommit(
   ctx: CommandInvocationContext,
 ): Promise<void> {
   const auth = await resolveAuth().catch(() => null);
-
-  // Validated up front, independent of staged files, so a misconfigured hook
-  // (--dependency-risks with no way to resolve a project) always fails loudly.
   const projectKey = await resolveDepRisksProjectKey(options, auth);
-
-  if (options.dependencyRisks && !projectKey) {
-    throw new InvalidOptionError('--dependency-risks requires -p <projectKey>.');
-  }
 
   const stagedFiles = files.length > 0 ? files : await getStagedFiles();
   if (stagedFiles.length === 0) return;
@@ -87,13 +81,22 @@ export async function gitPreCommit(
 
   await runCommitSecretsStage(stagedFiles, auth, ctx);
 
-  if (options.dependencyRisks && projectKey) {
-    await runDepRisksStage({
+  if (options.dependencyRisks) {
+    if (projectKey) {
+      await runDepRisksStage({
       project: projectKey,
       changedFiles: stagedFiles,
       auth,
       ctx,
     });
+    } else {
+      logger.warn('Dependency-risks hook: no project key resolved, skipping.');
+      warn(
+        'Dependency-risks scan skipped: no SonarQube project resolved for this repo; ' +
+          "commit not blocked. Re-run 'sonar integrate git --dependency-risks -p <project>' " +
+          'to set one explicitly.',
+      );
+    }
   }
 }
 
