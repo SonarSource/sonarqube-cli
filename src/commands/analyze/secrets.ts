@@ -20,7 +20,10 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 
-import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
+import type {
+  CommandAuthenticatedInvocationContext,
+  CommandInvocationContext,
+} from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { buildSubprocessNetworkEnv } from '@/core/host/connectivity/network-config.ts';
@@ -166,6 +169,7 @@ export async function scanAndEmitSecrets(
   callerCommand: SecretsCallerCommand,
   auth: ResolvedAuth,
   run: () => Promise<SpawnResult>,
+  _ctx: CommandInvocationContext,
 ): Promise<{ result: SpawnResult; parsed: SecretsJsonOutput }> {
   const start = performance.now();
   try {
@@ -196,8 +200,7 @@ export async function analyzeSecrets(
   options: AnalyzeSecretsOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const { auth } = ctx;
-  return handleCheckCommand(options, auth).catch(handleScanError);
+  return handleCheckCommand(options, ctx).catch(handleScanError);
 }
 
 // Env var names expected by the sonar-secrets binary
@@ -265,20 +268,31 @@ function buildAuthEnv(auth: ResolvedAuth): Record<string, string> {
 
 async function handleCheckCommand(
   options: AnalyzeSecretsOptions,
-  auth: ResolvedAuth,
+  ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
+  const { auth } = ctx;
   validateScanOptions(options);
   const binaryPath = await installSecretsBinary();
   const scanStartTime = Date.now();
   const callerCommand = options.telemetryCallerCommand ?? SECRETS_CALLER_COMMANDS.analyzeSecrets;
 
   if (options.stdin) {
-    const { result, parsed } = await scanAndEmitSecrets(callerCommand, auth, () =>
-      runSecretsBinary(binaryPath, ['--input'], auth, 'inherit'),
+    const { result, parsed } = await scanAndEmitSecrets(
+      callerCommand,
+      auth,
+      () => runSecretsBinary(binaryPath, ['--input'], auth, 'inherit'),
+      ctx,
     );
     reportScanResult(result, parsed, scanStartTime, { paths: [] });
   } else {
-    await performPathsScan(binaryPath, options.paths ?? [], auth, scanStartTime, callerCommand);
+    await performPathsScan(
+      binaryPath,
+      options.paths ?? [],
+      auth,
+      scanStartTime,
+      callerCommand,
+      ctx,
+    );
   }
 }
 
@@ -299,6 +313,7 @@ async function performPathsScan(
   auth: ResolvedAuth,
   scanStartTime: number,
   callerCommand: SecretsCallerCommand,
+  ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   if (paths.length === 0) {
     throw new InvalidOptionError('At least one path is required');
@@ -310,8 +325,11 @@ async function performPathsScan(
     }
   }
 
-  const { result, parsed } = await scanAndEmitSecrets(callerCommand, auth, () =>
-    runSecretsBinary(binaryPath, paths, auth),
+  const { result, parsed } = await scanAndEmitSecrets(
+    callerCommand,
+    auth,
+    () => runSecretsBinary(binaryPath, paths, auth),
+    ctx,
   );
   reportScanResult(result, parsed, scanStartTime, { paths });
 }

@@ -21,6 +21,7 @@
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { formatSpawnOutput } from '@/core/host/install/install-utils.ts';
@@ -51,8 +52,9 @@ export async function preScanManifestsForSecrets(deps: {
   scaInstaller: ScaScannerInstaller;
   scaSpawner: ScaScannerSpawner;
   secretsInstaller: SecretsInstaller;
+  ctx: CommandInvocationContext;
 }): Promise<void> {
-  const { invocation, baseDir, auth, scaInstaller, scaSpawner, secretsInstaller } = deps;
+  const { invocation, baseDir, auth, scaInstaller, scaSpawner, secretsInstaller, ctx } = deps;
   const discoverInvocation: ScaScannerInvocation = {
     ...invocation,
     workDir: join(tmpdir(), `sonar-sca-discover-${Date.now()}`),
@@ -63,7 +65,7 @@ export async function preScanManifestsForSecrets(deps: {
   const resolvedFiles = manifestFiles.map((file) =>
     isAbsolute(file) ? file : join(baseDir, file),
   );
-  await scanManifestsForSecrets(resolvedFiles, auth, secretsInstaller);
+  await scanManifestsForSecrets(resolvedFiles, auth, secretsInstaller, ctx);
 }
 
 /**
@@ -73,6 +75,7 @@ async function scanManifestsForSecrets(
   files: string[],
   auth: ResolvedAuth,
   installer: SecretsInstaller,
+  ctx: CommandInvocationContext,
 ): Promise<void> {
   if (files.length === 0) {
     return;
@@ -96,6 +99,7 @@ async function scanManifestsForSecrets(
         () => runSecretsBinary(binaryPath, files, auth),
         'stderr',
       ),
+    ctx,
   );
   const { issues, errors } = parsed;
   const exitCode = result.exitCode ?? 1;

@@ -33,6 +33,7 @@
 
 import { existsSync } from 'node:fs';
 
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 
@@ -61,7 +62,7 @@ function denyToolUse(reason: string): void {
   );
 }
 
-export async function copilotPreToolUse(): Promise<void> {
+export async function copilotPreToolUse(ctx: CommandInvocationContext): Promise<void> {
   let payload: CopilotPreToolUsePayload;
   try {
     payload = await readStdinJson<CopilotPreToolUsePayload>();
@@ -91,6 +92,7 @@ export async function copilotPreToolUse(): Promise<void> {
       SECRETS_CALLER_COMMANDS.copilotPreToolUse,
       deps,
       filePath,
+      ctx,
     );
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
       denyToolUse(`Sonar detected secrets in file: ${filePath}`);

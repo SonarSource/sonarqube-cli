@@ -21,6 +21,7 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { SCA_SCANNER_CACHE_DIR } from '@/core/config-constants.ts';
 import type { ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
@@ -60,6 +61,7 @@ export class ScaScanOrchestrator {
     auth: ResolvedAuth,
     projectKey: string,
     callerCommand: ScaCallerCommand,
+    ctx: CommandInvocationContext,
   ): Promise<ScaScanResult> {
     // Only the SCA scan itself is telemetered (below). Pre-flight failures — settings sync,
     // `assertScaAvailable`, and the secrets pre-scan — intentionally emit no SCA event: they
@@ -93,6 +95,7 @@ export class ScaScanOrchestrator {
       scaInstaller: this.installer,
       scaSpawner: this.spawner,
       secretsInstaller: this.secretsInstaller,
+      ctx,
     });
 
     // Time and telemeter only the SCA scan, so scan_duration_ms and a failures_count:1 event

@@ -26,6 +26,7 @@
 // `{ "decision": "block", "reason": "..." }`, which is why this handler is separate from
 // `agentPromptSubmit`.
 
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 
@@ -48,7 +49,9 @@ function denyPrompt(message: string): void {
   process.stdout.write(JSON.stringify({ continue: false, user_message: message }) + '\n');
 }
 
-export async function cursorPromptSubmit(): Promise<HookCommandResult> {
+export async function cursorPromptSubmit(
+  ctx: CommandInvocationContext,
+): Promise<HookCommandResult> {
   let payload: CursorPromptSubmitPayload;
   try {
     payload = await readStdinJson<CursorPromptSubmitPayload>();
@@ -78,6 +81,7 @@ export async function cursorPromptSubmit(): Promise<HookCommandResult> {
       SECRETS_CALLER_COMMANDS.cursorPromptSubmit,
       deps,
       prompt,
+      ctx,
     );
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
       denyPrompt('Sonar detected secrets in prompt');

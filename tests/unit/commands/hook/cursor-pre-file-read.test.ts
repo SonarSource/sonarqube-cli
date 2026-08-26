@@ -26,6 +26,7 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
 import { CURSOR_IGNORE_FILE } from '@/core/config-constants.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
@@ -42,6 +43,8 @@ const TEST_FILE = '/sonar-test/secret.ts';
 const SECRET_CONTENT = 'const secret = "ghp_test";';
 const { EXIT_CODE_SECRETS_FOUND } = analyzeSecrets;
 
+const ctx = new CommandInvocationContext();
+
 describe('cursorPreFileRead', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;
   let exitSpy: ReturnType<typeof spyOn>;
@@ -52,7 +55,11 @@ describe('cursorPreFileRead', () => {
   let existsSyncSpy: ReturnType<typeof spyOn>;
   let readFileSpy: ReturnType<typeof spyOn>;
 
+  let savedExitCode: typeof process.exitCode;
+
   beforeEach(() => {
+    savedExitCode = process.exitCode;
+    process.exitCode = 0;
     stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(
       (_data: unknown, cb?: unknown) => {
         if (typeof cb === 'function') cb();
@@ -91,6 +98,7 @@ describe('cursorPreFileRead', () => {
     runSecretsBinaryOnTextSpy.mockRestore();
     existsSyncSpy.mockRestore();
     readFileSpy.mockRestore();
+    process.exitCode = savedExitCode ?? 0;
   });
 
   it('blocks with deny JSON when secrets are found in payload content', async () => {
@@ -100,7 +108,7 @@ describe('cursorPreFileRead', () => {
       stderr: '',
     });
 
-    await cursorPreFileRead();
+    await cursorPreFileRead(ctx);
 
     expect(runSecretsBinaryOnTextSpy).toHaveBeenCalledWith(
       '/usr/bin/sonar-secrets',
@@ -110,13 +118,14 @@ describe('cursorPreFileRead', () => {
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.permission).toBe('deny');
-    expect(exitSpy).toHaveBeenCalledWith(2);
+    expect(process.exitCode).toBe(2);
+    expect(exitSpy).not.toHaveBeenCalled();
   });
 
   it('returns without scanning when file path and content are missing', async () => {
     readStdinJsonSpy.mockResolvedValue({});
 
-    await cursorPreFileRead();
+    await cursorPreFileRead(ctx);
 
     expect(runSecretsBinaryOnTextSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
@@ -126,7 +135,7 @@ describe('cursorPreFileRead', () => {
   it('scans file from disk when content is omitted but file_path is present', async () => {
     readStdinJsonSpy.mockResolvedValue({ file_path: TEST_FILE });
 
-    await cursorPreFileRead();
+    await cursorPreFileRead(ctx);
 
     expect(readFileSpy).toHaveBeenCalledWith(TEST_FILE, 'utf-8');
     expect(runSecretsBinaryOnTextSpy).toHaveBeenCalledWith(
@@ -139,27 +148,29 @@ describe('cursorPreFileRead', () => {
   it('denies with the unauthenticated message and exits 2 when auth is unavailable', async () => {
     resolveAuthSpy.mockResolvedValue(null);
 
-    await cursorPreFileRead();
+    await cursorPreFileRead(ctx);
 
     expect(runSecretsBinaryOnTextSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.permission).toBe('deny');
     expect(output.user_message).toBe(SECRETS_INACTIVE_UNAUTHENTICATED);
-    expect(exitSpy).toHaveBeenCalledWith(2);
+    expect(process.exitCode).toBe(2);
+    expect(exitSpy).not.toHaveBeenCalled();
   });
 
   it('denies with the binary-missing message and exits 2 when the analyzer is not installed', async () => {
     resolveSecretsBinaryPathSpy.mockReturnValue(null);
 
-    await cursorPreFileRead();
+    await cursorPreFileRead(ctx);
 
     expect(runSecretsBinaryOnTextSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.permission).toBe('deny');
     expect(output.user_message).toBe(SECRETS_INACTIVE_BINARY_MISSING);
-    expect(exitSpy).toHaveBeenCalledWith(2);
+    expect(process.exitCode).toBe(2);
+    expect(exitSpy).not.toHaveBeenCalled();
   });
 });
 
@@ -217,7 +228,7 @@ describe('cursorPreFileRead — .cursorignore side effect', () => {
 
     readStdinJsonSpy.mockResolvedValue({ file_path: filePath, content: SECRET_CONTENT });
 
-    await cursorPreFileRead();
+    await cursorPreFileRead(ctx);
 
     const ignoreContent = readFileSync(join(projectRoot, CURSOR_IGNORE_FILE), 'utf-8');
     expect(ignoreContent).toContain('src/secret.ts');
@@ -226,7 +237,7 @@ describe('cursorPreFileRead — .cursorignore side effect', () => {
   it('does not append to .cursorignore when no file path is available', async () => {
     readStdinJsonSpy.mockResolvedValue({ content: SECRET_CONTENT });
 
-    await cursorPreFileRead();
+    await cursorPreFileRead(ctx);
 
     expect(() => readFileSync(join(projectRoot, CURSOR_IGNORE_FILE))).toThrow();
   });

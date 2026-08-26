@@ -26,6 +26,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 
@@ -50,7 +51,7 @@ interface CursorPreToolUsePayload {
   conversation_id?: string;
 }
 
-export async function cursorPreToolUse(): Promise<HookCommandResult> {
+export async function cursorPreToolUse(ctx: CommandInvocationContext): Promise<HookCommandResult> {
   let payload: CursorPreToolUsePayload;
   try {
     payload = await readStdinJson<CursorPreToolUsePayload>();
@@ -79,8 +80,11 @@ export async function cursorPreToolUse(): Promise<HookCommandResult> {
   let scan: Awaited<ReturnType<typeof scanAndEmitSecrets>>;
   try {
     const content = await readFile(filePath, 'utf-8');
-    scan = await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.cursorPreToolUse, deps.auth, () =>
-      scanTextForSecrets(deps, content),
+    scan = await scanAndEmitSecrets(
+      SECRETS_CALLER_COMMANDS.cursorPreToolUse,
+      deps.auth,
+      () => scanTextForSecrets(deps, content),
+      ctx,
     );
   } catch (err) {
     logger.debug(`cursorPreToolUse secrets scan failed: ${(err as Error).message}`);

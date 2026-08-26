@@ -26,6 +26,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 
@@ -50,7 +51,7 @@ interface CursorBeforeReadFilePayload {
   conversation_id?: string;
 }
 
-export async function cursorPreFileRead(): Promise<HookCommandResult> {
+export async function cursorPreFileRead(ctx: CommandInvocationContext): Promise<HookCommandResult> {
   let payload: CursorBeforeReadFilePayload;
   try {
     payload = await readStdinJson<CursorBeforeReadFilePayload>();
@@ -77,8 +78,11 @@ export async function cursorPreFileRead(): Promise<HookCommandResult> {
 
   let scan: Awaited<ReturnType<typeof scanAndEmitSecrets>>;
   try {
-    scan = await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.cursorPreFileRead, deps.auth, () =>
-      scanTextForSecrets(deps, content),
+    scan = await scanAndEmitSecrets(
+      SECRETS_CALLER_COMMANDS.cursorPreFileRead,
+      deps.auth,
+      () => scanTextForSecrets(deps, content),
+      ctx,
     );
   } catch (err) {
     logger.debug(`cursorPreFileRead secrets scan failed: ${(err as Error).message}`);
