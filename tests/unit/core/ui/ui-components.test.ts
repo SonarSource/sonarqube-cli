@@ -24,41 +24,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-void mock.module('@/core/ui/colors.js', () => ({
-  isTTY: false,
-  bold: (s: string) => s,
-  dim: (s: string) => s,
-  green: (s: string) => s,
-  red: (s: string) => s,
-  cyan: (s: string) => s,
-  yellow: (s: string) => s,
-  gray: (s: string) => s,
-  white: (s: string) => s,
-  STATUS_COLORS: {
-    done: (s: string) => s,
-    running: (s: string) => s,
-    failed: (s: string) => s,
-    skipped: (s: string) => s,
-    warn: (s: string) => s,
-    pending: (s: string) => s,
-    info: (s: string) => s,
-    success: (s: string) => s,
-    error: (s: string) => s,
-    warning: (s: string) => s,
-  },
-  STATUS_ICONS: {
-    done: '✓',
-    running: '→',
-    failed: '✗',
-    skipped: '⏭',
-    warn: '⚠',
-    pending: '○',
-    info: 'ℹ',
-    success: '✓',
-    error: '✗',
-    warning: '⚠',
-  },
-}));
+void mock.module('@/core/ui/colors.js', mockColorsNonTTY);
 
 import { mock } from 'bun:test';
 
@@ -66,6 +32,8 @@ import { phase, phaseItem } from '@/core/ui';
 import { intro, outro } from '@/core/ui';
 import { withSpinner } from '@/core/ui';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
+import { mockColorsNonTTY } from '../../../_common/colors-mock.ts';
 
 // ─── phaseItem helper ─────────────────────────────────────────────────────────
 

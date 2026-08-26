@@ -20,7 +20,14 @@
 
 // Interactive prompts - text input, confirmation, press-to-continue
 
-import { ConfirmPrompt, isCancel, Prompt, SelectPrompt, TextPrompt } from '@clack/core';
+import {
+  ConfirmPrompt,
+  isCancel,
+  PasswordPrompt,
+  Prompt,
+  SelectPrompt,
+  TextPrompt,
+} from '@clack/core';
 
 import { cyan, dim, green, red } from '../colors.ts';
 import { print } from '../messages.ts';
@@ -44,6 +51,29 @@ export async function textPrompt(message: string): Promise<string | null> {
   const prompt = new TextPrompt({
     render() {
       if (this.state === 'submit') return `  ${green('✓')}  ${message} ${dim(this.value ?? '')}`;
+      if (this.state === 'cancel') return `  ${red('✗')}  ${message}`;
+      return [`  ${cyan('?')}  ${message}`, `  ${dim('›')} ${this.userInputWithCursor}`].join('\n');
+    },
+  });
+
+  const result = await prompt.prompt();
+  if (isCancel(result)) return null;
+  return result ?? null;
+}
+
+/**
+ * Password input prompt — masks input with bullet characters. Returns null if cancelled (Ctrl+C).
+ */
+export async function passwordPrompt(message: string): Promise<string | null> {
+  if (isMockActive()) {
+    const value = dequeueMockResponse<string>('');
+    recordCall('passwordPrompt', message, value);
+    return value;
+  }
+
+  const prompt = new PasswordPrompt({
+    render() {
+      if (this.state === 'submit') return `  ${green('✓')}  ${message}`;
       if (this.state === 'cancel') return `  ${red('✗')}  ${message}`;
       return [`  ${cyan('?')}  ${message}`, `  ${dim('›')} ${this.userInputWithCursor}`].join('\n');
     },

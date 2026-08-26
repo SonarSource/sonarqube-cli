@@ -32,6 +32,7 @@ export type {
 export {
   confirmPrompt,
   multiSelectPrompt,
+  passwordPrompt,
   pressEnterKeyPrompt,
   promptUntilValid,
   selectPrompt,

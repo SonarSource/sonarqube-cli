@@ -27,7 +27,6 @@ import {
   SonarQubeClient,
 } from '@/core/server/client.ts';
 import { info, intro, outro } from '@/core/ui';
-import { ImportProgress } from '@/core/ui/components/import-progress.ts';
 
 import type {
   OnlyPrivateProjects,
@@ -44,6 +43,7 @@ import {
   resolveRepos,
 } from './_common/resolve-options';
 import type { ImportOptions } from './_common/types';
+import { ImportProgress } from './import-progress.ts';
 
 export { type ImportOptions } from './_common/types';
 
