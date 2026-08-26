@@ -26,8 +26,8 @@ import type {
   IntegrationInvocation,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { askUser, skip, uninstall } from '@/core/framework/features';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { askUser, install, skip, uninstall } from '@/core/framework/features';
+import { SonarQubeClient, type VortexEntitlementStatus } from '@/core/server/client.ts';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
 import { info, warn } from '@/core/ui';
 import { resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
@@ -118,7 +118,48 @@ export interface ResolveVortexSetupParams {
 
 export interface ResolvedVortexSetup {
   disposition: VortexDisposition;
+  cagDisposition: VortexDisposition;
+  sqaaDisposition: VortexDisposition;
   scaEnabled?: boolean;
+}
+
+/**
+ * A capability follows the container unless the container is installing, in which case its
+ * own hub's answer decides. `not_applicable` means that hub is absent from this Server, so
+ * the capability is torn down rather than skipped — skipping would strand assets written
+ * by an earlier install and leave them calling a missing endpoint.
+ */
+function resolveCapabilityDisposition(
+  disposition: VortexDisposition,
+  capability: VortexEntitlementStatus | undefined,
+): VortexDisposition {
+  if (disposition !== 'install') {
+    return disposition;
+  }
+  switch (capability) {
+    case 'enabled':
+    case 'over_consumption':
+      return 'install';
+    case 'not_entitled':
+    case 'not_applicable':
+      return 'remove';
+    case 'check_failed':
+    case undefined:
+      return 'preserve';
+  }
+}
+
+/** Maps a per-capability disposition onto the framework's install decision. */
+export function capabilityInstallDecision(
+  disposition: VortexDisposition | undefined,
+): InstallDecision {
+  if (disposition === 'install') {
+    return install();
+  }
+  if (disposition === 'remove') {
+    return uninstall();
+  }
+  return skip();
 }
 
 async function resolveScaEnabled(auth: ResolvedAuth, isServer: boolean): Promise<boolean> {
@@ -137,39 +178,47 @@ async function resolveScaEnabled(auth: ResolvedAuth, isServer: boolean): Promise
 export async function resolveVortexSetup(
   params: ResolveVortexSetupParams,
 ): Promise<ResolvedVortexSetup> {
-  const { status } = await resolveVortexEntitlement(params.auth);
+  const { status, capabilities } = await resolveVortexEntitlement(params.auth);
   const isServer = !isSonarQubeCloud(params.auth.serverUrl);
+  const settled = (disposition: VortexDisposition): ResolvedVortexSetup => ({
+    disposition,
+    cagDisposition: resolveCapabilityDisposition(disposition, capabilities?.cag),
+    sqaaDisposition: resolveCapabilityDisposition(disposition, capabilities?.sqaa),
+  });
 
   if (status === 'not_applicable') {
     info(isServer ? VORTEX_SERVER_UNAVAILABLE_MESSAGE : VORTEX_PROMOTION_MESSAGE);
-    return { disposition: 'preserve' };
+    return settled('preserve');
   }
 
   if (status === 'check_failed') {
     warn(VORTEX_CHECK_FAILED_MESSAGE);
-    return { disposition: 'preserve' };
+    return settled('preserve');
   }
   if (status === 'not_entitled') {
     info(isServer ? VORTEX_SERVER_NOT_ENTITLED_MESSAGE : VORTEX_PROMOTION_MESSAGE);
-    return { disposition: 'remove' };
+    return settled('remove');
   }
   if (params.isGlobal) {
     warn(VORTEX_GLOBAL_SKIP_MESSAGE);
-    return { disposition: 'preserve' };
+    return settled('preserve');
   }
   if (!params.projectKey || (!isServer && !params.auth.orgKey)) {
     warn(isServer ? VORTEX_MISSING_PROJECT_MESSAGE : VORTEX_MISSING_CLOUD_CONTEXT_MESSAGE);
-    return { disposition: 'preserve' };
+    return settled('preserve');
   }
   if (status === 'over_consumption') {
     warn(VORTEX_OVER_CONSUMPTION_MESSAGE);
   }
 
   if (isContextAugmentationSkipped()) {
-    return { disposition: 'install', scaEnabled: false };
+    return { ...settled('install'), scaEnabled: false };
   }
 
   // The rendered context augmentation skill advertises
   // SCA tools only when SCA is available on the connection.
-  return { disposition: 'install', scaEnabled: await resolveScaEnabled(params.auth, isServer) };
+  return {
+    ...settled('install'),
+    scaEnabled: await resolveScaEnabled(params.auth, isServer),
+  };
 }

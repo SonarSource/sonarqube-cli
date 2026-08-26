@@ -28,7 +28,7 @@ import {
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display.ts';
 import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
-import { resolveAuth } from '@/core/auth/auth-resolver.ts';
+import { isSonarQubeCloud, resolveAuth } from '@/core/auth/auth-resolver.ts';
 import logger from '@/core/observability/logger.ts';
 import { resolveAgentSessionIdForEmit } from '@/core/telemetry/agent-session.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
@@ -79,7 +79,10 @@ export async function codexPostToolUse(
   if (!projectKey) return { agentSessionId: fromHook };
 
   const auth = await resolveAuth().catch(() => null);
-  if (auth?.connectionType !== 'cloud' || !auth.orgKey) return { agentSessionId: fromHook };
+  // Cloud addresses an organization; Server has none and resolves it from the instance.
+  if (!auth || (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey)) {
+    return { agentSessionId: fromHook };
+  }
 
   noteProject(auth, projectKey);
 

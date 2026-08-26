@@ -69,9 +69,20 @@ export type VortexEntitlementStatus =
 /** Placeholder org id the Server Hub expects — Server has no organizations. */
 export const SERVER_ORGANIZATION_ID_PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
 
+/**
+ * Per-capability outcomes behind the merged `status`. Vortex is two services, and on
+ * Server either can be absent from the installed edition, so callers that install one
+ * capability without the other need the individual answers rather than the merge.
+ */
+export interface VortexCapabilityStatuses {
+  cag: VortexEntitlementStatus;
+  sqaa: VortexEntitlementStatus;
+}
+
 export interface VortexEntitlementResult {
   status: VortexEntitlementStatus;
   consumption?: { consumed: number; limit: number };
+  capabilities?: VortexCapabilityStatuses;
 }
 
 export interface Organization {
@@ -438,29 +449,43 @@ export class SonarQubeClient {
     }
   }
 
+  private sqaaEntitlementEndpoint(organizationUuid: string): string {
+    return this.isCloud
+      ? `/a3s-analysis/org-entitlement/${organizationUuid}`
+      : `/api/v2/a3s/org-entitlement/${organizationUuid}`;
+  }
+
   /**
-   * Check if an organization has SQAA entitlement via `/a3s-analysis/org-entitlement/{id}`.
+   * Check if an organization has SQAA entitlement via the A3S hub.
    *
    * The endpoint distinguishes two negative cases:
    * - `allowed` — whether the org may use A3S right now (billing consumption check).
    * - `hasEntitlement` — whether the org is entitled at all.
    *
    * Returns `'enabled'` when currently allowed, `'over_consumption'` when entitled but
-   * over its current usage limit, `'not_entitled'` when not entitled, and
-   * `'check_failed'` when the API call errors out.
+   * over its current usage limit, `'not_entitled'` when not entitled, `'not_applicable'`
+   * when a Server has no A3S hub at all, and `'check_failed'` when the call errors out.
    */
   private async checkSqaaEntitlement(organizationUuid: string): Promise<VortexEntitlementResult> {
     try {
-      const endpoint = `/a3s-analysis/org-entitlement/${organizationUuid}`;
-      const result = await this.get<{ id: string; allowed: boolean; hasEntitlement: boolean }>(
-        endpoint,
-        undefined,
-        resolveFromEndpoint(this.serverURL, endpoint),
-      );
-      if (result.allowed) {
+      const endpoint = this.sqaaEntitlementEndpoint(organizationUuid);
+      const { response, value } = await this.getSafe<{
+        id?: string;
+        allowed?: boolean;
+        hasEntitlement?: boolean;
+      }>(endpoint, undefined, resolveFromEndpoint(this.serverURL, endpoint));
+      // On Cloud the service always exists, so a 404 is a fault rather than an absent
+      // capability — same split as `checkCagEntitlement`.
+      if (response.status === HTTP_STATUS_NOT_FOUND && !this.isCloud) {
+        return { status: 'not_applicable' };
+      }
+      if (!response.ok || value === undefined) {
+        return { status: 'check_failed' };
+      }
+      if (value.allowed) {
         return { status: 'enabled' };
       }
-      return { status: result.hasEntitlement ? 'over_consumption' : 'not_entitled' };
+      return { status: value.hasEntitlement ? 'over_consumption' : 'not_entitled' };
     } catch {
       return { status: 'check_failed' };
     }
@@ -535,46 +560,45 @@ export class SonarQubeClient {
 
   /**
    * Vortex is exposed through separate SQAA and CAG services, each with its own
-   * entitlement endpoint. Although both should eventually use one entitlement,
-   * there is no shared Vortex backend yet. On Cloud, require both checks so the
-   * CLI does not enable both capabilities when only one is available.
+   * entitlement endpoint; there is no shared Vortex backend yet. Both are queried on
+   * every connection, using the placeholder organization id on Server, where the
+   * instance itself is the only organization.
    *
-   * Cloud A3S (`/a3s-analysis/...`) lives on the Cloud API host, not on a
-   * Server instance. A Server connection therefore only calls CAG Hub.
-   *
-   * Usage `consumption` is CAG-specific (the SQAA endpoint does not report it) and is
-   * only forwarded for `enabled`: once over the limit the remaining headroom is no
-   * longer meaningful, and the API's consumption figures are not guaranteed there.
+   * The merged `status` answers "is any Vortex capability usable"; callers install each
+   * capability against its own entry in `capabilities`. See `mergeVortexEntitlement` for
+   * why a missing or unlicensed capability must not veto the other one.
    */
   async hasVortexEntitlement(organizationKey?: string): Promise<VortexEntitlementResult> {
     try {
-      if (!this.isCloud) {
-        return await this.checkCagEntitlement(SERVER_ORGANIZATION_ID_PLACEHOLDER);
-      }
-      if (!organizationKey) {
-        return { status: 'not_entitled' };
-      }
-      const uuid = await this.getOrganizationId(organizationKey);
-      if (!uuid) {
-        return { status: 'check_failed' };
+      const uuid = await this.resolveEntitlementOrganizationId(organizationKey);
+      if (typeof uuid !== 'string') {
+        return uuid;
       }
       const [sqaa, cag] = await Promise.all([
         this.checkSqaaEntitlement(uuid),
         this.checkCagEntitlement(uuid),
       ]);
-      if (sqaa.status === 'check_failed' || cag.status === 'check_failed') {
-        return { status: 'check_failed' };
-      }
-      if (sqaa.status === 'not_entitled' || cag.status === 'not_entitled') {
-        return { status: 'not_entitled' };
-      }
-      if (sqaa.status === 'over_consumption' || cag.status === 'over_consumption') {
-        return { status: 'over_consumption' };
-      }
-      return { status: 'enabled', consumption: cag.consumption };
+      return mergeVortexEntitlement(sqaa, cag);
     } catch {
       return { status: 'check_failed' };
     }
+  }
+
+  /**
+   * The organization id both entitlement endpoints are keyed by, or the terminal result
+   * when it cannot be resolved. Server has no organizations and its hubs expect the
+   * placeholder instead.
+   */
+  private async resolveEntitlementOrganizationId(
+    organizationKey?: string,
+  ): Promise<string | VortexEntitlementResult> {
+    if (!this.isCloud) {
+      return SERVER_ORGANIZATION_ID_PLACEHOLDER;
+    }
+    if (!organizationKey) {
+      return { status: 'not_entitled' };
+    }
+    return (await this.getOrganizationId(organizationKey)) ?? { status: 'check_failed' };
   }
 
   /**
@@ -913,11 +937,11 @@ export class SonarQubeClient {
   }
 
   /**
-   * Create a Vortex analysis (single- or multi-file).
-   * SonarQube Cloud only — endpoint lives on the region-specific API host.
+   * Create a Vortex analysis (single- or multi-file). On Cloud the endpoint lives on the
+   * region-specific API host; on Server the A3S hub serves it from the instance itself.
    */
   async createAnalysis(request: SqaaAnalysisRequest): Promise<SqaaAnalysisResponse> {
-    const endpoint = '/a3s-analysis/analyses';
+    const endpoint = this.isCloud ? '/a3s-analysis/analyses' : '/api/v2/a3s/analyses';
     try {
       return await this.post<SqaaAnalysisResponse>(
         endpoint,
@@ -933,6 +957,36 @@ export class SonarQubeClient {
       throw err;
     }
   }
+}
+
+/**
+ * Combined Vortex status, with a 404 (`not_applicable`) ignored so a Server edition that
+ * ships only one hub does not veto the other. Remaining sides keep the Cloud AND merge:
+ * `check_failed > not_entitled > over_consumption > enabled`.
+ *
+ * Usage `consumption` is CAG-specific (the SQAA endpoint does not report it) and is only
+ * forwarded for `enabled`: once over the limit the remaining headroom is no longer
+ * meaningful, and the API's consumption figures are not guaranteed there.
+ */
+function mergeVortexEntitlement(
+  sqaa: VortexEntitlementResult,
+  cag: VortexEntitlementResult,
+): VortexEntitlementResult {
+  const capabilities: VortexCapabilityStatuses = { cag: cag.status, sqaa: sqaa.status };
+  const sides = [sqaa, cag].filter((side) => side.status !== 'not_applicable');
+  if (sides.length === 0) {
+    return { status: 'not_applicable', capabilities };
+  }
+  if (sides.some((side) => side.status === 'check_failed')) {
+    return { status: 'check_failed', capabilities };
+  }
+  if (sides.some((side) => side.status === 'not_entitled')) {
+    return { status: 'not_entitled', capabilities };
+  }
+  if (sides.some((side) => side.status === 'over_consumption')) {
+    return { status: 'over_consumption', capabilities };
+  }
+  return { status: 'enabled', consumption: cag.consumption, capabilities };
 }
 
 /** Returns the sole binding, or null when there are none or more than one (ambiguous). */
@@ -1028,7 +1082,8 @@ export interface SqaaAnalysisFile {
 }
 
 export interface SqaaAnalysisRequest {
-  organizationKey: string;
+  /** Cloud-only: the Server hub forces the request onto the instance's default organization. */
+  organizationKey?: string;
   projectKey: string;
   branchName?: string;
   files: SqaaAnalysisFile[];

@@ -74,7 +74,7 @@ describe('sonar hook codex-post-tool-use', () => {
       expect(output.hookSpecificOutput.additionalContext).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(parseSqaaRequestBody(sqaaCalls[0].body).analysisDepth).toBeUndefined();
       expect(allSqaaRequestsUseDeep(sqaaCalls)).toBe(false);
@@ -99,7 +99,7 @@ describe('sonar hook codex-post-tool-use', () => {
       expect(result.exitCode).toBe(0);
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(sqaaRequestFileCount(sqaaCalls[0].body)).toBe(2);
       expect(allSqaaRequestsUseDeep(sqaaCalls)).toBe(false);
@@ -126,7 +126,7 @@ describe('sonar hook codex-post-tool-use', () => {
       expect(result.exitCode).toBe(0);
       const output = JSON.parse(result.stdout.trim());
       expect(output.hookSpecificOutput.additionalContext).toContain(
-        'no longer available for this organization',
+        'no longer available on this connection',
       );
       expect(output.hookSpecificOutput.additionalContext).toContain('remove the analysis hooks');
       expect(output.hookSpecificOutput.additionalContext).toContain(VORTEX_PRODUCT_URL);
@@ -222,7 +222,7 @@ describe('sonar hook codex-post-tool-use', () => {
       expect(result.stdout.trim()).toBe('');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(0);
     },
     { timeout: 15000 },

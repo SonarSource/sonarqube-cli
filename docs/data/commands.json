@@ -765,7 +765,7 @@
           "flags": "-p, --project <project>",
           "long": "--project",
           "short": "-p",
-          "description": "SonarQube Cloud project key (overrides auto-detected project)",
+          "description": "SonarQube project key (overrides auto-detected project)",
           "type": "string",
           "required": false
         },
@@ -908,7 +908,7 @@
       "id": "sonar-analyze-agentic",
       "name": "agentic",
       "fullName": "sonar analyze agentic",
-      "description": "Run server-side Vortex analysis (SonarQube Cloud only). Limitations apply.",
+      "description": "Run server-side Vortex analysis. Limitations apply.",
       "isGroup": false,
       "isRoot": false,
       "stage": "stable",
@@ -942,7 +942,7 @@
           "flags": "-p, --project <project>",
           "long": "--project",
           "short": "-p",
-          "description": "SonarQube Cloud project key (overrides auto-detected project)",
+          "description": "SonarQube project key (overrides auto-detected project)",
           "type": "string",
           "required": false
         },

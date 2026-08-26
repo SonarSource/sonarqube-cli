@@ -227,7 +227,7 @@ describe('agentPostToolUse', () => {
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
 
-  it('returns without output when connection is not cloud', async () => {
+  it('runs analysis on a Server connection without an organization', async () => {
     resolveAuthSpy.mockResolvedValue({
       token: 'tok',
       serverUrl: 'https://sonar.example.com',
@@ -236,8 +236,11 @@ describe('agentPostToolUse', () => {
 
     await agentPostToolUse(ctx, { project: 'my-project' });
 
-    expect(createAnalysisSpy).not.toHaveBeenCalled();
-    expect(stdoutSpy).not.toHaveBeenCalled();
+    expect(createAnalysisSpy).toHaveBeenCalledWith({
+      projectKey: 'my-project',
+      files: [{ path: 'src/index.ts', content: 'const x = 1;' }],
+      branchName: 'feature/hook-branch',
+    });
   });
 
   it('returns without output when project key is not provided', async () => {

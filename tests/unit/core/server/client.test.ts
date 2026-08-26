@@ -53,6 +53,14 @@ function lastFetchUrl(fetchSpy: ReturnType<typeof spyOn>): string {
   return (fetchSpy.mock.calls[0][0] as URL).toString();
 }
 
+function fetchPathnames(fetchSpy: ReturnType<typeof spyOn>): string[] {
+  const paths: string[] = [];
+  for (let index = 0; index < fetchSpy.mock.calls.length; index += 1) {
+    paths.push(new URL(fetchSpy.mock.calls[index][0] as URL).pathname);
+  }
+  return paths;
+}
+
 function lastFetchInit(fetchSpy: ReturnType<typeof spyOn>): RequestInit {
   return fetchSpy.mock.calls[0][1] as RequestInit;
 }
@@ -695,12 +703,28 @@ describe('SonarQubeClient', () => {
       expect((await cloudClient['checkSqaaEntitlement'](UUID)).status).toBe('check_failed');
     });
 
+    it("returns 'check_failed' when the Cloud A3S endpoint is missing (HTTP 404)", async () => {
+      fetchSpy = mockFetch({}, false, 404);
+      expect((await cloudClient['checkSqaaEntitlement'](UUID)).status).toBe('check_failed');
+    });
+
+    it("returns 'not_applicable' when the Server A3S hub is absent (HTTP 404)", async () => {
+      fetchSpy = mockFetch({}, false, 404);
+      expect((await client['checkSqaaEntitlement'](UUID)).status).toBe('not_applicable');
+    });
+
     it('hits the SQAA entitlement endpoint with the given UUID', async () => {
       fetchSpy = mockFetch({ id: UUID, allowed: true, hasEntitlement: true });
       await cloudClient['checkSqaaEntitlement'](UUID);
       expect(new URL(lastFetchUrl(fetchSpy)).pathname).toBe(
         `/a3s-analysis/org-entitlement/${UUID}`,
       );
+    });
+
+    it('uses the /api/v2 prefix on SonarQube Server', async () => {
+      fetchSpy = mockFetch({ id: UUID, allowed: true, hasEntitlement: true });
+      await client['checkSqaaEntitlement'](UUID);
+      expect(new URL(lastFetchUrl(fetchSpy)).pathname).toBe(`/api/v2/a3s/org-entitlement/${UUID}`);
     });
 
     it('routes to the US API host for SonarQube Cloud US', async () => {
@@ -810,19 +834,60 @@ describe('SonarQubeClient', () => {
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
-    it('queries CAG only on SonarQube Server, using the placeholder org id', async () => {
+    it('queries SQAA and CAG on SonarQube Server, using the placeholder org id', async () => {
       const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
       fetchSpy = mockFetch({ allowed: true, hasEntitlement: true });
       expect((await serverClient.hasVortexEntitlement()).status).toBe('enabled');
-      expect(new URL(lastFetchUrl(fetchSpy)).pathname).toBe(
+      expect(fetchPathnames(fetchSpy)).toEqual([
+        `/api/v2/a3s/org-entitlement/${SERVER_ORGANIZATION_ID_PLACEHOLDER}`,
         `/api/v2/cag/cag-entitlement/${SERVER_ORGANIZATION_ID_PLACEHOLDER}`,
-      );
+      ]);
     });
 
-    it("returns 'not_applicable' when the Server Hub is absent", async () => {
+    it("returns 'not_applicable' when both Server hubs are absent", async () => {
       const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
       fetchSpy = mockFetch({}, false, 404);
       expect((await serverClient.hasVortexEntitlement()).status).toBe('not_applicable');
+    });
+
+    it("returns 'enabled' when the Server A3S hub is absent but CAG is entitled", async () => {
+      const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
+      fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(((url: string | URL) => {
+        const pathname = new URL(url).pathname;
+        const missing = pathname.includes('/a3s/');
+        const body = missing ? {} : { allowed: true, hasEntitlement: true };
+        return Promise.resolve({
+          ok: !missing,
+          status: missing ? 404 : 200,
+          statusText: missing ? 'Not Found' : 'OK',
+          json: () => Promise.resolve(body),
+          text: () => Promise.resolve(JSON.stringify(body)),
+        } as Response);
+      }) as typeof fetch);
+
+      const result = await serverClient.hasVortexEntitlement();
+      expect(result.status).toBe('enabled');
+      expect(result.capabilities).toEqual({ cag: 'enabled', sqaa: 'not_applicable' });
+    });
+
+    it("returns 'enabled' when the Server CAG hub is absent but SQAA is entitled", async () => {
+      const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
+      fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(((url: string | URL) => {
+        const pathname = new URL(url).pathname;
+        const missing = pathname.includes('/cag/');
+        const body = missing ? {} : { allowed: true, hasEntitlement: true };
+        return Promise.resolve({
+          ok: !missing,
+          status: missing ? 404 : 200,
+          statusText: missing ? 'Not Found' : 'OK',
+          json: () => Promise.resolve(body),
+          text: () => Promise.resolve(JSON.stringify(body)),
+        } as Response);
+      }) as typeof fetch);
+
+      const result = await serverClient.hasVortexEntitlement();
+      expect(result.status).toBe('enabled');
+      expect(result.capabilities).toEqual({ cag: 'not_applicable', sqaa: 'enabled' });
     });
 
     it("returns 'check_failed' when the Server Hub is unavailable", async () => {
@@ -869,6 +934,7 @@ describe('SonarQubeClient', () => {
       expect(result).toEqual({
         status: 'enabled',
         consumption: { consumed: 15860, limit: 1000000 },
+        capabilities: { cag: 'enabled', sqaa: 'enabled' },
       });
     });
 
@@ -897,7 +963,10 @@ describe('SonarQubeClient', () => {
 
       const result = await cloudClient.hasVortexEntitlement('my-org');
 
-      expect(result).toEqual({ status: 'over_consumption' });
+      expect(result).toEqual({
+        status: 'over_consumption',
+        capabilities: { cag: 'over_consumption', sqaa: 'enabled' },
+      });
     });
   });
 
@@ -1155,6 +1224,15 @@ describe('SonarQubeClient', () => {
 
       const url = lastFetchUrl(fetchSpy);
       expect(url).toBe(`${SONARCLOUD_US_API_URL}/a3s-analysis/analyses`);
+    });
+
+    it('sends POST to the instance /api/v2 path on SonarQube Server', async () => {
+      fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
+
+      await client.createAnalysis(singleFileRequest);
+
+      const url = lastFetchUrl(fetchSpy);
+      expect(url).toBe(`${SERVER_URL}/api/v2/a3s/analyses`);
     });
 
     it('sends Bearer token in Authorization header', async () => {

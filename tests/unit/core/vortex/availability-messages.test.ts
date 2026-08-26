@@ -46,7 +46,7 @@ describe('vortexUnavailableHookMessage / vortexUnavailableCommandMessage', () =>
 
   it('returns the command variant for not_entitled in a command (no integrate hint)', () => {
     const message = vortexUnavailableCommandMessage('not_entitled');
-    expect(message).toContain('not available for your organization');
+    expect(message).toContain('not available on this connection');
     expect(message).not.toContain('sonar integrate');
   });
 

@@ -88,6 +88,8 @@ describe('integrateCopilot', () => {
     );
     resolveVortexSetupSpy = spyOn(vortex, 'resolveVortexSetup').mockResolvedValue({
       disposition: 'preserve',
+      cagDisposition: 'preserve',
+      sqaaDisposition: 'preserve',
     });
   });
 

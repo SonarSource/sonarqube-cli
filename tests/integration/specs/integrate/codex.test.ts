@@ -703,8 +703,8 @@ describe('integrate codex', () => {
     it(
       'prompts per feature, installs accepted features, and shows the Vortex promotion when not entitled',
       async () => {
-        // Default beforeEach is on-premise auth with no org, so Vortex is not
-        // available. The three remaining features
+        // Default beforeEach is on-premise with no entitlement stubs, so Vortex
+        // is not_applicable. The three remaining features
         // (secrets hook, secrets instructions, MCP) each ask. The leading '\r'
         // selects project scope before the per-feature prompts.
         const result = await harness.run('integrate codex', {
@@ -726,7 +726,7 @@ describe('integrate codex', () => {
         expect(harness.cwd.exists(...HOOKS_JSON_DIRS)).toBe(true);
         const agentsMd = harness.cwd.file(...PROJECT_AGENTS_MD_DIRS).asText();
         expect(agentsMd).toContain(SECRETS_HEADING);
-        // No SQAA marker block was written (org not entitled).
+        // No SQAA marker block was written (Server hubs absent).
         expect(agentsMd).not.toContain(SQAA_HEADING);
         expect(harness.cwd.exists(...CONFIG_TOML_DIRS)).toBe(true);
         // Declarative state records only the accepted features.

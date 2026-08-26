@@ -181,6 +181,8 @@ export class FakeSonarQubeServerBuilder {
   private scaEnabled?: boolean;
   private cagEntitlementStatusCode?: number;
   private cagEntitlementStatusBody?: string;
+  private sqaaEntitlementStatusCode?: number;
+  private sqaaEntitlementStatusBody?: string;
   private readonly projectSettings: Map<string, SettingsValue[]> = new Map();
   private agentJobErrorCode?: number;
   private agentJobErrorMessage?: string;
@@ -400,6 +402,16 @@ export class FakeSonarQubeServerBuilder {
   }
 
   /**
+   * Force GET /a3s-analysis/org-entitlement/{uuid} (and the Server /api/v2 prefix) to
+   * return a specific HTTP status code.
+   */
+  withSqaaEntitlementStatusCode(status: number, body?: string): this {
+    this.sqaaEntitlementStatusCode = status;
+    this.sqaaEntitlementStatusBody = body;
+    return this;
+  }
+
+  /**
    * Configure GET /billing/entitlements?resourceId=<uuid>&resourceType=organization for an
    * org's `uuidV4` (defaults to `<orgKey>-uuid-v4`, matching `/organizations/organizations`'
    * default when no CAG/SQAA entitlement overrides it).
@@ -490,6 +502,8 @@ export class FakeSonarQubeServerBuilder {
       scaEnabled,
       cagEntitlementStatusCode,
       cagEntitlementStatusBody,
+      sqaaEntitlementStatusCode,
+      sqaaEntitlementStatusBody,
       projectSettings,
       agentJobErrorCode,
       agentJobErrorMessage,
@@ -964,8 +978,18 @@ export class FakeSonarQubeServerBuilder {
           });
         }
 
-        const orgEntitlementMatch = /^\/a3s-analysis\/org-entitlement\/(.+)$/.exec(path);
+        const orgEntitlementMatch =
+          /^(?:\/api\/v2)?\/a3s(?:-analysis)?\/org-entitlement\/(.+)$/.exec(path);
         if (orgEntitlementMatch) {
+          if (sqaaEntitlementStatusCode !== undefined) {
+            return new Response(
+              sqaaEntitlementStatusBody ?? JSON.stringify({ errors: [{ msg: 'SQAA failed' }] }),
+              {
+                status: sqaaEntitlementStatusCode,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
+          }
           const uuid = orgEntitlementMatch[1];
           const entitlement = [...sqaaEntitlementOrgs.values()].find((e) => e.uuid === uuid);
           if (!entitlement) {
@@ -1045,7 +1069,10 @@ export class FakeSonarQubeServerBuilder {
           });
         }
 
-        if (path === '/a3s-analysis/analyses' && req.method === 'POST') {
+        if (
+          (path === '/a3s-analysis/analyses' || path === '/api/v2/a3s/analyses') &&
+          req.method === 'POST'
+        ) {
           if (sqaaStatusCode !== undefined) {
             return new Response(JSON.stringify({ message: sqaaStatusBody ?? 'simulated error' }), {
               status: sqaaStatusCode,

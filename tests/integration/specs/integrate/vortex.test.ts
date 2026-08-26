@@ -122,8 +122,13 @@ describe('integrate claude — Vortex entitlement', () => {
     if (scaEnabled !== undefined) {
       builder.withScaEnabled(scaEnabled);
     }
-    if (cloud && sqaa !== 'check_failed') {
-      builder.withSqaaEntitlement(ORG_KEY, ORG_UUID, entitlementBody(sqaa));
+    if (sqaa === 'check_failed') {
+      builder.withSqaaEntitlementStatusCode(500);
+    } else if (sqaa === 'not_applicable') {
+      builder.withSqaaEntitlementStatusCode(404);
+    } else {
+      const uuid = cloud ? ORG_UUID : SERVER_ORGANIZATION_ID_PLACEHOLDER;
+      builder.withSqaaEntitlement(ORG_KEY, uuid, entitlementBody(sqaa));
     }
     if (cag === 'check_failed') {
       builder.withCagEntitlementStatusCode(500);
@@ -253,10 +258,10 @@ describe('integrate claude — Vortex entitlement', () => {
   );
 
   it(
-    'skips Vortex on a SonarQube Server without the CAG Hub',
+    'skips Vortex on a SonarQube Server with neither hub',
     async () => {
       const result = await runIntegrateClaude({
-        sqaa: 'enabled',
+        sqaa: 'not_applicable',
         cag: 'not_applicable',
         cloud: false,
       });
@@ -269,10 +274,29 @@ describe('integrate claude — Vortex entitlement', () => {
   );
 
   it(
-    'installs CAG-only Vortex on a licensed SonarQube Server',
+    'installs Vortex on a licensed SonarQube Server when both hubs are entitled',
     async () => {
       const result = await runIntegrateClaude({
         sqaa: 'enabled',
+        cag: 'enabled',
+        scaEnabled: true,
+        cloud: false,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(isVortexInstalled()).toBe(true);
+      expect(harness.cwd.file('CLAUDE.md').asText()).toContain('# Vortex analysis protocol');
+      expect(postToolUseHooks()).toContain('sonar-sqaa');
+      expect(sqaaHookScriptExists()).toBe(true);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'installs CAG only on a Server whose A3S hub is absent',
+    async () => {
+      const result = await runIntegrateClaude({
+        sqaa: 'not_applicable',
         cag: 'enabled',
         scaEnabled: true,
         cloud: false,
@@ -303,7 +327,40 @@ describe('integrate claude — Vortex entitlement', () => {
   );
 
   it(
-    'tears down the SQAA hook and instructions when a Cloud install is repointed at a Server',
+    'installs SQAA only on a Server whose CAG hub is absent',
+    async () => {
+      const result = await runIntegrateClaude({
+        sqaa: 'enabled',
+        cag: 'not_applicable',
+        cloud: false,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
+      expect(harness.cwd.file('CLAUDE.md').asText()).toContain('# Vortex analysis protocol');
+      expect(postToolUseHooks()).toContain('sonar-sqaa');
+      expect(sqaaHookScriptExists()).toBe(true);
+
+      const state = harness.stateJsonFile.asJson() as CliState;
+      const vortex = state.integrations.installed
+        .find((integration) => integration.integrationId === 'claude-code')
+        ?.features.find((feature) => feature.featureId === VORTEX_FEATURE_ID);
+      expect(
+        vortex?.subfeatures?.some(
+          (subfeature) => subfeature.featureId === CONTEXT_AUGMENTATION_FEATURE_ID,
+        ),
+      ).toBe(false);
+      expect(
+        vortex?.subfeatures?.some(
+          (subfeature) => subfeature.featureId === SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+        ),
+      ).toBe(true);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'tears down SQAA when a Cloud install is repointed at a Server without the A3S hub',
     async () => {
       const installed = await runIntegrateClaude({ scaEnabled: true });
       expect(installed.exitCode).toBe(0);
@@ -312,6 +369,8 @@ describe('integrate claude — Vortex entitlement', () => {
       expect(harness.cwd.file('CLAUDE.md').asText()).toContain('# Vortex analysis protocol');
 
       const repointed = await runIntegrateClaude({
+        sqaa: 'not_applicable',
+        cag: 'enabled',
         scaEnabled: true,
         cloud: false,
         preserveState: true,

@@ -21,14 +21,13 @@
 import { join } from 'node:path';
 
 import { CONTEXT_AUGMENTATION_TOOL_MATCHER } from '@/commands/hook/context-augmentation-hook-subscriber.ts';
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type {
   InstallDecision,
   IntegrationContext,
   IntegrationDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { install, jsonPatch, skip, uninstall, wholeFile } from '@/core/framework/features';
+import { jsonPatch, skip, wholeFile } from '@/core/framework/features';
 import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 
@@ -46,7 +45,6 @@ import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secret
 import {
   createSqaaInstructionsSnippet,
   createSqaaInstructionsSubfeature,
-  shouldInstallSqaa,
   SQAA_HOOK_FEATURE_ID,
 } from '../_common/features/sqaa-instructions-feature.ts';
 import {
@@ -57,7 +55,7 @@ import {
 } from '../_common/hooks.ts';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
-import { createVortexFeature } from '../_common/vortex.ts';
+import { capabilityInstallDecision, createVortexFeature } from '../_common/vortex.ts';
 import { createClaudeHookEventContainer } from './hook-container-feature.ts';
 import {
   getPostToolUseFailureTemplateUnix,
@@ -154,7 +152,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           id: 'sqaa-posttooluse',
           displayName: 'Vortex analysis',
           matcher: 'Edit|Write',
-          shouldInstall: ({ options, auth }) => shouldInstallSqaaHook(options, auth),
+          shouldInstall: ({ options }) => capabilityInstallDecision(options.sqaaDisposition),
         },
         {
           id: 'cag-posttooluse',
@@ -210,27 +208,11 @@ function shouldInstallCagHook(
   options: ClaudeIntegrationOptions,
   attrs: Record<string, IntegrationStateAttribute> | undefined,
 ): InstallDecision {
-  if (options.vortexDisposition === 'remove') {
-    return uninstall();
-  }
-  return options.vortexDisposition === 'install' && isCagHookAllowedForAttrs(attrs)
-    ? install()
-    : skip();
-}
-
-function shouldInstallSqaaHook(
-  options: ClaudeIntegrationOptions,
-  auth: ResolvedAuth | undefined,
-): InstallDecision {
-  if (options.vortexDisposition === 'remove') {
-    return uninstall();
-  }
-  if (options.vortexDisposition !== 'install') {
+  // The allowlist only withholds a new install; it never tears an existing hook down.
+  if (options.cagDisposition === 'install' && !isCagHookAllowedForAttrs(attrs)) {
     return skip();
   }
-  // Skipping would strand a hook written by an earlier Cloud install, leaving it
-  // to call the Cloud-only A3S API on every edit once the project points at a Server.
-  return shouldInstallSqaa({ auth }).action === 'install' ? install() : uninstall();
+  return capabilityInstallDecision(options.cagDisposition);
 }
 
 function createContextAugmentationFailureHookSubfeature(): SubfeatureDeclaration<ClaudeIntegrationOptions> {

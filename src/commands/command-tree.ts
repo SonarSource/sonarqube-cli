@@ -485,10 +485,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       )
       .option('--staged', 'Analyze staged files only (git diff --cached)')
       .option('--base <ref>', 'Analyze files changed vs a branch or ref (e.g. main)')
-      .option(
-        '-p, --project <project>',
-        'SonarQube Cloud project key (overrides auto-detected project)',
-      )
+      .option('-p, --project <project>', 'SonarQube project key (overrides auto-detected project)')
       .option('--force', 'Skip the large change set confirmation prompt')
       .addOption(sqaaDepthOption)
       .addOption(sqaaFormatOption);
@@ -556,9 +553,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     );
 
   applySqaaOptions(
-    analyze
-      .command('agentic')
-      .description('Run server-side Vortex analysis (SonarQube Cloud only). Limitations apply.'),
+    analyze.command('agentic').description('Run server-side Vortex analysis. Limitations apply.'),
     { telemetryCallerCommand: SQAA_ANALYZE_AGENTIC_CALLER_COMMAND },
   );
 
@@ -739,7 +734,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
   hookCommand
     .command('claude-post-tool-use')
     .description('PostToolUse handler: run Vortex analysis after agent edits or writes a file')
-    .requiredOption('--project <key>', 'SonarQube Cloud project key')
+    .requiredOption('--project <key>', 'SonarQube project key')
     .anonymousAction(handleHookInvocation(agentPostToolUse));
 
   hookCommand
@@ -754,7 +749,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .description(
       'PostToolUse handler for Codex: run Vortex analysis on the git change set after apply_patch',
     )
-    .requiredOption('--project <key>', 'SonarQube Cloud project key')
+    .requiredOption('--project <key>', 'SonarQube project key')
     .anonymousAction(handleHookInvocation(codexPostToolUse));
 
   hookCommand
