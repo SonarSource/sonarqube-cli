@@ -68,10 +68,11 @@ export type VortexEntitlementStatus =
 
 /**
  * Server has no organizations, but entitlement lives on `/…/{id}` — omitting the
- * segment 404s. This is SonarQube Server's default-organization UUID (ADR-10).
- * CAG's `@OrganizationId` overwrites it with that same id; A3S parses then ignores it.
+ * segment 404s. The nil UUID is a valid UUID the CLI can send without knowing
+ * Server's default-org id (a backend internal). CAG's `@OrganizationId` overwrites
+ * it; A3S parses then ignores it.
  */
-export const SERVER_ORGANIZATION_ID_PLACEHOLDER = '00000000-0000-4000-0000-000000000000';
+export const SERVER_ORGANIZATION_ID_PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
 
 export interface VortexEntitlementResult {
   status: VortexEntitlementStatus;
@@ -522,8 +523,9 @@ export class SonarQubeClient {
   /**
    * Vortex is two hubs with no shared backend. Both are probed with the same GET mapper
    * on every connection. Server fills `{id}` with {@link SERVER_ORGANIZATION_ID_PLACEHOLDER}
-   * rather than a second org-less route — CAG's `@OrganizationId` rewrites that path to
-   * the instance default org; A3S ignores it. See `mergeVortexEntitlement`: either hub
+   * rather than a second org-less route — a valid UUID the CLI can send without
+   * knowing Server's default-org id. CAG's `@OrganizationId` rewrites that path; A3S
+   * ignores it. See `mergeVortexEntitlement`: either hub
    * missing or unlicensed means Vortex is not available.
    */
   async hasVortexEntitlement(organizationKey?: string): Promise<VortexEntitlementResult> {

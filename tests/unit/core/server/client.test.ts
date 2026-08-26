@@ -799,7 +799,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('queries SQAA and CAG on SonarQube Server, using the placeholder org id', async () => {
-      expect(SERVER_ORGANIZATION_ID_PLACEHOLDER).toBe('00000000-0000-4000-0000-000000000000');
+      expect(SERVER_ORGANIZATION_ID_PLACEHOLDER).toBe('00000000-0000-0000-0000-000000000000');
       const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
       fetchSpy = mockFetch({ allowed: true, hasEntitlement: true });
       expect((await serverClient.hasVortexEntitlement()).status).toBe('enabled');
