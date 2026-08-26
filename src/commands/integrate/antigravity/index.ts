@@ -93,6 +93,7 @@ export async function integrateAntigravity(
     attrs,
     onSuccess: (facts) => {
       recordIntegrationConfigured(ctx, {
+        auth,
         integrationId: ANTIGRAVITY_INTEGRATION_ID,
         scope,
         nonInteractive: options.nonInteractive ?? false,

@@ -72,8 +72,8 @@ export function finishSqaaTelemetryFromReport(
   runOptions: AnalyzeSqaaRunOptions,
   durationMs: number,
 ): void {
-  const { telemetryCallerCommand, telemetryCtx } = runOptions;
-  if (!telemetryCallerCommand || !telemetryCtx) return;
+  const { telemetryCallerCommand, telemetryCtx, auth } = runOptions;
+  if (!telemetryCallerCommand || !telemetryCtx || !auth) return;
   const exitCode =
     runOptions.telemetryProcessExitCode ??
     resolveSqaaCommandExitCode(
@@ -83,6 +83,7 @@ export function finishSqaaTelemetryFromReport(
     );
   recordSqaaAnalysisTelemetry(
     telemetryCtx,
+    auth,
     telemetryCallerCommand,
     tallyFromSqaaJsonReport(report),
     durationMs,
@@ -101,6 +102,7 @@ function finishSqaaRun(tally: RunTally, durationMs: number, options: SqaaBatchRu
   if (options.telemetryCallerCommand && options.telemetryCtx) {
     recordSqaaAnalysisTelemetry(
       options.telemetryCtx,
+      options.auth,
       options.telemetryCallerCommand,
       tally,
       durationMs,
@@ -249,6 +251,7 @@ export async function runSqaaAnalysis(
   if (telemetryCallerCommand && telemetryCtx) {
     recordSqaaAnalysisTelemetry(
       telemetryCtx,
+      auth,
       telemetryCallerCommand,
       tallyFromSqaaJsonReport(report),
       durationMs,

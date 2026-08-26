@@ -213,6 +213,7 @@ describe('codexPostToolUse', () => {
     expect(stdoutSpy).not.toHaveBeenCalled();
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
       ctx,
+      expect.objectContaining({ connectionType: 'cloud', orgKey: 'myorg' }),
       SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
       expect.objectContaining({ totalIssues: 0, totalFailures: 1 }),
       expect.any(Number),

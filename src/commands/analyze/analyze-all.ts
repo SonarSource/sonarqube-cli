@@ -39,10 +39,8 @@ import {
   runSecretsBinary,
   scanAndEmitSecrets,
 } from './secrets.ts';
-import { SECRETS_CALLER_COMMANDS } from './secrets-analysis-telemetry.ts';
 import type { OutputFormat } from './sqaa.ts';
 import { analyzeSqaa, buildSqaaJsonReport } from './sqaa.ts';
-import { SQAA_ANALYZE_CALLER_COMMAND } from './sqaa-analysis-telemetry.ts';
 import { resolveChangeSet } from './sqaa-changeset.ts';
 import { applyExitCode, makeReport, type SqaaJsonReport } from './sqaa-display.ts';
 import { resolveSqaaFileArgs } from './sqaa-file-arg.ts';

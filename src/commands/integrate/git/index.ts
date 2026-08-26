@@ -237,6 +237,7 @@ async function installGitFeatures(
     attrs: scope === 'project' ? { projectKey: options.project ?? null } : undefined,
     onSuccess: (facts) => {
       recordIntegrationConfigured(ctx, {
+        auth,
         integrationId,
         scope,
         nonInteractive: options.nonInteractive ?? false,

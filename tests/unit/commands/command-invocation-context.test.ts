@@ -116,4 +116,16 @@ describe('TelemetryFact', () => {
     const fact = new TelemetryFact('CliAnalysisCompleted', { ok: true }, 1_700_000_000_000);
     expect(fact.timestamp).toBe(1_700_000_000_000);
   });
+
+  it('accepts auth via options', () => {
+    const auth = {
+      connectionType: 'cloud' as const,
+      serverUrl: 'https://sonarcloud.io',
+      token: 't',
+      orgKey: 'org',
+    };
+    const fact = new TelemetryFact('CliAnalysisCompleted', { ok: true }, { auth });
+    expect(fact.auth).toBe(auth);
+    expect(fact.timestamp).toBeGreaterThan(0);
+  });
 });

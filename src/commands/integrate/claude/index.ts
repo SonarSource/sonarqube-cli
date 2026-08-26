@@ -107,6 +107,7 @@ export async function integrateClaude(
       nonInteractive: options.nonInteractive,
       onSuccess: (facts) => {
         recordIntegrationConfigured(ctx, {
+          auth,
           integrationId: CLAUDE_INTEGRATION_ID,
           scope: installScope,
           nonInteractive: options.nonInteractive ?? false,

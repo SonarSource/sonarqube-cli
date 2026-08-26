@@ -113,6 +113,7 @@ function buildSecretsAnalysisTelemetryFact(
   callerCommand: SecretsCallerCommand,
   result: { exitCode: number | null; stdout: string } | null,
   durationMs: number,
+  auth: ResolvedAuth,
 ): {
   parsed: SecretsJsonOutput;
   fact: TelemetryFact<AnalysisCompletedPayload>;
@@ -144,17 +145,21 @@ function buildSecretsAnalysisTelemetryFact(
 
   return {
     parsed,
-    fact: new TelemetryFact(CLI_ANALYSIS_COMPLETED, {
-      caller_command: callerCommand,
-      analyzer: 'sonar-secrets',
-      analysis_id: analysisId,
-      findings_count: issues.length,
-      exit_code: exitCode,
-      errors_count: errors?.length ?? 0,
-      failures_count: failuresCount,
-      scan_duration_ms: durationMs,
-      details,
-    } satisfies AnalysisCompletedPayload),
+    fact: new TelemetryFact(
+      CLI_ANALYSIS_COMPLETED,
+      {
+        caller_command: callerCommand,
+        analyzer: 'sonar-secrets',
+        analysis_id: analysisId,
+        findings_count: issues.length,
+        exit_code: exitCode,
+        errors_count: errors?.length ?? 0,
+        failures_count: failuresCount,
+        scan_duration_ms: durationMs,
+        details,
+      } satisfies AnalysisCompletedPayload,
+      { auth },
+    ),
   };
 }
 
@@ -172,7 +177,7 @@ function buildSecretsAnalysisTelemetryFact(
  */
 export async function scanAndEmitSecrets(
   callerCommand: SecretsCallerCommand,
-  _auth: ResolvedAuth,
+  auth: ResolvedAuth,
   run: () => Promise<SpawnResult>,
   ctx: CommandInvocationContext,
 ): Promise<{ result: SpawnResult; parsed: SecretsJsonOutput }> {
@@ -183,6 +188,7 @@ export async function scanAndEmitSecrets(
       callerCommand,
       result,
       Math.round(performance.now() - start),
+      auth,
     );
     ctx.recordTelemetry(fact);
     return { result, parsed };
@@ -191,6 +197,7 @@ export async function scanAndEmitSecrets(
       callerCommand,
       null,
       Math.round(performance.now() - start),
+      auth,
     );
     ctx.recordTelemetry(fact);
     throw err;

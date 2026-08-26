@@ -26,10 +26,14 @@ import {
   CommandInvocationContext,
   createTelemetryFactBuffer,
 } from '@/commands/command-invocation-context.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
 
-import { recordIntegrationConfigured } from '../../../../../src/commands/integrate/_common/integrate-telemetry.ts';
+import {
+  CLI_INTEGRATION_CONFIGURED,
+  recordIntegrationConfigured,
+} from '../../../../../src/commands/integrate/_common/integrate-telemetry.ts';
 
 function makeInstalledFeature(
   featureId: string,
@@ -50,15 +54,24 @@ function makeInstalledFeature(
   };
 }
 
-function record(params: Parameters<typeof recordIntegrationConfigured>[1]) {
+const AUTH: ResolvedAuth = {
+  connectionType: 'cloud',
+  serverUrl: 'https://sonarcloud.io',
+  token: 'test-token',
+  orgKey: 'my-org',
+};
+
+function record(params: Omit<Parameters<typeof recordIntegrationConfigured>[1], 'auth'>) {
   const buffer = createTelemetryFactBuffer();
   const ctx = new CommandInvocationContext(
     { isAlpha: false, isBeta: false, isPrivateBeta: false },
     { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
     buffer,
   );
-  recordIntegrationConfigured(ctx, params);
-  return buffer.facts[0].payload as Record<string, unknown>;
+  recordIntegrationConfigured(ctx, { auth: AUTH, ...params });
+  const fact = buffer.facts[0];
+  expect(fact.name).toBe(CLI_INTEGRATION_CONFIGURED);
+  return fact.payload as Record<string, unknown>;
 }
 
 describe('recordIntegrationConfigured()', () => {

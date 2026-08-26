@@ -148,6 +148,7 @@ export async function buildSqaaJsonReport(
   auth: ResolvedAuth,
   runOptions: AnalyzeSqaaRunOptions = {},
 ): Promise<SqaaJsonReport | null> {
+  const telemetryOptions = { ...runOptions, auth };
   const { file: rawFiles, branch, project, force, depth: rawDepth, forcedDepth } = options;
 
   if (rawFiles?.length) {
@@ -166,7 +167,7 @@ export async function buildSqaaJsonReport(
         resolvedBranch,
         wireDepth,
         displayDepth,
-        runOptions,
+        telemetryOptions,
       );
     }
 
@@ -182,9 +183,9 @@ export async function buildSqaaJsonReport(
       resolvedBranch,
       wireDepth,
       displayDepth,
-      runOptions,
+      telemetryOptions,
     );
   }
 
-  return buildSqaaJsonReportFromChangeSet(options, auth, rawDepth, forcedDepth, runOptions);
+  return buildSqaaJsonReportFromChangeSet(options, auth, rawDepth, forcedDepth, telemetryOptions);
 }

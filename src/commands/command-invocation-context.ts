@@ -48,13 +48,29 @@ export type CommandInvocationContextRuntime = {
  * - `name` — short event name (no shared domain prefix)
  * - `payload` — business data; typed at the producer, opaque here
  * - `timestamp` — ms since epoch, defaulted at construction, overridable
+ * - `auth` — command auth to resolve identity at drain; omit for store-event identity
  */
+export type TelemetryFactOptions = {
+  timestamp?: number;
+  auth?: ResolvedAuth;
+};
+
 export class TelemetryFact<TPayload = unknown> {
+  readonly timestamp: number;
+  readonly auth?: ResolvedAuth;
+
   constructor(
     readonly name: string,
     readonly payload: TPayload,
-    readonly timestamp: number = Date.now(),
-  ) {}
+    timestampOrOptions: number | TelemetryFactOptions = Date.now(),
+  ) {
+    if (typeof timestampOrOptions === 'number') {
+      this.timestamp = timestampOrOptions;
+    } else {
+      this.timestamp = timestampOrOptions.timestamp ?? Date.now();
+      this.auth = timestampOrOptions.auth;
+    }
+  }
 }
 
 /** Mutable per-tree buffer owned by `buildCommandTree` and closed over by postAction. */

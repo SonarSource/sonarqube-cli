@@ -24,6 +24,7 @@ import {
   type CommandInvocationContext,
   TelemetryFact,
 } from '@/commands/command-invocation-context.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import type { InstalledIntegrationFeature, IntegrationScope } from '@/core/state/state.ts';
 
@@ -42,6 +43,7 @@ export type IntegrationConfiguredPayload = {
 };
 
 export interface IntegrationConfiguredTelemetryParams {
+  auth: ResolvedAuth;
   integrationId: string;
   scope: IntegrationScope;
   nonInteractive: boolean;
@@ -64,16 +66,20 @@ export function recordIntegrationConfigured(
   params: IntegrationConfiguredTelemetryParams,
 ): void {
   ctx.recordTelemetry(
-    new TelemetryFact<IntegrationConfiguredPayload>(CLI_INTEGRATION_CONFIGURED, {
-      integration_id: params.integrationId,
-      repo_id: hashRepoRoot(params.repoRoot),
-      features_installed: collectInstalledFeatureIds(params.installedFeatures),
-      features_declined: params.featuresDeclined,
-      features_uninstalled: params.featuresUninstalled,
-      is_global: params.scope === 'global',
-      is_interactive: !params.nonInteractive,
-      is_from_router: params.isFromRouter,
-    }),
+    new TelemetryFact<IntegrationConfiguredPayload>(
+      CLI_INTEGRATION_CONFIGURED,
+      {
+        integration_id: params.integrationId,
+        repo_id: hashRepoRoot(params.repoRoot),
+        features_installed: collectInstalledFeatureIds(params.installedFeatures),
+        features_declined: params.featuresDeclined,
+        features_uninstalled: params.featuresUninstalled,
+        is_global: params.scope === 'global',
+        is_interactive: !params.nonInteractive,
+        is_from_router: params.isFromRouter,
+      },
+      { auth: params.auth },
+    ),
   );
 }
 

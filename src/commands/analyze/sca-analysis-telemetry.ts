@@ -24,6 +24,7 @@ import {
   type CommandInvocationContext,
   TelemetryFact,
 } from '@/commands/command-invocation-context.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 
 import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
 import type { AnalyzeProjectResponse } from './dependency-risk-helpers/sca-scanner.ts';
@@ -78,6 +79,7 @@ export function summarizeScaFindings(response: AnalyzeProjectResponse): {
  */
 export function recordScaAnalysisTelemetry(
   ctx: CommandInvocationContext,
+  auth: ResolvedAuth,
   callerCommand: ScaCallerCommand,
   response: AnalyzeProjectResponse | null,
   durationMs: number,
@@ -87,17 +89,21 @@ export function recordScaAnalysisTelemetry(
 
   if (!response) {
     ctx.recordTelemetry(
-      new TelemetryFact(CLI_ANALYSIS_COMPLETED, {
-        caller_command: callerCommand,
-        analyzer: 'sca-scanner-cli',
-        analysis_id: analysisId,
-        findings_count: 0,
-        exit_code: exitCode,
-        errors_count: 0,
-        failures_count: 1,
-        scan_duration_ms: durationMs,
-        details: '',
-      } satisfies AnalysisCompletedPayload),
+      new TelemetryFact(
+        CLI_ANALYSIS_COMPLETED,
+        {
+          caller_command: callerCommand,
+          analyzer: 'sca-scanner-cli',
+          analysis_id: analysisId,
+          findings_count: 0,
+          exit_code: exitCode,
+          errors_count: 0,
+          failures_count: 1,
+          scan_duration_ms: durationMs,
+          details: '',
+        } satisfies AnalysisCompletedPayload,
+        { auth },
+      ),
     );
     return;
   }
@@ -105,16 +111,20 @@ export function recordScaAnalysisTelemetry(
   const { findingsCount, details } = summarizeScaFindings(response);
 
   ctx.recordTelemetry(
-    new TelemetryFact(CLI_ANALYSIS_COMPLETED, {
-      caller_command: callerCommand,
-      analyzer: 'sca-scanner-cli',
-      analysis_id: analysisId,
-      findings_count: findingsCount,
-      exit_code: exitCode,
-      errors_count: response.errors.length,
-      failures_count: 0,
-      scan_duration_ms: durationMs,
-      details: findingsCount > 0 ? JSON.stringify(details) : '',
-    } satisfies AnalysisCompletedPayload),
+    new TelemetryFact(
+      CLI_ANALYSIS_COMPLETED,
+      {
+        caller_command: callerCommand,
+        analyzer: 'sca-scanner-cli',
+        analysis_id: analysisId,
+        findings_count: findingsCount,
+        exit_code: exitCode,
+        errors_count: response.errors.length,
+        failures_count: 0,
+        scan_duration_ms: durationMs,
+        details: findingsCount > 0 ? JSON.stringify(details) : '',
+      } satisfies AnalysisCompletedPayload,
+      { auth },
+    ),
   );
 }

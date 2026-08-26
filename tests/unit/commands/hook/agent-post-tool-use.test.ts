@@ -110,6 +110,7 @@ describe('agentPostToolUse', () => {
 
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
       ctx,
+      expect.objectContaining({ connectionType: 'cloud', orgKey: 'myorg' }),
       SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
       expect.objectContaining({ totalIssues: 0, totalFailures: 0 }),
       expect.any(Number),
@@ -134,6 +135,7 @@ describe('agentPostToolUse', () => {
 
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
       ctx,
+      expect.objectContaining({ connectionType: 'cloud', orgKey: 'myorg' }),
       SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
       expect.objectContaining({ totalIssues: 1, totalFailures: 0 }),
       expect.any(Number),
@@ -287,6 +289,7 @@ describe('agentPostToolUse', () => {
     expect(stdoutSpy).not.toHaveBeenCalled();
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
       ctx,
+      expect.objectContaining({ connectionType: 'cloud', orgKey: 'myorg' }),
       SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
       expect.objectContaining({ totalIssues: 0, totalFailures: 1 }),
       expect.any(Number),
@@ -305,6 +308,7 @@ describe('agentPostToolUse', () => {
     expect(stdoutSpy).not.toHaveBeenCalled();
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
       ctx,
+      expect.objectContaining({ connectionType: 'cloud', orgKey: 'myorg' }),
       SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
       expect.objectContaining({ totalIssues: 0, totalFailures: 1 }),
       expect.any(Number),
@@ -320,6 +324,7 @@ describe('agentPostToolUse', () => {
     expect(stdoutSpy).not.toHaveBeenCalled();
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
       ctx,
+      expect.objectContaining({ connectionType: 'cloud', orgKey: 'myorg' }),
       SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
       expect.objectContaining({ totalIssues: 0, totalFailures: 1 }),
       expect.any(Number),

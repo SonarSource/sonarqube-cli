@@ -207,8 +207,9 @@ describe('ScaScanOrchestrator', () => {
       ).rejects.toBeInstanceOf(CommandFailedError);
 
       expect(emitSpy).toHaveBeenCalledTimes(1);
-      const [calledCtx, callerCommand, response, , exitCode] = emitSpy.mock.calls[0];
+      const [calledCtx, calledAuth, callerCommand, response, , exitCode] = emitSpy.mock.calls[0];
       expect(calledCtx).toBeDefined();
+      expect(calledAuth).toBe(CLOUD_AUTH);
       expect(callerCommand).toBe(SCA_CALLER_COMMANDS.analyzeDependencyRisks);
       expect(response).toBeNull(); // null response ⇒ failures_count:1
       expect(exitCode).toBeNull();

@@ -107,6 +107,7 @@ export class ScaScanOrchestrator {
     } catch (err) {
       recordScaAnalysisTelemetry(
         ctx,
+        auth,
         callerCommand,
         null,
         Math.round(performance.now() - scanStart),

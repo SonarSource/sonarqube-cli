@@ -36,6 +36,8 @@ export interface AnalyzeSqaaRunOptions {
   telemetryProcessExitCode?: number | null;
   /** Invocation context used to record telemetry facts. */
   telemetryCtx?: CommandInvocationContext;
+  /** Auth the analysis ran against; identity is resolved from it at drain time. */
+  auth?: ResolvedAuth;
 }
 
 export interface AnalyzeSqaaOptions {

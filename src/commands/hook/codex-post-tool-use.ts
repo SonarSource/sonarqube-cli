@@ -87,6 +87,7 @@ export async function codexPostToolUse(
   } catch (err) {
     recordSqaaAnalysisTelemetry(
       ctx,
+      auth,
       SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
       { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 1 },
       Math.round(performance.now() - runStart),

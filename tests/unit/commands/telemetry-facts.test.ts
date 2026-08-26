@@ -22,6 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:te
 
 import { TelemetryFact } from '@/commands/command-invocation-context.ts';
 import { commitTelemetryFacts } from '@/commands/telemetry-facts.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import * as telemetryEvents from '@/core/telemetry/telemetry-events.ts';
 
@@ -39,8 +40,14 @@ const ANALYSIS_PAYLOAD = {
   details: '',
 };
 
-function fact(name: string, payload: object = ANALYSIS_PAYLOAD): TelemetryFact {
-  return new TelemetryFact(name, payload, 1_700_000_000_000);
+function fact(
+  name: string,
+  payload: object = ANALYSIS_PAYLOAD,
+  auth?: ResolvedAuth,
+): TelemetryFact {
+  return auth
+    ? new TelemetryFact(name, payload, { timestamp: 1_700_000_000_000, auth })
+    : new TelemetryFact(name, payload, 1_700_000_000_000);
 }
 
 describe('commitTelemetryFacts', () => {
@@ -75,8 +82,28 @@ describe('commitTelemetryFacts', () => {
     expect(emitSpy.mock.calls[0][2]).toEqual({
       eventTimestampMs: analysis.timestamp,
       agentSessionId: 'sess-1',
+      auth: undefined,
     });
     expect(emitSpy.mock.calls[1][0]).toBe('CliIntegrationConfigured');
+  });
+
+  it('forwards fact.auth to emitTelemetryEvent', async () => {
+    const emitSpy = spyOn(telemetryEvents, 'emitTelemetryEvent').mockResolvedValue();
+    const auth: ResolvedAuth = {
+      connectionType: 'cloud',
+      serverUrl: 'https://sonarcloud.io',
+      token: 'test-token',
+      orgKey: 'my-org',
+    };
+    const analysis = fact('CliAnalysisCompleted', ANALYSIS_PAYLOAD, auth);
+
+    await commitTelemetryFacts([analysis]);
+
+    expect(emitSpy.mock.calls[0][2]).toEqual({
+      eventTimestampMs: analysis.timestamp,
+      agentSessionId: undefined,
+      auth,
+    });
   });
 
   it('swallows emit failures', async () => {

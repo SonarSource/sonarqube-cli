@@ -71,7 +71,7 @@ async function emitScaAnalysisTelemetry(
     { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
     buffer,
   );
-  recordScaAnalysisTelemetry(ctx, callerCommand, response, durationMs, exitCode);
+  recordScaAnalysisTelemetry(ctx, AUTH, callerCommand, response, durationMs, exitCode);
   await commitTelemetryFacts(buffer.facts);
 }
 

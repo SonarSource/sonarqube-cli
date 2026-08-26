@@ -110,6 +110,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
   // Hook has no analyze-style 0/1/51 exit code, so exit_code is null.
   recordScaAnalysisTelemetry(
     options.ctx,
+    options.auth,
     SCA_CALLER_COMMANDS.gitPreCommit,
     scan.response,
     scan.scanDurationMs,

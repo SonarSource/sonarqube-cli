@@ -68,7 +68,7 @@ async function emitSqaaAnalysisTelemetry(
     { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
     buffer,
   );
-  recordSqaaAnalysisTelemetry(ctx, callerCommand, tally, durationMs, exitCode);
+  recordSqaaAnalysisTelemetry(ctx, AUTH, callerCommand, tally, durationMs, exitCode);
   await commitTelemetryFacts(buffer.facts);
 }
 

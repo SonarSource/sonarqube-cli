@@ -109,12 +109,14 @@ async function handleSqaaPostToolUse(
         telemetryCallerCommand: SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
         telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
         telemetryCtx: ctx,
+        auth,
       },
       timedFetch.durationMs,
     );
   } catch (err) {
     recordSqaaAnalysisTelemetry(
       ctx,
+      auth,
       SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
       { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 1 },
       Math.round(performance.now() - runStart),

@@ -24,6 +24,7 @@ import {
   type CommandInvocationContext,
   TelemetryFact,
 } from '@/commands/command-invocation-context.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { SqaaIssue } from '@/core/server/client.ts';
 
 import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
@@ -120,6 +121,7 @@ export function tallyFromSqaaJsonReport(report: SqaaJsonReport): RunTally {
  */
 export function recordSqaaAnalysisTelemetry(
   ctx: CommandInvocationContext,
+  auth: ResolvedAuth,
   callerCommand: SqaaTelemetryCallerCommand,
   tally: RunTally,
   durationMs: number,
@@ -131,16 +133,20 @@ export function recordSqaaAnalysisTelemetry(
     findingsCount > 0 ? JSON.stringify(collectRuleCounts(collectIssuesFromTally(tally))) : '';
 
   ctx.recordTelemetry(
-    new TelemetryFact(CLI_ANALYSIS_COMPLETED, {
-      caller_command: callerCommand,
-      analyzer: 'sqaa',
-      analysis_id: analysisId,
-      findings_count: findingsCount,
-      exit_code: exitCode ?? null,
-      errors_count: tally.totalErrors,
-      failures_count: tally.totalFailures,
-      scan_duration_ms: durationMs,
-      details,
-    } satisfies AnalysisCompletedPayload),
+    new TelemetryFact(
+      CLI_ANALYSIS_COMPLETED,
+      {
+        caller_command: callerCommand,
+        analyzer: 'sqaa',
+        analysis_id: analysisId,
+        findings_count: findingsCount,
+        exit_code: exitCode ?? null,
+        errors_count: tally.totalErrors,
+        failures_count: tally.totalFailures,
+        scan_duration_ms: durationMs,
+        details,
+      } satisfies AnalysisCompletedPayload,
+      { auth },
+    ),
   );
 }

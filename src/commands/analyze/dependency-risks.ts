@@ -108,6 +108,7 @@ export async function analyzeDependencyRisks(
   // Contribute after handleResult so exit_code carries the CLI's final process.exitCode (0/1/51).
   recordScaAnalysisTelemetry(
     ctx,
+    auth,
     SCA_CALLER_COMMANDS.analyzeDependencyRisks,
     scan.response,
     scan.scanDurationMs,

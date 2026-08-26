@@ -40,6 +40,7 @@ export async function commitTelemetryFacts(
       await emitTelemetryEvent(fact.name, fact.payload as object, {
         eventTimestampMs: fact.timestamp,
         agentSessionId: options?.agentSessionId,
+        auth: fact.auth,
       });
     } catch {
       // Telemetry is strictly fire-and-forget.

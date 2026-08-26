@@ -93,6 +93,7 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
     attrs,
     onSuccess: (facts) => {
       recordIntegrationConfigured(params.ctx, {
+        auth,
         integrationId: params.integrationId,
         scope: installScope,
         nonInteractive: options.nonInteractive ?? false,
