@@ -52,7 +52,8 @@ export function mockFetchSeq(...responses: Response[]): ReturnType<typeof spyOn>
 }
 
 export function lastFetchUrl(spy: ReturnType<typeof spyOn>): string {
-  return (spy.mock.calls[0][0] as string | URL).toString();
+  const calls = spy.mock.calls;
+  return (calls[calls.length - 1][0] as string | URL).toString();
 }
 
 export function nthFetchUrl(spy: ReturnType<typeof spyOn>, n: number): string {
@@ -60,5 +61,6 @@ export function nthFetchUrl(spy: ReturnType<typeof spyOn>, n: number): string {
 }
 
 export function lastFetchInit(spy: ReturnType<typeof spyOn>): RequestInit {
-  return spy.mock.calls[0][1] as RequestInit;
+  const calls = spy.mock.calls;
+  return calls[calls.length - 1][1] as RequestInit;
 }

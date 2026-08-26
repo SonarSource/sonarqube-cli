@@ -860,13 +860,13 @@ export class SonarQubeClient {
   }
 
   async hasProjectBeenAnalyzed(projectKey: string): Promise<boolean> {
-    const { response, value } = await this.getSafe<{ analyses: unknown[] }>(
+    const { response, value } = await this.getSafe<{ analyses?: unknown[] }>(
       '/api/project_analyses/search',
       { project: projectKey, ps: 1 },
     );
     if (response.status === HTTP_STATUS_NOT_FOUND) return false;
     await this.raiseForStatus(response, 'GET');
-    return (value?.analyses.length ?? 0) > 0;
+    return (value?.analyses?.length ?? 0) > 0;
   }
 
   async hasProvisionProjectsPermission(): Promise<boolean> {
