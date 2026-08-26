@@ -26,11 +26,11 @@ import { SonarQubeClient, type SqaaAnalysisRequest } from '@/core/server/client.
 import { RequestPayloadTooLargeError, ServiceUnavailableError } from '@/core/server/errors.ts';
 
 import { fetchChunkWith413Split } from '../../../../src/commands/analyze/sqaa-api.ts';
-import type { SqaaAuth } from '../../../../src/commands/analyze/sqaa-auth.ts';
+import type { CloudAuth } from '../../../../src/commands/analyze/sqaa-auth.ts';
 import type { SqaaChunkFile } from '../../../../src/commands/analyze/sqaa-chunking.ts';
 import * as sqaaChunking from '../../../../src/commands/analyze/sqaa-chunking.ts';
 
-const AUTH: SqaaAuth = {
+const AUTH: CloudAuth = {
   serverUrl: 'https://sonarcloud.io',
   token: 'token',
   orgKey: 'org',

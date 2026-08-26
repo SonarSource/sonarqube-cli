@@ -35,8 +35,8 @@ import { recheckVortexEntitlement } from '@/core/vortex/entitlement.ts';
 import type { RunContext, RunTally } from './sqaa-analysis.ts';
 import { runAnalyses } from './sqaa-analysis.ts';
 import { fetchWithRetry, readSqaaFileContent, toRelativePosixPath } from './sqaa-api.ts';
-import type { SqaaAuth } from './sqaa-auth.ts';
-import { resolveSqaaAuthAndProject } from './sqaa-auth.ts';
+import type { CloudAuth } from './sqaa-auth.ts';
+import { resolveCloudAuthAndProject } from './sqaa-auth.ts';
 import type { ChangeSetResult } from './sqaa-changeset.ts';
 import { resolveSqaaContext } from './sqaa-context.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
@@ -181,7 +181,7 @@ export async function runSqaaAnalysesTallyForResolved(
   const ctx: RunContext = {
     files,
     allPaths,
-    sqaaAuth: resolved.sqaaAuth,
+    cloudAuth: resolved.cloudAuth,
     projectKey: resolved.projectKey,
     branch,
     progress: silentProgress,
@@ -192,7 +192,7 @@ export async function runSqaaAnalysesTallyForResolved(
 }
 
 export async function fetchSingleFileReport(
-  sqaaAuth: SqaaAuth,
+  cloudAuth: CloudAuth,
   projectKey: string,
   file: string,
   fileContent: string,
@@ -202,7 +202,7 @@ export async function fetchSingleFileReport(
 ): Promise<{ report: SqaaJsonReport; error?: Error }> {
   const filePath = toRelativePosixPath(file);
   try {
-    const response = await fetchWithRetry(sqaaAuth, projectKey, file, fileContent, branch, {
+    const response = await fetchWithRetry(cloudAuth, projectKey, file, fileContent, branch, {
       analysisDepth: wireDepth,
     });
     return {
@@ -236,15 +236,23 @@ export async function runSqaaAnalysis(
     telemetryCallerCommand,
   } = options;
 
-  const resolution = await resolveSqaaAuthAndProject(auth, explicitProject);
+  const resolution = await resolveCloudAuthAndProject(auth, explicitProject);
   const resolved = resolveSqaaContext(resolution, { requireProject });
   if (!resolved) return;
 
-  const { sqaaAuth, projectKey } = resolved;
+  const { cloudAuth, projectKey } = resolved;
   const fileContent = readSqaaFileContent(file);
 
   const { result: fetchResult, durationMs } = await timed(() =>
-    fetchSingleFileReport(sqaaAuth, projectKey, file, fileContent, branch, wireDepth, displayDepth),
+    fetchSingleFileReport(
+      cloudAuth,
+      projectKey,
+      file,
+      fileContent,
+      branch,
+      wireDepth,
+      displayDepth,
+    ),
   );
   const { report, error } = fetchResult;
   const filePath = toRelativePosixPath(file);
@@ -296,7 +304,7 @@ export async function runSqaaAnalysisOnExplicitFiles(
   const ctx: RunContext = {
     files,
     allPaths,
-    sqaaAuth: resolved.sqaaAuth,
+    cloudAuth: resolved.cloudAuth,
     projectKey: resolved.projectKey,
     branch,
     progress,
@@ -318,7 +326,7 @@ export async function runSqaaAnalysisOnFiles(
 ): Promise<void> {
   const { resolved, branch, format = 'text', wireDepth, displayDepth = 'STANDARD' } = options;
   const { files, ignored, repoRoot } = changeSet;
-  const { sqaaAuth, projectKey } = resolved;
+  const { cloudAuth, projectKey } = resolved;
   const allPaths = files.map((f) => toRelativePosixPath(f, repoRoot));
 
   if (format === 'json') {
@@ -336,7 +344,7 @@ export async function runSqaaAnalysisOnFiles(
   const ctx: RunContext = {
     files,
     allPaths,
-    sqaaAuth,
+    cloudAuth,
     projectKey,
     branch,
     progress,

@@ -59,7 +59,7 @@ const LARGE_CHANGESET_HINT =
  * Authentication context required for SQAA API calls. `orgKey` is Cloud-only: Server has
  * no organizations and its A3S hub forces the request onto the instance's default one.
  */
-export interface SqaaAuth {
+export interface CloudAuth {
   serverUrl: string;
   token: string;
   orgKey?: string;
@@ -75,7 +75,7 @@ export interface SqaaAuth {
  *   decides whether this is an error or a graceful skip.
  */
 export type SqaaAuthResolution =
-  | { kind: 'resolved'; sqaaAuth: SqaaAuth; projectKey: string }
+  | { kind: 'resolved'; cloudAuth: CloudAuth; projectKey: string }
   | { kind: 'no-org' }
   | { kind: 'no-project' };
 
@@ -88,19 +88,19 @@ export type SqaaAuthResolution =
  * entry point — bare `sonar analyze`, `analyze agentic`, and `verify` — so noting here covers
  * all of them instead of at each of the five downstream call sites.
  */
-export async function resolveSqaaAuthAndProject(
+export async function resolveCloudAuthAndProject(
   auth: ResolvedAuth,
   explicitProject: string | undefined,
   projectRoot?: string,
 ): Promise<SqaaAuthResolution> {
-  const sqaaAuth = resolveSqaaAuth(auth, explicitProject);
-  if (!sqaaAuth) return { kind: 'no-org' };
+  const cloudAuth = resolveCloudAuth(auth, explicitProject);
+  if (!cloudAuth) return { kind: 'no-org' };
 
   const projectKey = explicitProject ?? (await resolveSqaaProjectKey(projectRoot));
   if (!projectKey) return { kind: 'no-project' };
 
   noteProject(auth, projectKey);
-  return { kind: 'resolved', sqaaAuth, projectKey };
+  return { kind: 'resolved', cloudAuth, projectKey };
 }
 
 /**
@@ -110,10 +110,10 @@ export async function resolveSqaaAuthAndProject(
  * Returns null when a Cloud connection has no organization and --project is not set.
  * Throws CommandFailedError when --project is set, since the caller asked explicitly.
  */
-export function resolveSqaaAuth(
+export function resolveCloudAuth(
   auth: ResolvedAuth,
   explicitProject: string | undefined,
-): SqaaAuth | null {
+): CloudAuth | null {
   if (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey) {
     if (explicitProject) {
       throw new CommandFailedError('Vortex analysis requires a SonarQube Cloud organization.', {

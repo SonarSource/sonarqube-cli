@@ -96,7 +96,7 @@ async function handleSqaaPostToolUse(
   let fetchResult: Awaited<ReturnType<typeof fetchSingleFileReport>>;
   try {
     const fileContent = readFileSync(canonicalPath, 'utf-8');
-    const sqaaAuth = {
+    const cloudAuth = {
       serverUrl: auth.serverUrl,
       token: auth.token,
       ...(auth.orgKey ? { orgKey: auth.orgKey } : {}),
@@ -105,7 +105,7 @@ async function handleSqaaPostToolUse(
 
     const timedFetch = await timed(() =>
       fetchSingleFileReport(
-        sqaaAuth,
+        cloudAuth,
         projectKey,
         canonicalPath,
         fileContent,

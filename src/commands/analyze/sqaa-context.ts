@@ -49,7 +49,7 @@ interface SqaaDepthResolution {
  *   surrounding command can proceed with its other analyses.
  *
  * A Cloud connection without an organization is always a graceful skip (the warning was
- * already emitted by resolveSqaaAuth).
+ * already emitted by resolveCloudAuth).
  */
 export function resolveSqaaContext(
   resolution: SqaaAuthResolution,
@@ -57,7 +57,7 @@ export function resolveSqaaContext(
 ): SqaaResolvedContext | null {
   switch (resolution.kind) {
     case 'resolved':
-      return { sqaaAuth: resolution.sqaaAuth, projectKey: resolution.projectKey };
+      return { cloudAuth: resolution.cloudAuth, projectKey: resolution.projectKey };
     case 'no-org':
       return null;
     case 'no-project':
