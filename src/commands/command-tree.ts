@@ -33,6 +33,7 @@ import {
   SonarOption,
   Stage,
 } from '@/core/commands/sonar-command.ts';
+import { resolveGitlabToken } from '@/core/gitlab/token.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
 import { GENERIC_HTTP_METHODS } from '@/core/server/client.ts';
@@ -44,6 +45,12 @@ import { blank, error } from '@/core/ui';
 import { parseInteger } from '@/core/ui/parsing.ts';
 
 import { version as VERSION } from '../../package.json';
+import {
+  collectScannerProperty,
+  onboardCiGitlab,
+  type OnboardCiGitlabOptions,
+  validateOnboardCiGitlabOptions,
+} from './admin/onboard-ci/gitlab/index.ts';
 import { analyzeAll, type AnalyzeAllOptions } from './analyze/analyze-all.ts';
 import type { Severity } from './analyze/dependency-risk-helpers/sca-scanner.ts';
 import { SEVERITIES } from './analyze/dependency-risk-helpers/view-model/build/severity.ts';
@@ -793,6 +800,46 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .description('git pre-push handler: scan files in new commits for secrets')
     .argument('[files...]', 'Changed files passed by pre-commit (pass_filenames: true)')
     .anonymousAction((ctx, files: string[] | undefined) => gitPrePush(files ?? [], ctx));
+
+  COMMAND_TREE.command('admin')
+    .stage(Stage.Alpha)
+    .description('Administrative operations for platform engineers')
+    .command('onboard-ci')
+    .description('Open CI configuration MRs across repositories')
+    .command('gitlab')
+    .description('Open CI configuration MRs across GitLab repositories')
+    .requiredOption(
+      '--group <group>',
+      'GitLab group or subgroup path to process (all nested subgroups included)',
+    )
+    .option(
+      '--binding-name <name>',
+      'Name of the GitLab configuration in SonarQube (auto-detected if only one exists)',
+    )
+    .option(
+      '--repos-file <file>',
+      'Path to a file listing repositories to process, one per line, relative to --group (e.g. subgroup/my-repo); omit to process all repositories in the group',
+    )
+    .option(
+      '--sonar-token-var-name <name>',
+      'Name of the GitLab CI/CD variable that holds the SonarQube analysis token (default: SONAR_TOKEN)',
+      'SONAR_TOKEN',
+    )
+    .option('--trigger-on <events>', 'Pipeline triggers: mr | main | both', 'both')
+    .option('--stage <name>', 'GitLab CI stage for the generated job (omit to use no stage)')
+    .option('--allow-failure', 'Add allow_failure: true to the generated job', false)
+    .option(
+      '--scanner-property <key=value>',
+      'Additional scanner property to inject into the CI script (repeatable; e.g. --scanner-property sonar.scanner.engineJarPath=/path/to/jar)',
+      collectScannerProperty,
+      [] as string[],
+    )
+    .option('--dry-run', 'Preview what would be processed without making any changes', false)
+    .authenticatedAction(async (ctx, options: OnboardCiGitlabOptions) => {
+      validateOnboardCiGitlabOptions(options);
+      const gitlabToken = await resolveGitlabToken();
+      return onboardCiGitlab(ctx.auth, gitlabToken, options);
+    });
 
   // Hidden flush command — only registered when running as a telemetry worker.
   if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {

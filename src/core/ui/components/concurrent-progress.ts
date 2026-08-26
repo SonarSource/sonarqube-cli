@@ -138,7 +138,7 @@ export class ConcurrentProgress {
         const state = this.items.get(slug);
         return phaseItem(slug, toPhaseStatus(state?.status), state?.detail);
       });
-      if (this.showResult) phase(this.resultTitle, phaseItems);
+      phase(this.resultTitle, phaseItems);
     }
 
     return { succeeded, failed };

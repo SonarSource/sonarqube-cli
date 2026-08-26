@@ -180,8 +180,20 @@ describe('ConcurrentProgress — mock mode options', () => {
     expect(methods).toContain('concurrentProgress.finish');
   });
 
-  it('showResult: false suppresses the result block on finish', () => {
+  it('showResult: false still emits the item list in non-TTY', () => {
     const progress = new ConcurrentProgress({ isTTY: false, showResult: false });
+    progress.setTotal(1);
+    progress.addItems(['item']);
+    progress.start();
+    progress.update('item', 'done', 'some detail');
+    setMockUi(false);
+    const output = captureStdout(() => progress.finish());
+    expect(output).toContain('item');
+    expect(output).toContain('some detail');
+  });
+
+  it('showResult: false suppresses the Succeeded/Failed block in TTY', () => {
+    const progress = new ConcurrentProgress({ isTTY: true, showResult: false });
     progress.setTotal(1);
     progress.addItems(['item']);
     progress.start();
@@ -189,7 +201,7 @@ describe('ConcurrentProgress — mock mode options', () => {
     setMockUi(false);
     const output = captureStdout(() => progress.finish());
     expect(output).not.toContain('Succeeded');
-    expect(output).not.toContain('Result');
+    expect(output).not.toContain('Failed');
   });
 
   it('resultTitle appears in TTY result header', () => {

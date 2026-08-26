@@ -94,6 +94,7 @@ export class FakeGitLabServer {
 export class FakeGitLabServerBuilder {
   private readonly projects: FakeGitLabProject[] = [];
   private readonly projectsByGroup = new Map<string, FakeGitLabProject[]>();
+  private readonly createBranchFailProjectIds = new Set<number>();
 
   withGroup(groupPath: string, projects: FakeGitLabProject[]): this {
     this.projectsByGroup.set(groupPath, projects);
@@ -102,6 +103,12 @@ export class FakeGitLabServerBuilder {
         this.projects.push(p);
       }
     }
+    return this;
+  }
+
+  /** Makes createBranch return 503 for the given project ID, simulating a GitLab outage. */
+  withCreateBranchFailure(projectId: number): this {
+    this.createBranchFailProjectIds.add(projectId);
     return this;
   }
 
@@ -120,6 +127,7 @@ export class FakeGitLabServerBuilder {
       );
     const projects = this.projects;
     const projectsByGroup = this.projectsByGroup;
+    const createBranchFailProjectIds = this.createBranchFailProjectIds;
 
     let mrCounter = 1;
 
@@ -215,6 +223,9 @@ export class FakeGitLabServerBuilder {
         const createBranchMatch = /^\/api\/v4\/projects\/(\d+)\/repository\/branches$/.exec(path);
         if (createBranchMatch && req.method === 'POST') {
           const projectId = Number.parseInt(createBranchMatch[1], 10);
+          if (createBranchFailProjectIds.has(projectId)) {
+            return json({ message: 'Service Unavailable' }, 503);
+          }
           const payload = JSON.parse(body ?? '{}') as { branch: string };
           if (branchExists(projectId, payload.branch)) {
             return json({ message: 'Branch already exists' }, 400);
