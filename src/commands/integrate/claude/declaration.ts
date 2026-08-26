@@ -55,7 +55,7 @@ import {
 } from '../_common/hooks.ts';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
-import { capabilityInstallDecision, createVortexFeature } from '../_common/vortex.ts';
+import { createVortexFeature, vortexInstallDecision } from '../_common/vortex.ts';
 import { createClaudeHookEventContainer } from './hook-container-feature.ts';
 import {
   getPostToolUseFailureTemplateUnix,
@@ -152,7 +152,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           id: 'sqaa-posttooluse',
           displayName: 'Vortex analysis',
           matcher: 'Edit|Write',
-          shouldInstall: ({ options }) => capabilityInstallDecision(options.sqaaDisposition),
+          shouldInstall: ({ options }) => vortexInstallDecision(options.vortexDisposition),
         },
         {
           id: 'cag-posttooluse',
@@ -209,10 +209,10 @@ function shouldInstallCagHook(
   attrs: Record<string, IntegrationStateAttribute> | undefined,
 ): InstallDecision {
   // The allowlist only withholds a new install; it never tears an existing hook down.
-  if (options.cagDisposition === 'install' && !isCagHookAllowedForAttrs(attrs)) {
+  if (options.vortexDisposition === 'install' && !isCagHookAllowedForAttrs(attrs)) {
     return skip();
   }
-  return capabilityInstallDecision(options.cagDisposition);
+  return vortexInstallDecision(options.vortexDisposition);
 }
 
 function createContextAugmentationFailureHookSubfeature(): SubfeatureDeclaration<ClaudeIntegrationOptions> {

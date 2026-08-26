@@ -21,10 +21,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.js';
-import {
-  SQAA_HOOK_FEATURE_ID,
-  SQAA_INSTRUCTIONS_SUBFEATURE_ID,
-} from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
+import { SQAA_HOOK_FEATURE_ID } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
 import {
   VORTEX_CHECK_FAILED_MESSAGE,
   VORTEX_FEATURE_ID,
@@ -292,81 +289,36 @@ describe('integrate claude — Vortex entitlement', () => {
     { timeout: 30000 },
   );
 
-  it(
-    'installs CAG only on a Server whose A3S hub is absent',
-    async () => {
+  it.each([
+    ['A3S', 'not_applicable', 'enabled'],
+    ['CAG', 'enabled', 'not_applicable'],
+  ] as const)(
+    'does not install Vortex on a Server whose %s hub is absent',
+    async (_hub, sqaa, cag) => {
       const result = await runIntegrateClaude({
-        sqaa: 'not_applicable',
-        cag: 'enabled',
+        sqaa,
+        cag,
         scaEnabled: true,
         cloud: false,
       });
 
       expect(result.exitCode).toBe(0);
-      expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(true);
+      expect(isVortexInstalled()).toBe(false);
+      expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
       expect(harness.cwd.file('CLAUDE.md').exists()).toBe(false);
       expect(postToolUseHooks()).not.toContain('sonar-sqaa');
       expect(sqaaHookScriptExists()).toBe(false);
-
-      const state = harness.stateJsonFile.asJson() as CliState;
-      const vortex = state.integrations.installed
-        .find((integration) => integration.integrationId === 'claude-code')
-        ?.features.find((feature) => feature.featureId === VORTEX_FEATURE_ID);
-      expect(
-        vortex?.subfeatures?.some(
-          (subfeature) => subfeature.featureId === CONTEXT_AUGMENTATION_FEATURE_ID,
-        ),
-      ).toBe(true);
-      expect(
-        vortex?.subfeatures?.some(
-          (subfeature) => subfeature.featureId === SQAA_INSTRUCTIONS_SUBFEATURE_ID,
-        ),
-      ).toBe(false);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_SERVER_UNAVAILABLE_MESSAGE);
     },
     { timeout: 30000 },
   );
 
   it(
-    'installs SQAA only on a Server whose CAG hub is absent',
-    async () => {
-      const result = await runIntegrateClaude({
-        sqaa: 'enabled',
-        cag: 'not_applicable',
-        cloud: false,
-      });
-
-      expect(result.exitCode).toBe(0);
-      expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
-      expect(harness.cwd.file('CLAUDE.md').asText()).toContain('# Vortex analysis protocol');
-      expect(postToolUseHooks()).toContain('sonar-sqaa');
-      expect(sqaaHookScriptExists()).toBe(true);
-
-      const state = harness.stateJsonFile.asJson() as CliState;
-      const vortex = state.integrations.installed
-        .find((integration) => integration.integrationId === 'claude-code')
-        ?.features.find((feature) => feature.featureId === VORTEX_FEATURE_ID);
-      expect(
-        vortex?.subfeatures?.some(
-          (subfeature) => subfeature.featureId === CONTEXT_AUGMENTATION_FEATURE_ID,
-        ),
-      ).toBe(false);
-      expect(
-        vortex?.subfeatures?.some(
-          (subfeature) => subfeature.featureId === SQAA_INSTRUCTIONS_SUBFEATURE_ID,
-        ),
-      ).toBe(true);
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'tears down SQAA when a Cloud install is repointed at a Server without the A3S hub',
+    'tears down Vortex when a Cloud install is repointed at a Server missing a hub',
     async () => {
       const installed = await runIntegrateClaude({ scaEnabled: true });
       expect(installed.exitCode).toBe(0);
-      expect(postToolUseHooks()).toContain('sonar-sqaa');
-      expect(sqaaHookScriptExists()).toBe(true);
-      expect(harness.cwd.file('CLAUDE.md').asText()).toContain('# Vortex analysis protocol');
+      expect(isVortexInstalled()).toBe(true);
 
       const repointed = await runIntegrateClaude({
         sqaa: 'not_applicable',
@@ -377,11 +329,12 @@ describe('integrate claude — Vortex entitlement', () => {
       });
 
       expect(repointed.exitCode).toBe(0);
+      expect(isVortexInstalled()).toBe(false);
       expect(postToolUseHooks()).not.toContain('sonar-sqaa');
       expect(sqaaHookScriptExists()).toBe(false);
-      // The snippet was CLAUDE.md's only content, so removing it drops the file.
       expect(harness.cwd.file('CLAUDE.md').exists()).toBe(false);
-      expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(true);
+      expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
+      expect(`${repointed.stdout}\n${repointed.stderr}`).toContain(VORTEX_UNINSTALL_MESSAGE);
     },
     { timeout: 30000 },
   );

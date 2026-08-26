@@ -32,7 +32,7 @@ import {
   sonarEndMarker,
 } from '../instructions-templates.ts';
 import type { IntegrateAgentOptions } from '../types.ts';
-import { capabilityInstallDecision } from '../vortex.ts';
+import { vortexInstallDecision } from '../vortex.ts';
 
 export const SQAA_HOOK_FEATURE_ID = 'sonar-sqaa-hook';
 export const SQAA_INSTRUCTIONS_SUBFEATURE_ID = 'sqaa-instructions';
@@ -45,7 +45,7 @@ export function createSqaaInstructionsSubfeature<TOptions extends IntegrateAgent
   return {
     id: SQAA_INSTRUCTIONS_SUBFEATURE_ID,
     displayName: 'Vortex analysis instructions',
-    shouldInstall: ({ options }) => capabilityInstallDecision(options.sqaaDisposition),
+    shouldInstall: ({ options }) => vortexInstallDecision(options.vortexDisposition),
     resources,
   };
 }

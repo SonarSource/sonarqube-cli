@@ -72,8 +72,6 @@ export async function integrateAntigravity(
     projectRoot: integrateCtx.project.rootDir,
     globalSecretsHookExists,
     vortexDisposition: vortex.disposition,
-    cagDisposition: vortex.cagDisposition,
-    sqaaDisposition: vortex.sqaaDisposition,
   };
 
   const attrs = await buildRecordedIntegrationAttrs({

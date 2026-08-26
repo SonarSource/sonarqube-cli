@@ -43,9 +43,9 @@ export async function recheckVortexEntitlement(
 }
 
 /**
- * `not_applicable` is decided here for connections that cannot ask the Hub at all
+ * `not_applicable` is decided here for connections that cannot ask either hub at all
  * (unauthenticated, or Cloud without an organization). Server connections are
- * queried: a missing Hub returns `not_applicable` from the 404, distinct from a
+ * queried: a missing hub returns `not_applicable` from the 404, distinct from a
  * real `not_entitled` licence refusal. Cloud vs Server follows the URL
  * (`isSonarQubeCloud`), same as `SonarQubeClient`, not the stored connection type.
  */

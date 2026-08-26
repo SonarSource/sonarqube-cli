@@ -61,7 +61,7 @@ export type HttpMethod = (typeof GENERIC_HTTP_METHODS)[number];
 
 /**
  * `not_applicable` is returned when Vortex cannot apply to this connection: Cloud without
- * an organization (see `resolveVortexEntitlement`), or a Server whose Hub is absent (HTTP 404).
+ * an organization (see `resolveVortexEntitlement`), or a Server missing either hub (HTTP 404).
  */
 export type VortexEntitlementStatus =
   'enabled' | 'over_consumption' | 'not_entitled' | 'check_failed' | 'not_applicable';
@@ -69,20 +69,9 @@ export type VortexEntitlementStatus =
 /** Placeholder org id the Server Hub expects — Server has no organizations. */
 export const SERVER_ORGANIZATION_ID_PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
 
-/**
- * Per-capability outcomes behind the merged `status`. Vortex is two services, and on
- * Server either can be absent from the installed edition, so callers that install one
- * capability without the other need the individual answers rather than the merge.
- */
-export interface VortexCapabilityStatuses {
-  cag: VortexEntitlementStatus;
-  sqaa: VortexEntitlementStatus;
-}
-
 export interface VortexEntitlementResult {
   status: VortexEntitlementStatus;
   consumption?: { consumed: number; limit: number };
-  capabilities?: VortexCapabilityStatuses;
 }
 
 export interface Organization {
@@ -456,26 +445,17 @@ export class SonarQubeClient {
   }
 
   /**
-   * Check if an organization has SQAA entitlement via the A3S hub.
-   *
-   * The endpoint distinguishes two negative cases:
-   * - `allowed` — whether the org may use A3S right now (billing consumption check).
-   * - `hasEntitlement` — whether the org is entitled at all.
-   *
-   * Returns `'enabled'` when currently allowed, `'over_consumption'` when entitled but
-   * over its current usage limit, `'not_entitled'` when not entitled, `'not_applicable'`
-   * when a Server has no A3S hub at all, and `'check_failed'` when the call errors out.
+   * Shared entitlement GET. SQAA and CAG expose the same `{ allowed, hasEntitlement,
+   * consumption? }` shape; only the path differs. A Server 404 means that hub is not
+   * installed. A Cloud 404 is a fault — those services always exist.
    */
-  private async checkSqaaEntitlement(organizationUuid: string): Promise<VortexEntitlementResult> {
+  private async checkHubEntitlement(endpoint: string): Promise<VortexEntitlementResult> {
     try {
-      const endpoint = this.sqaaEntitlementEndpoint(organizationUuid);
       const { response, value } = await this.getSafe<{
-        id?: string;
         allowed?: boolean;
         hasEntitlement?: boolean;
+        consumption?: { consumed: number; limit: number };
       }>(endpoint, undefined, resolveFromEndpoint(this.serverURL, endpoint));
-      // On Cloud the service always exists, so a 404 is a fault rather than an absent
-      // capability — same split as `checkCagEntitlement`.
       if (response.status === HTTP_STATUS_NOT_FOUND && !this.isCloud) {
         return { status: 'not_applicable' };
       }
@@ -483,9 +463,12 @@ export class SonarQubeClient {
         return { status: 'check_failed' };
       }
       if (value.allowed) {
-        return { status: 'enabled' };
+        return { status: 'enabled', consumption: value.consumption };
       }
-      return { status: value.hasEntitlement ? 'over_consumption' : 'not_entitled' };
+      return {
+        status: value.hasEntitlement ? 'over_consumption' : 'not_entitled',
+        consumption: value.consumption,
+      };
     } catch {
       return { status: 'check_failed' };
     }
@@ -532,41 +515,11 @@ export class SonarQubeClient {
       : `/api/v2/cag/cag-entitlement/${organizationUuid}`;
   }
 
-  private async checkCagEntitlement(organizationUuid: string): Promise<VortexEntitlementResult> {
-    try {
-      const endpoint = this.cagEntitlementEndpoint(organizationUuid);
-      const { response, value } = await this.getSafe<{
-        allowed?: boolean;
-        hasEntitlement?: boolean;
-        consumption?: { consumed: number; limit: number };
-      }>(endpoint, undefined, resolveFromEndpoint(this.serverURL, endpoint));
-      if (response.status === HTTP_STATUS_NOT_FOUND && !this.isCloud) {
-        return { status: 'not_applicable' };
-      }
-      if (!response.ok || value === undefined) {
-        return { status: 'check_failed' };
-      }
-      if (value.allowed) {
-        return { status: 'enabled', consumption: value.consumption };
-      }
-      return {
-        status: value.hasEntitlement ? 'over_consumption' : 'not_entitled',
-        consumption: value.consumption,
-      };
-    } catch {
-      return { status: 'check_failed' };
-    }
-  }
-
   /**
-   * Vortex is exposed through separate SQAA and CAG services, each with its own
-   * entitlement endpoint; there is no shared Vortex backend yet. Both are queried on
-   * every connection, using the placeholder organization id on Server, where the
-   * instance itself is the only organization.
-   *
-   * The merged `status` answers "is any Vortex capability usable"; callers install each
-   * capability against its own entry in `capabilities`. See `mergeVortexEntitlement` for
-   * why a missing or unlicensed capability must not veto the other one.
+   * Vortex is two hubs with no shared backend. Both are probed with the same GET mapper
+   * on every connection. Server uses the nil UUID placeholder — CAG rewrites it to the
+   * instance default org; A3S ignores it. See `mergeVortexEntitlement`: either hub
+   * missing or unlicensed means Vortex is not available.
    */
   async hasVortexEntitlement(organizationKey?: string): Promise<VortexEntitlementResult> {
     try {
@@ -575,8 +528,8 @@ export class SonarQubeClient {
         return uuid;
       }
       const [sqaa, cag] = await Promise.all([
-        this.checkSqaaEntitlement(uuid),
-        this.checkCagEntitlement(uuid),
+        this.checkHubEntitlement(this.sqaaEntitlementEndpoint(uuid)),
+        this.checkHubEntitlement(this.cagEntitlementEndpoint(uuid)),
       ]);
       return mergeVortexEntitlement(sqaa, cag);
     } catch {
@@ -960,9 +913,9 @@ export class SonarQubeClient {
 }
 
 /**
- * Combined Vortex status, with a 404 (`not_applicable`) ignored so a Server edition that
- * ships only one hub does not veto the other. Remaining sides keep the Cloud AND merge:
- * `check_failed > not_entitled > over_consumption > enabled`.
+ * Vortex is one product: if either hub is missing or unlicensed, neither capability
+ * loads. Priority among remaining outcomes: `check_failed > not_entitled >
+ * over_consumption > enabled`.
  *
  * Usage `consumption` is CAG-specific (the SQAA endpoint does not report it) and is only
  * forwarded for `enabled`: once over the limit the remaining headroom is no longer
@@ -972,21 +925,19 @@ function mergeVortexEntitlement(
   sqaa: VortexEntitlementResult,
   cag: VortexEntitlementResult,
 ): VortexEntitlementResult {
-  const capabilities: VortexCapabilityStatuses = { cag: cag.status, sqaa: sqaa.status };
-  const sides = [sqaa, cag].filter((side) => side.status !== 'not_applicable');
-  if (sides.length === 0) {
-    return { status: 'not_applicable', capabilities };
+  if (sqaa.status === 'not_applicable' || cag.status === 'not_applicable') {
+    return { status: 'not_applicable' };
   }
-  if (sides.some((side) => side.status === 'check_failed')) {
-    return { status: 'check_failed', capabilities };
+  if (sqaa.status === 'check_failed' || cag.status === 'check_failed') {
+    return { status: 'check_failed' };
   }
-  if (sides.some((side) => side.status === 'not_entitled')) {
-    return { status: 'not_entitled', capabilities };
+  if (sqaa.status === 'not_entitled' || cag.status === 'not_entitled') {
+    return { status: 'not_entitled' };
   }
-  if (sides.some((side) => side.status === 'over_consumption')) {
-    return { status: 'over_consumption', capabilities };
+  if (sqaa.status === 'over_consumption' || cag.status === 'over_consumption') {
+    return { status: 'over_consumption' };
   }
-  return { status: 'enabled', consumption: cag.consumption, capabilities };
+  return { status: 'enabled', consumption: cag.consumption };
 }
 
 /** Returns the sole binding, or null when there are none or more than one (ambiguous). */

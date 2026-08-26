@@ -655,7 +655,7 @@ describe('integrate claude — Vortex entitlement guard', () => {
         .start();
 
       // Point both Cloud URL constants at the fake server so SONARCLOUD_HOSTNAME check passes
-      // and getOrganizationId / checkSqaaEntitlement hit the same fake server
+      // and getOrganizationId / checkHubEntitlement hit the same fake server
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 

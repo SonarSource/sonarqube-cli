@@ -33,7 +33,7 @@ import {
 } from '../context-augmentation.ts';
 import { contextAugmentationBinaryDependency } from '../context-augmentation-dependency.ts';
 import type { IntegrateAgentOptions } from '../types.ts';
-import { capabilityInstallDecision } from '../vortex.ts';
+import { vortexInstallDecision } from '../vortex.ts';
 
 export const CONTEXT_AUGMENTATION_FEATURE_ID = 'context-augmentation';
 export const CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID = 'context-augmentation-skill-file';
@@ -53,7 +53,7 @@ export function createContextAugmentationSubfeature<TOptions extends IntegrateAg
     shouldInstall: ({ options: integrateOptions }) =>
       isContextAugmentationSkipped()
         ? skip()
-        : capabilityInstallDecision(integrateOptions.cagDisposition),
+        : vortexInstallDecision(integrateOptions.vortexDisposition),
     dependencies: [contextAugmentationBinaryDependency],
     resources: [
       wholeFile({

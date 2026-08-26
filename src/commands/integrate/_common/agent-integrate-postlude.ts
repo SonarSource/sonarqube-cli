@@ -83,8 +83,6 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
       ...params.featureOptions,
       projectRoot: context.project.rootDir,
       vortexDisposition: vortex.disposition,
-      cagDisposition: vortex.cagDisposition,
-      sqaaDisposition: vortex.sqaaDisposition,
     },
     targetRoot: installRoot,
     scope: installScope,

@@ -22,12 +22,6 @@ export type VortexDisposition = 'install' | 'preserve' | 'remove';
 
 export interface IntegrateAgentOptions {
   project?: string;
-  /**
-   * Per-capability dispositions. Distinct from `vortexDisposition` because the CAG and
-   * A3S hubs are entitled separately, and a Server edition can ship one without the other.
-   */
-  cagDisposition?: VortexDisposition;
-  sqaaDisposition?: VortexDisposition;
   nonInteractive?: boolean;
   global?: boolean;
   /** Set by the bare `sonar integrate` router; forwarded to telemetry only. */

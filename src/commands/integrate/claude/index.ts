@@ -93,8 +93,6 @@ export async function integrateClaude(
     projectRoot: integrateCtx.project.rootDir,
     globalSecretsHookExists: skipSecretsHooks,
     vortexDisposition: vortex.disposition,
-    cagDisposition: vortex.cagDisposition,
-    sqaaDisposition: vortex.sqaaDisposition,
   } satisfies ClaudeIntegrationOptions;
   let installError: Error | undefined;
   try {

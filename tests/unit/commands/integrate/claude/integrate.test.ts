@@ -442,7 +442,7 @@ describe('integrateCommand', () => {
         projectRoot: '/project/root',
         projectKey: 'a-project',
         globalSecretsHookExists: true,
-        vortexDisposition: 'preserve',
+        vortexDisposition: 'remove',
       });
     });
 
@@ -482,7 +482,7 @@ describe('integrateCommand', () => {
         projectRoot: '/project/root',
         projectKey: 'a-project',
         globalSecretsHookExists: false,
-        vortexDisposition: 'preserve',
+        vortexDisposition: 'remove',
       });
     });
   });
