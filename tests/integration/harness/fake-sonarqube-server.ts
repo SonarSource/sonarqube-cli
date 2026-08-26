@@ -257,6 +257,13 @@ export class FakeSonarQubeServerBuilder {
   private provisionProjectsDelayMs?: number;
   private autoscanEligibilityStatusCode?: number;
   private autoscanEligibilityStatusBody?: string;
+  private dopSettings: Array<{ id: string; key: string; type: string; url: string }> = [];
+  private projectBindings: Array<{ projectKey: string; repository: string; dopSettingId: string }> =
+    [];
+  private hasProvisionProjects = true;
+  private boundProjectsStatusCode?: number;
+  private analyzedProjectKeys = new Set<string>();
+
   private metrics: Metric[] = [];
 
   /** Configure the server-wide metric catalog `GET /api/metrics/search` returns. */
@@ -545,6 +552,35 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  withDopSettings(settings: Array<{ id: string; key: string; type: string; url: string }>): this {
+    this.dopSettings = settings;
+    return this;
+  }
+
+  withProjectBindings(
+    bindings: Array<{ projectKey: string; repository: string; dopSettingId: string }>,
+  ): this {
+    this.projectBindings = bindings;
+    return this;
+  }
+
+  withProvisionProjectsPermission(has: boolean): this {
+    this.hasProvisionProjects = has;
+    return this;
+  }
+
+  withBoundProjectsError(statusCode: number): this {
+    this.boundProjectsStatusCode = statusCode;
+    return this;
+  }
+
+  withAnalyzedProjects(projectKeys: string[]): this {
+    for (const key of projectKeys) {
+      this.analyzedProjectKeys.add(key);
+    }
+    return this;
+  }
+
   start(): Promise<FakeSonarQubeServer> {
     const projects = new Map([...this.projectBuilders.entries()].map(([k, v]) => [k, v.getData()]));
     const {
@@ -586,6 +622,11 @@ export class FakeSonarQubeServerBuilder {
       autoscanEligibilityStatusCode,
       autoscanEligibilityStatusBody,
       metrics,
+      dopSettings,
+      projectBindings,
+      hasProvisionProjects,
+      boundProjectsStatusCode,
+      analyzedProjectKeys,
     } = this;
     const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
@@ -1264,6 +1305,77 @@ export class FakeSonarQubeServerBuilder {
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );
+        }
+
+        if (path === '/api/users/current') {
+          const global = hasProvisionProjects ? ['provisioning'] : [];
+          return new Response(
+            JSON.stringify({ id: 'fake-user-uuid', login: 'fake-user', permissions: { global } }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path === '/api/v2/dop-translation/dop-settings') {
+          return new Response(JSON.stringify({ dopSettings }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (path === '/api/v2/dop-translation/project-bindings' && req.method === 'GET') {
+          const { dopSettingId, pageSize: pageSizeStr, pageIndex: pageIndexStr } = query;
+          const pageSize = Number.parseInt(pageSizeStr ?? '500', 10);
+          const pageIndex = Number.parseInt(pageIndexStr ?? '1', 10);
+          const filtered = dopSettingId
+            ? projectBindings.filter((b) => b.dopSettingId === dopSettingId)
+            : projectBindings;
+          const start = (pageIndex - 1) * pageSize;
+          const page = filtered.slice(start, start + pageSize);
+          return new Response(
+            JSON.stringify({
+              projectBindings: page.map(({ projectKey, repository }) => ({
+                projectKey,
+                repository,
+              })),
+              page: { total: filtered.length, pageSize, pageIndex },
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path === '/api/project_analyses/search' && req.method === 'GET') {
+          const projectKey = query.project ?? '';
+          const hasAnalysis = analyzedProjectKeys.has(projectKey);
+          const analyses = hasAnalysis ? [{ key: 'AX1', date: '2024-01-01T00:00:00+0000' }] : [];
+          return new Response(
+            JSON.stringify({
+              paging: { pageIndex: 1, pageSize: 1, total: analyses.length },
+              analyses,
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path === '/api/v2/dop-translation/bound-projects' && req.method === 'POST') {
+          if (boundProjectsStatusCode !== undefined) {
+            return new Response(JSON.stringify({ errors: [{ msg: 'Bound project error' }] }), {
+              status: boundProjectsStatusCode,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          const payload = JSON.parse(body ?? '{}') as {
+            projectKey: string;
+            repositoryIdentifier: string;
+            devOpsPlatformSettingId: string;
+          };
+          projectBindings.push({
+            projectKey: payload.projectKey,
+            repository: payload.repositoryIdentifier,
+            dopSettingId: payload.devOpsPlatformSettingId,
+          });
+          return new Response(JSON.stringify({}), {
+            status: 201,
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
 
         return new Response(JSON.stringify({ errors: [{ msg: `Unknown endpoint: ${path}` }] }), {

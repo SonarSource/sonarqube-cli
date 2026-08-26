@@ -37,25 +37,7 @@ import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { version as VERSION } from '../../../../package.json';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function mockFetch(body: unknown, ok = true, status = 200): ReturnType<typeof spyOn> {
-  const statusText = ok ? 'OK' : 'Internal Server Error';
-  return spyOn(globalThis, 'fetch').mockResolvedValue({
-    ok,
-    status,
-    statusText,
-    json: () => Promise.resolve(body),
-    text: () => Promise.resolve(JSON.stringify(body)),
-  } as Response);
-}
-
-function lastFetchUrl(fetchSpy: ReturnType<typeof spyOn>): string {
-  return (fetchSpy.mock.calls[0][0] as URL).toString();
-}
+import { lastFetchInit, lastFetchUrl, mockFetch } from '../../helpers/mock-fetch.ts';
 
 function fetchPathnames(fetchSpy: ReturnType<typeof spyOn>): string[] {
   const paths: string[] = [];
@@ -63,10 +45,6 @@ function fetchPathnames(fetchSpy: ReturnType<typeof spyOn>): string[] {
     paths.push(new URL(fetchSpy.mock.calls[index][0] as URL).pathname);
   }
   return paths;
-}
-
-function lastFetchInit(fetchSpy: ReturnType<typeof spyOn>): RequestInit {
-  return fetchSpy.mock.calls[0][1] as RequestInit;
 }
 
 // ---------------------------------------------------------------------------
@@ -148,7 +126,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('throws when response is not ok', async () => {
-      fetchSpy = mockFetch({}, false, 401);
+      fetchSpy = mockFetch({}, { ok: false, status: 401 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.get('/api/authentication/validate')).rejects.toThrow(
         'SonarQube API error: 401',
@@ -182,7 +160,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('postForm uses redirect: manual so the runtime cannot auto-follow', async () => {
-      fetchSpy = mockFetch({}, true, 204);
+      fetchSpy = mockFetch({}, { status: 204 });
       await client.postForm('/api/endpoint', { k: 'v' });
       expect(lastFetchInit(fetchSpy).redirect).toBe('manual');
     });
@@ -415,7 +393,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('returns response with undefined value on non-ok status (does not throw)', async () => {
-      fetchSpy = mockFetch({ errors: [{ msg: 'Not found' }] }, false, 404);
+      fetchSpy = mockFetch({ errors: [{ msg: 'Not found' }] }, { ok: false, status: 404 });
       const result = await client.getSafe('/api/settings/values', { component: 'missing' });
       expect(result.response.ok).toBe(false);
       expect(result.response.status).toBe(404);
@@ -464,7 +442,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('throws "Project ... not found" on 404', async () => {
-      fetchSpy = mockFetch({ errors: [{ msg: 'Not found' }] }, false, 404);
+      fetchSpy = mockFetch({ errors: [{ msg: 'Not found' }] }, { ok: false, status: 404 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.getProjectSettings('missing')).rejects.toThrow(
         "Project 'missing' not found",
@@ -472,7 +450,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('throws a generic API error on other non-ok statuses', async () => {
-      fetchSpy = mockFetch({}, false, 500);
+      fetchSpy = mockFetch({}, { ok: false, status: 500 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.getProjectSettings('demo')).rejects.toThrow('SonarQube API error: 500');
     });
@@ -500,7 +478,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('throws with error body text when response is not ok', async () => {
-      fetchSpy = mockFetch({ message: 'Not found' }, false, 404);
+      fetchSpy = mockFetch({ message: 'Not found' }, { ok: false, status: 404 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.post('/api/some/endpoint', {})).rejects.toThrow('404');
     });
@@ -512,7 +490,7 @@ describe('SonarQubeClient', () => {
 
   describe('postForm', () => {
     it('sends a form-encoded POST with URL-encoded body', async () => {
-      fetchSpy = mockFetch({}, true, 204);
+      fetchSpy = mockFetch({}, { status: 204 });
       await client.postForm('/api/some/form', { foo: 'bar baz', qux: 'a&b' });
       const init = lastFetchInit(fetchSpy);
       expect(init.method).toBe('POST');
@@ -520,7 +498,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('sets Content-Type: application/x-www-form-urlencoded and Bearer auth', async () => {
-      fetchSpy = mockFetch({}, true, 204);
+      fetchSpy = mockFetch({}, { status: 204 });
       await client.postForm('/api/some/form', { name: 'test' });
       expect(lastFetchInit(fetchSpy).headers).toMatchObject({
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -529,13 +507,13 @@ describe('SonarQubeClient', () => {
     });
 
     it('targets the exact endpoint on the configured server URL', async () => {
-      fetchSpy = mockFetch({}, true, 204);
+      fetchSpy = mockFetch({}, { status: 204 });
       await client.postForm('/api/some/form', { name: 'test' });
       expect(lastFetchUrl(fetchSpy)).toBe(`${SERVER_URL}/api/some/form`);
     });
 
     it('throws with error body text when response is not ok', async () => {
-      fetchSpy = mockFetch({ message: 'boom' }, false, 500);
+      fetchSpy = mockFetch({ message: 'boom' }, { ok: false, status: 500 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.postForm('/api/some/form', { name: 'test' })).rejects.toThrow(
         'SonarQube API error: 500 Internal Server Error',
@@ -545,7 +523,7 @@ describe('SonarQubeClient', () => {
 
   describe('revokeUserToken', () => {
     it('POSTs name=<tokenName> to /api/user_tokens/revoke', async () => {
-      fetchSpy = mockFetch({}, true, 204);
+      fetchSpy = mockFetch({}, { status: 204 });
       await client.revokeUserToken('cli-token-name');
       expect(lastFetchUrl(fetchSpy)).toBe(`${SERVER_URL}/api/user_tokens/revoke`);
       const init = lastFetchInit(fetchSpy);
@@ -558,13 +536,13 @@ describe('SonarQubeClient', () => {
     });
 
     it('URL-encodes special characters in the token name', async () => {
-      fetchSpy = mockFetch({}, true, 204);
+      fetchSpy = mockFetch({}, { status: 204 });
       await client.revokeUserToken('cli token+with/special&chars');
       expect(lastFetchInit(fetchSpy).body).toBe('name=cli+token%2Bwith%2Fspecial%26chars');
     });
 
     it('propagates server errors to the caller', async () => {
-      fetchSpy = mockFetch('revocation boom', false, 500);
+      fetchSpy = mockFetch('revocation boom', { ok: false, status: 500 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.revokeUserToken('cli-token-name')).rejects.toThrow(
         'SonarQube API error: 500 Internal Server Error',
@@ -625,7 +603,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('returns null on error', async () => {
-      fetchSpy = mockFetch({}, false, 401);
+      fetchSpy = mockFetch({}, { ok: false, status: 401 });
       expect(await client.getCurrentUser()).toBeNull();
     });
   });
@@ -665,7 +643,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('returns null on error', async () => {
-      fetchSpy = mockFetch({}, false, 404);
+      fetchSpy = mockFetch({}, { ok: false, status: 404 });
       expect(await client.getOrganizationId('unknown-org')).toBeNull();
     });
 
@@ -712,22 +690,22 @@ describe('SonarQubeClient', () => {
     });
 
     it("returns 'check_failed' when the entitlement API errors out", async () => {
-      fetchSpy = mockFetch({}, false, 500);
+      fetchSpy = mockFetch({}, { ok: false, status: 500 });
       expect((await cloudClient['checkHubEntitlement'](CLOUD_CAG)).status).toBe('check_failed');
     });
 
     it("returns 'check_failed' when a Cloud hub is missing (HTTP 404)", async () => {
-      fetchSpy = mockFetch({}, false, 404);
+      fetchSpy = mockFetch({}, { ok: false, status: 404 });
       expect((await cloudClient['checkHubEntitlement'](CLOUD_SQAA)).status).toBe('check_failed');
     });
 
     it("returns 'not_applicable' when a Server hub is absent (HTTP 404)", async () => {
-      fetchSpy = mockFetch({}, false, 404);
+      fetchSpy = mockFetch({}, { ok: false, status: 404 });
       expect((await client['checkHubEntitlement'](SERVER_SQAA)).status).toBe('not_applicable');
     });
 
     it("returns 'check_failed' when the hub is unavailable (HTTP 503)", async () => {
-      fetchSpy = mockFetch({}, false, 503);
+      fetchSpy = mockFetch({}, { ok: false, status: 503 });
       expect((await cloudClient['checkHubEntitlement'](CLOUD_CAG)).status).toBe('check_failed');
     });
 
@@ -815,7 +793,7 @@ describe('SonarQubeClient', () => {
 
     it("returns 'not_applicable' when both Server hubs are absent", async () => {
       const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
-      fetchSpy = mockFetch({}, false, 404);
+      fetchSpy = mockFetch({}, { ok: false, status: 404 });
       expect((await serverClient.hasVortexEntitlement()).status).toBe('not_applicable');
     });
 
@@ -842,12 +820,12 @@ describe('SonarQubeClient', () => {
 
     it("returns 'check_failed' when the Server Hub is unavailable", async () => {
       const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
-      fetchSpy = mockFetch({}, false, 503);
+      fetchSpy = mockFetch({}, { ok: false, status: 503 });
       expect((await serverClient.hasVortexEntitlement()).status).toBe('check_failed');
     });
 
     it('returns check_failed when org UUID cannot be resolved', async () => {
-      fetchSpy = mockFetch({}, false, 404);
+      fetchSpy = mockFetch({}, { ok: false, status: 404 });
       expect((await cloudClient.hasVortexEntitlement('unknown-org')).status).toBe('check_failed');
     });
 
@@ -929,7 +907,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('returns false when component is not found', async () => {
-      fetchSpy = mockFetch({}, false, 404);
+      fetchSpy = mockFetch({}, { ok: false, status: 404 });
       expect(await client.checkComponent('missing-project')).toBe(false);
     });
 
@@ -952,24 +930,24 @@ describe('SonarQubeClient', () => {
     });
 
     it('returns false when component is not found (404)', async () => {
-      fetchSpy = mockFetch({}, false, 404);
+      fetchSpy = mockFetch({}, { ok: false, status: 404 });
       expect(await client.componentExists('missing-project')).toBe(false);
     });
 
     it('propagates a rate-limit error instead of reporting the component as missing', async () => {
-      fetchSpy = mockFetch({}, false, 429);
+      fetchSpy = mockFetch({}, { ok: false, status: 429 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.componentExists('my-project')).rejects.toThrow(RateLimitError);
     });
 
     it('propagates a service-unavailable error instead of reporting the component as missing', async () => {
-      fetchSpy = mockFetch({}, false, 503);
+      fetchSpy = mockFetch({}, { ok: false, status: 503 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.componentExists('my-project')).rejects.toThrow(ServiceUnavailableError);
     });
 
     it('propagates a forbidden/auth failure instead of reporting the component as missing', async () => {
-      fetchSpy = mockFetch({}, false, 403);
+      fetchSpy = mockFetch({}, { ok: false, status: 403 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.componentExists('my-project')).rejects.toThrow('Access denied');
     });
@@ -991,7 +969,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('returns false on error', async () => {
-      fetchSpy = mockFetch({}, false, 500);
+      fetchSpy = mockFetch({}, { ok: false, status: 500 });
       expect(await client.checkOrganization('my-org')).toBe(false);
     });
   });
@@ -1028,7 +1006,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('returns false on error', async () => {
-      fetchSpy = mockFetch({}, false, 403);
+      fetchSpy = mockFetch({}, { ok: false, status: 403 });
       expect(await client.checkQualityProfiles('my-project')).toBe(false);
     });
   });
@@ -1132,7 +1110,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('throws BadRequestError on non-ok POST response', async () => {
-      fetchSpy = mockFetch({ message: 'Bad request' }, false, 400);
+      fetchSpy = mockFetch({ message: 'Bad request' }, { ok: false, status: 400 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(
         client.genericRequest('POST', '/api/issues/do_transition', '{"k":"v"}', 'form'),
@@ -1140,7 +1118,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('preserves raw body for non-SQAA POST 400 responses', async () => {
-      fetchSpy = mockFetch({ errors: [{ msg: 'Transition failed' }] }, false, 400);
+      fetchSpy = mockFetch({ errors: [{ msg: 'Transition failed' }] }, { ok: false, status: 400 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(
         client.genericRequest('POST', '/api/issues/do_transition', '{"k":"v"}', 'form'),
@@ -1151,7 +1129,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('throws access denied on GET 403', async () => {
-      fetchSpy = mockFetch({}, false, 403);
+      fetchSpy = mockFetch({}, { ok: false, status: 403 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.genericRequest('GET', '/api/system/status')).rejects.toThrow(
         'Access denied',
@@ -1302,8 +1280,7 @@ describe('SonarQubeClient', () => {
     it('throws BadRequestError on structured 400 response', async () => {
       fetchSpy = mockFetch(
         { message: 'Invalid request body', code: 'INVALID_FILE_PATH' },
-        false,
-        400,
+        { ok: false, status: 400 },
       );
 
       // eslint-disable-next-line @typescript-eslint/await-thenable
@@ -1321,8 +1298,7 @@ describe('SonarQubeClient', () => {
           code: 'REQUEST_TOO_LARGE',
           meta: { maxRequestSize: 512_000 },
         },
-        false,
-        413,
+        { ok: false, status: 413 },
       );
 
       // eslint-disable-next-line @typescript-eslint/await-thenable
@@ -1346,7 +1322,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('returns null when component is not found', async () => {
-      fetchSpy = mockFetch({}, false, 404);
+      fetchSpy = mockFetch({}, { ok: false, status: 404 });
       expect(await client.getComponentId('missing-project')).toBeNull();
     });
 
@@ -1421,7 +1397,7 @@ describe('SonarQubeClient', () => {
 
     it('throws ForbiddenApiError on 403 response', async () => {
       const cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
-      fetchSpy = mockFetch({ message: 'Insufficient privileges' }, false, 403);
+      fetchSpy = mockFetch({ message: 'Insufficient privileges' }, { ok: false, status: 403 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(
         cloudClient.scheduleAgentJob({
@@ -1476,7 +1452,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('returns null when SQS project-bindings request fails', async () => {
-      fetchSpy = mockFetch({ message: 'not found' }, false, 404);
+      fetchSpy = mockFetch({ message: 'not found' }, { ok: false, status: 404 });
       expect(await client.getProjectKeyByGitRemote(remoteUrl)).toBeNull();
     });
 
@@ -1560,7 +1536,7 @@ describe('SonarQubeClient', () => {
 
     it('returns null when SonarCloud project-bindings request fails', async () => {
       const cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
-      fetchSpy = mockFetch({ message: 'not found' }, false, 404);
+      fetchSpy = mockFetch({ message: 'not found' }, { ok: false, status: 404 });
       expect(await cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org')).toBeNull();
       expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
@@ -1645,6 +1621,134 @@ describe('SonarQubeClient', () => {
       } as Response);
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.getServerMode()).rejects.toThrow();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // listGitlabDopSettings
+  // -------------------------------------------------------------------------
+
+  describe('listGitlabDopSettings', () => {
+    it('returns only gitlab-type settings', async () => {
+      fetchSpy = mockFetch({
+        dopSettings: [
+          { id: 'g1', key: 'my-gitlab', type: 'gitlab', url: 'https://gitlab.com' },
+          { id: 'gh1', key: 'my-github', type: 'github', url: 'https://github.com' },
+        ],
+      });
+      const result = await client.listGitlabDopSettings();
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({ id: 'g1', key: 'my-gitlab', url: 'https://gitlab.com' });
+    });
+
+    it('returns empty array when no gitlab settings exist', async () => {
+      fetchSpy = mockFetch({ dopSettings: [] });
+      expect(await client.listGitlabDopSettings()).toEqual([]);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // getAllProjectBindings
+  // -------------------------------------------------------------------------
+
+  describe('getAllProjectBindings', () => {
+    it('returns a map of repository → projectKey for a single page', async () => {
+      fetchSpy = mockFetch({
+        projectBindings: [{ projectKey: 'my-project', repository: '123' }],
+        page: { total: 1, pageSize: 500, pageIndex: 1 },
+      });
+      const result = await client.getAllProjectBindings('dop-id');
+      expect(result.get('123')).toBe('my-project');
+      expect(result.size).toBe(1);
+    });
+
+    it('paginates using the server-returned pageSize', async () => {
+      // Server caps at 2 items per page even though we request 500
+      const page1 = {
+        projectBindings: [
+          { projectKey: 'p1', repository: '1' },
+          { projectKey: 'p2', repository: '2' },
+        ],
+        page: { total: 3, pageSize: 2, pageIndex: 1 },
+      };
+      const page2 = {
+        projectBindings: [{ projectKey: 'p3', repository: '3' }],
+        page: { total: 3, pageSize: 2, pageIndex: 2 },
+      };
+      fetchSpy = spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(page1),
+          text: () => Promise.resolve(''),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(page2),
+          text: () => Promise.resolve(''),
+        } as Response);
+      const result = await client.getAllProjectBindings('dop-id');
+      expect(result.size).toBe(3);
+      expect(result.get('3')).toBe('p3');
+    });
+
+    it('passes dopSettingId as a query parameter', async () => {
+      fetchSpy = mockFetch({
+        projectBindings: [],
+        page: { total: 0, pageSize: 500, pageIndex: 1 },
+      });
+      await client.getAllProjectBindings('my-dop-id');
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.searchParams.get('dopSettingId')).toBe('my-dop-id');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // hasProjectBeenAnalyzed
+  // -------------------------------------------------------------------------
+
+  describe('hasProjectBeenAnalyzed', () => {
+    it('returns true when analyses array is non-empty', async () => {
+      fetchSpy = mockFetch({ analyses: [{ key: 'abc' }] });
+      expect(await client.hasProjectBeenAnalyzed('my-project')).toBe(true);
+    });
+
+    it('returns false when analyses array is empty', async () => {
+      fetchSpy = mockFetch({ analyses: [] });
+      expect(await client.hasProjectBeenAnalyzed('my-project')).toBe(false);
+    });
+
+    it('returns false on 404 (project has no analysis history)', async () => {
+      fetchSpy = mockFetch({}, { ok: false, status: 404 });
+      expect(await client.hasProjectBeenAnalyzed('my-project')).toBe(false);
+    });
+
+    it('throws on 403 so access errors are not silently treated as unanalyzed', async () => {
+      fetchSpy = mockFetch({}, { ok: false, status: 403 });
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.hasProjectBeenAnalyzed('my-project')).rejects.toThrow('403');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // hasProvisionProjectsPermission
+  // -------------------------------------------------------------------------
+
+  describe('hasProvisionProjectsPermission', () => {
+    it('returns true when provisioning is in global permissions', async () => {
+      fetchSpy = mockFetch({ permissions: { global: ['provisioning', 'scan'] } });
+      expect(await client.hasProvisionProjectsPermission()).toBe(true);
+    });
+
+    it('returns false when provisioning is absent', async () => {
+      fetchSpy = mockFetch({ permissions: { global: ['scan'] } });
+      expect(await client.hasProvisionProjectsPermission()).toBe(false);
+    });
+
+    it('returns false when permissions field is absent', async () => {
+      fetchSpy = mockFetch({});
+      expect(await client.hasProvisionProjectsPermission()).toBe(false);
     });
   });
 });

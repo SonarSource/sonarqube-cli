@@ -33,12 +33,14 @@ import { getCliBinaryPath, runCli } from './cli-runner.js';
 import { Dir } from './dir';
 import { EnvironmentBuilder } from './environment-builder.js';
 import { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
+import { FakeGitLabServer, FakeGitLabServerBuilder } from './fake-gitlab-server.js';
 import { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from './fake-sonarqube-server.js';
 import { FakeUpdateScriptServer } from './fake-update-script-server.js';
 import { File } from './file';
 import { buildHomeEnv, IS_WINDOWS } from './platform';
 import type { CliResult, RunOptions } from './types.js';
 
+export { FakeGitLabServer, FakeGitLabServerBuilder } from './fake-gitlab-server.js';
 export { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from './fake-sonarqube-server.js';
 export { hookScriptName, hookScriptPath, IS_WINDOWS, normalizePath } from './platform';
 export type { CliResult, RecordedRequest } from './types.js';
@@ -53,6 +55,7 @@ export class TestHarness {
   private readonly tempDir: Dir;
   private readonly servers: FakeSonarQubeServer[] = [];
   private readonly binariesServers: FakeBinariesServer[] = [];
+  private readonly gitlabServers: FakeGitLabServer[] = [];
   private readonly updateScriptServers: FakeUpdateScriptServer[] = [];
   private _envBuilder?: EnvironmentBuilder;
   private systemEnvVars: Record<string, string> = {};
@@ -160,6 +163,20 @@ export class TestHarness {
       return server;
     };
 
+    return builder;
+  }
+
+  /** Creates a fake GitLab server. Call .start() on the result; stopped automatically on dispose(). */
+  newFakeGitLabServer(): FakeGitLabServerBuilder & {
+    start: () => Promise<FakeGitLabServer>;
+  } {
+    const builder = new FakeGitLabServerBuilder();
+    const originalStart = builder.start.bind(builder);
+    builder.start = async () => {
+      const server = await originalStart();
+      this.gitlabServers.push(server);
+      return server;
+    };
     return builder;
   }
 
@@ -277,7 +294,7 @@ export class TestHarness {
    */
   async dispose(): Promise<void> {
     await Promise.all(
-      [...this.servers, ...this.binariesServers].map((s) =>
+      [...this.servers, ...this.binariesServers, ...this.gitlabServers].map((s) =>
         s.stop().catch(() => {
           /* ignore stop errors */
         }),

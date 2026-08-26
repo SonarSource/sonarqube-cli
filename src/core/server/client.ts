@@ -21,6 +21,14 @@
 // SonarQube API HTTP client
 
 import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
+import {
+  HTTP_STATUS_BAD_REQUEST,
+  HTTP_STATUS_FORBIDDEN,
+  HTTP_STATUS_NOT_FOUND,
+  HTTP_STATUS_PAYLOAD_TOO_LARGE,
+  HTTP_STATUS_SERVICE_UNAVAILABLE,
+  HTTP_STATUS_TOO_MANY_REQUESTS,
+} from '@/core/http-constants.ts';
 import { INVOCATION_ID, SONAR_INVOCATION_ID_HEADER } from '@/core/telemetry/invocation-id.ts';
 import { print } from '@/core/ui';
 
@@ -48,12 +56,6 @@ const GET_REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 const POST_REQUEST_TIMEOUT_MS = 60000; // 60 seconds for analysis
 /** Best-effort token revocation should fail fast when the server is unreachable. */
 const REVOKE_USER_TOKEN_TIMEOUT_MS = 10_000;
-const HTTP_STATUS_BAD_REQUEST = 400;
-const HTTP_STATUS_FORBIDDEN = 403;
-const HTTP_STATUS_NOT_FOUND = 404;
-const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
-const HTTP_STATUS_TOO_MANY_REQUESTS = 429;
-const HTTP_STATUS_SERVICE_UNAVAILABLE = 503;
 
 export const GENERIC_HTTP_METHODS = ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'] as const;
 export const METHODS_WITH_BODY = new Set<HttpMethod>(['POST', 'PATCH', 'PUT']);
@@ -830,6 +832,58 @@ export class SonarQubeClient {
     } catch {
       return false;
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Admin / CI setup — SonarQube Server only (SQS v2 endpoints)
+  // ---------------------------------------------------------------------------
+
+  async listGitlabDopSettings(): Promise<Array<{ id: string; key: string; url: string }>> {
+    const result = await this.get<{
+      dopSettings: Array<{ id: string; key: string; type: string; url: string }>;
+    }>('/api/v2/dop-translation/dop-settings');
+    return result.dopSettings.filter((s) => s.type === 'gitlab');
+  }
+
+  // filters by dopSettingId to avoid cross-ALM collisions (GitHub, Azure also populate `repository`)
+  async getAllProjectBindings(dopSettingId: string): Promise<Map<string, string>> {
+    const bindingMap = new Map<string, string>();
+    let pageIndex = 1;
+    const pageSize = 500;
+    for (;;) {
+      const result = await this.get<{
+        projectBindings: Array<{ projectKey: string; repository: string }>;
+        page: { total: number; pageSize: number; pageIndex: number };
+      }>('/api/v2/dop-translation/project-bindings', {
+        pageSize,
+        pageIndex,
+        dopSettingId,
+      });
+      for (const binding of result.projectBindings) {
+        bindingMap.set(binding.repository, binding.projectKey);
+      }
+      const effectivePageSize = result.page.pageSize || pageSize;
+      if (result.projectBindings.length === 0 || pageIndex * effectivePageSize >= result.page.total)
+        break;
+      pageIndex++;
+    }
+    return bindingMap;
+  }
+
+  async hasProjectBeenAnalyzed(projectKey: string): Promise<boolean> {
+    const { response, value } = await this.getSafe<{ analyses: unknown[] }>(
+      '/api/project_analyses/search',
+      { project: projectKey, ps: 1 },
+    );
+    if (response.status === HTTP_STATUS_NOT_FOUND) return false;
+    await this.raiseForStatus(response, 'GET');
+    return (value?.analyses.length ?? 0) > 0;
+  }
+
+  async hasProvisionProjectsPermission(): Promise<boolean> {
+    const result = await this.get<{ permissions?: { global?: string[] } }>('/api/users/current');
+
+    return result.permissions?.global?.includes('provisioning') ?? false;
   }
 
   /**
