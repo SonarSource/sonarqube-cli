@@ -217,9 +217,14 @@ function resolveRepoRootForScope(scope: IntegrationScope, targetRoot: string): s
 function saveInstalledFeatures(state: CliState): boolean {
   try {
     try {
-      state.tools = loadState().tools;
+      const knownIds = new Set(state.dependencies.installed.map((entry) => entry.id));
+      state.dependencies.installed.push(
+        ...loadState().dependencies.installed.filter((entry) => !knownIds.has(entry.id)),
+      );
     } catch (err) {
-      logger.debug(`Failed to merge latest tools state before save: ${(err as Error).message}`);
+      logger.debug(
+        `Failed to merge latest dependency state before save: ${(err as Error).message}`,
+      );
     }
     saveState(state);
     return true;

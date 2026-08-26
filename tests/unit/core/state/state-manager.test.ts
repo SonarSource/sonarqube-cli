@@ -407,6 +407,79 @@ describe('loadState: migration', () => {
     expect(state.telemetry.installationId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
+  it('adopts a legacy tools entry whose binary is still on disk', () => {
+    mkdirSync(testCliDir, { recursive: true });
+    const binaryPath = join(testCliDir, 'sonar-secrets-1.2.3.4-linux-x86-64');
+    writeFileSync(binaryPath, 'binary', 'utf-8');
+    const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
+    raw['tools'] = {
+      installed: [
+        {
+          name: 'sonar-secrets',
+          version: '1.2.3.4',
+          path: binaryPath,
+          installedAt: '2026-01-01T00:00:00.000Z',
+          installedByCliVersion: '0.1.0',
+        },
+      ],
+    };
+    writeFileSync(testStateFile, JSON.stringify(raw), 'utf-8');
+
+    const state = loadState('0.1.0');
+
+    expect(state.dependencies.installed).toEqual([
+      {
+        id: 'sonar-secrets',
+        version: '1.2.3.4',
+        path: binaryPath,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        updatedByCliVersion: '0.1.0',
+      },
+    ]);
+    expect(state.tools).toBeUndefined();
+  });
+
+  it('drops a legacy tools entry whose binary is gone and keeps the dependency record on conflict', () => {
+    mkdirSync(testCliDir, { recursive: true });
+    const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
+    raw['dependencies'] = {
+      installed: [
+        {
+          id: 'sonar-secrets',
+          version: '9.9.9.9',
+          path: '/bin/sonar-secrets-9.9.9.9',
+          updatedAt: '2026-02-02T00:00:00.000Z',
+          updatedByCliVersion: '0.2.0',
+        },
+      ],
+    };
+    raw['tools'] = {
+      installed: [
+        {
+          name: 'sonar-secrets',
+          version: '1.1.1.1',
+          path: '/bin/sonar-secrets-1.1.1.1',
+          installedAt: '2026-01-01T00:00:00.000Z',
+          installedByCliVersion: '0.1.0',
+        },
+        {
+          name: 'sca-scanner-cli',
+          version: '1.0.0.0',
+          path: join(testCliDir, 'sca-scanner-cli-gone'),
+          installedAt: '2026-01-01T00:00:00.000Z',
+          installedByCliVersion: '0.1.0',
+        },
+      ],
+    };
+    writeFileSync(testStateFile, JSON.stringify(raw), 'utf-8');
+
+    const state = loadState('0.1.0');
+
+    expect(state.dependencies.installed).toHaveLength(1);
+    expect(state.dependencies.installed[0].version).toBe('9.9.9.9');
+    expect(state.tools).toBeUndefined();
+  });
+
   it('removes legacy keystoreKey field from connections', () => {
     const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
     (raw['auth'] as Record<string, unknown>)['connections'] = [

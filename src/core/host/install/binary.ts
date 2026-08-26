@@ -32,7 +32,7 @@ import {
   downloadBinary,
   verifyBinarySignature,
 } from '@/core/host/install/sonarsource-releases.ts';
-import { recordInstallationInState } from '@/core/state/state-manager.ts';
+import { recordInstalledDependency } from '@/core/state/state-manager.ts';
 import { type OutputChannel, print, text, withSpinner } from '@/core/ui';
 
 import {
@@ -146,7 +146,7 @@ async function downloadAndInstall(
   );
   print(`     ${spec.name} ${installedVersion}`, channel);
 
-  recordInstallationInState(spec.name, installedVersion, binaryPath);
+  recordInstalledDependency(spec.name, spec.version, binaryPath);
   cleanupOldVersionBinaries(resolvedBinDir, spec.name, binaryName);
 
   return { skipped: false, binaryPath };

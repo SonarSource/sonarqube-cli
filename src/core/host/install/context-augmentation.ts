@@ -40,7 +40,7 @@ import {
   verifyPgpSignature,
 } from '@/core/host/install/sonarsource-releases.ts';
 import { extractFileFromTarGz } from '@/core/io/tar.ts';
-import { recordInstallationInState } from '@/core/state/state-manager.ts';
+import { recordInstalledDependency } from '@/core/state/state-manager.ts';
 import { text, withSpinner } from '@/core/ui';
 
 import {
@@ -142,17 +142,18 @@ export async function resolveContextAugmentationBinary(
     await makeExecutable(binaryPath);
   }
 
-  let installedVersion: string;
   try {
-    installedVersion = await withSpinner('Verifying installation', () =>
-      verifyInstallation(binaryPath),
-    );
+    await withSpinner('Verifying installation', () => verifyInstallation(binaryPath));
   } catch (err) {
     rmSync(binaryPath, { force: true });
     throw err;
   }
 
-  recordInstallationInState(CONTEXT_AUGMENTATION_BINARY_NAME, installedVersion, binaryPath);
+  recordInstalledDependency(
+    CONTEXT_AUGMENTATION_BINARY_NAME,
+    SONAR_CONTEXT_AUGMENTATION_VERSION,
+    binaryPath,
+  );
   cleanupOldVersionBinaries(resolvedBinDir, CONTEXT_AUGMENTATION_BINARY_NAME, localName);
 
   return { binaryPath, freshlyInstalled: true };

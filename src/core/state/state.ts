@@ -647,9 +647,6 @@ export function getDefaultState(cliVersion: string): CliState {
     config: {
       cliVersion,
     },
-    tools: {
-      installed: [],
-    },
     dependencies: {
       installed: [],
     },

@@ -10,7 +10,7 @@ The state file persists configuration across CLI invocations and stores:
 - **Legacy Agent Configuration**: Backward-compatible agent status plus legacy hook and skill lists
 - **Agent Extension Registry**: Per-project/global hooks, skills, and instruction files installed for agents
 - **Declarative Integrations**: Generic records of installed integrations, features, resources, and operations
-- **Tool Metadata**: Installed external tools like sonar-secrets binary
+- **Dependency Metadata**: Installed external binaries like sonar-secrets
 - **Telemetry Data**: Anonymous usage statistics and pending telemetry events
 
 ## Location
@@ -30,7 +30,8 @@ The state file persists configuration across CLI invocations and stores:
 | `auth`            | AuthState             | Authentication and server connections               |
 | `agents`          | AgentsState           | Configuration for each agent (Claude Code, etc.)    |
 | `config`          | CliConfig             | CLI configuration metadata                          |
-| `tools`           | ToolsState (optional) | Installed tools and binaries                        |
+| `tools`           | ToolsState (optional) | Legacy, superseded by `dependencies`                |
+| `dependencies`    | DependenciesState     | Installed binaries shared by declarative features   |
 | `telemetry`       | TelemetryState        | Telemetry configuration and pending events          |
 | `agentExtensions` | AgentExtension[]      | Installed agent extensions per project/global scope |
 | `integrations`    | IntegrationsState     | Generic declarative integration install records     |
@@ -117,6 +118,8 @@ The `agentExtensions` registry stores per-project or global artifacts installed 
 | `cliVersion` | string | Latest CLI version used |
 
 ### Tools Section
+
+Legacy. Entries are folded into `dependencies.installed` on load and this list is deleted.
 
 | Field       | Type            | Description              |
 | ----------- | --------------- | ------------------------ |
@@ -389,7 +392,7 @@ cat ~/.sonar/sonarqube-cli/state.json | jq '.agents."claude-code".hooks.installe
 ### View Installed Tools
 
 ```bash
-cat ~/.sonar/sonarqube-cli/state.json | jq '.tools.installed'
+cat ~/.sonar/sonarqube-cli/state.json | jq '.dependencies.installed'
 ```
 
 ---

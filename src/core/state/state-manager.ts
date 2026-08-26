@@ -132,20 +132,21 @@ export function removeConnection(state: CliState, connectionId: string): void {
 }
 
 /**
- * Record an installed binary in state.json under `tools.installed[]`. Failures
- * are logged but do not propagate — state writes must not fail an install.
+ * Record an installed binary in state.json under `dependencies.installed[]`.
+ * Failures are logged but do not propagate — state writes must not fail an install.
  */
-export function recordInstallationInState(name: string, version: string, path: string): void {
+export function recordInstalledDependency(id: string, version: string, path: string): void {
   try {
     const state = loadState();
-    state.tools ??= { installed: [] };
-    state.tools.installed = state.tools.installed.filter((t) => t.name !== name);
-    state.tools.installed.push({
-      name,
+    state.dependencies.installed = state.dependencies.installed.filter(
+      (dependency) => dependency.id !== id,
+    );
+    state.dependencies.installed.push({
+      id,
       version,
       path,
-      installedAt: new Date().toISOString(),
-      installedByCliVersion: VERSION,
+      updatedAt: new Date().toISOString(),
+      updatedByCliVersion: VERSION,
     });
     saveState(state);
   } catch (err) {

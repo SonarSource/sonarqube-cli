@@ -32,23 +32,20 @@ import { resolveSafePath } from './safe-path.ts';
 export interface BinaryResetResult {
   item: PhaseItem;
   dependencyIds: string[];
-  toolNames: string[];
 }
 
 interface PathRemovalPlan {
   path: string;
   dependencyIds: Set<string>;
-  toolNames: Set<string>;
 }
 
 type BinaryRemoveOutcome =
-  | { status: 'cleaned'; fileRemoved: boolean; dependencyIds: string[]; toolNames: string[] }
+  | { status: 'cleaned'; fileRemoved: boolean; dependencyIds: string[] }
   | { status: 'failed'; message: string };
 
 export async function removeBinaries(state: CliState): Promise<BinaryResetResult> {
   const { plans, failed: planFailures } = buildRemovalPlans(state);
   const cleanedDependencyIds = new Set<string>();
-  const cleanedToolNames = new Set<string>();
   const failed = [...planFailures];
   let removedFileCount = 0;
   let purgedStaleCount = 0;
@@ -64,9 +61,6 @@ export async function removeBinaries(state: CliState): Promise<BinaryResetResult
       for (const id of outcome.dependencyIds) {
         cleanedDependencyIds.add(id);
       }
-      for (const name of outcome.toolNames) {
-        cleanedToolNames.add(name);
-      }
     } else {
       failed.push(outcome.message);
     }
@@ -75,7 +69,6 @@ export async function removeBinaries(state: CliState): Promise<BinaryResetResult
   return {
     item: buildBinaryPhaseItem(removedFileCount, purgedStaleCount, failed),
     dependencyIds: [...cleanedDependencyIds],
-    toolNames: [...cleanedToolNames],
   };
 }
 
@@ -91,15 +84,7 @@ function buildRemovalPlans(state: CliState): {
       failed.push(`${dep.id}: missing install path`);
       continue;
     }
-    addPathTarget(byPath, dep.path, dep.id, undefined);
-  }
-
-  for (const tool of state.tools?.installed ?? []) {
-    if (!tool.path) {
-      failed.push(`${tool.name}: missing install path`);
-      continue;
-    }
-    addPathTarget(byPath, tool.path, undefined, tool.name);
+    addPathTarget(byPath, dep.path, dep.id);
   }
 
   return { plans: [...byPath.values()], failed };
@@ -108,32 +93,24 @@ function buildRemovalPlans(state: CliState): {
 function addPathTarget(
   byPath: Map<string, PathRemovalPlan>,
   path: string,
-  dependencyId: string | undefined,
-  toolName: string | undefined,
+  dependencyId: string,
 ): void {
   let plan = byPath.get(path);
   if (!plan) {
-    plan = { path, dependencyIds: new Set(), toolNames: new Set() };
+    plan = { path, dependencyIds: new Set() };
     byPath.set(path, plan);
   }
-  if (dependencyId) {
-    plan.dependencyIds.add(dependencyId);
-  }
-  if (toolName) {
-    plan.toolNames.add(toolName);
-  }
+  plan.dependencyIds.add(dependencyId);
 }
 
 async function tryRemoveBinaryAtPath(plan: PathRemovalPlan): Promise<BinaryRemoveOutcome> {
-  const label = [...plan.dependencyIds, ...plan.toolNames].join(', ') || plan.path;
+  const label = [...plan.dependencyIds].join(', ') || plan.path;
   const safePath = resolveSafePath(plan.path, [BIN_DIR]);
   if (!safePath) {
     return { status: 'failed', message: `${label}: path rejected` };
   }
 
-  const needsCagStop =
-    plan.dependencyIds.has(CONTEXT_AUGMENTATION_BINARY_NAME) ||
-    plan.toolNames.has(CONTEXT_AUGMENTATION_BINARY_NAME);
+  const needsCagStop = plan.dependencyIds.has(CONTEXT_AUGMENTATION_BINARY_NAME);
   if (needsCagStop && existsSync(safePath)) {
     await stopAllContextAugmentationTools(safePath);
   }
@@ -147,7 +124,6 @@ async function tryRemoveBinaryAtPath(plan: PathRemovalPlan): Promise<BinaryRemov
       status: 'cleaned',
       fileRemoved,
       dependencyIds: [...plan.dependencyIds],
-      toolNames: [...plan.toolNames],
     };
   } catch (err) {
     return { status: 'failed', message: `${label}: ${(err as Error).message}` };

@@ -60,5 +60,5 @@ export async function updateScaScannerBinaryIfNeeded(): Promise<void> {
 }
 
 function hasBinaryInState(state: CliState, binaryName: string): boolean {
-  return (state.tools?.installed ?? []).some((t) => t.name === binaryName);
+  return state.dependencies.installed.some((dependency) => dependency.id === binaryName);
 }
