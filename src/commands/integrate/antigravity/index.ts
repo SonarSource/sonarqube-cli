@@ -91,16 +91,15 @@ export async function integrateAntigravity(
     auth,
     nonInteractive: options.nonInteractive,
     attrs,
-    onSuccess: (facts) => {
-      void emitIntegrationConfiguredTelemetry({
+    onSuccess: (facts) =>
+      emitIntegrationConfiguredTelemetry({
         auth,
         integrationId: ANTIGRAVITY_INTEGRATION_ID,
         scope,
         nonInteractive: options.nonInteractive ?? false,
         isFromRouter: options.isFromRouter ?? false,
         ...facts,
-      });
-    },
+      }),
   });
 }
 

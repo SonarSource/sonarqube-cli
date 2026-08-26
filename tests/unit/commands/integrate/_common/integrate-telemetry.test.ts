@@ -22,7 +22,10 @@ import { createHash } from 'node:crypto';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { emitIntegrationConfiguredTelemetry } from '@/commands/integrate/_common/integrate-telemetry.ts';
+import {
+  CLI_INTEGRATION_CONFIGURED,
+  emitIntegrationConfiguredTelemetry,
+} from '@/commands/integrate/_common/integrate-telemetry.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
@@ -83,7 +86,8 @@ describe('emitIntegrationConfiguredTelemetry()', () => {
       repoRoot: '/some/repo',
     });
 
-    const [, fields] = emitSpy.mock.calls[0] as [string, Record<string, unknown>];
+    const [name, fields] = emitSpy.mock.calls[0] as [string, Record<string, unknown>];
+    expect(name).toBe(CLI_INTEGRATION_CONFIGURED);
     // features_installed flattens active subfeature ids.
     expect(fields.features_installed).toEqual([
       'pre-commit-hook',

@@ -21,17 +21,17 @@
 // PostToolUse callback handler for Codex — runs git change-set SQAA after apply_patch.
 
 import { buildSqaaJsonReport } from '@/commands/analyze/sqaa.ts';
+import {
+  emitSqaaHookFailureTelemetry,
+  SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
+  SQAA_HOOK_TELEMETRY_EXIT_CODE,
+} from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display.ts';
 import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import logger from '@/core/observability/logger.ts';
 import { resolveAgentSessionIdForEmit } from '@/core/telemetry/agent-session.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
-import {
-  emitSqaaHookFailureTelemetry,
-  SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
-  SQAA_HOOK_TELEMETRY_EXIT_CODE,
-} from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 
 import {
   formatSqaaJsonReportForHook,

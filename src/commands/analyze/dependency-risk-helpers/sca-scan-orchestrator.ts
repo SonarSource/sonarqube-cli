@@ -21,6 +21,10 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import {
+  emitScaAnalysisTelemetry,
+  type ScaCallerCommand,
+} from '@/commands/analyze/sca-analysis-telemetry.ts';
 import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { SCA_SCANNER_CACHE_DIR } from '@/core/config-constants.ts';
@@ -30,10 +34,6 @@ import logger, { getLogLevelConfig } from '@/core/observability/logger.ts';
 import { type SonarQubeClient } from '@/core/server/client.ts';
 import { assertScaAvailable } from '@/core/server/sca-availability.ts';
 import type { SettingsValue } from '@/core/server/settings-value.ts';
-import {
-  emitScaAnalysisTelemetry,
-  type ScaCallerCommand,
-} from '@/commands/analyze/sca-analysis-telemetry.ts';
 import { withSpinner } from '@/core/ui';
 
 import { parseAnalysisProperties } from './analysis-properties.ts';

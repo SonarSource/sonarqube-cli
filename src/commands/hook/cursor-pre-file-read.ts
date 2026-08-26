@@ -26,9 +26,9 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
+import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
-import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 
 import { scanAndEmitSecrets } from '../analyze/secrets.ts';
 import {

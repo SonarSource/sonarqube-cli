@@ -21,9 +21,9 @@
 // UserPromptSubmit callback handler — scans prompt text for secrets before it is sent.
 // Replaces the bash/PowerShell logic that was previously embedded in the hook script.
 
+import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
-import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 
 import { EXIT_CODE_SECRETS_FOUND } from '../analyze/secrets.ts';
 import type { HookCommandResult } from './hook-command-result.ts';

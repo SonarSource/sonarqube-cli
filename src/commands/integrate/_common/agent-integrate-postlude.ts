@@ -89,15 +89,14 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
     auth,
     nonInteractive: options.nonInteractive,
     attrs,
-    onSuccess: (facts) => {
-      void emitIntegrationConfiguredTelemetry({
+    onSuccess: (facts) =>
+      emitIntegrationConfiguredTelemetry({
         auth,
         integrationId: params.integrationId,
         scope: installScope,
         nonInteractive: options.nonInteractive ?? false,
         isFromRouter: options.isFromRouter ?? false,
         ...facts,
-      });
-    },
+      }),
   });
 }

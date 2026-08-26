@@ -105,16 +105,15 @@ export async function integrateClaude(
       auth,
       attrs: featureAttrs,
       nonInteractive: options.nonInteractive,
-      onSuccess: (facts) => {
-        void emitIntegrationConfiguredTelemetry({
+      onSuccess: (facts) =>
+        emitIntegrationConfiguredTelemetry({
           auth,
           integrationId: CLAUDE_INTEGRATION_ID,
           scope: installScope,
           nonInteractive: options.nonInteractive ?? false,
           isFromRouter: options.isFromRouter ?? false,
           ...facts,
-        });
-      },
+        }),
     });
   } catch (error) {
     installError = error instanceof Error ? error : new Error(String(error));

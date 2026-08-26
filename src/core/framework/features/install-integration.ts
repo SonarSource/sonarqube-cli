@@ -64,8 +64,8 @@ export interface InstallIntegrationOptions<TOptions> {
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
   nonInteractive?: boolean;
-  /** Called after state is saved; omitted when the save fails. */
-  onSuccess?: (facts: InstallIntegrationSuccessFacts) => void;
+  /** Called after state is saved; omitted when the save fails. Awaited so emit finishes before the command returns. */
+  onSuccess?: (facts: InstallIntegrationSuccessFacts) => void | Promise<void>;
 }
 
 export async function installIntegration<TOptions>({
@@ -155,7 +155,7 @@ export async function installIntegration<TOptions>({
 
     const stateSaved = saveInstalledFeatures(state);
     if (stateSaved) {
-      onSuccess?.({
+      await onSuccess?.({
         installedFeatures,
         featuresDeclined: declined,
         featuresUninstalled: toRemove.map((application) => application.feature.id),
