@@ -22,7 +22,7 @@ import type { CommandInvocationContext } from '@/commands/command-invocation-con
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
-import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
+import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 
 import {
   EXIT_CODE_SECRETS_FOUND,

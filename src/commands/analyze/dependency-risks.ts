@@ -29,7 +29,7 @@ import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import {
   emitScaAnalysisTelemetry,
   SCA_CALLER_COMMANDS,
-} from '@/core/telemetry/sca-analysis-telemetry.ts';
+} from '@/commands/analyze/sca-analysis-telemetry.ts';
 import { error, print, warn } from '@/core/ui';
 
 import { countSelectedRisks } from './dependency-risk-helpers/count-selected-risks.ts';

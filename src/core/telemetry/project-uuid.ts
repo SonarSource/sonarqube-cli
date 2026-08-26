@@ -181,14 +181,14 @@ export async function resolveProjectUuid(
 
 // --- Ambient per-invocation project context -----------------------------------------------
 //
-// `project_uuid` is reported on `CliCommandExecuted` only; the other events are joined to it
-// on the shared `invocation_id` that `buildIdentityBase` stamps on every event. That makes the
-// project a per-process fact, so it is held here rather than threaded through call signatures
-// (which previously required forwarding the Commander `Command` down ~12 function signatures
-// purely to key a map that only ever held one entry). Same shape as `INVOCATION_ID` in
+// `project_uuid` is an ambient per-invocation fact: other events join to it on the shared
+// `invocation_id` that `buildIdentityBase` stamps on every event. That makes the project a
+// per-process fact, so it is held here rather than threaded through call signatures (which
+// previously required forwarding the Commander `Command` down ~12 function signatures purely
+// to key a map that only ever held one entry). Same shape as `INVOCATION_ID` in
 // invocation-id.ts: one value per CLI process.
 //
-// Commands that resolve a project key call `noteProject`; `storeEvent` calls
+// Commands that resolve a project key call `noteProject`; command-executed telemetry reads
 // `currentProjectUuid` once at `postAction`. Writes are synchronous and do no I/O, so noting
 // never adds latency to the command's own work.
 
@@ -201,7 +201,7 @@ let notedProject: NotedProject | null = null;
 let pendingResolution: Promise<string | null> | null = null;
 
 /**
- * Record the project this invocation is about, for `project_uuid` on `CliCommandExecuted`.
+ * Record the project this invocation is about, for `project_uuid` on command-executed telemetry.
  *
  * Synchronous and I/O-free — the API call happens later, once, in {@link currentProjectUuid}.
  * Call it at the point where both a project key and {@link ResolvedAuth} are known (auth is

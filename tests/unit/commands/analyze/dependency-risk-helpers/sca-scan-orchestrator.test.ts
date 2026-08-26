@@ -26,8 +26,8 @@ import { CommandFailedError } from '@/core/command-error.ts';
 import type { SecretsInstaller } from '@/core/host/install/secrets.ts';
 import type { SonarQubeClient } from '@/core/server/client.ts';
 import type { SettingsValue } from '@/core/server/settings-value.ts';
-import * as scaTelemetry from '@/core/telemetry/sca-analysis-telemetry.ts';
-import { SCA_CALLER_COMMANDS } from '@/core/telemetry/sca-analysis-telemetry.ts';
+import * as scaTelemetry from '@/commands/analyze/sca-analysis-telemetry.ts';
+import { SCA_CALLER_COMMANDS } from '@/commands/analyze/sca-analysis-telemetry.ts';
 
 import { ScaScanOrchestrator } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
 import { okScaInstaller as okInstaller } from './_helpers.ts';

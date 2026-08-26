@@ -26,7 +26,7 @@ import {
   emitSqaaAnalysisTelemetry,
   type SqaaTelemetryCallerCommand,
   tallyFromSqaaJsonReport,
-} from '@/core/telemetry/sqaa-analysis-telemetry.ts';
+} from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import { print } from '@/core/ui';
 import { SqaaProgress } from '@/core/ui/components/sqaa-progress.ts';
 import { vortexUnavailableCommandMessage } from '@/core/vortex/availability-messages.ts';

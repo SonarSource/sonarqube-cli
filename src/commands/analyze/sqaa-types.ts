@@ -20,7 +20,7 @@
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
-import type { SqaaTelemetryCallerCommand } from '@/core/telemetry/sqaa-analysis-telemetry.ts';
+import type { SqaaTelemetryCallerCommand } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 
 import type { CloudAuth } from './sqaa-auth.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';

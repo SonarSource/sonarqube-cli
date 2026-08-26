@@ -40,7 +40,7 @@ import {
   emitScaAnalysisTelemetry,
   SCA_CALLER_COMMANDS,
   summarizeScaFindings,
-} from '@/core/telemetry/sca-analysis-telemetry.ts';
+} from '@/commands/analyze/sca-analysis-telemetry.ts';
 import * as userModule from '@/core/telemetry/user.ts';
 
 import { makeTelemetryState, readAnalysisEvents } from '../../../_common/telemetry-helpers.ts';

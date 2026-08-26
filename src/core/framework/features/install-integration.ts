@@ -29,7 +29,6 @@ import type {
   IntegrationStateAttribute,
 } from '@/core/state/state.ts';
 import { loadState, saveStateKeepingInstalledDependencies } from '@/core/state/state-repository.ts';
-import { emitIntegrationConfiguredTelemetry } from '@/core/telemetry/integrate-telemetry.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { text, warn } from '@/core/ui';
 
@@ -47,6 +46,14 @@ import type {
 } from './types.ts';
 import { isFeatureContainer } from './types.ts';
 
+/** Facts from a successful install; commands turn these into telemetry. */
+export interface InstallIntegrationSuccessFacts {
+  installedFeatures: InstalledIntegrationFeature[];
+  featuresDeclined: string[];
+  featuresUninstalled: string[];
+  repoRoot: string | null;
+}
+
 export interface InstallIntegrationOptions<TOptions> {
   registry: IntegrationRegistry;
   integrationId: string;
@@ -57,8 +64,8 @@ export interface InstallIntegrationOptions<TOptions> {
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
   nonInteractive?: boolean;
-  /** True when invoked via the bare `sonar integrate` router (telemetry only). */
-  isFromRouter?: boolean;
+  /** Called after state is saved; omitted when the save fails. */
+  onSuccess?: (facts: InstallIntegrationSuccessFacts) => void;
 }
 
 export async function installIntegration<TOptions>({
@@ -71,7 +78,7 @@ export async function installIntegration<TOptions>({
   force,
   attrs,
   nonInteractive,
-  isFromRouter,
+  onSuccess,
 }: InstallIntegrationOptions<TOptions>): Promise<InstalledIntegrationFeature[]> {
   const integration = getIntegrationDeclaration<TOptions>(registry, integrationId);
   const state = loadState();
@@ -140,7 +147,7 @@ export async function installIntegration<TOptions>({
 
     renderCompletionSummary(integration, installedFeatures, removedFeatures);
 
-    // Publish the project for `project_uuid` on CliCommandExecuted. Project scope only:
+    // Publish the project for command-executed telemetry. Project scope only:
     // `--global` installs have no project key recorded, which is why they report null.
     if (scope === 'project' && auth) {
       noteProject(auth, projectKeyFromAttrs(attrs));
@@ -148,14 +155,7 @@ export async function installIntegration<TOptions>({
 
     const stateSaved = saveInstalledFeatures(state);
     if (stateSaved) {
-      await emitIntegrationConfiguredTelemetry({
-        // `integrate` is an authenticatedAction, so auth is always present here.
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        auth: auth!,
-        integrationId,
-        scope,
-        nonInteractive: nonInteractive ?? false,
-        isFromRouter: isFromRouter ?? false,
+      onSuccess?.({
         installedFeatures,
         featuresDeclined: declined,
         featuresUninstalled: toRemove.map((application) => application.feature.id),

@@ -25,6 +25,7 @@ import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/ag
 
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';
 import { buildRecordedIntegrationAttrs } from '../_common/context-augmentation.ts';
+import { emitIntegrationConfiguredTelemetry } from '../_common/integrate-telemetry.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { resolveVortexSetup } from '../_common/vortex.ts';
 import { supportedIntegrations } from '../index.ts';
@@ -89,8 +90,17 @@ export async function integrateAntigravity(
     scope,
     auth,
     nonInteractive: options.nonInteractive,
-    isFromRouter: options.isFromRouter,
     attrs,
+    onSuccess: (facts) => {
+      void emitIntegrationConfiguredTelemetry({
+        auth,
+        integrationId: ANTIGRAVITY_INTEGRATION_ID,
+        scope,
+        nonInteractive: options.nonInteractive ?? false,
+        isFromRouter: options.isFromRouter ?? false,
+        ...facts,
+      });
+    },
   });
 }
 

@@ -22,10 +22,11 @@ import { randomUUID } from 'node:crypto';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { SqaaIssue } from '@/core/server/client.ts';
+import { emitTelemetryEvent } from '@/core/telemetry/telemetry-events.ts';
 
-import type { FileResult, RunTally } from '../../commands/analyze/sqaa-analysis.ts';
-import type { SqaaJsonReport } from '../../commands/analyze/sqaa-display-json.ts';
-import { emitAnalysisCompleted } from './telemetry-events.ts';
+import { CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
+import type { FileResult, RunTally } from './sqaa-analysis.ts';
+import type { SqaaJsonReport } from './sqaa-display-json.ts';
 
 export const SQAA_ANALYZE_CALLER_COMMAND = 'analyze';
 
@@ -160,8 +161,8 @@ export async function emitSqaaAnalysisTelemetry(
     const details =
       findingsCount > 0 ? JSON.stringify(collectRuleCounts(collectIssuesFromTally(tally))) : '';
 
-    await emitAnalysisCompleted(
-      auth,
+    await emitTelemetryEvent(
+      CLI_ANALYSIS_COMPLETED,
       {
         caller_command: callerCommand,
         analyzer: 'sqaa',
@@ -173,7 +174,7 @@ export async function emitSqaaAnalysisTelemetry(
         scan_duration_ms: durationMs,
         details,
       },
-      { agentSessionId },
+      { auth, agentSessionId },
     );
   } catch {
     // Telemetry is strictly fire-and-forget; never surface to the command handler.

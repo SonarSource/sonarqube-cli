@@ -20,6 +20,10 @@
 
 import { type Command, Help, InvalidArgumentError } from 'commander';
 
+import {
+  SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
+  SQAA_VERIFY_CALLER_COMMAND,
+} from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
@@ -27,17 +31,8 @@ import { initSentry } from '@/core/observability/sentry.ts';
 import { GENERIC_HTTP_METHODS } from '@/core/server/client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { tryLoadState } from '@/core/state/state-repository.ts';
-import {
-  flushTelemetry,
-  setPassthroughSubcommand,
-  storeEvent,
-  TELEMETRY_FLUSH_MODE_ENV,
-} from '@/core/telemetry';
+import { flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { createAgentSessionSlot, resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
-import {
-  SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
-  SQAA_VERIFY_CALLER_COMMAND,
-} from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 import { blank, error, warn } from '@/core/ui';
 import { parseInteger } from '@/core/ui/parsing.ts';
 
@@ -63,6 +58,7 @@ import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './api/api.
 import { authLogin, type AuthLoginOptions } from './auth/login.ts';
 import { authLogout } from './auth/logout.ts';
 import { authStatus } from './auth/status.ts';
+import { setPassthroughSubcommand, storeEvent } from './command-executed-telemetry.ts';
 import { type CommandInvocationContext } from './command-invocation-context.ts';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';

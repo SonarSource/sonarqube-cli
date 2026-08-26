@@ -33,7 +33,7 @@ import type { SettingsValue } from '@/core/server/settings-value.ts';
 import {
   emitScaAnalysisTelemetry,
   type ScaCallerCommand,
-} from '@/core/telemetry/sca-analysis-telemetry.ts';
+} from '@/commands/analyze/sca-analysis-telemetry.ts';
 import { withSpinner } from '@/core/ui';
 
 import { parseAnalysisProperties } from './analysis-properties.ts';

@@ -37,7 +37,7 @@ import { SonarQubeClient } from '@/core/server/client.ts';
 import {
   emitScaAnalysisTelemetry,
   SCA_CALLER_COMMANDS,
-} from '@/core/telemetry/sca-analysis-telemetry.ts';
+} from '@/commands/analyze/sca-analysis-telemetry.ts';
 import { discreetSuccess, success, warn } from '@/core/ui';
 
 import { countSelectedRisks } from '../analyze/dependency-risk-helpers/count-selected-risks.ts';

@@ -56,6 +56,7 @@ export { buildApplications } from './feature-target.ts';
 export {
   installIntegration,
   type InstallIntegrationOptions,
+  type InstallIntegrationSuccessFacts,
   makeContext,
 } from './install-integration.ts';
 export {

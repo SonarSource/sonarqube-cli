@@ -18,76 +18,21 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { type Command } from 'commander';
-
-import { DISTRIBUTION } from '../host/distribution.ts';
 import { tryLoadState } from '../state/state-manager.ts';
 import { resolveTelemetryEgress } from './egress.ts';
 import { isTelemetryEnabled } from './enabled.ts';
-import { currentProjectUuid } from './project-uuid.ts';
-import { emitCommandExecuted, flushTelemetryEvents } from './telemetry-events.ts';
+import { flushTelemetryEvents } from './telemetry-events.ts';
 
 export const TELEMETRY_FLUSH_MODE_ENV = '__SQ_CLI_TELEMETRY_FLUSH__';
 
-// Passthrough commands (e.g. `sonar context`) own a single Command node, so the
-// usual parent-chain walk cannot recover the forwarded subcommand. The handler
-// publishes the resolved subcommand here and storeEvent reads it back.
-const passthroughSubcommands = new WeakMap<Command, string | null>();
-
-export function setPassthroughSubcommand(command: Command, subcommand: string | null): void {
-  passthroughSubcommands.set(command, subcommand);
-}
-
 /**
- * Emit one CliCommandExecuted event for a finished command and spawn the detached flush
- * worker that drains telemetry-events.ndjson.
- *
- * No-ops when called from within a flush worker (prevents infinite recursion) or when
- * telemetry is disabled.
- *
- * `agentSessionId` is resolved by the caller (buildCommandTree postAction) so session
- * identification stays outside SonarCommand / CliRuntime.
+ * Spawn the detached flush worker when consent and egress allow it.
+ * Command producers call this after appending events.
  */
-export async function storeEvent(
-  command: Command,
-  success: boolean,
-  agentSessionId: string | null = null,
-): Promise<void> {
+export function scheduleTelemetryFlush(): void {
   if (process.env[TELEMETRY_FLUSH_MODE_ENV]) return;
   const state = tryLoadState();
   if (!state || !isTelemetryEnabled(state)) return;
-
-  const commandNames: string[] = [];
-  let current: Command = command;
-  while (current.parent !== null) {
-    commandNames.unshift(current.name());
-    current = current.parent;
-  }
-  const topCommand = commandNames[0];
-  const commandPathTail = commandNames.slice(1);
-  const fallbackSubcommand = commandPathTail.length > 0 ? commandPathTail.join(' ') : null;
-  let subcommand: string | null;
-  if (passthroughSubcommands.has(command)) {
-    subcommand = passthroughSubcommands.get(command) ?? null;
-  } else {
-    subcommand = fallbackSubcommand;
-  }
-  await emitCommandExecuted(
-    {
-      command: topCommand,
-      subcommand,
-      result: success ? 'success' : 'failure',
-      distribution: DISTRIBUTION,
-      // Per-invocation, published by whichever command resolved a project key (see
-      // noteProject). `null` for commands that never resolve one; the other telemetry
-      // events recover it by joining on the shared invocation_id.
-      project_uuid: await currentProjectUuid(),
-    },
-    { agentSessionId },
-  );
-
-  // Gated at the spawn rather than in the worker: a process that is never created cannot
-  // transmit, whatever the drain does.
   if (resolveTelemetryEgress().kind !== 'off') {
     spawnFlushWorker();
   }

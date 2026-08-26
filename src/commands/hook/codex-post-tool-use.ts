@@ -31,7 +31,7 @@ import {
   emitSqaaHookFailureTelemetry,
   SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
   SQAA_HOOK_TELEMETRY_EXIT_CODE,
-} from '@/core/telemetry/sqaa-analysis-telemetry.ts';
+} from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 
 import {
   formatSqaaJsonReportForHook,

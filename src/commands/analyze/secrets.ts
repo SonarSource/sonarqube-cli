@@ -31,13 +31,15 @@ import { installSecretsBinary } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
 import type { SpawnResult, StdioMode } from '@/core/process/process.ts';
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
+import { emitTelemetryEvent } from '@/core/telemetry/telemetry-events.ts';
+import { blank, print, success, warn } from '@/core/ui';
+import { green, yellow } from '@/core/ui/colors.ts';
+
+import { CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
 import {
   SECRETS_CALLER_COMMANDS,
   type SecretsCallerCommand,
-} from '@/core/telemetry/secrets-analysis-telemetry.ts';
-import { emitAnalysisCompleted } from '@/core/telemetry/telemetry-events.ts';
-import { blank, print, success, warn } from '@/core/ui';
-import { green, yellow } from '@/core/ui/colors.ts';
+} from './secrets-analysis-telemetry.ts';
 
 export interface AnalyzeSecretsOptions {
   paths?: string[];
@@ -140,17 +142,21 @@ async function emitSecretsRunTelemetry(
     });
   }
 
-  await emitAnalysisCompleted(auth, {
-    caller_command: callerCommand,
-    analyzer: 'sonar-secrets',
-    analysis_id: analysisId,
-    findings_count: issues.length,
-    exit_code: exitCode,
-    errors_count: errors?.length ?? 0,
-    failures_count: failuresCount,
-    scan_duration_ms: durationMs,
-    details,
-  });
+  await emitTelemetryEvent(
+    CLI_ANALYSIS_COMPLETED,
+    {
+      caller_command: callerCommand,
+      analyzer: 'sonar-secrets',
+      analysis_id: analysisId,
+      findings_count: issues.length,
+      exit_code: exitCode,
+      errors_count: errors?.length ?? 0,
+      failures_count: failuresCount,
+      scan_duration_ms: durationMs,
+      details,
+    },
+    { auth },
+  );
 
   return parsed;
 }

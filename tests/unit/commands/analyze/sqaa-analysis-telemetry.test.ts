@@ -37,7 +37,7 @@ import {
   SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
   SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
   tallyFromSqaaJsonReport,
-} from '@/core/telemetry/sqaa-analysis-telemetry.ts';
+} from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import * as userModule from '@/core/telemetry/user.ts';
 
 import { makeTelemetryState, readAnalysisEvents } from '../../../_common/telemetry-helpers.ts';

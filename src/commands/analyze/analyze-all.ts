@@ -21,8 +21,8 @@
 import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
-import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
-import { SQAA_ANALYZE_CALLER_COMMAND } from '@/core/telemetry/sqaa-analysis-telemetry.ts';
+import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
+import { SQAA_ANALYZE_CALLER_COMMAND } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import {
   blank,
   getMessagesForFormattedOutput,

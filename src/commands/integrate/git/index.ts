@@ -37,6 +37,7 @@ import { yellow } from '@/core/ui/colors.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 
 import { resolveIntegrateScope } from '../_common/integrate-scope.ts';
+import { emitIntegrationConfiguredTelemetry } from '../_common/integrate-telemetry.ts';
 import { printGitPreflightSummary } from '../_common/preflight-summary.ts';
 import { supportedIntegrations } from '../index.ts';
 import type { GitHookType, IntegrateGitOptions } from './options.ts';
@@ -227,9 +228,18 @@ async function installGitFeatures(
     auth,
     force: options.force,
     nonInteractive: options.nonInteractive,
-    isFromRouter: options.isFromRouter,
     // Attrs are project-scope only; global hooks do not support a project key.
     attrs: scope === 'project' ? { projectKey: options.project ?? null } : undefined,
+    onSuccess: (facts) => {
+      void emitIntegrationConfiguredTelemetry({
+        auth,
+        integrationId,
+        scope,
+        nonInteractive: options.nonInteractive ?? false,
+        isFromRouter: options.isFromRouter ?? false,
+        ...facts,
+      });
+    },
   });
 }
 
