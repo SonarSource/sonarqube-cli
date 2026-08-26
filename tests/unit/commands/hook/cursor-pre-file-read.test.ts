@@ -55,11 +55,7 @@ describe('cursorPreFileRead', () => {
   let existsSyncSpy: ReturnType<typeof spyOn>;
   let readFileSpy: ReturnType<typeof spyOn>;
 
-  let savedExitCode: typeof process.exitCode;
-
   beforeEach(() => {
-    savedExitCode = process.exitCode;
-    process.exitCode = 0;
     stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(
       (_data: unknown, cb?: unknown) => {
         if (typeof cb === 'function') cb();
@@ -98,7 +94,6 @@ describe('cursorPreFileRead', () => {
     runSecretsBinaryOnTextSpy.mockRestore();
     existsSyncSpy.mockRestore();
     readFileSpy.mockRestore();
-    process.exitCode = savedExitCode ?? 0;
   });
 
   it('blocks with deny JSON when secrets are found in payload content', async () => {
@@ -118,8 +113,7 @@ describe('cursorPreFileRead', () => {
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.permission).toBe('deny');
-    expect(process.exitCode).toBe(2);
-    expect(exitSpy).not.toHaveBeenCalled();
+    expect(exitSpy).toHaveBeenCalledWith(2);
   });
 
   it('returns without scanning when file path and content are missing', async () => {
@@ -155,8 +149,7 @@ describe('cursorPreFileRead', () => {
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.permission).toBe('deny');
     expect(output.user_message).toBe(SECRETS_INACTIVE_UNAUTHENTICATED);
-    expect(process.exitCode).toBe(2);
-    expect(exitSpy).not.toHaveBeenCalled();
+    expect(exitSpy).toHaveBeenCalledWith(2);
   });
 
   it('denies with the binary-missing message and exits 2 when the analyzer is not installed', async () => {
@@ -169,8 +162,7 @@ describe('cursorPreFileRead', () => {
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.permission).toBe('deny');
     expect(output.user_message).toBe(SECRETS_INACTIVE_BINARY_MISSING);
-    expect(process.exitCode).toBe(2);
-    expect(exitSpy).not.toHaveBeenCalled();
+    expect(exitSpy).toHaveBeenCalledWith(2);
   });
 });
 

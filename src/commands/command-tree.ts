@@ -149,10 +149,10 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
 
   const handleHookInvocation =
     <TArgs extends unknown[]>(
-      run: (...args: TArgs) => Promise<HookCommandResult>,
-    ): ((_ctx: CommandInvocationContext, ...args: TArgs) => Promise<void>) =>
-    async (_ctx, ...args) => {
-      const { agentSessionId } = await run(...args);
+      run: (ctx: CommandInvocationContext, ...args: TArgs) => Promise<HookCommandResult>,
+    ): ((ctx: CommandInvocationContext, ...args: TArgs) => Promise<void>) =>
+    async (ctx, ...args) => {
+      const { agentSessionId } = await run(ctx, ...args);
       if (agentSessionId != null) {
         agentSession.id = agentSessionId;
       }

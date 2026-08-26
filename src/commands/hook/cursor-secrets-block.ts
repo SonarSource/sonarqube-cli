@@ -26,9 +26,8 @@ import type { HookDependencies } from './hook-dependencies.ts';
 
 // Cursor treats exit code 2 as a structured block ("equivalent to returning permission: deny"
 // per cursor.com/docs/hooks). Other non-zero codes are treated as hook errors and fail open
-// (with failClosed: false), so the deny path must leave process.exitCode as 2 — not 0.
-// Exit code 2 guarantees the block even if Cursor does not parse the JSON, while the
-// JSON still carries the messages.
+// (with failClosed: false), so the deny path must exit exactly 2 — not 0. Exiting 2 guarantees
+// the block even if Cursor does not parse the JSON, while the JSON still carries the messages.
 //
 // The beforeSubmitPrompt hook (cursor-prompt-submit.ts) blocks differently — `{ continue: false }`
 // at exit 0 — because that event has no `permission` field; the file-read events use this path.
@@ -47,14 +46,12 @@ export function secretsFoundInScan(result: { exitCode: number | null }): boolean
 }
 
 /**
- * Deny a Cursor file-read/tool-use event with `message`.
- *
- * Sets `process.exitCode` to {@link CURSOR_BLOCK_EXIT_CODE} and returns so
- * Commander's `postAction` can still run (telemetry, update notice) before the process exits.
+ * Deny a Cursor file-read/tool-use event with `message`, then exit.
  */
-export async function denyCursor(message: string): Promise<void> {
-  // process.stdout.write() is buffered and async on pipes; returning before the
-  // write callback can truncate the deny JSON before Cursor reads it.
+export async function denyCursor(message: string): Promise<never> {
+  // process.stdout.write() is buffered and async on pipes; calling process.exit() immediately
+  // after can truncate the deny JSON before Cursor reads it. Awaiting the write callback
+  // guarantees the payload is fully flushed before the process terminates.
   await new Promise<void>((resolve) => {
     process.stdout.write(
       JSON.stringify({ permission: 'deny', user_message: message, agent_message: message }) + '\n',
@@ -63,11 +60,11 @@ export async function denyCursor(message: string): Promise<void> {
       },
     );
   });
-  process.exitCode = CURSOR_BLOCK_EXIT_CODE;
+  process.exit(CURSOR_BLOCK_EXIT_CODE);
 }
 
 /** Deny access because secrets were found in `filePath`, adding it to `.cursorignore`. */
-export async function denyCursorFileAccess(filePath: string | undefined): Promise<void> {
+export async function denyCursorFileAccess(filePath: string | undefined): Promise<never> {
   const ignored = filePath === undefined ? false : appendToCursorIgnore(filePath);
   let message: string;
   if (filePath === undefined) {
