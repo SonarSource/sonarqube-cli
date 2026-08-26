@@ -20,9 +20,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { ImportProgress } from '@/commands/import/import-progress.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
-import { ImportProgress } from '@/core/ui/components/import-progress.ts';
+import { ConcurrentProgress } from '@/core/ui/components/concurrent-progress.ts';
 
+const ITEMS = ['alpha', 'beta', 'gamma'];
 const REPOS = ['my-org/api-gateway', 'my-org/auth-service', 'my-org/billing'];
 
 function captureStdout(fn: () => void): string {
@@ -39,30 +41,33 @@ function captureStdout(fn: () => void): string {
   return chunks.join('');
 }
 
-/** Mirrors the pre-streaming single-batch construction: total and rows known up front. */
-function newProgress(repos: string[], opts: { isTTY?: boolean; maxVisible?: number } = {}) {
+function newBaseProgress(items: string[], opts: { isTTY?: boolean; maxVisible?: number } = {}) {
+  const progress = new ConcurrentProgress({ ...opts, resultTitle: 'Results' });
+  progress.setTotal(items.length);
+  progress.addItems(items);
+  return progress;
+}
+
+function newImportProgress(repos: string[], opts: { isTTY?: boolean; maxVisible?: number } = {}) {
   const progress = new ImportProgress(opts);
   progress.setTotal(repos.length);
   progress.addRepos(repos);
   return progress;
 }
 
-describe('ImportProgress — non-TTY', () => {
+describe('ConcurrentProgress — non-TTY', () => {
   it('writes nothing on start or during updates', () => {
-    const progress = newProgress(REPOS, { isTTY: false });
-    const start = captureStdout(() => progress.start());
-    expect(start).toBe('');
-
-    const update = captureStdout(() => progress.update(REPOS[0], 'running'));
-    expect(update).toBe('');
+    const progress = newBaseProgress(ITEMS, { isTTY: false });
+    expect(captureStdout(() => progress.start())).toBe('');
+    expect(captureStdout(() => progress.update(ITEMS[0], 'running'))).toBe('');
   });
 
   it('finish() delegates to the static phase() summary', () => {
-    const progress = newProgress(REPOS, { isTTY: false });
+    const progress = newBaseProgress(ITEMS, { isTTY: false });
     progress.start();
-    progress.update(REPOS[0], 'done', 'Project created', 'my-org_api-gateway');
-    progress.update(REPOS[1], 'done', 'Project created', 'my-org_auth-service');
-    progress.update(REPOS[2], 'failed', 'CI failed');
+    progress.update(ITEMS[0], 'done', 'OK');
+    progress.update(ITEMS[1], 'done', 'OK');
+    progress.update(ITEMS[2], 'failed', 'Error');
 
     const output = captureStdout(() => {
       const { succeeded, failed } = progress.finish();
@@ -70,21 +75,21 @@ describe('ImportProgress — non-TTY', () => {
       expect(failed).toBe(1);
     });
 
-    expect(output).toContain('Import results');
-    expect(output).toContain('my-org/api-gateway');
-    expect(output).toContain('my-org/auth-service');
-    expect(output).toContain('my-org/billing');
-    expect(output).toContain('Project created');
-    expect(output).toContain('CI failed');
+    expect(output).toContain('Results');
+    expect(output).toContain('alpha');
+    expect(output).toContain('beta');
+    expect(output).toContain('gamma');
+    expect(output).toContain('OK');
+    expect(output).toContain('Error');
   });
 
-  it('a repo never updated stays out of the succeeded/failed counts', () => {
-    const progress = newProgress(REPOS, { isTTY: false });
+  it('an item never updated stays out of the succeeded/failed counts', () => {
+    const progress = newBaseProgress(ITEMS, { isTTY: false });
     let succeeded = 0;
     let failed = 0;
     captureStdout(() => {
       progress.start();
-      progress.update(REPOS[0], 'done', 'Project created', 'key');
+      progress.update(ITEMS[0], 'done', 'OK');
       ({ succeeded, failed } = progress.finish());
     });
     expect(succeeded).toBe(1);
@@ -92,86 +97,121 @@ describe('ImportProgress — non-TTY', () => {
   });
 });
 
-describe('ImportProgress — TTY', () => {
-  it('renders one row per repo plus a progress bar, updating in place', () => {
-    const progress = newProgress(REPOS, { isTTY: true });
+describe('ConcurrentProgress — TTY', () => {
+  it('renders one row per item plus a progress bar, updating in place', () => {
+    const progress = newBaseProgress(ITEMS, { isTTY: true });
     const start = captureStdout(() => progress.start());
-    for (const repo of REPOS) {
-      expect(start).toContain(repo.split('/')[1]);
+    for (const item of ITEMS) {
+      expect(start).toContain(item);
     }
     expect(start).toContain('0%');
     expect(start).toContain('0/3');
 
-    const afterOne = captureStdout(() =>
-      progress.update(REPOS[0], 'done', 'Project created', 'my-org_api-gateway'),
-    );
-    expect(afterOne).toContain('Project created');
-    expect(afterOne).toContain('my-org_api-gateway');
+    const afterOne = captureStdout(() => progress.update(ITEMS[0], 'done', 'OK', 'ref-alpha'));
+    expect(afterOne).toContain('OK');
+    expect(afterOne).toContain('ref-alpha');
     expect(afterOne).toContain('33%');
     expect(afterOne).toContain('1/3');
   });
 
-  it('shows at most maxVisible rows, promoting the next queued repo on completion', () => {
-    const repos = ['org/repo-1', 'org/repo-2', 'org/repo-3', 'org/repo-4', 'org/repo-5'];
-    const progress = newProgress(repos, { isTTY: true, maxVisible: 3 });
+  it('shows at most maxVisible rows, promoting the next queued item on completion', () => {
+    const items = ['item-1', 'item-2', 'item-3', 'item-4', 'item-5'];
+    const progress = newBaseProgress(items, { isTTY: true, maxVisible: 3 });
 
     const start = captureStdout(() => progress.start());
-    expect(start).toContain('repo-1');
-    expect(start).toContain('repo-2');
-    expect(start).toContain('repo-3');
-    expect(start).not.toContain('repo-4');
-    expect(start).not.toContain('repo-5');
+    expect(start).toContain('item-1');
+    expect(start).toContain('item-2');
+    expect(start).toContain('item-3');
+    expect(start).not.toContain('item-4');
+    expect(start).not.toContain('item-5');
 
-    // repo-1 finishes → repo-4 (next queued) takes over its row.
-    const afterFirst = captureStdout(() =>
-      progress.update('org/repo-1', 'done', 'Project created'),
-    );
-    expect(afterFirst).not.toContain('repo-1');
-    expect(afterFirst).toContain('repo-2');
-    expect(afterFirst).toContain('repo-3');
-    expect(afterFirst).toContain('repo-4');
-    expect(afterFirst).not.toContain('repo-5');
+    const afterFirst = captureStdout(() => progress.update('item-1', 'done', 'OK'));
+    expect(afterFirst).not.toContain('item-1');
+    expect(afterFirst).toContain('item-2');
+    expect(afterFirst).toContain('item-3');
+    expect(afterFirst).toContain('item-4');
+    expect(afterFirst).not.toContain('item-5');
 
-    // repo-2 finishes → repo-5 takes over; the queue is now empty.
-    const afterSecond = captureStdout(() => progress.update('org/repo-2', 'failed', 'CI failed'));
-    expect(afterSecond).not.toContain('repo-2');
-    expect(afterSecond).toContain('repo-5');
+    const afterSecond = captureStdout(() => progress.update('item-2', 'failed', 'Error'));
+    expect(afterSecond).not.toContain('item-2');
+    expect(afterSecond).toContain('item-5');
 
-    // repo-3 finishes with nothing left to promote — its row stays, showing "done".
-    const afterThird = captureStdout(() =>
-      progress.update('org/repo-3', 'done', 'Project created'),
-    );
-    expect(afterThird).toContain('repo-3');
-    expect(afterThird).toContain('repo-4');
-    expect(afterThird).toContain('repo-5');
+    const afterThird = captureStdout(() => progress.update('item-3', 'done', 'OK'));
+    expect(afterThird).toContain('item-3');
+    expect(afterThird).toContain('item-4');
+    expect(afterThird).toContain('item-5');
   });
 
   it('finish() renders the final state and a Result section', () => {
-    const progress = newProgress(REPOS, { isTTY: true });
+    const progress = newBaseProgress(ITEMS, { isTTY: true });
     captureStdout(() => {
       progress.start();
-      progress.update(REPOS[0], 'done', 'Project created', 'my-org_api-gateway');
-      progress.update(REPOS[1], 'done', 'Project created', 'my-org_auth-service');
-      progress.update(REPOS[2], 'failed', 'CI failed');
+      progress.update(ITEMS[0], 'done', 'OK');
+      progress.update(ITEMS[1], 'done', 'OK');
+      progress.update(ITEMS[2], 'failed', 'Error');
     });
 
     const finish = captureStdout(() => progress.finish());
     expect(finish).toContain('100%');
     expect(finish).toContain('3/3');
-    expect(finish).toContain('Result');
+    expect(finish).toContain('Results');
     expect(finish).toContain('Succeeded: 2');
     expect(finish).toContain('Failed: 1');
   });
+});
 
+describe('ConcurrentProgress — mock mode options', () => {
+  beforeEach(() => {
+    setMockUi(true);
+    clearMockUiCalls();
+  });
+  afterEach(() => setMockUi(false));
+
+  it('uses default concurrentProgress mock prefix', () => {
+    const progress = new ConcurrentProgress({});
+    progress.setTotal(1);
+    progress.addItems(['item']);
+    progress.start();
+    progress.update('item', 'done');
+    progress.finish();
+    const methods = getMockUiCalls().map((c) => c.method);
+    expect(methods).toContain('concurrentProgress.start');
+    expect(methods).toContain('concurrentProgress.update');
+    expect(methods).toContain('concurrentProgress.finish');
+  });
+
+  it('showResult: false suppresses the result block on finish', () => {
+    const progress = new ConcurrentProgress({ isTTY: false, showResult: false });
+    progress.setTotal(1);
+    progress.addItems(['item']);
+    progress.start();
+    progress.update('item', 'done');
+    setMockUi(false);
+    const output = captureStdout(() => progress.finish());
+    expect(output).not.toContain('Succeeded');
+    expect(output).not.toContain('Result');
+  });
+
+  it('resultTitle appears in TTY result header', () => {
+    const progress = new ConcurrentProgress({ isTTY: true, resultTitle: 'My Results' });
+    progress.setTotal(1);
+    progress.addItems(['item']);
+    progress.start();
+    progress.update('item', 'done');
+    setMockUi(false);
+    const output = captureStdout(() => progress.finish());
+    expect(output).toContain('My Results');
+  });
+});
+
+describe('ImportProgress — TTY', () => {
   it('setTotal fixes the bar denominator independently of addRepos, for a streaming job', () => {
-    // The server-reported total (5) is known before any page's eligible repos are added.
     const progress = new ImportProgress({ isTTY: true });
     progress.setTotal(5);
 
     const start = captureStdout(() => progress.start());
     expect(start).toContain('0/5');
 
-    // First page: 2 eligible repos added and both provisioned.
     const afterPage1 = captureStdout(() => {
       progress.addRepos(['org/repo-1', 'org/repo-2']);
       progress.update('org/repo-1', 'done', 'Project created');
@@ -180,7 +220,6 @@ describe('ImportProgress — TTY', () => {
     expect(afterPage1).toContain('40%');
     expect(afterPage1).toContain('2/5');
 
-    // Second page: 3 more eligible repos discovered and added.
     const afterPage2 = captureStdout(() =>
       progress.addRepos(['org/repo-3', 'org/repo-4', 'org/repo-5']),
     );
@@ -190,9 +229,6 @@ describe('ImportProgress — TTY', () => {
   });
 
   it('a later page takes over rows already finished by an earlier page, instead of stalling in the queue', () => {
-    // maxVisible (mirrors the real IMPORT_PROVISION_CONCURRENCY_LIMIT) is smaller than a page,
-    // so page 1 fills every visible row and finishes all of them before page 2 is fetched —
-    // exactly the streaming `--all` shape (page size 50, maxVisible 10).
     const progress = new ImportProgress({ isTTY: true, maxVisible: 2 });
     progress.setTotal(4);
     progress.start();
@@ -203,9 +239,6 @@ describe('ImportProgress — TTY', () => {
       progress.update('org/repo-2', 'done', 'Project created');
     });
 
-    // Page 2 arrives after page 1's rows are already terminal — repo-3/4 must take over those
-    // rows immediately rather than sitting in the queue forever (nothing will ever finish again
-    // to trigger `promoteNext`).
     const afterPage2 = captureStdout(() => progress.addRepos(['org/repo-3', 'org/repo-4']));
     expect(afterPage2).toContain('repo-3');
     expect(afterPage2).toContain('repo-4');
@@ -238,6 +271,21 @@ describe('ImportProgress — TTY', () => {
   });
 });
 
+describe('ImportProgress — formatLabel', () => {
+  it('dims the org/ prefix and bolds the repo name', () => {
+    const progress = newImportProgress(['my-org/api-gateway'], { isTTY: true });
+    const output = captureStdout(() => progress.start());
+    expect(output).toContain('my-org/');
+    expect(output).toContain('api-gateway');
+  });
+
+  it('bolds the whole slug when there is no slash', () => {
+    const progress = newImportProgress(['standalone'], { isTTY: true });
+    const output = captureStdout(() => progress.start());
+    expect(output).toContain('standalone');
+  });
+});
+
 describe('ImportProgress — mock mode', () => {
   beforeEach(() => {
     setMockUi(true);
@@ -245,8 +293,8 @@ describe('ImportProgress — mock mode', () => {
   });
   afterEach(() => setMockUi(false));
 
-  it('records method calls, writes nothing, and still tracks counts', () => {
-    const progress = newProgress(REPOS);
+  it('records method calls with importProgress prefix, writes nothing, and tracks counts', () => {
+    const progress = newImportProgress(REPOS);
 
     const output = captureStdout(() => {
       progress.start();
@@ -260,6 +308,7 @@ describe('ImportProgress — mock mode', () => {
     expect(succeeded).toBe(1);
     expect(failed).toBe(1);
     const methods = getMockUiCalls().map((c) => c.method);
+    expect(methods).toContain('importProgress.addRepos');
     expect(methods).toContain('importProgress.start');
     expect(methods).toContain('importProgress.update');
     expect(methods).toContain('importProgress.recordSkipped');

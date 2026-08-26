@@ -29,6 +29,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   confirmPrompt,
   multiSelectPrompt,
+  passwordPrompt,
   pressEnterKeyPrompt,
   promptUntilValid,
   textPrompt,
@@ -86,6 +87,50 @@ describe('textPrompt: mock mode', () => {
     await textPrompt('Message A');
     await textPrompt('Message B');
     const calls = getMockUiCalls().filter((c) => c.method === 'textPrompt');
+    expect(calls.map((c) => c.args[0])).toEqual(['Message A', 'Message B']);
+  });
+});
+
+// ─── passwordPrompt ───────────────────────────────────────────────────────────
+
+describe('passwordPrompt: mock mode', () => {
+  beforeEach(() => {
+    setMockUi(true);
+    clearMockUiCalls();
+  });
+
+  afterEach(() => {
+    setMockUi(false);
+  });
+
+  it('returns queued string response and records call', async () => {
+    queueMockResponse('s3cr3t');
+    const result = await passwordPrompt('Enter token');
+    expect(result).toBe('s3cr3t');
+    const calls = getMockUiCalls();
+    expect(calls.some((c) => c.method === 'passwordPrompt' && c.args[0] === 'Enter token')).toBe(
+      true,
+    );
+  });
+
+  it('returns empty string fallback when queue is empty', async () => {
+    const result = await passwordPrompt('Enter token');
+    expect(result).toBe('');
+  });
+
+  it('dequeues responses in FIFO order', async () => {
+    queueMockResponse('first');
+    queueMockResponse('second');
+    const r1 = await passwordPrompt('Token 1');
+    const r2 = await passwordPrompt('Token 2');
+    expect(r1).toBe('first');
+    expect(r2).toBe('second');
+  });
+
+  it('records each call with its message', async () => {
+    await passwordPrompt('Message A');
+    await passwordPrompt('Message B');
+    const calls = getMockUiCalls().filter((c) => c.method === 'passwordPrompt');
     expect(calls.map((c) => c.args[0])).toEqual(['Message A', 'Message B']);
   });
 });
