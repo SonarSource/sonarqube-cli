@@ -96,7 +96,8 @@ function migrateLegacyToolRecords(raw: Record<string, unknown>): void {
     return;
   }
 
-  const dependencies = (raw.dependencies as { installed: InstalledIntegrationDependency[] }).installed;
+  const dependencies = (raw.dependencies as { installed: InstalledIntegrationDependency[] })
+    .installed;
   const knownIds = new Set(dependencies.map((entry) => entry.id));
 
   for (const tool of legacy as InstalledTool[]) {

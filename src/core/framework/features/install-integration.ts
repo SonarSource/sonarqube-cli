@@ -216,16 +216,9 @@ function resolveRepoRootForScope(scope: IntegrationScope, targetRoot: string): s
 
 function saveInstalledFeatures(state: CliState): boolean {
   try {
-    try {
-      const knownIds = new Set(state.dependencies.installed.map((entry) => entry.id));
-      state.dependencies.installed.push(
-        ...loadState().dependencies.installed.filter((entry) => !knownIds.has(entry.id)),
-      );
-    } catch (err) {
-      logger.debug(
-        `Failed to merge latest dependency state before save: ${(err as Error).message}`,
-      );
-    }
+    // Binary installers record into `dependencies.installed` themselves, after this snapshot was
+    // loaded, so re-read that registry instead of saving the pre-install view over it.
+    state.dependencies.installed = loadState().dependencies.installed;
     saveState(state);
     return true;
   } catch (err) {

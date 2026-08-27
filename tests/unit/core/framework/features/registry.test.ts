@@ -770,7 +770,6 @@ describe('declarative integration framework', () => {
       featureId: 'sub-a',
       dependencies: [{ id: 'sub-dep' }],
     });
-    expect(state.dependencies.installed.some((d) => d.id === 'sub-dep')).toBe(true);
     expect(context).toBeDefined();
   });
 
@@ -1295,13 +1294,6 @@ describe('declarative integration framework', () => {
       'yaml',
     ]);
     expect(second.operations.map((operation) => operation.id)).toEqual(['operation']);
-    expect(state.dependencies.installed).toMatchObject([
-      {
-        id: 'binary',
-        version: SECRETS_SPEC.version,
-        path: join(tempDir, 'bin', 'sonar-secrets'),
-      },
-    ]);
     expect(operationCalls).toEqual(['operation', 'operation']);
     expect(await readFile(join(tempDir, 'script.sh'), 'utf-8')).toBe('#!/bin/sh\necho sonar\n');
     expect(JSON.parse(await readFile(join(tempDir, 'settings.json'), 'utf-8'))).toEqual({

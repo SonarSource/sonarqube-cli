@@ -494,11 +494,6 @@ describe('integrateGit', () => {
           (resource) => resource.id === 'hook-file' && resource.resourceType === 'text-snippet',
         ),
       ).toBe(true);
-      expect(state.dependencies.installed).toMatchObject([
-        {
-          id: 'sonar-secrets',
-        },
-      ]);
     } finally {
       spawnSpy.mockRestore();
       rmSync(TEMP_DIR, { recursive: true, force: true });
@@ -538,11 +533,6 @@ describe('integrateGit', () => {
         ),
       ).toBe(true);
       expect(feature?.operations.some((operation) => operation.id === 'activate-hook')).toBe(true);
-      expect(state.dependencies.installed).toMatchObject([
-        {
-          id: 'sonar-secrets',
-        },
-      ]);
     } finally {
       spawnSpy.mockRestore();
       rmSync(TEMP_DIR, { recursive: true, force: true });
@@ -571,11 +561,6 @@ describe('integrateGit', () => {
         ),
       ).toBe(true);
       expect(feature?.operations).toEqual([]);
-      expect(state.dependencies.installed).toMatchObject([
-        {
-          id: 'sonar-secrets',
-        },
-      ]);
     } finally {
       spawnSpy.mockRestore();
       rmSync(TEMP_DIR, { recursive: true, force: true });

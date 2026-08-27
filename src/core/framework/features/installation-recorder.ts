@@ -23,7 +23,6 @@ import { randomUUID } from 'node:crypto';
 import type {
   CliState,
   InstalledIntegration,
-  InstalledIntegrationDependency,
   InstalledIntegrationDependencyReference,
   InstalledIntegrationFeature,
   InstalledIntegrationOperation,
@@ -38,7 +37,6 @@ import type {
   AppliedOperation,
   AppliedResource,
   FeatureDeclaration,
-  InstalledDependency,
   IntegrationContext,
   IntegrationDeclaration,
   SubfeatureDeclaration,
@@ -164,12 +162,6 @@ export function recordInstalledFeature<TOptions>(
     installedIntegration.features.push(next);
   }
 
-  state.dependencies.installed = upsertDependencies(
-    state.dependencies.installed,
-    applied.dependencies,
-    now,
-  );
-
   return existing ?? next;
 }
 
@@ -282,28 +274,6 @@ function upsertDependencyReferences(
         .filter((id) => !existing.some((dependency) => dependency.id === id))
         .map((id) => ({ id })),
     );
-}
-
-function upsertDependencies(
-  existing: InstalledIntegrationDependency[],
-  applied: InstalledDependency[],
-  now: string,
-): InstalledIntegrationDependency[] {
-  const dependencies = [...existing];
-  for (const dependency of applied) {
-    const next: InstalledIntegrationDependency = {
-      ...dependency,
-      updatedByCliVersion: VERSION,
-      updatedAt: now,
-    };
-    const index = dependencies.findIndex((entry) => entry.id === dependency.id);
-    if (index >= 0) {
-      dependencies[index] = next;
-    } else {
-      dependencies.push(next);
-    }
-  }
-  return dependencies;
 }
 
 function upsertResources(
