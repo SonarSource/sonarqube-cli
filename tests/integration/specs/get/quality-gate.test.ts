@@ -45,7 +45,7 @@ describe('get quality-gate', () => {
         .start();
       harness.withAuth(server.baseUrl(), 'test-token');
 
-      const result = await harness.run(`get quality-gate --project my-project`);
+      const result = await harness.run(`get quality-gate --project my-project --format json`);
 
       expect(result.exitCode).toBe(0);
       const parsed = JSON.parse(result.stdout);
@@ -55,6 +55,27 @@ describe('get quality-gate', () => {
         branch: 'main',
         conditions: [],
       });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'defaults to table format when --format is omitted',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK'))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`get quality-gate --project my-project`);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Quality Gate: [✓ Passed]');
+      expect(() => {
+        JSON.parse(result.stdout);
+      }).toThrow();
     },
     { timeout: 15000 },
   );
@@ -156,7 +177,7 @@ describe('get quality-gate', () => {
         .start();
       harness.withAuth(server.baseUrl(), 'test-token');
 
-      const result = await harness.run(`get quality-gate --project my-project`);
+      const result = await harness.run(`get quality-gate --project my-project --format json`);
 
       expect(result.stderr).toBe('');
     },
@@ -183,7 +204,7 @@ describe('get quality-gate', () => {
         .start();
       harness.withAuth(server.baseUrl(), 'test-token');
 
-      const result = await harness.run(`get quality-gate --project my-project`);
+      const result = await harness.run(`get quality-gate --project my-project --format json`);
 
       expect(result.exitCode).toBe(51);
       const parsed = JSON.parse(result.stdout);
@@ -235,7 +256,7 @@ describe('get quality-gate', () => {
         .start();
       harness.withAuth(server.baseUrl(), 'test-token');
 
-      const result = await harness.run(`get quality-gate --project my-project`);
+      const result = await harness.run(`get quality-gate --project my-project --format json`);
 
       const parsed = JSON.parse(result.stdout);
       expect(parsed.qualityGate.conditions).toEqual([
@@ -281,7 +302,7 @@ describe('get quality-gate', () => {
         .start();
       harness.withAuth(server.baseUrl(), 'test-token');
 
-      const result = await harness.run(`get quality-gate --project my-project --all`);
+      const result = await harness.run(`get quality-gate --project my-project --all --format json`);
 
       const parsed = JSON.parse(result.stdout);
       expect(parsed.qualityGate.conditions).toEqual([
@@ -357,7 +378,7 @@ describe('get quality-gate', () => {
         .start();
       harness.withAuth(server.baseUrl(), 'test-token');
 
-      const result = await harness.run(`get quality-gate --project my-project --all`);
+      const result = await harness.run(`get quality-gate --project my-project --all --format json`);
 
       const parsed = JSON.parse(result.stdout);
       expect(parsed.qualityGate.conditions).toContainEqual({
@@ -560,7 +581,7 @@ describe('get quality-gate', () => {
         .start();
       harness.withAuth(server.baseUrl(), 'test-token');
 
-      const jsonResult = await harness.run(`get quality-gate --project my-project`);
+      const jsonResult = await harness.run(`get quality-gate --project my-project --format json`);
       const parsed = JSON.parse(jsonResult.stdout);
       expect(parsed.qualityGate.branch).toBe('master');
 
@@ -732,7 +753,7 @@ describe('get quality-gate', () => {
         .start();
       harness.withAuth(server.baseUrl(), 'test-token');
 
-      const result = await harness.run(`get quality-gate --project my-project`);
+      const result = await harness.run(`get quality-gate --project my-project --format json`);
 
       expect(result.exitCode).toBe(1);
       const parsed = JSON.parse(result.stdout);
@@ -756,7 +777,9 @@ describe('get quality-gate', () => {
         .start();
       harness.withAuth(server.baseUrl(), 'test-token');
 
-      const result = await harness.run(`get quality-gate --project my-project --branch feature-x`);
+      const result = await harness.run(
+        `get quality-gate --project my-project --branch feature-x --format json`,
+      );
 
       expect(result.exitCode).toBe(1);
       const parsed = JSON.parse(result.stdout);

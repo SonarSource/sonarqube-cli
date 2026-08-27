@@ -283,7 +283,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .addOption(
       new SonarOption('--format <format>', 'Output format')
         .choices(QUALITY_GATE_VALID_FORMATS)
-        .default('json'),
+        .default('table'),
     )
     .option('--branch <branch>', 'Branch name. Cannot be combined with --pull-request.')
     .option('--pull-request <pull-request>', 'Pull request ID. Cannot be combined with --branch.')

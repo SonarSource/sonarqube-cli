@@ -75,7 +75,7 @@ export async function getQualityGate(
   const verdict = toVerdict(projectStatus?.status);
   const conditions = selectConditions(rawConditions, metrics, options.all);
 
-  const format = options.format ?? 'json';
+  const format = options.format ?? 'table';
   const message =
     format === 'table'
       ? formatQualityGateTable({ verdict, project: projectKey, scope, conditions })
