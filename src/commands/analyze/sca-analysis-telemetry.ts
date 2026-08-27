@@ -23,7 +23,7 @@ import { randomUUID } from 'node:crypto';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { emitTelemetryEvent } from '@/core/telemetry/telemetry-events.ts';
 
-import { CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
+import { type AnalysisCompletedPayload,CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
 import type { AnalyzeProjectResponse } from './dependency-risk-helpers/sca-scanner.ts';
 
 /**
@@ -107,7 +107,7 @@ export async function emitScaAnalysisTelemetry(
           failures_count: 1,
           scan_duration_ms: durationMs,
           details: '',
-        },
+        } satisfies AnalysisCompletedPayload,
         { auth },
       );
       return;
@@ -127,7 +127,7 @@ export async function emitScaAnalysisTelemetry(
         failures_count: 0,
         scan_duration_ms: durationMs,
         details: findingsCount > 0 ? JSON.stringify(details) : '',
-      },
+      } satisfies AnalysisCompletedPayload,
       { auth },
     );
   } catch {
