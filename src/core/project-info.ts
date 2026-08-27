@@ -25,6 +25,7 @@ import { basename, join } from 'node:path';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
+import { CommandFailedError } from '@/core/command-error.ts';
 import { findGitRoot, getGitRemote } from '@/core/host/git/discover.ts';
 import {
   discoverProjectKeyByGitRemote,
@@ -200,6 +201,38 @@ export async function discoverProject(
   await applyGitRemoteBindingFromRemote(config, projectInfo, options, silent);
 
   return config;
+}
+
+/**
+ * Resolve a project key for a command: an explicit `--project` wins outright, otherwise falls
+ * back to `discoverProject()`. Throws `CommandFailedError` when neither resolves anything.
+ * `silent` (same convention as `discoverProject`) suppresses the "Using ... project key" stderr
+ * hints, for commands whose entire output must be a single clean payload.
+ */
+export async function resolveProjectKey(
+  explicitProject: string | undefined,
+  auth: ResolvedAuth,
+  silent = false,
+): Promise<string> {
+  if (explicitProject) {
+    if (!silent) {
+      print(`     Using project key: ${explicitProject}`, 'stderr');
+    }
+    return explicitProject;
+  }
+
+  const discovered = await discoverProject(process.cwd(), true, { auth });
+  if (discovered.projectKey) {
+    if (!silent) {
+      print(`     Using auto-detected project key: ${discovered.projectKey}`, 'stderr');
+    }
+    return discovered.projectKey;
+  }
+
+  throw new CommandFailedError('Could not determine project key.', {
+    remediationHint:
+      'Use --project <key>, add sonar.projectKey to sonar-project.properties, or configure a .sonarlint/ binding.',
+  });
 }
 
 async function applyGitRemoteBindingFromRemote(

@@ -27,7 +27,11 @@ import {
   SONARCLOUD_US_URL,
 } from '@/core/config-constants.ts';
 import { SERVER_ORGANIZATION_ID_PLACEHOLDER, SonarQubeClient } from '@/core/server/client.ts';
-import { ForbiddenApiError } from '@/core/server/errors.ts';
+import {
+  ForbiddenApiError,
+  RateLimitError,
+  ServiceUnavailableError,
+} from '@/core/server/errors.ts';
 import { fetchGuarded } from '@/core/server/fetch-guarded.ts';
 import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
@@ -934,6 +938,40 @@ describe('SonarQubeClient', () => {
       await client.checkComponent('my-project');
       const url = new URL(lastFetchUrl(fetchSpy));
       expect(url.searchParams.get('component')).toBe('my-project');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // componentExists
+  // -------------------------------------------------------------------------
+
+  describe('componentExists', () => {
+    it('returns true when component exists', async () => {
+      fetchSpy = mockFetch({ component: { key: 'my-project' } });
+      expect(await client.componentExists('my-project')).toBe(true);
+    });
+
+    it('returns false when component is not found (404)', async () => {
+      fetchSpy = mockFetch({}, false, 404);
+      expect(await client.componentExists('missing-project')).toBe(false);
+    });
+
+    it('propagates a rate-limit error instead of reporting the component as missing', async () => {
+      fetchSpy = mockFetch({}, false, 429);
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.componentExists('my-project')).rejects.toThrow(RateLimitError);
+    });
+
+    it('propagates a service-unavailable error instead of reporting the component as missing', async () => {
+      fetchSpy = mockFetch({}, false, 503);
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.componentExists('my-project')).rejects.toThrow(ServiceUnavailableError);
+    });
+
+    it('propagates a forbidden/auth failure instead of reporting the component as missing', async () => {
+      fetchSpy = mockFetch({}, false, 403);
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.componentExists('my-project')).rejects.toThrow('Access denied');
     });
   });
 
