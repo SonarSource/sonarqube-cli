@@ -24,7 +24,7 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { SqaaIssue } from '@/core/server/client.ts';
 import { emitTelemetryEvent } from '@/core/telemetry/telemetry-events.ts';
 
-import { type AnalysisCompletedPayload,CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
+import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
 import type { FileResult, RunTally } from './sqaa-analysis.ts';
 import type { SqaaJsonReport } from './sqaa-display-json.ts';
 

@@ -35,7 +35,7 @@ import { emitTelemetryEvent } from '@/core/telemetry/telemetry-events.ts';
 import { blank, print, success, warn } from '@/core/ui';
 import { green, yellow } from '@/core/ui/colors.ts';
 
-import { type AnalysisCompletedPayload,CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
+import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
 import {
   SECRETS_CALLER_COMMANDS,
   type SecretsCallerCommand,
