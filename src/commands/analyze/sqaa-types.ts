@@ -22,7 +22,7 @@ import type { SqaaTelemetryCallerCommand } from '@/commands/analyze/sqaa-analysi
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 
-import type { CloudAuth } from './sqaa-auth.ts';
+import type { SqaaAuth } from './sqaa-auth.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 
 export const VALID_FORMATS = ['text', 'json'] as const;
@@ -51,7 +51,7 @@ export interface AnalyzeSqaaOptions {
 }
 
 export interface SqaaResolvedContext {
-  cloudAuth: CloudAuth;
+  sqaaAuth: SqaaAuth;
   projectKey: string;
 }
 

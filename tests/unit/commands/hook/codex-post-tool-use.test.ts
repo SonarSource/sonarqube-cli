@@ -186,7 +186,7 @@ describe('codexPostToolUse', () => {
       connectionType: 'on-premise',
     });
 
-    await codexPostToolUse({ project: 'my-project' });
+    await codexPostToolUse(ctx, { project: 'my-project' });
 
     expect(buildSqaaJsonReportSpy).toHaveBeenCalledWith(
       { project: 'my-project', force: true, format: 'json', forcedDepth: 'STANDARD' },

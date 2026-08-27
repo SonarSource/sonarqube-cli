@@ -33,7 +33,7 @@ import {
   SqaaForbiddenError,
 } from '@/core/server/errors.ts';
 
-import type { CloudAuth } from './sqaa-auth.ts';
+import type { SqaaAuth } from './sqaa-auth.ts';
 import { type PackChunksLimits, packFilesIntoChunks, type SqaaChunkFile } from './sqaa-chunking.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import { displaySqaaResults, printSingleFileTextFailure } from './sqaa-display.ts';
@@ -112,7 +112,7 @@ function validationGroupErrors(
 }
 
 async function postSqaaAnalysis(
-  auth: CloudAuth,
+  auth: SqaaAuth,
   projectKey: string,
   branch: string | undefined,
   files: SqaaAnalysisFile[],
@@ -153,7 +153,7 @@ async function postSqaaAnalysis(
 
 /** Validated SQAA POST for hook and other callers outside the analyze command. */
 export async function submitValidatedSqaaAnalysis(
-  auth: CloudAuth,
+  auth: SqaaAuth,
   projectKey: string,
   files: SqaaAnalysisFile[],
   options: { branch?: string; analysisDepth?: SqaaDeepWireDepth } = {},
@@ -173,7 +173,7 @@ export async function submitValidatedSqaaAnalysis(
  * pass the repository root so paths are stable regardless of where the user runs.
  */
 export async function fetchSqaaResponse(
-  auth: CloudAuth,
+  auth: SqaaAuth,
   projectKey: string,
   file: string,
   fileContent: string,
@@ -229,7 +229,7 @@ export interface FetchSqaaRetryOptions {
  * Calls fetchSqaaResponse with a 503-retry loop.
  */
 export async function fetchWithRetry(
-  auth: CloudAuth,
+  auth: SqaaAuth,
   projectKey: string,
   file: string,
   fileContent: string,
@@ -264,7 +264,7 @@ export type SqaaChunkGroupError = {
 };
 
 function packLimitsForRequest(
-  auth: CloudAuth,
+  auth: SqaaAuth,
   projectKey: string,
   branch: string | undefined,
   overrides: { maxRequestBytes?: number; maxFilesPerRequest?: number } = {},
@@ -280,7 +280,7 @@ function packLimitsForRequest(
 }
 
 function packLimitsFrom413Error(
-  auth: CloudAuth,
+  auth: SqaaAuth,
   projectKey: string,
   branch: string | undefined,
   err: RequestPayloadTooLargeError,
@@ -303,7 +303,7 @@ function packLimitsFrom413Error(
  * Throws ServiceUnavailableError on 503, RequestPayloadTooLargeError on 413.
  */
 export async function fetchChunkResponse(
-  auth: CloudAuth,
+  auth: SqaaAuth,
   projectKey: string,
   files: SqaaAnalysisFile[],
   branch: string | undefined,
@@ -319,7 +319,7 @@ export async function fetchChunkResponse(
  * Calls fetchChunkResponse with a 503-retry loop.
  */
 export async function fetchChunkWithRetry(
-  auth: CloudAuth,
+  auth: SqaaAuth,
   projectKey: string,
   files: SqaaAnalysisFile[],
   branch: string | undefined,
@@ -346,7 +346,7 @@ function splitChunkFiles(files: SqaaChunkFile[], limits: PackChunksLimits): Sqaa
 }
 
 async function fetchSplitParts(
-  auth: CloudAuth,
+  auth: SqaaAuth,
   projectKey: string,
   partGroups: SqaaChunkFile[][],
   branch: string | undefined,
@@ -384,7 +384,7 @@ async function fetchSplitParts(
  * Returns partial successes when only some sub-chunks fail after splitting.
  */
 export async function fetchChunkWith413Split(
-  auth: CloudAuth,
+  auth: SqaaAuth,
   projectKey: string,
   chunkFiles: SqaaChunkFile[],
   branch: string | undefined,
@@ -499,7 +499,7 @@ export async function defaultRetryCountdown(
  * Returns the number of issues found. Analysis failures render as a ✗ file row (exit 1).
  */
 export async function callSqaaApiAndDisplay(
-  auth: CloudAuth,
+  auth: SqaaAuth,
   projectKey: string,
   file: string,
   fileContent: string,

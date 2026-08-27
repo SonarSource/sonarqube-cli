@@ -59,7 +59,7 @@ const LARGE_CHANGESET_HINT =
  * Authentication context required for SQAA API calls. `orgKey` is Cloud-only: Server has
  * no organizations and its A3S hub forces the request onto the instance's default one.
  */
-export interface CloudAuth {
+export interface SqaaAuth {
   serverUrl: string;
   token: string;
   orgKey?: string;
@@ -69,18 +69,18 @@ export interface CloudAuth {
  * Outcome of resolving auth + project key for SQAA. This resolver reports
  * what it found and leaves the policy (skip vs. fail) to the caller:
  * - `resolved`: usable auth and project key.
- * - `no-org`: a Cloud connection without an organization (a warning was already
+ * - `no-org`: Cloud is authenticated but has no organization (a warning was already
  *   emitted, since this is always a graceful skip).
  * - `no-project`: auth is fine but no project is configured. The caller
  *   decides whether this is an error or a graceful skip.
  */
 export type SqaaAuthResolution =
-  | { kind: 'resolved'; cloudAuth: CloudAuth; projectKey: string }
+  | { kind: 'resolved'; sqaaAuth: SqaaAuth; projectKey: string }
   | { kind: 'no-org' }
   | { kind: 'no-project' };
 
 /**
- * Combines cloud-auth validation and project-key resolution. Never throws or warns for
+ * Combines auth validation and project-key resolution. Never throws or warns for
  * `no-project` — the caller owns that decision (see `resolveSqaaContext` in sqaa.ts).
  *
  * Not side-effect-free: on a successful resolution it publishes the project key for
@@ -88,19 +88,19 @@ export type SqaaAuthResolution =
  * entry point — bare `sonar analyze`, `analyze agentic`, and `verify` — so noting here covers
  * all of them instead of at each of the five downstream call sites.
  */
-export async function resolveCloudAuthAndProject(
+export async function resolveSqaaAuthAndProject(
   auth: ResolvedAuth,
   explicitProject: string | undefined,
   projectRoot?: string,
 ): Promise<SqaaAuthResolution> {
-  const cloudAuth = resolveCloudAuth(auth, explicitProject);
-  if (!cloudAuth) return { kind: 'no-org' };
+  const sqaaAuth = resolveSqaaAuth(auth, explicitProject);
+  if (!sqaaAuth) return { kind: 'no-org' };
 
   const projectKey = explicitProject ?? (await resolveSqaaProjectKey(projectRoot));
   if (!projectKey) return { kind: 'no-project' };
 
   noteProject(auth, projectKey);
-  return { kind: 'resolved', cloudAuth, projectKey };
+  return { kind: 'resolved', sqaaAuth, projectKey };
 }
 
 /**
@@ -110,10 +110,10 @@ export async function resolveCloudAuthAndProject(
  * Returns null when a Cloud connection has no organization and --project is not set.
  * Throws CommandFailedError when --project is set, since the caller asked explicitly.
  */
-export function resolveCloudAuth(
+export function resolveSqaaAuth(
   auth: ResolvedAuth,
   explicitProject: string | undefined,
-): CloudAuth | null {
+): SqaaAuth | null {
   if (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey) {
     if (explicitProject) {
       throw new CommandFailedError('Vortex analysis requires a SonarQube Cloud organization.', {
