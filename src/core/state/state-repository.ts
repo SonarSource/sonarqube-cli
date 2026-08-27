@@ -197,6 +197,22 @@ export function saveState(state: CliState): void {
 }
 
 /**
+ * Save state without overwriting `dependencies.installed`: binary installers record there
+ * themselves, writing straight to disk after the caller loaded its snapshot. Callers that
+ * install binaries between their `loadState()` and their save must use this.
+ */
+export function saveStateKeepingInstalledDependencies(state: CliState): void {
+  try {
+    state.dependencies.installed = loadState().dependencies.installed;
+  } catch (error) {
+    logger.debug(
+      `Keeping the in-memory dependency registry; re-read failed: ${(error as Error).message}`,
+    );
+  }
+  saveState(state);
+}
+
+/**
  * Returns true when the state file exists on disk.
  * Respects the SONAR_USER_HOME override used in tests.
  */

@@ -102,6 +102,12 @@ export async function resolveContextAugmentationBinary(
   const binaryPath = join(resolvedBinDir, localName);
 
   if (!options.force && existsSync(binaryPath)) {
+    // Heal state when the binary is on disk but not (or no longer) recorded.
+    recordInstalledDependency(
+      CONTEXT_AUGMENTATION_BINARY_NAME,
+      SONAR_CONTEXT_AUGMENTATION_VERSION,
+      binaryPath,
+    );
     return { binaryPath, freshlyInstalled: false };
   }
 

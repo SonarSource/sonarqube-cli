@@ -28,7 +28,7 @@ import type {
   IntegrationScope,
   IntegrationStateAttribute,
 } from '@/core/state/state.ts';
-import { loadState, saveState } from '@/core/state/state-repository.ts';
+import { loadState, saveStateKeepingInstalledDependencies } from '@/core/state/state-repository.ts';
 import { emitIntegrationConfiguredTelemetry } from '@/core/telemetry/integrate-telemetry.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { text, warn } from '@/core/ui';
@@ -216,10 +216,7 @@ function resolveRepoRootForScope(scope: IntegrationScope, targetRoot: string): s
 
 function saveInstalledFeatures(state: CliState): boolean {
   try {
-    // Binary installers record into `dependencies.installed` themselves, after this snapshot was
-    // loaded, so re-read that registry instead of saving the pre-install view over it.
-    state.dependencies.installed = loadState().dependencies.installed;
-    saveState(state);
+    saveStateKeepingInstalledDependencies(state);
     return true;
   } catch (err) {
     const msg = (err as Error).message;
