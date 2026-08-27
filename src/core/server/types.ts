@@ -119,3 +119,52 @@ export interface ProjectsSearchResponse {
   };
   components: SonarQubeProject[];
 }
+
+export interface ProjectStatusParams {
+  projectKey: string;
+  branch?: string;
+  pullRequest?: string;
+}
+
+export type QualityGateStatus = 'OK' | 'WARN' | 'ERROR' | 'NONE';
+
+export interface QualityGateCondition {
+  status: string;
+  metricKey: string;
+  comparator: string;
+  errorThreshold?: string;
+  actualValue?: string;
+}
+
+export interface ProjectStatus {
+  status: QualityGateStatus;
+  ignoredConditions?: boolean;
+  conditions: QualityGateCondition[];
+}
+
+export interface ProjectStatusResponse {
+  projectStatus: ProjectStatus;
+}
+
+export interface ProjectBranch {
+  name: string;
+  isMain: boolean;
+  type: string;
+}
+
+export interface ProjectBranchesResponse {
+  branches: ProjectBranch[];
+}
+
+export interface Metric {
+  key: string;
+  type: string;
+  name: string;
+}
+
+export interface MetricsSearchResponse {
+  metrics: Metric[];
+  total: number;
+  p: number;
+  ps: number;
+}
