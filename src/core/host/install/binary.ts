@@ -110,8 +110,6 @@ async function downloadAndInstall(
   const binaryPath = join(resolvedBinDir, binaryName);
 
   if (!options.force && existsSync(binaryPath)) {
-    // Heal state when the binary is on disk but not (or no longer) recorded.
-    recordInstalledDependency(spec.name, spec.version, binaryPath);
     return { skipped: true, binaryPath };
   }
 

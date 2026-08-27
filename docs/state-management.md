@@ -249,7 +249,7 @@ A user authenticated with SonarQube Cloud and configured Claude Code with a PreT
   "config": {
     "cliVersion": "0.2.102"
   },
-  "tools": {
+  "dependencies": {
     "installed": []
   }
 }
@@ -289,7 +289,7 @@ A user authenticated with a self-hosted SonarQube instance (no organization requ
   "config": {
     "cliVersion": "0.2.102"
   },
-  "tools": {
+  "dependencies": {
     "installed": []
   }
 }
@@ -353,14 +353,14 @@ A complete setup with SonarQube Cloud, multiple hooks, skills, and installed too
   "config": {
     "cliVersion": "0.2.102"
   },
-  "tools": {
+  "dependencies": {
     "installed": [
       {
-        "name": "sonar-secrets",
+        "id": "sonar-secrets",
         "version": "2.38.0.10279",
         "path": "/Users/john.doe/.sonar/sonarqube-cli/bin/sonar-secrets",
-        "installedAt": "2026-02-16T11:48:27.000Z",
-        "installedByCliVersion": "0.2.95"
+        "updatedAt": "2026-02-16T11:48:27.000Z",
+        "updatedByCliVersion": "0.2.95"
       }
     ]
   }
@@ -389,7 +389,7 @@ cat ~/.sonar/sonarqube-cli/state.json | jq '.auth'
 cat ~/.sonar/sonarqube-cli/state.json | jq '.agents."claude-code".hooks.installed'
 ```
 
-### View Installed Tools
+### View Installed Dependencies
 
 ```bash
 cat ~/.sonar/sonarqube-cli/state.json | jq '.dependencies.installed'
