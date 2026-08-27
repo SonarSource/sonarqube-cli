@@ -215,14 +215,14 @@ Examples:
   --min-severity  <string>   Minimum severity level to include. Allowed values: BLOCKER, HIGH, MEDIUM, LOW, INFO (default: all severities)
 
 ### sonar analyze agentic *
-Run server-side Vortex analysis. Limitations apply.
+Run server-side Vortex analysis (SonarQube Cloud only). Limitations apply.
 Usage: sonar analyze agentic [--file <value>] [--staged] [--base <value>] [-p <value>] [--force] [--depth <value>] [--format <value>] [--branch <value>]
 
 Options:
   --file  <string>   Analyze specific file(s) instead of the git change set (repeatable)
   --staged   Analyze staged files only (git diff --cached)
   --base  <string>   Analyze files changed vs a branch or ref (e.g. main)
-  --project, -p  <string>   SonarQube project key (overrides auto-detected project)
+  --project, -p  <string>   SonarQube Cloud project key (overrides auto-detected project)
   --force   Skip the large change set confirmation prompt
   --depth  <string>   Analysis depth: STANDARD (fast) or DEEP (cross-file). Default: STANDARD for one --file; DEEP otherwise.
   --format  <string>   Output format
