@@ -36,7 +36,7 @@ jobs:
         with:
           version: 2026.4.20
 
-      - uses: SonarSource/ci-github-actions/get-build-number@de29c54be07c772c6afc381db8ae4bfcbfe4df12 # 1.8.0
+      - uses: SonarSource/ci-github-actions/get-build-number@d41706a4180f70b6c0d0479795309a6c99726022 # 2.0.0
         id: get-build-number
 
       - name: Update package.json version with build number
@@ -557,7 +557,7 @@ jobs:
       - scan
     if: ${{ !cancelled() && !failure() && (github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-')) }}
     steps:
-      - uses: SonarSource/ci-github-actions/promote@de29c54be07c772c6afc381db8ae4bfcbfe4df12 # 1.8.0
+      - uses: SonarSource/ci-github-actions/promote@d41706a4180f70b6c0d0479795309a6c99726022 # 2.0.0
         env:
           PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
