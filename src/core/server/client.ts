@@ -829,6 +829,16 @@ export class SonarQubeClient {
   }
 
   /**
+   * Like `checkComponent`, but only treats a 404 as "missing" - every other
+   * failure (auth, rate limit, outage, network error) propagates as its
+   * normal typed error instead of being reported as a missing component.
+   */
+  async componentExists(projectKey: string): Promise<boolean> {
+    const component = await this.getOrNotFound('/api/components/show', { component: projectKey });
+    return component !== null;
+  }
+
+  /**
    * Return the legacy alphanumeric ID for a project component key.
    * The external AI agents API expects this ID (not the human-readable key) as `projectId`.
    * Uses /api/navigation/component - same endpoint the web UI uses; `id` is always present there.

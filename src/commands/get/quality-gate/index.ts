@@ -29,11 +29,11 @@ import { QualityGatesClient } from '@/core/server/quality-gates.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { print } from '@/core/ui';
 
-import { selectConditions } from './quality-gate-helpers/condition-summary.ts';
-import { formatQualityGateJson } from './quality-gate-helpers/format-json.ts';
-import { formatQualityGateTable } from './quality-gate-helpers/format-table.ts';
-import { resolveDisplayScope, resolveScopeQueryParams } from './quality-gate-helpers/scope.ts';
-import { exitCodeFor, toVerdict } from './quality-gate-helpers/verdict.ts';
+import { selectConditions } from './condition-summary.ts';
+import { formatQualityGateJson } from './format-json.ts';
+import { formatQualityGateTable } from './format-table.ts';
+import { resolveDisplayScope, resolveScopeQueryParams } from './scope.ts';
+import { exitCodeFor, toVerdict } from './verdict.ts';
 
 export const VALID_FORMATS = ['json', 'table'];
 
@@ -86,7 +86,7 @@ export async function getQualityGate(
 }
 
 async function assertProjectExists(client: SonarQubeClient, projectKey: string): Promise<void> {
-  if (!(await client.checkComponent(projectKey))) {
+  if (!(await client.componentExists(projectKey))) {
     throw new CommandFailedError(`Project '${projectKey}' does not exist or not accessible.`, {
       remediationHint: 'Check the project key and your access to the project on the server.',
     });

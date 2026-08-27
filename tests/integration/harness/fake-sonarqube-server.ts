@@ -63,6 +63,7 @@ interface ProjectData {
   qualityGateStatus?: QualityGateStatus;
   qualityGateConditions?: QualityGateCondition[];
   defaultBranchName: string | null;
+  unanalyzedBranch?: string;
 }
 
 export interface DopRepositoryConfig {
@@ -81,6 +82,7 @@ export class ProjectBuilder {
   private qualityGateStatus?: QualityGateStatus;
   private qualityGateConditions?: QualityGateCondition[];
   private defaultBranchName: string | null = 'main';
+  private unanalyzedBranch?: string;
 
   constructor(projectKey: string) {
     this.projectKey = projectKey;
@@ -133,6 +135,16 @@ export class ProjectBuilder {
     return this;
   }
 
+  /**
+   * Makes `GET /api/qualitygates/project_status` 404 when queried for this exact branch,
+   * matching the real API's "no analysis for this branch yet" response — distinct from
+   * `NONE`, which means the project *is* analyzed but has no quality gate.
+   */
+  withUnanalyzedBranch(branch: string): this {
+    this.unanalyzedBranch = branch;
+    return this;
+  }
+
   getData(): ProjectData {
     return {
       key: this.projectKey,
@@ -141,6 +153,7 @@ export class ProjectBuilder {
       qualityGateStatus: this.qualityGateStatus,
       qualityGateConditions: this.qualityGateConditions,
       defaultBranchName: this.defaultBranchName,
+      unanalyzedBranch: this.unanalyzedBranch,
     };
   }
 }
@@ -704,6 +717,12 @@ export class FakeSonarQubeServerBuilder {
           if (!projectData) {
             return new Response(
               JSON.stringify({ errors: [{ msg: `Component key '${projectKey}' not found` }] }),
+              { status: 404, headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+          if (projectData.unanalyzedBranch && projectData.unanalyzedBranch === query.branch) {
+            return new Response(
+              JSON.stringify({ errors: [{ msg: 'Component or ref not found' }] }),
               { status: 404, headers: { 'Content-Type': 'application/json' } },
             );
           }

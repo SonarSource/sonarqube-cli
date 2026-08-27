@@ -33,7 +33,9 @@ export interface QualityGateConditionSummary {
   status: string;
   comparator: string;
   threshold?: string;
+  formattedThreshold?: string;
   actualValue?: string;
+  formattedActualValue?: string;
 }
 
 function isFailing(condition: QualityGateConditionSummary): boolean {
@@ -66,8 +68,10 @@ function toSummary(
     metricType: metric?.type,
     status: condition.status,
     comparator: condition.comparator,
-    threshold: formatOptionalValue(condition.errorThreshold, metric),
-    actualValue: formatOptionalValue(condition.actualValue, metric),
+    threshold: condition.errorThreshold,
+    formattedThreshold: formatOptionalValue(condition.errorThreshold, metric),
+    actualValue: condition.actualValue,
+    formattedActualValue: formatOptionalValue(condition.actualValue, metric),
   };
 }
 

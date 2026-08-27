@@ -40,7 +40,6 @@ import {
 } from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 import { blank, error, warn } from '@/core/ui';
 import { parseInteger } from '@/core/ui/parsing.ts';
-import { isTableFormatOption } from '@/core/update/notification.ts';
 
 import { version as VERSION } from '../../package.json';
 import { analyzeAll, type AnalyzeAllOptions } from './analyze/analyze-all.ts';
@@ -67,11 +66,12 @@ import { authStatus } from './auth/status.ts';
 import { type CommandInvocationContext } from './command-invocation-context.ts';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
+import { isTableFormatOption } from './formatting-options.ts';
 import {
   getQualityGate,
   type GetQualityGateOptions,
   VALID_FORMATS as QUALITY_GATE_VALID_FORMATS,
-} from './get/quality-gate.ts';
+} from './get/quality-gate';
 import { agentPostToolUse } from './hook/agent-post-tool-use.ts';
 import { agentPromptSubmit } from './hook/agent-prompt-submit.ts';
 import { antigravityPreToolUse } from './hook/antigravity-pre-tool-use.ts';

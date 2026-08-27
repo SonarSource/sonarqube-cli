@@ -40,6 +40,10 @@ const VERDICT_BRACKETS: Record<QualityGateVerdict, string> = {
   NOT_COMPUTED: '[⚠ Not computed]',
 };
 
+/**
+ * The comparator describes when the condition *fails*,
+ * so passing requires the inclusive opposite bound.
+ */
 const INVERSE_COMPARATOR_SYMBOLS: Record<string, string> = {
   LT: '≥',
   GT: '≤',
@@ -69,7 +73,7 @@ export function formatQualityGateTable(vm: QualityGateTableViewModel): string {
     const [labels, values] = padColumns(
       [
         vm.conditions.map((condition) => condition.metricName),
-        vm.conditions.map((condition) => condition.actualValue ?? '—'),
+        vm.conditions.map((condition) => condition.formattedActualValue ?? '—'),
       ],
       [MIN_CONDITION_LABEL_WIDTH, MIN_CONDITION_VALUE_WIDTH],
       CONDITION_GAP,
@@ -110,8 +114,8 @@ function formatConditionLine(
 ): string {
   const marker = condition.status === 'OK' ? green('✓') : red('✗');
   const requirement =
-    condition.threshold !== undefined
-      ? `(required ${INVERSE_COMPARATOR_SYMBOLS[condition.comparator] ?? condition.comparator} ${condition.threshold})`
+    condition.formattedThreshold !== undefined
+      ? `(required ${INVERSE_COMPARATOR_SYMBOLS[condition.comparator] ?? condition.comparator} ${condition.formattedThreshold})`
       : '';
   return `    ${marker}  ${paddedLabel}${paddedValue}${requirement}`;
 }

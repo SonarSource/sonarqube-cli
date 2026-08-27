@@ -198,7 +198,9 @@ describe('get quality-gate', () => {
             metricName: 'new_coverage',
             comparator: 'LT',
             threshold: '80',
+            formattedThreshold: '80',
             actualValue: '62.4',
+            formattedActualValue: '62.4',
           },
         ],
       });
@@ -243,7 +245,9 @@ describe('get quality-gate', () => {
           metricName: 'new_coverage',
           comparator: 'LT',
           threshold: '80',
+          formattedThreshold: '80',
           actualValue: '62.4',
+          formattedActualValue: '62.4',
         },
       ]);
     },
@@ -287,7 +291,9 @@ describe('get quality-gate', () => {
           metricName: 'new_coverage',
           comparator: 'LT',
           threshold: '80',
+          formattedThreshold: '80',
           actualValue: '62.4',
+          formattedActualValue: '62.4',
         },
         {
           status: 'OK',
@@ -295,7 +301,9 @@ describe('get quality-gate', () => {
           metricName: 'new_bugs',
           comparator: 'GT',
           threshold: '0',
+          formattedThreshold: '0',
           actualValue: '0',
+          formattedActualValue: '0',
         },
       ]);
     },
@@ -358,8 +366,10 @@ describe('get quality-gate', () => {
         metricName: 'Security Rating on New Code',
         metricType: 'RATING',
         comparator: 'GT',
-        threshold: 'A',
-        actualValue: 'C',
+        threshold: '1',
+        formattedThreshold: 'A',
+        actualValue: '3',
+        formattedActualValue: 'C',
       });
       expect(parsed.qualityGate.conditions).toContainEqual({
         status: 'ERROR',
@@ -367,8 +377,10 @@ describe('get quality-gate', () => {
         metricName: 'Coverage on New Code',
         metricType: 'PERCENT',
         comparator: 'LT',
-        threshold: '80%',
-        actualValue: '62.4%',
+        threshold: '80',
+        formattedThreshold: '80%',
+        actualValue: '62.4',
+        formattedActualValue: '62.4%',
       });
       expect(parsed.qualityGate.conditions).toContainEqual({
         status: 'OK',
@@ -377,7 +389,9 @@ describe('get quality-gate', () => {
         metricType: 'INT',
         comparator: 'GT',
         threshold: '0',
+        formattedThreshold: '0',
         actualValue: '0',
+        formattedActualValue: '0',
       });
       expect(parsed.qualityGate.conditions).toContainEqual({
         status: 'OK',
@@ -385,8 +399,10 @@ describe('get quality-gate', () => {
         metricName: 'Technical Debt',
         metricType: 'WORK_DUR',
         comparator: 'GT',
-        threshold: '480 min',
-        actualValue: '150 min',
+        threshold: '480',
+        formattedThreshold: '480 min',
+        actualValue: '150',
+        formattedActualValue: '150 min',
       });
     },
     { timeout: 15000 },
@@ -726,6 +742,54 @@ describe('get quality-gate', () => {
         branch: 'main',
         conditions: [],
       });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports NOT_COMPUTED and exits 1 when the server 404s a not-yet-analyzed branch',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withUnanalyzedBranch('feature-x'))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`get quality-gate --project my-project --branch feature-x`);
+
+      expect(result.exitCode).toBe(1);
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate).toEqual({
+        status: 'NOT_COMPUTED',
+        project: 'my-project',
+        branch: 'feature-x',
+        conditions: [],
+      });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows the not-computed table verdict when the server 404s a not-yet-analyzed branch',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withUnanalyzedBranch('feature-x'))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `get quality-gate --project my-project --branch feature-x --format table`,
+      );
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toContain('Quality Gate: [⚠ Not computed]');
+      expect(result.stdout).toContain('Branch:       feature-x');
+      expect(result.stdout).toContain(
+        "This branch either doesn't exist, hasn't been analyzed yet, or analysis ran but the quality gate status is not updated yet. You can run `sonar analyze` for local analysis.",
+      );
     },
     { timeout: 15000 },
   );
