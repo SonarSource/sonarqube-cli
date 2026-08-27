@@ -84,7 +84,12 @@ export async function analyzeDependencyRisks(
 
   // The orchestrator emits the failures_count:1 event itself if the SCA scan throws (scoped so a
   // secrets pre-scan abort never counts as an SCA failure); any throw here just propagates.
-  const scan = await orchestrator.run(auth, projectKey, SCA_CALLER_COMMANDS.analyzeDependencyRisks);
+  const scan = await orchestrator.run(
+    auth,
+    projectKey,
+    SCA_CALLER_COMMANDS.analyzeDependencyRisks,
+    ctx,
+  );
 
   const viewModel = buildDependencyRisksViewModel(scan.response, filter);
   switch (options.format) {

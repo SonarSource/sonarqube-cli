@@ -20,6 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import * as scaInstall from '@/core/host/install/sca-scanner.ts';
@@ -32,6 +33,8 @@ import type {
 } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import { ScaWatchPatternsRunner } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-watch-patterns.ts';
 import { runDepRisksStage } from '../../../../src/commands/hook/git-pre-commit-dependency-risks.ts';
+
+const ctx = new CommandInvocationContext();
 
 const FAKE_AUTH: ResolvedAuth = {
   token: 'test-token',
@@ -200,7 +203,12 @@ describe('runDepRisksStage', () => {
   it('throws CommandFailedError with a minimal summary when risks are found', async () => {
     let thrown: unknown;
     try {
-      await runDepRisksStage({ project: 'demo', changedFiles: ['package.json'], auth: FAKE_AUTH });
+      await runDepRisksStage({
+        project: 'demo',
+        changedFiles: ['package.json'],
+        auth: FAKE_AUTH,
+        ctx,
+      });
     } catch (e) {
       thrown = e;
     }
@@ -218,7 +226,12 @@ describe('runDepRisksStage', () => {
 
     let thrown: unknown;
     try {
-      await runDepRisksStage({ project: 'demo', changedFiles: ['package.json'], auth: FAKE_AUTH });
+      await runDepRisksStage({
+        project: 'demo',
+        changedFiles: ['package.json'],
+        auth: FAKE_AUTH,
+        ctx,
+      });
     } catch (e) {
       thrown = e;
     }
@@ -232,7 +245,12 @@ describe('runDepRisksStage', () => {
   it('does not block when all risks are below MEDIUM severity', async () => {
     orchestratorRunSpy.mockResolvedValue(asScan(withSeverities('LOW', 'INFO')));
 
-    await runDepRisksStage({ project: 'demo', changedFiles: ['package.json'], auth: FAKE_AUTH });
+    await runDepRisksStage({
+      project: 'demo',
+      changedFiles: ['package.json'],
+      auth: FAKE_AUTH,
+      ctx,
+    });
 
     const successCall = findMockUiCall('discreetSuccess', 'No dependency risks found.');
     expect(successCall).toBeDefined();
@@ -243,7 +261,12 @@ describe('runDepRisksStage', () => {
 
     let thrown: unknown;
     try {
-      await runDepRisksStage({ project: 'demo', changedFiles: ['package.json'], auth: FAKE_AUTH });
+      await runDepRisksStage({
+        project: 'demo',
+        changedFiles: ['package.json'],
+        auth: FAKE_AUTH,
+        ctx,
+      });
     } catch (e) {
       thrown = e;
     }
@@ -257,7 +280,12 @@ describe('runDepRisksStage', () => {
   it('reports success and does not throw when the scan finds no risks', async () => {
     orchestratorRunSpy.mockResolvedValue(asScan(SCAN_RESULT_EMPTY));
 
-    await runDepRisksStage({ project: 'demo', changedFiles: ['package.json'], auth: FAKE_AUTH });
+    await runDepRisksStage({
+      project: 'demo',
+      changedFiles: ['package.json'],
+      auth: FAKE_AUTH,
+      ctx,
+    });
 
     expect(getMockUiCalls().filter((c) => c.method === 'print')).toHaveLength(0);
     const successCall = findMockUiCall('discreetSuccess', 'No dependency risks found.');
@@ -265,7 +293,7 @@ describe('runDepRisksStage', () => {
   });
 
   it('skips when no dependency manifests changed in the commit', async () => {
-    await runDepRisksStage({ project: 'demo', changedFiles: ['index.ts'], auth: FAKE_AUTH });
+    await runDepRisksStage({ project: 'demo', changedFiles: ['index.ts'], auth: FAKE_AUTH, ctx });
 
     expect(orchestratorRunSpy).not.toHaveBeenCalled();
     const skipCall = findMockUiCall('success', 'No dependency manifests changed in this commit');

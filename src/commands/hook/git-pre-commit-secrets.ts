@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
@@ -36,7 +37,11 @@ import {
 } from './hook-dependencies.ts';
 import { printSecretsFindingsOrStderr } from './secrets-display.ts';
 
-export async function runCommitSecretsStage(files: string[], auth: ResolvedAuth): Promise<void> {
+export async function runCommitSecretsStage(
+  files: string[],
+  auth: ResolvedAuth,
+  ctx: CommandInvocationContext,
+): Promise<void> {
   const binaryPath = resolveSecretsBinaryPath();
   if (!binaryPath) {
     throw new MissingDependenciesError(SECRETS_INACTIVE_BINARY_MISSING);
@@ -44,8 +49,11 @@ export async function runCommitSecretsStage(files: string[], auth: ResolvedAuth)
 
   let scan: Awaited<ReturnType<typeof scanAndEmitSecrets>>;
   try {
-    scan = await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.gitPreCommit, auth, () =>
-      runSecretsBinary(binaryPath, files, auth),
+    scan = await scanAndEmitSecrets(
+      SECRETS_CALLER_COMMANDS.gitPreCommit,
+      auth,
+      () => runSecretsBinary(binaryPath, files, auth),
+      ctx,
     );
   } catch (err) {
     handleScanError('Commit', err as Error);

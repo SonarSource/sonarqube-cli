@@ -26,6 +26,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
 import { CURSOR_IGNORE_FILE } from '@/core/config-constants.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
@@ -41,6 +42,8 @@ import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
 const TEST_FILE = '/sonar-test/secret.ts';
 const SECRET_CONTENT = 'const secret = "ghp_test";';
 const { EXIT_CODE_SECRETS_FOUND } = analyzeSecrets;
+
+const ctx = new CommandInvocationContext();
 
 describe('cursorPreToolUse', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;
@@ -100,7 +103,7 @@ describe('cursorPreToolUse', () => {
       stderr: '',
     });
 
-    await cursorPreToolUse();
+    await cursorPreToolUse(ctx);
 
     expect(readFileSpy).toHaveBeenCalledWith(TEST_FILE, 'utf-8');
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
@@ -116,7 +119,7 @@ describe('cursorPreToolUse', () => {
       tool_input: { file_path: TEST_FILE },
     });
 
-    await cursorPreToolUse();
+    await cursorPreToolUse(ctx);
 
     expect(readFileSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
@@ -128,7 +131,7 @@ describe('cursorPreToolUse', () => {
       tool_input: { path: TEST_FILE },
     });
 
-    await cursorPreToolUse();
+    await cursorPreToolUse(ctx);
 
     expect(readFileSpy).toHaveBeenCalledWith(TEST_FILE, 'utf-8');
   });
@@ -136,7 +139,7 @@ describe('cursorPreToolUse', () => {
   it('denies with the unauthenticated message and exits 2 when auth is unavailable', async () => {
     resolveAuthSpy.mockResolvedValue(null);
 
-    await cursorPreToolUse();
+    await cursorPreToolUse(ctx);
 
     expect(readFileSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
@@ -149,7 +152,7 @@ describe('cursorPreToolUse', () => {
   it('denies with the binary-missing message and exits 2 when the analyzer is not installed', async () => {
     resolveSecretsBinaryPathSpy.mockReturnValue(null);
 
-    await cursorPreToolUse();
+    await cursorPreToolUse(ctx);
 
     expect(readFileSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
@@ -217,7 +220,7 @@ describe('cursorPreToolUse — .cursorignore side effect', () => {
       tool_input: { file_path: filePath },
     });
 
-    await cursorPreToolUse();
+    await cursorPreToolUse(ctx);
 
     const ignoreContent = readFileSync(join(projectRoot, CURSOR_IGNORE_FILE), 'utf-8');
     expect(ignoreContent).toContain('src/secret.ts');

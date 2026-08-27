@@ -88,9 +88,8 @@ export async function analyzeAll(
   options: AnalyzeAllOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const { auth } = ctx;
   if (options.format === 'json') {
-    return analyzeAllJson(options, auth);
+    return analyzeAllJson(options, ctx);
   }
 
   const { file: rawFiles, staged, base, project, force, format, depth } = options;
@@ -131,7 +130,11 @@ export async function analyzeAll(
   });
 }
 
-async function analyzeAllJson(options: AnalyzeAllOptions, auth: ResolvedAuth): Promise<void> {
+async function analyzeAllJson(
+  options: AnalyzeAllOptions,
+  ctx: CommandAuthenticatedInvocationContext,
+): Promise<void> {
+  const { auth } = ctx;
   setFormattedOutputMode(true);
   try {
     const { file: rawFiles, staged, base } = options;
@@ -142,6 +145,7 @@ async function analyzeAllJson(options: AnalyzeAllOptions, auth: ResolvedAuth): P
         entries.map((e) => e.absolutePath),
         options,
         auth,
+        ctx,
       );
       return;
     }
@@ -153,7 +157,7 @@ async function analyzeAllJson(options: AnalyzeAllOptions, auth: ResolvedAuth): P
       return;
     }
 
-    await runSecretsAndAgentic(changeSet.files, options, auth);
+    await runSecretsAndAgentic(changeSet.files, options, auth, ctx);
   } finally {
     setFormattedOutputMode(false);
   }
@@ -163,8 +167,9 @@ async function runSecretsAndAgentic(
   files: string[],
   options: AnalyzeAllOptions,
   auth: ResolvedAuth,
+  ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const secrets = await runSecretsScan(files, auth);
+  const secrets = await runSecretsScan(files, auth, ctx);
   const secretsFailed = secrets !== null && secrets.exitCode !== 0;
   const agentic = secretsFailed
     ? null
@@ -188,12 +193,16 @@ async function runSecretsAndAgentic(
 async function runSecretsScan(
   files: string[],
   auth: ResolvedAuth,
+  ctx: CommandAuthenticatedInvocationContext,
 ): Promise<{ report: SecretsReport; exitCode: number } | null> {
   const binaryPath = resolveSecretsBinaryPath();
   if (binaryPath === null) return null;
 
-  const { result } = await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.analyze, auth, () =>
-    runSecretsBinary(binaryPath, files, auth),
+  const { result } = await scanAndEmitSecrets(
+    SECRETS_CALLER_COMMANDS.analyze,
+    auth,
+    () => runSecretsBinary(binaryPath, files, auth),
+    ctx,
   );
   const exitCode = result.exitCode ?? EXIT_CODE_SECRETS_FOUND;
   const { issues, errors } = parseSecretsJson(result.stdout);

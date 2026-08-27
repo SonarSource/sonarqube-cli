@@ -22,6 +22,7 @@
 
 import { buildSqaaJsonReport } from '@/commands/analyze/sqaa.ts';
 import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display.ts';
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import logger from '@/core/observability/logger.ts';
 import { resolveAgentSessionIdForEmit } from '@/core/telemetry/agent-session.ts';
@@ -57,6 +58,7 @@ interface CodexPostToolUsePayload {
 }
 
 export async function codexPostToolUse(
+  _ctx: CommandInvocationContext,
   options: CodexPostToolUseOptions,
 ): Promise<HookCommandResult> {
   // Best-effort: when Codex pipes PostToolUse JSON, capture session_id. Skip when

@@ -149,10 +149,10 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
 
   const handleHookInvocation =
     <TArgs extends unknown[]>(
-      run: (...args: TArgs) => Promise<HookCommandResult>,
-    ): ((_ctx: CommandInvocationContext, ...args: TArgs) => Promise<void>) =>
-    async (_ctx, ...args) => {
-      const { agentSessionId } = await run(...args);
+      run: (ctx: CommandInvocationContext, ...args: TArgs) => Promise<HookCommandResult>,
+    ): ((ctx: CommandInvocationContext, ...args: TArgs) => Promise<void>) =>
+    async (ctx, ...args) => {
+      const { agentSessionId } = await run(ctx, ...args);
       if (agentSessionId != null) {
         agentSession.id = agentSessionId;
       }
@@ -695,50 +695,50 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
   hookCommand
     .command('claude-pre-tool-use')
     .description('PreToolUse handler: scan files for secrets before agent reads them')
-    .anonymousAction(handleHookInvocation(() => claudePreToolUse()));
+    .anonymousAction(handleHookInvocation(claudePreToolUse));
 
   hookCommand
     .command('copilot-pre-tool-use')
     .description(
       'PreToolUse handler for GitHub Copilot CLI: scan files for secrets before agent reads them',
     )
-    .anonymousAction((_ctx) => copilotPreToolUse());
+    .anonymousAction((ctx) => copilotPreToolUse(ctx));
 
   hookCommand
     .command('antigravity-pre-tool-use')
     .description(
       'PreToolUse handler for Antigravity: scan files for secrets before agent reads them',
     )
-    .anonymousAction((_ctx) => antigravityPreToolUse());
+    .anonymousAction((ctx) => antigravityPreToolUse(ctx));
 
   hookCommand
     .command('claude-prompt-submit')
     .description('UserPromptSubmit handler: scan prompts for secrets before sending')
-    .anonymousAction(handleHookInvocation(() => agentPromptSubmit()));
+    .anonymousAction(handleHookInvocation(agentPromptSubmit));
 
   hookCommand
     .command('codex-prompt-submit')
     .description('UserPromptSubmit handler for Codex: scan prompts for secrets before sending')
-    .anonymousAction(handleHookInvocation(() => codexPromptSubmit()));
+    .anonymousAction(handleHookInvocation(codexPromptSubmit));
 
   hookCommand
     .command('cursor-prompt-submit')
     .description('beforeSubmitPrompt handler for Cursor: scan prompts for secrets before sending')
-    .anonymousAction(handleHookInvocation(() => cursorPromptSubmit()));
+    .anonymousAction(handleHookInvocation(cursorPromptSubmit));
 
   hookCommand
     .command('cursor-pre-file-read')
     .description(
       'beforeReadFile handler for Cursor: scan files for secrets before agent reads them',
     )
-    .anonymousAction(handleHookInvocation(() => cursorPreFileRead()));
+    .anonymousAction(handleHookInvocation(cursorPreFileRead));
 
   hookCommand
     .command('cursor-pre-tool-use')
     .description(
       'preToolUse handler for Cursor: scan Read tool targets for secrets before execution',
     )
-    .anonymousAction(handleHookInvocation(() => cursorPreToolUse()));
+    .anonymousAction(handleHookInvocation(cursorPreToolUse));
 
   hookCommand
     .command('claude-post-tool-use')
@@ -772,15 +772,15 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       'Also run a dependency-risks scan after the secrets scan (requires -p)',
     )
     .argument('[files...]', 'Changed files passed by pre-commit (pass_filenames: true)')
-    .anonymousAction((_ctx, files: string[], options: GitPreCommitOptions) =>
-      gitPreCommit(options, files),
+    .anonymousAction((ctx, files: string[] | undefined, options: GitPreCommitOptions) =>
+      gitPreCommit(options, files ?? [], ctx),
     );
 
   hookCommand
     .command('git-pre-push')
     .description('git pre-push handler: scan files in new commits for secrets')
     .argument('[files...]', 'Changed files passed by pre-commit (pass_filenames: true)')
-    .anonymousAction((_ctx, files: string[]) => gitPrePush(files));
+    .anonymousAction((ctx, files: string[] | undefined) => gitPrePush(files ?? [], ctx));
 
   // Hidden flush command — only registered when running as a telemetry worker.
   if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {

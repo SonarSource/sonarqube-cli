@@ -21,6 +21,7 @@
 // git pre-push callback handler — scans files in new commits for secrets.
 // Replaces the shell logic that was previously embedded in the git hook script.
 
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 
@@ -31,7 +32,7 @@ import { readGitPushRefs } from './stdin.ts';
 
 export const GIT_NULL_OID = '0000000000000000000000000000000000000000';
 
-export async function gitPrePush(files: string[] = []): Promise<void> {
+export async function gitPrePush(files: string[], ctx: CommandInvocationContext): Promise<void> {
   const fileGroups = await getFileGroupsToScan(files);
   if (fileGroups === null) return;
 
@@ -41,7 +42,7 @@ export async function gitPrePush(files: string[] = []): Promise<void> {
   }
 
   for (const group of fileGroups) {
-    await runSecretsStage(group, auth);
+    await runSecretsStage(group, auth, ctx);
   }
 }
 

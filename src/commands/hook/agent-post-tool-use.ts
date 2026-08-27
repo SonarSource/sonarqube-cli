@@ -23,6 +23,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { canonicalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
@@ -159,6 +160,7 @@ function createSqaaPostToolUseSubscriber(
 }
 
 export async function agentPostToolUse(
+  _ctx: CommandInvocationContext,
   options: AgentPostToolUseOptions,
 ): Promise<HookCommandResult> {
   let raw: string;

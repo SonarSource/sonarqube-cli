@@ -23,6 +23,7 @@
 
 import { existsSync } from 'node:fs';
 
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 
@@ -54,7 +55,7 @@ function denyToolUse(reason: string): void {
   );
 }
 
-export async function claudePreToolUse(): Promise<HookCommandResult> {
+export async function claudePreToolUse(ctx: CommandInvocationContext): Promise<HookCommandResult> {
   let payload: PreToolUsePayload;
   try {
     payload = await readStdinJson<PreToolUsePayload>();
@@ -85,6 +86,7 @@ export async function claudePreToolUse(): Promise<HookCommandResult> {
       SECRETS_CALLER_COMMANDS.claudePreToolUse,
       deps,
       filePath,
+      ctx,
     );
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
       denyToolUse(`Sonar detected secrets in file: ${filePath}`);

@@ -22,6 +22,7 @@
 // when --dependency-risks is set, runs a dependency-risks scan as a follow-up stage.
 // Replaces the shell logic that was previously embedded in the git hook script.
 
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { InvalidOptionError } from '@/core/command-error.ts';
 import { spawnProcess } from '@/core/process/process.ts';
@@ -37,8 +38,9 @@ export interface GitPreCommitOptions {
 }
 
 export async function gitPreCommit(
-  options: GitPreCommitOptions = {},
-  files: string[] = [],
+  options: GitPreCommitOptions,
+  files: string[],
+  ctx: CommandInvocationContext,
 ): Promise<void> {
   if (options.dependencyRisks && !options.project) {
     throw new InvalidOptionError('--dependency-risks requires -p <projectKey>.');
@@ -57,10 +59,15 @@ export async function gitPreCommit(
   // alongside --dependency-risks, so a secrets-only pre-commit correctly reports null.
   noteProject(auth, options.project);
 
-  await runCommitSecretsStage(stagedFiles, auth);
+  await runCommitSecretsStage(stagedFiles, auth, ctx);
 
   if (options.dependencyRisks && options.project) {
-    await runDepRisksStage({ project: options.project, changedFiles: stagedFiles, auth });
+    await runDepRisksStage({
+      project: options.project,
+      changedFiles: stagedFiles,
+      auth,
+      ctx,
+    });
   }
 }
 

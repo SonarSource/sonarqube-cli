@@ -21,6 +21,7 @@
 // UserPromptSubmit callback handler — scans prompt text for secrets before it is sent.
 // Replaces the bash/PowerShell logic that was previously embedded in the hook script.
 
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 
@@ -43,7 +44,7 @@ function denyPrompt(reason: string): void {
   process.stdout.write(JSON.stringify({ decision: 'block', reason }) + '\n');
 }
 
-export async function agentPromptSubmit(): Promise<HookCommandResult> {
+export async function agentPromptSubmit(ctx: CommandInvocationContext): Promise<HookCommandResult> {
   let payload: PromptSubmitPayload;
   try {
     payload = await readStdinJson<PromptSubmitPayload>();
@@ -73,6 +74,7 @@ export async function agentPromptSubmit(): Promise<HookCommandResult> {
       SECRETS_CALLER_COMMANDS.agentPromptSubmit,
       deps,
       prompt,
+      ctx,
     );
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
       denyPrompt('Sonar detected secrets in prompt');

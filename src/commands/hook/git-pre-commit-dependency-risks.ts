@@ -24,6 +24,7 @@
 // missing, scanner failure), and blocks the commit only when risks matching the
 // configured filter are found.
 
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import {
@@ -63,6 +64,7 @@ export interface DepRisksStageOptions {
   project: string;
   changedFiles: string[];
   auth: ResolvedAuth;
+  ctx: CommandInvocationContext;
 }
 
 export async function runDepRisksStage(options: DepRisksStageOptions): Promise<void> {
@@ -96,7 +98,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
       new ScaScannerNoopInstaller(binaryPath),
       new DefaultScaScannerSpawner(),
       new ResolveOnlySecretsInstaller(),
-    ).run(options.auth, options.project, SCA_CALLER_COMMANDS.gitPreCommit);
+    ).run(options.auth, options.project, SCA_CALLER_COMMANDS.gitPreCommit, options.ctx);
     viewModel = buildDependencyRisksViewModel(scan.response, filter);
   } catch (err) {
     // The orchestrator already emitted a failures_count:1 event if the SCA scan itself failed;
