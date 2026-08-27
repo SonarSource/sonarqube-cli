@@ -198,9 +198,10 @@ for (const region of STAGING_REGIONS) {
 
           const result = await harness.run(
             `analyze dependency-risks --project ${projectKey} --format json`,
-            // __SQ_CLI_TELEMETRY_FLUSH__=1 writes the telemetry-events.ndjson sink without POSTing.
+            // Do not set TELEMETRY_FLUSH_MODE_ENV: it no-ops commitTelemetryFacts(), so
+            // CliAnalysisCompleted never lands. Egress is already off for spawned CLIs.
             {
-              extraEnv: { ...cfg.cliEnv, __SQ_CLI_TELEMETRY_FLUSH__: '1' },
+              extraEnv: cfg.cliEnv,
               timeoutMs: SCAN_TIMEOUT_MS,
             },
           );
