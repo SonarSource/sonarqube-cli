@@ -30,7 +30,11 @@ import type {
   IntegrationContext,
   IntegrationDeclaration,
 } from '@/core/framework/features';
-import { getDefaultState, type InstalledIntegrationFeature } from '@/core/state/state.ts';
+import {
+  type CliState,
+  getDefaultState,
+  type InstalledIntegrationFeature,
+} from '@/core/state/state.ts';
 
 const binaryInstall = await import('@/core/host/install/binary.ts');
 await mock.module('@/core/host/install/binary.ts', () => ({
@@ -372,6 +376,7 @@ describe('declarative integration framework - resources and state recording', ()
   it('keeps shared dependency state when no installed feature references it', async () => {
     const state = getDefaultState('test');
     const context = makeContext(state, tempDir);
+    recordDependency(state, 'binary', join(tempDir, 'bin', 'sonar-secrets'));
     const legacyFeature: FeatureDeclaration = {
       id: 'feature',
       displayName: 'Feature',
@@ -472,6 +477,7 @@ describe('declarative integration framework - resources and state recording', ()
 
     const installed = await applyAndRecord(installer, context, integration, feature);
     const found = findInstalledFeature(state, context, integration, feature);
+    recordDependency(state, 'dependency', join(tempDir, 'bin', 'sonar-secrets'), '1');
     resolveBinaryPathSpy.mockReturnValue(join(tempDir, 'bin', 'sonar-secrets'));
 
     expect(found?.featureId).toBe(installed.featureId);
@@ -573,6 +579,22 @@ function makeContext(
     attrs,
     resolvedDependencies: new Map(),
   };
+}
+
+/** Stands in for `recordInstalledDependency`, the binary installer's own state write. */
+function recordDependency(
+  state: CliState,
+  id: string,
+  path: string,
+  version = SECRETS_SPEC.version,
+): void {
+  state.dependencies.installed.push({
+    id,
+    version,
+    path,
+    updatedAt: new Date().toISOString(),
+    updatedByCliVersion: 'test',
+  });
 }
 
 async function applyAndRecord<TOptions>(

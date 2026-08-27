@@ -32,7 +32,12 @@ import logger from '@/core/observability/logger.ts';
 
 import { version as VERSION } from '../../../package.json';
 import { getCliDir as resolveCliDir } from '../config-constants.ts';
-import { type CliState, getDefaultState } from './state.ts';
+import {
+  type CliState,
+  getDefaultState,
+  type InstalledIntegrationDependency,
+  type InstalledTool,
+} from './state.ts';
 
 function getCliDir(): string {
   return resolveCliDir();
@@ -65,6 +70,7 @@ function migrateState(raw: Record<string, unknown>): CliState {
   if (!raw.dependencies) {
     raw.dependencies = { installed: [] };
   }
+  migrateLegacyToolRecords(raw);
   if (!raw.auth) {
     raw.auth = getDefaultState(VERSION).auth;
     return raw as unknown as CliState;
@@ -77,6 +83,36 @@ function migrateState(raw: Record<string, unknown>): CliState {
     }
   }
   return raw as unknown as CliState;
+}
+
+/**
+ * Fold the legacy `tools.installed` registry into `dependencies.installed`, which is
+ * the only one still read, and drop the field for good.
+ */
+function migrateLegacyToolRecords(raw: Record<string, unknown>): void {
+  const legacy = (raw.tools as { installed?: unknown } | undefined)?.installed;
+  delete raw.tools;
+  if (!Array.isArray(legacy) || legacy.length === 0) {
+    return;
+  }
+
+  const dependencies = (raw.dependencies as { installed: InstalledIntegrationDependency[] })
+    .installed;
+  const knownIds = new Set(dependencies.map((entry) => entry.id));
+
+  for (const tool of legacy as InstalledTool[]) {
+    if (knownIds.has(tool.name) || !fs.existsSync(tool.path)) {
+      continue;
+    }
+    dependencies.push({
+      id: tool.name,
+      version: tool.version,
+      path: tool.path,
+      updatedAt: tool.installedAt,
+      updatedByCliVersion: tool.installedByCliVersion,
+    });
+    knownIds.add(tool.name);
+  }
 }
 
 export const STATE_READ_MAX_ATTEMPTS = 5;
@@ -158,6 +194,22 @@ export function saveState(state: CliState): void {
   } catch (error) {
     throw new Error(`Failed to save state to ${getStateFile()}: ${String(error)}`);
   }
+}
+
+/**
+ * Save state without overwriting `dependencies.installed`: binary installers record there
+ * themselves, writing straight to disk after the caller loaded its snapshot. Callers that
+ * install binaries between their `loadState()` and their save must use this.
+ */
+export function saveStateKeepingInstalledDependencies(state: CliState): void {
+  try {
+    state.dependencies.installed = loadState().dependencies.installed;
+  } catch (error) {
+    logger.debug(
+      `Keeping the in-memory dependency registry; re-read failed: ${(error as Error).message}`,
+    );
+  }
+  saveState(state);
 }
 
 /**

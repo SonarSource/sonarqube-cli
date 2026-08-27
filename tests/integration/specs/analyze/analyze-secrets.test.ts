@@ -148,9 +148,9 @@ describe('analyze secrets', () => {
         true,
       );
       const state = harness.stateJsonFile.asJson() as {
-        tools: { installed: Array<{ name: string; version: string }> };
+        dependencies: { installed: Array<{ id: string; version: string }> };
       };
-      const recorded = state.tools.installed.find((t) => t.name === 'sonar-secrets');
+      const recorded = state.dependencies.installed.find((d) => d.id === 'sonar-secrets');
       expect(recorded).toBeDefined();
       expect(recorded?.version).toBeDefined();
     },

@@ -37,14 +37,14 @@
   "config": {
     "cliVersion": "0.2.62"
   },
-  "tools": {
+  "dependencies": {
     "installed": [
       {
-        "name": "sonar-secrets",
+        "id": "sonar-secrets",
         "version": "2.38.0.10279",
         "path": "/Users/john.doe/.sonar/sonarqube-cli/bin/sonar-secrets",
-        "installedAt": "2026-02-18T20:08:34.327Z",
-        "installedByCliVersion": "0.2.109"
+        "updatedAt": "2026-02-18T20:08:34.327Z",
+        "updatedByCliVersion": "0.2.109"
       }
     ]
   }

@@ -414,18 +414,7 @@ export async function systemStatus(options: SystemStatusOptions): Promise<void> 
 
   const { tokenStatus, vortex } = await resolveAuthenticatedChecks(auth);
 
-  const legacyBinaries = (state.tools?.installed ?? []).map((t) => {
-    const pinned = PINNED_VERSIONS[t.name];
-    return {
-      name: t.name,
-      version: t.version,
-      path: abbreviatePath(t.path),
-      updateAvailable: pinned !== undefined && isNewerVersion(t.version, pinned),
-      latestVersion: pinned ?? t.version,
-    };
-  });
-
-  const depBinaries = state.dependencies.installed
+  const binaries = state.dependencies.installed
     .filter((d): d is typeof d & { path: string; version: string } => !!(d.path && d.version))
     .map((d) => {
       const pinned = PINNED_VERSIONS[d.id];
@@ -437,9 +426,6 @@ export async function systemStatus(options: SystemStatusOptions): Promise<void> 
         latestVersion: pinned ?? d.version,
       };
     });
-
-  const seen = new Set(legacyBinaries.map((b) => b.name));
-  const binaries = [...legacyBinaries, ...depBinaries.filter((b) => !seen.has(b.name))];
 
   const cacheDirs = [
     { id: 'logs', name: 'Logs', path: LOG_DIR },

@@ -246,17 +246,6 @@ describe('post-update migration', () => {
           },
           config: { cliVersion: '0.5.0' },
           telemetry: { enabled: false, firstUseDate: new Date().toISOString(), events: [] },
-          tools: {
-            installed: [
-              {
-                name: CONTEXT_AUGMENTATION_BINARY_NAME,
-                version: staleCagVersion,
-                path: installedBinaryPath,
-                installedAt: new Date().toISOString(),
-                installedByCliVersion: '0.5.0',
-              },
-            ],
-          },
           dependencies: {
             installed: [
               {

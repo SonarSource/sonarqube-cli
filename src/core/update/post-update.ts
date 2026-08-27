@@ -25,7 +25,13 @@ import {
 
 import { version as CURRENT_VERSION } from '../../../package.json';
 import logger from '../observability/logger.ts';
-import { loadState, saveState, stateFileExists, tryLoadState } from '../state/state-repository.ts';
+import {
+  loadState,
+  saveState,
+  saveStateKeepingInstalledDependencies,
+  stateFileExists,
+  tryLoadState,
+} from '../state/state-repository.ts';
 import { isNewerVersion } from '../version.ts';
 import { updateScaScannerBinaryIfNeeded, updateSecretsBinaryIfNeeded } from './binary-refresh.ts';
 import {
@@ -106,6 +112,6 @@ async function runActions(deps: PostUpdateDependencies): Promise<void> {
 export async function migrateDeclarativeIntegrations(registry: IntegrationRegistry): Promise<void> {
   const state = loadState();
   if (await reconcileInstalledIntegrations(state, registry)) {
-    saveState(state);
+    saveStateKeepingInstalledDependencies(state);
   }
 }

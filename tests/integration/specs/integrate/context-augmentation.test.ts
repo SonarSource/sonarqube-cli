@@ -611,12 +611,14 @@ describe('integrate claude — Context Augmentation', () => {
       const versionedName = buildLocalCagBinaryName(detectPlatform());
       expect(harness.cliHome.file('bin', versionedName).exists()).toBe(true);
 
-      // state.json records the installation in the legacy tools section even
-      // when the subsequent feature setup fails.
+      // state.json records the installed dependency even when the subsequent
+      // feature setup fails.
       const state = loadState(harness);
-      const installed = state.tools?.installed.find((t) => t.name === 'sonar-context-augmentation');
+      const installed = state.dependencies.installed.find(
+        (d) => d.id === 'sonar-context-augmentation',
+      );
       expect(installed).toBeDefined();
-      expect(installed?.version).toMatch(/^\d+\.\d+/);
+      expect(installed?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
     },
     { timeout: 60000 },
   );

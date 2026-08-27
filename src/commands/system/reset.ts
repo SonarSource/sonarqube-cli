@@ -38,7 +38,6 @@ export interface SystemResetOptions {
 interface CleanedFields {
   authConnectionIds: string[];
   dependencyIds: string[];
-  toolNames: string[];
   integrationFeatures: Array<{ integrationStateId: string; featureId: string }>;
 }
 
@@ -51,7 +50,6 @@ function emptyCleanedFields(overrides: Partial<CleanedFields> = {}): CleanedFiel
   return {
     authConnectionIds: [],
     dependencyIds: [],
-    toolNames: [],
     integrationFeatures: [],
     ...overrides,
   };
@@ -61,7 +59,6 @@ function mergeCleanedFields(fields: CleanedFields[]): CleanedFields {
   return {
     authConnectionIds: fields.flatMap((f) => f.authConnectionIds),
     dependencyIds: fields.flatMap((f) => f.dependencyIds),
-    toolNames: fields.flatMap((f) => f.toolNames),
     integrationFeatures: fields.flatMap((f) => f.integrationFeatures),
   };
 }
@@ -93,10 +90,7 @@ export async function systemReset(options: SystemResetOptions): Promise<void> {
     const binaryResult = await removeBinaries(state);
     results.push({
       item: binaryResult.item,
-      cleaned: emptyCleanedFields({
-        dependencyIds: binaryResult.dependencyIds,
-        toolNames: binaryResult.toolNames,
-      }),
+      cleaned: emptyCleanedFields({ dependencyIds: binaryResult.dependencyIds }),
     });
 
     const integrationResult = await removeAllIntegrations(state, supportedIntegrations);
@@ -199,12 +193,6 @@ function applyCleanedState(state: CliState, cleaned: CleanedFields): void {
     );
   }
 
-  if (cleaned.toolNames.length > 0) {
-    const removedNames = new Set(cleaned.toolNames);
-    state.tools ??= { installed: [] };
-    state.tools.installed = state.tools.installed.filter((t) => !removedNames.has(t.name));
-  }
-
   if (cleaned.integrationFeatures.length > 0) {
     const cleanedFeatures = indexCleanedFeatures(cleaned.integrationFeatures);
     state.integrations.installed = state.integrations.installed
@@ -217,8 +205,5 @@ function clearLegacyState(state: CliState): void {
   const defaults = getDefaultState(VERSION);
   state.agents = defaults.agents;
   state.agentExtensions = defaults.agentExtensions;
-  if (state.tools?.installed.length === 0) {
-    state.tools = defaults.tools;
-  }
   state.lastUpdated = new Date().toISOString();
 }

@@ -28,7 +28,7 @@ import type {
   IntegrationScope,
   IntegrationStateAttribute,
 } from '@/core/state/state.ts';
-import { loadState, saveState } from '@/core/state/state-repository.ts';
+import { loadState, saveStateKeepingInstalledDependencies } from '@/core/state/state-repository.ts';
 import { emitIntegrationConfiguredTelemetry } from '@/core/telemetry/integrate-telemetry.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { text, warn } from '@/core/ui';
@@ -216,12 +216,7 @@ function resolveRepoRootForScope(scope: IntegrationScope, targetRoot: string): s
 
 function saveInstalledFeatures(state: CliState): boolean {
   try {
-    try {
-      state.tools = loadState().tools;
-    } catch (err) {
-      logger.debug(`Failed to merge latest tools state before save: ${(err as Error).message}`);
-    }
-    saveState(state);
+    saveStateKeepingInstalledDependencies(state);
     return true;
   } catch (err) {
     const msg = (err as Error).message;
