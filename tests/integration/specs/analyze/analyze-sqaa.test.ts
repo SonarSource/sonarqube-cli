@@ -25,21 +25,24 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
-import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
-import type { StoredAnalysisCompletedEvent } from '@/core/state/state.ts';
-import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
-import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
+import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import {
   SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
   SQAA_ANALYZE_CALLER_COMMAND,
-} from '@/core/telemetry/sqaa-analysis-telemetry.ts';
+} from '@/commands/analyze/sqaa-analysis-telemetry.ts';
+import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
+import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
+import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 
 import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
-import { readAnalysisEvents, readCommandEvents } from '../../../_common/telemetry-helpers';
+import {
+  readAnalysisEvents,
+  readCommandEvents,
+  type StoredAnalysisCompletedEvent,
+} from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
 import { commitFile, git, initGitRepo, stageFile } from '../hook/git-test-helpers';
 import {

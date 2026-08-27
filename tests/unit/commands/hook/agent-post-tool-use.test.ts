@@ -23,15 +23,15 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import * as sqaaTelemetry from '@/commands/analyze/sqaa-analysis-telemetry.ts';
+import {
+  SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
+  SQAA_HOOK_TELEMETRY_EXIT_CODE,
+} from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
 import * as processLib from '@/core/process/process.ts';
 import * as clientModule from '@/core/server/client.ts';
-import * as sqaaTelemetry from '@/core/telemetry/sqaa-analysis-telemetry.ts';
-import {
-  SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
-  SQAA_HOOK_TELEMETRY_EXIT_CODE,
-} from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 
 import { agentPostToolUse } from '../../../../src/commands/hook/agent-post-tool-use.ts';
 import { contextAugmentationPostToolUseSubscriber } from '../../../../src/commands/hook/context-augmentation-hook-subscriber.ts';

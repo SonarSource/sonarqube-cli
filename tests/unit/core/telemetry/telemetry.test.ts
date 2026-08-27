@@ -30,22 +30,17 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { setPassthroughSubcommand, storeEvent } from '@/commands/command-executed-telemetry.ts';
 import { SonarCommand } from '@/commands/sonar-command.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
 import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/auth/auth-resolver.ts';
 import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import { DISTRIBUTION } from '@/core/host/distribution.ts';
 import * as agentDetector from '@/core/host/environment/agent-detector.ts';
-import type { StoredAnalysisCompletedEvent } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
-import {
-  flushTelemetry,
-  setPassthroughSubcommand,
-  storeEvent,
-  TELEMETRY_FLUSH_MODE_ENV,
-} from '@/core/telemetry';
+import { flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { ENV_TELEMETRY_EGRESS, TELEMETRY_EGRESS_OFF } from '@/core/telemetry/egress.ts';
 import { resolveTelemetryIdentity } from '@/core/telemetry/identity-fetch.ts';
 import * as userModule from '@/core/telemetry/user.ts';
@@ -55,6 +50,7 @@ import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
 import {
   readCommandEvents,
   readTelemetryEvents,
+  type StoredAnalysisCompletedEvent,
   writeTelemetryEvent,
 } from '../../../_common/telemetry-helpers.ts';
 import { mockIdentityGetSafe } from './identity-api-mock.ts';

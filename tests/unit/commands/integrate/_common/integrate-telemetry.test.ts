@@ -22,10 +22,13 @@ import { createHash } from 'node:crypto';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import {
+  CLI_INTEGRATION_CONFIGURED,
+  emitIntegrationConfiguredTelemetry,
+} from '@/commands/integrate/_common/integrate-telemetry.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
-import { emitIntegrationConfiguredTelemetry } from '@/core/telemetry/integrate-telemetry.ts';
 import * as telemetryEvents from '@/core/telemetry/telemetry-events.ts';
 
 const AUTH: ResolvedAuth = {
@@ -57,7 +60,7 @@ function makeInstalledFeature(
 let emitSpy: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
-  emitSpy = spyOn(telemetryEvents, 'emitIntegrationConfigured').mockResolvedValue(undefined);
+  emitSpy = spyOn(telemetryEvents, 'emitTelemetryEvent').mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -83,7 +86,8 @@ describe('emitIntegrationConfiguredTelemetry()', () => {
       repoRoot: '/some/repo',
     });
 
-    const [, fields] = emitSpy.mock.calls[0] as [ResolvedAuth, Record<string, unknown>];
+    const [name, fields] = emitSpy.mock.calls[0] as [string, Record<string, unknown>];
+    expect(name).toBe(CLI_INTEGRATION_CONFIGURED);
     // features_installed flattens active subfeature ids.
     expect(fields.features_installed).toEqual([
       'pre-commit-hook',
@@ -112,7 +116,7 @@ describe('emitIntegrationConfiguredTelemetry()', () => {
       repoRoot: null,
     });
 
-    const [, fields] = emitSpy.mock.calls[0] as [ResolvedAuth, Record<string, unknown>];
+    const [, fields] = emitSpy.mock.calls[0] as [string, Record<string, unknown>];
     expect(fields.repo_id).toBeNull();
     expect(fields.is_global).toBe(true);
     expect(fields.is_from_router).toBe(true);
@@ -133,7 +137,7 @@ describe('emitIntegrationConfiguredTelemetry()', () => {
       repoRoot: '/some/repo',
     });
 
-    const [, fields] = emitSpy.mock.calls[0] as [ResolvedAuth, Record<string, unknown>];
+    const [, fields] = emitSpy.mock.calls[0] as [string, Record<string, unknown>];
     expect(fields.features_installed).toEqual(['sonar-secrets-hooks']);
     expect(fields.features_declined).toEqual(['sqaa-instructions']);
     expect(fields.features_uninstalled).toEqual(['mcp-server']);
@@ -152,7 +156,7 @@ describe('emitIntegrationConfiguredTelemetry()', () => {
       repoRoot: null,
     });
 
-    const [, fields] = emitSpy.mock.calls[0] as [ResolvedAuth, Record<string, unknown>];
+    const [, fields] = emitSpy.mock.calls[0] as [string, Record<string, unknown>];
     expect(fields.repo_id).toBeNull();
   });
 });

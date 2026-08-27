@@ -21,9 +21,10 @@
 import { randomUUID } from 'node:crypto';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { emitTelemetryEvent } from '@/core/telemetry/telemetry-events.ts';
 
-import type { AnalyzeProjectResponse } from '../../commands/analyze/dependency-risk-helpers/sca-scanner.ts';
-import { emitAnalysisCompleted } from './telemetry-events.ts';
+import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
+import type { AnalyzeProjectResponse } from './dependency-risk-helpers/sca-scanner.ts';
 
 /**
  * The `caller_command` value recorded on every SCA analysis event, one per call site.
@@ -94,33 +95,41 @@ export async function emitScaAnalysisTelemetry(
     const analysisId = randomUUID();
 
     if (!response) {
-      await emitAnalysisCompleted(auth, {
-        caller_command: callerCommand,
-        analyzer: 'sca-scanner-cli',
-        analysis_id: analysisId,
-        findings_count: 0,
-        exit_code: exitCode,
-        errors_count: 0,
-        failures_count: 1,
-        scan_duration_ms: durationMs,
-        details: '',
-      });
+      await emitTelemetryEvent(
+        CLI_ANALYSIS_COMPLETED,
+        {
+          caller_command: callerCommand,
+          analyzer: 'sca-scanner-cli',
+          analysis_id: analysisId,
+          findings_count: 0,
+          exit_code: exitCode,
+          errors_count: 0,
+          failures_count: 1,
+          scan_duration_ms: durationMs,
+          details: '',
+        } satisfies AnalysisCompletedPayload,
+        { auth },
+      );
       return;
     }
 
     const { findingsCount, details } = summarizeScaFindings(response);
 
-    await emitAnalysisCompleted(auth, {
-      caller_command: callerCommand,
-      analyzer: 'sca-scanner-cli',
-      analysis_id: analysisId,
-      findings_count: findingsCount,
-      exit_code: exitCode,
-      errors_count: response.errors.length,
-      failures_count: 0,
-      scan_duration_ms: durationMs,
-      details: findingsCount > 0 ? JSON.stringify(details) : '',
-    });
+    await emitTelemetryEvent(
+      CLI_ANALYSIS_COMPLETED,
+      {
+        caller_command: callerCommand,
+        analyzer: 'sca-scanner-cli',
+        analysis_id: analysisId,
+        findings_count: findingsCount,
+        exit_code: exitCode,
+        errors_count: response.errors.length,
+        failures_count: 0,
+        scan_duration_ms: durationMs,
+        details: findingsCount > 0 ? JSON.stringify(details) : '',
+      } satisfies AnalysisCompletedPayload,
+      { auth },
+    );
   } catch {
     // Telemetry is strictly fire-and-forget; never surface to the command handler.
   }

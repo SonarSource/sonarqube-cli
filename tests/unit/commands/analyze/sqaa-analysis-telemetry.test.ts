@@ -25,19 +25,19 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import type { RunTally } from '@/commands/analyze/sqaa-analysis.ts';
-import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display-json.ts';
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
-import type { SqaaIssue } from '@/core/server/client.ts';
-import * as stateManager from '@/core/state/state-manager.ts';
-import * as stateRepository from '@/core/state/state-repository.ts';
 import {
   collectRuleCounts,
   emitSqaaAnalysisTelemetry,
   SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
   SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
   tallyFromSqaaJsonReport,
-} from '@/core/telemetry/sqaa-analysis-telemetry.ts';
+} from '@/commands/analyze/sqaa-analysis-telemetry.ts';
+import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display-json.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
+import type { SqaaIssue } from '@/core/server/client.ts';
+import * as stateManager from '@/core/state/state-manager.ts';
+import * as stateRepository from '@/core/state/state-repository.ts';
 import * as userModule from '@/core/telemetry/user.ts';
 
 import { makeTelemetryState, readAnalysisEvents } from '../../../_common/telemetry-helpers.ts';

@@ -20,14 +20,14 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
-import * as authResolver from '@/core/auth/auth-resolver.ts';
-import * as agentSession from '@/core/telemetry/agent-session.ts';
-import * as sqaaTelemetry from '@/core/telemetry/sqaa-analysis-telemetry.ts';
+import * as sqaaTelemetry from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import {
   SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
   SQAA_HOOK_TELEMETRY_EXIT_CODE,
-} from '@/core/telemetry/sqaa-analysis-telemetry.ts';
+} from '@/commands/analyze/sqaa-analysis-telemetry.ts';
+import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
+import * as authResolver from '@/core/auth/auth-resolver.ts';
+import * as agentSession from '@/core/telemetry/agent-session.ts';
 
 import * as sqaaModule from '../../../../src/commands/analyze/sqaa.ts';
 import { codexPostToolUse } from '../../../../src/commands/hook/codex-post-tool-use.ts';

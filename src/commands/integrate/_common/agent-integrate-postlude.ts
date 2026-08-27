@@ -32,6 +32,7 @@ import {
   resolveIntegrateInstallTarget,
 } from './agent-integrate-prelude.ts';
 import { buildRecordedIntegrationAttrs } from './context-augmentation.ts';
+import { emitIntegrationConfiguredTelemetry } from './integrate-telemetry.ts';
 import type { IntegrateAgentOptions } from './types.ts';
 import { resolveVortexSetup } from './vortex.ts';
 
@@ -87,7 +88,15 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
     scope: installScope,
     auth,
     nonInteractive: options.nonInteractive,
-    isFromRouter: options.isFromRouter,
     attrs,
+    onSuccess: (facts) =>
+      emitIntegrationConfiguredTelemetry({
+        auth,
+        integrationId: params.integrationId,
+        scope: installScope,
+        nonInteractive: options.nonInteractive ?? false,
+        isFromRouter: options.isFromRouter ?? false,
+        ...facts,
+      }),
   });
 }

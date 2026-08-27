@@ -21,11 +21,24 @@
 import { createHash } from 'node:crypto';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
+import logger from '@/core/observability/logger.ts';
+import type { InstalledIntegrationFeature, IntegrationScope } from '@/core/state/state.ts';
+import { emitTelemetryEvent } from '@/core/telemetry/telemetry-events.ts';
 
-import { canonicalizePath } from '../io/fs-utils.ts';
-import logger from '../observability/logger.ts';
-import type { InstalledIntegrationFeature, IntegrationScope } from '../state/state.ts';
-import { emitIntegrationConfigured } from './telemetry-events.ts';
+export const CLI_INTEGRATION_CONFIGURED = 'CliIntegrationConfigured';
+
+/** Domain payload for CliIntegrationConfigured (identity is filled by core emit). */
+export type IntegrationConfiguredPayload = {
+  integration_id: string;
+  repo_id: string | null;
+  features_installed: string[];
+  features_declined: string[];
+  features_uninstalled: string[];
+  is_global: boolean;
+  is_interactive: boolean;
+  is_from_router: boolean;
+};
 
 export interface IntegrationConfiguredTelemetryParams {
   auth: ResolvedAuth;
@@ -53,16 +66,20 @@ export async function emitIntegrationConfiguredTelemetry(
   try {
     const featuresInstalled = collectInstalledFeatureIds(params.installedFeatures);
 
-    await emitIntegrationConfigured(params.auth, {
-      integration_id: params.integrationId,
-      repo_id: hashRepoRoot(params.repoRoot),
-      features_installed: featuresInstalled,
-      features_declined: params.featuresDeclined,
-      features_uninstalled: params.featuresUninstalled,
-      is_global: params.scope === 'global',
-      is_interactive: !params.nonInteractive,
-      is_from_router: params.isFromRouter,
-    });
+    await emitTelemetryEvent(
+      CLI_INTEGRATION_CONFIGURED,
+      {
+        integration_id: params.integrationId,
+        repo_id: hashRepoRoot(params.repoRoot),
+        features_installed: featuresInstalled,
+        features_declined: params.featuresDeclined,
+        features_uninstalled: params.featuresUninstalled,
+        is_global: params.scope === 'global',
+        is_interactive: !params.nonInteractive,
+        is_from_router: params.isFromRouter,
+      } satisfies IntegrationConfiguredPayload,
+      { auth: params.auth },
+    );
   } catch (err) {
     logger.debug(`Failed to emit CliIntegrationConfigured telemetry: ${(err as Error).message}`);
   }

@@ -32,10 +32,7 @@ import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
 import { version as VERSION } from '../../../package.json';
 import { getTelemetryDir, TELEMETRY_API_KEY, TELEMETRY_ENDPOINT } from '../config-constants.ts';
 import type {
-  AnalysisCompletedEventPayload,
   AuthConnection,
-  CommandExecutedEventPayload,
-  IntegrationConfiguredEventPayload,
   StoredTelemetryEvent,
   TelemetryConnectionType,
   TelemetryEventIdentityPayload,
@@ -109,20 +106,8 @@ async function buildIdentityBase(
   };
 }
 
-export type AnalysisCompletedFields = Omit<
-  AnalysisCompletedEventPayload,
-  keyof TelemetryEventIdentityPayload
->;
-
-export type IntegrationConfiguredFields = Omit<
-  IntegrationConfiguredEventPayload,
-  keyof TelemetryEventIdentityPayload
->;
-
-export type CommandExecutedFields = Omit<
-  CommandExecutedEventPayload,
-  keyof TelemetryEventIdentityPayload
->;
+/** Wire `event_type` prefix. Domain producers pass the short name only. */
+export const TELEMETRY_EVENT_TYPE_PREFIX = 'Analytics.Cli.';
 
 export type IdentityEmitOptions = {
   /**
@@ -132,67 +117,32 @@ export type IdentityEmitOptions = {
   agentSessionId?: string | null;
 };
 
-/**
- * Emits one CliAnalysisCompleted event when telemetry is enabled.
- * Resolves identity from state + auth; no-ops on opt-out or missing installationId.
- */
-export async function emitAnalysisCompleted(
-  auth: ResolvedAuth,
-  fields: AnalysisCompletedFields,
-  identityOptions?: IdentityEmitOptions,
-): Promise<void> {
-  const base = await buildIdentityBase(
-    (conn) => resolveCommandTelemetryIdentity(conn, auth),
-    identityOptions,
-  );
-  if (!base) return;
-  appendTelemetryEvent({
-    metadata: {
-      event_id: randomUUID(),
-      source: { domain: 'CLI' },
-      event_type: 'Analytics.Cli.CliAnalysisCompleted',
-      event_timestamp: String(Date.now()),
-    },
-    event_payload: { ...base, ...fields },
-  });
-}
+export type TelemetryEmitOptions = IdentityEmitOptions & {
+  /** When set, identity is resolved from this auth; otherwise the active connection. */
+  auth?: ResolvedAuth;
+};
 
 /**
- * Emits one CliIntegrationConfigured event when telemetry is enabled.
- * Resolves identity from state + auth; no-ops on opt-out or missing installationId.
+ * Appends one telemetry event. `name` is the short event name; identity and the
+ * `Analytics.Cli.` prefix are applied here. `fields` is an opaque domain payload.
  */
-export async function emitIntegrationConfigured(
-  auth: ResolvedAuth,
-  fields: IntegrationConfiguredFields,
+export async function emitTelemetryEvent(
+  name: string,
+  fields: object,
+  options?: TelemetryEmitOptions,
 ): Promise<void> {
-  const base = await buildIdentityBase((conn) => resolveCommandTelemetryIdentity(conn, auth));
+  const auth = options?.auth;
+  const resolve: IdentityResolver =
+    auth === undefined
+      ? resolveStoreEventTelemetryIdentitySafely
+      : (conn) => resolveCommandTelemetryIdentity(conn, auth);
+  const base = await buildIdentityBase(resolve, options);
   if (!base) return;
   appendTelemetryEvent({
     metadata: {
       event_id: randomUUID(),
       source: { domain: 'CLI' },
-      event_type: 'Analytics.Cli.CliIntegrationConfigured',
-      event_timestamp: String(Date.now()),
-    },
-    event_payload: { ...base, ...fields },
-  });
-}
-
-/**
- * Emits one CliCommandExecuted event when telemetry is enabled.
- * Resolves identity from the active connection; no-ops on opt-out or missing installationId.
- */
-export async function emitCommandExecuted(
-  fields: CommandExecutedFields,
-  identityOptions?: IdentityEmitOptions,
-): Promise<void> {
-  const base = await buildIdentityBase(resolveStoreEventTelemetryIdentitySafely, identityOptions);
-  if (!base) return;
-  appendTelemetryEvent({
-    metadata: {
-      event_id: randomUUID(),
-      source: { domain: 'CLI' },
-      event_type: 'Analytics.Cli.CliCommandExecuted',
+      event_type: `${TELEMETRY_EVENT_TYPE_PREFIX}${name}`,
       event_timestamp: String(Date.now()),
     },
     event_payload: { ...base, ...fields },

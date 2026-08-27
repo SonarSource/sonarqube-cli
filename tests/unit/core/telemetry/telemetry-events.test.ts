@@ -20,7 +20,7 @@
 
 /**
  * Tests for telemetry/telemetry-events.ts:
- *   emitAnalysisCompleted — CliAnalysisCompleted envelope + telemetry gate
+ *   emitTelemetryEvent — generic envelope + telemetry gate
  *   flushTelemetryEvents  — atomic rename, retention cap, send, re-queue, concurrent safety
  */
 
@@ -31,8 +31,12 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import type { AnalysisCompletedPayload } from '@/commands/analyze/analysis-completed.ts';
 import { scanAndEmitSecrets } from '@/commands/analyze/secrets.ts';
+import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
+import { SQAA_ANALYZE_AGENTIC_CALLER_COMMAND } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
+import type { IntegrationConfiguredPayload } from '@/commands/integrate/_common/integrate-telemetry.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { ENV_SONAR_USER_HOME, TELEMETRY_ENDPOINT } from '@/core/config-constants.ts';
 import * as networkConfig from '@/core/host/connectivity/network-config.ts';
@@ -40,22 +44,10 @@ import { DISTRIBUTION } from '@/core/host/distribution.ts';
 import * as agentDetector from '@/core/host/environment/agent-detector.ts';
 import type { SpawnResult } from '@/core/process/process.ts';
 import * as fetchGuardedModule from '@/core/server/fetch-guarded.ts';
-import type {
-  AnalysisCompletedEventPayload,
-  StoredAnalysisCompletedEvent,
-} from '@/core/state/state.ts';
+import type { TelemetryEventIdentityPayload } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
-import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
-import { SQAA_ANALYZE_AGENTIC_CALLER_COMMAND } from '@/core/telemetry/sqaa-analysis-telemetry.ts';
-import {
-  type AnalysisCompletedFields,
-  emitAnalysisCompleted,
-  emitCommandExecuted,
-  emitIntegrationConfigured,
-  flushTelemetryEvents,
-  type IntegrationConfiguredFields,
-} from '@/core/telemetry/telemetry-events.ts';
+import { emitTelemetryEvent, flushTelemetryEvents } from '@/core/telemetry/telemetry-events.ts';
 import * as userModule from '@/core/telemetry/user.ts';
 
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
@@ -64,11 +56,35 @@ import {
   readAnalysisEvents,
   readCommandEvents,
   readIntegrationEvents,
+  type StoredAnalysisCompletedEvent,
   telemetryEventsPath,
   writeTelemetryEvent,
 } from '../../../_common/telemetry-helpers.ts';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+type AnalysisCompletedEventPayload = TelemetryEventIdentityPayload &
+  AnalysisCompletedPayload &
+  Record<string, unknown>;
+
+async function emitAnalysisCompleted(
+  auth: ResolvedAuth,
+  fields: AnalysisCompletedPayload,
+  options?: { agentSessionId?: string | null },
+): Promise<void> {
+  await emitTelemetryEvent('CliAnalysisCompleted', fields, { auth, ...options });
+}
+
+async function emitIntegrationConfigured(
+  auth: ResolvedAuth,
+  fields: IntegrationConfiguredPayload,
+): Promise<void> {
+  await emitTelemetryEvent('CliIntegrationConfigured', fields, { auth });
+}
+
+async function emitCommandExecuted(fields: object): Promise<void> {
+  await emitTelemetryEvent('CliCommandExecuted', fields);
+}
 
 function makeIdentityPayload() {
   return {
@@ -87,8 +103,8 @@ function makeIdentityPayload() {
 }
 
 function makeCompletedFields(
-  overrides: Partial<AnalysisCompletedFields> = {},
-): AnalysisCompletedFields {
+  overrides: Partial<AnalysisCompletedPayload> = {},
+): AnalysisCompletedPayload {
   return {
     caller_command: SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
     analyzer: 'sqaa',
@@ -335,8 +351,8 @@ describe('emitAnalysisCompleted()', () => {
 // ─── emitIntegrationConfigured ─────────────────────────────────────────────────
 
 function makeIntegrationConfiguredFields(
-  overrides: Partial<IntegrationConfiguredFields> = {},
-): IntegrationConfiguredFields {
+  overrides: Partial<IntegrationConfiguredPayload> = {},
+): IntegrationConfiguredPayload {
   return {
     integration_id: 'claude',
     repo_id: 'a'.repeat(64),

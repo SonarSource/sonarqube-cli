@@ -23,6 +23,11 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 
+import {
+  emitSqaaHookFailureTelemetry,
+  SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
+  SQAA_HOOK_TELEMETRY_EXIT_CODE,
+} from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { canonicalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
@@ -31,11 +36,6 @@ import { timed } from '@/core/observability/timed.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
 import { resolveAgentSessionIdForEmit } from '@/core/telemetry/agent-session.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
-import {
-  emitSqaaHookFailureTelemetry,
-  SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
-  SQAA_HOOK_TELEMETRY_EXIT_CODE,
-} from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 
 import { resolveSqaaBranch } from '../analyze/sqaa-changeset.ts';
 import { fetchSingleFileReport, finishSqaaTelemetryFromReport } from '../analyze/sqaa-run.ts';
