@@ -125,6 +125,19 @@ describe('resolveLookupPaths', () => {
     ]);
   });
 
+  it('bounds to a known root even when a directory name merely starts with ".."', async () => {
+    mockGitResponses({ 'rev-parse --show-toplevel': null });
+    const dotDir = `${STANDALONE_PROJECT}/..cache`;
+
+    const paths = await resolveLookupPaths(`${dotDir}/src`, [STANDALONE_PROJECT]);
+
+    expect(paths).toEqual([
+      { checkPath: canon(`${dotDir}/src`), projectRoot: canon(`${dotDir}/src`) },
+      { checkPath: canon(dotDir), projectRoot: canon(dotDir) },
+      { checkPath: canon(STANDALONE_PROJECT), projectRoot: canon(STANDALONE_PROJECT) },
+    ]);
+  });
+
   it('falls back to the start dir itself when no known root is an ancestor', async () => {
     mockGitResponses({ 'rev-parse --show-toplevel': null });
 

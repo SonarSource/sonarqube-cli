@@ -95,13 +95,13 @@ export interface SonarProperties {
   organization: string;
 }
 
-/** Same nearest-first climb as discoverProject()'s local-config source — no known-mapping table, no git-remote API call, since this also runs pre-login (no token yet). */
+/** Same nearest-first, known-root-bounded climb as discoverProject()'s local-config source — no known-mapping match, no git-remote API call, since this also runs pre-login (no token yet). */
 async function discoverLocalConfig(
   startDir: string,
   silent: boolean,
 ): Promise<Pick<DiscoveredProject, 'serverUrl' | 'organization'>> {
   const config: DiscoveredProject = { projectRoot: canonicalizePath(startDir), configSources: [] };
-  const lookupPaths = await resolveLookupPaths(startDir);
+  const lookupPaths = await resolveLookupPaths(startDir, collectKnownRoots(loadKnownMappings()));
   await applyLocalConfigAcrossLookupPaths(config, lookupPaths, { silent });
   return config;
 }
