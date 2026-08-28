@@ -71,6 +71,8 @@ import { agentPromptSubmit } from './hook/agent-prompt-submit.ts';
 import { antigravityPreToolUse } from './hook/antigravity-pre-tool-use.ts';
 import { claudePostToolUseFailure } from './hook/claude-post-tool-use-failure.ts';
 import { claudePreToolUse } from './hook/claude-pre-tool-use.ts';
+import { claudeSessionStart } from './hook/claude-session-start.ts';
+import { claudeSubagentStart } from './hook/claude-subagent-start.ts';
 import { codexPostToolUse } from './hook/codex-post-tool-use.ts';
 import { codexPromptSubmit } from './hook/codex-prompt-submit.ts';
 import { copilotPreToolUse } from './hook/copilot-pre-tool-use.ts';
@@ -774,6 +776,16 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       'PostToolUseFailure handler: forward the failed tool call to Vortex context augmentation',
     )
     .anonymousAction((_ctx) => claudePostToolUseFailure());
+
+  hookCommand
+    .command('claude-session-start')
+    .description('SessionStart handler: inject Vortex context at session start')
+    .anonymousAction(handleHookInvocation(claudeSessionStart));
+
+  hookCommand
+    .command('claude-subagent-start')
+    .description('SubagentStart handler: inject Vortex context when a subagent starts')
+    .anonymousAction(handleHookInvocation(claudeSubagentStart));
 
   hookCommand
     .command('codex-post-tool-use')

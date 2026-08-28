@@ -50,6 +50,14 @@ export function isCagHookOrgAllowed(orgKey: string | undefined): boolean {
   return orgKey !== undefined && CAG_HOOK_ORG_ALLOWLIST.has(orgKey.toLowerCase());
 }
 
+/** Shared by every CAG-hook feature (PostToolUse, PostToolUseFailure, session-start) for allowlist gating. */
+export function isCagHookAllowedForAttrs(
+  attrs: Record<string, IntegrationStateAttribute> | undefined,
+): boolean {
+  const orgKey = typeof attrs?.orgKey === 'string' ? attrs.orgKey : undefined;
+  return isCagHookOrgAllowed(orgKey);
+}
+
 /** Context-Augmentation-specific persisted attrs (connection + SCA flag). */
 export function buildContextAugmentationAttrs(
   serverUrl: string,
@@ -182,6 +190,48 @@ export async function printContextAugmentationSkill({
       ok: false,
       failureMessage: 'sonar-context-augmentation tool print-skill produced empty output',
     });
+  }
+  return result.stdout;
+}
+
+export interface ContextAugmentationSessionStartParams {
+  binaryPath: string;
+  organization?: string;
+  projectKey: string;
+  serverUrl: string;
+  token: string;
+  workspaceDir?: string;
+}
+
+/**
+ * Best-effort `tool print-session-start-context` invocation for the agent
+ * SessionStart/SubagentStart hooks (CLI-986). Unlike {@link printContextAugmentationSkill}
+ * (used at install time, where a failure should abort), this never throws: any
+ * failure (non-zero exit, empty output) resolves to null so the calling hook
+ * can fail open and never block agent startup.
+ */
+export async function resolveContextAugmentationSessionStartText(
+  params: ContextAugmentationSessionStartParams,
+): Promise<string | null> {
+  const result = await runCagSubprocess(
+    params.binaryPath,
+    ['tool', 'print-session-start-context'],
+    {
+      projectRoot: params.workspaceDir ?? process.cwd(),
+      env: buildContextAugmentationEnv({
+        organization: params.organization,
+        projectKey: params.projectKey,
+        serverUrl: params.serverUrl,
+        token: params.token,
+        workspaceDir: params.workspaceDir,
+      }),
+    },
+  );
+  if (!result.ok || result.stdout.trim().length === 0) {
+    logger.debug(
+      `Vortex session-start context unavailable: ${result.failureMessage ?? 'empty output'}`,
+    );
+    return null;
   }
   return result.stdout;
 }

@@ -44,6 +44,7 @@ export type HookType =
   | 'PreToolUse'
   | 'PostToolUse'
   | 'SessionStart'
+  | 'SubagentStart'
   | 'UserPromptSubmit'
   | 'PreInvocation'
   | 'PostInvocation';
