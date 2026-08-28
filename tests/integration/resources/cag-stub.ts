@@ -41,7 +41,7 @@ import { appendFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 
 if (args[0] === '--version') {
-  // Match what verifyInstallation() expects (3- or 4-segment dotted version).
+  // verifyInstallation() requires a zero exit code.
   console.log('sonar-context-augmentation 0.0.0-test');
   process.exit(0);
 }
