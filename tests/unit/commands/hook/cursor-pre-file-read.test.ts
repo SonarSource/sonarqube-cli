@@ -43,7 +43,9 @@ const TEST_FILE = '/sonar-test/secret.ts';
 const SECRET_CONTENT = 'const secret = "ghp_test";';
 const { EXIT_CODE_SECRETS_FOUND } = analyzeSecrets;
 
-const ctx = new CommandInvocationContext();
+function makeCtx() {
+  return new CommandInvocationContext();
+}
 
 describe('cursorPreFileRead', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;
@@ -103,6 +105,7 @@ describe('cursorPreFileRead', () => {
       stderr: '',
     });
 
+    const ctx = makeCtx();
     await cursorPreFileRead(ctx);
 
     expect(runSecretsBinaryOnTextSpy).toHaveBeenCalledWith(
@@ -114,12 +117,13 @@ describe('cursorPreFileRead', () => {
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.permission).toBe('deny');
     expect(exitSpy).toHaveBeenCalledWith(2);
+    expect(ctx.telemetryFacts()).toHaveLength(1);
   });
 
   it('returns without scanning when file path and content are missing', async () => {
     readStdinJsonSpy.mockResolvedValue({});
 
-    await cursorPreFileRead(ctx);
+    await cursorPreFileRead(makeCtx());
 
     expect(runSecretsBinaryOnTextSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
@@ -129,7 +133,7 @@ describe('cursorPreFileRead', () => {
   it('scans file from disk when content is omitted but file_path is present', async () => {
     readStdinJsonSpy.mockResolvedValue({ file_path: TEST_FILE });
 
-    await cursorPreFileRead(ctx);
+    await cursorPreFileRead(makeCtx());
 
     expect(readFileSpy).toHaveBeenCalledWith(TEST_FILE, 'utf-8');
     expect(runSecretsBinaryOnTextSpy).toHaveBeenCalledWith(
@@ -142,7 +146,7 @@ describe('cursorPreFileRead', () => {
   it('denies with the unauthenticated message and exits 2 when auth is unavailable', async () => {
     resolveAuthSpy.mockResolvedValue(null);
 
-    await cursorPreFileRead(ctx);
+    await cursorPreFileRead(makeCtx());
 
     expect(runSecretsBinaryOnTextSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
@@ -155,7 +159,7 @@ describe('cursorPreFileRead', () => {
   it('denies with the binary-missing message and exits 2 when the analyzer is not installed', async () => {
     resolveSecretsBinaryPathSpy.mockReturnValue(null);
 
-    await cursorPreFileRead(ctx);
+    await cursorPreFileRead(makeCtx());
 
     expect(runSecretsBinaryOnTextSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
@@ -220,7 +224,7 @@ describe('cursorPreFileRead — .cursorignore side effect', () => {
 
     readStdinJsonSpy.mockResolvedValue({ file_path: filePath, content: SECRET_CONTENT });
 
-    await cursorPreFileRead(ctx);
+    await cursorPreFileRead(makeCtx());
 
     const ignoreContent = readFileSync(join(projectRoot, CURSOR_IGNORE_FILE), 'utf-8');
     expect(ignoreContent).toContain('src/secret.ts');
@@ -229,7 +233,7 @@ describe('cursorPreFileRead — .cursorignore side effect', () => {
   it('does not append to .cursorignore when no file path is available', async () => {
     readStdinJsonSpy.mockResolvedValue({ content: SECRET_CONTENT });
 
-    await cursorPreFileRead(ctx);
+    await cursorPreFileRead(makeCtx());
 
     expect(() => readFileSync(join(projectRoot, CURSOR_IGNORE_FILE))).toThrow();
   });

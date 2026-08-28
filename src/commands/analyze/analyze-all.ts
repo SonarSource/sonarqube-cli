@@ -175,6 +175,7 @@ async function runSecretsAndAgentic(
     ? null
     : await buildSqaaJsonReport(options, auth, {
         telemetryCallerCommand: SQAA_ANALYZE_CALLER_COMMAND,
+        telemetryCtx: ctx,
       });
 
   printCombinedReport(secrets?.report ?? null, agentic);

@@ -20,9 +20,10 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 
-import type {
-  CommandAuthenticatedInvocationContext,
-  CommandInvocationContext,
+import {
+  type CommandAuthenticatedInvocationContext,
+  type CommandInvocationContext,
+  TelemetryFact,
 } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
@@ -31,7 +32,6 @@ import { installSecretsBinary } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
 import type { SpawnResult, StdioMode } from '@/core/process/process.ts';
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
-import { emitTelemetryEvent } from '@/core/telemetry/telemetry-events.ts';
 import { blank, print, success, warn } from '@/core/ui';
 import { green, yellow } from '@/core/ui/colors.ts';
 
@@ -103,20 +103,21 @@ export function parseSecretsJson(stdout: string): SecretsJsonOutput {
 }
 
 /**
- * Emits a single CliAnalysisCompleted event for one sonar-secrets run, carrying `details`
- * (JSON-encoded blob when findings were reported, `""` otherwise). Telemetry write failures
- * are swallowed by the emit helper.
+ * Builds one CliAnalysisCompleted fact for a sonar-secrets run (`details` is a
+ * JSON blob when findings were reported, `""` otherwise).
  *
- * Pass `result: null` for a run that failed to execute (spawn error or timeout): the completed
- * event is emitted with `exit_code: null` and `failures_count: 1` so failed-to-run scans are
- * still counted. Prefer {@link scanAndEmitSecrets}, which handles both outcomes for callers.
+ * Pass `result: null` for a run that failed to execute (spawn error or timeout):
+ * `exit_code: null` and `failures_count: 1` so failed-to-run scans are still counted.
  */
-async function emitSecretsRunTelemetry(
+function buildSecretsAnalysisTelemetryFact(
   callerCommand: SecretsCallerCommand,
-  auth: ResolvedAuth,
   result: { exitCode: number | null; stdout: string } | null,
   durationMs: number,
-): Promise<SecretsJsonOutput> {
+  auth: ResolvedAuth,
+): {
+  parsed: SecretsJsonOutput;
+  fact: TelemetryFact<AnalysisCompletedPayload>;
+} {
   const parsed = result ? parseSecretsJson(result.stdout) : { issues: [] };
 
   const { issues, errors } = parsed;
@@ -142,58 +143,63 @@ async function emitSecretsRunTelemetry(
     });
   }
 
-  await emitTelemetryEvent(
-    CLI_ANALYSIS_COMPLETED,
-    {
-      caller_command: callerCommand,
-      analyzer: 'sonar-secrets',
-      analysis_id: analysisId,
-      findings_count: issues.length,
-      exit_code: exitCode,
-      errors_count: errors?.length ?? 0,
-      failures_count: failuresCount,
-      scan_duration_ms: durationMs,
-      details,
-    } satisfies AnalysisCompletedPayload,
-    { auth },
-  );
-
-  return parsed;
+  return {
+    parsed,
+    fact: new TelemetryFact(
+      CLI_ANALYSIS_COMPLETED,
+      {
+        caller_command: callerCommand,
+        analyzer: 'sonar-secrets',
+        analysis_id: analysisId,
+        findings_count: issues.length,
+        exit_code: exitCode,
+        errors_count: errors?.length ?? 0,
+        failures_count: failuresCount,
+        scan_duration_ms: durationMs,
+        details,
+      } satisfies AnalysisCompletedPayload,
+      { auth },
+    ),
+  };
 }
 
 /**
- * Runs one sonar-secrets spawn and emits CliAnalysisCompleted for either outcome:
- *  - the process ran (any exit code) → telemetry via {@link emitSecretsRunTelemetry};
+ * Runs one sonar-secrets spawn and records CliAnalysisCompleted for either outcome:
+ *  - the process ran (any exit code) → telemetry via {@link buildSecretsAnalysisTelemetryFact};
  *  - the process failed to run (spawn error or timeout, i.e. the promise rejected) →
  *    a failures_count:1 event with exit_code null, then the error is re-thrown.
  *
- * Re-throwing preserves each caller's own fail-open / fail-closed / block handling; because the
- * emit happens first, failed runs are recorded even when the caller then throws (e.g. git hooks
- * failing closed under environment-based auth).
+ * Telemetry is always deferred via {@link CommandInvocationContext.recordTelemetry} for
+ * `postAction` commit. `SonarCommand.runCommand` catches handler throws, so Commander
+ * still runs `postAction` and the buffer is drained. Re-throwing preserves each
+ * caller's fail-open / fail-closed handling; recording happens first so failed
+ * runs are still counted.
  */
 export async function scanAndEmitSecrets(
   callerCommand: SecretsCallerCommand,
   auth: ResolvedAuth,
   run: () => Promise<SpawnResult>,
-  _ctx: CommandInvocationContext,
+  ctx: CommandInvocationContext,
 ): Promise<{ result: SpawnResult; parsed: SecretsJsonOutput }> {
   const start = performance.now();
   try {
     const result = await run();
-    const parsed = await emitSecretsRunTelemetry(
+    const { parsed, fact } = buildSecretsAnalysisTelemetryFact(
       callerCommand,
-      auth,
       result,
       Math.round(performance.now() - start),
+      auth,
     );
+    ctx.recordTelemetry(fact);
     return { result, parsed };
   } catch (err) {
-    await emitSecretsRunTelemetry(
+    const { fact } = buildSecretsAnalysisTelemetryFact(
       callerCommand,
-      auth,
       null,
       Math.round(performance.now() - start),
-    ).catch(() => undefined);
+      auth,
+    );
+    ctx.recordTelemetry(fact);
     throw err;
   }
 }

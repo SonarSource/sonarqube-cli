@@ -18,11 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import {
-  emitSqaaAnalysisTelemetry,
-  type SqaaTelemetryCallerCommand,
-  tallyFromSqaaJsonReport,
-} from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { timed } from '@/core/observability/timed.ts';
 import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
@@ -34,6 +29,7 @@ import { recheckVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 import type { RunContext, RunTally } from './sqaa-analysis.ts';
 import { runAnalyses } from './sqaa-analysis.ts';
+import { recordSqaaAnalysisTelemetry, tallyFromSqaaJsonReport } from './sqaa-analysis-telemetry.ts';
 import { fetchWithRetry, readSqaaFileContent, toRelativePosixPath } from './sqaa-api.ts';
 import type { CloudAuth } from './sqaa-auth.ts';
 import { resolveCloudAuthAndProject } from './sqaa-auth.ts';
@@ -71,32 +67,13 @@ function resolveSqaaCommandExitCode(
   return 0;
 }
 
-async function emitSqaaTelemetryIfRequested(
-  telemetryCallerCommand: SqaaTelemetryCallerCommand | undefined,
-  auth: ResolvedAuth,
-  tally: RunTally,
-  durationMs: number,
-  exitCode: number,
-  agentSessionId?: string | null,
-): Promise<void> {
-  if (!telemetryCallerCommand) return;
-  await emitSqaaAnalysisTelemetry(
-    telemetryCallerCommand,
-    auth,
-    tally,
-    durationMs,
-    exitCode,
-    agentSessionId,
-  );
-}
-
-export async function finishSqaaTelemetryFromReport(
+export function finishSqaaTelemetryFromReport(
   report: SqaaJsonReport,
-  auth: ResolvedAuth,
   runOptions: AnalyzeSqaaRunOptions,
   durationMs: number,
-): Promise<void> {
-  if (!runOptions.telemetryCallerCommand) return;
+): void {
+  const { telemetryCallerCommand, telemetryCtx, auth } = runOptions;
+  if (!telemetryCallerCommand || !telemetryCtx || !auth) return;
   const exitCode =
     runOptions.telemetryProcessExitCode ??
     resolveSqaaCommandExitCode(
@@ -104,21 +81,17 @@ export async function finishSqaaTelemetryFromReport(
       report.summary.totalFailures,
       report.globalError !== undefined,
     );
-  await emitSqaaTelemetryIfRequested(
-    runOptions.telemetryCallerCommand,
+  recordSqaaAnalysisTelemetry(
+    telemetryCtx,
     auth,
+    telemetryCallerCommand,
     tallyFromSqaaJsonReport(report),
     durationMs,
     exitCode,
-    runOptions.agentSessionId,
   );
 }
 
-async function finishSqaaRun(
-  tally: RunTally,
-  durationMs: number,
-  options: SqaaBatchRunOptions,
-): Promise<void> {
+function finishSqaaRun(tally: RunTally, durationMs: number, options: SqaaBatchRunOptions): void {
   const hasGlobalError = tally.globalError !== undefined;
   const exitCode = resolveSqaaCommandExitCode(
     tally.totalIssues,
@@ -126,14 +99,16 @@ async function finishSqaaRun(
     hasGlobalError,
   );
   applyExitCode(tally.totalIssues, tally.totalFailures, hasGlobalError);
-  await emitSqaaTelemetryIfRequested(
-    options.telemetryCallerCommand,
-    options.auth,
-    tally,
-    durationMs,
-    exitCode,
-    options.agentSessionId,
-  );
+  if (options.telemetryCallerCommand && options.telemetryCtx) {
+    recordSqaaAnalysisTelemetry(
+      options.telemetryCtx,
+      options.auth,
+      options.telemetryCallerCommand,
+      tally,
+      durationMs,
+      exitCode,
+    );
+  }
 }
 
 /**
@@ -234,6 +209,7 @@ export async function runSqaaAnalysis(
     wireDepth,
     displayDepth = 'STANDARD',
     telemetryCallerCommand,
+    telemetryCtx,
   } = options;
 
   const resolution = await resolveCloudAuthAndProject(auth, explicitProject);
@@ -267,18 +243,8 @@ export async function runSqaaAnalysis(
     displaySingleFileReport(report, displayDepth);
   }
 
-  const exitCode = resolveSqaaCommandExitCode(
-    report.summary.totalIssues,
-    report.summary.totalFailures,
-  );
   applyExitCode(report.summary.totalIssues, report.summary.totalFailures);
-  await emitSqaaTelemetryIfRequested(
-    telemetryCallerCommand,
-    auth,
-    tallyFromSqaaJsonReport(report),
-    durationMs,
-    exitCode,
-  );
+  finishSqaaTelemetryFromReport(report, { telemetryCallerCommand, telemetryCtx, auth }, durationMs);
 }
 
 export async function runSqaaAnalysisOnExplicitFiles(
@@ -296,7 +262,7 @@ export async function runSqaaAnalysisOnExplicitFiles(
     );
     const report = buildJsonReport(tally, [], allPaths, cwd, displayDepth);
     await printSqaaJsonReport(report, options.auth);
-    await finishSqaaRun(tally, durationMs, options);
+    finishSqaaRun(tally, durationMs, options);
     return;
   }
 
@@ -317,7 +283,7 @@ export async function runSqaaAnalysisOnExplicitFiles(
     await printVortexUnavailableForForbidden(options.auth);
   }
   printSqaaTextReport({ tally, allPaths, ignoredPaths: [], analysisDepth: displayDepth });
-  await finishSqaaRun(tally, durationMs, options);
+  finishSqaaRun(tally, durationMs, options);
 }
 
 export async function runSqaaAnalysisOnFiles(
@@ -335,7 +301,7 @@ export async function runSqaaAnalysisOnFiles(
     );
     const report = buildJsonReport(tally, ignored, allPaths, repoRoot, displayDepth);
     await printSqaaJsonReport(report, options.auth);
-    await finishSqaaRun(tally, durationMs, options);
+    finishSqaaRun(tally, durationMs, options);
     return;
   }
 
@@ -357,5 +323,5 @@ export async function runSqaaAnalysisOnFiles(
     await printVortexUnavailableForForbidden(options.auth);
   }
   printSqaaTextReport({ tally, allPaths, ignoredPaths, analysisDepth: displayDepth });
-  await finishSqaaRun(tally, durationMs, options);
+  finishSqaaRun(tally, durationMs, options);
 }

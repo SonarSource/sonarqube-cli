@@ -32,17 +32,13 @@ import {
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
 import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
-import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 
 import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
-import {
-  readAnalysisEvents,
-  readCommandEvents,
-  type StoredAnalysisCompletedEvent,
-} from '../../../_common/telemetry-helpers';
+import type { StoredAnalysisCompletedEvent } from '../../../_common/telemetry-helpers';
+import { readAnalysisEvents, readCommandEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
 import { commitFile, git, initGitRepo, stageFile } from '../hook/git-test-helpers';
 import {
@@ -1101,10 +1097,6 @@ describe('analyze agentic — analysis telemetry', () => {
     await harness.dispose();
   });
 
-  function enableFlushTelemetry(): void {
-    harness.withExtraEnv({ [TELEMETRY_FLUSH_MODE_ENV]: '1' });
-  }
-
   it(
     'writes CliAnalysisCompleted to telemetry-events.ndjson on a clean run',
     async () => {
@@ -1114,7 +1106,6 @@ describe('analyze agentic — analysis telemetry', () => {
         .withSqaaResponse({ issues: [] })
         .start();
 
-      enableFlushTelemetry();
       harness
         .state()
         .withTelemetryEnabled()
@@ -1151,7 +1142,6 @@ describe('analyze agentic — analysis telemetry', () => {
         .withSqaaResponse({ issues: [] })
         .start();
 
-      enableFlushTelemetry();
       harness
         .state()
         .withTelemetryEnabled()
@@ -1185,7 +1175,6 @@ describe('analyze agentic — analysis telemetry', () => {
         })
         .start();
 
-      enableFlushTelemetry();
       harness
         .state()
         .withTelemetryEnabled()
@@ -1220,9 +1209,9 @@ describe('analyze agentic — analysis telemetry', () => {
         .withProject(TEST_PROJECT)
         .start();
 
-      // Deliberately do NOT set TELEMETRY_FLUSH_MODE_ENV: it makes storeEvent() (which owns
-      // CliCommandExecuted) no-op, since it also doubles as the guard that stops the detached
-      // flush worker from recursively emitting its own CliCommandExecuted event.
+      // Deliberately do NOT set TELEMETRY_FLUSH_MODE_ENV: it makes commitTelemetryFacts()
+      // no-op, since it also doubles as the guard that stops the detached flush worker
+      // from recursively emitting its own events.
       harness
         .state()
         .withTelemetryEnabled()
@@ -1261,10 +1250,6 @@ describe('sonar analyze — analysis telemetry', () => {
     await harness.dispose();
   });
 
-  function enableFlushTelemetry(): void {
-    harness.withExtraEnv({ [TELEMETRY_FLUSH_MODE_ENV]: '1' });
-  }
-
   function readCompletedEventsForAnalyzer(
     analyzer: 'sqaa' | 'sonar-secrets',
   ): StoredAnalysisCompletedEvent[] {
@@ -1282,7 +1267,6 @@ describe('sonar analyze — analysis telemetry', () => {
         .withSqaaResponse({ issues: [] })
         .start();
 
-      enableFlushTelemetry();
       harness
         .state()
         .withTelemetryEnabled()
@@ -1316,7 +1300,6 @@ describe('sonar analyze — analysis telemetry', () => {
         .withSqaaResponse({ issues: [] })
         .start();
 
-      enableFlushTelemetry();
       harness
         .state()
         .withTelemetryEnabled()
@@ -1349,8 +1332,8 @@ describe('sonar analyze — analysis telemetry', () => {
         .withProject(TEST_PROJECT)
         .start();
 
-      // Do NOT enable flush mode: TELEMETRY_FLUSH_MODE_ENV no-ops storeEvent(), which owns
-      // CliCommandExecuted, so the command event would never be written.
+      // Do NOT enable flush mode: TELEMETRY_FLUSH_MODE_ENV no-ops commitTelemetryFacts(),
+      // so neither analysis events nor CliCommandExecuted would be written.
       harness
         .state()
         .withTelemetryEnabled()

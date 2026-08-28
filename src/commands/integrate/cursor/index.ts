@@ -54,5 +54,6 @@ export async function integrateCursor(
     context: integrateCtx,
     options,
     auth,
+    ctx,
   });
 }

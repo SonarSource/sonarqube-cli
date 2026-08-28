@@ -20,10 +20,6 @@
 
 import { type Command, Help, InvalidArgumentError } from 'commander';
 
-import {
-  SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
-  SQAA_VERIFY_CALLER_COMMAND,
-} from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
@@ -32,7 +28,7 @@ import { GENERIC_HTTP_METHODS } from '@/core/server/client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { tryLoadState } from '@/core/state/state-repository.ts';
 import { flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
-import { createAgentSessionSlot, resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
+import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
 import { blank, error, warn } from '@/core/ui';
 import { parseInteger } from '@/core/ui/parsing.ts';
 
@@ -52,14 +48,21 @@ import {
   type AnalyzeSqaaRunOptions,
   VALID_FORMATS as SQAA_FORMATS,
 } from './analyze/sqaa.ts';
+import {
+  SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
+  SQAA_VERIFY_CALLER_COMMAND,
+} from './analyze/sqaa-analysis-telemetry.ts';
 import { SQAA_DEPTH_CHOICES } from './analyze/sqaa-depth.ts';
 import { collectSqaaFileOption } from './analyze/sqaa-file-arg.ts';
 import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './api/api.ts';
 import { authLogin, type AuthLoginOptions } from './auth/login.ts';
 import { authLogout } from './auth/logout.ts';
 import { authStatus } from './auth/status.ts';
-import { setPassthroughSubcommand, storeEvent } from './command-executed-telemetry.ts';
-import { type CommandInvocationContext } from './command-invocation-context.ts';
+import {
+  buildCommandExecutedFact,
+  setPassthroughSubcommand,
+} from './command-executed-telemetry.ts';
+import type { CommandInvocationContext } from './command-invocation-context.ts';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
 import { isTableFormatOption } from './formatting-options.ts';
@@ -114,6 +117,7 @@ import {
 } from './sonar-command.ts';
 import { systemReset, type SystemResetOptions } from './system/reset.ts';
 import { systemStatus, type SystemStatusOptions } from './system/status.ts';
+import { commitTelemetryFacts } from './telemetry-facts.ts';
 import { updateVersion, type UpdateVersionOptions } from './update';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
@@ -144,9 +148,9 @@ export interface CreateCommandTreeOptions {
 
 /** Registers the full command tree for the given runtime (sync). */
 function buildCommandTree(runtime: CliRuntime): SonarCommand {
-  // Per-tree slot for agent session correlation. Hook handlers write ids when
-  // present; postAction resolves (env fallback) before telemetry flush.
-  const agentSession = createAgentSessionSlot();
+  // Hook handlers write an agent-native session id when present; postAction
+  // resolves (env fallback) before telemetry flush.
+  let capturedAgentSessionId: string | null = null;
   const COMMAND_TREE = new SonarCommand({ runtime });
 
   const handleHookInvocation =
@@ -156,7 +160,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     async (ctx, ...args) => {
       const { agentSessionId } = await run(ctx, ...args);
       if (agentSessionId != null) {
-        agentSession.id = agentSessionId;
+        capturedAgentSessionId = agentSessionId;
       }
     };
 
@@ -820,15 +824,15 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     if (state) initSentry(state);
   });
 
-  // Collect a telemetry event after every command action.
+  // Emit handler facts plus CliCommandExecuted in one commit.
   COMMAND_TREE.hook('postAction', async (_thisCommand, actionCommand) => {
-    // Resolve/cache the agent session id for this invocation (env fallback when
-    // no hook id), then pass it into telemetry.
-    await storeEvent(
-      actionCommand,
-      (process.exitCode ?? 0) === 0,
-      resolveAgentSessionId(agentSession),
-    );
+    const handlerFacts =
+      actionCommand instanceof SonarCommand
+        ? (actionCommand.invocationContext?.telemetryFacts() ?? [])
+        : [];
+    await commitTelemetryFacts([...handlerFacts, await buildCommandExecutedFact(actionCommand)], {
+      agentSessionId: resolveAgentSessionId(capturedAgentSessionId),
+    });
     await COMMAND_TREE.updateNotifier.maybeNotify(actionCommand);
   });
 

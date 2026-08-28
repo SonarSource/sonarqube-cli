@@ -68,6 +68,10 @@ const AUTH: ResolvedAuth = {
 
 const BASE_DIR = join(tmpdir(), 'manifest-guard-repo');
 
+function makeCtx() {
+  return new CommandInvocationContext();
+}
+
 // Spawner that returns the given manifest file list from `discover-manifests`.
 function discoverSpawner(files: unknown[]): ScaScannerSpawner {
   return {
@@ -88,8 +92,6 @@ function stubRunSecretsBinary(result: SpawnResult) {
   return spy;
 }
 
-const ctx = new CommandInvocationContext();
-
 async function runGuard(deps: {
   files: unknown[];
   secretsInstaller: SecretsInstaller;
@@ -101,7 +103,7 @@ async function runGuard(deps: {
     scaInstaller: okScaInstaller,
     scaSpawner: discoverSpawner(deps.files),
     secretsInstaller: deps.secretsInstaller,
-    ctx,
+    ctx: makeCtx(),
   });
 }
 
