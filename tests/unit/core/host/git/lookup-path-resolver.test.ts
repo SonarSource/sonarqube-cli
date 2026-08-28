@@ -88,18 +88,17 @@ describe('resolveLookupPaths', () => {
     clearGitStdoutCache();
   });
 
-  it('climbs to the filesystem root when not inside a git repository', async () => {
+  it('is bounded to the start dir itself when not inside a git repository', async () => {
+    // Outside git, nothing bounds a climb to a project — climbing to the filesystem
+    // root would let a mapping/config file sitting in an unrelated ancestor directory
+    // resolve for any subdirectory below it. Restrict to the start dir alone.
     mockGitResponses({ 'rev-parse --show-toplevel': null });
 
     const paths = await resolveLookupPaths(STANDALONE_PROJECT);
 
-    expect(paths[0]).toEqual({
-      checkPath: canon(STANDALONE_PROJECT),
-      projectRoot: canon(STANDALONE_PROJECT),
-    });
-    const last = paths.at(-1);
-    expect(dirname(last!.checkPath)).toBe(last!.checkPath);
-    expect(last!.projectRoot).toBe(last!.checkPath);
+    expect(paths).toEqual([
+      { checkPath: canon(STANDALONE_PROJECT), projectRoot: canon(STANDALONE_PROJECT) },
+    ]);
   });
 
   it('climbs only up to the repo root on the main working tree', async () => {

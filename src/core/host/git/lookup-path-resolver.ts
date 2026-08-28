@@ -68,15 +68,16 @@ function asLookupPaths(paths: string[]): LookupPath[] {
 }
 
 /**
- * Nearest-first directories to check for `startDir`: climbs to the repo root (or the
- * filesystem root outside git); from a linked worktree, also appends the main tree's
- * offset-equivalent climb so a mapping recorded only there still resolves.
+ * Nearest-first directories to check for `startDir`: climbs to the repo root, or — outside
+ * git, where nothing bounds a climb to a project — just `startDir` itself; from a linked
+ * worktree, also appends the main tree's offset-equivalent climb so a mapping recorded only
+ * there still resolves.
  */
 export async function resolveLookupPaths(startDir: string): Promise<LookupPath[]> {
   const canonicalStart = canonicalizePath(startDir);
   const currentRepoRoot = await resolveGitRepoRoot(canonicalStart);
   if (!currentRepoRoot) {
-    return asLookupPaths(buildDirectoryClimb(canonicalStart));
+    return asLookupPaths(buildDirectoryClimb(canonicalStart, canonicalStart));
   }
 
   const climb = buildDirectoryClimb(canonicalStart, currentRepoRoot);
