@@ -58,7 +58,7 @@ export function introAgentIntegration(agentDisplayName: string): void {
 
 export async function discoverIntegrateProject(auth: ResolvedAuth): Promise<DiscoveredProject> {
   return withSpinner('Discovering project...', () =>
-    discoverProject(process.cwd(), true, { auth }),
+    discoverProject(process.cwd(), { auth, silent: true }),
   );
 }
 

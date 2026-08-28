@@ -76,7 +76,7 @@ async function handleSqaaPostToolUse(
   }
 
   const projectKey =
-    explicitProjectKey ?? (await discoverProject(process.cwd(), true, { auth })).projectKey;
+    explicitProjectKey ?? (await discoverProject(process.cwd(), { auth, silent: true })).projectKey;
   if (!projectKey) {
     return { decision: 'none' };
   }

@@ -54,7 +54,7 @@ async function resolveDepRisksProjectKey(
   if (!options.dependencyRisks || !auth) {
     return undefined;
   }
-  const discovered = await discoverProject(process.cwd(), true, { auth });
+  const discovered = await discoverProject(process.cwd(), { auth, silent: true });
   return discovered.projectKey;
 }
 

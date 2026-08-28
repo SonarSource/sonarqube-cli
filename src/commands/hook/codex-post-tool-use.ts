@@ -73,7 +73,7 @@ export async function codexPostToolUse(
   }
 
   const projectKey =
-    options.project ?? (await discoverProject(process.cwd(), true, { auth })).projectKey;
+    options.project ?? (await discoverProject(process.cwd(), { auth, silent: true })).projectKey;
   if (!projectKey) return { agentSessionId: fromHook };
 
   noteProject(auth, projectKey);

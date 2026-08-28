@@ -589,7 +589,7 @@ describe('integrateGit', () => {
       spawnSpy.mockRestore();
       rmSync(TEMP_DIR, { recursive: true, force: true });
     }
-    expect(discoverProjectSpy).toHaveBeenCalledWith(TEMP_DIR, true, { auth: MOCK_AUTH });
+    expect(discoverProjectSpy).toHaveBeenCalledWith(TEMP_DIR, { auth: MOCK_AUTH, silent: true });
     expect(caughtError).toBeInstanceOf(CommandFailedError);
     expect((caughtError as Error).message).toContain('Installation cancelled');
   });

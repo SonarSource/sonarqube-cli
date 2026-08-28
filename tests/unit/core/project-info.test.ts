@@ -356,7 +356,7 @@ describe('discoverProject', () => {
       organization: 'my-org',
     });
 
-    const result = await discoverProject(testDir, false, {
+    const result = await discoverProject(testDir, {
       auth: {
         token: 'token',
         serverUrl: 'https://sonarcloud.io',
@@ -384,7 +384,7 @@ describe('discoverProject', () => {
       serverUrl: 'https://sonarcloud.io',
     });
 
-    const result = await discoverProject(testDir, false, {
+    const result = await discoverProject(testDir, {
       auth: { token: 't', serverUrl: 'https://sonarcloud.io', connectionType: 'cloud' },
     });
     expect(result.projectKey).toBe('local_key');
@@ -398,9 +398,10 @@ describe('discoverProject', () => {
       serverUrl: 'https://sonarcloud.io',
     });
 
-    await discoverProject(testDir, true, {
+    await discoverProject(testDir, {
       auth: { token: 't', serverUrl: 'https://sonarcloud.io', connectionType: 'cloud' },
       tryGitRemoteBinding: false,
+      silent: true,
     });
     expect(remoteSpy).not.toHaveBeenCalled();
   });
@@ -531,7 +532,7 @@ describe('discoverProject', () => {
         serverUrl: 'https://sonarcloud.io',
       });
 
-      const result = await discoverProject(testDir, false, {
+      const result = await discoverProject(testDir, {
         auth: { token: 't', serverUrl: 'https://sonarcloud.io', connectionType: 'cloud' },
       });
 
@@ -547,7 +548,7 @@ describe('discoverProject', () => {
         serverUrl: 'https://sonarcloud.io',
       });
 
-      const result = await discoverProject(testDir, false, {
+      const result = await discoverProject(testDir, {
         auth: { token: 't', serverUrl: 'https://sonarcloud.io', connectionType: 'cloud' },
       });
 
@@ -664,7 +665,7 @@ describe('discoverProject', () => {
         ]);
         withActiveConnection(state);
 
-        const result = await discoverProject(testDir, false, {
+        const result = await discoverProject(testDir, {
           auth: {
             token: 't',
             serverUrl: 'https://env-auth.example.com',

@@ -84,6 +84,8 @@ export interface DiscoverProjectOptions {
   auth?: ResolvedAuth | null;
   /** When false, skips server lookup even if a git remote is present. Defaults to true. */
   tryGitRemoteBinding?: boolean;
+  /** Suppresses the "Found ..." stderr hints. Defaults to false. */
+  silent?: boolean;
 }
 
 export interface SonarProperties {
@@ -100,7 +102,7 @@ async function discoverLocalConfig(
 ): Promise<Pick<DiscoveredProject, 'serverUrl' | 'organization'>> {
   const config: DiscoveredProject = { projectRoot: canonicalizePath(startDir), configSources: [] };
   const lookupPaths = await resolveLookupPaths(startDir);
-  await applyLocalConfigAcrossLookupPaths(config, lookupPaths, silent);
+  await applyLocalConfigAcrossLookupPaths(config, lookupPaths, { silent });
   return config;
 }
 
@@ -146,7 +148,6 @@ async function loadLocalProjectConfig(dir: string): Promise<LocalProjectConfig> 
  */
 export async function discoverProject(
   startDir: string,
-  silent = false,
   options: DiscoverProjectOptions = {},
 ): Promise<DiscoveredProject> {
   const invocationDir = canonicalizePath(startDir);
@@ -173,12 +174,12 @@ export async function discoverProject(
 
     const resolved =
       (knownMappings !== undefined &&
-        applyKnownServerProjectMapping(config, lookupPaths, knownMappings, silent, options.auth)) ||
-      (await applyLocalConfigAcrossLookupPaths(config, lookupPaths, silent));
+        applyKnownServerProjectMapping(config, lookupPaths, knownMappings, options)) ||
+      (await applyLocalConfigAcrossLookupPaths(config, lookupPaths, options));
 
     if (!resolved) {
       const gitRemote = repoRoot ? await getGitRemote(repoRoot) : '';
-      await applyGitRemoteBindingFromRemote(config, gitRemote, options, silent);
+      await applyGitRemoteBindingFromRemote(config, gitRemote, options);
     }
   } catch (error) {
     // No caller treats this as fallible — degrade to whatever was already resolved
@@ -207,7 +208,7 @@ export async function resolveProjectKey(
     return explicitProject;
   }
 
-  const discovered = await discoverProject(process.cwd(), true, { auth });
+  const discovered = await discoverProject(process.cwd(), { auth, silent: true });
   if (discovered.projectKey) {
     if (!silent) {
       print(`     Using auto-detected project key: ${discovered.projectKey}`, 'stderr');
@@ -224,7 +225,7 @@ export async function resolveProjectKey(
 function applyLocalSonarProperties(
   config: DiscoveredProject,
   local: LocalProjectConfig,
-  silent: boolean,
+  options: DiscoverProjectOptions,
 ): void {
   if (!local.hasSonarProps || !local.sonarPropsData) {
     return;
@@ -235,7 +236,7 @@ function applyLocalSonarProperties(
   config.projectKey = local.sonarPropsData.projectKey;
   config.organization = local.sonarPropsData.organization;
 
-  if (silent) {
+  if (options.silent) {
     return;
   }
   const fields = formatConfigFields(config.serverUrl, config.projectKey, config.organization);
@@ -248,7 +249,7 @@ function applyLocalSonarProperties(
 function applySonarLintConfig(
   config: DiscoveredProject,
   local: LocalProjectConfig,
-  silent: boolean,
+  options: DiscoverProjectOptions,
 ): boolean {
   if (!local.hasSonarLintConfig || !local.sonarLintData || !local.sonarLintConfigPath) {
     return !!config.projectKey;
@@ -259,7 +260,7 @@ function applySonarLintConfig(
   config.projectKey = config.projectKey || local.sonarLintData.projectKey;
   config.organization = config.organization || local.sonarLintData.organization;
 
-  if (!silent) {
+  if (!options.silent) {
     const fields = formatConfigFields(
       local.sonarLintData.serverURL,
       local.sonarLintData.projectKey,
@@ -277,7 +278,7 @@ function applySonarLintConfig(
 async function applyLocalConfigAcrossLookupPaths(
   config: DiscoveredProject,
   lookupPaths: LookupPath[],
-  silent: boolean,
+  options: DiscoverProjectOptions,
 ): Promise<boolean> {
   for (const { checkPath, projectRoot } of lookupPaths) {
     let local: LocalProjectConfig;
@@ -293,8 +294,8 @@ async function applyLocalConfigAcrossLookupPaths(
       continue;
     }
 
-    applyLocalSonarProperties(config, local, silent);
-    if (applySonarLintConfig(config, local, silent)) {
+    applyLocalSonarProperties(config, local, options);
+    if (applySonarLintConfig(config, local, options)) {
       config.projectRoot = projectRoot;
       return true;
     }
@@ -367,15 +368,14 @@ function applyKnownServerProjectMapping(
   config: DiscoveredProject,
   lookupPaths: LookupPath[],
   known: KnownMappingsResult,
-  silent: boolean,
-  auth?: ResolvedAuth | null,
+  options: DiscoverProjectOptions,
 ): boolean {
   const match = matchKnownServerProjectMapping(lookupPaths, known.mappings);
   if (!match) {
     return false;
   }
 
-  const { serverUrl, orgKey } = resolveMappingConnection(match.feature, known.state, auth);
+  const { serverUrl, orgKey } = resolveMappingConnection(match.feature, known.state, options.auth);
   if (!serverUrl) {
     return false;
   }
@@ -387,7 +387,7 @@ function applyKnownServerProjectMapping(
   config.projectRoot = match.matchedPath;
   config.integrationDir = match.feature.targetRoot;
 
-  if (!silent) {
+  if (!options.silent) {
     const fields = formatConfigFields(config.serverUrl, config.projectKey, config.organization);
     if (fields) {
       print(`Found ${KNOWN_SERVER_PROJECT_MAPPING_SOURCE}: ${fields}`);
@@ -401,7 +401,6 @@ async function applyGitRemoteBindingFromRemote(
   config: DiscoveredProject,
   gitRemote: string,
   options: DiscoverProjectOptions,
-  silent: boolean,
 ): Promise<void> {
   const tryGitRemoteBinding = options.tryGitRemoteBinding !== false;
   if (!tryGitRemoteBinding || !gitRemote) {
@@ -423,7 +422,7 @@ async function applyGitRemoteBindingFromRemote(
   config.projectKey = remoteBinding.projectKey;
   config.organization = config.organization || remoteBinding.organization;
 
-  if (silent) {
+  if (options.silent) {
     return;
   }
 

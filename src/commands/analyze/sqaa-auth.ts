@@ -124,7 +124,7 @@ export async function resolveSqaaProjectKey(
   auth: ResolvedAuth,
   projectRoot?: string,
 ): Promise<string | null> {
-  const discovered = await discoverProject(projectRoot ?? process.cwd(), true, { auth });
+  const discovered = await discoverProject(projectRoot ?? process.cwd(), { auth, silent: true });
   if (!discovered.projectKey) {
     logger.debug('Vortex analysis skipped: no project key found');
   }

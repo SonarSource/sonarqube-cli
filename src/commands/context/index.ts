@@ -89,7 +89,7 @@ async function resolveRecordedContextAugmentationConfig(
   cwd: string,
   auth: ResolvedAuth,
 ): Promise<RecordedContextAugmentationConfig> {
-  const discovered = await discoverProject(cwd, true, { auth });
+  const discovered = await discoverProject(cwd, { auth, silent: true });
   if (!discovered.projectKey) {
     return {};
   }
