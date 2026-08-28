@@ -27,6 +27,7 @@ import {
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
+import * as projectInfo from '@/core/project-info.ts';
 
 import * as sqaaModule from '../../../../src/commands/analyze/sqaa.ts';
 import { codexPostToolUse } from '../../../../src/commands/hook/codex-post-tool-use.ts';
@@ -40,6 +41,7 @@ describe('codexPostToolUse', () => {
   let emitSqaaAnalysisTelemetrySpy: ReturnType<typeof spyOn>;
   let readStdinJsonSpy: ReturnType<typeof spyOn>;
   let ctx: CommandInvocationContext;
+  let discoverProjectSpy: ReturnType<typeof spyOn>;
   const originalStdinIsTTY = process.stdin.isTTY;
 
   beforeEach(() => {
@@ -67,6 +69,13 @@ describe('codexPostToolUse', () => {
       sqaaTelemetry,
       'recordSqaaAnalysisTelemetry',
     ).mockImplementation(() => {});
+    // Only exercised when a test omits `project` — an explicit project short-circuits it.
+    discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
+      repoRoot: process.cwd(),
+      projectRoot: process.cwd(),
+      projectKey: undefined,
+      configSources: [],
+    });
   });
 
   afterEach(() => {
@@ -75,6 +84,7 @@ describe('codexPostToolUse', () => {
     buildSqaaJsonReportSpy.mockRestore();
     emitSqaaAnalysisTelemetrySpy.mockRestore();
     readStdinJsonSpy.mockRestore();
+    discoverProjectSpy.mockRestore();
     Object.defineProperty(process.stdin, 'isTTY', {
       configurable: true,
       value: originalStdinIsTTY,

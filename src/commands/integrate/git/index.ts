@@ -204,7 +204,7 @@ async function resolveProjectKey(
     return options;
   }
 
-  const discovered = await discoverProject(root, true, { auth });
+  const discovered = await discoverProject(root, { auth, silent: true });
   if (discovered.projectKey) {
     phase('Project', [phaseItem('Key', 'done', discovered.projectKey)]);
     return { ...options, project: discovered.projectKey };

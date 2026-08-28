@@ -120,9 +120,9 @@ async function buildProjectItems(
   options: AgentPreflightSummaryOptions,
   tokenStatus: TokenStatus,
 ): Promise<PhaseItem[]> {
-  const items: PhaseItem[] = [phaseItem('Root', 'done', options.project.rootDir)];
+  const items: PhaseItem[] = [phaseItem('Root', 'done', options.project.projectRoot)];
 
-  if (options.project.isGitRepo) {
+  if (options.project.repoRoot) {
     items.push(phaseItem('Git repository', 'done', 'detected'));
   } else {
     items.push(phaseItem('Git repository', 'warn', 'not detected'));

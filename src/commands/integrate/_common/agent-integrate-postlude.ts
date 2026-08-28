@@ -68,11 +68,12 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
   });
   const { installRoot, installScope } = resolveIntegrateInstallTarget(
     context.isGlobal,
-    context.project.rootDir,
+    context.project.projectRoot,
   );
-  const attrs = await buildRecordedIntegrationAttrs({
+  const attrs = buildRecordedIntegrationAttrs({
     baseAttrs: { projectKey: context.projectKey ?? null },
-    projectRoot: context.project.rootDir,
+    projectRoot: context.project.projectRoot,
+    mainRepoRoot: context.project.mainRepoRoot,
     serverUrl: context.serverUrl,
     orgKey: context.organization,
     contextAugmentation: vortex,
@@ -83,7 +84,7 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
     options: {
       ...options,
       ...params.featureOptions,
-      projectRoot: context.project.rootDir,
+      projectRoot: context.project.projectRoot,
       vortexDisposition: vortex.disposition,
     },
     targetRoot: installRoot,

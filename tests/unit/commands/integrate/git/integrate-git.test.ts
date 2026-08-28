@@ -357,9 +357,9 @@ describe('integrateGit', () => {
     clearMockUiCalls();
     findGitRootSpy = spyOn(gitDiscovery, 'findGitRoot');
     discoverProjectSpy = spyOn(discovery, 'discoverProject').mockResolvedValue({
-      rootDir: TEMP_DIR,
+      repoRoot: TEMP_DIR,
+      projectRoot: TEMP_DIR,
       projectKey: undefined,
-      isGitRepo: true,
       configSources: [],
     });
     printGitPreflightSummarySpy = spyOn(
@@ -571,9 +571,9 @@ describe('integrateGit', () => {
     mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
     findGitRootSpy.mockReturnValue({ gitRoot: TEMP_DIR, isGit: true });
     discoverProjectSpy.mockResolvedValue({
-      rootDir: TEMP_DIR,
+      repoRoot: TEMP_DIR,
+      projectRoot: TEMP_DIR,
       projectKey: 'my-project',
-      isGitRepo: true,
       configSources: [],
     });
     const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
@@ -589,7 +589,7 @@ describe('integrateGit', () => {
       spawnSpy.mockRestore();
       rmSync(TEMP_DIR, { recursive: true, force: true });
     }
-    expect(discoverProjectSpy).toHaveBeenCalledWith(TEMP_DIR, true, { auth: MOCK_AUTH });
+    expect(discoverProjectSpy).toHaveBeenCalledWith(TEMP_DIR, { auth: MOCK_AUTH, silent: true });
     expect(caughtError).toBeInstanceOf(CommandFailedError);
     expect((caughtError as Error).message).toContain('Installation cancelled');
   });

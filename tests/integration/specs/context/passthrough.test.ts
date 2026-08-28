@@ -26,13 +26,13 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
+import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
+import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
+import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
+import { COPILOT_INTEGRATION_ID } from '@/commands/integrate/copilot/declaration.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import type { CliState, InstalledIntegrationFeature } from '@/core/state/state.ts';
 
-import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/commands/integrate/_common/features/context-augmentation-feature';
-import { VORTEX_FEATURE_ID } from '../../../../src/commands/integrate/_common/vortex';
-import { CLAUDE_INTEGRATION_ID } from '../../../../src/commands/integrate/claude/declaration';
-import { COPILOT_INTEGRATION_ID } from '../../../../src/commands/integrate/copilot/declaration';
 import { TestHarness } from '../../harness';
 import {
   type CagInvocation,
@@ -53,6 +53,11 @@ function findInvocation(invocations: CagInvocation[], argv: string[]): CagInvoca
   return match;
 }
 
+/**
+ * Records a project-scoped installed feature so `discoverProject()`'s live known-mapping
+ * derivation (`buildKnownServerProjectMappings`, reading `integrations.installed`) picks it
+ * up — there is no persisted `state.knownServerProjectMappings` table on this branch.
+ */
 function appendRecordedCagFeature(
   state: CliState,
   args: {
@@ -267,7 +272,7 @@ describe('sonar context passthrough', () => {
   );
 
   it(
-    'resolves context from a recorded Vortex feature',
+    'resolves context from a recorded known-server-project mapping',
     async () => {
       const server = await harness.newFakeServer().start();
       const serverUrl = server.baseUrl();
@@ -300,13 +305,18 @@ describe('sonar context passthrough', () => {
   );
 
   it(
-    'matches on the recorded repoRoot when targetRoot points at a different worktree',
+    'resolves a mapping via its repoRoot signal when invoked from a linked worktree',
     async () => {
-      // Simulates integrate having run inside worktree-A (targetRoot = that worktree),
-      // while repoRoot records the stable main working tree. Running from the main
-      // tree must still resolve via repoRoot even though cwd is not inside targetRoot.
+      // The mapping's targetRoot points at a different (unrelated) physical location,
+      // so this can only resolve through the repoRoot fallback signal — proving the two
+      // stay distinct instead of collapsing into a single "folder".
       const server = await harness.newFakeServer().start();
       const serverUrl = server.baseUrl();
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'README.md', '# test\n');
+      const worktreePath = join(dirname(harness.cwd.path), 'linked-worktree');
+      git(['worktree', 'add', worktreePath, '-b', 'feature/repo-root-fallback'], harness.cwd.path);
+
       const stateBuilder = harness
         .state()
         .withAuth(serverUrl, 'main-token', ORG_KEY)
@@ -314,16 +324,16 @@ describe('sonar context passthrough', () => {
       const state = stateBuilder.build();
       appendRecordedCagFeature(state, {
         integrationId: CLAUDE_INTEGRATION_ID,
-        targetRoot: join(dirname(harness.cwd.path), 'some-other-worktree'),
+        targetRoot: join(dirname(harness.cwd.path), 'other-physical-location'),
         repoRoot: harness.cwd.path,
-        updatedAt: '2026-03-01T00:00:00.000Z',
+        updatedAt: new Date().toISOString(),
         projectKey: PROJECT_KEY,
         orgKey: ORG_KEY,
         serverUrl,
       });
       stateBuilder.withRawState(JSON.stringify(state, null, 2));
 
-      const result = await harness.run('context status');
+      const result = await harness.run('context status', { cwd: worktreePath });
 
       expect(result.exitCode).toBe(0);
       const invocation = findInvocation(readInvocations(harness), ['status']);
@@ -335,53 +345,7 @@ describe('sonar context passthrough', () => {
   );
 
   it(
-    'prefers a targetRoot match over a more recent repoRoot-only match',
-    async () => {
-      // Two worktrees integrated with different project keys, both recording the
-      // same main working tree as repoRoot. Running from the main tree, the
-      // feature whose targetRoot IS the main tree must win over a sibling that
-      // only shares the repoRoot — even though the sibling was updated later, so
-      // recency alone would pick the wrong one.
-      const server = await harness.newFakeServer().start();
-      const serverUrl = server.baseUrl();
-      const stateBuilder = harness
-        .state()
-        .withAuth(serverUrl, 'main-token', ORG_KEY)
-        .withContextAugmentationBinaryInstalled();
-      const state = stateBuilder.build();
-      // repoRoot-only match, integrated in a sibling worktree, updated LATER.
-      appendRecordedCagFeature(state, {
-        integrationId: CLAUDE_INTEGRATION_ID,
-        targetRoot: join(dirname(harness.cwd.path), 'some-other-worktree'),
-        repoRoot: harness.cwd.path,
-        updatedAt: '2026-02-01T00:00:00.000Z',
-        projectKey: 'wrong-worktree-project',
-        orgKey: ORG_KEY,
-        serverUrl,
-      });
-      // Exact targetRoot match for the current directory, updated EARLIER.
-      appendRecordedCagFeature(state, {
-        integrationId: COPILOT_INTEGRATION_ID,
-        targetRoot: harness.cwd.path,
-        repoRoot: harness.cwd.path,
-        updatedAt: '2026-01-01T00:00:00.000Z',
-        projectKey: 'right-here-project',
-        orgKey: ORG_KEY,
-        serverUrl,
-      });
-      stateBuilder.withRawState(JSON.stringify(state, null, 2));
-
-      const result = await harness.run('context status');
-
-      expect(result.exitCode).toBe(0);
-      const invocation = findInvocation(readInvocations(harness), ['status']);
-      expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe('right-here-project');
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'uses the latest recorded CAG feature when multiple entries share the same project root',
+    'uses the latest recorded mapping when multiple entries share the same project root',
     async () => {
       const server = await harness.newFakeServer().start();
       const serverUrl = server.baseUrl();

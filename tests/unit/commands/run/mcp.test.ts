@@ -108,8 +108,8 @@ describe('runMcp', () => {
   beforeEach(() => {
     discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
       projectKey: undefined,
-      rootDir: '/tmp/non-git-dir',
-      isGitRepo: false,
+      repoRoot: undefined,
+      projectRoot: '/tmp/non-git-dir',
       configSources: [],
     });
   });
@@ -233,8 +233,8 @@ describe('runMcp', () => {
   it('adds fs mount when --project is set and discovered root is a git repo', async () => {
     discoverProjectSpy.mockResolvedValue({
       projectKey: undefined,
-      rootDir: '/tmp/git-repo',
-      isGitRepo: true,
+      repoRoot: '/tmp/git-repo',
+      projectRoot: '/tmp/git-repo',
       configSources: [],
     });
     detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({

@@ -30,7 +30,6 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import * as token from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import * as registry from '@/core/framework/features';
-import * as gitWorktree from '@/core/host/git/worktree.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import * as discovery from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
@@ -87,9 +86,6 @@ describe('integrateCommand', () => {
   let getScaEnablementSpy: Mock<
     Extract<(typeof SonarQubeClient.prototype)['getScaEnablement'], (...args: any[]) => any>
   >;
-  let resolveRecordedRepoRootSpy: Mock<
-    Extract<(typeof gitWorktree)['resolveRecordedRepoRoot'], (...args: any[]) => any>
-  >;
 
   beforeEach(() => {
     setMockUi(true);
@@ -98,9 +94,6 @@ describe('integrateCommand', () => {
     hasVortexEntitlementSpy.mockResolvedValue({ status: 'not_entitled' });
     getScaEnablementSpy = spyOn(SonarQubeClient.prototype, 'getScaEnablement').mockResolvedValue(
       'not_enabled',
-    );
-    resolveRecordedRepoRootSpy = spyOn(gitWorktree, 'resolveRecordedRepoRoot').mockImplementation(
-      (projectRoot: string) => Promise.resolve(projectRoot),
     );
 
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
@@ -133,7 +126,6 @@ describe('integrateCommand', () => {
     installIntegrationSpy.mockRestore();
     detectGlobalSecretsHookSpy.mockRestore();
     getScaEnablementSpy.mockRestore();
-    resolveRecordedRepoRootSpy.mockRestore();
   });
 
   it('shows intro message', async () => {
@@ -285,7 +277,7 @@ describe('integrateCommand', () => {
   });
 
   it('installs Vortex through the declarative installer in a single call', async () => {
-    mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+    mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
     mockVortexEntitlement(true);
     getScaEnablementSpy.mockResolvedValue('enabled');
 
@@ -314,8 +306,27 @@ describe('integrateCommand', () => {
     );
   });
 
+  it('records the already-resolved mainRepoRoot from discovery instead of re-deriving it', async () => {
+    // attrs.repoRoot must record mainRepoRoot (main tree), not repoRoot (current worktree).
+    mockDiscoveredProject({
+      repoRoot: '/repo-worktrees/feature-x',
+      mainRepoRoot: '/repo',
+      projectKey: 'a-project',
+    });
+    mockVortexEntitlement(true);
+    getScaEnablementSpy.mockResolvedValue('enabled');
+
+    await integrateClaude({}, CLOUD_CTX);
+
+    expect(installIntegrationSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attrs: expect.objectContaining({ repoRoot: '/repo' }),
+      }),
+    );
+  });
+
   it('requests Vortex removal when the project organization is not entitled', async () => {
-    mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+    mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
     mockVortexEntitlement(false);
 
     await integrateClaude({}, CLOUD_CTX);
@@ -332,7 +343,7 @@ describe('integrateCommand', () => {
   });
 
   it('rethrows Vortex installation failures', async () => {
-    mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+    mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
     mockVortexEntitlement(true);
     installIntegrationSpy.mockRejectedValueOnce(new Error('print failed'));
 
@@ -352,7 +363,7 @@ describe('integrateCommand', () => {
   });
 
   it('runs migration and installs hooks when setup summary succeeds', async () => {
-    mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+    mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
     mockVortexEntitlement(true);
 
     await integrateClaude({}, CLOUD_CTX);
@@ -367,7 +378,7 @@ describe('integrateCommand', () => {
   });
 
   it('runs migration and installs hooks when global option is set', async () => {
-    mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+    mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
     mockVortexEntitlement(true);
 
     await integrateClaude({ global: true }, CLOUD_CTX);
@@ -384,7 +395,7 @@ describe('integrateCommand', () => {
   });
 
   it('still installs when organization access check fails in the summary', async () => {
-    mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+    mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
     mockVortexEntitlement(true);
     checkOrganizationSpy.mockResolvedValue(false);
 
@@ -400,7 +411,7 @@ describe('integrateCommand', () => {
   });
 
   it('requests Vortex removal when project key is missing and entitlement is lost', async () => {
-    mockDiscoveredProject({ rootDir: '/projectB/root' });
+    mockDiscoveredProject({ repoRoot: '/projectB/root' });
     mockVortexEntitlement(false);
 
     await integrateClaude({}, CLOUD_CTX);
@@ -430,7 +441,7 @@ describe('integrateCommand', () => {
     });
 
     it('forwards skipSecretsHooks: true to migrations and skips the declarative secrets-hooks feature', async () => {
-      mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+      mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
       hasVortexEntitlementSpy.mockResolvedValue({ status: 'not_applicable' });
 
       await integrateClaude({}, SERVER_CTX);
@@ -447,7 +458,7 @@ describe('integrateCommand', () => {
     });
 
     it('still installs project-scoped Vortex when the org is entitled', async () => {
-      mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+      mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
       mockVortexEntitlement(true);
 
       await integrateClaude({}, CLOUD_CTX);
@@ -470,7 +481,7 @@ describe('integrateCommand', () => {
     });
 
     it('falls back to a project-level install (does not skip secrets hooks)', async () => {
-      mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+      mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
       hasVortexEntitlementSpy.mockResolvedValue({ status: 'not_applicable' });
 
       await integrateClaude({}, SERVER_CTX);
@@ -505,7 +516,7 @@ describe('integrateCommand', () => {
     });
 
     it('skips Vortex (and warns) even when the org is entitled', async () => {
-      mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+      mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
       mockVortexEntitlement(true);
 
       await integrateClaude({ global: true }, CLOUD_CTX);
@@ -528,7 +539,7 @@ describe('integrateCommand', () => {
     });
 
     it('requests Vortex removal when a global run finds the org is not entitled', async () => {
-      mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+      mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
       mockVortexEntitlement(false);
 
       await integrateClaude({ global: true }, CLOUD_CTX);
@@ -546,9 +557,11 @@ describe('integrateCommand', () => {
   });
 
   function mockDiscoveredProject(project: Partial<DiscoveredProject>) {
+    const repoRoot = project.repoRoot || process.cwd();
     discoverProjectSpy.mockResolvedValue({
-      rootDir: project.rootDir || process.cwd(),
-      isGitRepo: project.isGitRepo ?? false,
+      repoRoot,
+      mainRepoRoot: project.mainRepoRoot,
+      projectRoot: project.projectRoot || repoRoot,
       serverUrl: project.serverUrl,
       organization: project.organization,
       projectKey: project.projectKey,

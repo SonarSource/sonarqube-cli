@@ -31,6 +31,7 @@ import {
 import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
 import * as processLib from '@/core/process/process.ts';
+import * as projectInfo from '@/core/project-info.ts';
 import * as clientModule from '@/core/server/client.ts';
 
 import { agentPostToolUse } from '../../../../src/commands/hook/agent-post-tool-use.ts';
@@ -52,6 +53,7 @@ describe('agentPostToolUse', () => {
   let spawnProcessSpy: ReturnType<typeof spyOn>;
   let cagMatchesSpy: ReturnType<typeof spyOn>;
   let ctx: CommandInvocationContext;
+  let discoverProjectSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     // Deterministic git branch auto-detection (hook resolves branch from the edited file).
@@ -82,6 +84,13 @@ describe('agentPostToolUse', () => {
     );
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
     readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue('const x = 1;');
+    // Only exercised when a test omits `project` — an explicit project short-circuits it.
+    discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
+      repoRoot: process.cwd(),
+      projectRoot: process.cwd(),
+      projectKey: undefined,
+      configSources: [],
+    });
     createAnalysisSpy = spyOn(
       clientModule.SonarQubeClient.prototype,
       'createAnalysis',
@@ -103,6 +112,7 @@ describe('agentPostToolUse', () => {
     emitSqaaAnalysisTelemetrySpy.mockRestore();
     spawnProcessSpy.mockRestore();
     cagMatchesSpy.mockRestore();
+    discoverProjectSpy.mockRestore();
   });
 
   it('emits SQAA analysis telemetry after a successful PostToolUse analysis', async () => {

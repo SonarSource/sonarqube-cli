@@ -322,7 +322,7 @@ describe('integrate git (native hooks)', () => {
     async () => {
       await setupAuthenticated(harness);
 
-      // No .git directory — discoverProject() sets isGitRepo: false
+      // No .git directory — discoverProject() leaves repoRoot undefined
       const result = await harness.run('integrate git --non-interactive');
 
       expect(result.exitCode).toBe(1);

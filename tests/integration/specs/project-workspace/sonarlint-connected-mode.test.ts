@@ -24,12 +24,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { SONARCLOUD_URL } from '@/core/config-constants.ts';
-import {
-  discoverOrganization,
-  discoverProject,
-  discoverProjectInfo,
-  discoverServer,
-} from '@/core/project-info.ts';
+import { discoverOrganization, discoverProject, discoverServer } from '@/core/project-info.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { TestHarness } from '../../harness';
@@ -63,7 +58,7 @@ describe('Project workspace + SonarLint (harness)', () => {
   }
 
   it(
-    'discoverProjectInfo and discoverProject read SonarQube Server binding from .sonarlint',
+    'discoverProject reads SonarQube Server binding from .sonarlint',
     async () => {
       const root = projectRoot('sq-server');
       mkdirSync(join(root, '.sonarlint'), { recursive: true });
@@ -75,16 +70,6 @@ describe('Project workspace + SonarLint (harness)', () => {
         }),
       );
 
-      const info = await discoverProjectInfo(root);
-      expect(info.root).toBeDefined();
-      expect(info.hasSonarLintConfig).toBe(true);
-      expect(info.sonarLintConfigPath).toBe(join('.sonarlint', 'connectedMode.json'));
-      expect(info.sonarLintData).toMatchObject({
-        serverURL: 'https://sonarqube.example.com',
-        projectKey: 'my_server_project',
-      });
-      expect(info.sonarLintData?.organization).toBeUndefined();
-
       const discovered = await discoverProject(root);
       expect(discovered.serverUrl).toBe('https://sonarqube.example.com');
       expect(discovered.projectKey).toBe('my_server_project');
@@ -95,7 +80,7 @@ describe('Project workspace + SonarLint (harness)', () => {
   );
 
   it(
-    'discoverProjectInfo and discoverProject read SonarQube Cloud binding from .sonarlint',
+    'discoverProject reads SonarQube Cloud binding from .sonarlint',
     async () => {
       const root = projectRoot('sq-cloud');
       mkdirSync(join(root, '.sonarlint'), { recursive: true });
@@ -106,12 +91,6 @@ describe('Project workspace + SonarLint (harness)', () => {
           projectKey: 'cloud_project_key',
         }),
       );
-
-      const info = await discoverProjectInfo(root);
-      expect(info.hasSonarLintConfig).toBe(true);
-      expect(info.sonarLintData?.serverURL).toBe(SONARCLOUD_URL);
-      expect(info.sonarLintData?.organization).toBe('my-org');
-      expect(info.sonarLintData?.projectKey).toBe('cloud_project_key');
 
       const discovered = await discoverProject(root);
       expect(discovered.serverUrl).toBe(SONARCLOUD_URL);
@@ -135,11 +114,8 @@ describe('Project workspace + SonarLint (harness)', () => {
         }),
       );
 
-      const info = await discoverProjectInfo(root);
-      expect(info.sonarLintConfigPath).toBe(join('.sonarlint', 'MySolution.json'));
-      expect(info.sonarLintData?.projectKey).toBe('acme_solution');
-
       const discovered = await discoverProject(root);
+      expect(discovered.configSources).toEqual([join('.sonarlint', 'MySolution.json')]);
       expect(discovered.projectKey).toBe('acme_solution');
       expect(discovered.organization).toBe('acme');
     },
@@ -147,29 +123,30 @@ describe('Project workspace + SonarLint (harness)', () => {
   );
 
   it(
-    'discoverProjectInfo reports no SonarLint config when .sonarlint is missing',
+    'discoverProject finds no SonarLint config when .sonarlint is missing',
     async () => {
       const root = projectRoot('no-sonarlint');
       mkdirSync(root, { recursive: true });
 
-      const info = await discoverProjectInfo(root);
-      expect(info.hasSonarLintConfig).toBe(false);
-      expect(info.sonarLintData).toBeNull();
-      expect(info.sonarLintConfigPath).toBeNull();
+      const discovered = await discoverProject(root);
+      expect(discovered.serverUrl).toBeUndefined();
+      expect(discovered.projectKey).toBeUndefined();
+      expect(discovered.configSources).toEqual([]);
     },
     { timeout: 15000 },
   );
 
   it(
-    'discoverProjectInfo reports no SonarLint config when .sonarlint has no binding JSON',
+    'discoverProject finds no SonarLint config when .sonarlint has no binding JSON',
     async () => {
       const root = projectRoot('empty-sonarlint');
       mkdirSync(join(root, '.sonarlint'), { recursive: true });
       writeFileSync(join(root, '.sonarlint', 'notes.txt'), 'not json');
 
-      const info = await discoverProjectInfo(root);
-      expect(info.hasSonarLintConfig).toBe(false);
-      expect(info.sonarLintData).toBeNull();
+      const discovered = await discoverProject(root);
+      expect(discovered.serverUrl).toBeUndefined();
+      expect(discovered.projectKey).toBeUndefined();
+      expect(discovered.configSources).toEqual([]);
     },
     { timeout: 15000 },
   );
@@ -212,10 +189,13 @@ describe('Project workspace + SonarLint (harness)', () => {
       });
 
       expect(
-        getMockUiCalls().some(
-          (c) =>
-            c.method === 'print' && String(c.args[0]).includes('Found server in .sonarlint config'),
-        ),
+        getMockUiCalls().some((c) => {
+          if (c.method !== 'print') return false;
+          const message = String(c.args[0]);
+          return (
+            message.includes('.sonarlint') && message.includes('https://sonarqube.from-lint.test')
+          );
+        }),
       ).toBe(true);
     },
     { timeout: 15000 },

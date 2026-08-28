@@ -18,34 +18,20 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Git worktree awareness: map a path inside a linked worktree back to the
-// equivalent path in the repository's main working tree, so per-project state
-// recorded by `sonar integrate` in the main checkout can still be found after a
-// worktree is created (e.g. for SQAA project-key and CAG context lookups).
-//
-// `resolveGitRepoRoot` is also the single source of truth for "resolve the git
-// top-level for a path" used by branch resolution (branch.ts) and other
-// callers that only need the plain repository root, not worktree mapping.
+// Git worktree awareness: resolves a repository's main working tree root for a given
+// directory (see also the worktree-aware climb in `lookup-path-resolver.ts`).
 
 import { statSync } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
-import { canonicalizePath, pathComparisonKey } from '../../io/fs-utils.ts';
+import { canonicalizePath } from '../../io/fs-utils.ts';
 import { tryRunGit } from './exec.ts';
 
-interface WorktreeMapping {
-  /** git top-level of the input path (the linked worktree root when inside one). */
-  currentRoot: string;
-  /** Main working tree root; differs from currentRoot only inside a linked worktree. */
-  mainRoot: string;
-}
-
-// Per-process cache of `git` stdout keyed by (cwd, args). A single CLI
-// invocation resolves worktree topology for the same directory several times
-// (e.g. `sonar context` maps cwd both to match recorded features and to derive
-// the workspace root), and that topology cannot change mid-invocation — so we
-// spawn `git` at most once per distinct command. Each CLI run is a fresh
-// process, so the cache never outlives a single invocation.
+// Per-process cache of `git` stdout keyed by (cwd, args). A single CLI invocation can
+// resolve worktree topology for the same directory more than once (e.g. the lookup-path
+// climb checks both the current and main worktree), and that topology cannot change
+// mid-invocation — so we spawn `git` at most once per distinct command. Each CLI run is
+// a fresh process, so the cache never outlives a single invocation.
 const gitStdoutCache = new Map<string, Promise<string | null>>();
 
 function runGitStdout(args: string[], cwd: string): Promise<string | null> {
@@ -120,75 +106,4 @@ async function listWorktreeRoots(dir: string): Promise<string[] | null> {
 export async function resolveMainWorktreeRoot(dir: string): Promise<string | null> {
   const roots = await listWorktreeRoots(dir);
   return roots?.[0] ?? null;
-}
-
-/**
- * Resolve the current git top-level and the repository's main working tree root
- * for the given directory. The current root comes from `resolveGitRepoRoot`
- * (climbs up from subdirectories automatically). The main root is the first
- * `git worktree list` entry when available, otherwise the current root. Returns
- * null when git is unavailable or the directory is not inside a repository;
- * when not inside a linked worktree, currentRoot equals mainRoot.
- */
-async function resolveWorktreeMapping(dir: string): Promise<WorktreeMapping | null> {
-  const currentRoot = await resolveGitRepoRoot(dir);
-  if (!currentRoot) {
-    return null;
-  }
-  const roots = await listWorktreeRoots(dir);
-  const mainRoot = roots?.[0] ?? currentRoot;
-  return { currentRoot, mainRoot };
-}
-
-/**
- * Given a filesystem `path` inside a git working tree, return the de-duplicated
- * list of equivalent paths to consult for per-project state lookups: `path`
- * itself, plus its equivalent inside the repository's main working tree when
- * `path` is inside a linked worktree. Order is [current, main].
- *
- * Preserves the in-worktree offset (a subdirectory maps to the same subdirectory
- * under the main tree), so callers that match by prefix keep subfolder precision.
- * Falls back to `[path]` when git is unavailable, `path` is not inside a linked
- * worktree, or `path` is outside the current worktree root.
- */
-export async function resolveWorktreeEquivalentPaths(path: string): Promise<string[]> {
-  const mapping = await resolveWorktreeMapping(path);
-  const canonicalPath = canonicalizePath(path);
-  if (!mapping || mapping.currentRoot === mapping.mainRoot) {
-    return [canonicalPath];
-  }
-
-  const rel = relative(mapping.currentRoot, canonicalPath);
-  if (rel.startsWith('..') || isAbsolute(rel)) {
-    return [canonicalPath];
-  }
-
-  const mapped = rel === '' ? mapping.mainRoot : canonicalizePath(join(mapping.mainRoot, rel));
-  return pathComparisonKey(mapped) === pathComparisonKey(canonicalPath)
-    ? [canonicalPath]
-    : [canonicalPath, mapped];
-}
-
-/**
- * Stable repository identity key for per-project integration state: the main
- * working tree when inside a git repo, otherwise `projectRoot` itself.
- */
-export async function resolveRecordedRepoRoot(projectRoot: string): Promise<string> {
-  return (await resolveMainWorktreeRoot(projectRoot)) ?? projectRoot;
-}
-
-/**
- * Workspace root for CAG: the git working-tree root containing `cwd` when inside a
- * repository (climbs up from subdirectories), otherwise the physical integrate
- * `targetRoot` supplied by the caller.
- */
-export async function resolveContextWorkspaceRoot(
-  cwd: string,
-  integratedTargetRoot: string,
-): Promise<string> {
-  const mapping = await resolveWorktreeMapping(cwd);
-  if (mapping) {
-    return mapping.currentRoot;
-  }
-  return integratedTargetRoot;
 }

@@ -33,6 +33,7 @@ import { isSonarQubeCloud, resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { canonicalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import { timed } from '@/core/observability/timed.ts';
+import { discoverProject } from '@/core/project-info.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
@@ -56,7 +57,7 @@ export interface AgentPostToolUseOptions {
 
 async function handleSqaaPostToolUse(
   payload: ClaudePostToolUsePayload,
-  projectKey: string | undefined,
+  explicitProjectKey: string | undefined,
   ctx: CommandInvocationContext,
 ): Promise<ClaudePostToolUseResult> {
   const filePath = payload.tool_input?.file_path;
@@ -65,12 +66,18 @@ async function handleSqaaPostToolUse(
   }
 
   const auth = await resolveAuth().catch(() => null);
-  if (!auth || !projectKey) {
+  if (!auth) {
     return { decision: 'none' };
   }
 
   // Cloud addresses an organization; Server has none and resolves it from the instance.
   if (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey) {
+    return { decision: 'none' };
+  }
+
+  const projectKey =
+    explicitProjectKey ?? (await discoverProject(process.cwd(), { auth, silent: true })).projectKey;
+  if (!projectKey) {
     return { decision: 'none' };
   }
 
