@@ -20,7 +20,14 @@
 
 // Integration tests for `sonar integrate git`
 
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -885,6 +892,209 @@ describe('integrate git (native hooks)', () => {
     },
     { timeout: 15000 },
   );
+
+  describe('global hook chains to a pre-existing local hook', () => {
+    const OLD_HOOK_MARKER_FILE = 'old-hook-ran.txt';
+
+    function writePreExistingHook(
+      harness: TestHarness,
+      script: string,
+      hook: 'pre-commit' | 'pre-push' = 'pre-commit',
+    ): void {
+      const hookPath = join(harness.cwd.path, '.git', 'hooks', hook);
+      mkdirSync(join(harness.cwd.path, '.git', 'hooks'), { recursive: true });
+      writeFileSync(hookPath, script, { mode: 0o755 });
+      chmodSync(hookPath, 0o755);
+    }
+
+    it(
+      'runs the pre-existing hook before Sonar’s own check, then still blocks a secret',
+      async () => {
+        await setupAuthenticated(harness, { withSecretsBinary: true });
+        initGitRepo(harness);
+        writePreExistingHook(harness, `#!/bin/sh\necho ran >> ${OLD_HOOK_MARKER_FILE}\nexit 0\n`);
+
+        const install = await harness.run('integrate git --global --non-interactive');
+        expect(install.exitCode).toBe(0);
+        // The repo's own pre-existing hook is untouched — global scope never writes here.
+        expect(
+          readFileSync(join(harness.cwd.path, '.git', 'hooks', 'pre-commit'), 'utf-8'),
+        ).toContain('echo ran');
+
+        const { hookEnv } = setupSonarBinDir(harness);
+        setupGitUser(harness.cwd.path);
+        harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+        Bun.spawnSync(['git', 'add', 'secret.js'], { cwd: harness.cwd.path });
+
+        const commit = gitCommit(harness.cwd.path, hookEnv, 'wip');
+
+        expect(commit.exitCode).not.toBe(0);
+        const output = (commit.stdout?.toString() ?? '') + (commit.stderr?.toString() ?? '');
+        expect(output).toContain('Secrets detected');
+        // Proves the old hook actually executed (chaining happened), not just that Sonar's ran.
+        expect(harness.cwd.exists(OLD_HOOK_MARKER_FILE)).toBe(true);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'aborts the commit when the pre-existing hook fails, without ever running Sonar’s check',
+      async () => {
+        await setupAuthenticated(harness, { withSecretsBinary: true });
+        initGitRepo(harness);
+        writePreExistingHook(harness, `#!/bin/sh\necho OLD-HOOK-FAILED\nexit 1\n`);
+
+        const install = await harness.run('integrate git --global --non-interactive');
+        expect(install.exitCode).toBe(0);
+
+        const { hookEnv } = setupSonarBinDir(harness);
+        setupGitUser(harness.cwd.path);
+        harness.cwd.writeFile('clean.js', 'const x = 1;\n');
+        Bun.spawnSync(['git', 'add', 'clean.js'], { cwd: harness.cwd.path });
+
+        const commit = gitCommit(harness.cwd.path, hookEnv, 'wip');
+
+        expect(commit.exitCode).not.toBe(0);
+        const output = (commit.stdout?.toString() ?? '') + (commit.stderr?.toString() ?? '');
+        expect(output).toContain('OLD-HOOK-FAILED');
+        // Sonar's own secrets scan never ran — no "Secrets detected" output for this clean file,
+        // and the abort happened before Sonar's part of the script.
+        expect(output).not.toContain('Secrets detected');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'does not double-chain when the pre-existing hook is itself an old Sonar-installed hook',
+      async () => {
+        await setupAuthenticated(harness, { withSecretsBinary: true });
+        initGitRepo(harness);
+        // Simulates a per-repo install from before global scope existed: same marker Sonar's
+        // own native hook uses, so the chain block must recognize and skip it.
+        writePreExistingHook(
+          harness,
+          [
+            '#!/bin/sh',
+            '# sonar pre-commit hook - installed by sonar integrate git',
+            `echo ran >> ${OLD_HOOK_MARKER_FILE}`,
+            'exit 0',
+            '',
+          ].join('\n'),
+        );
+
+        const install = await harness.run('integrate git --global --non-interactive');
+        expect(install.exitCode).toBe(0);
+
+        const { hookEnv } = setupSonarBinDir(harness);
+        setupGitUser(harness.cwd.path);
+        harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+        Bun.spawnSync(['git', 'add', 'secret.js'], { cwd: harness.cwd.path });
+
+        const commit = gitCommit(harness.cwd.path, hookEnv, 'wip');
+
+        // The GLOBAL hook's own secrets check still ran and blocked the commit...
+        expect(commit.exitCode).not.toBe(0);
+        const output = (commit.stdout?.toString() ?? '') + (commit.stderr?.toString() ?? '');
+        expect(output).toContain('Secrets detected');
+        // ...but the old marked-as-Sonar hook was recognized and skipped, not executed again.
+        expect(harness.cwd.exists(OLD_HOOK_MARKER_FILE)).toBe(false);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'pre-push: chains to a hook that reads stdin, and Sonar still detects a secret afterward',
+      async () => {
+        await setupAuthenticated(harness, { withSecretsBinary: true });
+        initGitRepo(harness);
+        // A realistic pre-push hook actually reads the ref list from stdin — this is exactly the
+        // scenario that would silently disable Sonar's scan without the stdin capture-and-replay.
+        writePreExistingHook(
+          harness,
+          [
+            '#!/bin/sh',
+            `LINES=$(cat | wc -l)`,
+            `echo "ran-saw-$LINES-lines" >> ${OLD_HOOK_MARKER_FILE}`,
+            'exit 0',
+            '',
+          ].join('\n'),
+          'pre-push',
+        );
+
+        const install = await harness.run(
+          'integrate git --global --hook pre-push --non-interactive',
+        );
+        expect(install.exitCode).toBe(0);
+
+        const { hookEnv } = setupSonarBinDir(harness);
+        setupGitUser(harness.cwd.path);
+
+        // First commit + push: clean file, should succeed and still run the chained old hook.
+        harness.cwd.writeFile('clean.js', 'const x = 1;\n');
+        Bun.spawnSync(['git', 'add', 'clean.js'], { cwd: harness.cwd.path });
+        gitCommit(harness.cwd.path, hookEnv, 'initial');
+        addBareRemote(harness.cwd.path);
+        const firstPush = gitPush(harness.cwd.path, hookEnv, true);
+        expect(firstPush.exitCode).toBe(0);
+        // The chained hook actually read a non-empty ref list — proves stdin wasn't already
+        // drained empty before it ran.
+        const oldHookLog = readFileSync(join(harness.cwd.path, OLD_HOOK_MARKER_FILE), 'utf-8');
+        expect(oldHookLog).toMatch(/ran-saw-\s*[1-9]\d*-lines/);
+
+        // Second commit + push: file with a secret. If Sonar's scan lost its stdin (the bug this
+        // capture-and-replay fixes), this would wrongly succeed instead of being blocked.
+        harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+        Bun.spawnSync(['git', 'add', 'secret.js'], { cwd: harness.cwd.path });
+        gitCommit(harness.cwd.path, hookEnv, 'wip');
+        const secondPush = gitPush(harness.cwd.path, hookEnv, false);
+
+        expect(secondPush.exitCode).not.toBe(0);
+        const output =
+          (secondPush.stdout?.toString() ?? '') + (secondPush.stderr?.toString() ?? '');
+        expect(output).toContain('Secrets detected');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'chains to the pre-existing hook when committing from a linked worktree',
+      async () => {
+        await setupAuthenticated(harness, { withSecretsBinary: true });
+        initGitRepo(harness);
+        writePreExistingHook(harness, `#!/bin/sh\necho ran >> ${OLD_HOOK_MARKER_FILE}\nexit 0\n`);
+
+        const install = await harness.run('integrate git --global --non-interactive');
+        expect(install.exitCode).toBe(0);
+
+        const { hookEnv } = setupSonarBinDir(harness);
+        setupGitUser(harness.cwd.path);
+        // A worktree needs an existing commit to branch from.
+        harness.cwd.writeFile('initial.js', 'const x = 1;\n');
+        Bun.spawnSync(['git', 'add', 'initial.js'], { cwd: harness.cwd.path });
+        gitCommit(harness.cwd.path, hookEnv, 'initial');
+
+        const worktreePath = join(harness.cwd.path, '..', 'linked-worktree');
+        const worktreeAdd = Bun.spawnSync(
+          ['git', 'worktree', 'add', worktreePath, '-b', 'linked-branch'],
+          { cwd: harness.cwd.path, env: hookEnv },
+        );
+        expect(worktreeAdd.exitCode).toBe(0);
+
+        writeFileSync(join(worktreePath, 'secret.js'), `const token = "${GITHUB_TEST_TOKEN}";`);
+        Bun.spawnSync(['git', 'add', 'secret.js'], { cwd: worktreePath });
+
+        const commit = gitCommit(worktreePath, hookEnv, 'wip');
+
+        expect(commit.exitCode).not.toBe(0);
+        const output = (commit.stdout?.toString() ?? '') + (commit.stderr?.toString() ?? '');
+        expect(output).toContain('Secrets detected');
+        // The old hook's marker lands in the worktree (git hooks run with the invoking
+        // worktree as cwd) — proves --git-common-dir found the shared hook from there.
+        expect(existsSync(join(worktreePath, OLD_HOOK_MARKER_FILE))).toBe(true);
+      },
+      { timeout: 30000 },
+    );
+  });
 
   it(
     'exits with error when --dependency-risks is used without -p',
