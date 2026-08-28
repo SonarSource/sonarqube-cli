@@ -66,11 +66,6 @@ import type { CommandInvocationContext } from './command-invocation-context.ts';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
 import { isTableFormatOption } from './formatting-options.ts';
-import {
-  getQualityGate,
-  type GetQualityGateOptions,
-  VALID_FORMATS as QUALITY_GATE_VALID_FORMATS,
-} from './get/quality-gate';
 import { agentPostToolUse } from './hook/agent-post-tool-use.ts';
 import { agentPromptSubmit } from './hook/agent-prompt-submit.ts';
 import { antigravityPreToolUse } from './hook/antigravity-pre-tool-use.ts';
@@ -104,6 +99,11 @@ import {
   VALID_STATUSES,
 } from './list/issues.ts';
 import { listProjects, type ListProjectsOptions } from './list/projects.ts';
+import {
+  showQualityGate,
+  type ShowQualityGateOptions,
+  VALID_FORMATS as QUALITY_GATE_VALID_FORMATS,
+} from './quality-gate/show';
 import { remediate, type RemediateOptions } from './remediate';
 import { getBanner, getCustomRootHelp } from './root-help.ts';
 import { runMcp } from './run/mcp.ts';
@@ -269,14 +269,14 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .addOption(pageSizeOption)
     .authenticatedAction((ctx, options: ListProjectsOptions) => listProjects(options, ctx));
 
-  const get = COMMAND_TREE.command('get')
+  const qualityGate = COMMAND_TREE.command('quality-gate')
     .description('Fetch quality gate status from SonarQube Cloud or Server')
     .rootHelp({
       category: 'data',
     });
 
-  get
-    .command('quality-gate')
+  qualityGate
+    .command('show')
     .description('Show the quality gate verdict for a project')
     .showUpdateNotification(isTableFormatOption)
     .option('-p, --project <project>', 'Project key')
@@ -288,7 +288,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .option('--branch <branch>', 'Branch name. Cannot be combined with --pull-request.')
     .option('--pull-request <pull-request>', 'Pull request ID. Cannot be combined with --branch.')
     .option('--all', 'Also show passing conditions. By default only failing conditions are shown.')
-    .authenticatedAction((ctx, options: GetQualityGateOptions) => getQualityGate(options, ctx));
+    .authenticatedAction((ctx, options: ShowQualityGateOptions) => showQualityGate(options, ctx));
 
   // Import repositories from DevOps platforms into SonarQube (hidden while in development)
   COMMAND_TREE.command('import', { hidden: true })
