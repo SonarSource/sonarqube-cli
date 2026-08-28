@@ -60,6 +60,30 @@ describe('quality-gate show', () => {
   );
 
   it(
+    'resolves via the qg alias',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK'))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`qg show --project my-project --format json`);
+
+      expect(result.exitCode).toBe(0);
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate).toEqual({
+        status: 'OK',
+        project: 'my-project',
+        branch: 'main',
+        conditions: [],
+      });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'defaults to table format when --format is omitted',
     async () => {
       const server = await harness

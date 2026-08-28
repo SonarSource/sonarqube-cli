@@ -270,6 +270,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .authenticatedAction((ctx, options: ListProjectsOptions) => listProjects(options, ctx));
 
   const qualityGate = COMMAND_TREE.command('quality-gate')
+    .alias('qg')
     .description('Fetch quality gate status from SonarQube Cloud or Server')
     .rootHelp({
       category: 'data',

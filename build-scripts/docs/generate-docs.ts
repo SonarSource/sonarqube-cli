@@ -74,6 +74,7 @@ interface ClidocCommand {
   id: string;
   name: string;
   fullName: string;
+  aliases: string[];
   description: string;
   isGroup: boolean;
   isRoot: boolean;
@@ -148,6 +149,7 @@ function serializeCommand(
     id,
     name: cmd.name(),
     fullName,
+    aliases: cmd.aliases(),
     description: descriptionWithoutBetaTag(cmd),
     isGroup: visibleChildren.length > 0,
     isRoot: depth === 0,
@@ -181,6 +183,7 @@ const rootEntry: ClidocCommand = {
   id: rootId,
   name: 'sonar',
   fullName: 'sonar',
+  aliases: [],
   description: COMMAND_TREE.description() ?? 'SonarQube CLI',
   isGroup: true,
   isRoot: true,
@@ -210,6 +213,10 @@ mkdirSync(OUT_DIR, { recursive: true });
 writeFileSync(join(OUT_DIR, 'commands.json'), JSON.stringify(data, null, 2));
 
 // ── llms.txt ─────────────────────────────────────────────────
+function aliasSuffix(cmd: ClidocCommand): string {
+  return cmd.aliases.length > 0 ? `|${cmd.aliases.join('|')}` : '';
+}
+
 function buildLlmsTxt(): string {
   const template = readFileSync(join(__dirname, 'llms.txt.template'), 'utf-8');
   const commandLines: string[] = [];
@@ -219,7 +226,7 @@ function buildLlmsTxt(): string {
     if (cmd.isRoot) continue;
 
     const authMarker = cmd.requiresAuth ? ' *' : '';
-    commandLines.push(`### ${cmd.fullName}${authMarker}`);
+    commandLines.push(`### ${cmd.fullName}${aliasSuffix(cmd)}${authMarker}`);
     if (cmd.description) {
       const betaTag = cmd.stage === 'beta' ? ` ${BETA_HELP_TAG}` : '';
       commandLines.push(`${cmd.description}${betaTag}`);

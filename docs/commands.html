@@ -154,6 +154,7 @@ function renderTree(filter) {
     const matches = data.commands.filter(c =>
       c.fullName.toLowerCase().includes(q) ||
       c.description.toLowerCase().includes(q) ||
+      (c.aliases && c.aliases.some(a => a.toLowerCase().includes(q))) ||
       (c.stage && c.stage !== 'stable' && c.stage.toLowerCase().includes(q))
     );
     for (const cmd of matches) {
@@ -174,6 +175,10 @@ function renderTree(filter) {
       }
     }
   }
+}
+
+function nameWithAliases(cmd) {
+  return cmd.name + ((cmd.aliases || []).length ? `|${cmd.aliases.join('|')}` : '');
 }
 
 // ── Pill tree node (tree mode) ────────────────────────────────
@@ -198,7 +203,7 @@ function buildPillNode(cmd, flat) {
     + (isSelected ? ' selected' : '')
     + (!isSelected && isOnPath ? ' path-highlight' : '')
     + (cmd.stage === 'beta' ? ' stage-beta' : '');
-  pill.textContent = cmd.name;
+  pill.textContent = nameWithAliases(cmd);
   row.appendChild(pill);
 
   if (!cmd.isRoot) {
@@ -238,7 +243,7 @@ function renderTreeNode(cmd, flat) {
 
   const label = document.createElement('span');
   label.className = 'tree-label ' + (cmd.isRoot ? 'root' : (cmd.isGroup || cmd.depth === 1) ? 'group' : 'leaf');
-  label.textContent = cmd.name;
+  label.textContent = nameWithAliases(cmd);
   row.appendChild(label);
 
   row.addEventListener('click', () => { navigateToCommand(cmd.id); });
@@ -325,7 +330,7 @@ function buildColumnView(root) {
           + (isSelected ? ' selected' : '')
           + (isOnPath   ? ' path-highlight' : '')
           + (entry.stage === 'beta' ? ' stage-beta' : '');
-        pill.textContent = entry.name;
+        pill.textContent = nameWithAliases(entry);
         pill.dataset.id = entry.id;
 
 
@@ -484,6 +489,9 @@ function renderDetail(cmd) {
   // Header
   parts.push(`<div class="detail-header">`);
   parts.push(`<span class="detail-title"><code>${escHtml(cmd.fullName)}</code></span>`);
+  for (const alias of cmd.aliases || []) {
+    parts.push(`<code class="detail-alias">${escHtml(alias)}</code>`);
+  }
   if (cmd.stage === 'beta') {
     parts.push(`<span class="stage-badge stage-${escHtml(cmd.stage)}">${escHtml(cmd.stage)}</span>`);
   }
@@ -569,6 +577,9 @@ function renderDetail(cmd) {
       if (!child) continue;
       parts.push(`<div class="subcmd-item" data-target="${escAttr(child.id)}">`);
       parts.push(`<span class="subcmd-name">${escHtml(child.fullName)}</span>`);
+      for (const alias of child.aliases || []) {
+        parts.push(`<code class="detail-alias">${escHtml(alias)}</code>`);
+      }
       parts.push(`<span class="subcmd-desc">${escHtml(child.description)}</span>`);
       parts.push(`<span class="subcmd-arrow">→</span>`);
       parts.push(`</div>`);
