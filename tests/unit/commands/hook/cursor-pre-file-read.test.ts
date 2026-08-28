@@ -181,7 +181,6 @@ describe('cursorPreFileRead — .cursorignore side effect', () => {
 
   beforeEach(() => {
     projectRoot = mkdtempSync(join(tmpdir(), 'cursor-pre-file-read-'));
-    mkdirSync(join(projectRoot, '.cursor'));
 
     stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(
       (_data: unknown, cb?: unknown) => {
@@ -222,7 +221,11 @@ describe('cursorPreFileRead — .cursorignore side effect', () => {
     mkdirSync(dirname(filePath), { recursive: true });
     writeFileSync(filePath, SECRET_CONTENT);
 
-    readStdinJsonSpy.mockResolvedValue({ file_path: filePath, content: SECRET_CONTENT });
+    readStdinJsonSpy.mockResolvedValue({
+      file_path: filePath,
+      content: SECRET_CONTENT,
+      workspace_roots: [projectRoot],
+    });
 
     await cursorPreFileRead(makeCtx());
 
@@ -231,7 +234,7 @@ describe('cursorPreFileRead — .cursorignore side effect', () => {
   });
 
   it('does not append to .cursorignore when no file path is available', async () => {
-    readStdinJsonSpy.mockResolvedValue({ content: SECRET_CONTENT });
+    readStdinJsonSpy.mockResolvedValue({ content: SECRET_CONTENT, workspace_roots: [projectRoot] });
 
     await cursorPreFileRead(makeCtx());
 

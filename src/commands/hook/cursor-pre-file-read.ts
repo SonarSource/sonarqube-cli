@@ -49,6 +49,7 @@ interface CursorBeforeReadFilePayload {
   file_path?: string;
   content?: string;
   conversation_id?: string;
+  workspace_roots?: string[];
 }
 
 export async function cursorPreFileRead(ctx: CommandInvocationContext): Promise<HookCommandResult> {
@@ -64,6 +65,8 @@ export async function cursorPreFileRead(ctx: CommandInvocationContext): Promise<
   const filePath = payload.file_path;
   const content = await resolveFileContent(payload, filePath);
   if (content === undefined) return { agentSessionId };
+
+  const workspaceRoots = Array.isArray(payload.workspace_roots) ? payload.workspace_roots : [];
 
   let deps: HookDependencies;
   try {
@@ -90,7 +93,7 @@ export async function cursorPreFileRead(ctx: CommandInvocationContext): Promise<
   }
 
   if (secretsFoundInScan(scan.result)) {
-    await denyCursorFileAccess(filePath);
+    await denyCursorFileAccess(filePath, workspaceRoots);
   }
 
   return { agentSessionId };

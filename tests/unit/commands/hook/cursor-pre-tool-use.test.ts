@@ -178,7 +178,6 @@ describe('cursorPreToolUse — .cursorignore side effect', () => {
 
   beforeEach(() => {
     projectRoot = mkdtempSync(join(tmpdir(), 'cursor-pre-tool-use-'));
-    mkdirSync(join(projectRoot, '.cursor'));
 
     stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(
       (_data: unknown, cb?: unknown) => {
@@ -222,6 +221,7 @@ describe('cursorPreToolUse — .cursorignore side effect', () => {
     readStdinJsonSpy.mockResolvedValue({
       tool_name: 'Read',
       tool_input: { file_path: filePath },
+      workspace_roots: [projectRoot],
     });
 
     await cursorPreToolUse(makeCtx());
