@@ -47,5 +47,6 @@ export async function integrateCodex(
     context: integrateCtx,
     options,
     auth,
+    ctx,
   });
 }

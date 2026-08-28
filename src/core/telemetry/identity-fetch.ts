@@ -64,7 +64,7 @@ export function isIdentityCompleteForConnection(
   if (connectionType === 'cloud') {
     return !!identity.user_uuid && !!identity.organization_uuid_v4;
   }
-  // user_uuid may be absent on older SonarQube Server versions (see TelemetryEventIdentityPayload).
+  // user_uuid may be absent on older SonarQube Server versions (see TelemetryEventPayload).
   return !!identity.sqs_installation_id;
 }
 

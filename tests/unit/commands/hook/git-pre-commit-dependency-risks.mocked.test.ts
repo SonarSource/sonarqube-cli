@@ -34,7 +34,9 @@ import type {
 import { ScaWatchPatternsRunner } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-watch-patterns.ts';
 import { runDepRisksStage } from '../../../../src/commands/hook/git-pre-commit-dependency-risks.ts';
 
-const ctx = new CommandInvocationContext();
+function makeCtx() {
+  return new CommandInvocationContext();
+}
 
 const FAKE_AUTH: ResolvedAuth = {
   token: 'test-token',
@@ -207,7 +209,7 @@ describe('runDepRisksStage', () => {
         project: 'demo',
         changedFiles: ['package.json'],
         auth: FAKE_AUTH,
-        ctx,
+        ctx: makeCtx(),
       });
     } catch (e) {
       thrown = e;
@@ -230,7 +232,7 @@ describe('runDepRisksStage', () => {
         project: 'demo',
         changedFiles: ['package.json'],
         auth: FAKE_AUTH,
-        ctx,
+        ctx: makeCtx(),
       });
     } catch (e) {
       thrown = e;
@@ -249,7 +251,7 @@ describe('runDepRisksStage', () => {
       project: 'demo',
       changedFiles: ['package.json'],
       auth: FAKE_AUTH,
-      ctx,
+      ctx: makeCtx(),
     });
 
     const successCall = findMockUiCall('discreetSuccess', 'No dependency risks found.');
@@ -265,7 +267,7 @@ describe('runDepRisksStage', () => {
         project: 'demo',
         changedFiles: ['package.json'],
         auth: FAKE_AUTH,
-        ctx,
+        ctx: makeCtx(),
       });
     } catch (e) {
       thrown = e;
@@ -284,7 +286,7 @@ describe('runDepRisksStage', () => {
       project: 'demo',
       changedFiles: ['package.json'],
       auth: FAKE_AUTH,
-      ctx,
+      ctx: makeCtx(),
     });
 
     expect(getMockUiCalls().filter((c) => c.method === 'print')).toHaveLength(0);
@@ -293,7 +295,12 @@ describe('runDepRisksStage', () => {
   });
 
   it('skips when no dependency manifests changed in the commit', async () => {
-    await runDepRisksStage({ project: 'demo', changedFiles: ['index.ts'], auth: FAKE_AUTH, ctx });
+    await runDepRisksStage({
+      project: 'demo',
+      changedFiles: ['index.ts'],
+      auth: FAKE_AUTH,
+      ctx: makeCtx(),
+    });
 
     expect(orchestratorRunSpy).not.toHaveBeenCalled();
     const skipCall = findMockUiCall('success', 'No dependency manifests changed in this commit');

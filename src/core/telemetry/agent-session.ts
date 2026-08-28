@@ -21,23 +21,12 @@
 // Resolves an opaque agent session id from agent-native sources only.
 // Never invents IDs; never reinterprets thread vs session semantics.
 //
-// buildCommandTree owns an AgentSessionSlot closed over by hook capture and
-// postAction. Hook handlers return the agent-native field value as-is
-// (Claude/Codex session_id, Cursor conversation_id); handleHookInvocation
-// writes non-null returns onto the slot. resolveAgentSessionId (and
-// resolveAgentSessionIdForEmit) trim and reject empty values once at resolve
-// time (and fill from env when the slot is still empty).
+// buildCommandTree captures a hook-returned id and postAction passes it to
+// resolveAgentSessionId, which trims empty values and falls back to env.
 
 import { tryLoadState } from '@/core/state/state-manager.ts';
 
 import { isTelemetryEnabled } from './enabled.ts';
-
-/** Mutable per-invocation slot owned by buildCommandTree and closed over by postAction. */
-export type AgentSessionSlot = { id: string | null };
-
-export function createAgentSessionSlot(): AgentSessionSlot {
-  return { id: null };
-}
 
 function nonEmptyTrimmed(value: string | null | undefined): string | null {
   if (value == null) return null;
@@ -74,28 +63,9 @@ export function resolveAgentSessionIdFromEnv(env: NodeJS.ProcessEnv = process.en
 }
 
 /**
- * Lazily identify the agent session id for telemetry. Returns null when
- * collection is disabled. Prefers a hook-captured id on the slot (normalized);
- * otherwise resolves from env and caches it on the slot.
- */
-export function resolveAgentSessionId(
-  slot: AgentSessionSlot,
-  env: NodeJS.ProcessEnv = process.env,
-): string | null {
-  if (!shouldIdentifyAgentSession()) return null;
-  const fromHook = normalizeAgentSessionId(slot.id);
-  if (fromHook != null) {
-    slot.id = fromHook;
-    return fromHook;
-  }
-  slot.id = resolveAgentSessionIdFromEnv(env);
-  return slot.id;
-}
-
-/**
  * Prefers a hook-payload id (normalized); otherwise falls back to env.
  * Callers that have not already verified telemetry is on should use
- * {@link resolveAgentSessionIdForEmit} instead.
+ * {@link resolveAgentSessionId} instead.
  */
 export function resolveAgentSessionIdFromHookOrEnv(
   hookSessionId: string | null,
@@ -105,11 +75,11 @@ export function resolveAgentSessionIdFromHookOrEnv(
 }
 
 /**
- * Session id for an in-command telemetry emit (e.g. SQAA during a hook).
- * Prefers a hook-payload id (normalized); otherwise falls back to env when
- * collection is on. Does not touch the command-tree slot — postAction owns that.
+ * Lazily identify the agent session id for telemetry. Returns null when
+ * collection is disabled. Prefers a hook-captured id (normalized); otherwise
+ * falls back to env.
  */
-export function resolveAgentSessionIdForEmit(
+export function resolveAgentSessionId(
   hookSessionId: string | null,
   env: NodeJS.ProcessEnv = process.env,
 ): string | null {

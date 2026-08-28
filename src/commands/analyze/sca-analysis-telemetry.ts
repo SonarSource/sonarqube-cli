@@ -20,8 +20,11 @@
 
 import { randomUUID } from 'node:crypto';
 
+import {
+  type CommandInvocationContext,
+  TelemetryFact,
+} from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { emitTelemetryEvent } from '@/core/telemetry/telemetry-events.ts';
 
 import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
 import type { AnalyzeProjectResponse } from './dependency-risk-helpers/sca-scanner.ts';
@@ -68,34 +71,25 @@ export function summarizeScaFindings(response: AnalyzeProjectResponse): {
 }
 
 /**
- * Emits a single CliAnalysisCompleted event for one SCA run, carrying `details`
- * (JSON-encoded blob when findings were reported, `""` otherwise). Strictly fire-and-forget:
- * the entire body is guarded, so no telemetry failure — identity resolution
- * (`getOrCreateUserId`) or the file write — can ever propagate to the caller. This matters
- * because the analyze call site emits *after* `process.exitCode` is set, and the hook call
- * site must keep failing open; a thrown error here would otherwise turn a successful scan
- * into a failure.
+ * Record a CliAnalysisCompleted fact for one SCA run.
  *
- * Pass `response: null` for a run that failed to execute (scanner spawn/parse error or a
- * non-zero exit that threw): the completed event is emitted with `exit_code` as supplied
- * (callers pass `null` on the throw path), `failures_count: 1`, and `details: ""`.
- *
- * `exitCode` is the CLI command's final `process.exitCode` (0/1/51 for `analyze`), not the
- * sca-scanner subprocess code; pass `null` when there is no analyze-style exit (hook) or the
- * run threw.
+ * Pass `response: null` for a run that failed to execute: `failures_count: 1` and `details: ""`.
+ * `exitCode` is the CLI command's final `process.exitCode` (0/1/51 for `analyze`); pass `null`
+ * when there is no analyze-style exit (hook) or the run threw.
  */
-export async function emitScaAnalysisTelemetry(
-  callerCommand: ScaCallerCommand,
+export function recordScaAnalysisTelemetry(
+  ctx: CommandInvocationContext,
   auth: ResolvedAuth,
+  callerCommand: ScaCallerCommand,
   response: AnalyzeProjectResponse | null,
   durationMs: number,
   exitCode: number | null,
-): Promise<void> {
-  try {
-    const analysisId = randomUUID();
+): void {
+  const analysisId = randomUUID();
 
-    if (!response) {
-      await emitTelemetryEvent(
+  if (!response) {
+    ctx.recordTelemetry(
+      new TelemetryFact(
         CLI_ANALYSIS_COMPLETED,
         {
           caller_command: callerCommand,
@@ -109,13 +103,15 @@ export async function emitScaAnalysisTelemetry(
           details: '',
         } satisfies AnalysisCompletedPayload,
         { auth },
-      );
-      return;
-    }
+      ),
+    );
+    return;
+  }
 
-    const { findingsCount, details } = summarizeScaFindings(response);
+  const { findingsCount, details } = summarizeScaFindings(response);
 
-    await emitTelemetryEvent(
+  ctx.recordTelemetry(
+    new TelemetryFact(
       CLI_ANALYSIS_COMPLETED,
       {
         caller_command: callerCommand,
@@ -129,8 +125,6 @@ export async function emitScaAnalysisTelemetry(
         details: findingsCount > 0 ? JSON.stringify(details) : '',
       } satisfies AnalysisCompletedPayload,
       { auth },
-    );
-  } catch {
-    // Telemetry is strictly fire-and-forget; never surface to the command handler.
-  }
+    ),
+  );
 }

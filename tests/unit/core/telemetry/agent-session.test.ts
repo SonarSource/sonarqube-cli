@@ -23,9 +23,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { ENV_DO_NOT_TRACK } from '@/core/config-constants.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import {
-  createAgentSessionSlot,
   resolveAgentSessionId,
-  resolveAgentSessionIdForEmit,
   resolveAgentSessionIdFromEnv,
   resolveAgentSessionIdFromHookOrEnv,
 } from '@/core/telemetry/agent-session.ts';
@@ -107,73 +105,20 @@ describe('resolveAgentSessionId', () => {
 
   it('does not identify when telemetry is disabled', () => {
     tryLoadStateSpy.mockReturnValue(makeTelemetryState(false));
-    const slot = createAgentSessionSlot();
-    expect(resolveAgentSessionId(slot, { CLAUDE_CODE_SESSION_ID: 'env-id' })).toBeNull();
-    expect(slot.id).toBeNull();
+    expect(resolveAgentSessionId('hook-id', { CLAUDE_CODE_SESSION_ID: 'env-id' })).toBeNull();
   });
 
-  it('returns a hook-captured id already on the slot', () => {
-    const slot = createAgentSessionSlot();
-    slot.id = 'hook-id';
-    expect(resolveAgentSessionId(slot, { CLAUDE_CODE_SESSION_ID: 'env-id' })).toBe('hook-id');
-  });
-
-  it('normalizes a whitespace-padded hook id on the slot', () => {
-    const slot = createAgentSessionSlot();
-    slot.id = '  hook-id  ';
-    expect(resolveAgentSessionId(slot, {})).toBe('hook-id');
-    expect(slot.id).toBe('hook-id');
-  });
-
-  it('falls through to env when the slot holds only whitespace', () => {
-    const slot = createAgentSessionSlot();
-    slot.id = '   ';
-    expect(resolveAgentSessionId(slot, { CODEX_SESSION_ID: 'codex-id' })).toBe('codex-id');
-    expect(slot.id).toBe('codex-id');
-  });
-
-  it('lazily resolves from env when the slot is empty', () => {
-    const slot = createAgentSessionSlot();
-    expect(resolveAgentSessionId(slot, { CODEX_SESSION_ID: 'codex-id' })).toBe('codex-id');
-    expect(slot.id).toBe('codex-id');
-  });
-});
-
-describe('resolveAgentSessionIdForEmit', () => {
-  let tryLoadStateSpy: ReturnType<typeof spyOn>;
-  let savedDoNotTrack: string | undefined;
-
-  beforeEach(() => {
-    savedDoNotTrack = process.env[ENV_DO_NOT_TRACK];
-    delete process.env[ENV_DO_NOT_TRACK];
-    tryLoadStateSpy = spyOn(stateManager, 'tryLoadState').mockReturnValue(makeTelemetryState());
-  });
-
-  afterEach(() => {
-    tryLoadStateSpy.mockRestore();
-    restoreEnv(ENV_DO_NOT_TRACK, savedDoNotTrack);
-  });
-
-  it('prefers the hook id over env', () => {
-    expect(resolveAgentSessionIdForEmit('hook-id', { CLAUDE_CODE_SESSION_ID: 'env-id' })).toBe(
-      'hook-id',
-    );
+  it('prefers a hook-captured id over env', () => {
+    expect(resolveAgentSessionId('hook-id', { CLAUDE_CODE_SESSION_ID: 'env-id' })).toBe('hook-id');
   });
 
   it('normalizes a whitespace-padded hook id', () => {
-    expect(resolveAgentSessionIdForEmit('  hook-id  ', {})).toBe('hook-id');
+    expect(resolveAgentSessionId('  hook-id  ', {})).toBe('hook-id');
   });
 
-  it('falls back to env when the hook id is null or blank', () => {
-    expect(resolveAgentSessionIdForEmit(null, { CODEX_SESSION_ID: 'codex-id' })).toBe('codex-id');
-    expect(resolveAgentSessionIdForEmit('   ', { CODEX_SESSION_ID: 'codex-id' })).toBe('codex-id');
-  });
-
-  it('returns null when telemetry is disabled', () => {
-    tryLoadStateSpy.mockReturnValue(makeTelemetryState(false));
-    expect(
-      resolveAgentSessionIdForEmit('hook-id', { CLAUDE_CODE_SESSION_ID: 'env-id' }),
-    ).toBeNull();
+  it('falls through to env when the hook id is null or whitespace', () => {
+    expect(resolveAgentSessionId(null, { CODEX_SESSION_ID: 'codex-id' })).toBe('codex-id');
+    expect(resolveAgentSessionId('   ', { CODEX_SESSION_ID: 'codex-id' })).toBe('codex-id');
   });
 });
 
