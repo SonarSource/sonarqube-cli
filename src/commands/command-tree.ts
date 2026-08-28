@@ -62,10 +62,7 @@ import {
   buildCommandExecutedFact,
   setPassthroughSubcommand,
 } from './command-executed-telemetry.ts';
-import {
-  type CommandInvocationContext,
-  createTelemetryFactBuffer,
-} from './command-invocation-context.ts';
+import type { CommandInvocationContext } from './command-invocation-context.ts';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
 import { agentPostToolUse } from './hook/agent-post-tool-use.ts';
@@ -148,10 +145,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
   // Hook handlers write an agent-native session id when present; postAction
   // resolves (env fallback) before telemetry flush.
   let capturedAgentSessionId: string | null = null;
-  // Telemetry facts from ctx.recordTelemetry; drained in postAction concatenated
-  // with CliCommandExecuted so enrichment stays out of mid-command call sites.
-  const telemetryFactBuffer = createTelemetryFactBuffer();
-  const COMMAND_TREE = new SonarCommand({ runtime, telemetryFactBuffer });
+  const COMMAND_TREE = new SonarCommand({ runtime });
 
   const handleHookInvocation =
     <TArgs extends unknown[]>(
@@ -808,10 +802,13 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
 
   // Emit handler facts plus CliCommandExecuted in one commit.
   COMMAND_TREE.hook('postAction', async (_thisCommand, actionCommand) => {
-    await commitTelemetryFacts(
-      [...telemetryFactBuffer.facts, await buildCommandExecutedFact(actionCommand)],
-      { agentSessionId: resolveAgentSessionId(capturedAgentSessionId) },
-    );
+    const handlerFacts =
+      actionCommand instanceof SonarCommand
+        ? (actionCommand.invocationContext?.telemetryFacts() ?? [])
+        : [];
+    await commitTelemetryFacts([...handlerFacts, await buildCommandExecutedFact(actionCommand)], {
+      agentSessionId: resolveAgentSessionId(capturedAgentSessionId),
+    });
     await COMMAND_TREE.updateNotifier.maybeNotify(actionCommand);
   });
 

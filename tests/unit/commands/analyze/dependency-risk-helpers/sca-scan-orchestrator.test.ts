@@ -22,10 +22,7 @@ import { describe, expect, it, mock, spyOn } from 'bun:test';
 
 import * as scaTelemetry from '@/commands/analyze/sca-analysis-telemetry.ts';
 import { SCA_CALLER_COMMANDS } from '@/commands/analyze/sca-analysis-telemetry.ts';
-import {
-  CommandInvocationContext,
-  createTelemetryFactBuffer,
-} from '@/commands/command-invocation-context.ts';
+import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import type { SecretsInstaller } from '@/core/host/install/secrets.ts';
@@ -71,13 +68,7 @@ function mockSpawner(payload: unknown) {
 const noopSecretsInstaller: SecretsInstaller = { install: () => Promise.resolve(null) };
 
 function makeCtx() {
-  const buffer = createTelemetryFactBuffer();
-  const ctx = new CommandInvocationContext(
-    { isAlpha: false, isBeta: false, isPrivateBeta: false },
-    { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
-    buffer,
-  );
-  return { ctx, buffer };
+  return new CommandInvocationContext();
 }
 
 describe('ScaScanOrchestrator', () => {
@@ -93,7 +84,7 @@ describe('ScaScanOrchestrator', () => {
       CLOUD_AUTH,
       'my-project',
       SCA_CALLER_COMMANDS.analyzeDependencyRisks,
-      makeCtx().ctx,
+      makeCtx(),
     );
 
     expect(result.response).toEqual(EMPTY_RESPONSE);
@@ -114,7 +105,7 @@ describe('ScaScanOrchestrator', () => {
         CLOUD_AUTH,
         'my-project',
         SCA_CALLER_COMMANDS.analyzeDependencyRisks,
-        makeCtx().ctx,
+        makeCtx(),
       ),
     ).rejects.toBeInstanceOf(CommandFailedError);
   });
@@ -132,7 +123,7 @@ describe('ScaScanOrchestrator', () => {
       CLOUD_AUTH,
       'my-project',
       SCA_CALLER_COMMANDS.analyzeDependencyRisks,
-      makeCtx().ctx,
+      makeCtx(),
     );
 
     const analyzeCall = spawn.mock.calls.find(([, args]) => args[0] === 'analyze-project');
@@ -165,7 +156,7 @@ describe('ScaScanOrchestrator', () => {
           CLOUD_AUTH,
           'my-project',
           SCA_CALLER_COMMANDS.analyzeDependencyRisks,
-          makeCtx().ctx,
+          makeCtx(),
         ),
       ).rejects.toThrow('secrets pre-scan failed');
 
@@ -202,7 +193,7 @@ describe('ScaScanOrchestrator', () => {
           CLOUD_AUTH,
           'my-project',
           SCA_CALLER_COMMANDS.analyzeDependencyRisks,
-          makeCtx().ctx,
+          makeCtx(),
         ),
       ).rejects.toBeInstanceOf(CommandFailedError);
 

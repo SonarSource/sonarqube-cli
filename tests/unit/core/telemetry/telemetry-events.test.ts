@@ -35,10 +35,7 @@ import type { AnalysisCompletedPayload } from '@/commands/analyze/analysis-compl
 import { scanAndEmitSecrets } from '@/commands/analyze/secrets.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import { SQAA_ANALYZE_AGENTIC_CALLER_COMMAND } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
-import {
-  CommandInvocationContext,
-  createTelemetryFactBuffer,
-} from '@/commands/command-invocation-context.ts';
+import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { IntegrationConfiguredPayload } from '@/commands/integrate/_common/integrate-telemetry.ts';
 import { commitTelemetryFacts } from '@/commands/telemetry-facts.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
@@ -845,38 +842,32 @@ function resolvedRun(exitCode: number | null, stdout: string): () => Promise<Spa
 }
 
 function makeCtx() {
-  const buffer = createTelemetryFactBuffer();
-  const ctx = new CommandInvocationContext(
-    { isAlpha: false, isBeta: false, isPrivateBeta: false },
-    { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
-    buffer,
-  );
-  return { ctx, buffer };
+  return new CommandInvocationContext();
 }
 
 describe('scanAndEmitSecrets() — emitted event fields', () => {
   it('does nothing when telemetry is disabled', async () => {
     loadStateSpy.mockReturnValue(makeTelemetryState(false));
-    const { ctx, buffer } = makeCtx();
+    const ctx = makeCtx();
     await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.analyzeSecrets,
       AUTH,
       resolvedRun(0, '{}'),
       ctx,
     );
-    await commitTelemetryFacts(buffer.facts);
+    await commitTelemetryFacts(ctx.telemetryFacts());
     expect(readAnalysisEvents(testSonarUserHome)).toHaveLength(0);
   });
 
   it('emits a single CliAnalysisCompleted with details "" on a clean scan (exit 0, no issues)', async () => {
-    const { ctx, buffer } = makeCtx();
+    const ctx = makeCtx();
     await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.analyzeSecrets,
       AUTH,
       resolvedRun(0, JSON.stringify({ issues: [] })),
       ctx,
     );
-    await commitTelemetryFacts(buffer.facts);
+    await commitTelemetryFacts(ctx.telemetryFacts());
 
     const lines = readAnalysisEvents(testSonarUserHome);
     expect(lines).toHaveLength(1);
@@ -900,14 +891,14 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
         { ruleKey: 'secrets:S1234', description: 'Other', file: 'src/other.ts' },
       ],
     });
-    const { ctx, buffer } = makeCtx();
+    const ctx = makeCtx();
     await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.gitPreCommit,
       AUTH,
       resolvedRun(51, stdout),
       ctx,
     );
-    await commitTelemetryFacts(buffer.facts);
+    await commitTelemetryFacts(ctx.telemetryFacts());
 
     const lines = readAnalysisEvents(testSonarUserHome);
     expect(lines).toHaveLength(1);
@@ -934,14 +925,14 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
     const stdout = JSON.stringify({
       issues: [{ ruleKey: 'secrets:S6290', description: 'AWS key in prompt' }],
     });
-    const { ctx, buffer } = makeCtx();
+    const ctx = makeCtx();
     await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.agentPromptSubmit,
       AUTH,
       resolvedRun(51, stdout),
       ctx,
     );
-    await commitTelemetryFacts(buffer.facts);
+    await commitTelemetryFacts(ctx.telemetryFacts());
 
     const lines = readAnalysisEvents(testSonarUserHome);
     const completed = lines[0];
@@ -954,14 +945,14 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
   });
 
   it('emits only CliAnalysisCompleted with failures_count 1 for a non-clean, non-findings exit code', async () => {
-    const { ctx, buffer } = makeCtx();
+    const ctx = makeCtx();
     await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.copilotPreToolUse,
       AUTH,
       resolvedRun(2, '{}'),
       ctx,
     );
-    await commitTelemetryFacts(buffer.facts);
+    await commitTelemetryFacts(ctx.telemetryFacts());
 
     const lines = readAnalysisEvents(testSonarUserHome);
     expect(lines).toHaveLength(1);
@@ -972,14 +963,14 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
   });
 
   it('reports a resolved null exitCode as exit_code null with failures_count 1 (no coercion)', async () => {
-    const { ctx, buffer } = makeCtx();
+    const ctx = makeCtx();
     await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.agentPromptSubmit,
       AUTH,
       resolvedRun(null, '{}'),
       ctx,
     );
-    await commitTelemetryFacts(buffer.facts);
+    await commitTelemetryFacts(ctx.telemetryFacts());
 
     const lines = readAnalysisEvents(testSonarUserHome);
     expect(lines).toHaveLength(1);
@@ -991,14 +982,14 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
   it('records errors_count from the errors field in stdout, independent of failures_count', async () => {
     const stdout = JSON.stringify({ issues: [], errors: ['auth failed', 'partial scan'] });
     // exit 2: run failed (failures_count 1) AND reported errors[] (errors_count 2) — not mutually exclusive
-    const { ctx, buffer } = makeCtx();
+    const ctx = makeCtx();
     await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.analyzeSecrets,
       AUTH,
       resolvedRun(2, stdout),
       ctx,
     );
-    await commitTelemetryFacts(buffer.facts);
+    await commitTelemetryFacts(ctx.telemetryFacts());
 
     const lines = readAnalysisEvents(testSonarUserHome);
     const completed = lines[0];
@@ -1014,14 +1005,14 @@ describe('scanAndEmitSecrets() — wrapper behavior', () => {
       stdout: JSON.stringify({ issues: [{ ruleKey: 'secrets:S6290', description: 'AWS key' }] }),
       stderr: '',
     };
-    const { ctx, buffer } = makeCtx();
+    const ctx = makeCtx();
     const out = await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.gitPreCommit,
       AUTH,
       () => Promise.resolve(result),
       ctx,
     );
-    await commitTelemetryFacts(buffer.facts);
+    await commitTelemetryFacts(ctx.telemetryFacts());
 
     expect(out.result).toBe(result);
     expect(out.parsed.issues).toHaveLength(1);
@@ -1038,7 +1029,7 @@ describe('scanAndEmitSecrets() — wrapper behavior', () => {
   it('emits a failures_count:1 event and re-throws when the scan fails to run', async () => {
     const boom = new Error('Scan timed out after 30000ms');
 
-    const { ctx, buffer } = makeCtx();
+    const ctx = makeCtx();
     let thrown: unknown;
     await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.gitPreCommit,
@@ -1049,7 +1040,7 @@ describe('scanAndEmitSecrets() — wrapper behavior', () => {
       thrown = err;
     });
     expect(thrown).toBe(boom);
-    await commitTelemetryFacts(buffer.facts);
+    await commitTelemetryFacts(ctx.telemetryFacts());
 
     const lines = readAnalysisEvents(testSonarUserHome);
     expect(lines).toHaveLength(1);
@@ -1061,7 +1052,7 @@ describe('scanAndEmitSecrets() — wrapper behavior', () => {
   });
 
   it('defers NDJSON append when an invocation context is provided', async () => {
-    const { ctx, buffer } = makeCtx();
+    const ctx = makeCtx();
     const result: SpawnResult = { exitCode: 0, stdout: '{}', stderr: '' };
     await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.analyzeSecrets,
@@ -1071,8 +1062,8 @@ describe('scanAndEmitSecrets() — wrapper behavior', () => {
     );
 
     expect(readAnalysisEvents(testSonarUserHome)).toHaveLength(0);
-    expect(buffer.facts).toHaveLength(1);
-    const pending = buffer.facts[0];
+    expect(ctx.telemetryFacts()).toHaveLength(1);
+    const pending = ctx.telemetryFacts()[0];
     expect(pending?.name).toBe('CliAnalysisCompleted');
     expect((pending?.payload as { caller_command?: string }).caller_command).toBe(
       SECRETS_CALLER_COMMANDS.analyzeSecrets,

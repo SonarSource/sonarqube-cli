@@ -243,21 +243,8 @@ export async function runSqaaAnalysis(
     displaySingleFileReport(report, displayDepth);
   }
 
-  const exitCode = resolveSqaaCommandExitCode(
-    report.summary.totalIssues,
-    report.summary.totalFailures,
-  );
   applyExitCode(report.summary.totalIssues, report.summary.totalFailures);
-  if (telemetryCallerCommand && telemetryCtx) {
-    recordSqaaAnalysisTelemetry(
-      telemetryCtx,
-      auth,
-      telemetryCallerCommand,
-      tallyFromSqaaJsonReport(report),
-      durationMs,
-      exitCode,
-    );
-  }
+  finishSqaaTelemetryFromReport(report, { telemetryCallerCommand, telemetryCtx, auth }, durationMs);
 }
 
 export async function runSqaaAnalysisOnExplicitFiles(

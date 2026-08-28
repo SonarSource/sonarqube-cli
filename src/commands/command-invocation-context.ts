@@ -73,15 +73,6 @@ export class TelemetryFact<TPayload = unknown> {
   }
 }
 
-/** Mutable per-tree buffer owned by `buildCommandTree` and closed over by postAction. */
-export type TelemetryFactBuffer = {
-  facts: TelemetryFact[];
-};
-
-export function createTelemetryFactBuffer(): TelemetryFactBuffer {
-  return { facts: [] };
-}
-
 const STABLE_STAGE: CommandInvocationContextStage = {
   isAlpha: false,
   isBeta: false,
@@ -100,14 +91,16 @@ const DISABLED_RUNTIME: CommandInvocationContextRuntime = {
  * can combine the command's `.stage()` with runtime entitlement (alpha env /
  * Private Beta LaunchDarkly), not merely echo the stage name.
  *
- * Facts are recorded with {@link recordTelemetry} and drained in `postAction`.
+ * Facts are recorded with {@link recordTelemetry} and read via
+ * {@link telemetryFacts} from `postAction` on the action command's context.
  * Payload shapes inside {@link TelemetryFact.payload} are owned by producers.
  */
 export class CommandInvocationContext {
+  private readonly facts: TelemetryFact[] = [];
+
   constructor(
     private readonly stage: CommandInvocationContextStage = STABLE_STAGE,
     private readonly runtime: CommandInvocationContextRuntime = DISABLED_RUNTIME,
-    private readonly telemetryFactBuffer?: TelemetryFactBuffer,
   ) {}
 
   /** True when this command is Alpha and alpha is enabled for this run. */
@@ -130,15 +123,17 @@ export class CommandInvocationContext {
     return flagKey !== undefined && this.runtime.isPrivateBetaEnabled(flagKey);
   }
 
-  /**
-   * Record telemetry facts for `postAction` drain. No-ops when the context was
-   * built without a tree buffer (unit-test fixtures).
-   */
+  /** Record telemetry facts for `postAction` drain. */
   recordTelemetry(...facts: TelemetryFact[]): void {
-    if (this.telemetryFactBuffer == null || facts.length === 0) {
+    if (facts.length === 0) {
       return;
     }
-    this.telemetryFactBuffer.facts.push(...facts);
+    this.facts.push(...facts);
+  }
+
+  /** Snapshot of facts recorded during this invocation. */
+  telemetryFacts(): readonly TelemetryFact[] {
+    return this.facts.slice();
   }
 }
 
@@ -153,8 +148,7 @@ export class CommandAuthenticatedInvocationContext extends CommandInvocationCont
     readonly auth: ResolvedAuth,
     stage?: CommandInvocationContextStage,
     runtime?: CommandInvocationContextRuntime,
-    telemetryFactBuffer?: TelemetryFactBuffer,
   ) {
-    super(stage, runtime, telemetryFactBuffer);
+    super(stage, runtime);
   }
 }

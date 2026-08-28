@@ -20,10 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import {
-  CommandInvocationContext,
-  createTelemetryFactBuffer,
-} from '@/commands/command-invocation-context.ts';
+import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
@@ -54,13 +51,7 @@ const OK_RESULT = { exitCode: 0, stdout: '', stderr: '' };
 const SECRETS_RESULT = { exitCode: EXIT_CODE_SECRETS_FOUND, stdout: '', stderr: '' };
 
 function makeCtx() {
-  const buffer = createTelemetryFactBuffer();
-  const ctx = new CommandInvocationContext(
-    { isAlpha: false, isBeta: false, isPrivateBeta: false },
-    { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
-    buffer,
-  );
-  return { ctx, buffer };
+  return new CommandInvocationContext();
 }
 
 const SECRETS_RESULT_WITH_ISSUES = {
@@ -109,7 +100,7 @@ describe('gitPreCommit', () => {
   });
 
   it('scans staged files when they exist', async () => {
-    await gitPreCommit({}, [], makeCtx().ctx);
+    await gitPreCommit({}, [], makeCtx());
 
     expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
     const [, files] = runSecretsBinarySpy.mock.calls[0] as [string, string[], unknown];
@@ -121,7 +112,7 @@ describe('gitPreCommit', () => {
 
     let thrown: unknown;
     try {
-      await gitPreCommit({}, [], makeCtx().ctx);
+      await gitPreCommit({}, [], makeCtx());
     } catch (e) {
       thrown = e;
     }
@@ -132,7 +123,7 @@ describe('gitPreCommit', () => {
   it('prints finding detail (file, line, masked secret) when secrets are found', async () => {
     runSecretsBinarySpy.mockResolvedValue(SECRETS_RESULT_WITH_ISSUES);
 
-    await gitPreCommit({}, [], makeCtx().ctx).catch(() => undefined);
+    await gitPreCommit({}, [], makeCtx()).catch(() => undefined);
 
     const prints = getMockUiCalls()
       .filter((c) => c.method === 'print')
@@ -143,13 +134,13 @@ describe('gitPreCommit', () => {
   });
 
   it('resolves without throwing when no secrets are found', async () => {
-    await gitPreCommit({}, [], makeCtx().ctx); // resolves cleanly — test fails if it throws
+    await gitPreCommit({}, [], makeCtx()); // resolves cleanly — test fails if it throws
   });
 
   it('skips scan when no staged files', async () => {
     spawnProcessSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
 
-    await gitPreCommit({}, [], makeCtx().ctx);
+    await gitPreCommit({}, [], makeCtx());
 
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });
@@ -159,7 +150,7 @@ describe('gitPreCommit', () => {
 
     let thrown: unknown;
     try {
-      await gitPreCommit({}, [], makeCtx().ctx);
+      await gitPreCommit({}, [], makeCtx());
     } catch (e) {
       thrown = e;
     }
@@ -173,7 +164,7 @@ describe('gitPreCommit', () => {
 
     let thrown: unknown;
     try {
-      await gitPreCommit({}, [], makeCtx().ctx);
+      await gitPreCommit({}, [], makeCtx());
     } catch (e) {
       thrown = e;
     }
@@ -189,7 +180,7 @@ describe('gitPreCommit', () => {
 
     let thrown: unknown;
     try {
-      await gitPreCommit({}, [], makeCtx().ctx);
+      await gitPreCommit({}, [], makeCtx());
     } catch (e) {
       thrown = e;
     } finally {
@@ -203,13 +194,13 @@ describe('gitPreCommit', () => {
   it('resolves without throwing when scan fails with keychain auth (fail soft)', async () => {
     runSecretsBinarySpy.mockRejectedValue(new Error('binary crashed'));
 
-    await gitPreCommit({}, [], makeCtx().ctx); // must not throw
+    await gitPreCommit({}, [], makeCtx()); // must not throw
   });
 
   it('skips scan when git spawn throws while listing staged files', async () => {
     spawnProcessSpy.mockRejectedValue(new Error('git not found'));
 
-    await gitPreCommit({}, [], makeCtx().ctx);
+    await gitPreCommit({}, [], makeCtx());
 
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });
@@ -260,7 +251,7 @@ describe('gitPrePush', () => {
   });
 
   it('scans files from the pushed ref', async () => {
-    await gitPrePush([], makeCtx().ctx);
+    await gitPrePush([], makeCtx());
 
     expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
     const [, files] = runSecretsBinarySpy.mock.calls[0] as [string, string[], unknown];
@@ -272,7 +263,7 @@ describe('gitPrePush', () => {
 
     let thrown: unknown;
     try {
-      await gitPrePush([], makeCtx().ctx);
+      await gitPrePush([], makeCtx());
     } catch (e) {
       thrown = e;
     }
@@ -283,7 +274,7 @@ describe('gitPrePush', () => {
   it('prints finding detail (file, line, masked secret) when secrets are found', async () => {
     runSecretsBinarySpy.mockResolvedValue(SECRETS_RESULT_WITH_ISSUES);
 
-    await gitPrePush([], makeCtx().ctx).catch(() => undefined);
+    await gitPrePush([], makeCtx()).catch(() => undefined);
 
     const prints = getMockUiCalls()
       .filter((c) => c.method === 'print')
@@ -294,13 +285,13 @@ describe('gitPrePush', () => {
   });
 
   it('resolves without throwing when no secrets found', async () => {
-    await gitPrePush([], makeCtx().ctx); // resolves cleanly — test fails if it throws
+    await gitPrePush([], makeCtx()); // resolves cleanly — test fails if it throws
   });
 
   it('skips scan when refs are empty', async () => {
     readGitPushRefsSpy.mockResolvedValue([]);
 
-    await gitPrePush([], makeCtx().ctx);
+    await gitPrePush([], makeCtx());
 
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });
@@ -310,7 +301,7 @@ describe('gitPrePush', () => {
 
     let thrown: unknown;
     try {
-      await gitPrePush([], makeCtx().ctx);
+      await gitPrePush([], makeCtx());
     } catch (e) {
       thrown = e;
     }
@@ -324,7 +315,7 @@ describe('gitPrePush', () => {
 
     let thrown: unknown;
     try {
-      await gitPrePush([], makeCtx().ctx);
+      await gitPrePush([], makeCtx());
     } catch (e) {
       thrown = e;
     }
@@ -338,7 +329,7 @@ describe('gitPrePush', () => {
       { ...FAKE_REF, localSha: '0000000000000000000000000000000000000000' },
     ]);
 
-    await gitPrePush([], makeCtx().ctx);
+    await gitPrePush([], makeCtx());
 
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });
@@ -346,7 +337,7 @@ describe('gitPrePush', () => {
   it('skips ref when no files are returned for it', async () => {
     spawnProcessSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
 
-    await gitPrePush([], makeCtx().ctx);
+    await gitPrePush([], makeCtx());
 
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });
@@ -358,7 +349,7 @@ describe('gitPrePush', () => {
 
     let thrown: unknown;
     try {
-      await gitPrePush([], makeCtx().ctx);
+      await gitPrePush([], makeCtx());
     } catch (e) {
       thrown = e;
     } finally {
@@ -372,14 +363,14 @@ describe('gitPrePush', () => {
   it('resolves without throwing when scan fails with keychain auth (fail soft)', async () => {
     runSecretsBinarySpy.mockRejectedValue(new Error('binary crashed'));
 
-    await gitPrePush([], makeCtx().ctx); // must not throw
+    await gitPrePush([], makeCtx()); // must not throw
   });
 
   it('calls the secrets binary once per ref group', async () => {
     const secondRef = { ...FAKE_REF, localSha: 'def456' };
     readGitPushRefsSpy.mockResolvedValue([FAKE_REF, secondRef]);
 
-    await gitPrePush([], makeCtx().ctx);
+    await gitPrePush([], makeCtx());
 
     expect(runSecretsBinarySpy).toHaveBeenCalledTimes(2);
     for (const call of runSecretsBinarySpy.mock.calls) {
@@ -392,7 +383,7 @@ describe('gitPrePush', () => {
     spawnProcessSpy.mockRejectedValueOnce(new Error('mktree failed'));
     // subsequent calls use the beforeEach default — rev-list + diff-tree return files
 
-    await gitPrePush([], makeCtx().ctx);
+    await gitPrePush([], makeCtx());
 
     expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
   });
@@ -401,7 +392,7 @@ describe('gitPrePush', () => {
     readGitPushRefsSpy.mockResolvedValue([EXISTING_BRANCH_REF]);
     // spawnProcess: mktree (call 1) then git diff (call 2) — both use beforeEach default
 
-    await gitPrePush([], makeCtx().ctx);
+    await gitPrePush([], makeCtx());
 
     expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
     const [, files] = runSecretsBinarySpy.mock.calls[0] as [string, string[], unknown];
@@ -414,7 +405,7 @@ describe('gitPrePush', () => {
       .mockResolvedValueOnce({ exitCode: 0, stdout: 'abc123tree', stderr: '' }) // mktree
       .mockRejectedValueOnce(new Error('git diff failed')); // diff remoteSha..localSha
 
-    await gitPrePush([], makeCtx().ctx);
+    await gitPrePush([], makeCtx());
 
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });
@@ -425,7 +416,7 @@ describe('gitPrePush', () => {
       .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }) // rev-list: no commits
       .mockResolvedValue({ exitCode: 0, stdout: 'src/new.ts', stderr: '' }); // diff vs empty tree
 
-    await gitPrePush([], makeCtx().ctx);
+    await gitPrePush([], makeCtx());
 
     expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
     const [, files] = runSecretsBinarySpy.mock.calls[0] as [string, string[], unknown];
@@ -438,7 +429,7 @@ describe('gitPrePush', () => {
       .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }) // rev-list: no commits
       .mockRejectedValue(new Error('git diff failed')); // empty-tree diff throws
 
-    await gitPrePush([], makeCtx().ctx);
+    await gitPrePush([], makeCtx());
 
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });

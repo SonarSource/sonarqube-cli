@@ -20,11 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import {
-  CommandInvocationContext,
-  createTelemetryFactBuffer,
-  TelemetryFact,
-} from '@/commands/command-invocation-context.ts';
+import { CommandInvocationContext, TelemetryFact } from '@/commands/command-invocation-context.ts';
 
 describe('CommandInvocationContext stage accessors', () => {
   it('defaults to non-alpha / non-beta', () => {
@@ -78,7 +74,7 @@ describe('CommandInvocationContext stage accessors', () => {
     ).toBe(true);
   });
 
-  it('recordTelemetry no-ops without a buffer and appends when one is provided', () => {
+  it('recordTelemetry appends facts onto the context', () => {
     const fact = new TelemetryFact('CliAnalysisCompleted', {
       caller_command: 'analyze secrets',
       analyzer: 'sonar-secrets' as const,
@@ -91,15 +87,10 @@ describe('CommandInvocationContext stage accessors', () => {
       details: '',
     });
 
-    new CommandInvocationContext().recordTelemetry(fact);
-
-    const buffer = createTelemetryFactBuffer();
-    new CommandInvocationContext(
-      { isAlpha: false, isBeta: false, isPrivateBeta: false },
-      { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
-      buffer,
-    ).recordTelemetry(fact);
-    expect(buffer.facts).toEqual([fact]);
+    const ctx = new CommandInvocationContext();
+    ctx.recordTelemetry(fact);
+    expect(ctx.telemetryFacts()).toEqual([fact]);
+    expect(ctx.telemetryFacts()).not.toBe(ctx.telemetryFacts());
   });
 });
 

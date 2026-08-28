@@ -37,8 +37,6 @@ import {
   CommandAuthenticatedInvocationContext,
   CommandInvocationContext,
   type CommandInvocationContextStage,
-  createTelemetryFactBuffer,
-  type TelemetryFactBuffer,
 } from './command-invocation-context.ts';
 
 export const ALPHA_ENV_VAR = 'SONARQUBE_CLI_ALPHA';
@@ -201,8 +199,6 @@ export interface RootHelpMetadata {
 export interface SonarCommandOptions {
   updateNotifier?: UpdateNotifier;
   runtime?: CliRuntime;
-  /** Tree-owned buffer; handlers record via {@link CommandInvocationContext.recordTelemetry}. */
-  telemetryFactBuffer?: TelemetryFactBuffer;
 }
 
 type CommandArgs = unknown[];
@@ -272,11 +268,11 @@ export class SonarCommand extends Command {
   private _rootHelp: RootHelpMetadata = {};
   private readonly _updateNotifier: UpdateNotifier;
   private readonly _runtime: CliRuntime;
-  private readonly _telemetryFactBuffer: TelemetryFactBuffer;
+  private _invocationContext: CommandInvocationContext | undefined;
 
   /**
-   * `updateNotifier` / `runtime` / `telemetryFactBuffer` default so the root command
-   * owns the instances the whole tree shares; every subcommand inherits them via
+   * `updateNotifier` / `runtime` default so the root command owns the
+   * instances the whole tree shares; every subcommand inherits them via
    * createCommand().
    */
   constructor(options?: SonarCommandOptions);
@@ -291,7 +287,6 @@ export class SonarCommand extends Command {
     super(name);
     this._updateNotifier = options.updateNotifier ?? new UpdateNotifier();
     this._runtime = options.runtime ?? createDefaultCliRuntime();
-    this._telemetryFactBuffer = options.telemetryFactBuffer ?? createTelemetryFactBuffer();
     this.hook('preAction', () => {
       if (this.isAlpha) {
         info(`'${this.name()}' is in alpha; may change or be removed without notice.`, 'stderr');
@@ -305,7 +300,6 @@ export class SonarCommand extends Command {
     return new SonarCommand(name, {
       updateNotifier: this._updateNotifier,
       runtime: this._runtime,
-      telemetryFactBuffer: this._telemetryFactBuffer,
     });
   }
 
@@ -354,6 +348,15 @@ export class SonarCommand extends Command {
   /** Startup auth / Private Beta gate shared by this command and its subtree. */
   get runtime(): CliRuntime {
     return this._runtime;
+  }
+
+  /**
+   * Context for the action that just ran. Set when `anonymousAction` /
+   * `authenticatedAction` invoke the handler; `postAction` reads recorded
+   * telemetry facts from it.
+   */
+  get invocationContext(): CommandInvocationContext | undefined {
+    return this._invocationContext;
   }
 
   /**
@@ -509,22 +512,21 @@ export class SonarCommand extends Command {
   }
 
   private createCommandInvocationContext(): CommandInvocationContext {
-    return new CommandInvocationContext(
-      this.commandInvocationContextStage(),
-      this._runtime,
-      this._telemetryFactBuffer,
-    );
+    const ctx = new CommandInvocationContext(this.commandInvocationContextStage(), this._runtime);
+    this._invocationContext = ctx;
+    return ctx;
   }
 
   private createCommandAuthenticatedInvocationContext(
     auth: ResolvedAuth,
   ): CommandAuthenticatedInvocationContext {
-    return new CommandAuthenticatedInvocationContext(
+    const ctx = new CommandAuthenticatedInvocationContext(
       auth,
       this.commandInvocationContextStage(),
       this._runtime,
-      this._telemetryFactBuffer,
     );
+    this._invocationContext = ctx;
+    return ctx;
   }
 
   private commandInvocationContextStage(): CommandInvocationContextStage {

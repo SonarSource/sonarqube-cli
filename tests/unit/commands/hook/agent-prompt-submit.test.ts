@@ -24,10 +24,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import {
-  CommandInvocationContext,
-  createTelemetryFactBuffer,
-} from '@/commands/command-invocation-context.ts';
+import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 
@@ -40,13 +37,7 @@ import {
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
 
 function makeCtx() {
-  const buffer = createTelemetryFactBuffer();
-  const ctx = new CommandInvocationContext(
-    { isAlpha: false, isBeta: false, isPrivateBeta: false },
-    { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
-    buffer,
-  );
-  return { ctx, buffer };
+  return new CommandInvocationContext();
 }
 
 describe('agentPromptSubmit (unit — impractical-via-e2e paths)', () => {
@@ -92,7 +83,7 @@ describe('agentPromptSubmit (unit — impractical-via-e2e paths)', () => {
       stderr: '',
     });
 
-    await agentPromptSubmit(makeCtx().ctx);
+    await agentPromptSubmit(makeCtx());
 
     const written = String((stdoutSpy.mock.calls[0] as unknown[])[0]);
     const payload = JSON.parse(written) as { decision: string; reason: string };
@@ -103,7 +94,7 @@ describe('agentPromptSubmit (unit — impractical-via-e2e paths)', () => {
   it('outputs nothing and does not throw when scan throws an error', async () => {
     runSecretsBinaryOnTextSpy.mockRejectedValue(new Error('scan process crashed'));
 
-    await agentPromptSubmit(makeCtx().ctx);
+    await agentPromptSubmit(makeCtx());
 
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
@@ -111,7 +102,7 @@ describe('agentPromptSubmit (unit — impractical-via-e2e paths)', () => {
   it('outputs nothing when exitCode is null', async () => {
     runSecretsBinaryOnTextSpy.mockResolvedValue({ exitCode: null, stdout: '', stderr: '' });
 
-    await agentPromptSubmit(makeCtx().ctx);
+    await agentPromptSubmit(makeCtx());
 
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
@@ -119,7 +110,7 @@ describe('agentPromptSubmit (unit — impractical-via-e2e paths)', () => {
   it('blocks with the unauthenticated message when auth is unavailable', async () => {
     resolveAuthSpy.mockResolvedValue(null);
 
-    await agentPromptSubmit(makeCtx().ctx);
+    await agentPromptSubmit(makeCtx());
 
     expect(runSecretsBinaryOnTextSpy).not.toHaveBeenCalled();
     const payload = JSON.parse(String((stdoutSpy.mock.calls[0] as unknown[])[0])) as {
@@ -133,7 +124,7 @@ describe('agentPromptSubmit (unit — impractical-via-e2e paths)', () => {
   it('blocks with the binary-missing message when the analyzer is not installed', async () => {
     resolveSecretsBinaryPathSpy.mockReturnValue(null);
 
-    await agentPromptSubmit(makeCtx().ctx);
+    await agentPromptSubmit(makeCtx());
 
     expect(runSecretsBinaryOnTextSpy).not.toHaveBeenCalled();
     const payload = JSON.parse(String((stdoutSpy.mock.calls[0] as unknown[])[0])) as {

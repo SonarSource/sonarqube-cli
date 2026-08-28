@@ -22,10 +22,7 @@ import { createHash } from 'node:crypto';
 
 import { describe, expect, it } from 'bun:test';
 
-import {
-  CommandInvocationContext,
-  createTelemetryFactBuffer,
-} from '@/commands/command-invocation-context.ts';
+import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
@@ -62,14 +59,9 @@ const AUTH: ResolvedAuth = {
 };
 
 function record(params: Omit<Parameters<typeof recordIntegrationConfigured>[1], 'auth'>) {
-  const buffer = createTelemetryFactBuffer();
-  const ctx = new CommandInvocationContext(
-    { isAlpha: false, isBeta: false, isPrivateBeta: false },
-    { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
-    buffer,
-  );
+  const ctx = new CommandInvocationContext();
   recordIntegrationConfigured(ctx, { auth: AUTH, ...params });
-  const fact = buffer.facts[0];
+  const fact = ctx.telemetryFacts()[0];
   expect(fact.name).toBe(CLI_INTEGRATION_CONFIGURED);
   return fact.payload as Record<string, unknown>;
 }

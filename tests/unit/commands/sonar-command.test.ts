@@ -25,7 +25,6 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:te
 import {
   CommandAuthenticatedInvocationContext,
   CommandInvocationContext,
-  createTelemetryFactBuffer,
   TelemetryFact,
 } from '@/commands/command-invocation-context.ts';
 import { getCustomRootHelp } from '@/commands/root-help.ts';
@@ -723,8 +722,7 @@ describe('SonarCommand', () => {
     });
 
     it('ctx.recordTelemetry queues items before a thrown CommandFailedError', async () => {
-      const telemetryFactBuffer = createTelemetryFactBuffer();
-      const cmd = new SonarCommand({ telemetryFactBuffer });
+      const cmd = new SonarCommand();
       cmd.anonymousAction((ctx) => {
         ctx.recordTelemetry(
           new TelemetryFact('CliAnalysisCompleted', {
@@ -743,7 +741,7 @@ describe('SonarCommand', () => {
       });
       await cmd.parseAsync([], { from: 'user' });
       expect(process.exitCode).toBe(51);
-      expect(telemetryFactBuffer.facts).toHaveLength(1);
+      expect(cmd.invocationContext?.telemetryFacts()).toHaveLength(1);
     });
   });
 

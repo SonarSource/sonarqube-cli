@@ -20,10 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import {
-  CommandInvocationContext,
-  createTelemetryFactBuffer,
-} from '@/commands/command-invocation-context.ts';
+import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import * as scaInstall from '@/core/host/install/sca-scanner.ts';
@@ -38,13 +35,7 @@ import { ScaWatchPatternsRunner } from '../../../../src/commands/analyze/depende
 import { runDepRisksStage } from '../../../../src/commands/hook/git-pre-commit-dependency-risks.ts';
 
 function makeCtx() {
-  const buffer = createTelemetryFactBuffer();
-  const ctx = new CommandInvocationContext(
-    { isAlpha: false, isBeta: false, isPrivateBeta: false },
-    { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
-    buffer,
-  );
-  return { ctx, buffer };
+  return new CommandInvocationContext();
 }
 
 const FAKE_AUTH: ResolvedAuth = {
@@ -218,7 +209,7 @@ describe('runDepRisksStage', () => {
         project: 'demo',
         changedFiles: ['package.json'],
         auth: FAKE_AUTH,
-        ctx: makeCtx().ctx,
+        ctx: makeCtx(),
       });
     } catch (e) {
       thrown = e;
@@ -241,7 +232,7 @@ describe('runDepRisksStage', () => {
         project: 'demo',
         changedFiles: ['package.json'],
         auth: FAKE_AUTH,
-        ctx: makeCtx().ctx,
+        ctx: makeCtx(),
       });
     } catch (e) {
       thrown = e;
@@ -260,7 +251,7 @@ describe('runDepRisksStage', () => {
       project: 'demo',
       changedFiles: ['package.json'],
       auth: FAKE_AUTH,
-      ctx: makeCtx().ctx,
+      ctx: makeCtx(),
     });
 
     const successCall = findMockUiCall('discreetSuccess', 'No dependency risks found.');
@@ -276,7 +267,7 @@ describe('runDepRisksStage', () => {
         project: 'demo',
         changedFiles: ['package.json'],
         auth: FAKE_AUTH,
-        ctx: makeCtx().ctx,
+        ctx: makeCtx(),
       });
     } catch (e) {
       thrown = e;
@@ -295,7 +286,7 @@ describe('runDepRisksStage', () => {
       project: 'demo',
       changedFiles: ['package.json'],
       auth: FAKE_AUTH,
-      ctx: makeCtx().ctx,
+      ctx: makeCtx(),
     });
 
     expect(getMockUiCalls().filter((c) => c.method === 'print')).toHaveLength(0);
@@ -308,7 +299,7 @@ describe('runDepRisksStage', () => {
       project: 'demo',
       changedFiles: ['index.ts'],
       auth: FAKE_AUTH,
-      ctx: makeCtx().ctx,
+      ctx: makeCtx(),
     });
 
     expect(orchestratorRunSpy).not.toHaveBeenCalled();

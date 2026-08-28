@@ -34,10 +34,7 @@ import {
   tallyFromSqaaJsonReport,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display-json.ts';
-import {
-  CommandInvocationContext,
-  createTelemetryFactBuffer,
-} from '@/commands/command-invocation-context.ts';
+import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import { commitTelemetryFacts } from '@/commands/telemetry-facts.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
@@ -62,14 +59,9 @@ async function emitSqaaAnalysisTelemetry(
   durationMs: number,
   exitCode?: number | null,
 ): Promise<void> {
-  const buffer = createTelemetryFactBuffer();
-  const ctx = new CommandInvocationContext(
-    { isAlpha: false, isBeta: false, isPrivateBeta: false },
-    { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
-    buffer,
-  );
+  const ctx = new CommandInvocationContext();
   recordSqaaAnalysisTelemetry(ctx, AUTH, callerCommand, tally, durationMs, exitCode);
-  await commitTelemetryFacts(buffer.facts);
+  await commitTelemetryFacts(ctx.telemetryFacts());
 }
 
 function makeIssue(rule: string, message = 'issue'): SqaaIssue {
