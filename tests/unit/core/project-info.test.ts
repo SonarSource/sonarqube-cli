@@ -458,6 +458,24 @@ describe('discoverProject', () => {
       expect(result.projectKey).toBe('known-project');
     });
 
+    it("passes every known mapping's targetRoot/repoRoot as the resolveLookupPaths bound, unfiltered", async () => {
+      // Deduplication/nesting is resolveLookupPaths()'s job, not discoverProject()'s.
+      const repoRoot = join(testDir, '..');
+      mockLiveMappings(loadStateSpy, [
+        makeKnownMapping({
+          targetRoot: canonicalizePath(testDir),
+          repoRoot: canonicalizePath(repoRoot),
+        }),
+      ]);
+
+      await discoverProject(testDir);
+
+      expect(lookupPathsSpy).toHaveBeenCalledWith(testDir, [
+        canonicalizePath(testDir),
+        canonicalizePath(repoRoot),
+      ]);
+    });
+
     it('matches a known mapping recorded at a subdirectory below the git repo root (monorepo package)', async () => {
       // Regression test: discoverProject() must pass the raw invocation directory
       // (not the already-collapsed git repo root) into the known-mapping lookup, so a

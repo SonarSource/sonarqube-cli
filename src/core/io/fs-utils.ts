@@ -93,3 +93,12 @@ export function toRelativePosixPath(file: string, base: string = process.cwd()):
   if (isAbsolute(rel) || rel.split('/').includes('..')) return null;
   return rel;
 }
+
+/** True when `path` is `ancestor` itself or nested under it. Both args must already be canonicalized. */
+export function isAncestorOrSelf(ancestor: string, path: string): boolean {
+  if (pathComparisonKey(ancestor) === pathComparisonKey(path)) {
+    return true;
+  }
+  const rel = relative(ancestor, path);
+  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+}

@@ -89,12 +89,46 @@ describe('resolveLookupPaths', () => {
   });
 
   it('is bounded to the start dir itself when not inside a git repository', async () => {
-    // Outside git, nothing bounds a climb to a project — climbing to the filesystem
-    // root would let a mapping/config file sitting in an unrelated ancestor directory
-    // resolve for any subdirectory below it. Restrict to the start dir alone.
     mockGitResponses({ 'rev-parse --show-toplevel': null });
 
     const paths = await resolveLookupPaths(STANDALONE_PROJECT);
+
+    expect(paths).toEqual([
+      { checkPath: canon(STANDALONE_PROJECT), projectRoot: canon(STANDALONE_PROJECT) },
+    ]);
+  });
+
+  it('bounds the non-git climb to a known root instead of the start dir', async () => {
+    mockGitResponses({ 'rev-parse --show-toplevel': null });
+
+    const paths = await resolveLookupPaths(`${STANDALONE_PROJECT}/src`, [STANDALONE_PROJECT]);
+
+    expect(paths).toEqual([
+      {
+        checkPath: canon(`${STANDALONE_PROJECT}/src`),
+        projectRoot: canon(`${STANDALONE_PROJECT}/src`),
+      },
+      { checkPath: canon(STANDALONE_PROJECT), projectRoot: canon(STANDALONE_PROJECT) },
+    ]);
+  });
+
+  it('bounds to the shallowest matching known root, given an un-deduplicated nested chain', async () => {
+    mockGitResponses({ 'rev-parse --show-toplevel': null });
+    const nested = `${STANDALONE_PROJECT}/deep`;
+
+    const paths = await resolveLookupPaths(`${nested}/src`, [nested, STANDALONE_PROJECT]);
+
+    expect(paths).toEqual([
+      { checkPath: canon(`${nested}/src`), projectRoot: canon(`${nested}/src`) },
+      { checkPath: canon(nested), projectRoot: canon(nested) },
+      { checkPath: canon(STANDALONE_PROJECT), projectRoot: canon(STANDALONE_PROJECT) },
+    ]);
+  });
+
+  it('falls back to the start dir itself when no known root is an ancestor', async () => {
+    mockGitResponses({ 'rev-parse --show-toplevel': null });
+
+    const paths = await resolveLookupPaths(STANDALONE_PROJECT, ['/unrelated/root']);
 
     expect(paths).toEqual([
       { checkPath: canon(STANDALONE_PROJECT), projectRoot: canon(STANDALONE_PROJECT) },

@@ -160,7 +160,8 @@ export async function discoverProject(
     const repoRoot = isGit ? canonicalizePath(gitRoot) : undefined;
     config.repoRoot = repoRoot;
 
-    const lookupPaths = await resolveLookupPaths(startDir);
+    const knownMappings = loadKnownMappings();
+    const lookupPaths = await resolveLookupPaths(startDir, collectKnownRoots(knownMappings));
     logger.debug(
       `Project discovery lookup paths (nearest first): ${lookupPaths.map((p) => p.checkPath).join(', ')}`,
     );
@@ -171,7 +172,8 @@ export async function discoverProject(
       : undefined;
 
     const resolved =
-      applyKnownServerProjectMapping(config, lookupPaths, silent, options.auth) ||
+      (knownMappings !== undefined &&
+        applyKnownServerProjectMapping(config, lookupPaths, knownMappings, silent, options.auth)) ||
       (await applyLocalConfigAcrossLookupPaths(config, lookupPaths, silent));
 
     if (!resolved) {
@@ -337,28 +339,43 @@ function resolveMappingConnection(
   return { serverUrl: activeConnection?.serverUrl, orgKey: activeConnection?.orgKey };
 }
 
-/** Derives mappings live from installed features, then matches once so the nearest wins. */
+interface KnownMappingsResult {
+  state: CliState;
+  mappings: KnownServerProjectMapping[];
+}
+
+/** Loaded upfront so `discoverProject()` can derive knownRoots and share one lookupPaths list. */
+function loadKnownMappings(): KnownMappingsResult | undefined {
+  try {
+    const state = loadState();
+    return { state, mappings: buildKnownServerProjectMappings(state) };
+  } catch (error) {
+    logger.debug(`Known project mapping lookup skipped: ${(error as Error).message}`);
+    return undefined;
+  }
+}
+
+/** Passed raw to resolveLookupPaths() — it picks the shallowest matching one itself. */
+function collectKnownRoots(known: KnownMappingsResult | undefined): string[] {
+  return (known?.mappings ?? []).flatMap((mapping) =>
+    mapping.repoRoot ? [mapping.targetRoot, mapping.repoRoot] : [mapping.targetRoot],
+  );
+}
+
+/** Matches against mappings derived live from installed features, caller-loaded once above. */
 function applyKnownServerProjectMapping(
   config: DiscoveredProject,
   lookupPaths: LookupPath[],
+  known: KnownMappingsResult,
   silent: boolean,
   auth?: ResolvedAuth | null,
 ): boolean {
-  let state: CliState;
-  try {
-    state = loadState();
-  } catch (error) {
-    logger.debug(`Known project mapping lookup skipped: ${(error as Error).message}`);
-    return false;
-  }
-
-  const mappings = buildKnownServerProjectMappings(state);
-  const match = matchKnownServerProjectMapping(lookupPaths, mappings);
+  const match = matchKnownServerProjectMapping(lookupPaths, known.mappings);
   if (!match) {
     return false;
   }
 
-  const { serverUrl, orgKey } = resolveMappingConnection(match.feature, state, auth);
+  const { serverUrl, orgKey } = resolveMappingConnection(match.feature, known.state, auth);
   if (!serverUrl) {
     return false;
   }

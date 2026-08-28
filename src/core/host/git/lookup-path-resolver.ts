@@ -23,7 +23,7 @@
 
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 
-import { canonicalizePath, pathComparisonKey } from '@/core/io/fs-utils.ts';
+import { canonicalizePath, isAncestorOrSelf, pathComparisonKey } from '@/core/io/fs-utils.ts';
 
 import { resolveGitRepoRoot, resolveMainWorktreeRoot } from './worktree.ts';
 
@@ -67,17 +67,31 @@ function asLookupPaths(paths: string[]): LookupPath[] {
   return paths.map((checkPath) => ({ checkPath, projectRoot: checkPath }));
 }
 
-/**
- * Nearest-first directories to check for `startDir`: climbs to the repo root, or — outside
- * git, where nothing bounds a climb to a project — just `startDir` itself; from a linked
- * worktree, also appends the main tree's offset-equivalent climb so a mapping recorded only
- * there still resolves.
- */
-export async function resolveLookupPaths(startDir: string): Promise<LookupPath[]> {
+/** Shallowest ancestor-or-self of `dir` among the raw, un-deduplicated `knownRoots`. */
+function findBoundingKnownRoot(dir: string, knownRoots: string[]): string | undefined {
+  let shallowest: string | undefined;
+  for (const root of knownRoots) {
+    const canonicalRoot = canonicalizePath(root);
+    if (
+      isAncestorOrSelf(canonicalRoot, dir) &&
+      (shallowest === undefined || canonicalRoot.length < shallowest.length)
+    ) {
+      shallowest = canonicalRoot;
+    }
+  }
+  return shallowest;
+}
+
+/** Nearest-first directories to check for `startDir`: repo-root climb in git, else bounded by the shallowest matching `knownRoots` entry (or `startDir` itself); appends the main-tree-equivalent climb from a linked worktree. */
+export async function resolveLookupPaths(
+  startDir: string,
+  knownRoots: string[] = [],
+): Promise<LookupPath[]> {
   const canonicalStart = canonicalizePath(startDir);
   const currentRepoRoot = await resolveGitRepoRoot(canonicalStart);
   if (!currentRepoRoot) {
-    return asLookupPaths(buildDirectoryClimb(canonicalStart, canonicalStart));
+    const bound = findBoundingKnownRoot(canonicalStart, knownRoots) ?? canonicalStart;
+    return asLookupPaths(buildDirectoryClimb(canonicalStart, bound));
   }
 
   const climb = buildDirectoryClimb(canonicalStart, currentRepoRoot);
