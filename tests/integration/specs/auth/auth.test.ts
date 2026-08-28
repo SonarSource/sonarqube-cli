@@ -317,7 +317,11 @@ describe('auth login — organization selection', () => {
   it(
     'prompts for manual org key when user is not a member of any organization',
     async () => {
-      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withVisibleOrganizations([{ key: 'open-source-org', name: 'Open Source Org' }])
+        .start();
 
       const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
         extraEnv: {
@@ -473,6 +477,242 @@ describe('auth login — organization selection', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('my-org');
+    },
+    { timeout: 15000 },
+  );
+});
+
+describe('auth login — organization validation', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  const cloudEnv = (baseUrl: string) => ({
+    SONARQUBE_CLI_SONARCLOUD_URL: baseUrl,
+    SONARQUBE_CLI_SONARCLOUD_API_URL: baseUrl,
+  });
+
+  it(
+    'accepts a public organization the user is not a member of',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .withVisibleOrganizations([{ key: 'public-org', name: 'Public Org' }])
+        .start();
+
+      const result = await harness.run(`auth login --org public-org --server ${server.baseUrl()}`, {
+        extraEnv: cloudEnv(server.baseUrl()),
+        browserToken: 'my-token',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(
+        `Authentication successful for: ${server.baseUrl()} (public-org)`,
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'rejects a manually entered organization that does not exist',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+
+      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+        extraEnv: cloudEnv(server.baseUrl()),
+        browserToken: 'my-token',
+        stdin: 'hgfjhgfhj\r',
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("Organization 'hgfjhgfhj' not found or not accessible");
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'falls back to the memberships when the organization in sonar-project.properties does not exist',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .start();
+
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        `sonar.host.url=${server.baseUrl()}\nsonar.organization=stale-org\n`,
+      );
+
+      // Nothing is asked here, so the fallback works on piped stdin as well as on a terminal.
+      const result = await harness.run('auth login', {
+        extraEnv: cloudEnv(server.baseUrl()),
+        browserToken: 'my-token',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain("Organization 'stale-org' from project config");
+      expect(result.stdout).toContain('Using organization (only member): my-org');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'rejects an organization from sonar-project.properties when the lookup fails',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizationsSearchError(500)
+        .start();
+
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        `sonar.host.url=${server.baseUrl()}\nsonar.organization=stale-org\n`,
+      );
+
+      const result = await harness.run('auth login', {
+        extraEnv: cloudEnv(server.baseUrl()),
+        browserToken: 'my-token',
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("Could not verify organization 'stale-org'");
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports a failed lookup as unverified rather than as a missing organization',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizationsSearchError(500)
+        .start();
+
+      const result = await harness.run(`auth login --org my-org --server ${server.baseUrl()}`, {
+        extraEnv: cloudEnv(server.baseUrl()),
+        browserToken: 'my-token',
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("Could not verify organization 'my-org'");
+      expect(result.stderr).not.toContain('not found or not accessible');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports a failed membership listing instead of prompting for a key',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizationsSearchError(503)
+        .start();
+
+      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+        extraEnv: cloudEnv(server.baseUrl()),
+        browserToken: 'my-token',
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('Could not list your organizations');
+      expect(result.stdout).not.toContain('Enter organization key');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'trims a padded --org value instead of failing the lookup on whitespace',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .start();
+
+      const result = await harness.run(
+        `auth login --org "  my-org  " --server ${server.baseUrl()}`,
+        { extraEnv: cloudEnv(server.baseUrl()), browserToken: 'my-token' },
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(
+        `Authentication successful for: ${server.baseUrl()} (my-org)`,
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'revokes the token it just minted and stores nothing when the organization is rejected',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+
+      const result = await harness.run(
+        `auth login --org nonexistent-org --server ${server.baseUrl()}`,
+        {
+          extraEnv: cloudEnv(server.baseUrl()),
+          browserToken: 'my-token',
+          browserTokenName: 'cli-browser-token',
+        },
+      );
+
+      expect(result.exitCode).toBe(1);
+
+      const revokes = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/user_tokens/revoke');
+      expect(revokes).toHaveLength(1);
+      expect(revokes[0].body).toContain('name=cli-browser-token');
+
+      const state = harness.stateJsonFile.asJson() as {
+        auth: { connections: unknown[]; isAuthenticated?: boolean };
+      };
+      expect(state.auth.connections).toHaveLength(0);
+      expect(
+        readKeychainToken(
+          harness.keychainJsonFile,
+          generateKeychainAccount(server.baseUrl(), 'nonexistent-org'),
+        ),
+      ).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'leaves an already-stored token alone when the organization is rejected',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('existing-token').start();
+      harness.state().withKeychainToken(server.baseUrl(), 'existing-token', 'nonexistent-org');
+
+      const result = await harness.run(
+        `auth login --org nonexistent-org --server ${server.baseUrl()}`,
+        { extraEnv: cloudEnv(server.baseUrl()) },
+      );
+
+      expect(result.exitCode).toBe(1);
+      expect(
+        server.getRecordedRequests().filter((r) => r.path === '/api/user_tokens/revoke'),
+      ).toHaveLength(0);
+      expect(
+        readKeychainToken(
+          harness.keychainJsonFile,
+          generateKeychainAccount(server.baseUrl(), 'nonexistent-org'),
+        ),
+      ).toBe('existing-token');
+      const state = harness.stateJsonFile.asJson() as { auth: { connections: unknown[] } };
+      expect(state.auth.connections).toHaveLength(0);
     },
     { timeout: 15000 },
   );

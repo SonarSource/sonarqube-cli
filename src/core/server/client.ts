@@ -90,6 +90,12 @@ export interface Organization {
   onlyPrivateProjects?: { enabled: boolean };
 }
 
+/** Result of an organization lookup: found, absent, or not checkable. */
+export type OrganizationAccess =
+  | { status: 'accessible'; organization: Organization }
+  | { status: 'not_found' }
+  | { status: 'check_failed'; reason: string };
+
 export interface DopRepository {
   id: string;
   name: string;
@@ -632,20 +638,15 @@ export class SonarQubeClient {
     }
   }
 
+  /**
+   * List the organizations the caller is a member of.
+   *
+   * Errors are not swallowed here. An empty list sends the login flow to the manual
+   * organization prompt, so a failed request must not look like an empty list.
+   */
   async listUserOrganizations(
     page = 1,
     ps = 10,
-  ): Promise<{ organizations: Organization[]; total: number }> {
-    try {
-      return await this.fetchUserOrganizationsPage(page, ps);
-    } catch {
-      return { organizations: [], total: 0 };
-    }
-  }
-
-  private async fetchUserOrganizationsPage(
-    page: number,
-    ps: number,
   ): Promise<{ organizations: Organization[]; total: number }> {
     const result = await this.get<{
       organizations: Organization[];
@@ -913,20 +914,31 @@ export class SonarQubeClient {
   }
 
   /**
-   * Check if organization exists and is accessible
+   * Resolve an organization key.
+   *
+   * `/api/organizations/search` answers an unknown key with `200` and an empty list. An error
+   * therefore never means "no such organization", so the two cases are reported apart.
+   *
+   * The `organizations` filter is not limited to the caller's memberships: it also resolves
+   * public organizations. That is why a hand-typed key can be validated with it.
+   */
+  async resolveOrganizationAccess(organizationKey: string): Promise<OrganizationAccess> {
+    try {
+      const organization = await this.fetchOrganizationByKey(organizationKey);
+      return organization ? { status: 'accessible', organization } : { status: 'not_found' };
+    } catch (error) {
+      return { status: 'check_failed', reason: (error as Error).message };
+    }
+  }
+
+  /**
+   * Check if organization exists and is accessible.
+   *
+   * Use `resolveOrganizationAccess` to tell a missing organization from a failed lookup.
    */
   async checkOrganization(organizationKey: string): Promise<boolean> {
-    try {
-      const result = await this.get<{ organizations: Array<{ key: string }> }>(
-        '/api/organizations/search',
-        {
-          organizations: organizationKey,
-        },
-      );
-      return result.organizations.some((org) => org.key === organizationKey);
-    } catch {
-      return false;
-    }
+    const access = await this.resolveOrganizationAccess(organizationKey);
+    return access.status === 'accessible';
   }
 
   /**

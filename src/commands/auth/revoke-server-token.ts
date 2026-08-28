@@ -22,6 +22,9 @@ import { SonarQubeClient } from '@/core/server/client.ts';
 import type { AuthConnection } from '@/core/state/state.ts';
 import { warn } from '@/core/ui';
 
+/** The part of a connection needed to revoke a token. */
+export type RevocableToken = Pick<AuthConnection, 'serverUrl' | 'tokenName'>;
+
 export type RevokeServerTokenResult =
   | { status: 'success' }
   | { status: 'skipped'; message: string }
@@ -58,9 +61,11 @@ export function reportRevokeServerTokenOutcome(
 /**
  * Attempt to revoke the server-side token before local cleanup.
  * Best-effort: callers decide how to surface skipped/failed outcomes.
+ *
+ * Takes only the fields it needs, so `sonar auth login` can call it before a connection exists.
  */
 export async function revokeServerTokenIfPossible(
-  connection: AuthConnection,
+  connection: RevocableToken,
   token: string | undefined,
 ): Promise<RevokeServerTokenResult> {
   if (!connection.tokenName) {

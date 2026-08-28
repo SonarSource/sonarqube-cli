@@ -975,6 +975,35 @@ describe('SonarQubeClient', () => {
   });
 
   // -------------------------------------------------------------------------
+  // resolveOrganizationAccess
+  // -------------------------------------------------------------------------
+
+  describe('resolveOrganizationAccess', () => {
+    it('reports an organization the server resolves as accessible', async () => {
+      fetchSpy = mockFetch({ organizations: [{ key: 'my-org', name: 'My Org' }] });
+
+      expect(await client.resolveOrganizationAccess('my-org')).toEqual({
+        status: 'accessible',
+        organization: { key: 'my-org', name: 'My Org' },
+      });
+    });
+
+    it('reports an empty result as not_found', async () => {
+      fetchSpy = mockFetch({ organizations: [] });
+
+      expect(await client.resolveOrganizationAccess('my-org')).toEqual({ status: 'not_found' });
+    });
+
+    it('reports a server error as check_failed rather than as a missing organization', async () => {
+      fetchSpy = mockFetch({}, false, 500);
+
+      const access = await client.resolveOrganizationAccess('my-org');
+
+      expect(access.status).toBe('check_failed');
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // checkQualityProfiles
   // -------------------------------------------------------------------------
 
