@@ -27,6 +27,7 @@ import { isAbsolute, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { VORTEX_PROMOTION_MESSAGE } from '../../../../src/commands/integrate/_common/vortex.ts';
 import { cursorIntegration } from '../../../../src/commands/integrate/cursor/declaration';
 import { ENV_SONAR_USER_HOME } from '../../../../src/core/config-constants.ts';
 import {
@@ -669,9 +670,7 @@ describe('integrate cursor', () => {
         );
 
         expect(result.exitCode).toBe(0);
-        expect(`${result.stdout}\n${result.stderr}`).toContain(
-          'Vortex is available on SonarQube Cloud',
-        );
+        expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_PROMOTION_MESSAGE);
         expect(harness.cwd.file(...SQAA_RULE_DIRS).exists()).toBe(false);
         expect(findInstalledFeature(harness, 'cursor', 'vortex')).toBeUndefined();
       },

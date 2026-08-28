@@ -23,7 +23,7 @@ import { timed } from '@/core/observability/timed.ts';
 import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 
 import { readSqaaFileContent, toRelativePosixPath } from './sqaa-api.ts';
-import { resolveCloudAuthAndProject } from './sqaa-auth.ts';
+import { resolveSqaaAuthAndProject } from './sqaa-auth.ts';
 import {
   resolveChangeSet,
   resolveSqaaBranch,
@@ -62,7 +62,7 @@ async function buildSqaaJsonReportFromEntries(
     const fileContent = readSqaaFileContent(absolutePath);
     const { result: fetchResult, durationMs } = await timed(() =>
       fetchSingleFileReport(
-        resolved.cloudAuth,
+        resolved.sqaaAuth,
         resolved.projectKey,
         absolutePath,
         fileContent,
@@ -113,7 +113,7 @@ async function buildSqaaJsonReportFromChangeSet(
     );
   }
 
-  const resolution = await resolveCloudAuthAndProject(auth, project, changeSet.repoRoot);
+  const resolution = await resolveSqaaAuthAndProject(auth, project, changeSet.repoRoot);
   const resolved = resolveSqaaContext(resolution, { requireProject: false });
   if (!resolved) return null;
 
@@ -154,7 +154,7 @@ export async function buildSqaaJsonReport(
   if (rawFiles?.length) {
     const entries = resolveSqaaFileArgs(rawFiles);
     const resolvedBranch = await resolveSqaaBranch(branch, entries[0].absolutePath);
-    const resolution = await resolveCloudAuthAndProject(auth, project);
+    const resolution = await resolveSqaaAuthAndProject(auth, project);
     const resolved = resolveSqaaContext(resolution, { requireProject: false });
     if (!resolved) return null;
 

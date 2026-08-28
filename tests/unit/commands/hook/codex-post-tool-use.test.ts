@@ -177,11 +177,31 @@ describe('codexPostToolUse', () => {
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
 
-  it('skips output when auth is not Cloud', async () => {
+  it('runs analysis on a Server connection without an organization', async () => {
     resolveAuthSpy.mockResolvedValue({
       token: 'tok',
       serverUrl: 'https://sonar.example.com',
-      connectionType: 'server',
+      connectionType: 'on-premise',
+    });
+
+    await codexPostToolUse(ctx, { project: 'my-project' });
+
+    expect(buildSqaaJsonReportSpy).toHaveBeenCalledWith(
+      { project: 'my-project', force: true, format: 'json', forcedDepth: 'STANDARD' },
+      expect.objectContaining({ connectionType: 'on-premise' }),
+      expect.objectContaining({
+        telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
+      }),
+    );
+    expect(stdoutSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips output when cloud auth has no orgKey', async () => {
+    resolveAuthSpy.mockResolvedValue({
+      token: 'tok',
+      serverUrl: 'https://sonarcloud.io',
+      connectionType: 'cloud',
+      orgKey: undefined,
     });
 
     await codexPostToolUse(ctx, { project: 'my-project' });

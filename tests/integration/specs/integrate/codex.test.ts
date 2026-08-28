@@ -658,7 +658,7 @@ describe('integrate codex', () => {
         expect(body).toContain(SECRETS_HEADING);
         expect(body).not.toContain(SQAA_HEADING);
         const output = `${result.stdout}\n${result.stderr}`;
-        expect(output).toContain('Vortex is available on SonarQube Cloud');
+        expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
       },
       { timeout: 30000 },
     );
@@ -703,8 +703,8 @@ describe('integrate codex', () => {
     it(
       'prompts per feature, installs accepted features, and shows the Vortex promotion when not entitled',
       async () => {
-        // Default beforeEach is on-premise auth with no org, so Vortex is not
-        // available. The three remaining features
+        // Default beforeEach is on-premise with no entitlement stubs, so Vortex
+        // is not_applicable. The three remaining features
         // (secrets hook, secrets instructions, MCP) each ask. The leading '\r'
         // selects project scope before the per-feature prompts.
         const result = await harness.run('integrate codex', {
@@ -717,10 +717,8 @@ describe('integrate codex', () => {
         expect(output).toContain('Install secret scanning hooks?');
         expect(output).toContain('Install secrets-on-read instructions?');
         expect(output).toContain('Install MCP server?');
-        // Vortex is not eligible, so it is skipped without a prompt but the shared
-        // promotion message is surfaced.
         expect(output).not.toContain('Install Vortex?');
-        expect(output).toContain('Vortex is available on SonarQube Cloud');
+        expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
         // Accepted features are installed on disk.
         expect(
           harness.cwd.file(...PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')).exists(),
@@ -728,7 +726,7 @@ describe('integrate codex', () => {
         expect(harness.cwd.exists(...HOOKS_JSON_DIRS)).toBe(true);
         const agentsMd = harness.cwd.file(...PROJECT_AGENTS_MD_DIRS).asText();
         expect(agentsMd).toContain(SECRETS_HEADING);
-        // No SQAA marker block was written (org not entitled).
+        // No SQAA marker block was written (Server hubs absent).
         expect(agentsMd).not.toContain(SQAA_HEADING);
         expect(harness.cwd.exists(...CONFIG_TOML_DIRS)).toBe(true);
         // Declarative state records only the accepted features.

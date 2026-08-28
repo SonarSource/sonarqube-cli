@@ -27,7 +27,7 @@ import { InvalidOptionError } from '@/core/command-error.ts';
 import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 import { text } from '@/core/ui';
 
-import { resolveCloudAuthAndProject } from './sqaa-auth.ts';
+import { resolveSqaaAuthAndProject } from './sqaa-auth.ts';
 import {
   resolveChangeSet,
   resolveSqaaBranch,
@@ -161,7 +161,7 @@ async function analyzeSqaaExplicitFiles(
   }
 
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'multi-file', forcedDepth);
-  const resolution = await resolveCloudAuthAndProject(auth, project);
+  const resolution = await resolveSqaaAuthAndProject(auth, project);
   const resolved = resolveSqaaContext(resolution, { requireProject });
   if (!resolved) return;
 
@@ -224,7 +224,7 @@ async function analyzeSqaaChangeSet(params: {
     return;
   }
 
-  const resolution = await resolveCloudAuthAndProject(auth, project, changeSet.repoRoot);
+  const resolution = await resolveSqaaAuthAndProject(auth, project, changeSet.repoRoot);
   const resolved = resolveSqaaContext(resolution, { requireProject });
   if (!resolved) return;
 

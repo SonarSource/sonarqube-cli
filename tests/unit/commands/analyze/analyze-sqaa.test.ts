@@ -372,20 +372,20 @@ describe('analyzeSqaa: path normalization', () => {
 // ─── analyzeSqaa: explicit --project option ──────────────────────────────────
 
 describe('analyzeSqaa: explicit --project option', () => {
-  it('throws CommandFailedError when --project given but on-premise server', async () => {
+  it('runs Vortex analysis on SonarQube Server when --project is given', async () => {
     const onPremiseAuth = {
       token: TEST_TOKEN,
       serverUrl: 'https://mysonar.company.com',
-      orgKey: TEST_ORG,
       connectionType: 'on-premise' as const,
     };
 
     const onPremiseContext = new CommandAuthenticatedInvocationContext(onPremiseAuth);
 
-    // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(
-      analyzeSqaa({ file: ['src/index.ts'], project: 'my-project' }, onPremiseContext),
-    ).rejects.toThrow(CommandFailedError);
+    await analyzeSqaa({ file: ['src/index.ts'], project: 'my-project' }, onPremiseContext);
+
+    expect(createAnalysisSpy).toHaveBeenCalled();
+    expect(createAnalysisSpy.mock.calls[0][0].organizationKey).toBeUndefined();
+    expect(createAnalysisSpy.mock.calls[0][0].projectKey).toBe('my-project');
   });
 });
 
@@ -409,17 +409,17 @@ describe('buildSqaaJsonReport', () => {
     expect(createAnalysisSpy.mock.calls[0][0].analysisDepth).toBe('DEEP');
   });
 
-  it('returns null when SQAA is unavailable (non-Cloud)', async () => {
+  it('runs Vortex analysis on SonarQube Server', async () => {
     const onPremiseAuth = {
       token: TEST_TOKEN,
       serverUrl: 'https://mysonar.company.com',
-      orgKey: TEST_ORG,
       connectionType: 'on-premise' as const,
     };
 
     const report = await buildSqaaJsonReport({ file: ['src/index.ts'] }, onPremiseAuth);
-    expect(report).toBeNull();
-    expect(createAnalysisSpy).not.toHaveBeenCalled();
+    expect(report).not.toBeNull();
+    expect(createAnalysisSpy).toHaveBeenCalled();
+    expect(createAnalysisSpy.mock.calls[0][0].organizationKey).toBeUndefined();
   });
 
   it('returns a failure entry when the API call fails', async () => {

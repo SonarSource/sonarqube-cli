@@ -655,7 +655,7 @@ describe('integrate claude — Vortex entitlement guard', () => {
         .start();
 
       // Point both Cloud URL constants at the fake server so SONARCLOUD_HOSTNAME check passes
-      // and getOrganizationId / checkSqaaEntitlement hit the same fake server
+      // and getOrganizationId / checkHubEntitlement hit the same fake server
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 
@@ -874,7 +874,7 @@ describe('integrate claude — Vortex entitlement guard', () => {
 
       expect(result.exitCode).toBe(0);
       expect(`${result.stdout}\n${result.stderr}`).toContain(
-        'Your organization has reached its Vortex usage limit',
+        'The Vortex usage limit has been reached',
       );
       const settings = harness.cwd.file('.claude', 'settings.json').asJson();
       expect(settings.hooks?.PostToolUse).toBeDefined();
@@ -1984,10 +1984,9 @@ describe('integrate claude — interactive feature selection', () => {
   it(
     'prompts per feature, installs accepted features, and shows the Vortex promotion when not entitled',
     async () => {
-      // On-premise auth with no org: SQAA is not available, so it is skipped
-      // without a prompt but surfaces the shared promotion message. Context
-      // Augmentation is skipped silently. The secret scanning hooks and MCP
-      // server features each ask.
+      // On-premise auth with no org and no CAG Hub: Vortex is skipped with the
+      // Server unavailable line. Context Augmentation is skipped silently. The
+      // secret scanning hooks and MCP server features each ask.
       const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
       harness.withAuth(server.baseUrl(), 'tok');
       harness.cwd.writeFile(
@@ -2005,10 +2004,8 @@ describe('integrate claude — interactive feature selection', () => {
       const output = `${result.stdout}\n${result.stderr}`;
       expect(output).toContain('Install secret scanning hooks?');
       expect(output).toContain('Install MCP server?');
-      // SQAA is not eligible, so it is skipped without a prompt but the shared
-      // promotion message is surfaced.
       expect(output).not.toContain('Install Vortex?');
-      expect(output).toContain('Vortex is available on SonarQube Cloud');
+      expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
 
       // Accepted features are installed on disk.
       expect(

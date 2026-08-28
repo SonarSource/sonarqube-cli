@@ -27,7 +27,7 @@ import type {
   IntegrationDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { install, jsonPatch, skip, uninstall, wholeFile } from '@/core/framework/features';
+import { jsonPatch, skip, wholeFile } from '@/core/framework/features';
 import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 
@@ -55,7 +55,7 @@ import {
 } from '../_common/hooks.ts';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
-import { createVortexFeature } from '../_common/vortex.ts';
+import { createVortexFeature, vortexInstallDecision } from '../_common/vortex.ts';
 import { createClaudeHookEventContainer } from './hook-container-feature.ts';
 import {
   getPostToolUseFailureTemplateUnix,
@@ -152,7 +152,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           id: 'sqaa-posttooluse',
           displayName: 'Vortex analysis',
           matcher: 'Edit|Write',
-          shouldInstall: ({ options }) => shouldInstallSqaaHook(options),
+          shouldInstall: ({ options }) => vortexInstallDecision(options.vortexDisposition),
         },
         {
           id: 'cag-posttooluse',
@@ -208,22 +208,11 @@ function shouldInstallCagHook(
   options: ClaudeIntegrationOptions,
   attrs: Record<string, IntegrationStateAttribute> | undefined,
 ): InstallDecision {
-  if (options.vortexDisposition === 'remove') {
-    return uninstall();
+  // The allowlist only withholds a new install; it never tears an existing hook down.
+  if (options.vortexDisposition === 'install' && !isCagHookAllowedForAttrs(attrs)) {
+    return skip();
   }
-  return options.vortexDisposition === 'install' && isCagHookAllowedForAttrs(attrs)
-    ? install()
-    : skip();
-}
-
-function shouldInstallSqaaHook(options: ClaudeIntegrationOptions): InstallDecision {
-  if (options.vortexDisposition === 'install') {
-    return install();
-  }
-  if (options.vortexDisposition === 'remove') {
-    return uninstall();
-  }
-  return skip();
+  return vortexInstallDecision(options.vortexDisposition);
 }
 
 function createContextAugmentationFailureHookSubfeature(): SubfeatureDeclaration<ClaudeIntegrationOptions> {

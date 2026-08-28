@@ -24,8 +24,7 @@ import { join } from 'node:path';
 
 import { parse as parseToml } from 'smol-toml';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { resolveAuth } from '@/core/auth/auth-resolver.ts';
+import { isSonarQubeCloud, resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
 import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '@/core/config-constants.ts';
@@ -462,7 +461,7 @@ export async function systemStatus(options: SystemStatusOptions): Promise<void> 
     network,
     vortex,
     vortexInstalled,
-    auth?.orgKey,
+    auth,
   );
 
   const data: StatusData = {
@@ -513,7 +512,7 @@ function buildRecommendations(
   network: ResolvedNetworkConfig,
   vortexEntitlement: VortexEntitlementResult,
   vortexInstalled: boolean,
-  orgKey: string | undefined,
+  auth: ResolvedAuth | null,
 ): string[] {
   const recommendations: string[] = [];
   if (tokenStatus === null) recommendations.push("Run 'sonar auth login' to authenticate");
@@ -524,7 +523,8 @@ function buildRecommendations(
   const vortexRecommendation = buildVortexRecommendation(
     vortexEntitlement,
     vortexInstalled,
-    orgKey,
+    auth?.orgKey,
+    auth != null && !isSonarQubeCloud(auth.serverUrl),
   );
   if (vortexRecommendation) recommendations.push(vortexRecommendation);
   if (updateResult && !updateResult.upToDate) {

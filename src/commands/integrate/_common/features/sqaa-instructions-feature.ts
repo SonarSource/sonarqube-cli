@@ -23,7 +23,7 @@ import type {
   ResourceDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { install, textSnippet } from '@/core/framework/features';
+import { textSnippet } from '@/core/framework/features';
 
 import { getRequiredStringAttr } from '../attrs.ts';
 import {
@@ -31,19 +31,21 @@ import {
   sonarBeginMarker,
   sonarEndMarker,
 } from '../instructions-templates.ts';
+import type { IntegrateAgentOptions } from '../types.ts';
+import { vortexInstallDecision } from '../vortex.ts';
 
 export const SQAA_HOOK_FEATURE_ID = 'sonar-sqaa-hook';
 export const SQAA_INSTRUCTIONS_SUBFEATURE_ID = 'sqaa-instructions';
 const SQAA_INSTRUCTIONS_MARKER = 'sonarqube-agentic-analysis-protocol';
 
 /** End-of-turn SQAA instructions, written by each agent into its own rules format. */
-export function createSqaaInstructionsSubfeature<TOptions>(
+export function createSqaaInstructionsSubfeature<TOptions extends IntegrateAgentOptions>(
   resources: ResourceDeclaration[],
 ): SubfeatureDeclaration<TOptions> {
   return {
     id: SQAA_INSTRUCTIONS_SUBFEATURE_ID,
     displayName: 'Vortex analysis instructions',
-    shouldInstall: () => install(),
+    shouldInstall: ({ options }) => vortexInstallDecision(options.vortexDisposition),
     resources,
   };
 }

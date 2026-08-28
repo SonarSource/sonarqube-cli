@@ -20,7 +20,7 @@
 
 // Auth and project-key resolution for SQAA commands.
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { selectRecordedFeatureForDir } from '@/core/host/recorded-feature-resolver.ts';
 import logger from '@/core/observability/logger.ts';
@@ -55,29 +55,32 @@ const LARGE_CHANGESET_HINT =
   '  --file <path>     analyze specific file(s) — repeat for multiple files\n' +
   '  --depth STANDARD  faster analysis (change-set / multi-file default is DEEP)';
 
-/** Cloud authentication context required for SQAA API calls. */
-export interface CloudAuth {
+/**
+ * Authentication context required for SQAA API calls. `orgKey` is Cloud-only: Server has
+ * no organizations and its A3S hub forces the request onto the instance's default one.
+ */
+export interface SqaaAuth {
   serverUrl: string;
   token: string;
-  orgKey: string;
+  orgKey?: string;
 }
 
 /**
- * Outcome of resolving cloud auth + project key for SQAA. This resolver reports
+ * Outcome of resolving auth + project key for SQAA. This resolver reports
  * what it found and leaves the policy (skip vs. fail) to the caller:
- * - `resolved`: usable cloud auth and project key.
- * - `no-cloud`: connection is not SonarQube Cloud (a warning was already emitted,
- *   since agentic analysis is Cloud-only and this is always a graceful skip).
- * - `no-project`: cloud auth is fine but no project is configured. The caller
+ * - `resolved`: usable auth and project key.
+ * - `no-org`: Cloud is authenticated but has no organization (a warning was already
+ *   emitted, since this is always a graceful skip).
+ * - `no-project`: auth is fine but no project is configured. The caller
  *   decides whether this is an error or a graceful skip.
  */
 export type SqaaAuthResolution =
-  | { kind: 'resolved'; cloudAuth: CloudAuth; projectKey: string }
-  | { kind: 'no-cloud' }
+  | { kind: 'resolved'; sqaaAuth: SqaaAuth; projectKey: string }
+  | { kind: 'no-org' }
   | { kind: 'no-project' };
 
 /**
- * Combines cloud-auth validation and project-key resolution. Never throws or warns for
+ * Combines auth validation and project-key resolution. Never throws or warns for
  * `no-project` — the caller owns that decision (see `resolveSqaaContext` in sqaa.ts).
  *
  * Not side-effect-free: on a successful resolution it publishes the project key for
@@ -85,43 +88,49 @@ export type SqaaAuthResolution =
  * entry point — bare `sonar analyze`, `analyze agentic`, and `verify` — so noting here covers
  * all of them instead of at each of the five downstream call sites.
  */
-export async function resolveCloudAuthAndProject(
+export async function resolveSqaaAuthAndProject(
   auth: ResolvedAuth,
   explicitProject: string | undefined,
   projectRoot?: string,
 ): Promise<SqaaAuthResolution> {
-  const cloudAuth = resolveCloudAuth(auth, explicitProject);
-  if (!cloudAuth) return { kind: 'no-cloud' };
+  const sqaaAuth = resolveSqaaAuth(auth, explicitProject);
+  if (!sqaaAuth) return { kind: 'no-org' };
 
   const projectKey = explicitProject ?? (await resolveSqaaProjectKey(projectRoot));
   if (!projectKey) return { kind: 'no-project' };
 
   noteProject(auth, projectKey);
-  return { kind: 'resolved', cloudAuth, projectKey };
+  return { kind: 'resolved', sqaaAuth, projectKey };
 }
 
 /**
- * Validate that the resolved auth is for SonarQube Cloud.
- * Returns null when the connection is not Cloud and --project is not set.
- * Throws CommandFailedError when --project is set but the connection is not Cloud.
+ * Validate that the resolved auth can drive a Vortex analysis. Cloud needs an
+ * organization to address; Server has none, so the connection alone is enough.
+ *
+ * Returns null when a Cloud connection has no organization and --project is not set.
+ * Throws CommandFailedError when --project is set, since the caller asked explicitly.
  */
-export function resolveCloudAuth(
+export function resolveSqaaAuth(
   auth: ResolvedAuth,
   explicitProject: string | undefined,
-): CloudAuth | null {
-  if (auth.connectionType != 'cloud' || auth.orgKey == null) {
+): SqaaAuth | null {
+  if (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey) {
     if (explicitProject) {
-      throw new CommandFailedError('Vortex analysis requires a SonarQube Cloud connection.', {
-        remediationHint: "Run 'sonar auth login' and connect to SonarQube Cloud, then retry.",
+      throw new CommandFailedError('Vortex analysis requires a SonarQube Cloud organization.', {
+        remediationHint: "Run 'sonar auth login' and select an organization, then retry.",
       });
     }
     warn(
-      'Vortex analysis skipped: a SonarQube Cloud connection is required. Run: sonar auth login (ensure you connect to SonarQube Cloud)',
+      'Vortex analysis skipped: a SonarQube Cloud organization is required. Run: sonar auth login',
     );
     return null;
   }
 
-  return { serverUrl: auth.serverUrl, token: auth.token, orgKey: auth.orgKey };
+  return {
+    serverUrl: auth.serverUrl,
+    token: auth.token,
+    ...(auth.orgKey ? { orgKey: auth.orgKey } : {}),
+  };
 }
 
 /**

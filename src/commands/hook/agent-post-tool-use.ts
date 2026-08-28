@@ -29,7 +29,7 @@ import {
   SQAA_HOOK_TELEMETRY_EXIT_CODE,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
-import { resolveAuth } from '@/core/auth/auth-resolver.ts';
+import { isSonarQubeCloud, resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { canonicalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import { timed } from '@/core/observability/timed.ts';
@@ -65,12 +65,12 @@ async function handleSqaaPostToolUse(
   }
 
   const auth = await resolveAuth().catch(() => null);
-  if (auth?.connectionType !== 'cloud') {
+  if (!auth || !projectKey) {
     return { decision: 'none' };
   }
 
-  const orgKey = auth.orgKey;
-  if (!orgKey || !projectKey) {
+  // Cloud addresses an organization; Server has none and resolves it from the instance.
+  if (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey) {
     return { decision: 'none' };
   }
 
@@ -87,12 +87,16 @@ async function handleSqaaPostToolUse(
   let fetchResult: Awaited<ReturnType<typeof fetchSingleFileReport>>;
   try {
     const fileContent = readFileSync(canonicalPath, 'utf-8');
-    const cloudAuth = { serverUrl: auth.serverUrl, token: auth.token, orgKey };
+    const sqaaAuth = {
+      serverUrl: auth.serverUrl,
+      token: auth.token,
+      ...(auth.orgKey ? { orgKey: auth.orgKey } : {}),
+    };
     const branch = await resolveSqaaBranch(undefined, canonicalPath);
 
     const timedFetch = await timed(() =>
       fetchSingleFileReport(
-        cloudAuth,
+        sqaaAuth,
         projectKey,
         canonicalPath,
         fileContent,

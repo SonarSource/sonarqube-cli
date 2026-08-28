@@ -23,14 +23,15 @@ import type { VortexEntitlementStatus } from '@/core/server/client.ts';
 
 /**
  * Usage-limit copy is identical for hooks and commands and must never suggest
- * re-running `sonar integrate` — the org is still entitled, just over its limit.
+ * re-running `sonar integrate` — the connection is still entitled, just over its limit.
+ * All three messages stay connection-neutral: Server has no organization to name.
  */
 export const VORTEX_OVER_CONSUMPTION_MESSAGE =
-  'Vortex analysis is paused: your organization has reached its usage limit. Analysis will resume once your usage resets.';
+  'Vortex analysis is paused: the usage limit has been reached. Analysis will resume once usage resets.';
 
-const VORTEX_NOT_ENTITLED_HOOK_MESSAGE = `Vortex analysis is no longer available for this organization. Run \`sonar integrate\` to remove the analysis hooks. See ${VORTEX_PRODUCT_URL}`;
+const VORTEX_NOT_ENTITLED_HOOK_MESSAGE = `Vortex analysis is no longer available on this connection. Run \`sonar integrate\` to remove the analysis hooks. See ${VORTEX_PRODUCT_URL}`;
 
-const VORTEX_NOT_ENTITLED_COMMAND_MESSAGE = `Vortex analysis is not available for your organization. See ${VORTEX_PRODUCT_URL}`;
+const VORTEX_NOT_ENTITLED_COMMAND_MESSAGE = `Vortex analysis is not available on this connection. See ${VORTEX_PRODUCT_URL}`;
 
 /** Shown when the entitlement re-check cannot attribute a Vortex 403 to a known cause. */
 const VORTEX_AMBIGUOUS_403_MESSAGE =
