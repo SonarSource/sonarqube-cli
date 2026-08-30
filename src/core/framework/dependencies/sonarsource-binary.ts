@@ -18,21 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { SCA_SCANNER_CLI_DIST_PREFIX, SONAR_SECRETS_DIST_PREFIX } from '@/core/config-constants.ts';
 import {
   type BinarySpec,
   installBinary,
   removeBinary,
   resolveBinaryPath,
 } from '@/core/host/install/binary.ts';
-import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from '@/core/host/install/install-types.ts';
-import {
-  SCA_SCANNER_CLI_SIGNATURES,
-  SCA_SCANNER_CLI_VERSION,
-  SONAR_SECRETS_SIGNATURES,
-  SONAR_SECRETS_VERSION,
-  SONARSOURCE_PUBLIC_KEY,
-} from '@/core/host/install/signatures.ts';
+import { SCA_SCANNER_SPEC } from '@/core/host/install/sca-scanner.ts';
+import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
 
 import type {
   DependencyInstallContext,
@@ -41,36 +34,8 @@ import type {
 } from '../features/types.ts';
 import { type BaseDependencyOptions, type DependencyDeclaration } from './common.ts';
 
-export interface SonarSourceBinaryDescriptor {
-  id: string;
-  spec: BinarySpec;
-}
-
-export const SonarSourceBinary = {
-  SonarSecrets: {
-    id: SECRETS_BINARY_NAME,
-    spec: {
-      name: SECRETS_BINARY_NAME,
-      version: SONAR_SECRETS_VERSION,
-      distPrefix: SONAR_SECRETS_DIST_PREFIX,
-      signatures: SONAR_SECRETS_SIGNATURES,
-      publicKey: SONARSOURCE_PUBLIC_KEY,
-    },
-  },
-  ScaScanner: {
-    id: SCA_SCANNER_BINARY_NAME,
-    spec: {
-      name: SCA_SCANNER_BINARY_NAME,
-      version: SCA_SCANNER_CLI_VERSION,
-      distPrefix: SCA_SCANNER_CLI_DIST_PREFIX,
-      signatures: SCA_SCANNER_CLI_SIGNATURES,
-      publicKey: SONARSOURCE_PUBLIC_KEY,
-    },
-  },
-} as const satisfies Record<string, SonarSourceBinaryDescriptor>;
-
 export interface SonarSourceBinaryDependencyOptions extends BaseDependencyOptions {
-  binary: SonarSourceBinaryDescriptor;
+  spec: BinarySpec;
 }
 
 export function sonarSourceBinary(
@@ -82,42 +47,40 @@ export function sonarSourceBinary(
 export class SonarSourceBinaryDependency implements DependencyDeclaration {
   readonly id: string;
   readonly displayName?: string;
-  readonly dependencyType = 'sonarsource-binary';
   readonly version: string;
 
   constructor(private readonly options: SonarSourceBinaryDependencyOptions) {
     this.id = options.id;
     this.displayName = options.displayName;
-    this.version = options.version ?? options.binary.spec.version;
+    this.version = options.version ?? options.spec.version;
   }
 
   async installOrUpdate(_context: DependencyInstallContext): Promise<InstalledDependency> {
-    const result = await installBinary(this.options.binary.spec);
+    const result = await installBinary(this.options.spec);
     return {
       id: this.id,
-      dependencyType: this.dependencyType,
       version: this.version,
       path: result.binaryPath,
     };
   }
 
   isInstalled(_context: IntegrationContext): boolean {
-    return resolveBinaryPath(this.options.binary.spec) !== null;
+    return resolveBinaryPath(this.options.spec) !== null;
   }
 
   remove(_context: IntegrationContext): void {
-    removeBinary(this.options.binary.spec);
+    removeBinary(this.options.spec);
   }
 }
 
 export const sonarSecretsBinaryDependency = sonarSourceBinary({
-  id: 'sonar-secrets',
+  id: SECRETS_SPEC.name,
   displayName: 'sonar-secrets binary',
-  binary: SonarSourceBinary.SonarSecrets,
+  spec: SECRETS_SPEC,
 });
 
 export const scaScannerBinaryDependency = sonarSourceBinary({
-  id: SCA_SCANNER_BINARY_NAME,
+  id: SCA_SCANNER_SPEC.name,
   displayName: 'sca-scanner-cli binary',
-  binary: SonarSourceBinary.ScaScanner,
+  spec: SCA_SCANNER_SPEC,
 });

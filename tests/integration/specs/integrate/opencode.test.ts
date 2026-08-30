@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
+import { readFileSync } from 'node:fs';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
@@ -279,7 +281,9 @@ describe('integrate opencode', () => {
         expect(agents).toContain('# Project instructions');
         expect(agents).toContain('# Vortex analysis protocol');
         expect(agents).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --depth DEEP`);
-        expect(harness.cwd.file(...OPENCODE_CAG_SKILL_PATH).asText()).toContain('sonar context');
+        expect(harness.cwd.file(...OPENCODE_CAG_SKILL_PATH).asText()).toContain(
+          '# Generated CAG skill',
+        );
         expect(
           findInstalledSubfeature(
             harness,
@@ -368,6 +372,8 @@ describe('integrate opencode', () => {
         expect(second.exitCode).toBe(0);
         expect(harness.cwd.file('AGENTS.md').asText()).toBe(firstAgents);
         expect(firstAgents.match(/# Vortex analysis protocol/g)?.length).toBe(1);
+        const stateAfterIntegrate = readFileSync(harness.stateJsonFile.path, 'utf-8');
+        harness.state().withRawState(stateAfterIntegrate);
 
         const reset = await harness.run('system reset --force');
 

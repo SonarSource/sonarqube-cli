@@ -23,10 +23,12 @@
 
 import { existsSync } from 'node:fs';
 
+import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
-import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 
 import { EXIT_CODE_SECRETS_FOUND } from '../analyze/secrets.ts';
+import type { HookCommandResult } from './hook-command-result.ts';
 import {
   type HookDependencies,
   MissingDependenciesError,
@@ -38,6 +40,7 @@ import { readStdinJson } from './stdin.ts';
 interface PreToolUsePayload {
   tool_name?: string;
   tool_input?: { file_path?: string };
+  session_id?: string;
 }
 
 function denyToolUse(reason: string): void {
@@ -52,18 +55,20 @@ function denyToolUse(reason: string): void {
   );
 }
 
-export async function claudePreToolUse(): Promise<void> {
+export async function claudePreToolUse(ctx: CommandInvocationContext): Promise<HookCommandResult> {
   let payload: PreToolUsePayload;
   try {
     payload = await readStdinJson<PreToolUsePayload>();
   } catch {
-    return; // unparseable stdin — allow
+    return { agentSessionId: null }; // unparseable stdin — allow
   }
 
-  if (payload.tool_name !== 'Read') return;
+  const agentSessionId = payload.session_id ?? null;
+
+  if (payload.tool_name !== 'Read') return { agentSessionId };
 
   const filePath = payload.tool_input?.file_path;
-  if (!filePath || !existsSync(filePath)) return;
+  if (!filePath || !existsSync(filePath)) return { agentSessionId };
 
   let deps: HookDependencies;
   try {
@@ -71,7 +76,7 @@ export async function claudePreToolUse(): Promise<void> {
   } catch (err) {
     if (err instanceof MissingDependenciesError) {
       denyToolUse(err.message);
-      return;
+      return { agentSessionId };
     }
     throw err;
   }
@@ -81,6 +86,7 @@ export async function claudePreToolUse(): Promise<void> {
       SECRETS_CALLER_COMMANDS.claudePreToolUse,
       deps,
       filePath,
+      ctx,
     );
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
       denyToolUse(`Sonar detected secrets in file: ${filePath}`);
@@ -88,4 +94,6 @@ export async function claudePreToolUse(): Promise<void> {
   } catch (err) {
     logger.debug(`PreToolUse secrets scan failed: ${(err as Error).message}`);
   }
+
+  return { agentSessionId };
 }

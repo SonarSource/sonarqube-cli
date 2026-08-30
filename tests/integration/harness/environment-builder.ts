@@ -43,7 +43,6 @@ import type {
   CliState,
   InstalledIntegration,
   InstalledIntegrationDependency,
-  InstalledTool,
   IntegrationScope,
 } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
@@ -286,7 +285,7 @@ export class EnvironmentBuilder {
   /**
    * Ensures sca-scanner-cli is available inside the isolated test environment.
    * Copies the cached binary from tests/integration/resources/dependency-artifacts/
-   * into <tempDir>/bin/ and records it in state.tools.installed.
+   * into <tempDir>/bin/ and records it in state.dependencies.installed.
    */
   withScaScannerBinaryInstalled(): this {
     this._installScaScannerBinary = true;
@@ -349,8 +348,9 @@ export class EnvironmentBuilder {
    *
    * Safe on its own — no extra env needed. Every spawned CLI carries egress mode `off`, so
    * the flush worker is never created and nothing is POSTed. Do not reach for
-   * `__SQ_CLI_TELEMETRY_FLUSH__=1`: it also no-ops storeEvent(), which owns
-   * CliCommandExecuted, so specs asserting on that event cannot use it.
+   * `__SQ_CLI_TELEMETRY_FLUSH__=1`: it no-ops `commitTelemetryFacts()`, so neither
+   * handler facts (`CliAnalysisCompleted`, `CliIntegrationConfigured`) nor
+   * `CliCommandExecuted` are written.
    */
   withTelemetryEnabled(): this {
     this._telemetryEnabled = true;
@@ -476,60 +476,41 @@ export class EnvironmentBuilder {
       state.auth.activeConnectionId = connectionId;
     }
 
-    // Match production: recordInstallationInState stores the absolute installed
+    // Match production: recordInstalledDependency stores the absolute installed
     // path. binDir is omitted only by the no-arg build() callers that do not
     // care about path resolution.
     const resolvePath = (name: string): string => (binDir ? join(binDir, name) : name);
 
-    const installed: InstalledTool[] = [];
     const installedDependencies: InstalledIntegrationDependency[] = [];
-    if (this._installSecretsBinary) {
-      const binaryPath = resolvePath(buildLocalBinaryName(SECRETS_SPEC, detectPlatform()));
-      installed.push({
-        name: SECRETS_SPEC.name,
-        version: SECRETS_SPEC.version,
-        path: binaryPath,
-        installedAt: new Date().toISOString(),
-        installedByCliVersion: 'integration-test',
-      });
+    const recordDependency = (id: string, version: string, path: string): void => {
       installedDependencies.push({
-        id: SECRETS_SPEC.name,
-        dependencyType: 'sonarsource-binary',
-        version: SECRETS_SPEC.version,
-        path: binaryPath,
+        id,
+        version,
+        path,
         updatedAt: new Date().toISOString(),
         updatedByCliVersion: 'integration-test',
       });
+    };
+    if (this._installSecretsBinary) {
+      recordDependency(
+        SECRETS_SPEC.name,
+        SECRETS_SPEC.version,
+        resolvePath(buildLocalBinaryName(SECRETS_SPEC, detectPlatform())),
+      );
     }
     if (this._installCagBinary) {
-      const binaryPath = resolvePath(buildLocalCagBinaryName(detectPlatform()));
-      installed.push({
-        name: CONTEXT_AUGMENTATION_BINARY_NAME,
-        version: SONAR_CONTEXT_AUGMENTATION_VERSION,
-        path: binaryPath,
-        installedAt: new Date().toISOString(),
-        installedByCliVersion: 'integration-test',
-      });
-      installedDependencies.push({
-        id: CONTEXT_AUGMENTATION_BINARY_NAME,
-        dependencyType: 'context-augmentation-binary',
-        version: SONAR_CONTEXT_AUGMENTATION_VERSION,
-        path: binaryPath,
-        updatedAt: new Date().toISOString(),
-        updatedByCliVersion: 'integration-test',
-      });
+      recordDependency(
+        CONTEXT_AUGMENTATION_BINARY_NAME,
+        SONAR_CONTEXT_AUGMENTATION_VERSION,
+        resolvePath(buildLocalCagBinaryName(detectPlatform())),
+      );
     }
     if (this._installScaScannerBinary) {
-      installed.push({
-        name: SCA_SCANNER_SPEC.name,
-        version: SCA_SCANNER_SPEC.version,
-        path: resolvePath(buildLocalBinaryName(SCA_SCANNER_SPEC, detectPlatform())),
-        installedAt: new Date().toISOString(),
-        installedByCliVersion: 'integration-test',
-      });
-    }
-    if (installed.length > 0) {
-      state.tools = { installed };
+      recordDependency(
+        SCA_SCANNER_SPEC.name,
+        SCA_SCANNER_SPEC.version,
+        resolvePath(buildLocalBinaryName(SCA_SCANNER_SPEC, detectPlatform())),
+      );
     }
     if (installedDependencies.length > 0) {
       state.dependencies = { installed: installedDependencies };

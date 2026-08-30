@@ -18,13 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { installIntegration } from '@/core/framework/features';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';
 import { buildRecordedIntegrationAttrs } from '../_common/context-augmentation.ts';
+import { recordIntegrationConfigured } from '../_common/integrate-telemetry.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { resolveVortexSetup } from '../_common/vortex.ts';
 import { supportedIntegrations } from '../index.ts';
@@ -34,8 +35,9 @@ import { resolveAntigravityInstallTarget } from './install-target.ts';
 
 export async function integrateAntigravity(
   options: IntegrateAgentOptions,
-  auth: ResolvedAuth,
+  ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
+  const { auth } = ctx;
   if (!options.nonInteractive) {
     printAgentNonInteractiveAlternativeHint(
       'sonar integrate antigravity --non-interactive',
@@ -43,33 +45,41 @@ export async function integrateAntigravity(
     );
   }
 
-  const ctx = await displayAgentIntegratePrelude('Antigravity', 'antigravity', options, auth);
+  const integrateCtx = await displayAgentIntegratePrelude(
+    'Antigravity',
+    'antigravity',
+    options,
+    auth,
+  );
 
   const vortex = await resolveVortexSetup({
     auth,
-    projectKey: ctx.projectKey,
-    isGlobal: ctx.isGlobal,
+    projectKey: integrateCtx.projectKey,
+    isGlobal: integrateCtx.isGlobal,
   });
 
   const { installRoot: targetRoot, installScope: scope } = resolveAntigravityInstallTarget(
-    ctx.isGlobal,
-    ctx.project.rootDir,
+    integrateCtx.isGlobal,
+    integrateCtx.project.projectRoot,
   );
-  const existingGlobalHookPath = ctx.isGlobal ? undefined : await detectGlobalSecretsHook();
+  const existingGlobalHookPath = integrateCtx.isGlobal
+    ? undefined
+    : await detectGlobalSecretsHook();
   const globalSecretsHookExists = existingGlobalHookPath !== undefined;
 
   const integrationOptions: AntigravityIntegrationOptions = {
     ...options,
-    projectRoot: ctx.project.rootDir,
+    projectRoot: integrateCtx.project.projectRoot,
     globalSecretsHookExists,
     vortexDisposition: vortex.disposition,
   };
 
-  const attrs = await buildRecordedIntegrationAttrs({
-    baseAttrs: buildIntegrationAttrs(ctx),
-    projectRoot: ctx.project.rootDir,
-    serverUrl: ctx.serverUrl,
-    orgKey: ctx.organization,
+  const attrs = buildRecordedIntegrationAttrs({
+    baseAttrs: buildIntegrationAttrs(integrateCtx),
+    projectRoot: integrateCtx.project.projectRoot,
+    mainRepoRoot: integrateCtx.project.mainRepoRoot,
+    serverUrl: integrateCtx.serverUrl,
+    orgKey: integrateCtx.organization,
     contextAugmentation: vortex,
   });
 
@@ -81,8 +91,17 @@ export async function integrateAntigravity(
     scope,
     auth,
     nonInteractive: options.nonInteractive,
-    isFromRouter: options.isFromRouter,
     attrs,
+    onSuccess: (facts) => {
+      recordIntegrationConfigured(ctx, {
+        auth,
+        integrationId: ANTIGRAVITY_INTEGRATION_ID,
+        scope,
+        nonInteractive: options.nonInteractive ?? false,
+        isFromRouter: options.isFromRouter ?? false,
+        ...facts,
+      });
+    },
   });
 }
 

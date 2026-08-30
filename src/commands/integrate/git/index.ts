@@ -23,6 +23,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { GLOBAL_HOOKS_DIR } from '@/core/config-constants.ts';
@@ -36,6 +37,7 @@ import { yellow } from '@/core/ui/colors.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 
 import { resolveIntegrateScope } from '../_common/integrate-scope.ts';
+import { recordIntegrationConfigured } from '../_common/integrate-telemetry.ts';
 import { printGitPreflightSummary } from '../_common/preflight-summary.ts';
 import { supportedIntegrations } from '../index.ts';
 import type { GitHookType, IntegrateGitOptions } from './options.ts';
@@ -112,7 +114,11 @@ export function validateHookOption(hook: string | undefined): void {
   }
 }
 
-async function integrateGitGlobal(options: IntegrateGitOptions, auth: ResolvedAuth): Promise<void> {
+async function integrateGitGlobal(
+  options: IntegrateGitOptions,
+  auth: ResolvedAuth,
+  ctx: CommandAuthenticatedInvocationContext,
+): Promise<void> {
   validateHookOption(options.hook);
 
   warn('Global hook installation');
@@ -135,13 +141,14 @@ async function integrateGitGlobal(options: IntegrateGitOptions, auth: ResolvedAu
   }
   blank();
 
-  await installGitFeatures(options, GLOBAL_HOOKS_DIR, 'global', auth);
+  await installGitFeatures(options, GLOBAL_HOOKS_DIR, 'global', auth, ctx);
 }
 
 export async function integrateGit(
   options: IntegrateGitOptions,
-  auth: ResolvedAuth,
+  ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
+  const { auth } = ctx;
   validateHookOption(options.hook);
 
   if (options.global && (options.dependencyRisks || options.project)) {
@@ -157,7 +164,7 @@ export async function integrateGit(
   info(yellow('Some scan types may be unavailable for certain hook types.'));
 
   if (options.global) {
-    return integrateGitGlobal(options, auth);
+    return integrateGitGlobal(options, auth, ctx);
   }
 
   const { gitRoot, isGit } = findGitRoot(process.cwd());
@@ -172,7 +179,7 @@ export async function integrateGit(
     projectRoot: isGit ? gitRoot : process.cwd(),
   });
   if (scope === 'global') {
-    return integrateGitGlobal(options, auth);
+    return integrateGitGlobal(options, auth, ctx);
   }
 
   if (!isGit) {
@@ -184,7 +191,7 @@ export async function integrateGit(
 
   const resolvedOptions = await resolveProjectKey(options, gitRoot, auth);
 
-  await installGitFeatures(resolvedOptions, gitRoot, 'project', auth);
+  await installGitFeatures(resolvedOptions, gitRoot, 'project', auth, ctx);
 }
 
 async function resolveProjectKey(
@@ -197,7 +204,7 @@ async function resolveProjectKey(
     return options;
   }
 
-  const discovered = await discoverProject(root, true, { auth });
+  const discovered = await discoverProject(root, { auth, silent: true });
   if (discovered.projectKey) {
     phase('Project', [phaseItem('Key', 'done', discovered.projectKey)]);
     return { ...options, project: discovered.projectKey };
@@ -214,6 +221,7 @@ async function installGitFeatures(
   targetRoot: string,
   scope: 'project' | 'global',
   auth: ResolvedAuth,
+  ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   const integrationId = await resolveGitIntegrationId(targetRoot, scope);
   await installIntegration({
@@ -225,9 +233,18 @@ async function installGitFeatures(
     auth,
     force: options.force,
     nonInteractive: options.nonInteractive,
-    isFromRouter: options.isFromRouter,
     // Attrs are project-scope only; global hooks do not support a project key.
     attrs: scope === 'project' ? { projectKey: options.project ?? null } : undefined,
+    onSuccess: (facts) => {
+      recordIntegrationConfigured(ctx, {
+        auth,
+        integrationId,
+        scope,
+        nonInteractive: options.nonInteractive ?? false,
+        isFromRouter: options.isFromRouter ?? false,
+        ...facts,
+      });
+    },
   });
 }
 

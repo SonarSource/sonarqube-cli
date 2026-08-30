@@ -246,22 +246,10 @@ describe('post-update migration', () => {
           },
           config: { cliVersion: '0.5.0' },
           telemetry: { enabled: false, firstUseDate: new Date().toISOString(), events: [] },
-          tools: {
-            installed: [
-              {
-                name: CONTEXT_AUGMENTATION_BINARY_NAME,
-                version: staleCagVersion,
-                path: installedBinaryPath,
-                installedAt: new Date().toISOString(),
-                installedByCliVersion: '0.5.0',
-              },
-            ],
-          },
           dependencies: {
             installed: [
               {
                 id: CONTEXT_AUGMENTATION_BINARY_NAME,
-                dependencyType: 'context-augmentation-binary',
                 version: staleCagVersion,
                 path: installedBinaryPath,
                 updatedByCliVersion: '0.5.0',
@@ -552,9 +540,13 @@ describe('post-update migration', () => {
       expect(codex?.features.map((feature) => feature.featureId)).toEqual([VORTEX_FEATURE_ID]);
       expect(codex?.features[0].subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
         SQAA_HOOK_FEATURE_ID,
+        SQAA_INSTRUCTIONS_SUBFEATURE_ID,
         CONTEXT_AUGMENTATION_FEATURE_ID,
       ]);
       expect(harness.cwd.file('.codex', 'hooks.json').asJson().hooks?.PostToolUse).toBeDefined();
+      expect(harness.cwd.file('AGENTS.md').asText()).toContain(
+        '<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->',
+      );
       expect(
         harness.cwd.file('.agents', 'skills', 'sonar-context-augmentation', 'SKILL.md').exists(),
       ).toBe(true);
@@ -596,14 +588,18 @@ describe('post-update migration', () => {
       const pretoolScriptRel = `.claude/hooks/sonar-secrets/build-scripts/${hookScriptName('pretool-secrets')}`;
       const promptScriptRel = `.claude/hooks/sonar-secrets/build-scripts/${hookScriptName('prompt-secrets')}`;
       const settingsRel = '.claude/settings.json';
-      // The path is shell-quoted so it survives spaces/metacharacters:
-      // double-quoted on Windows, single-quoted on Unix.
+      // Project scope anchors the path to Claude Code's ${CLAUDE_PROJECT_DIR} placeholder
+      // (cwd-independent) and shell-quotes it so it survives spaces/metacharacters. Double-quoted
+      // on both platforms — single-quoting on Unix would suppress the shell's `${var}` expansion
+      // and leave the placeholder unexpanded.
+      const pretoolCommandPath = '${CLAUDE_PROJECT_DIR}/' + pretoolScriptRel;
+      const promptCommandPath = '${CLAUDE_PROJECT_DIR}/' + promptScriptRel;
       const expectedPretoolCommand = IS_WINDOWS
-        ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${pretoolScriptRel}"`
-        : `'${pretoolScriptRel}'`;
+        ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${pretoolCommandPath}"`
+        : `"${pretoolCommandPath}"`;
       const expectedPromptCommand = IS_WINDOWS
-        ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${promptScriptRel}"`
-        : `'${promptScriptRel}'`;
+        ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${promptCommandPath}"`
+        : `"${promptCommandPath}"`;
 
       harness.cwd.writeFile(
         pretoolScriptRel,

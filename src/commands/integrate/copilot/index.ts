@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 
 import { finalizeAgentInstall } from '../_common/agent-integrate-postlude.ts';
@@ -27,7 +27,11 @@ import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { COPILOT_INTEGRATION_ID, type CopilotIntegrationOptions } from './declaration.ts';
 import { detectGlobalSecretsHook } from './hooks.ts';
 
-export async function integrateCopilot(options: IntegrateAgentOptions, auth: ResolvedAuth) {
+export async function integrateCopilot(
+  options: IntegrateAgentOptions,
+  ctx: CommandAuthenticatedInvocationContext,
+) {
+  const { auth } = ctx;
   if (!options.nonInteractive) {
     printAgentNonInteractiveAlternativeHint(
       'sonar integrate copilot --non-interactive',
@@ -35,15 +39,18 @@ export async function integrateCopilot(options: IntegrateAgentOptions, auth: Res
     );
   }
 
-  const ctx = await displayAgentIntegratePrelude('Copilot', 'copilot', options, auth);
+  const integrateCtx = await displayAgentIntegratePrelude('Copilot', 'copilot', options, auth);
 
-  const existingGlobalHookPath = ctx.isGlobal ? undefined : await detectGlobalSecretsHook();
+  const existingGlobalHookPath = integrateCtx.isGlobal
+    ? undefined
+    : await detectGlobalSecretsHook();
 
   await finalizeAgentInstall<CopilotIntegrationOptions>({
     integrationId: COPILOT_INTEGRATION_ID,
-    context: ctx,
+    context: integrateCtx,
     options,
     auth,
+    ctx,
     featureOptions: {
       globalSecretsHookExists: existingGlobalHookPath !== undefined,
     },

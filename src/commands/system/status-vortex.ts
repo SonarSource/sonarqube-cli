@@ -27,7 +27,7 @@ const VORTEX_STATUS_LABELS: Record<VortexEntitlementStatus, string> = {
   over_consumption: 'Active (quota exhausted)',
   not_entitled: 'Not entitled',
   check_failed: 'Unknown (check failed)',
-  not_applicable: 'Not available (SonarQube Cloud only)',
+  not_applicable: 'Not available',
 };
 
 function formatVortexUsage(consumption: { consumed: number; limit: number }): string {
@@ -51,9 +51,13 @@ export function buildVortexRecommendation(
   vortexEntitlement: VortexEntitlementResult,
   vortexInstalled: boolean,
   orgKey: string | undefined,
+  isServer: boolean,
 ): string | undefined {
   if (!isVortexEntitlementLoss(vortexEntitlement, vortexInstalled)) {
     return undefined;
+  }
+  if (isServer) {
+    return "Ask your administrator, or run 'sonar integrate' to remove the Vortex integration";
   }
   const target = orgKey ? ` for organization '${orgKey}'` : '';
   return `Re-enable Vortex${target}, or run 'sonar integrate' to remove the Vortex integration`;

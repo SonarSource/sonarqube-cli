@@ -23,14 +23,20 @@
 // hook-agent-prompt-submit.test.ts; this spec only exercises the integrate
 // command — script + hooks.json layout, scope semantics, and idempotency.
 
-import { isAbsolute } from 'node:path';
+import { cpSync } from 'node:fs';
+import { isAbsolute, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { parse as parseToml } from 'smol-toml';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/commands/integrate/_common/features/context-augmentation-feature';
-import { SQAA_HOOK_FEATURE_ID } from '../../../../src/commands/integrate/_common/features/sqaa-instructions-feature';
+import {
+  SQAA_HOOK_FEATURE_ID,
+  SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+} from '../../../../src/commands/integrate/_common/features/sqaa-instructions-feature';
 import { VORTEX_FEATURE_ID } from '../../../../src/commands/integrate/_common/vortex';
 import { codexIntegration } from '../../../../src/commands/integrate/codex/declaration';
+import { ENV_SONAR_USER_HOME } from '../../../../src/core/config-constants.ts';
 import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
@@ -269,6 +275,7 @@ describe('integrate codex', () => {
         expect(tomlBody).toContain('mcp');
         expect(tomlBody).toContain('--project');
         expect(tomlBody).toContain('my-project');
+        expect(tomlBody).not.toContain('[mcp_servers.sonarqube.env]');
 
         // Assert on the state
         const state = harness.stateJsonFile.asJson();
@@ -287,6 +294,36 @@ describe('integrate codex', () => {
             },
           ],
         });
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'forwards SONAR_USER_HOME into [mcp_servers.sonarqube.env] and refreshes a prior entry',
+      async () => {
+        harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=my-project\n');
+
+        const first = await harness.run('integrate codex --non-interactive');
+        expect(first.exitCode).toBe(0);
+        expect(harness.cwd.file(...CONFIG_TOML_DIRS).asText()).not.toContain(
+          '[mcp_servers.sonarqube.env]',
+        );
+
+        // Distinct from $HOME/.sonar. Copy cliHome because harness.run() always
+        // writes state there, and the child with a custom home must still find auth.
+        const customHome = join(harness.userHome.path, 'custom-sonar');
+        cpSync(harness.cliHome.path, join(customHome, 'sonarqube-cli'), { recursive: true });
+        const result = await harness.run('integrate codex --non-interactive', {
+          extraEnv: { [ENV_SONAR_USER_HOME]: customHome },
+        });
+
+        expect(result.exitCode).toBe(0);
+        const tomlBody = harness.cwd.file(...CONFIG_TOML_DIRS).asText();
+        expect(tomlBody).toContain('[mcp_servers.sonarqube.env]');
+        const parsed = parseToml(tomlBody) as {
+          mcp_servers?: { sonarqube?: { env?: Record<string, string> } };
+        };
+        expect(parsed.mcp_servers?.sonarqube?.env?.[ENV_SONAR_USER_HOME]).toBe(customHome);
       },
       { timeout: 30000 },
     );
@@ -451,7 +488,7 @@ describe('integrate codex', () => {
     );
 
     it(
-      'installs PostToolUse SQAA hook on apply_patch and omits AGENTS.md SQAA protocol when Vortex entitled',
+      'installs PostToolUse SQAA hook on apply_patch and writes the AGENTS.md SQAA protocol when Vortex entitled',
       async () => {
         harness.state().withContextAugmentationBinaryInstalled();
         const server = await harness
@@ -477,9 +514,17 @@ describe('integrate codex', () => {
         expect(result.exitCode).toBe(0);
         const body = harness.cwd.file(...PROJECT_AGENTS_MD_DIRS).asText();
         expect(body).toContain('<!-- sonar:begin:codex-secrets-on-read -->');
-        expect(body).not.toContain('<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->');
-        expect(body).not.toContain(SQAA_HEADING);
-        expect(body).not.toContain('sonar analyze agentic');
+        expect(body).toContain('<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->');
+        expect(body).toContain(SQAA_HEADING);
+        expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --depth DEEP`);
+        expect(
+          findInstalledSubfeature(
+            harness,
+            'codex',
+            VORTEX_FEATURE_ID,
+            SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+          ),
+        ).toBeDefined();
 
         const sqaaScript = harness.cwd.file(...SQAA_SCRIPT_DIRS, hookScriptName('posttool-sqaa'));
         expect(sqaaScript.exists()).toBe(true);
@@ -613,7 +658,7 @@ describe('integrate codex', () => {
         expect(body).toContain(SECRETS_HEADING);
         expect(body).not.toContain(SQAA_HEADING);
         const output = `${result.stdout}\n${result.stderr}`;
-        expect(output).toContain('Vortex is available on SonarQube Cloud');
+        expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
       },
       { timeout: 30000 },
     );
@@ -658,8 +703,8 @@ describe('integrate codex', () => {
     it(
       'prompts per feature, installs accepted features, and shows the Vortex promotion when not entitled',
       async () => {
-        // Default beforeEach is on-premise auth with no org, so Vortex is not
-        // available. The three remaining features
+        // Default beforeEach is on-premise with no entitlement stubs, so Vortex
+        // is not_applicable. The three remaining features
         // (secrets hook, secrets instructions, MCP) each ask. The leading '\r'
         // selects project scope before the per-feature prompts.
         const result = await harness.run('integrate codex', {
@@ -672,10 +717,8 @@ describe('integrate codex', () => {
         expect(output).toContain('Install secret scanning hooks?');
         expect(output).toContain('Install secrets-on-read instructions?');
         expect(output).toContain('Install MCP server?');
-        // Vortex is not eligible, so it is skipped without a prompt but the shared
-        // promotion message is surfaced.
         expect(output).not.toContain('Install Vortex?');
-        expect(output).toContain('Vortex is available on SonarQube Cloud');
+        expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
         // Accepted features are installed on disk.
         expect(
           harness.cwd.file(...PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')).exists(),
@@ -683,7 +726,7 @@ describe('integrate codex', () => {
         expect(harness.cwd.exists(...HOOKS_JSON_DIRS)).toBe(true);
         const agentsMd = harness.cwd.file(...PROJECT_AGENTS_MD_DIRS).asText();
         expect(agentsMd).toContain(SECRETS_HEADING);
-        // No SQAA marker block was written (org not entitled).
+        // No SQAA marker block was written (Server hubs absent).
         expect(agentsMd).not.toContain(SQAA_HEADING);
         expect(harness.cwd.exists(...CONFIG_TOML_DIRS)).toBe(true);
         // Declarative state records only the accepted features.

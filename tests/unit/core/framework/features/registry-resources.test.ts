@@ -30,7 +30,11 @@ import type {
   IntegrationContext,
   IntegrationDeclaration,
 } from '@/core/framework/features';
-import { getDefaultState, type InstalledIntegrationFeature } from '@/core/state/state.ts';
+import {
+  type CliState,
+  getDefaultState,
+  type InstalledIntegrationFeature,
+} from '@/core/state/state.ts';
 
 const binaryInstall = await import('@/core/host/install/binary.ts');
 await mock.module('@/core/host/install/binary.ts', () => ({
@@ -42,11 +46,11 @@ const {
   IntegrationInstaller,
   jsonPatch,
   textSnippetRemover,
-  SonarSourceBinary,
   sonarSourceBinary,
   textSnippet,
   wholeFile,
 } = await import('@/core/framework/features');
+const { SECRETS_SPEC } = await import('@/core/host/install/secrets.ts');
 const { removeInstalledFeature } =
   await import('@/core/framework/features/installation-recorder.ts');
 
@@ -369,16 +373,17 @@ describe('declarative integration framework - resources and state recording', ()
     ]);
   });
 
-  it('prunes stale shared dependency state when no installed feature references it', async () => {
+  it('keeps shared dependency state when no installed feature references it', async () => {
     const state = getDefaultState('test');
     const context = makeContext(state, tempDir);
+    recordDependency(state, 'binary', join(tempDir, 'bin', 'sonar-secrets'));
     const legacyFeature: FeatureDeclaration = {
       id: 'feature',
       displayName: 'Feature',
       dependencies: [
         sonarSourceBinary({
           id: 'binary',
-          binary: SonarSourceBinary.SonarSecrets,
+          spec: SECRETS_SPEC,
         }),
       ],
     };
@@ -408,7 +413,7 @@ describe('declarative integration framework - resources and state recording', ()
     );
 
     expect(installed.dependencies).toEqual([]);
-    expect(state.dependencies.installed).toEqual([]);
+    expect(state.dependencies.installed.map((dependency) => dependency.id)).toEqual(['binary']);
   });
 
   it('checks SonarSource binary dependencies by their descriptor', async () => {
@@ -416,7 +421,7 @@ describe('declarative integration framework - resources and state recording', ()
     const binaryPath = join(tempDir, 'bin', 'sonar-secrets');
     const dependency = sonarSourceBinary({
       id: 'binary',
-      binary: SonarSourceBinary.SonarSecrets,
+      spec: SECRETS_SPEC,
     });
     const context = makeContext(state, tempDir);
 
@@ -428,11 +433,10 @@ describe('declarative integration framework - resources and state recording', ()
 
     const applied = await dependency.installOrUpdate(context);
 
-    expect(installBinarySpy).toHaveBeenCalledWith(SonarSourceBinary.SonarSecrets.spec);
+    expect(installBinarySpy).toHaveBeenCalledWith(SECRETS_SPEC);
     expect(applied).toEqual({
       id: 'binary',
-      dependencyType: 'sonarsource-binary',
-      version: SonarSourceBinary.SonarSecrets.spec.version,
+      version: SECRETS_SPEC.version,
       path: binaryPath,
     });
   });
@@ -446,7 +450,7 @@ describe('declarative integration framework - resources and state recording', ()
         sonarSourceBinary({
           id: 'dependency',
           version: '1',
-          binary: SonarSourceBinary.SonarSecrets,
+          spec: SECRETS_SPEC,
         }),
       ],
       resources: [
@@ -473,6 +477,7 @@ describe('declarative integration framework - resources and state recording', ()
 
     const installed = await applyAndRecord(installer, context, integration, feature);
     const found = findInstalledFeature(state, context, integration, feature);
+    recordDependency(state, 'dependency', join(tempDir, 'bin', 'sonar-secrets'), '1');
     resolveBinaryPathSpy.mockReturnValue(join(tempDir, 'bin', 'sonar-secrets'));
 
     expect(found?.featureId).toBe(installed.featureId);
@@ -487,7 +492,7 @@ describe('declarative integration framework - resources and state recording', ()
         sonarSourceBinary({
           id: 'dependency',
           version: '2',
-          binary: SonarSourceBinary.SonarSecrets,
+          spec: SECRETS_SPEC,
         }),
       ),
     ).toBe(true);
@@ -520,31 +525,29 @@ describe('declarative integration framework - resources and state recording', ()
     ).toBe(true);
   });
 
-  it('removeInstalledFeature returns [] without mutation when the integration is not recorded', () => {
+  it('removeInstalledFeature does not mutate state when the integration is not recorded', () => {
     const integration = makeIntegration();
     const state = getDefaultState('test');
 
-    const removed = removeInstalledFeature(
+    removeInstalledFeature(
       state,
       { scope: 'project', targetRoot: tempDir },
       integration,
       integration.features[0],
     );
 
-    expect(removed).toEqual([]);
     expect(state.integrations.installed).toEqual([]);
   });
 
-  it('removeInstalledFeature returns [] and leaves other features intact when the target feature is not recorded', async () => {
+  it('removeInstalledFeature leaves other features intact when the target feature is not recorded', async () => {
     const integration = makeIntegration();
     const state = getDefaultState('test');
     const context = makeContext(state, tempDir);
     // Record a different feature; the one we ask to remove was never installed.
     await applyAndRecord(installer, context, integration, { id: 'other', displayName: 'Other' });
 
-    const removed = removeInstalledFeature(state, context, integration, integration.features[0]);
+    removeInstalledFeature(state, context, integration, integration.features[0]);
 
-    expect(removed).toEqual([]);
     expect(state.integrations.installed[0]?.features.map((f) => f.featureId)).toEqual(['other']);
   });
 });
@@ -576,6 +579,22 @@ function makeContext(
     attrs,
     resolvedDependencies: new Map(),
   };
+}
+
+/** Stands in for `recordInstalledDependency`, the binary installer's own state write. */
+function recordDependency(
+  state: CliState,
+  id: string,
+  path: string,
+  version = SECRETS_SPEC.version,
+): void {
+  state.dependencies.installed.push({
+    id,
+    version,
+    path,
+    updatedAt: new Date().toISOString(),
+    updatedByCliVersion: 'test',
+  });
 }
 
 async function applyAndRecord<TOptions>(

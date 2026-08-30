@@ -24,8 +24,7 @@ import { join } from 'node:path';
 
 import { parse as parseToml } from 'smol-toml';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { resolveAuth } from '@/core/auth/auth-resolver.ts';
+import { isSonarQubeCloud, resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
 import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '@/core/config-constants.ts';
@@ -414,18 +413,7 @@ export async function systemStatus(options: SystemStatusOptions): Promise<void> 
 
   const { tokenStatus, vortex } = await resolveAuthenticatedChecks(auth);
 
-  const legacyBinaries = (state.tools?.installed ?? []).map((t) => {
-    const pinned = PINNED_VERSIONS[t.name];
-    return {
-      name: t.name,
-      version: t.version,
-      path: abbreviatePath(t.path),
-      updateAvailable: pinned !== undefined && isNewerVersion(t.version, pinned),
-      latestVersion: pinned ?? t.version,
-    };
-  });
-
-  const depBinaries = state.dependencies.installed
+  const binaries = state.dependencies.installed
     .filter((d): d is typeof d & { path: string; version: string } => !!(d.path && d.version))
     .map((d) => {
       const pinned = PINNED_VERSIONS[d.id];
@@ -437,9 +425,6 @@ export async function systemStatus(options: SystemStatusOptions): Promise<void> 
         latestVersion: pinned ?? d.version,
       };
     });
-
-  const seen = new Set(legacyBinaries.map((b) => b.name));
-  const binaries = [...legacyBinaries, ...depBinaries.filter((b) => !seen.has(b.name))];
 
   const cacheDirs = [
     { id: 'logs', name: 'Logs', path: LOG_DIR },
@@ -476,7 +461,7 @@ export async function systemStatus(options: SystemStatusOptions): Promise<void> 
     network,
     vortex,
     vortexInstalled,
-    auth?.orgKey,
+    auth,
   );
 
   const data: StatusData = {
@@ -527,7 +512,7 @@ function buildRecommendations(
   network: ResolvedNetworkConfig,
   vortexEntitlement: VortexEntitlementResult,
   vortexInstalled: boolean,
-  orgKey: string | undefined,
+  auth: ResolvedAuth | null,
 ): string[] {
   const recommendations: string[] = [];
   if (tokenStatus === null) recommendations.push("Run 'sonar auth login' to authenticate");
@@ -538,7 +523,8 @@ function buildRecommendations(
   const vortexRecommendation = buildVortexRecommendation(
     vortexEntitlement,
     vortexInstalled,
-    orgKey,
+    auth?.orgKey,
+    auth != null && !isSonarQubeCloud(auth.serverUrl),
   );
   if (vortexRecommendation) recommendations.push(vortexRecommendation);
   if (updateResult && !updateResult.upToDate) {

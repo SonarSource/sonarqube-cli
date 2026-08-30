@@ -18,11 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
-import type { SqaaTelemetryCallerCommand } from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 
-import type { CloudAuth } from './sqaa-auth.ts';
+import type { SqaaTelemetryCallerCommand } from './sqaa-analysis-telemetry.ts';
+import type { SqaaAuth } from './sqaa-auth.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 
 export const VALID_FORMATS = ['text', 'json'] as const;
@@ -33,6 +34,10 @@ export interface AnalyzeSqaaRunOptions {
   telemetryCallerCommand?: SqaaTelemetryCallerCommand;
   /** Overrides computed CLI exit for telemetry only (e.g. non-blocking hooks always exit 0). */
   telemetryProcessExitCode?: number | null;
+  /** Invocation context used to record telemetry facts. */
+  telemetryCtx?: CommandInvocationContext;
+  /** Auth the analysis ran against; identity is resolved from it at drain time. */
+  auth?: ResolvedAuth;
 }
 
 export interface AnalyzeSqaaOptions {
@@ -49,7 +54,7 @@ export interface AnalyzeSqaaOptions {
 }
 
 export interface SqaaResolvedContext {
-  cloudAuth: CloudAuth;
+  sqaaAuth: SqaaAuth;
   projectKey: string;
 }
 
@@ -61,6 +66,7 @@ export interface SqaaBatchRunOptions {
   wireDepth?: SqaaDeepWireDepth;
   displayDepth?: SqaaAnalysisDepth;
   telemetryCallerCommand?: SqaaTelemetryCallerCommand;
+  telemetryCtx?: CommandInvocationContext;
 }
 
 export interface SingleFileRunOptions {
@@ -71,4 +77,5 @@ export interface SingleFileRunOptions {
   wireDepth?: SqaaDeepWireDepth;
   displayDepth?: SqaaAnalysisDepth;
   telemetryCallerCommand?: SqaaTelemetryCallerCommand;
+  telemetryCtx?: CommandInvocationContext;
 }

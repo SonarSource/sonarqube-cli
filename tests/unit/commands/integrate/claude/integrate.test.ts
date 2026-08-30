@@ -22,6 +22,7 @@ import { homedir } from 'node:os';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
+import { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { VortexDisposition } from '@/commands/integrate/_common/types.ts';
 import { integrateClaude } from '@/commands/integrate/claude';
 import * as hooks from '@/commands/integrate/claude/hooks.ts';
@@ -29,7 +30,6 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import * as token from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import * as registry from '@/core/framework/features';
-import * as gitWorktree from '@/core/host/git/worktree.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import * as discovery from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
@@ -50,6 +50,9 @@ const CLOUD_AUTH: ResolvedAuth = {
   serverUrl: 'https://sonarcloud.io',
   connectionType: 'cloud',
 };
+
+const SERVER_CTX = new CommandAuthenticatedInvocationContext(SERVER_AUTH);
+const CLOUD_CTX = new CommandAuthenticatedInvocationContext(CLOUD_AUTH);
 
 function getPhaseItems(title: string): PhaseItem[] {
   const call = getMockUiCalls().find((c) => c.method === 'phase' && c.args[0] === title);
@@ -83,9 +86,6 @@ describe('integrateCommand', () => {
   let getScaEnablementSpy: Mock<
     Extract<(typeof SonarQubeClient.prototype)['getScaEnablement'], (...args: any[]) => any>
   >;
-  let resolveRecordedRepoRootSpy: Mock<
-    Extract<(typeof gitWorktree)['resolveRecordedRepoRoot'], (...args: any[]) => any>
-  >;
 
   beforeEach(() => {
     setMockUi(true);
@@ -94,9 +94,6 @@ describe('integrateCommand', () => {
     hasVortexEntitlementSpy.mockResolvedValue({ status: 'not_entitled' });
     getScaEnablementSpy = spyOn(SonarQubeClient.prototype, 'getScaEnablement').mockResolvedValue(
       'not_enabled',
-    );
-    resolveRecordedRepoRootSpy = spyOn(gitWorktree, 'resolveRecordedRepoRoot').mockImplementation(
-      (projectRoot: string) => Promise.resolve(projectRoot),
     );
 
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
@@ -129,11 +126,10 @@ describe('integrateCommand', () => {
     installIntegrationSpy.mockRestore();
     detectGlobalSecretsHookSpy.mockRestore();
     getScaEnablementSpy.mockRestore();
-    resolveRecordedRepoRootSpy.mockRestore();
   });
 
   it('shows intro message', async () => {
-    await integrateClaude({}, SERVER_AUTH);
+    await integrateClaude({}, SERVER_CTX);
 
     const introText = getMockUiCalls().find(
       (c) =>
@@ -143,7 +139,7 @@ describe('integrateCommand', () => {
   });
 
   it('shows discovering project spinner', async () => {
-    await integrateClaude({}, SERVER_AUTH);
+    await integrateClaude({}, SERVER_CTX);
 
     expect(
       getMockUiCalls().some(
@@ -153,7 +149,7 @@ describe('integrateCommand', () => {
   });
 
   it('shows Connection and Project setup summary sections', async () => {
-    await integrateClaude({}, CLOUD_AUTH);
+    await integrateClaude({}, CLOUD_CTX);
 
     expect(getPhaseItems('Connection').some((i) => i.text === 'Server')).toBe(true);
     expect(getPhaseItems('Connection').some((i) => i.text === 'Organization')).toBe(true);
@@ -164,7 +160,7 @@ describe('integrateCommand', () => {
   });
 
   it('validates token against the auth server URL', async () => {
-    await integrateClaude({}, SERVER_AUTH);
+    await integrateClaude({}, SERVER_CTX);
 
     expect(checkTokenStatusSpy).toHaveBeenCalledWith(SERVER_AUTH.serverUrl, SERVER_AUTH.token);
   });
@@ -172,7 +168,7 @@ describe('integrateCommand', () => {
   it('shows warning when resolved server does not match discovered server', async () => {
     mockDiscoveredProject({ serverUrl: 'https://example-sonarqube.com' });
 
-    await integrateClaude({}, CLOUD_AUTH);
+    await integrateClaude({}, CLOUD_CTX);
 
     const warnText = getMockUiCalls().find(
       (c) => c.method === 'warn' && String(c.args[0]).includes('Server URL mismatch'),
@@ -183,7 +179,7 @@ describe('integrateCommand', () => {
   it('shows warning when resolved organization does not match discovered organization', async () => {
     mockDiscoveredProject({ organization: 'an-org' });
 
-    await integrateClaude({}, CLOUD_AUTH);
+    await integrateClaude({}, CLOUD_CTX);
 
     const warnText = getMockUiCalls().find(
       (c) => c.method === 'warn' && String(c.args[0]).includes('organization mismatch'),
@@ -200,7 +196,9 @@ describe('integrateCommand', () => {
     };
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(integrateClaude({}, cloudAuthNoOrg)).rejects.toThrow(CommandFailedError);
+    await expect(
+      integrateClaude({}, new CommandAuthenticatedInvocationContext(cloudAuthNoOrg)),
+    ).rejects.toThrow(CommandFailedError);
   });
 
   it('shows config source from discovered files', async () => {
@@ -209,7 +207,7 @@ describe('integrateCommand', () => {
       configSources: ['sonar-project.properties'],
     });
 
-    await integrateClaude({}, SERVER_AUTH);
+    await integrateClaude({}, SERVER_CTX);
 
     const configSource = getPhaseItems('Project').find((i) => i.text === 'Config source');
     expect(configSource?.status).toBe('done');
@@ -222,7 +220,7 @@ describe('integrateCommand', () => {
       configSources: ['sonar-project.properties'],
     });
 
-    await integrateClaude({ project: 'cli-key' }, SERVER_AUTH);
+    await integrateClaude({ project: 'cli-key' }, SERVER_CTX);
 
     const configSource = getPhaseItems('Project').find((i) => i.text === 'Config source');
     expect(configSource?.status).toBe('info');
@@ -231,7 +229,7 @@ describe('integrateCommand', () => {
   });
 
   it('shows config source as none detected when no config file contributed', async () => {
-    await integrateClaude({}, SERVER_AUTH);
+    await integrateClaude({}, SERVER_CTX);
 
     const configSource = getPhaseItems('Project').find((i) => i.text === 'Config source');
     expect(configSource?.status).toBe('warn');
@@ -241,7 +239,7 @@ describe('integrateCommand', () => {
   it('project key defaults to discovered project key', async () => {
     mockDiscoveredProject({ projectKey: 'project' });
 
-    await integrateClaude({}, SERVER_AUTH);
+    await integrateClaude({}, SERVER_CTX);
 
     expect(getPhaseItems('Project').find((i) => i.text === 'Key')?.detail).toBe('project');
   });
@@ -249,7 +247,7 @@ describe('integrateCommand', () => {
   it('project key overrides discovered project key', async () => {
     mockDiscoveredProject({ projectKey: 'project' });
 
-    await integrateClaude({ project: 'override-project' }, SERVER_AUTH);
+    await integrateClaude({ project: 'override-project' }, SERVER_CTX);
 
     expect(getPhaseItems('Project').find((i) => i.text === 'Key')?.detail).toBe('override-project');
   });
@@ -258,7 +256,7 @@ describe('integrateCommand', () => {
     checkTokenStatusSpy.mockResolvedValue({ status: 'invalid' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(integrateClaude({}, SERVER_AUTH)).rejects.toThrow('Token is invalid.');
+    await expect(integrateClaude({}, SERVER_CTX)).rejects.toThrow('Token is invalid.');
     expect(installIntegrationSpy).not.toHaveBeenCalled();
   });
 
@@ -266,24 +264,24 @@ describe('integrateCommand', () => {
     checkTokenStatusSpy.mockResolvedValue({ status: 'unreachable' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(integrateClaude({}, SERVER_AUTH)).rejects.toThrow('Server is unreachable.');
+    await expect(integrateClaude({}, SERVER_CTX)).rejects.toThrow('Server is unreachable.');
     expect(installIntegrationSpy).not.toHaveBeenCalled();
   });
 
   it('checks Vortex entitlement', async () => {
     hasVortexEntitlementSpy.mockResolvedValue({ status: 'enabled' });
 
-    await integrateClaude({}, CLOUD_AUTH);
+    await integrateClaude({}, CLOUD_CTX);
 
     expect(hasVortexEntitlementSpy).toHaveBeenCalledTimes(1);
   });
 
   it('installs Vortex through the declarative installer in a single call', async () => {
-    mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+    mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
     mockVortexEntitlement(true);
     getScaEnablementSpy.mockResolvedValue('enabled');
 
-    await integrateClaude({}, CLOUD_AUTH);
+    await integrateClaude({}, CLOUD_CTX);
 
     expect(installIntegrationSpy).toHaveBeenCalledTimes(1);
     expect(installIntegrationSpy).toHaveBeenCalledWith(
@@ -308,11 +306,30 @@ describe('integrateCommand', () => {
     );
   });
 
+  it('records the already-resolved mainRepoRoot from discovery instead of re-deriving it', async () => {
+    // attrs.repoRoot must record mainRepoRoot (main tree), not repoRoot (current worktree).
+    mockDiscoveredProject({
+      repoRoot: '/repo-worktrees/feature-x',
+      mainRepoRoot: '/repo',
+      projectKey: 'a-project',
+    });
+    mockVortexEntitlement(true);
+    getScaEnablementSpy.mockResolvedValue('enabled');
+
+    await integrateClaude({}, CLOUD_CTX);
+
+    expect(installIntegrationSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attrs: expect.objectContaining({ repoRoot: '/repo' }),
+      }),
+    );
+  });
+
   it('requests Vortex removal when the project organization is not entitled', async () => {
-    mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+    mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
     mockVortexEntitlement(false);
 
-    await integrateClaude({}, CLOUD_AUTH);
+    await integrateClaude({}, CLOUD_CTX);
 
     expectClaudeInstallCall({
       targetRoot: '/project/root',
@@ -326,13 +343,13 @@ describe('integrateCommand', () => {
   });
 
   it('rethrows Vortex installation failures', async () => {
-    mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+    mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
     mockVortexEntitlement(true);
     installIntegrationSpy.mockRejectedValueOnce(new Error('print failed'));
 
     let thrown: unknown;
     try {
-      await integrateClaude({}, CLOUD_AUTH);
+      await integrateClaude({}, CLOUD_CTX);
     } catch (error) {
       thrown = error;
     }
@@ -346,10 +363,10 @@ describe('integrateCommand', () => {
   });
 
   it('runs migration and installs hooks when setup summary succeeds', async () => {
-    mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+    mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
     mockVortexEntitlement(true);
 
-    await integrateClaude({}, CLOUD_AUTH);
+    await integrateClaude({}, CLOUD_CTX);
 
     assertMigrationAndHookInstallationRan(
       'a-project',
@@ -361,10 +378,10 @@ describe('integrateCommand', () => {
   });
 
   it('runs migration and installs hooks when global option is set', async () => {
-    mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+    mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
     mockVortexEntitlement(true);
 
-    await integrateClaude({ global: true }, CLOUD_AUTH);
+    await integrateClaude({ global: true }, CLOUD_CTX);
 
     // Vortex is project-scoped, so a global install never enables it even when
     // the org is entitled.
@@ -378,11 +395,11 @@ describe('integrateCommand', () => {
   });
 
   it('still installs when organization access check fails in the summary', async () => {
-    mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+    mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
     mockVortexEntitlement(true);
     checkOrganizationSpy.mockResolvedValue(false);
 
-    await integrateClaude({}, CLOUD_AUTH);
+    await integrateClaude({}, CLOUD_CTX);
 
     assertMigrationAndHookInstallationRan(
       'a-project',
@@ -394,10 +411,10 @@ describe('integrateCommand', () => {
   });
 
   it('requests Vortex removal when project key is missing and entitlement is lost', async () => {
-    mockDiscoveredProject({ rootDir: '/projectB/root' });
+    mockDiscoveredProject({ repoRoot: '/projectB/root' });
     mockVortexEntitlement(false);
 
-    await integrateClaude({}, CLOUD_AUTH);
+    await integrateClaude({}, CLOUD_CTX);
 
     assertMigrationAndHookInstallationRan(undefined, '/projectB/root', undefined, false, 'remove');
   });
@@ -407,7 +424,7 @@ describe('integrateCommand', () => {
 
     let error: unknown;
     try {
-      await integrateClaude({}, SERVER_AUTH);
+      await integrateClaude({}, SERVER_CTX);
     } catch (err) {
       error = err;
     }
@@ -424,9 +441,10 @@ describe('integrateCommand', () => {
     });
 
     it('forwards skipSecretsHooks: true to migrations and skips the declarative secrets-hooks feature', async () => {
-      mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+      mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
+      hasVortexEntitlementSpy.mockResolvedValue({ status: 'not_applicable' });
 
-      await integrateClaude({}, SERVER_AUTH);
+      await integrateClaude({}, SERVER_CTX);
 
       expectClaudeInstallCall({
         targetRoot: '/project/root',
@@ -435,15 +453,15 @@ describe('integrateCommand', () => {
         projectRoot: '/project/root',
         projectKey: 'a-project',
         globalSecretsHookExists: true,
-        vortexDisposition: 'preserve',
+        vortexDisposition: 'remove',
       });
     });
 
     it('still installs project-scoped Vortex when the org is entitled', async () => {
-      mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+      mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
       mockVortexEntitlement(true);
 
-      await integrateClaude({}, CLOUD_AUTH);
+      await integrateClaude({}, CLOUD_CTX);
 
       expectClaudeInstallCall({
         targetRoot: '/project/root',
@@ -463,9 +481,10 @@ describe('integrateCommand', () => {
     });
 
     it('falls back to a project-level install (does not skip secrets hooks)', async () => {
-      mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+      mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
+      hasVortexEntitlementSpy.mockResolvedValue({ status: 'not_applicable' });
 
-      await integrateClaude({}, SERVER_AUTH);
+      await integrateClaude({}, SERVER_CTX);
 
       expectClaudeInstallCall({
         targetRoot: '/project/root',
@@ -474,20 +493,20 @@ describe('integrateCommand', () => {
         projectRoot: '/project/root',
         projectKey: 'a-project',
         globalSecretsHookExists: false,
-        vortexDisposition: 'preserve',
+        vortexDisposition: 'remove',
       });
     });
   });
 
   describe('when -g (global) is used', () => {
     it('does not probe for a pre-existing global hook', async () => {
-      await integrateClaude({ global: true }, SERVER_AUTH);
+      await integrateClaude({ global: true }, SERVER_CTX);
 
       expect(detectGlobalSecretsHookSpy).not.toHaveBeenCalled();
     });
 
     it('does not print the "already configured globally" skip notice (no probe is run)', async () => {
-      await integrateClaude({ global: true }, SERVER_AUTH);
+      await integrateClaude({ global: true }, SERVER_CTX);
 
       const skipNotice = getMockUiCalls().find(
         (c) =>
@@ -497,10 +516,10 @@ describe('integrateCommand', () => {
     });
 
     it('skips Vortex (and warns) even when the org is entitled', async () => {
-      mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+      mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
       mockVortexEntitlement(true);
 
-      await integrateClaude({ global: true }, CLOUD_AUTH);
+      await integrateClaude({ global: true }, CLOUD_CTX);
 
       // Vortex is project-scoped, so a global run never installs it.
       expectClaudeInstallCall({
@@ -520,10 +539,10 @@ describe('integrateCommand', () => {
     });
 
     it('requests Vortex removal when a global run finds the org is not entitled', async () => {
-      mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+      mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
       mockVortexEntitlement(false);
 
-      await integrateClaude({ global: true }, CLOUD_AUTH);
+      await integrateClaude({ global: true }, CLOUD_CTX);
 
       expectClaudeInstallCall({
         targetRoot: homedir(),
@@ -538,9 +557,11 @@ describe('integrateCommand', () => {
   });
 
   function mockDiscoveredProject(project: Partial<DiscoveredProject>) {
+    const repoRoot = project.repoRoot || process.cwd();
     discoverProjectSpy.mockResolvedValue({
-      rootDir: project.rootDir || process.cwd(),
-      isGitRepo: project.isGitRepo ?? false,
+      repoRoot,
+      mainRepoRoot: project.mainRepoRoot,
+      projectRoot: project.projectRoot || repoRoot,
       serverUrl: project.serverUrl,
       organization: project.organization,
       projectKey: project.projectKey,

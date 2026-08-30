@@ -22,7 +22,12 @@
 
 import type { Organization } from '@/core/server/client.ts';
 import type { SettingsValue } from '@/core/server/settings-value.ts';
-import type { SonarQubeIssue } from '@/core/server/types.ts';
+import type {
+  Metric,
+  QualityGateCondition,
+  QualityGateStatus,
+  SonarQubeIssue,
+} from '@/core/server/types.ts';
 
 import type { RecordedRequest } from './types.js';
 
@@ -55,6 +60,10 @@ interface ProjectData {
   key: string;
   name: string;
   issues: Required<IssueConfig>[];
+  qualityGateStatus?: QualityGateStatus;
+  qualityGateConditions?: QualityGateCondition[];
+  defaultBranchName: string | null;
+  unanalyzedBranch?: string;
 }
 
 export interface DopRepositoryConfig {
@@ -70,6 +79,10 @@ export interface DopRepositoryConfig {
 export class ProjectBuilder {
   private readonly projectKey: string;
   private readonly issues: Required<IssueConfig>[] = [];
+  private qualityGateStatus?: QualityGateStatus;
+  private qualityGateConditions?: QualityGateCondition[];
+  private defaultBranchName: string | null = 'main';
+  private unanalyzedBranch?: string;
 
   constructor(projectKey: string) {
     this.projectKey = projectKey;
@@ -90,11 +103,57 @@ export class ProjectBuilder {
     return this;
   }
 
+  /**
+   * Configure `GET /api/qualitygates/project_status`'s verdict for this project. A project
+   * with no configured status defaults to `NONE` at response time, matching the real API's
+   * "analyzed project, no quality gate" behavior.
+   */
+  withProjectStatus(status: QualityGateStatus): this {
+    this.qualityGateStatus = status;
+    return this;
+  }
+
+  /** Configure the `conditions` array `GET /api/qualitygates/project_status` returns for this project. */
+  withConditions(conditions: QualityGateCondition[]): this {
+    this.qualityGateConditions = conditions;
+    return this;
+  }
+
+  /**
+   * Name of the branch `GET /api/project_branches/list` flags `isMain: true` for this project.
+   * Defaults to `main`, but real servers use whatever name the repo's default branch has
+   * (`master`, `trunk`, ...) — override this to prove callers don't assume a fixed name.
+   */
+  withDefaultBranchName(name: string): this {
+    this.defaultBranchName = name;
+    return this;
+  }
+
+  /** No branch flagged `isMain: true` — `GET /api/project_branches/list` returns an empty array. */
+  withNoDefaultBranch(): this {
+    this.defaultBranchName = null;
+    return this;
+  }
+
+  /**
+   * Makes `GET /api/qualitygates/project_status` 404 when queried for this exact branch,
+   * matching the real API's "no analysis for this branch yet" response — distinct from
+   * `NONE`, which means the project *is* analyzed but has no quality gate.
+   */
+  withUnanalyzedBranch(branch: string): this {
+    this.unanalyzedBranch = branch;
+    return this;
+  }
+
   getData(): ProjectData {
     return {
       key: this.projectKey,
       name: this.projectKey,
       issues: this.issues,
+      qualityGateStatus: this.qualityGateStatus,
+      qualityGateConditions: this.qualityGateConditions,
+      defaultBranchName: this.defaultBranchName,
+      unanalyzedBranch: this.unanalyzedBranch,
     };
   }
 }
@@ -181,6 +240,8 @@ export class FakeSonarQubeServerBuilder {
   private scaEnabled?: boolean;
   private cagEntitlementStatusCode?: number;
   private cagEntitlementStatusBody?: string;
+  private sqaaEntitlementStatusCode?: number;
+  private sqaaEntitlementStatusBody?: string;
   private readonly projectSettings: Map<string, SettingsValue[]> = new Map();
   private agentJobErrorCode?: number;
   private agentJobErrorMessage?: string;
@@ -196,6 +257,13 @@ export class FakeSonarQubeServerBuilder {
   private provisionProjectsDelayMs?: number;
   private autoscanEligibilityStatusCode?: number;
   private autoscanEligibilityStatusBody?: string;
+  private metrics: Metric[] = [];
+
+  /** Configure the server-wide metric catalog `GET /api/metrics/search` returns. */
+  withMetrics(metrics: Metric[]): this {
+    this.metrics = metrics;
+    return this;
+  }
 
   withMode(mode: 'MQR' | 'STANDARD'): this {
     this.serverMode = mode;
@@ -389,12 +457,23 @@ export class FakeSonarQubeServerBuilder {
   }
 
   /**
-   * Force GET /cag/cag-entitlement/{uuid} to return a specific HTTP
-   * status code. Useful for testing entitlement check failure paths.
+   * Force GET /cag/cag-entitlement/{uuid} (and the Server /api/v2 prefix) to
+   * return a specific HTTP status code. Useful for testing entitlement check
+   * failure paths.
    */
   withCagEntitlementStatusCode(status: number, body?: string): this {
     this.cagEntitlementStatusCode = status;
     this.cagEntitlementStatusBody = body;
+    return this;
+  }
+
+  /**
+   * Force GET /a3s-analysis/org-entitlement/{uuid} (and the Server /api/v2 prefix) to
+   * return a specific HTTP status code.
+   */
+  withSqaaEntitlementStatusCode(status: number, body?: string): this {
+    this.sqaaEntitlementStatusCode = status;
+    this.sqaaEntitlementStatusBody = body;
     return this;
   }
 
@@ -489,6 +568,8 @@ export class FakeSonarQubeServerBuilder {
       scaEnabled,
       cagEntitlementStatusCode,
       cagEntitlementStatusBody,
+      sqaaEntitlementStatusCode,
+      sqaaEntitlementStatusBody,
       projectSettings,
       agentJobErrorCode,
       agentJobErrorMessage,
@@ -504,6 +585,7 @@ export class FakeSonarQubeServerBuilder {
       provisionProjectsDelayMs,
       autoscanEligibilityStatusCode,
       autoscanEligibilityStatusBody,
+      metrics,
     } = this;
     const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
@@ -644,6 +726,38 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
+        if (path === '/api/qualitygates/project_status') {
+          const projectKey = query.projectKey;
+          const projectData = projectKey ? projects.get(projectKey) : undefined;
+          if (!projectData) {
+            return new Response(
+              JSON.stringify({ errors: [{ msg: `Component key '${projectKey}' not found` }] }),
+              { status: 404, headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+          if (projectData.unanalyzedBranch && projectData.unanalyzedBranch === query.branch) {
+            return new Response(
+              JSON.stringify({ errors: [{ msg: 'Component or ref not found' }] }),
+              { status: 404, headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+          return new Response(
+            JSON.stringify({
+              projectStatus: {
+                status: projectData.qualityGateStatus ?? 'NONE',
+                conditions: projectData.qualityGateConditions ?? [],
+              },
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path === '/api/metrics/search') {
+          return new Response(JSON.stringify({ metrics, total: metrics.length, p: 1, ps: 500 }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
         // sonar-context-augmentation calls /api/project_branches/list to
         // confirm the project exists in the org during daemon startup. Return
         // a one-branch payload for registered projects; otherwise CAG aborts
@@ -659,9 +773,16 @@ export class FakeSonarQubeServerBuilder {
           }
           return new Response(
             JSON.stringify({
-              branches: [
-                { name: 'main', isMain: true, type: 'LONG', status: { qualityGateStatus: 'OK' } },
-              ],
+              branches: projectData.defaultBranchName
+                ? [
+                    {
+                      name: projectData.defaultBranchName,
+                      isMain: true,
+                      type: 'LONG',
+                      status: { qualityGateStatus: 'OK' },
+                    },
+                  ]
+                : [],
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );
@@ -806,6 +927,13 @@ export class FakeSonarQubeServerBuilder {
               { headers: { 'Content-Type': 'application/json' } },
             );
           }
+          return new Response(JSON.stringify([]), {
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (path === '/enterprises/enterprise-organizations') {
+          // Orgs not in an enterprise map to an empty list; identity caches that as null.
           return new Response(JSON.stringify([]), {
             headers: { 'Content-Type': 'application/json' },
           });
@@ -956,8 +1084,18 @@ export class FakeSonarQubeServerBuilder {
           });
         }
 
-        const orgEntitlementMatch = /^\/a3s-analysis\/org-entitlement\/(.+)$/.exec(path);
+        const orgEntitlementMatch =
+          /^(?:\/api\/v2)?\/a3s(?:-analysis)?\/org-entitlement\/(.+)$/.exec(path);
         if (orgEntitlementMatch) {
+          if (sqaaEntitlementStatusCode !== undefined) {
+            return new Response(
+              sqaaEntitlementStatusBody ?? JSON.stringify({ errors: [{ msg: 'SQAA failed' }] }),
+              {
+                status: sqaaEntitlementStatusCode,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
+          }
           const uuid = orgEntitlementMatch[1];
           const entitlement = [...sqaaEntitlementOrgs.values()].find((e) => e.uuid === uuid);
           if (!entitlement) {
@@ -976,7 +1114,7 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
-        const cagEntitlementMatch = /^\/cag\/cag-entitlement\/(.+)$/.exec(path);
+        const cagEntitlementMatch = /^(?:\/api\/v2)?\/cag\/cag-entitlement\/(.+)$/.exec(path);
         if (cagEntitlementMatch) {
           if (cagEntitlementStatusCode !== undefined) {
             return new Response(
@@ -1037,7 +1175,10 @@ export class FakeSonarQubeServerBuilder {
           });
         }
 
-        if (path === '/a3s-analysis/analyses' && req.method === 'POST') {
+        if (
+          (path === '/a3s-analysis/analyses' || path === '/api/v2/a3s/analyses') &&
+          req.method === 'POST'
+        ) {
           if (sqaaStatusCode !== undefined) {
             return new Response(JSON.stringify({ message: sqaaStatusBody ?? 'simulated error' }), {
               status: sqaaStatusCode,

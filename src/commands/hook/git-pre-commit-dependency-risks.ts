@@ -24,6 +24,11 @@
 // missing, scanner failure), and blocks the commit only when risks matching the
 // configured filter are found.
 
+import {
+  recordScaAnalysisTelemetry,
+  SCA_CALLER_COMMANDS,
+} from '@/commands/analyze/sca-analysis-telemetry.ts';
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import {
@@ -33,10 +38,6 @@ import {
 import { ResolveOnlySecretsInstaller } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
-import {
-  emitScaAnalysisTelemetry,
-  SCA_CALLER_COMMANDS,
-} from '@/core/telemetry/sca-analysis-telemetry.ts';
 import { discreetSuccess, success, warn } from '@/core/ui';
 
 import { countSelectedRisks } from '../analyze/dependency-risk-helpers/count-selected-risks.ts';
@@ -63,6 +64,7 @@ export interface DepRisksStageOptions {
   project: string;
   changedFiles: string[];
   auth: ResolvedAuth;
+  ctx: CommandInvocationContext;
 }
 
 export async function runDepRisksStage(options: DepRisksStageOptions): Promise<void> {
@@ -96,7 +98,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
       new ScaScannerNoopInstaller(binaryPath),
       new DefaultScaScannerSpawner(),
       new ResolveOnlySecretsInstaller(),
-    ).run(options.auth, options.project, SCA_CALLER_COMMANDS.gitPreCommit);
+    ).run(options.auth, options.project, SCA_CALLER_COMMANDS.gitPreCommit, options.ctx);
     viewModel = buildDependencyRisksViewModel(scan.response, filter);
   } catch (err) {
     // The orchestrator already emitted a failures_count:1 event if the SCA scan itself failed;
@@ -106,9 +108,10 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
   }
 
   // Hook has no analyze-style 0/1/51 exit code, so exit_code is null.
-  await emitScaAnalysisTelemetry(
-    SCA_CALLER_COMMANDS.gitPreCommit,
+  recordScaAnalysisTelemetry(
+    options.ctx,
     options.auth,
+    SCA_CALLER_COMMANDS.gitPreCommit,
     scan.response,
     scan.scanDurationMs,
     null,

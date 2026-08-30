@@ -20,20 +20,17 @@
 
 import { createHash } from 'node:crypto';
 
-import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 
+import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
-import { emitIntegrationConfiguredTelemetry } from '@/core/telemetry/integrate-telemetry.ts';
-import * as telemetryEvents from '@/core/telemetry/telemetry-events.ts';
 
-const AUTH: ResolvedAuth = {
-  connectionType: 'cloud',
-  serverUrl: 'https://sonarcloud.io',
-  token: 'test-token',
-  orgKey: 'my-org',
-};
+import {
+  CLI_INTEGRATION_CONFIGURED,
+  recordIntegrationConfigured,
+} from '../../../../../src/commands/integrate/_common/integrate-telemetry.ts';
 
 function makeInstalledFeature(
   featureId: string,
@@ -54,20 +51,24 @@ function makeInstalledFeature(
   };
 }
 
-let emitSpy: ReturnType<typeof spyOn>;
+const AUTH: ResolvedAuth = {
+  connectionType: 'cloud',
+  serverUrl: 'https://sonarcloud.io',
+  token: 'test-token',
+  orgKey: 'my-org',
+};
 
-beforeEach(() => {
-  emitSpy = spyOn(telemetryEvents, 'emitIntegrationConfigured').mockResolvedValue(undefined);
-});
+function record(params: Omit<Parameters<typeof recordIntegrationConfigured>[1], 'auth'>) {
+  const ctx = new CommandInvocationContext();
+  recordIntegrationConfigured(ctx, { auth: AUTH, ...params });
+  const fact = ctx.telemetryFacts()[0];
+  expect(fact.name).toBe(CLI_INTEGRATION_CONFIGURED);
+  return fact.payload as Record<string, unknown>;
+}
 
-afterEach(() => {
-  emitSpy.mockRestore();
-});
-
-describe('emitIntegrationConfiguredTelemetry()', () => {
-  it('assembles the full payload for a project-scope run', async () => {
-    await emitIntegrationConfiguredTelemetry({
-      auth: AUTH,
+describe('recordIntegrationConfigured()', () => {
+  it('assembles the full payload for a project-scope run', () => {
+    const payload = record({
       integrationId: 'git',
       scope: 'project',
       nonInteractive: true,
@@ -83,25 +84,21 @@ describe('emitIntegrationConfiguredTelemetry()', () => {
       repoRoot: '/some/repo',
     });
 
-    const [, fields] = emitSpy.mock.calls[0] as [ResolvedAuth, Record<string, unknown>];
-    // features_installed flattens active subfeature ids.
-    expect(fields.features_installed).toEqual([
+    expect(payload.features_installed).toEqual([
       'pre-commit-hook',
       'pre-commit-secrets',
       'pre-commit-dependency-risks',
     ]);
-    expect(fields.features_declined).toEqual([]);
-    expect(fields.features_uninstalled).toEqual([]);
-    // repo_id is the SHA-256 hex of the canonical repo root.
+    expect(payload.features_declined).toEqual([]);
+    expect(payload.features_uninstalled).toEqual([]);
     const expected = createHash('sha256').update(canonicalizePath('/some/repo')).digest('hex');
-    expect(fields.repo_id).toBe(expected);
-    expect(fields.repo_id as string).toHaveLength(64);
-    expect(fields.is_interactive).toBe(false);
+    expect(payload.repo_id).toBe(expected);
+    expect(payload.repo_id as string).toHaveLength(64);
+    expect(payload.is_interactive).toBe(false);
   });
 
-  it('sets repo_id to null for global scope', async () => {
-    await emitIntegrationConfiguredTelemetry({
-      auth: AUTH,
+  it('sets repo_id to null for global scope', () => {
+    const payload = record({
       integrationId: 'claude',
       scope: 'global',
       nonInteractive: false,
@@ -112,17 +109,13 @@ describe('emitIntegrationConfiguredTelemetry()', () => {
       repoRoot: null,
     });
 
-    const [, fields] = emitSpy.mock.calls[0] as [ResolvedAuth, Record<string, unknown>];
-    expect(fields.repo_id).toBeNull();
-    expect(fields.is_global).toBe(true);
-    expect(fields.is_from_router).toBe(true);
+    expect(payload.repo_id).toBeNull();
+    expect(payload.is_global).toBe(true);
+    expect(payload.is_from_router).toBe(true);
   });
 
-  it('records declined and uninstalled features in separate fields', async () => {
-    // Interactive run: install one feature, decline another offered via `ask`,
-    // and remove a previously-installed one.
-    await emitIntegrationConfiguredTelemetry({
-      auth: AUTH,
+  it('records declined and uninstalled features in separate fields', () => {
+    const payload = record({
       integrationId: 'claude',
       scope: 'project',
       nonInteractive: false,
@@ -133,15 +126,13 @@ describe('emitIntegrationConfiguredTelemetry()', () => {
       repoRoot: '/some/repo',
     });
 
-    const [, fields] = emitSpy.mock.calls[0] as [ResolvedAuth, Record<string, unknown>];
-    expect(fields.features_installed).toEqual(['sonar-secrets-hooks']);
-    expect(fields.features_declined).toEqual(['sqaa-instructions']);
-    expect(fields.features_uninstalled).toEqual(['mcp-server']);
+    expect(payload.features_installed).toEqual(['sonar-secrets-hooks']);
+    expect(payload.features_declined).toEqual(['sqaa-instructions']);
+    expect(payload.features_uninstalled).toEqual(['mcp-server']);
   });
 
-  it('sets repo_id to null when repoRoot is null on project scope', async () => {
-    await emitIntegrationConfiguredTelemetry({
-      auth: AUTH,
+  it('sets repo_id to null when repoRoot is null on project scope', () => {
+    const payload = record({
       integrationId: 'claude',
       scope: 'project',
       nonInteractive: false,
@@ -152,7 +143,6 @@ describe('emitIntegrationConfiguredTelemetry()', () => {
       repoRoot: null,
     });
 
-    const [, fields] = emitSpy.mock.calls[0] as [ResolvedAuth, Record<string, unknown>];
-    expect(fields.repo_id).toBeNull();
+    expect(payload.repo_id).toBeNull();
   });
 });

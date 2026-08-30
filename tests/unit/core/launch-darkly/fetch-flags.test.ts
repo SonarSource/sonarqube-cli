@@ -59,6 +59,7 @@ const cloudIdentity: FeatureFlagIdentity = {
   connectionType: 'cloud',
   userUuid: 'user-1',
   organizationUuidV4: 'org-1',
+  enterpriseUuid: null,
   sqsInstallationId: null,
 };
 
@@ -120,30 +121,46 @@ describe('fetchFlagsFromLaunchDarkly', () => {
     options.logger.error('e');
   });
 
-  it('returns an empty map when the client-side ID is missing', async () => {
+  it('sends an enterprise context to LaunchDarkly when the UUID is known', async () => {
+    await fetchFlagsFromLaunchDarkly({
+      ...cloudIdentity,
+      enterpriseUuid: 'ent-1',
+    });
+
+    const [, context] = initialize.mock.calls[0];
+    expect(context).toEqual({
+      kind: 'multi',
+      user: { key: 'user-1' },
+      organization: { key: 'org-1' },
+      enterprise: { key: 'ent-1' },
+    });
+  });
+
+  it('returns null when SDK initialization fails', async () => {
+    waitForInitialization.mockImplementation(() => Promise.reject(new Error('timeout')));
+
+    expect(await fetchFlagsFromLaunchDarkly(cloudIdentity)).toBeNull();
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns null when the client-side ID is missing', async () => {
     clientSideIdSpy = spyOn(ldConstants, 'resolveLaunchDarklyClientSideId').mockReturnValue('');
 
-    expect(await fetchFlagsFromLaunchDarkly(cloudIdentity)).toEqual({});
+    expect(await fetchFlagsFromLaunchDarkly(cloudIdentity)).toBeNull();
     expect(initialize).not.toHaveBeenCalled();
   });
 
-  it('returns an empty map when the identity cannot build an LD context', async () => {
+  it('returns null when the identity cannot build an LD context', async () => {
     expect(
       await fetchFlagsFromLaunchDarkly({
         connectionType: 'cloud',
         userUuid: 'user-1',
         organizationUuidV4: null,
+        enterpriseUuid: null,
         sqsInstallationId: null,
       }),
-    ).toEqual({});
+    ).toBeNull();
     expect(initialize).not.toHaveBeenCalled();
-  });
-
-  it('returns an empty map when SDK initialization fails', async () => {
-    waitForInitialization.mockImplementation(() => Promise.reject(new Error('timeout')));
-
-    expect(await fetchFlagsFromLaunchDarkly(cloudIdentity)).toEqual({});
-    expect(close).toHaveBeenCalledTimes(1);
   });
 
   it('still returns flags when client.close rejects', async () => {

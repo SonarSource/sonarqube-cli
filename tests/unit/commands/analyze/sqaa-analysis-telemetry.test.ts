@@ -25,19 +25,22 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import type { RunTally } from '@/commands/analyze/sqaa-analysis.ts';
+import {
+  collectRuleCounts,
+  recordSqaaAnalysisTelemetry,
+  SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
+  SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
+  type SqaaTelemetryCallerCommand,
+  tallyFromSqaaJsonReport,
+} from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display-json.ts';
+import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
+import { commitTelemetryFacts } from '@/commands/telemetry-facts.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import type { SqaaIssue } from '@/core/server/client.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
-import {
-  collectRuleCounts,
-  emitSqaaAnalysisTelemetry,
-  SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
-  SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
-  tallyFromSqaaJsonReport,
-} from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 import * as userModule from '@/core/telemetry/user.ts';
 
 import { makeTelemetryState, readAnalysisEvents } from '../../../_common/telemetry-helpers.ts';
@@ -48,6 +51,18 @@ const AUTH: ResolvedAuth = {
   token: 'test-token',
   orgKey: 'my-org',
 };
+
+async function emitSqaaAnalysisTelemetry(
+  callerCommand: SqaaTelemetryCallerCommand,
+  _auth: ResolvedAuth,
+  tally: RunTally,
+  durationMs: number,
+  exitCode?: number | null,
+): Promise<void> {
+  const ctx = new CommandInvocationContext();
+  recordSqaaAnalysisTelemetry(ctx, AUTH, callerCommand, tally, durationMs, exitCode);
+  await commitTelemetryFacts(ctx.telemetryFacts());
+}
 
 function makeIssue(rule: string, message = 'issue'): SqaaIssue {
   return {
@@ -145,7 +160,7 @@ describe('tallyFromSqaaJsonReport()', () => {
   });
 });
 
-describe('emitSqaaAnalysisTelemetry()', () => {
+describe('recordSqaaAnalysisTelemetry()', () => {
   it('writes a single CliAnalysisCompleted with details "" on a clean run', async () => {
     await emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, makeTally(), 123, 0);
 

@@ -33,8 +33,8 @@ import type { PhaseItem } from '@/core/ui';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 const BASE_PROJECT: DiscoveredProject = {
-  rootDir: '/workspace/app',
-  isGitRepo: true,
+  repoRoot: '/workspace/app',
+  projectRoot: '/workspace/app',
   configSources: [],
 };
 

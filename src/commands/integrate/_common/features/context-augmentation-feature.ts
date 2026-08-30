@@ -19,7 +19,7 @@
  */
 
 import { CommandFailedError } from '@/core/command-error.ts';
-import { install, skip } from '@/core/framework/features/selection.ts';
+import { skip } from '@/core/framework/features/selection.ts';
 import type { IntegrationContext, SubfeatureDeclaration } from '@/core/framework/features/types.ts';
 import { wholeFile } from '@/core/framework/resources';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
@@ -32,6 +32,8 @@ import {
   runToolIntegrateCommand,
 } from '../context-augmentation.ts';
 import { contextAugmentationBinaryDependency } from '../context-augmentation-dependency.ts';
+import type { IntegrateAgentOptions } from '../types.ts';
+import { vortexInstallDecision } from '../vortex.ts';
 
 export const CONTEXT_AUGMENTATION_FEATURE_ID = 'context-augmentation';
 export const CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID = 'context-augmentation-skill-file';
@@ -42,13 +44,16 @@ export interface ContextAugmentationSkillFeatureOptions {
   targetPath: (context: IntegrationContext) => string;
 }
 
-export function createContextAugmentationSubfeature<TOptions>(
+export function createContextAugmentationSubfeature<TOptions extends IntegrateAgentOptions>(
   options: ContextAugmentationSkillFeatureOptions,
 ): SubfeatureDeclaration<TOptions> {
   return {
     id: CONTEXT_AUGMENTATION_FEATURE_ID,
     displayName: 'Vortex Context',
-    shouldInstall: () => (isContextAugmentationSkipped() ? skip() : install()),
+    shouldInstall: ({ options: integrateOptions }) =>
+      isContextAugmentationSkipped()
+        ? skip()
+        : vortexInstallDecision(integrateOptions.vortexDisposition),
     dependencies: [contextAugmentationBinaryDependency],
     resources: [
       wholeFile({

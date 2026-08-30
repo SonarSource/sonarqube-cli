@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 
 import { finalizeAgentInstall } from '../_common/agent-integrate-postlude.ts';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';
@@ -27,8 +27,9 @@ import { OPENCODE_INTEGRATION_ID } from './declaration.ts';
 
 export async function integrateOpenCode(
   options: IntegrateAgentOptions,
-  auth: ResolvedAuth,
+  ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
+  const { auth } = ctx;
   const context = await displayAgentIntegratePrelude('OpenCode', 'opencode', options, auth);
 
   await finalizeAgentInstall({
@@ -36,5 +37,6 @@ export async function integrateOpenCode(
     context,
     options,
     auth,
+    ctx,
   });
 }

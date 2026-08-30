@@ -22,8 +22,6 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { CLI_COMMAND } from '@/core/config-constants.ts';
-
 import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
@@ -90,11 +88,11 @@ describe('integrate copilot', () => {
         );
 
         // .mcp.json: present and registers the sonarqube MCP server using
-        // the platform CLI command.
+        // the PATH command `sonar` (Windows PATHEXT resolves sonar.exe).
         expect(harness.cwd.exists('.mcp.json')).toBe(true);
         const mcp: McpJson = harness.cwd.file('.mcp.json').asJson();
         const sonar = mcp.mcpServers?.sonarqube;
-        expect(sonar?.command).toBe(CLI_COMMAND);
+        expect(sonar?.command).toBe('sonar');
         expect(sonar?.args?.slice(0, 2)).toEqual(['run', 'mcp']);
 
         // Completion summary
@@ -183,7 +181,6 @@ describe('integrate copilot', () => {
         expect(state.dependencies.installed).toMatchObject([
           {
             id: 'sonar-secrets',
-            dependencyType: 'sonarsource-binary',
           },
         ]);
       },
@@ -525,7 +522,9 @@ describe('integrate copilot', () => {
             .map((feature: { featureId: string }) => feature.featureId)
             .sort(),
         ).toEqual(['mcp-server', 'prompt-secrets-instructions']);
-        expect(state.dependencies.installed).toEqual([]);
+        expect(
+          state.dependencies.installed.map((dependency: { id: string }) => dependency.id),
+        ).toEqual(['sonar-secrets']);
       },
       { timeout: 30000 },
     );
@@ -787,10 +786,10 @@ describe('integrate copilot', () => {
     );
 
     it(
-      'omits the SQAA section on on-premise (no organization on the auth)',
+      'omits the SQAA section when Server Vortex hubs are absent',
       async () => {
-        // Default beforeEach sets up on-premise auth (no org). hasVortexEntitlement
-        // returns 'not_entitled' fast without hitting the API in this case.
+        // Default beforeEach is on-premise with no entitlement stubs, so both
+        // hubs 404 and Vortex is not_applicable.
         const result = await harness.run(
           `integrate copilot --project ${TEST_PROJECT} --non-interactive`,
         );
@@ -846,8 +845,8 @@ describe('integrate copilot', () => {
     it(
       'prompts per feature, installs accepted features, and shows the Vortex promotion when not entitled',
       async () => {
-        // Default beforeEach is on-premise auth with no org, so Vortex is not
-        // available: it is skipped with the promotion line. The three remaining
+        // Default beforeEach is on-premise with no entitlement stubs, so Vortex
+        // is not_applicable. The three remaining
         // features (hook, prompt-secrets, MCP) each ask.
         const result = await harness.run('integrate copilot', {
           stdinChunks: ['\r', '\r', '\r', '\r'],
@@ -859,13 +858,12 @@ describe('integrate copilot', () => {
         expect(output).toContain('Install pre-tool-use hook?');
         expect(output).toContain('Install prompt-secrets instructions?');
         expect(output).toContain('Install MCP server?');
-        // Vortex is skipped with the promotion message.
-        expect(output).toContain('Vortex is available on SonarQube Cloud');
+        expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
         // Accepted features are installed on disk.
         expect(harness.cwd.file(...PROJECT_HOOK_SCRIPT_PATH).exists()).toBe(true);
         expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(true);
         expect(harness.cwd.exists('.mcp.json')).toBe(true);
-        // No SQAA marker block was written (org not entitled).
+        // No SQAA marker block was written (Server hubs absent).
         expect(harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText()).not.toContain(
           '# Vortex analysis',
         );

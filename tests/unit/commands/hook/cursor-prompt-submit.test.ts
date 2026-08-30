@@ -24,6 +24,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 
@@ -34,6 +35,10 @@ import {
   SECRETS_INACTIVE_UNAUTHENTICATED,
 } from '../../../../src/commands/hook/hook-dependencies.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
+
+function makeCtx() {
+  return new CommandInvocationContext();
+}
 
 describe('cursorPromptSubmit (unit — impractical-via-e2e paths)', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;
@@ -78,7 +83,7 @@ describe('cursorPromptSubmit (unit — impractical-via-e2e paths)', () => {
       stderr: '',
     });
 
-    await cursorPromptSubmit();
+    await cursorPromptSubmit(makeCtx());
 
     const written = String((stdoutSpy.mock.calls[0] as unknown[])[0]);
     const payload = JSON.parse(written) as { continue: boolean; user_message: string };
@@ -89,7 +94,7 @@ describe('cursorPromptSubmit (unit — impractical-via-e2e paths)', () => {
   it('outputs nothing and does not throw when scan throws an error', async () => {
     runSecretsBinaryOnTextSpy.mockRejectedValue(new Error('scan process crashed'));
 
-    await cursorPromptSubmit();
+    await cursorPromptSubmit(makeCtx());
 
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
@@ -97,7 +102,7 @@ describe('cursorPromptSubmit (unit — impractical-via-e2e paths)', () => {
   it('outputs nothing when exitCode is null', async () => {
     runSecretsBinaryOnTextSpy.mockResolvedValue({ exitCode: null, stdout: '', stderr: '' });
 
-    await cursorPromptSubmit();
+    await cursorPromptSubmit(makeCtx());
 
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
@@ -105,7 +110,7 @@ describe('cursorPromptSubmit (unit — impractical-via-e2e paths)', () => {
   it('blocks with the unauthenticated message when auth is unavailable', async () => {
     resolveAuthSpy.mockResolvedValue(null);
 
-    await cursorPromptSubmit();
+    await cursorPromptSubmit(makeCtx());
 
     expect(runSecretsBinaryOnTextSpy).not.toHaveBeenCalled();
     const payload = JSON.parse(String((stdoutSpy.mock.calls[0] as unknown[])[0])) as {
@@ -119,7 +124,7 @@ describe('cursorPromptSubmit (unit — impractical-via-e2e paths)', () => {
   it('blocks with the binary-missing message when the analyzer is not installed', async () => {
     resolveSecretsBinaryPathSpy.mockReturnValue(null);
 
-    await cursorPromptSubmit();
+    await cursorPromptSubmit(makeCtx());
 
     expect(runSecretsBinaryOnTextSpy).not.toHaveBeenCalled();
     const payload = JSON.parse(String((stdoutSpy.mock.calls[0] as unknown[])[0])) as {

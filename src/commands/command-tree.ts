@@ -18,24 +18,17 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { type Command, Help, InvalidArgumentError, Option } from 'commander';
+import { type Command, Help, InvalidArgumentError } from 'commander';
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
 import { GENERIC_HTTP_METHODS } from '@/core/server/client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { tryLoadState } from '@/core/state/state-repository.ts';
-import {
-  flushTelemetry,
-  setPassthroughSubcommand,
-  storeEvent,
-  TELEMETRY_FLUSH_MODE_ENV,
-} from '@/core/telemetry';
-import {
-  SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
-  SQAA_VERIFY_CALLER_COMMAND,
-} from '@/core/telemetry/sqaa-analysis-telemetry.ts';
+import { flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
+import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
 import { blank, error, warn } from '@/core/ui';
 import { parseInteger } from '@/core/ui/parsing.ts';
 
@@ -55,20 +48,30 @@ import {
   type AnalyzeSqaaRunOptions,
   VALID_FORMATS as SQAA_FORMATS,
 } from './analyze/sqaa.ts';
+import {
+  SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
+  SQAA_VERIFY_CALLER_COMMAND,
+} from './analyze/sqaa-analysis-telemetry.ts';
 import { SQAA_DEPTH_CHOICES } from './analyze/sqaa-depth.ts';
 import { collectSqaaFileOption } from './analyze/sqaa-file-arg.ts';
 import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './api/api.ts';
 import { authLogin, type AuthLoginOptions } from './auth/login.ts';
 import { authLogout } from './auth/logout.ts';
 import { authStatus } from './auth/status.ts';
+import {
+  buildCommandExecutedFact,
+  setPassthroughSubcommand,
+} from './command-executed-telemetry.ts';
+import type { CommandInvocationContext } from './command-invocation-context.ts';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
-import { agentPostToolUse, type AgentPostToolUseOptions } from './hook/agent-post-tool-use.ts';
+import { isTableFormatOption } from './formatting-options.ts';
+import { agentPostToolUse } from './hook/agent-post-tool-use.ts';
 import { agentPromptSubmit } from './hook/agent-prompt-submit.ts';
 import { antigravityPreToolUse } from './hook/antigravity-pre-tool-use.ts';
 import { claudePostToolUseFailure } from './hook/claude-post-tool-use-failure.ts';
 import { claudePreToolUse } from './hook/claude-pre-tool-use.ts';
-import { codexPostToolUse, type CodexPostToolUseOptions } from './hook/codex-post-tool-use.ts';
+import { codexPostToolUse } from './hook/codex-post-tool-use.ts';
 import { codexPromptSubmit } from './hook/codex-prompt-submit.ts';
 import { copilotPreToolUse } from './hook/copilot-pre-tool-use.ts';
 import { cursorPreFileRead } from './hook/cursor-pre-file-read.ts';
@@ -76,6 +79,7 @@ import { cursorPreToolUse } from './hook/cursor-pre-tool-use.ts';
 import { cursorPromptSubmit } from './hook/cursor-prompt-submit.ts';
 import { gitPreCommit, type GitPreCommitOptions } from './hook/git-pre-commit.ts';
 import { gitPrePush } from './hook/git-pre-push.ts';
+import type { HookCommandResult } from './hook/hook-command-result.ts';
 import { importHandler, type ImportOptions } from './import';
 import { collectRepoOption } from './import/_common/repo-option.ts';
 import type { IntegrateAgentOptions } from './integrate/_common/types.ts';
@@ -96,12 +100,25 @@ import {
   VALID_STATUSES,
 } from './list/issues.ts';
 import { listProjects, type ListProjectsOptions } from './list/projects.ts';
+import {
+  showQualityGate,
+  type ShowQualityGateOptions,
+  VALID_FORMATS as QUALITY_GATE_VALID_FORMATS,
+} from './quality-gate/show';
 import { remediate, type RemediateOptions } from './remediate';
 import { getBanner, getCustomRootHelp } from './root-help.ts';
 import { runMcp } from './run/mcp.ts';
-import { type CliRuntime, createDefaultCliRuntime, SonarCommand, Stage } from './sonar-command.ts';
+import {
+  type CliRuntime,
+  collectPrivateBetaFlagKeys,
+  createDefaultCliRuntime,
+  isAlphaEnabledFromEnv,
+  SonarCommand,
+  SonarOption,
+} from './sonar-command.ts';
 import { systemReset, type SystemResetOptions } from './system/reset.ts';
 import { systemStatus, type SystemStatusOptions } from './system/status.ts';
+import { commitTelemetryFacts } from './telemetry-facts.ts';
 import { updateVersion, type UpdateVersionOptions } from './update';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
@@ -116,9 +133,37 @@ Dependency manifest files (e.g. package-lock.json, pom.xml) will be uploaded to 
 Learn more: https://docs.sonarsource.com/sonarqube-server/advanced-security/analyzing-projects-for-dependencies#supported-languages-and-package-managers
 ${projectKeyExtraHelp}`;
 
-/** Build the CLI command tree for this invocation. */
-export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime()): SonarCommand {
+/**
+ * Loads auth + Private Beta flag decisions. Invoked at most once, only when the
+ * tree declares at least one Private Beta command.
+ */
+export type LoadPrivateBetaContext = (flagKeys: readonly string[]) => Promise<{
+  auth: ResolvedAuth | null;
+  flags: Record<string, boolean>;
+}>;
+
+export interface CreateCommandTreeOptions {
+  isAlphaEnabled?: boolean;
+  loadPrivateBetaContext?: LoadPrivateBetaContext;
+}
+
+/** Registers the full command tree for the given runtime (sync). */
+function buildCommandTree(runtime: CliRuntime): SonarCommand {
+  // Hook handlers write an agent-native session id when present; postAction
+  // resolves (env fallback) before telemetry flush.
+  let capturedAgentSessionId: string | null = null;
   const COMMAND_TREE = new SonarCommand({ runtime });
+
+  const handleHookInvocation =
+    <TArgs extends unknown[]>(
+      run: (ctx: CommandInvocationContext, ...args: TArgs) => Promise<HookCommandResult>,
+    ): ((ctx: CommandInvocationContext, ...args: TArgs) => Promise<void>) =>
+    async (ctx, ...args) => {
+      const { agentSessionId } = await run(ctx, ...args);
+      if (agentSessionId != null) {
+        capturedAgentSessionId = agentSessionId;
+      }
+    };
 
   COMMAND_TREE.name('sonar')
     .description('SonarQube CLI')
@@ -139,7 +184,7 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
         return getBanner(VERSION) + '\n' + Help.prototype.formatHelp.call(helper, cmd, helper);
       },
     })
-    .anonymousAction(function (this: Command, command?: string) {
+    .anonymousAction(function (this: Command, _ctx, command?: string) {
       if (command) {
         throw new CommandFailedError(`unknown command '${command}'`, {
           remediationHint: "Run 'sonar --help' to see the list of available commands.",
@@ -168,17 +213,17 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
       'SonarQube Server URL, SonarQube Cloud EU (https://sonarcloud.io), or SonarQube Cloud US (https://sonarqube.us). Defaults to SonarQube Cloud EU.',
     )
     .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
-    .anonymousAction((options: AuthLoginOptions) => authLogin(options));
+    .anonymousAction((_ctx, options: AuthLoginOptions) => authLogin(options));
 
   auth
     .command('logout')
     .description('Remove active connection token from keychain')
-    .anonymousAction(() => authLogout());
+    .anonymousAction((_ctx) => authLogout());
 
   auth
     .command('status')
     .description('Show active authentication connection with token verification')
-    .anonymousAction(() => authStatus());
+    .anonymousAction((_ctx) => authStatus());
 
   // List Sonar resources
   const list = COMMAND_TREE.command('list')
@@ -187,20 +232,19 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
       category: 'data',
     });
 
-  const pageOption = new Option('--page <page>', 'Page number').default(1).argParser(parseInteger);
-  const pageSizeOption = new Option('--page-size <page-size>', 'Page size (1-500)')
+  const pageOption = new SonarOption('--page <page>', 'Page number')
+    .default(1)
+    .argParser(parseInteger);
+  const pageSizeOption = new SonarOption('--page-size <page-size>', 'Page size (1-500)')
     .default(DEFAULT_PAGE_SIZE)
     .argParser(parseInteger);
-  const listIssuesFormatOption = new Option('--format <format>', 'Output format')
+  const listIssuesFormatOption = new SonarOption('--format <format>', 'Output format')
     .choices(VALID_FORMATS)
     .default('json');
   list
     .command('issues')
     .description('Search for issues in SonarQube')
-    .showUpdateNotification((opts) => {
-      const format = typeof opts.format === 'string' ? opts.format : 'json';
-      return format.toLowerCase() === 'table';
-    })
+    .showUpdateNotification(isTableFormatOption)
     .requiredOption('-p, --project <project>', 'Project key')
     .option(
       '--statuses <statuses>',
@@ -215,7 +259,7 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
     .option('--pull-request <pull-request>', 'Pull request ID')
     .addOption(pageSizeOption)
     .addOption(pageOption)
-    .authenticatedAction((auth, options: ListIssuesOptions) => listIssues(options, auth));
+    .authenticatedAction((ctx, options: ListIssuesOptions) => listIssues(options, ctx));
 
   list
     .command('projects')
@@ -224,7 +268,29 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
     .option('-q, --query <query>', 'Search query to filter projects by name or key')
     .addOption(pageOption)
     .addOption(pageSizeOption)
-    .authenticatedAction((auth, options: ListProjectsOptions) => listProjects(options, auth));
+    .authenticatedAction((ctx, options: ListProjectsOptions) => listProjects(options, ctx));
+
+  const qualityGate = COMMAND_TREE.command('quality-gate')
+    .alias('qg')
+    .description('Fetch quality gate status from SonarQube Cloud or Server')
+    .rootHelp({
+      category: 'data',
+    });
+
+  qualityGate
+    .command('show')
+    .description('Show the quality gate verdict for a project')
+    .showUpdateNotification(isTableFormatOption)
+    .option('-p, --project <project>', 'Project key')
+    .addOption(
+      new SonarOption('--format <format>', 'Output format')
+        .choices(QUALITY_GATE_VALID_FORMATS)
+        .default('table'),
+    )
+    .option('--branch <branch>', 'Branch name. Cannot be combined with --pull-request.')
+    .option('--pull-request <pull-request>', 'Pull request ID. Cannot be combined with --branch.')
+    .option('--all', 'Also show passing conditions. By default only failing conditions are shown.')
+    .authenticatedAction((ctx, options: ShowQualityGateOptions) => showQualityGate(options, ctx));
 
   // Import repositories from DevOps platforms into SonarQube (hidden while in development)
   COMMAND_TREE.command('import', { hidden: true })
@@ -249,7 +315,7 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
         '                       --regex "/^archived-/i"\n',
     )
     .option('--non-interactive', 'Skip all prompts; require explicit flags')
-    .authenticatedAction((auth, options: ImportOptions) => importHandler(options, auth));
+    .authenticatedAction((ctx, options: ImportOptions) => importHandler(options, ctx));
 
   COMMAND_TREE.command('api')
     .rootHelp({
@@ -271,8 +337,8 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
     .option('-v, --verbose', 'Print request and response details for debugging.')
     .description('Make authenticated API requests to SonarQube')
     .addHelpText('after', apiExtraHelpText())
-    .authenticatedAction((auth, method: string, endpoint: string, options: ApiCommandOptions) =>
-      apiCommand(auth, method, endpoint, options),
+    .authenticatedAction((ctx, method: string, endpoint: string, options: ApiCommandOptions) =>
+      apiCommand(ctx, method, endpoint, options),
     );
 
   // Setup SonarQube integration for AI coding agent
@@ -285,7 +351,7 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
     .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
     .option('-g, --global', 'Install integrations globally.')
     .rejectUnknownSubcommands()
-    .authenticatedAction((auth, options: IntegrateBareOptions) => integrateBare(auth, options));
+    .authenticatedAction((ctx, options: IntegrateBareOptions) => integrateBare(ctx, options));
 
   integrateCommand
     .command('git')
@@ -310,7 +376,7 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
       '-p, --project <project>',
       'Project key baked into the dependency-risks hook (required with --dependency-risks)',
     )
-    .authenticatedAction((auth, options: IntegrateGitOptions) => integrateGit(options, auth));
+    .authenticatedAction((ctx, options: IntegrateGitOptions) => integrateGit(options, ctx));
 
   integrateCommand
     .command('claude')
@@ -324,7 +390,7 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
       'Install hooks and config globally to ~/.claude instead of project directory',
     )
     .addHelpText('after', projectKeyExtraHelp)
-    .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateClaude(options, auth));
+    .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateClaude(options, ctx));
 
   integrateCommand
     .command('copilot')
@@ -338,7 +404,7 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
     .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
     .addHelpText('after', projectKeyExtraHelp)
-    .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCopilot(options, auth));
+    .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCopilot(options, ctx));
 
   // `sonar context` — passthrough wrapper for sonar-context-augmentation.
   // Forwards arguments verbatim to the locally-installed CAG binary; install via
@@ -349,13 +415,17 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
       category: 'data',
       label: 'context [action] [args...]',
     })
-    .stage(Stage.Beta())
     .argument('[action]', 'Action forwarded to sonar-context-augmentation')
     .argument('[args...]', 'Additional arguments forwarded to sonar-context-augmentation')
     .helpOption(false)
     .passThroughOptions()
     .allowUnknownOption()
-    .anonymousAction(function (this: SonarCommand, action: string | undefined, args: string[]) {
+    .anonymousAction(function (
+      this: SonarCommand,
+      _ctx,
+      action: string | undefined,
+      args: string[],
+    ) {
       setPassthroughSubcommand(this, derivePassthroughSubcommand(action, args));
       return runContextPassthrough(action, args);
     });
@@ -372,7 +442,7 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
     .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
     .addHelpText('after', projectKeyExtraHelp)
-    .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCodex(options, auth));
+    .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCodex(options, ctx));
 
   integrateCommand
     .command('antigravity')
@@ -386,8 +456,8 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
       'Install hooks and config globally under ~/.gemini/config instead of the project .agents/ directory',
     )
     .addHelpText('after', projectKeyExtraHelp)
-    .authenticatedAction((auth, options: IntegrateAgentOptions) =>
-      integrateAntigravity(options, auth),
+    .authenticatedAction((ctx, options: IntegrateAgentOptions) =>
+      integrateAntigravity(options, ctx),
     );
 
   integrateCommand
@@ -402,7 +472,7 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
       "Install config globally to ~/.cursor instead of project directory. Note: Cursor's cloud/background agents only pick up project-level hooks, not global ones.",
     )
     .addHelpText('after', projectKeyExtraHelp)
-    .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCursor(options, auth));
+    .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCursor(options, ctx));
 
   integrateCommand
     .command('opencode')
@@ -416,9 +486,7 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
       'Install config globally to ~/.config/opencode instead of project directory',
     )
     .addHelpText('after', projectKeyExtraHelp)
-    .authenticatedAction((auth, options: IntegrateAgentOptions) =>
-      integrateOpenCode(options, auth),
-    );
+    .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateOpenCode(options, ctx));
 
   // Analyze code for quality and security issues
   const analyze = COMMAND_TREE.command('analyze')
@@ -436,16 +504,16 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
     .description('Scan files or stdin for hardcoded secrets')
     .argument('[paths...]', 'File or directory paths to scan for secrets')
     .option('--stdin', 'Read from standard input instead of paths')
-    .authenticatedAction((auth, paths: string[], options: AnalyzeSecretsOptions) =>
-      analyzeSecrets({ paths: Array.isArray(paths) ? paths : [], stdin: options.stdin }, auth),
+    .authenticatedAction((ctx, paths: string[], options: AnalyzeSecretsOptions) =>
+      analyzeSecrets({ paths: Array.isArray(paths) ? paths : [], stdin: options.stdin }, ctx),
     );
 
   // Shared option set for `analyze agentic` and `verify`.
-  const sqaaFormatOption = new Option('--format <format>', 'Output format')
+  const sqaaFormatOption = new SonarOption('--format <format>', 'Output format')
     .choices(SQAA_FORMATS)
     .default('text');
 
-  const sqaaDepthOption = new Option(
+  const sqaaDepthOption = new SonarOption(
     '--depth <depth>',
     'Analysis depth: STANDARD (fast) or DEEP (cross-file). Default: STANDARD for one --file; DEEP otherwise.',
   ).choices(SQAA_DEPTH_CHOICES);
@@ -461,10 +529,7 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
       )
       .option('--staged', 'Analyze staged files only (git diff --cached)')
       .option('--base <ref>', 'Analyze files changed vs a branch or ref (e.g. main)')
-      .option(
-        '-p, --project <project>',
-        'SonarQube Cloud project key (overrides auto-detected project)',
-      )
+      .option('-p, --project <project>', 'SonarQube project key (overrides auto-detected project)')
       .option('--force', 'Skip the large change set confirmation prompt')
       .addOption(sqaaDepthOption)
       .addOption(sqaaFormatOption);
@@ -476,21 +541,21 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
   ): SonarCommand {
     return applyBaseAgenticOptions(cmd)
       .option('--branch <branch>', 'Branch name for analysis context')
-      .authenticatedAction((auth, options: AnalyzeSqaaOptions) =>
-        analyzeSqaa(options, auth, runOptions),
+      .authenticatedAction((ctx, options: AnalyzeSqaaOptions) =>
+        analyzeSqaa(options, ctx, runOptions),
       );
   }
 
   // Default action for `sonar analyze` (no subcommand): run all analyses (secrets + agentic).
-  applyBaseAgenticOptions(analyze).authenticatedAction((auth, options: AnalyzeAllOptions) =>
-    analyzeAll(options, auth),
+  applyBaseAgenticOptions(analyze).authenticatedAction((ctx, options: AnalyzeAllOptions) =>
+    analyzeAll(options, ctx),
   );
 
-  const dependencyRisksFormatOption = new Option('--format <format>', 'Output format')
+  const dependencyRisksFormatOption = new SonarOption('--format <format>', 'Output format')
     .choices(DEPENDENCY_RISKS_FORMATS)
     .default('table');
 
-  const dependencyRisksStatusFilterOption = new Option(
+  const dependencyRisksStatusFilterOption = new SonarOption(
     '--statuses <statuses>',
     'Filter issues by status\n' +
       '\n' +
@@ -508,7 +573,7 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
       '    --statuses active,safe\n',
   ).default('active');
 
-  const dependencyRisksMinSeverityOption = new Option(
+  const dependencyRisksMinSeverityOption = new SonarOption(
     '--min-severity <severity>',
     `Minimum severity level to include. Allowed values: ${SEVERITIES.join(', ')} (default: all severities)`,
   ).argParser((v) => {
@@ -527,14 +592,12 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
     .addOption(dependencyRisksStatusFilterOption)
     .addOption(dependencyRisksMinSeverityOption)
     .addHelpText('after', dependencyRisksExtraHelp)
-    .authenticatedAction((auth, options: AnalyzeDependencyRisksOptions) =>
-      analyzeDependencyRisks(options, auth),
+    .authenticatedAction((ctx, options: AnalyzeDependencyRisksOptions) =>
+      analyzeDependencyRisks(options, ctx),
     );
 
   applySqaaOptions(
-    analyze
-      .command('agentic')
-      .description('Run server-side Vortex analysis (SonarQube Cloud only). Limitations apply.'),
+    analyze.command('agentic').description('Run server-side Vortex analysis. Limitations apply.'),
     { telemetryCallerCommand: SQAA_ANALYZE_AGENTIC_CALLER_COMMAND },
   );
 
@@ -565,7 +628,7 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
       '--issues <issueIds>',
       'Comma-separated issue keys to remediate non-interactively (max 20). Required when stdin is not a TTY.',
     )
-    .authenticatedAction((auth, options: RemediateOptions) => remediate(options, auth));
+    .authenticatedAction((ctx, options: RemediateOptions) => remediate(options, ctx));
 
   // Configure things related to the CLI
   const configure = COMMAND_TREE.command('config').description('Configure CLI settings');
@@ -578,7 +641,7 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
     .description('Configure telemetry settings')
     .option('--enabled', 'Enable collection of anonymous usage statistics')
     .option('--disabled', 'Disable collection of anonymous usage statistics')
-    .anonymousAction((options: ConfigureTelemetryOptions) => configureTelemetry(options));
+    .anonymousAction((_ctx, options: ConfigureTelemetryOptions) => configureTelemetry(options));
 
   // System diagnostics and maintenance
   const system = COMMAND_TREE.command('system')
@@ -592,7 +655,7 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
     .description('Show overall system status: authentication, installed binaries, and integrations')
     .showUpdateNotification((opts) => !opts.json)
     .option('--json', 'Output as JSON for machine consumption')
-    .anonymousAction((options: SystemStatusOptions) => systemStatus(options));
+    .anonymousAction((_ctx, options: SystemStatusOptions) => systemStatus(options));
 
   system
     .command('reset')
@@ -604,7 +667,7 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
       '--force',
       'Skip the interactive confirmation prompt (required for non-interactive use)',
     )
-    .anonymousAction((options: SystemResetOptions) => systemReset(options));
+    .anonymousAction((_ctx, options: SystemResetOptions) => systemReset(options));
 
   // Update the CLI to the latest version
   if (CURRENT_DISTRIBUTION.enableSelfUpdate) {
@@ -615,7 +678,7 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
       })
       .option('--status', 'Check for a newer version without installing')
       .option('--force', 'Install the latest version even if already up to date')
-      .anonymousAction((options: UpdateVersionOptions) => updateVersion(options));
+      .anonymousAction((_ctx, options: UpdateVersionOptions) => updateVersion(options));
 
     // `self-update` is deprecated in favour of `sonar update`.
     const selfUpdateCmd = COMMAND_TREE.command('self-update', { hidden: true })
@@ -624,7 +687,7 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
       )
       .option('--status', 'Check for a newer version without installing')
       .option('--force', 'Install the latest version even if already up to date')
-      .anonymousAction((options: UpdateVersionOptions) => updateVersion(options));
+      .anonymousAction((_ctx, options: UpdateVersionOptions) => updateVersion(options));
     selfUpdateCmd.hook('preAction', () => {
       warn(
         "sonar self-update is deprecated and will be removed in one of the upcoming versions. Use 'sonar update' instead.",
@@ -650,9 +713,9 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
     .addHelpText(`after`, projectKeyExtraHelp)
     .authenticatedAction(
       (
-        auth,
+        ctx,
         options: { debug?: boolean; readOnly?: boolean; toolsets?: string; project?: string },
-      ) => runMcp(auth, options),
+      ) => runMcp(ctx, options),
     );
 
   // Hidden callback command — internal handlers for agent and git hooks.
@@ -660,78 +723,78 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
   const hookCommand = COMMAND_TREE.command('hook', { hidden: true })
     .description('Internal hook handlers for agent and git hooks')
     .enablePositionalOptions()
-    .anonymousAction(function (this: Command) {
+    .anonymousAction(function (this: Command, _ctx) {
       this.outputHelp();
     });
 
   hookCommand
     .command('claude-pre-tool-use')
     .description('PreToolUse handler: scan files for secrets before agent reads them')
-    .anonymousAction(() => claudePreToolUse());
+    .anonymousAction(handleHookInvocation(claudePreToolUse));
 
   hookCommand
     .command('copilot-pre-tool-use')
     .description(
       'PreToolUse handler for GitHub Copilot CLI: scan files for secrets before agent reads them',
     )
-    .anonymousAction(() => copilotPreToolUse());
+    .anonymousAction((ctx) => copilotPreToolUse(ctx));
 
   hookCommand
     .command('antigravity-pre-tool-use')
     .description(
       'PreToolUse handler for Antigravity: scan files for secrets before agent reads them',
     )
-    .anonymousAction(() => antigravityPreToolUse());
+    .anonymousAction((ctx) => antigravityPreToolUse(ctx));
 
   hookCommand
     .command('claude-prompt-submit')
     .description('UserPromptSubmit handler: scan prompts for secrets before sending')
-    .anonymousAction(() => agentPromptSubmit());
+    .anonymousAction(handleHookInvocation(agentPromptSubmit));
 
   hookCommand
     .command('codex-prompt-submit')
     .description('UserPromptSubmit handler for Codex: scan prompts for secrets before sending')
-    .anonymousAction(() => codexPromptSubmit());
+    .anonymousAction(handleHookInvocation(codexPromptSubmit));
 
   hookCommand
     .command('cursor-prompt-submit')
     .description('beforeSubmitPrompt handler for Cursor: scan prompts for secrets before sending')
-    .anonymousAction(() => cursorPromptSubmit());
+    .anonymousAction(handleHookInvocation(cursorPromptSubmit));
 
   hookCommand
     .command('cursor-pre-file-read')
     .description(
       'beforeReadFile handler for Cursor: scan files for secrets before agent reads them',
     )
-    .anonymousAction(() => cursorPreFileRead());
+    .anonymousAction(handleHookInvocation(cursorPreFileRead));
 
   hookCommand
     .command('cursor-pre-tool-use')
     .description(
       'preToolUse handler for Cursor: scan Read tool targets for secrets before execution',
     )
-    .anonymousAction(() => cursorPreToolUse());
+    .anonymousAction(handleHookInvocation(cursorPreToolUse));
 
   hookCommand
     .command('claude-post-tool-use')
     .description('PostToolUse handler: run Vortex analysis after agent edits or writes a file')
-    .requiredOption('--project <key>', 'SonarQube Cloud project key')
-    .anonymousAction((options: AgentPostToolUseOptions) => agentPostToolUse(options));
+    .requiredOption('--project <key>', 'SonarQube project key')
+    .anonymousAction(handleHookInvocation(agentPostToolUse));
 
   hookCommand
     .command('claude-post-tool-use-failure')
     .description(
       'PostToolUseFailure handler: forward the failed tool call to Vortex context augmentation',
     )
-    .anonymousAction(() => claudePostToolUseFailure());
+    .anonymousAction((_ctx) => claudePostToolUseFailure());
 
   hookCommand
     .command('codex-post-tool-use')
     .description(
       'PostToolUse handler for Codex: run Vortex analysis on the git change set after apply_patch',
     )
-    .requiredOption('--project <key>', 'SonarQube Cloud project key')
-    .anonymousAction((options: CodexPostToolUseOptions) => codexPostToolUse(options));
+    .requiredOption('--project <key>', 'SonarQube project key')
+    .anonymousAction(handleHookInvocation(codexPostToolUse));
 
   hookCommand
     .command('git-pre-commit')
@@ -744,19 +807,21 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
       'Also run a dependency-risks scan after the secrets scan (requires -p)',
     )
     .argument('[files...]', 'Changed files passed by pre-commit (pass_filenames: true)')
-    .anonymousAction((files: string[], options: GitPreCommitOptions) =>
-      gitPreCommit(options, files),
+    .anonymousAction((ctx, files: string[] | undefined, options: GitPreCommitOptions) =>
+      gitPreCommit(options, files ?? [], ctx),
     );
 
   hookCommand
     .command('git-pre-push')
     .description('git pre-push handler: scan files in new commits for secrets')
     .argument('[files...]', 'Changed files passed by pre-commit (pass_filenames: true)')
-    .anonymousAction((files: string[]) => gitPrePush(files));
+    .anonymousAction((ctx, files: string[] | undefined) => gitPrePush(files ?? [], ctx));
 
   // Hidden flush command — only registered when running as a telemetry worker.
   if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {
-    COMMAND_TREE.command('flush-telemetry', { hidden: true }).anonymousAction(flushTelemetry);
+    COMMAND_TREE.command('flush-telemetry', { hidden: true }).anonymousAction((_ctx) =>
+      flushTelemetry(),
+    );
   }
 
   // Defer Sentry initialization until a command action is about to run, so that
@@ -770,11 +835,58 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
     if (state) initSentry(state);
   });
 
-  // Collect a telemetry event after every command action.
+  // Emit handler facts plus CliCommandExecuted in one commit.
   COMMAND_TREE.hook('postAction', async (_thisCommand, actionCommand) => {
-    await storeEvent(actionCommand, (process.exitCode ?? 0) === 0);
+    const handlerFacts =
+      actionCommand instanceof SonarCommand
+        ? (actionCommand.invocationContext?.telemetryFacts() ?? [])
+        : [];
+    await commitTelemetryFacts([...handlerFacts, await buildCommandExecutedFact(actionCommand)], {
+      agentSessionId: resolveAgentSessionId(capturedAgentSessionId),
+    });
     await COMMAND_TREE.updateNotifier.maybeNotify(actionCommand);
   });
 
   return COMMAND_TREE;
+}
+
+/**
+ * Build the CLI command tree for this invocation.
+ *
+ * Probes for Private Beta flag keys first. Only when at least one exists does it
+ * call `loadPrivateBetaContext` (auth + LaunchDarkly). Otherwise the probe tree
+ * is returned and LaunchDarkly is never contacted.
+ */
+export async function createCommandTree(
+  options: CreateCommandTreeOptions = {},
+): Promise<SonarCommand> {
+  const isAlphaEnabled = options.isAlphaEnabled ?? isAlphaEnabledFromEnv();
+
+  const probe = buildCommandTree({
+    auth: null,
+    isAlphaEnabled,
+    // Allow all Private Beta commands so Stage.Beta('…') keys are discoverable.
+    isPrivateBetaEnabled: () => true,
+  });
+
+  const flagKeys = collectPrivateBetaFlagKeys(probe);
+  if (flagKeys.length === 0) {
+    return probe;
+  }
+
+  if (options.loadPrivateBetaContext) {
+    const { auth, flags } = await options.loadPrivateBetaContext(flagKeys);
+    return buildCommandTree({
+      auth,
+      isAlphaEnabled,
+      isPrivateBetaEnabled: (flagKey) => flags[flagKey] ?? false,
+    });
+  }
+
+  // Keys exist but no loader (e.g. docs generation): omit Private Beta commands.
+  return buildCommandTree({
+    ...createDefaultCliRuntime(),
+    isAlphaEnabled,
+    isPrivateBetaEnabled: () => false,
+  });
 }

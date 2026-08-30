@@ -27,6 +27,7 @@ import * as fs from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
@@ -50,6 +51,8 @@ const FAKE_AUTH: ResolvedAuth = {
   orgKey: TEST_ORG,
   connectionType: 'cloud',
 };
+
+const FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(FAKE_AUTH);
 
 // Helper: make binary exist, file exist (or not), by controlling existsSync
 function mockBinaryExists(fileAlsoExists = true) {
@@ -100,10 +103,13 @@ describe('secretCheckCommand: auth forwarding', () => {
     });
     const existsSpy = mockBinaryExists();
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
     } finally {
       existsSpy.mockRestore();
     }
+
+    const spawnCall = spawnSpy.mock.calls[0];
+    expect(spawnCall[0]).toBe('/fake/bin/sonar-secrets');
   });
 
   it('passes auth env vars to binary', async () => {
@@ -114,7 +120,7 @@ describe('secretCheckCommand: auth forwarding', () => {
     });
     const existsSpy = mockBinaryExists();
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
     } finally {
       existsSpy.mockRestore();
     }
@@ -132,7 +138,7 @@ describe('secretCheckCommand: auth forwarding', () => {
     });
     const existsSpy = mockBinaryExists();
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
     } finally {
       existsSpy.mockRestore();
     }
@@ -149,7 +155,10 @@ describe('secretCheckCommand: auth forwarding', () => {
     });
     const existsSpy = mockBinaryExists(true);
     try {
-      await analyzeSecrets({ paths: ['src/index.ts', 'src/lib/auth.ts'] }, FAKE_AUTH);
+      await analyzeSecrets(
+        { paths: ['src/index.ts', 'src/lib/auth.ts'] },
+        FAKE_AUTHENTICATED_CONTEXT,
+      );
     } finally {
       existsSpy.mockRestore();
     }
@@ -176,7 +185,7 @@ describe('secretCheckCommand: successful scan', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
     } finally {
       existsSpy.mockRestore();
     }
@@ -196,7 +205,7 @@ describe('secretCheckCommand: successful scan', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
     } finally {
       existsSpy.mockRestore();
     }
@@ -216,7 +225,7 @@ describe('secretCheckCommand: successful scan', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
     } finally {
       existsSpy.mockRestore();
     }
@@ -236,7 +245,7 @@ describe('secretCheckCommand: successful scan', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
     } finally {
       existsSpy.mockRestore();
     }
@@ -256,7 +265,7 @@ describe('secretCheckCommand: successful scan', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
     } finally {
       existsSpy.mockRestore();
     }
@@ -274,7 +283,7 @@ describe('secretCheckCommand: successful scan', () => {
 describe('secretCheckCommand: input validation', () => {
   it('throws InvalidOptionError when paths array is empty', async () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(analyzeSecrets({ paths: [] }, FAKE_AUTH)).rejects.toThrow(
+    await expect(analyzeSecrets({ paths: [] }, FAKE_AUTHENTICATED_CONTEXT)).rejects.toThrow(
       new InvalidOptionError('Either provide file/directory paths or --stdin'),
     );
   });
@@ -296,7 +305,7 @@ describe('secretCheckCommand: scan failures', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
     } catch (e) {
       expect(e).toBeInstanceOf(CommandFailedError);
       expect((e as CommandFailedError).message).toContain('secret');
@@ -325,7 +334,7 @@ describe('secretCheckCommand: scan failures', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
     } catch {
       // expected
     } finally {
@@ -361,7 +370,7 @@ describe('secretCheckCommand: scan failures', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
     } catch {
       // expected CommandFailedError
     } finally {
@@ -380,7 +389,7 @@ describe('secretCheckCommand: scan failures', () => {
     const existsSpy = mockBinaryExists(true);
     let caughtError: unknown;
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
     } catch (err) {
       caughtError = err;
     } finally {
@@ -402,7 +411,7 @@ describe('secretCheckCommand: scan failures', () => {
     const existsSpy = mockBinaryExists(true);
     let caughtError: unknown;
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
     } catch (err) {
       caughtError = err;
     } finally {
@@ -429,7 +438,7 @@ describe('secretCheckCommand: scan failures', () => {
     const existsSpy = mockBinaryExists(true);
     let caughtError: unknown;
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
     } catch (err) {
       caughtError = err;
     } finally {
@@ -459,7 +468,7 @@ describe('secretCheckCommand: scan error handling', () => {
     const existsSpy = mockBinaryExists(true);
     let caughtError: unknown;
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
     } catch (err) {
       caughtError = err;
     } finally {
@@ -479,7 +488,7 @@ describe('secretCheckCommand: scan error handling', () => {
     const existsSpy = mockBinaryExists(true);
     let caughtError: unknown;
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
     } catch (err) {
       caughtError = err;
     } finally {
@@ -501,7 +510,7 @@ describe('secretCheckCommand: scan error handling', () => {
     const existsSpy = mockBinaryExists(true);
     let caughtError: unknown;
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
     } catch (err) {
       caughtError = err;
     } finally {
@@ -549,7 +558,9 @@ describe('secretCheckCommand: stdin scan', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      await withMockStdin('const x = 1;\n', () => analyzeSecrets({ stdin: true }, FAKE_AUTH));
+      await withMockStdin('const x = 1;\n', () =>
+        analyzeSecrets({ stdin: true }, FAKE_AUTHENTICATED_CONTEXT),
+      );
     } finally {
       existsSpy.mockRestore();
     }
@@ -563,7 +574,7 @@ describe('secretCheckCommand: stdin scan', () => {
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(
         withMockStdin('const secret = "abc123";\n', () =>
-          analyzeSecrets({ stdin: true }, FAKE_AUTH),
+          analyzeSecrets({ stdin: true }, FAKE_AUTHENTICATED_CONTEXT),
         ),
       ).rejects.toThrow(CommandFailedError);
     } finally {
@@ -604,9 +615,9 @@ describe('secretCheckCommand: throws CommandFailedError for scan failures', () =
     const existsSpy = mockBinaryExists(true);
     try {
       // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH)).rejects.toThrow(
-        CommandFailedError,
-      );
+      await expect(
+        analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT),
+      ).rejects.toThrow(CommandFailedError);
     } finally {
       existsSpy.mockRestore();
     }

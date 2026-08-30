@@ -35,7 +35,7 @@ import {
   IntegrationRegistry,
   wholeFile,
 } from '@/core/framework/features';
-import { getDefaultState } from '@/core/state/state.ts';
+import { type CliState, getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
@@ -175,14 +175,11 @@ describe('generic integration installer', () => {
     loadStateSpy.mockReturnValue(state);
     const dependency: DependencyDeclaration = {
       id: 'shared-binary',
-      dependencyType: 'binary',
       version: '2',
-      installOrUpdate: () => ({
-        id: 'shared-binary',
-        dependencyType: 'binary',
-        version: '2',
-        path: '/opt/sonar/shared-binary',
-      }),
+      installOrUpdate: () => {
+        recordDependencyLikeInstaller(state, 'shared-binary', '2', '/opt/sonar/shared-binary');
+        return { id: 'shared-binary', version: '2', path: '/opt/sonar/shared-binary' };
+      },
       isInstalled: () => false,
       remove: () => {},
     };
@@ -216,7 +213,6 @@ describe('generic integration installer', () => {
     expect(state.dependencies.installed).toMatchObject([
       {
         id: 'shared-binary',
-        dependencyType: 'binary',
         version: '2',
         path: '/opt/sonar/shared-binary',
       },
@@ -302,14 +298,11 @@ describe('generic integration installer', () => {
     loadStateSpy.mockReturnValue(state);
     const dependency: DependencyDeclaration = {
       id: 'unnamed-binary',
-      dependencyType: 'binary',
       version: '1',
-      installOrUpdate: () => ({
-        id: 'unnamed-binary',
-        dependencyType: 'binary',
-        version: '1',
-        path: '/opt/sonar/unnamed-binary',
-      }),
+      installOrUpdate: () => {
+        recordDependencyLikeInstaller(state, 'unnamed-binary', '1', '/opt/sonar/unnamed-binary');
+        return { id: 'unnamed-binary', version: '1', path: '/opt/sonar/unnamed-binary' };
+      },
       isInstalled: () => true,
       remove: () => {},
     };
@@ -567,6 +560,33 @@ describe('generic integration installer', () => {
     ]);
   });
 
+  it('keeps dependency records an installer wrote to disk after the snapshot was loaded', async () => {
+    const snapshot = getDefaultState('test');
+    const disk = getDefaultState('test');
+    recordDependencyLikeInstaller(disk, 'installer-binary', '2', '/opt/sonar/installer-binary-2');
+    loadStateSpy.mockReturnValueOnce(snapshot).mockReturnValue(disk);
+    const integration = registerIntegration(registry, 'installer-dependency-reread', [
+      {
+        id: 'feature',
+        displayName: 'Feature',
+        operations: [{ id: 'operation', apply: () => undefined }],
+      },
+    ]);
+
+    await installIntegration({
+      registry,
+      integrationId: integration.id,
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+    });
+
+    expect(saveStateSpy).toHaveBeenCalledWith(snapshot);
+    expect(snapshot.dependencies.installed).toMatchObject([
+      { id: 'installer-binary', version: '2', path: '/opt/sonar/installer-binary-2' },
+    ]);
+  });
+
   it('prints container display name then each active subfeature on a separate indented line', async () => {
     const container: FeatureContainer = {
       id: 'container',
@@ -693,6 +713,19 @@ describe('generic integration installer', () => {
     expect(hasUiCall('warn', 'Failed to update configuration state: write failed')).toBe(true);
   });
 });
+
+/** Mirrors `recordInstalledDependency`, which every binary installer calls for itself. */
+function recordDependencyLikeInstaller(
+  state: CliState,
+  id: string,
+  version: string,
+  path: string,
+): void {
+  state.dependencies.installed = [
+    ...state.dependencies.installed.filter((entry) => entry.id !== id),
+    { id, version, path, updatedAt: new Date().toISOString(), updatedByCliVersion: 'test' },
+  ];
+}
 
 function hasUiCall(method: string, message: string): boolean {
   return getMockUiCalls().some((call) => call.method === method && call.args[0] === message);

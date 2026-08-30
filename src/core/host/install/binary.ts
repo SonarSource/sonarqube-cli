@@ -32,8 +32,8 @@ import {
   downloadBinary,
   verifyBinarySignature,
 } from '@/core/host/install/sonarsource-releases.ts';
-import { recordInstallationInState } from '@/core/state/state-manager.ts';
-import { type OutputChannel, print, text, withSpinner } from '@/core/ui';
+import { recordInstalledDependency } from '@/core/state/state-manager.ts';
+import { type OutputChannel, text, withSpinner } from '@/core/ui';
 
 import {
   cleanupOldVersionBinaries,
@@ -139,14 +139,9 @@ async function downloadAndInstall(
     await makeExecutable(binaryPath);
   }
 
-  const installedVersion = await withSpinner(
-    'Verifying installation',
-    () => verifyInstallation(binaryPath),
-    channel,
-  );
-  print(`     ${spec.name} ${installedVersion}`, channel);
+  await withSpinner('Verifying installation', () => verifyInstallation(binaryPath), channel);
 
-  recordInstallationInState(spec.name, installedVersion, binaryPath);
+  recordInstalledDependency(spec.name, spec.version, binaryPath);
   cleanupOldVersionBinaries(resolvedBinDir, spec.name, binaryName);
 
   return { skipped: false, binaryPath };

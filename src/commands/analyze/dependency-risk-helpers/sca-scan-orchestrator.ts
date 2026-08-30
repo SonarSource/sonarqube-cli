@@ -21,6 +21,11 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import {
+  recordScaAnalysisTelemetry,
+  type ScaCallerCommand,
+} from '@/commands/analyze/sca-analysis-telemetry.ts';
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { SCA_SCANNER_CACHE_DIR } from '@/core/config-constants.ts';
 import type { ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
@@ -29,10 +34,6 @@ import logger, { getLogLevelConfig } from '@/core/observability/logger.ts';
 import { type SonarQubeClient } from '@/core/server/client.ts';
 import { assertScaAvailable } from '@/core/server/sca-availability.ts';
 import type { SettingsValue } from '@/core/server/settings-value.ts';
-import {
-  emitScaAnalysisTelemetry,
-  type ScaCallerCommand,
-} from '@/core/telemetry/sca-analysis-telemetry.ts';
 import { withSpinner } from '@/core/ui';
 
 import { parseAnalysisProperties } from './analysis-properties.ts';
@@ -60,6 +61,7 @@ export class ScaScanOrchestrator {
     auth: ResolvedAuth,
     projectKey: string,
     callerCommand: ScaCallerCommand,
+    ctx: CommandInvocationContext,
   ): Promise<ScaScanResult> {
     // Only the SCA scan itself is telemetered (below). Pre-flight failures — settings sync,
     // `assertScaAvailable`, and the secrets pre-scan — intentionally emit no SCA event: they
@@ -93,6 +95,7 @@ export class ScaScanOrchestrator {
       scaInstaller: this.installer,
       scaSpawner: this.spawner,
       secretsInstaller: this.secretsInstaller,
+      ctx,
     });
 
     // Time and telemeter only the SCA scan, so scan_duration_ms and a failures_count:1 event
@@ -102,9 +105,10 @@ export class ScaScanOrchestrator {
       const response = await this.analyzeDependencyRisks(invocation);
       return { response, scanDurationMs: Math.round(performance.now() - scanStart) };
     } catch (err) {
-      await emitScaAnalysisTelemetry(
-        callerCommand,
+      recordScaAnalysisTelemetry(
+        ctx,
         auth,
+        callerCommand,
         null,
         Math.round(performance.now() - scanStart),
         null,

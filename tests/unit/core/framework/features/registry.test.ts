@@ -54,7 +54,6 @@ const {
   jsonPatch,
   selectFeaturesForInvocation,
   skip,
-  SonarSourceBinary,
   sonarSourceBinary,
   textSnippet,
   textSnippetRemover,
@@ -63,6 +62,7 @@ const {
   wholeFile,
   yamlPatch,
 } = await import('@/core/framework/features');
+const { SECRETS_SPEC } = await import('@/core/host/install/secrets.ts');
 
 type Installer = InstanceType<typeof IntegrationInstaller>;
 
@@ -138,8 +138,8 @@ describe('declarative integration framework', () => {
               id: 'feature',
               displayName: 'Feature',
               dependencies: [
-                sonarSourceBinary({ id: 'same', binary: SonarSourceBinary.SonarSecrets }),
-                sonarSourceBinary({ id: 'same', binary: SonarSourceBinary.SonarSecrets }),
+                sonarSourceBinary({ id: 'same', spec: SECRETS_SPEC }),
+                sonarSourceBinary({ id: 'same', spec: SECRETS_SPEC }),
               ],
             },
           ],
@@ -213,9 +213,7 @@ describe('declarative integration framework', () => {
             {
               id: 'feature',
               displayName: 'Feature',
-              dependencies: [
-                sonarSourceBinary({ id: ' ', binary: SonarSourceBinary.SonarSecrets }),
-              ],
+              dependencies: [sonarSourceBinary({ id: ' ', spec: SECRETS_SPEC })],
             },
           ],
         }),
@@ -430,7 +428,7 @@ describe('declarative integration framework', () => {
   });
 
   it('selectFeaturesForInvocation filters subfeatures by shouldInstall (install/skip)', async () => {
-    const dep = sonarSourceBinary({ id: 'test-dep', binary: SonarSourceBinary.SonarSecrets });
+    const dep = sonarSourceBinary({ id: 'test-dep', spec: SECRETS_SPEC });
     const container: FeatureContainer<{ enableSca?: boolean }> = {
       id: 'container',
       displayName: 'Container',
@@ -746,7 +744,7 @@ describe('declarative integration framework', () => {
   });
 
   it('records active subfeatures nested under the container feature in state', async () => {
-    const dep = sonarSourceBinary({ id: 'sub-dep', binary: SonarSourceBinary.SonarSecrets });
+    const dep = sonarSourceBinary({ id: 'sub-dep', spec: SECRETS_SPEC });
     const container: FeatureContainer = {
       id: 'container',
       displayName: 'Container',
@@ -772,13 +770,12 @@ describe('declarative integration framework', () => {
       featureId: 'sub-a',
       dependencies: [{ id: 'sub-dep' }],
     });
-    expect(state.dependencies.installed.some((d) => d.id === 'sub-dep')).toBe(true);
     expect(context).toBeDefined();
   });
 
   it('reconciles subfeature dependency references across re-installs', async () => {
-    const depOld = sonarSourceBinary({ id: 'dep-old', binary: SonarSourceBinary.SonarSecrets });
-    const depNew = sonarSourceBinary({ id: 'dep-new', binary: SonarSourceBinary.SonarSecrets });
+    const depOld = sonarSourceBinary({ id: 'dep-old', spec: SECRETS_SPEC });
+    const depNew = sonarSourceBinary({ id: 'dep-new', spec: SECRETS_SPEC });
 
     const makeContainer = (dep: typeof depOld): FeatureContainer => ({
       id: 'container',
@@ -1230,7 +1227,7 @@ describe('declarative integration framework', () => {
       dependencies: [
         sonarSourceBinary({
           id: 'binary',
-          binary: SonarSourceBinary.SonarSecrets,
+          spec: SECRETS_SPEC,
         }),
       ],
       resources: [
@@ -1297,14 +1294,6 @@ describe('declarative integration framework', () => {
       'yaml',
     ]);
     expect(second.operations.map((operation) => operation.id)).toEqual(['operation']);
-    expect(state.dependencies.installed).toMatchObject([
-      {
-        id: 'binary',
-        dependencyType: 'sonarsource-binary',
-        version: SonarSourceBinary.SonarSecrets.spec.version,
-        path: join(tempDir, 'bin', 'sonar-secrets'),
-      },
-    ]);
     expect(operationCalls).toEqual(['operation', 'operation']);
     expect(await readFile(join(tempDir, 'script.sh'), 'utf-8')).toBe('#!/bin/sh\necho sonar\n');
     expect(JSON.parse(await readFile(join(tempDir, 'settings.json'), 'utf-8'))).toEqual({

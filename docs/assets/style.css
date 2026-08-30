@@ -1218,6 +1218,15 @@ body.commands-page { height: 100%; overflow: hidden; }
 }
 .detail-badge.group { background: var(--orange-dim); color: var(--orange); }
 .detail-badge.cmd { background: var(--green-dim); color: var(--green); }
+.detail-alias {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
 
 /* ─── Stage badges ─────────────────────────────────────────────────── */
 /* Color driver — a single --stage-c custom property varies per stage

@@ -59,7 +59,7 @@ export function introAgentIntegration(agentDisplayName: string): void {
 
 export async function discoverIntegrateProject(auth: ResolvedAuth): Promise<DiscoveredProject> {
   return withSpinner('Discovering project...', () =>
-    discoverProject(process.cwd(), true, { auth }),
+    discoverProject(process.cwd(), { auth, silent: true }),
   );
 }
 
@@ -142,7 +142,7 @@ export async function displayAgentIntegratePrelude(
   });
   const scope = await resolveIntegrateScope({
     ...options,
-    projectRoot: project.rootDir,
+    projectRoot: project.projectRoot,
     projectKey: options.project,
   });
   const isGlobal = isGlobalIntegrateScope(scope);

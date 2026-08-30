@@ -18,10 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
+import { SQAA_ANALYZE_CALLER_COMMAND } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
-import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
-import { SQAA_ANALYZE_CALLER_COMMAND } from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 import {
   blank,
   getMessagesForFormattedOutput,
@@ -83,9 +84,12 @@ function printCombinedReport(secrets: SecretsReport | null, agentic: SqaaJsonRep
  * In json mode, outputs a single combined JSON report including any informational messages.
  * In text mode, each analysis prints its own output sequentially.
  */
-export async function analyzeAll(options: AnalyzeAllOptions, auth: ResolvedAuth): Promise<void> {
+export async function analyzeAll(
+  options: AnalyzeAllOptions,
+  ctx: CommandAuthenticatedInvocationContext,
+): Promise<void> {
   if (options.format === 'json') {
-    return analyzeAllJson(options, auth);
+    return analyzeAllJson(options, ctx);
   }
 
   const { file: rawFiles, staged, base, project, force, format, depth } = options;
@@ -93,8 +97,8 @@ export async function analyzeAll(options: AnalyzeAllOptions, auth: ResolvedAuth)
   if (rawFiles?.length) {
     const entries = resolveSqaaFileArgs(rawFiles);
     const paths = entries.map((e) => e.absolutePath);
-    await analyzeSecrets({ paths, telemetryCallerCommand: SECRETS_CALLER_COMMANDS.analyze }, auth);
-    await analyzeSqaa({ file: paths, project, force, format, depth }, auth, {
+    await analyzeSecrets({ paths, telemetryCallerCommand: SECRETS_CALLER_COMMANDS.analyze }, ctx);
+    await analyzeSqaa({ file: paths, project, force, format, depth }, ctx, {
       requireProject: false,
       telemetryCallerCommand: SQAA_ANALYZE_CALLER_COMMAND,
     });
@@ -114,19 +118,23 @@ export async function analyzeAll(options: AnalyzeAllOptions, auth: ResolvedAuth)
 
   await analyzeSecrets(
     { paths: changeSet.files, telemetryCallerCommand: SECRETS_CALLER_COMMANDS.analyze },
-    auth,
+    ctx,
   );
   // analyzeSqaa resolves the change set again internally. The two resolutions may
   // cover slightly different sets if the working tree changes between calls — this
   // is acceptable since the analyses are independent and best-effort.
   // requireProject: false → bare `analyze` skips agentic gracefully when unconfigured.
-  await analyzeSqaa({ staged, base, project, force, format, depth }, auth, {
+  await analyzeSqaa({ staged, base, project, force, format, depth }, ctx, {
     requireProject: false,
     telemetryCallerCommand: SQAA_ANALYZE_CALLER_COMMAND,
   });
 }
 
-async function analyzeAllJson(options: AnalyzeAllOptions, auth: ResolvedAuth): Promise<void> {
+async function analyzeAllJson(
+  options: AnalyzeAllOptions,
+  ctx: CommandAuthenticatedInvocationContext,
+): Promise<void> {
+  const { auth } = ctx;
   setFormattedOutputMode(true);
   try {
     const { file: rawFiles, staged, base } = options;
@@ -137,6 +145,7 @@ async function analyzeAllJson(options: AnalyzeAllOptions, auth: ResolvedAuth): P
         entries.map((e) => e.absolutePath),
         options,
         auth,
+        ctx,
       );
       return;
     }
@@ -148,7 +157,7 @@ async function analyzeAllJson(options: AnalyzeAllOptions, auth: ResolvedAuth): P
       return;
     }
 
-    await runSecretsAndAgentic(changeSet.files, options, auth);
+    await runSecretsAndAgentic(changeSet.files, options, auth, ctx);
   } finally {
     setFormattedOutputMode(false);
   }
@@ -158,13 +167,15 @@ async function runSecretsAndAgentic(
   files: string[],
   options: AnalyzeAllOptions,
   auth: ResolvedAuth,
+  ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const secrets = await runSecretsScan(files, auth);
+  const secrets = await runSecretsScan(files, auth, ctx);
   const secretsFailed = secrets !== null && secrets.exitCode !== 0;
   const agentic = secretsFailed
     ? null
     : await buildSqaaJsonReport(options, auth, {
         telemetryCallerCommand: SQAA_ANALYZE_CALLER_COMMAND,
+        telemetryCtx: ctx,
       });
 
   printCombinedReport(secrets?.report ?? null, agentic);
@@ -183,12 +194,16 @@ async function runSecretsAndAgentic(
 async function runSecretsScan(
   files: string[],
   auth: ResolvedAuth,
+  ctx: CommandAuthenticatedInvocationContext,
 ): Promise<{ report: SecretsReport; exitCode: number } | null> {
   const binaryPath = resolveSecretsBinaryPath();
   if (binaryPath === null) return null;
 
-  const { result } = await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.analyze, auth, () =>
-    runSecretsBinary(binaryPath, files, auth),
+  const { result } = await scanAndEmitSecrets(
+    SECRETS_CALLER_COMMANDS.analyze,
+    auth,
+    () => runSecretsBinary(binaryPath, files, auth),
+    ctx,
   );
   const exitCode = result.exitCode ?? EXIT_CODE_SECRETS_FOUND;
   const { issues, errors } = parseSecretsJson(result.stdout);

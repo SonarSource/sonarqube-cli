@@ -35,6 +35,7 @@ import {
   resolveTelemetryIdentity,
 } from '@/core/telemetry/identity-fetch.ts';
 
+import { readFreshFlagDecisions, writeFlagDecisions } from './cache.ts';
 import {
   getLaunchDarklyDir,
   LAUNCHDARKLY_INIT_TIMEOUT_SECONDS,
@@ -45,6 +46,7 @@ import type { FeatureFlagFetcher, FeatureFlagIdentity } from './types.ts';
 export type { LaunchDarklyEnvironment } from './constants.ts';
 export {
   ENV_LAUNCHDARKLY_ENVIRONMENT,
+  FEATURE_FLAG_CACHE_TTL_MS,
   getLaunchDarklyDir,
   LAUNCHDARKLY_CLIENT_SIDE_IDS,
   LAUNCHDARKLY_PROJECT_KEY,
@@ -57,6 +59,7 @@ export interface ResolvePrivateBetaFlagsOptions {
   fetchFlags?: FeatureFlagFetcher;
   /** Required Private Beta flag keys discovered from the command tree. */
   flagKeys?: readonly string[];
+  nowMs?: number;
   clientSideId?: string;
 }
 
@@ -69,6 +72,7 @@ export function buildLaunchDarklyContext(identity: FeatureFlagIdentity): LDConte
       kind: 'multi',
       user: { key: identity.userUuid },
       organization: { key: identity.organizationUuidV4 },
+      ...(identity.enterpriseUuid ? { enterprise: { key: identity.enterpriseUuid } } : {}),
     };
   }
 
@@ -100,17 +104,19 @@ function toBooleanFlagMap(allFlags: Record<string, unknown>): Record<string, boo
 
 /**
  * Fetches Private Beta flag values via the LaunchDarkly client-side SDK.
- * Failures and missing client-side IDs yield an empty map (all flags treated as false).
+ * Returns `null` on failure (missing client-side ID, unusable context, or SDK error)
+ * so callers do not cache a poisoned all-false decision. A successful empty map means
+ * LaunchDarkly returned no true flags.
  */
 export const fetchFlagsFromLaunchDarkly: FeatureFlagFetcher = async (identity) => {
   const clientSideId = resolveLaunchDarklyClientSideId();
   if (!clientSideId) {
-    return {};
+    return null;
   }
 
   const context = buildLaunchDarklyContext(identity);
   if (!context) {
-    return {};
+    return null;
   }
 
   const client = initialize(clientSideId, context, {
@@ -138,7 +144,7 @@ export const fetchFlagsFromLaunchDarkly: FeatureFlagFetcher = async (identity) =
     return toBooleanFlagMap(client.allFlags());
   } catch (err) {
     logger.debug(`LaunchDarkly flag refresh failed: ${(err as Error).message}`);
-    return {};
+    return null;
   } finally {
     await client.close().catch(() => undefined);
   }
@@ -162,6 +168,7 @@ async function resolveFeatureFlagIdentity(auth: ResolvedAuth): Promise<FeatureFl
     connectionType: auth.connectionType,
     userUuid: identity.user_uuid,
     organizationUuidV4: identity.organization_uuid_v4,
+    enterpriseUuid: identity.enterprise_uuid ?? null,
     sqsInstallationId: identity.sqs_installation_id,
   };
 }
@@ -183,7 +190,9 @@ function selectFlagDecisions(
  *
  * Returns an empty map when there are no declared flag keys, auth is missing,
  * identity is incomplete, the client-side ID is missing, or the fetch fails —
- * callers treat missing keys as false.
+ * callers treat missing keys as false. Uses a 2-hour local cache under
+ * `~/.sonar/sonarqube-cli/launch-darkly/`. Fetch failures are not written to
+ * the cache so a transient LaunchDarkly outage cannot lock users out for the TTL.
  */
 export async function resolvePrivateBetaFlags(
   auth: ResolvedAuth | null,
@@ -199,6 +208,7 @@ export async function resolvePrivateBetaFlags(
     return {};
   }
 
+  const nowMs = options.nowMs ?? Date.now();
   const fetchFlags = options.fetchFlags ?? fetchFlagsFromLaunchDarkly;
 
   try {
@@ -207,7 +217,19 @@ export async function resolvePrivateBetaFlags(
       return {};
     }
 
-    return selectFlagDecisions(await fetchFlags(identity), flagKeys);
+    const cached = readFreshFlagDecisions(identity, flagKeys, clientSideId, nowMs);
+    if (cached) {
+      return cached;
+    }
+
+    const fetched = await fetchFlags(identity);
+    if (fetched === null) {
+      return {};
+    }
+
+    const decisions = selectFlagDecisions(fetched, flagKeys);
+    writeFlagDecisions(identity, decisions, clientSideId, nowMs);
+    return decisions;
   } catch (err) {
     logger.debug(`Private Beta flag resolution failed: ${(err as Error).message}`);
     return {};

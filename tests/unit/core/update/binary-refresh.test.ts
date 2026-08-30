@@ -37,14 +37,14 @@ function makeState(): CliState {
 
 function makeStateWithSecrets(): CliState {
   const state = makeState();
-  state.tools = {
+  state.dependencies = {
     installed: [
       {
-        name: 'sonar-secrets',
+        id: 'sonar-secrets',
         version: '0.0.0.1',
         path: '/fake/bin/sonar-secrets-0.0.0.1-linux-x86-64',
-        installedAt: '2026-01-01T00:00:00.000Z',
-        installedByCliVersion: '1.0.0',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        updatedByCliVersion: '1.0.0',
       },
     ],
   };
@@ -68,7 +68,7 @@ describe('updateSecretsBinaryIfNeeded', () => {
   });
 
   it('does nothing when no previous binary is recorded in state', async () => {
-    loadStateSpy.mockReturnValue(makeState()); // tools.installed is empty
+    loadStateSpy.mockReturnValue(makeState()); // dependencies.installed is empty
 
     await updateSecretsBinaryIfNeeded();
 
@@ -91,14 +91,14 @@ describe('updateSecretsBinaryIfNeeded', () => {
 
 function makeStateWithScaScanner(): CliState {
   const state = makeState();
-  state.tools = {
+  state.dependencies = {
     installed: [
       {
-        name: SCA_SCANNER_BINARY_NAME,
+        id: SCA_SCANNER_BINARY_NAME,
         version: '0.0.0.1',
         path: '/fake/bin/sca-scanner-cli-0.0.0.1-linux-x86-64',
-        installedAt: '2026-01-01T00:00:00.000Z',
-        installedByCliVersion: '1.0.0',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        updatedByCliVersion: '1.0.0',
       },
     ],
   };
@@ -123,7 +123,7 @@ describe('updateScaScannerBinaryIfNeeded', () => {
   });
 
   it('does nothing when no previous binary is recorded in state', async () => {
-    loadStateSpy.mockReturnValue(makeState()); // tools.installed is empty
+    loadStateSpy.mockReturnValue(makeState()); // dependencies.installed is empty
 
     await updateScaScannerBinaryIfNeeded();
 

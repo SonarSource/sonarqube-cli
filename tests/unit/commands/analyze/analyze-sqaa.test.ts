@@ -20,23 +20,22 @@
 
 // Unit tests for analyzeSqaa command
 
-import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import * as processLib from '@/core/process/process.ts';
+import * as projectInfo from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
-import { CliState, getDefaultState } from '@/core/state/state.ts';
+import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockTty, setMockUi } from '@/core/ui';
 
 import { analyzeSqaa, buildSqaaJsonReport } from '../../../../src/commands/analyze/sqaa.ts';
 import * as changesetModule from '../../../../src/commands/analyze/sqaa-changeset.ts';
-import { SQAA_HOOK_FEATURE_ID } from '../../../../src/commands/integrate/_common/features/sqaa-instructions-feature.ts';
-import { CLAUDE_INTEGRATION_ID } from '../../../../src/commands/integrate/claude/declaration.ts';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const TEST_ORG = 'test-org';
@@ -52,6 +51,8 @@ const FAKE_AUTH: import('@/core/auth/auth-resolver.ts').ResolvedAuth = {
   connectionType: 'cloud',
 };
 
+const FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(FAKE_AUTH);
+
 let loadStateSpy: ReturnType<typeof spyOn>;
 let saveStateSpy: ReturnType<typeof spyOn>;
 let existsSpy: ReturnType<typeof spyOn>;
@@ -59,46 +60,25 @@ let statSyncSpy: ReturnType<typeof spyOn>;
 let readFileSpy: ReturnType<typeof spyOn>;
 let createAnalysisSpy: ReturnType<typeof spyOn>;
 let spawnProcessSpy: ReturnType<typeof spyOn>;
+let discoverProjectSpy: ReturnType<typeof spyOn>;
 
-/**
- * Seed a declarative Claude Code integration whose project-scoped
- * `sonar-sqaa-hook` feature carries the given `projectKey` attr (or none).
- */
-function seedClaudeSqaaFeature(state: CliState, projectKey: string | undefined) {
-  const now = new Date().toISOString();
-  state.integrations.installed.push({
-    id: randomUUID(),
-    integrationId: CLAUDE_INTEGRATION_ID,
-    installedByCliVersion: '1.0.0',
-    installedAt: now,
-    updatedByCliVersion: '1.0.0',
-    updatedAt: now,
-    features: [
-      {
-        featureId: SQAA_HOOK_FEATURE_ID,
-        scope: 'project',
-        targetRoot: process.cwd(),
-        installedByCliVersion: '1.0.0',
-        installedAt: now,
-        updatedByCliVersion: '1.0.0',
-        updatedAt: now,
-        dependencies: [],
-        resources: [],
-        operations: [],
-        attrs: projectKey === undefined ? {} : { projectKey },
-      },
-    ],
-  });
-}
-
-/** Cloud state WITH a sonar-sqaa hook feature for the current project root */
+/** Cloud state (project-key resolution is mocked separately via discoverProjectSpy) */
 function makeCloudState() {
   const state = getDefaultState('test');
   stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', {
     orgKey: TEST_ORG,
   });
-  seedClaudeSqaaFeature(state, TEST_PROJECT);
   return state;
+}
+
+/** discoverProject result carrying just enough for resolveSqaaProjectKey to resolve `projectKey`. */
+function makeDiscoveredProject(projectKey: string | undefined) {
+  return {
+    repoRoot: process.cwd(),
+    projectRoot: process.cwd(),
+    projectKey,
+    configSources: [],
+  };
 }
 
 beforeEach(() => {
@@ -112,6 +92,10 @@ beforeEach(() => {
   existsSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
   statSyncSpy = spyOn(fs, 'statSync').mockReturnValue({ isFile: () => true } as fs.Stats);
   readFileSpy = spyOn(fs, 'readFileSync').mockReturnValue(FILE_CONTENT);
+
+  discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue(
+    makeDiscoveredProject(TEST_PROJECT),
+  );
 
   createAnalysisSpy = spyOn(SonarQubeClient.prototype, 'createAnalysis').mockResolvedValue({
     id: 'analysis-1',
@@ -141,6 +125,7 @@ afterEach(() => {
   existsSpy.mockRestore();
   statSyncSpy.mockRestore();
   readFileSpy.mockRestore();
+  discoverProjectSpy.mockRestore();
   createAnalysisSpy.mockRestore();
   spawnProcessSpy.mockRestore();
 });
@@ -152,34 +137,26 @@ describe('analyzeSqaa: input validation', () => {
     statSyncSpy.mockReturnValue(undefined);
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(analyzeSqaa({ file: ['nonexistent.ts'] }, FAKE_AUTH)).rejects.toThrow(
-      InvalidOptionError,
-    );
+    await expect(
+      analyzeSqaa({ file: ['nonexistent.ts'] }, FAKE_AUTHENTICATED_CONTEXT),
+    ).rejects.toThrow(InvalidOptionError);
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(analyzeSqaa({ file: ['nonexistent.ts'] }, FAKE_AUTH)).rejects.toThrow(
-      'File not found',
-    );
+    await expect(
+      analyzeSqaa({ file: ['nonexistent.ts'] }, FAKE_AUTHENTICATED_CONTEXT),
+    ).rejects.toThrow('File not found');
   });
 });
 
-function stateWithSqaaFeatureMissingProjectKey() {
-  const state = getDefaultState('test');
-  stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', {
-    orgKey: TEST_ORG,
-  });
-  // Feature exists but projectKey attr is absent
-  seedClaudeSqaaFeature(state, undefined);
-  return state;
-}
-
 describe('analyzeSqaa: auth resolution', () => {
-  it('throws CommandFailedError when the SQAA feature has no projectKey (explicit agentic)', async () => {
-    loadStateSpy.mockReturnValue(stateWithSqaaFeatureMissingProjectKey());
+  it('throws CommandFailedError when no project can be discovered (explicit agentic)', async () => {
+    discoverProjectSpy.mockResolvedValue(makeDiscoveredProject(undefined));
 
     let thrown: unknown;
-    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTH).catch((err: unknown) => {
-      thrown = err;
-    });
+    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT).catch(
+      (err: unknown) => {
+        thrown = err;
+      },
+    );
 
     expect(thrown).toBeInstanceOf(CommandFailedError);
     expect((thrown as Error).message).toContain(
@@ -188,10 +165,12 @@ describe('analyzeSqaa: auth resolution', () => {
     expect(createAnalysisSpy).not.toHaveBeenCalled();
   });
 
-  it('skips SQAA and warns when the SQAA feature has no projectKey and requireProject is false (bare analyze)', async () => {
-    loadStateSpy.mockReturnValue(stateWithSqaaFeatureMissingProjectKey());
+  it('skips SQAA and warns when no project can be discovered and requireProject is false (bare analyze)', async () => {
+    discoverProjectSpy.mockResolvedValue(makeDiscoveredProject(undefined));
 
-    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTH, { requireProject: false });
+    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT, {
+      requireProject: false,
+    });
 
     expect(createAnalysisSpy).not.toHaveBeenCalled();
     const output = getMockUiCalls()
@@ -203,66 +182,14 @@ describe('analyzeSqaa: auth resolution', () => {
   });
 });
 
-/**
- * Cloud state with two project-scoped SQAA features that both resolve to the
- * current directory, but via different signals: the first (array order) matches
- * only on `repoRoot` (as if a sibling worktree integrated with a different key
- * shares this main working tree); the second matches exactly on `targetRoot`
- * (the install actually rooted here). The exact targetRoot match must win.
- */
-function stateWithTargetAndRepoRootSqaaFeatures(
-  repoRootOnlyKey: string,
-  targetRootKey: string,
-): CliState {
-  const state = getDefaultState('test');
-  stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', { orgKey: TEST_ORG });
-  const now = new Date().toISOString();
-  const makeFeature = (targetRoot: string, projectKey: string) => ({
-    featureId: SQAA_HOOK_FEATURE_ID,
-    scope: 'project' as const,
-    targetRoot,
-    installedByCliVersion: '1.0.0',
-    installedAt: now,
-    updatedByCliVersion: '1.0.0',
-    updatedAt: now,
-    dependencies: [],
-    resources: [],
-    operations: [],
-    attrs: { projectKey, repoRoot: process.cwd() },
-  });
-  state.integrations.installed.push({
-    id: randomUUID(),
-    integrationId: CLAUDE_INTEGRATION_ID,
-    installedByCliVersion: '1.0.0',
-    installedAt: now,
-    updatedByCliVersion: '1.0.0',
-    updatedAt: now,
-    features: [
-      // repoRoot-only match listed first — would win on array order under a
-      // combined targetRoot-OR-repoRoot search.
-      makeFeature('/some/other/worktree', repoRootOnlyKey),
-      makeFeature(process.cwd(), targetRootKey),
-    ],
-  });
-  return state;
-}
-
-describe('analyzeSqaa: project-key resolution across worktrees', () => {
-  it('prefers a targetRoot match over a repoRoot-only match regardless of feature order', async () => {
-    loadStateSpy.mockReturnValue(
-      stateWithTargetAndRepoRootSqaaFeatures('wrong-worktree-key', 'right-here-key'),
-    );
-
-    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTH);
-
-    expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
-    expect(createAnalysisSpy.mock.calls[0][0].projectKey).toBe('right-here-key');
-  });
-});
+// Worktree-aware project-key resolution (targetRoot vs. repoRoot precedence) now
+// lives entirely inside discoverProject/selectFeatureForLookupPaths, which this
+// suite mocks away via discoverProjectSpy — see tests/unit/core/project-info.test.ts
+// and tests/unit/core/host/recorded-feature-resolver.test.ts for that coverage.
 
 describe('analyzeSqaa: API call and result display', () => {
   it('calls client.createAnalysis with correct parameters', async () => {
-    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTH);
+    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
 
     expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
     const request = createAnalysisSpy.mock.calls[0][0];
@@ -273,7 +200,7 @@ describe('analyzeSqaa: API call and result display', () => {
   });
 
   it('does not send branchName in request when no branch is provided and git has no current branch', async () => {
-    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTH);
+    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
 
     const request = createAnalysisSpy.mock.calls[0][0];
     // branchName: null causes a 400 from the real API — must be omitted entirely
@@ -291,14 +218,17 @@ describe('analyzeSqaa: API call and result display', () => {
       return Promise.resolve({ exitCode: 0, stdout: `${process.cwd()}\n`, stderr: '' });
     });
 
-    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTH);
+    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
 
     const request = createAnalysisSpy.mock.calls[0][0];
     expect(request.branchName).toBe('feature/auto-detect');
   });
 
   it('passes branch to client when --branch option is provided', async () => {
-    await analyzeSqaa({ file: ['src/index.ts'], branch: 'feature/my-branch' }, FAKE_AUTH);
+    await analyzeSqaa(
+      { file: ['src/index.ts'], branch: 'feature/my-branch' },
+      FAKE_AUTHENTICATED_CONTEXT,
+    );
 
     const request = createAnalysisSpy.mock.calls[0][0];
     expect(request.branchName).toBe('feature/my-branch');
@@ -307,7 +237,7 @@ describe('analyzeSqaa: API call and result display', () => {
   it('renders per-file failure rows when a single --file analysis fails', async () => {
     createAnalysisSpy.mockRejectedValue(new Error('Network error'));
 
-    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTH);
+    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
 
     expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
     const lines = getMockUiCalls()
@@ -321,7 +251,7 @@ describe('analyzeSqaa: API call and result display', () => {
   });
 
   it('renders file row and summary footer for a clean single-file result', async () => {
-    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTH);
+    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
 
     const lines = getMockUiCalls()
       .filter((c) => c.method === 'text')
@@ -334,7 +264,10 @@ describe('analyzeSqaa: API call and result display', () => {
 
 describe('analyzeSqaa: path normalization', () => {
   it('normalizes Windows-style backslash paths to forward slashes in the API request', async () => {
-    await analyzeSqaa({ file: [String.raw`python\scripts\check_md_code_blocks.py`] }, FAKE_AUTH);
+    await analyzeSqaa(
+      { file: [String.raw`python\scripts\check_md_code_blocks.py`] },
+      FAKE_AUTHENTICATED_CONTEXT,
+    );
 
     const request = createAnalysisSpy.mock.calls[0][0];
     expect(request.files[0].path).toBe('python/scripts/check_md_code_blocks.py');
@@ -346,31 +279,33 @@ describe('analyzeSqaa: path normalization', () => {
         : '/other-project/file.ts';
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(analyzeSqaa({ file: ['../outside.ts'] }, FAKE_AUTH)).rejects.toThrow(
-      InvalidOptionError,
-    );
+    await expect(
+      analyzeSqaa({ file: ['../outside.ts'] }, FAKE_AUTHENTICATED_CONTEXT),
+    ).rejects.toThrow(InvalidOptionError);
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(analyzeSqaa({ file: [differentDrive] }, FAKE_AUTH)).rejects.toThrow(
-      InvalidOptionError,
-    );
+    await expect(
+      analyzeSqaa({ file: [differentDrive] }, FAKE_AUTHENTICATED_CONTEXT),
+    ).rejects.toThrow(InvalidOptionError);
   });
 });
 
 // ─── analyzeSqaa: explicit --project option ──────────────────────────────────
 
 describe('analyzeSqaa: explicit --project option', () => {
-  it('throws CommandFailedError when --project given but on-premise server', async () => {
+  it('runs Vortex analysis on SonarQube Server when --project is given', async () => {
     const onPremiseAuth = {
       token: TEST_TOKEN,
       serverUrl: 'https://mysonar.company.com',
-      orgKey: TEST_ORG,
       connectionType: 'on-premise' as const,
     };
 
-    // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(
-      analyzeSqaa({ file: ['src/index.ts'], project: 'my-project' }, onPremiseAuth),
-    ).rejects.toThrow(CommandFailedError);
+    const onPremiseContext = new CommandAuthenticatedInvocationContext(onPremiseAuth);
+
+    await analyzeSqaa({ file: ['src/index.ts'], project: 'my-project' }, onPremiseContext);
+
+    expect(createAnalysisSpy).toHaveBeenCalled();
+    expect(createAnalysisSpy.mock.calls[0][0].organizationKey).toBeUndefined();
+    expect(createAnalysisSpy.mock.calls[0][0].projectKey).toBe('my-project');
   });
 });
 
@@ -394,17 +329,17 @@ describe('buildSqaaJsonReport', () => {
     expect(createAnalysisSpy.mock.calls[0][0].analysisDepth).toBe('DEEP');
   });
 
-  it('returns null when SQAA is unavailable (non-Cloud)', async () => {
+  it('runs Vortex analysis on SonarQube Server', async () => {
     const onPremiseAuth = {
       token: TEST_TOKEN,
       serverUrl: 'https://mysonar.company.com',
-      orgKey: TEST_ORG,
       connectionType: 'on-premise' as const,
     };
 
     const report = await buildSqaaJsonReport({ file: ['src/index.ts'] }, onPremiseAuth);
-    expect(report).toBeNull();
-    expect(createAnalysisSpy).not.toHaveBeenCalled();
+    expect(report).not.toBeNull();
+    expect(createAnalysisSpy).toHaveBeenCalled();
+    expect(createAnalysisSpy.mock.calls[0][0].organizationKey).toBeUndefined();
   });
 
   it('returns a failure entry when the API call fails', async () => {
@@ -428,12 +363,12 @@ describe('analyzeSqaa: depth option', () => {
   it('throws InvalidOptionError for invalid --depth', async () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      analyzeSqaa({ file: ['src/index.ts'], depth: 'INVALID' }, FAKE_AUTH),
+      analyzeSqaa({ file: ['src/index.ts'], depth: 'INVALID' }, FAKE_AUTHENTICATED_CONTEXT),
     ).rejects.toThrow(InvalidOptionError);
   });
 
   it('sends DEEP on the wire when --depth DEEP is set for a single file', async () => {
-    await analyzeSqaa({ file: ['src/index.ts'], depth: 'DEEP' }, FAKE_AUTH);
+    await analyzeSqaa({ file: ['src/index.ts'], depth: 'DEEP' }, FAKE_AUTHENTICATED_CONTEXT);
 
     expect(createAnalysisSpy.mock.calls[0][0].analysisDepth).toBe('DEEP');
   });
@@ -457,7 +392,7 @@ describe('analyzeSqaa: change-set mode', () => {
       repoRoot: process.cwd(),
     });
 
-    await analyzeSqaa({ staged: true }, FAKE_AUTH);
+    await analyzeSqaa({ staged: true }, FAKE_AUTHENTICATED_CONTEXT);
 
     const output = getMockUiCalls()
       .map((c) => String(c.args[0]))
@@ -488,7 +423,7 @@ describe('analyzeSqaa: change-set mode', () => {
       repoRoot: process.cwd(),
     });
 
-    await analyzeSqaa({ staged: true }, FAKE_AUTH);
+    await analyzeSqaa({ staged: true }, FAKE_AUTHENTICATED_CONTEXT);
 
     expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
     expect(createAnalysisSpy.mock.calls[0][0].analysisDepth).toBe('DEEP');

@@ -26,8 +26,9 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
+import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
-import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 
 import { scanAndEmitSecrets } from '../analyze/secrets.ts';
 import {
@@ -36,6 +37,7 @@ import {
   scanTextForSecrets,
   secretsFoundInScan,
 } from './cursor-secrets-block.ts';
+import type { HookCommandResult } from './hook-command-result.ts';
 import {
   type HookDependencies,
   MissingDependenciesError,
@@ -46,20 +48,23 @@ import { readStdinJson } from './stdin.ts';
 interface CursorPreToolUsePayload {
   tool_name?: string;
   tool_input?: { file_path?: string; path?: string };
+  conversation_id?: string;
 }
 
-export async function cursorPreToolUse(): Promise<void> {
+export async function cursorPreToolUse(ctx: CommandInvocationContext): Promise<HookCommandResult> {
   let payload: CursorPreToolUsePayload;
   try {
     payload = await readStdinJson<CursorPreToolUsePayload>();
   } catch {
-    return; // unparseable stdin — allow
+    return { agentSessionId: null }; // unparseable stdin — allow
   }
 
-  if (payload.tool_name !== 'Read') return;
+  const agentSessionId = payload.conversation_id ?? null;
+
+  if (payload.tool_name !== 'Read') return { agentSessionId };
 
   const filePath = payload.tool_input?.file_path ?? payload.tool_input?.path;
-  if (!filePath || !existsSync(filePath)) return;
+  if (!filePath || !existsSync(filePath)) return { agentSessionId };
 
   let deps: HookDependencies;
   try {
@@ -67,7 +72,7 @@ export async function cursorPreToolUse(): Promise<void> {
   } catch (err) {
     if (err instanceof MissingDependenciesError) {
       await denyCursor(err.message);
-      return;
+      return { agentSessionId };
     }
     throw err;
   }
@@ -75,15 +80,20 @@ export async function cursorPreToolUse(): Promise<void> {
   let scan: Awaited<ReturnType<typeof scanAndEmitSecrets>>;
   try {
     const content = await readFile(filePath, 'utf-8');
-    scan = await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.cursorPreToolUse, deps.auth, () =>
-      scanTextForSecrets(deps, content),
+    scan = await scanAndEmitSecrets(
+      SECRETS_CALLER_COMMANDS.cursorPreToolUse,
+      deps.auth,
+      () => scanTextForSecrets(deps, content),
+      ctx,
     );
   } catch (err) {
     logger.debug(`cursorPreToolUse secrets scan failed: ${(err as Error).message}`);
-    return;
+    return { agentSessionId };
   }
 
   if (secretsFoundInScan(scan.result)) {
     await denyCursorFileAccess(filePath);
   }
+
+  return { agentSessionId };
 }

@@ -148,9 +148,9 @@ describe('analyze secrets', () => {
         true,
       );
       const state = harness.stateJsonFile.asJson() as {
-        tools: { installed: Array<{ name: string; version: string }> };
+        dependencies: { installed: Array<{ id: string; version: string }> };
       };
-      const recorded = state.tools.installed.find((t) => t.name === 'sonar-secrets');
+      const recorded = state.dependencies.installed.find((d) => d.id === 'sonar-secrets');
       expect(recorded).toBeDefined();
       expect(recorded?.version).toBeDefined();
     },
@@ -268,9 +268,8 @@ describe('analyze secrets', () => {
     async () => {
       harness.state().withSecretsBinaryInstalled().withTelemetryEnabled();
       harness.withAuth(FAKE_SERVER, 'fake-token');
-      // Run in flush-worker mode so storeEvent() never spawns the detached flush worker:
-      // telemetry-events.ndjson is written but nothing is POSTed to the telemetry endpoint.
-      harness.withExtraEnv({ __SQ_CLI_TELEMETRY_FLUSH__: '1' });
+      // Do NOT enable flush mode: TELEMETRY_FLUSH_MODE_ENV no-ops commitTelemetryFacts(),
+      // so CliAnalysisCompleted never lands in telemetry-events.ndjson. Egress is already off.
       harness.cwd.writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
 
       const result = await harness.run('analyze secrets secrets.js');

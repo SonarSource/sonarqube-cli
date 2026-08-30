@@ -187,14 +187,12 @@ describe('reconcileInstalledIntegrations', () => {
 
     const sharedDependency: DependencyDeclaration = {
       id: 'shared-dependency',
-      dependencyType: 'binary',
       version: '2',
       installOrUpdate: ({ existingDependency }) => {
         existingDependencyPaths.push(existingDependency?.path ?? 'missing');
         installCalls.push('install');
         return {
           id: 'shared-dependency',
-          dependencyType: 'binary',
           version: '2',
           path: '/new/shared-dependency',
         };
@@ -240,7 +238,6 @@ describe('reconcileInstalledIntegrations', () => {
     });
     state.dependencies.installed.push({
       id: sharedDependency.id,
-      dependencyType: sharedDependency.dependencyType,
       version: '1',
       path: '/old/shared-dependency',
       updatedByCliVersion: '0.9.0',

@@ -26,10 +26,12 @@
 // `{ "decision": "block", "reason": "..." }`, which is why this handler is separate from
 // `agentPromptSubmit`.
 
+import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
-import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 
 import { EXIT_CODE_SECRETS_FOUND } from '../analyze/secrets.ts';
+import type { HookCommandResult } from './hook-command-result.ts';
 import {
   type HookDependencies,
   MissingDependenciesError,
@@ -40,23 +42,28 @@ import { readStdinJson } from './stdin.ts';
 
 interface CursorPromptSubmitPayload {
   prompt?: string;
+  conversation_id?: string;
 }
 
 function denyPrompt(message: string): void {
   process.stdout.write(JSON.stringify({ continue: false, user_message: message }) + '\n');
 }
 
-export async function cursorPromptSubmit(): Promise<void> {
+export async function cursorPromptSubmit(
+  ctx: CommandInvocationContext,
+): Promise<HookCommandResult> {
   let payload: CursorPromptSubmitPayload;
   try {
     payload = await readStdinJson<CursorPromptSubmitPayload>();
   } catch (err) {
     logger.debug(`beforeSubmitPrompt: failed to parse stdin — ${(err as Error).message}`);
-    return; // unparseable stdin — allow
+    return { agentSessionId: null }; // unparseable stdin — allow
   }
 
+  const agentSessionId = payload.conversation_id ?? null;
+
   const prompt = payload.prompt;
-  if (!prompt) return;
+  if (!prompt) return { agentSessionId };
 
   let deps: HookDependencies;
   try {
@@ -64,7 +71,7 @@ export async function cursorPromptSubmit(): Promise<void> {
   } catch (err) {
     if (err instanceof MissingDependenciesError) {
       denyPrompt(err.message);
-      return;
+      return { agentSessionId };
     }
     throw err;
   }
@@ -74,6 +81,7 @@ export async function cursorPromptSubmit(): Promise<void> {
       SECRETS_CALLER_COMMANDS.cursorPromptSubmit,
       deps,
       prompt,
+      ctx,
     );
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
       denyPrompt('Sonar detected secrets in prompt');
@@ -81,4 +89,6 @@ export async function cursorPromptSubmit(): Promise<void> {
   } catch (err) {
     logger.debug(`beforeSubmitPrompt secrets scan failed: ${(err as Error).message}`);
   }
+
+  return { agentSessionId };
 }

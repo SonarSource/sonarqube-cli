@@ -399,18 +399,17 @@ describe('system status', () => {
             },
           },
           config: { cliVersion: CLI_VERSION },
-          tools: {
+          dependencies: {
             installed: [
               {
-                name: SECRETS_SPEC.name,
+                id: SECRETS_SPEC.name,
                 version: '1.0.0',
                 path: '/fake/path/sonar-secrets',
-                installedAt: new Date().toISOString(),
-                installedByCliVersion: '0.14.0',
+                updatedAt: new Date().toISOString(),
+                updatedByCliVersion: '0.14.0',
               },
             ],
           },
-          dependencies: { installed: [] },
           telemetry: { enabled: false, firstUseDate: '', events: [] },
           agentExtensions: [],
           integrations: { installed: [] },
@@ -770,7 +769,6 @@ describe('system status', () => {
               installed: [
                 {
                   id: 'sonar-context-augmentation',
-                  dependencyType: 'binary',
                   version: '0.12.0.1451',
                   path: '/fake/bin/sonar-context-augmentation',
                   updatedByCliVersion: '0.14.0',
@@ -778,7 +776,6 @@ describe('system status', () => {
                 },
                 {
                   id: 'sca-scanner-cli',
-                  dependencyType: 'binary',
                   version: '2025.6.0.14965',
                   path: '/fake/bin/sca-scanner-cli',
                   updatedByCliVersion: '0.14.0',

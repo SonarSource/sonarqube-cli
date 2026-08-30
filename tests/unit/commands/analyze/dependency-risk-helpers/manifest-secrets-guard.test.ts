@@ -23,6 +23,7 @@ import { join } from 'node:path';
 
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
+import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import type { SecretsInstaller } from '@/core/host/install/secrets.ts';
@@ -67,6 +68,10 @@ const AUTH: ResolvedAuth = {
 
 const BASE_DIR = join(tmpdir(), 'manifest-guard-repo');
 
+function makeCtx() {
+  return new CommandInvocationContext();
+}
+
 // Spawner that returns the given manifest file list from `discover-manifests`.
 function discoverSpawner(files: unknown[]): ScaScannerSpawner {
   return {
@@ -98,6 +103,7 @@ async function runGuard(deps: {
     scaInstaller: okScaInstaller,
     scaSpawner: discoverSpawner(deps.files),
     secretsInstaller: deps.secretsInstaller,
+    ctx: makeCtx(),
   });
 }
 

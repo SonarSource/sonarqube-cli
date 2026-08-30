@@ -20,8 +20,8 @@
 
 // SonarCommand — Commander Command subclass with built-in error handling and auth support
 
-import type { CommandOptions, Option } from 'commander';
-import { Command, Help } from 'commander';
+import type { CommandOptions } from 'commander';
+import { Command, Help, Option } from 'commander';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
@@ -33,6 +33,11 @@ import type { UpdateNotificationCondition } from '@/core/update/notification.ts'
 import { UpdateNotifier } from '@/core/update/notification.ts';
 
 import { version as VERSION } from '../../package.json';
+import {
+  CommandAuthenticatedInvocationContext,
+  CommandInvocationContext,
+  type CommandInvocationContextStage,
+} from './command-invocation-context.ts';
 
 export const ALPHA_ENV_VAR = 'SONARQUBE_CLI_ALPHA';
 export const ALPHA_HELP_TAG = '[ALPHA]';
@@ -91,6 +96,99 @@ export function createDefaultCliRuntime(): CliRuntime {
   };
 }
 
+/** Whether a command or option at this stage should be registered for this runtime. */
+function isStageVisible(
+  stage: StageName,
+  flagKey: string | undefined,
+  runtime: CliRuntime,
+): boolean {
+  if (stage === 'alpha') {
+    return runtime.isAlphaEnabled;
+  }
+  if (stage === 'beta' && flagKey !== undefined) {
+    return runtime.isPrivateBetaEnabled(flagKey);
+  }
+  return true;
+}
+
+function withLifecycleTag(description: string, stage: StageName): string {
+  if (stage === 'alpha') {
+    return `${description} ${ALPHA_HELP_TAG}`;
+  }
+  if (stage === 'beta') {
+    return `${description} ${BETA_HELP_TAG}`;
+  }
+  return description;
+}
+
+/**
+ * Commander Option subclass that can be marked Alpha or Beta.
+ *
+ * `.option()` returns the command, so `.option().stage()` cannot type-check.
+ * Stage options by passing a {@link SonarOption} to {@link SonarCommand.addOption}:
+ *
+ * @example
+ * .addOption(
+ *   new SonarOption('--preview', 'Preview the plan without applying it')
+ *     .stage(Stage.Alpha),
+ * )
+ */
+export class SonarOption extends Option {
+  private _stage: StageName = 'stable';
+  private _betaFlagKey: string | undefined;
+
+  /**
+   * Mark this option as Stable, Alpha, or Beta (optionally Private Beta via a flag key).
+   * Required options cannot be staged; when the caller is not entitled the option is
+   * omitted from help and treated as unknown.
+   */
+  stage(stage: StageDescriptor): this {
+    if (this.mandatory) {
+      throw new Error(`Cannot stage a required option as Alpha or Beta: '${this.flags}'`);
+    }
+
+    const newStage = stage.name;
+    const newFlagKey = stage.name === 'beta' ? stage.flagKey : undefined;
+    if (this._stage === newStage && this._betaFlagKey === newFlagKey) {
+      return this;
+    }
+
+    this._stage = newStage;
+    this._betaFlagKey = newFlagKey;
+
+    if (newStage === 'alpha') {
+      this.helpGroup(ALPHA_HELP_GROUP);
+    } else {
+      this.helpGroupHeading = undefined;
+    }
+    return this;
+  }
+
+  get lifecycleStage(): StageName {
+    return this._stage;
+  }
+
+  get isStable(): boolean {
+    return this._stage === 'stable';
+  }
+
+  get isAlpha(): boolean {
+    return this._stage === 'alpha';
+  }
+
+  get isBeta(): boolean {
+    return this._stage === 'beta';
+  }
+
+  get isPrivateBeta(): boolean {
+    return this._stage === 'beta' && this._betaFlagKey !== undefined;
+  }
+
+  get betaFlagKey(): string | undefined {
+    return this._betaFlagKey;
+  }
+}
+
 export interface RootHelpMetadata {
   category?: CommandCategory;
   expandSubcommands?: boolean;
@@ -135,6 +233,13 @@ class SonarHelp extends Help {
     }
     return super.formatItemList(heading, items, helper);
   }
+
+  override optionDescription(option: Option): string {
+    const description = super.optionDescription(option);
+    return option instanceof SonarOption
+      ? withLifecycleTag(description, option.lifecycleStage)
+      : description;
+  }
 }
 
 /**
@@ -150,18 +255,25 @@ class SonarHelp extends Help {
  *                          useful for documentation generation
  *  - stage()               marks a command as Stable, Alpha, or Beta, controlling its
  *                          availability, help, documentation, and warnings
+ *  - createOption()        returns {@link SonarOption}; stage via addOption(), not .option()
+ *  - addOption()           accepts {@link SonarOption} only; omits Alpha/Private Beta options
+ *                          the caller is not entitled to use
  */
 export class SonarCommand extends Command {
+  // Valid because Commander declares `options` as readonly (covariant), so we can narrow Option to SonarOption.
+  declare readonly options: readonly SonarOption[];
   private _stage: StageName = 'stable';
   private _betaFlagKey: string | undefined;
   private _requiresAuth = false;
   private _rootHelp: RootHelpMetadata = {};
   private readonly _updateNotifier: UpdateNotifier;
   private readonly _runtime: CliRuntime;
+  private _invocationContext: CommandInvocationContext | undefined;
 
   /**
-   * `updateNotifier` / `runtime` default so the root command owns the instances
-   * the whole tree shares; every subcommand inherits them via createCommand().
+   * `updateNotifier` / `runtime` default so the root command owns the
+   * instances the whole tree shares; every subcommand inherits them via
+   * createCommand().
    */
   constructor(options?: SonarCommandOptions);
   constructor(name?: string, options?: SonarCommandOptions);
@@ -179,6 +291,7 @@ export class SonarCommand extends Command {
       if (this.isAlpha) {
         info(`'${this.name()}' is in alpha; may change or be removed without notice.`, 'stderr');
       }
+      this.warnIfStagedOptionsUsed();
     });
   }
 
@@ -188,6 +301,25 @@ export class SonarCommand extends Command {
       updateNotifier: this._updateNotifier,
       runtime: this._runtime,
     });
+  }
+
+  /** Options created via `.option()` / `.requiredOption()` are {@link SonarOption}s. */
+  createOption(flags: string, description?: string): SonarOption {
+    return new SonarOption(flags, description);
+  }
+
+  /**
+   * Register a {@link SonarOption}. Alpha and Private Beta options are omitted when the caller
+   * is not entitled, so they do not appear in help and parse as unknown.
+   */
+  addOption(option: SonarOption): this {
+    if (!option.isStable && option.mandatory) {
+      throw new Error(`Cannot stage a required option as Alpha or Beta: '${option.flags}'`);
+    }
+    if (!isStageVisible(option.lifecycleStage, option.betaFlagKey, this._runtime)) {
+      return this;
+    }
+    return super.addOption(option);
   }
 
   createHelp(): Help {
@@ -216,6 +348,15 @@ export class SonarCommand extends Command {
   /** Startup auth / Private Beta gate shared by this command and its subtree. */
   get runtime(): CliRuntime {
     return this._runtime;
+  }
+
+  /**
+   * Context for the action that just ran. Set when `anonymousAction` /
+   * `authenticatedAction` invoke the handler; `postAction` reads recorded
+   * telemetry facts from it.
+   */
+  get invocationContext(): CommandInvocationContext | undefined {
+    return this._invocationContext;
   }
 
   /**
@@ -255,13 +396,7 @@ export class SonarCommand extends Command {
   }
 
   private isStageVisible(): boolean {
-    if (this._stage === 'alpha') {
-      return this._runtime.isAlphaEnabled;
-    }
-    if (this._stage === 'beta' && this._betaFlagKey !== undefined) {
-      return this._runtime.isPrivateBetaEnabled(this._betaFlagKey);
-    }
-    return true;
+    return isStageVisible(this._stage, this._betaFlagKey, this._runtime);
   }
 
   /** Re-attach after a stage change that makes this command visible again. */
@@ -296,7 +431,7 @@ export class SonarCommand extends Command {
           super.description(str, argsDescription);
     }
 
-    return this.withLifecycleTag(super.description());
+    return withLifecycleTag(super.description(), this._stage);
   }
 
   summary(str: string): this;
@@ -307,7 +442,7 @@ export class SonarCommand extends Command {
     }
 
     const summary = super.summary();
-    return summary ? this.withLifecycleTag(summary) : summary;
+    return summary ? withLifecycleTag(summary, this._stage) : summary;
   }
 
   /**
@@ -326,15 +461,22 @@ export class SonarCommand extends Command {
    * process.exitCode is set on failure. Wraps Commander's action() so callers
    * do not need to invoke runCommand() themselves.
    *
+   * A {@link CommandInvocationContext} is passed as the first argument to fn (stage accessors
+   * resolve alpha/beta for this execution); Commander's own arguments follow.
+   * Record telemetry with `ctx.recordTelemetry(...)` — drained in `postAction`
+   * together with `CliCommandExecuted`.
+   *
    * The `this` context set by Commander is forwarded to the handler, so
-   * `function(this: Command) { this.outputHelp(); }` works as expected.
+   * `function(this: Command, _ctx: CommandInvocationContext) { this.outputHelp(); }` works.
    */
   anonymousAction<TArgs extends CommandArgs>(
     this: this & { __commandArgs?: TArgs },
-    fn: (...args: TArgs) => CommandResult,
+    fn: (ctx: CommandInvocationContext, ...args: TArgs) => CommandResult,
   ): this {
     super.action(function (this: SonarCommand, ...args: TArgs) {
-      return this.runCommand(() => Promise.resolve(fn.apply(this, args)));
+      return this.runCommand(() =>
+        Promise.resolve(fn.call(this, this.createCommandInvocationContext(), ...args)),
+      );
     });
     return this;
   }
@@ -342,14 +484,16 @@ export class SonarCommand extends Command {
   /**
    * Register an action that requires authentication. Auth is resolved before
    * the handler is invoked; if no auth is configured the command fails with a
-   * clear message. Auth is passed as the first argument to fn; Commander's own
-   * arguments (options, positional args) follow.
+   * clear message. A {@link CommandAuthenticatedInvocationContext} is passed as the first
+   * argument to fn (auth plus stage accessors for this execution); Commander's
+   * own arguments (options, positional args) follow. Record telemetry with
+   * `ctx.recordTelemetry(...)` — drained in `postAction`.
    *
    * Sets requiresAuth = true on this command for documentation purposes.
    */
   authenticatedAction<TArgs extends CommandArgs>(
     this: this & { __commandArgs?: TArgs },
-    fn: (auth: ResolvedAuth, ...args: TArgs) => Promise<void>,
+    fn: (ctx: CommandAuthenticatedInvocationContext, ...args: TArgs) => Promise<void>,
   ): this {
     this._requiresAuth = true;
     super.action((...args: TArgs) =>
@@ -361,10 +505,37 @@ export class SonarCommand extends Command {
             remediationHint: "Run 'sonar auth login' to authenticate.",
           });
         }
-        await fn(auth, ...args);
+        await fn(this.createCommandAuthenticatedInvocationContext(auth), ...args);
       }),
     );
     return this;
+  }
+
+  private createCommandInvocationContext(): CommandInvocationContext {
+    const ctx = new CommandInvocationContext(this.commandInvocationContextStage(), this._runtime);
+    this._invocationContext = ctx;
+    return ctx;
+  }
+
+  private createCommandAuthenticatedInvocationContext(
+    auth: ResolvedAuth,
+  ): CommandAuthenticatedInvocationContext {
+    const ctx = new CommandAuthenticatedInvocationContext(
+      auth,
+      this.commandInvocationContextStage(),
+      this._runtime,
+    );
+    this._invocationContext = ctx;
+    return ctx;
+  }
+
+  private commandInvocationContextStage(): CommandInvocationContextStage {
+    return {
+      isAlpha: this.isAlpha,
+      isBeta: this.isBeta,
+      isPrivateBeta: this.isPrivateBeta,
+      betaFlagKey: this.betaFlagKey,
+    };
   }
 
   action(_: (...args: CommandArgs) => CommandResult): this {
@@ -448,16 +619,6 @@ export class SonarCommand extends Command {
     }
   }
 
-  private withLifecycleTag(description: string): string {
-    if (this._stage === 'alpha') {
-      return `${description} ${ALPHA_HELP_TAG}`;
-    }
-    if (this._stage === 'beta') {
-      return `${description} ${BETA_HELP_TAG}`;
-    }
-    return description;
-  }
-
   private commandPath(): string {
     const names = [this.name()];
 
@@ -468,33 +629,58 @@ export class SonarCommand extends Command {
     return names.join(' ');
   }
 
+  private warnIfStagedOptionsUsed(): void {
+    for (const option of this.options) {
+      if (option.isStable) {
+        continue;
+      }
+      if (this.getOptionValueSource(option.attributeName()) !== 'cli') {
+        continue;
+      }
+
+      const flag = option.long ?? option.flags;
+      if (option.isAlpha) {
+        info(`'${flag}' is in alpha; may change or be removed without notice.`, 'stderr');
+      } else if (option.isBeta) {
+        this.warnIfBetaOnce(
+          `${this.commandPath()} ${flag}`,
+          `'${flag}' is in beta and may change.`,
+        );
+      }
+    }
+  }
+
   private warnIfBeta(): void {
     if (this._stage !== 'beta') {
       return;
     }
 
     const commandPath = this.commandPath();
+    this.warnIfBetaOnce(commandPath, `'${commandPath}' is in beta and may change.`);
+  }
+
+  private warnIfBetaOnce(warningKey: string, message: string): void {
     let state;
 
     try {
       state = loadState();
     } catch {
-      if (betaWarningsShownWithoutState.has(commandPath)) {
+      if (betaWarningsShownWithoutState.has(warningKey)) {
         return;
       }
-      betaWarningsShownWithoutState.add(commandPath);
-      info(`'${commandPath}' is in beta and may change.`, 'stderr');
+      betaWarningsShownWithoutState.add(warningKey);
+      info(message, 'stderr');
       return;
     }
 
-    if (state.config.betaCommandWarnings?.[commandPath] === VERSION) {
+    if (state.config.betaCommandWarnings?.[warningKey] === VERSION) {
       return;
     }
 
-    info(`'${commandPath}' is in beta and may change.`, 'stderr');
+    info(message, 'stderr');
     state.config.betaCommandWarnings = {
       ...state.config.betaCommandWarnings,
-      [commandPath]: VERSION,
+      [warningKey]: VERSION,
     };
 
     try {
@@ -503,4 +689,27 @@ export class SonarCommand extends Command {
       logger.debug(`Failed to persist Beta command warning: ${(err as Error).message}`);
     }
   }
+}
+
+/** Collects unique LaunchDarkly flag keys from Private Beta commands and options in the tree. */
+export function collectPrivateBetaFlagKeys(root: SonarCommand): string[] {
+  const keys = new Set<string>();
+
+  const visit = (command: SonarCommand): void => {
+    const flagKey = command.betaFlagKey;
+    if (command.isPrivateBeta && flagKey !== undefined) {
+      keys.add(flagKey);
+    }
+    for (const option of command.options) {
+      if (option.isPrivateBeta && option.betaFlagKey !== undefined) {
+        keys.add(option.betaFlagKey);
+      }
+    }
+    for (const child of command.commands as SonarCommand[]) {
+      visit(child);
+    }
+  };
+
+  visit(root);
+  return [...keys];
 }

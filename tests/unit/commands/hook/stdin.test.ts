@@ -22,10 +22,13 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { readGitPushRefs, readStdinJson } from '../../../../src/commands/hook/stdin.ts';
 
-describe('readStdinJson', () => {
-  type StdinListener = (...args: any[]) => void;
+type StdinListener = (...args: any[]) => void;
+
+function createStdinHarness() {
   const listeners: Record<string, StdinListener[]> = {};
-  let onSpy: ReturnType<typeof spyOn>;
+  const spies: Array<{ mockRestore: () => void }> = [];
+  let pauseCalls = 0;
+  let destroyCalls = 0;
 
   function captureListener(event: string, fn: StdinListener) {
     if (!listeners[event]) listeners[event] = [];
@@ -33,22 +36,73 @@ describe('readStdinJson', () => {
     return process.stdin;
   }
 
+  function dropListener(event: string, fn: StdinListener) {
+    listeners[event] = (listeners[event] ?? []).filter((registered) => registered !== fn);
+    return process.stdin;
+  }
+
   function emitStdin(event: string, ...args: unknown[]) {
-    for (const fn of listeners[event] ?? []) {
+    for (const fn of [...(listeners[event] ?? [])]) {
       fn(...args);
     }
   }
 
-  beforeEach(() => {
+  function listenerCount(event: string): number {
+    return listeners[event]?.length ?? 0;
+  }
+
+  function install() {
     for (const key of Object.keys(listeners)) {
       delete listeners[key];
     }
-    onSpy = spyOn(process.stdin, 'on').mockImplementation(captureListener);
+    pauseCalls = 0;
+    destroyCalls = 0;
+    spies.push(spyOn(process.stdin, 'on').mockImplementation(captureListener));
+    spies.push(spyOn(process.stdin, 'off').mockImplementation(dropListener));
+    spies.push(
+      spyOn(process.stdin, 'pause').mockImplementation(() => {
+        pauseCalls += 1;
+        return process.stdin;
+      }),
+    );
+    spies.push(
+      spyOn(process.stdin, 'destroy').mockImplementation(() => {
+        destroyCalls += 1;
+        return process.stdin;
+      }),
+    );
+  }
+
+  function restore() {
+    for (const spy of spies.splice(0)) {
+      spy.mockRestore();
+    }
+  }
+
+  return {
+    emitStdin,
+    install,
+    restore,
+    listenerCount,
+    pauseCalls: () => pauseCalls,
+    destroyCalls: () => destroyCalls,
+  };
+}
+
+describe('readStdinJson', () => {
+  const stdin = createStdinHarness();
+
+  beforeEach(() => {
+    stdin.install();
   });
 
   afterEach(() => {
-    onSpy.mockRestore();
+    stdin.restore();
   });
+
+  function emitStdin(event: string, ...args: unknown[]) {
+    stdin.emitStdin(event, ...args);
+  }
 
   it('parses a JSON object from stdin', async () => {
     const payload = { tool_name: 'Read', tool_input: { file_path: '/tmp/test.ts' } };
@@ -116,39 +170,45 @@ describe('readStdinJson', () => {
       const err = await promise.catch((e: unknown) => e);
       expect(err).toBeInstanceOf(Error);
       expect((err as Error).message).toContain('stdin read timed out');
+      expect(stdin.listenerCount('data')).toBe(0);
+      expect(stdin.listenerCount('end')).toBe(0);
+      expect(stdin.listenerCount('error')).toBe(0);
+      expect(stdin.pauseCalls()).toBeGreaterThan(0);
+      expect(stdin.destroyCalls()).toBeGreaterThan(0);
+      emitStdin('end');
     } finally {
       timeoutSpy.mockRestore();
     }
   });
+
+  it('removes stdin listeners after a successful read', async () => {
+    const payload = { ok: true };
+    const promise = readStdinJson<typeof payload>();
+    emitStdin('data', Buffer.from(JSON.stringify(payload)));
+    emitStdin('end');
+    await promise;
+    expect(stdin.listenerCount('data')).toBe(0);
+    expect(stdin.listenerCount('end')).toBe(0);
+    expect(stdin.listenerCount('error')).toBe(0);
+    expect(stdin.pauseCalls()).toBeGreaterThan(0);
+    expect(stdin.destroyCalls()).toBeGreaterThan(0);
+  });
 });
 
 describe('readGitPushRefs', () => {
-  type StdinListener = (...args: any[]) => void;
-  const listeners: Record<string, StdinListener[]> = {};
-  let onSpy: ReturnType<typeof spyOn>;
-
-  function captureListener(event: string, fn: StdinListener) {
-    if (!listeners[event]) listeners[event] = [];
-    listeners[event].push(fn);
-    return process.stdin;
-  }
-
-  function emitStdin(event: string, ...args: unknown[]) {
-    for (const fn of listeners[event] ?? []) {
-      fn(...args);
-    }
-  }
+  const stdin = createStdinHarness();
 
   beforeEach(() => {
-    for (const key of Object.keys(listeners)) {
-      delete listeners[key];
-    }
-    onSpy = spyOn(process.stdin, 'on').mockImplementation(captureListener);
+    stdin.install();
   });
 
   afterEach(() => {
-    onSpy.mockRestore();
+    stdin.restore();
   });
+
+  function emitStdin(event: string, ...args: unknown[]) {
+    stdin.emitStdin(event, ...args);
+  }
 
   it('parses valid push ref lines', async () => {
     const localSha = 'abc1234abc1234abc1234abc1234abc1234abc123';

@@ -22,8 +22,13 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
+import {
+  CommandAuthenticatedInvocationContext,
+  CommandInvocationContext,
+  TelemetryFact,
+} from '@/commands/command-invocation-context.ts';
 import { getCustomRootHelp } from '@/commands/root-help.ts';
-import { ALPHA_ENV_VAR, SonarCommand, Stage } from '@/commands/sonar-command.ts';
+import { ALPHA_ENV_VAR, SonarCommand, SonarOption, Stage } from '@/commands/sonar-command.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
@@ -251,14 +256,14 @@ describe('SonarCommand', () => {
     );
 
     it('does not execute an unregistered alpha command', async () => {
-      const rootHandler = mock((_command?: string) => {});
-      const alphaHandler = mock(() => {});
+      const rootHandler = mock((_ctx: CommandInvocationContext, _command?: string) => {});
+      const alphaHandler = mock((_ctx: CommandInvocationContext) => {});
       const root = new SonarCommand('sonar').argument('[command]').anonymousAction(rootHandler);
       root.command('experimental').stage(Stage.Alpha).anonymousAction(alphaHandler);
 
       await root.parseAsync(['experimental'], { from: 'user' });
 
-      expect(rootHandler.mock.calls[0]?.[0]).toBe('experimental');
+      expect(rootHandler.mock.calls[0]?.[1]).toBe('experimental');
       expect(alphaHandler).not.toHaveBeenCalled();
     });
 
@@ -390,7 +395,7 @@ describe('SonarCommand', () => {
 
     it('is false after anonymousAction()', () => {
       const cmd = new SonarCommand();
-      cmd.anonymousAction(() => {});
+      cmd.anonymousAction((_ctx) => {});
       expect(cmd.requiresAuth).toBe(false);
     });
 
@@ -495,7 +500,7 @@ describe('SonarCommand', () => {
       const state = getDefaultState(VERSION);
       loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
       saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
-      const command = new SonarCommand('preview').stage(Stage.Beta()).anonymousAction(() => {});
+      const command = new SonarCommand('preview').stage(Stage.Beta()).anonymousAction((_ctx) => {});
 
       await command.parseAsync([], { from: 'user' });
       await command.parseAsync([], { from: 'user' });
@@ -511,8 +516,8 @@ describe('SonarCommand', () => {
       const state = getDefaultState(VERSION);
       loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
       saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
-      const first = new SonarCommand('first').stage(Stage.Beta()).anonymousAction(() => {});
-      const second = new SonarCommand('second').stage(Stage.Beta()).anonymousAction(() => {});
+      const first = new SonarCommand('first').stage(Stage.Beta()).anonymousAction((_ctx) => {});
+      const second = new SonarCommand('second').stage(Stage.Beta()).anonymousAction((_ctx) => {});
 
       await first.parseAsync([], { from: 'user' });
       await second.parseAsync([], { from: 'user' });
@@ -529,7 +534,7 @@ describe('SonarCommand', () => {
       state.config.betaCommandWarnings = { preview: '0.0.1' };
       loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
       saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
-      const command = new SonarCommand('preview').stage(Stage.Beta()).anonymousAction(() => {});
+      const command = new SonarCommand('preview').stage(Stage.Beta()).anonymousAction((_ctx) => {});
 
       await command.parseAsync([], { from: 'user' });
 
@@ -543,7 +548,7 @@ describe('SonarCommand', () => {
       });
       const command = new SonarCommand('preview-with-unreadable-state')
         .stage(Stage.Beta())
-        .anonymousAction(() => {});
+        .anonymousAction((_ctx) => {});
 
       await command.parseAsync([], { from: 'user' });
       await command.parseAsync([], { from: 'user' });
@@ -647,17 +652,59 @@ describe('SonarCommand', () => {
   // ─── anonymousAction() ────────────────────────────────────────────────────
 
   describe('anonymousAction()', () => {
-    it('calls the handler when the command is invoked', async () => {
-      const handler = mock(() => {});
+    it('calls the handler with CommandInvocationContext as first argument', async () => {
+      const handler = mock((_ctx: CommandInvocationContext) => {});
       const cmd = new SonarCommand();
       cmd.anonymousAction(handler);
       await cmd.parseAsync([], { from: 'user' });
       expect(handler).toHaveBeenCalledTimes(1);
+      const receivedContext = handler.mock.calls[0][0];
+      expect(receivedContext).toBeInstanceOf(CommandInvocationContext);
+      expect(receivedContext.isAlphaEligible()).toBe(false);
+      expect(receivedContext.isBetaEligible()).toBe(false);
+    });
+
+    it('sets isAlphaEligible() when command has Stage.Alpha and alpha is enabled', async () => {
+      process.env[ALPHA_ENV_VAR] = 'true';
+      const handler = mock((_ctx: CommandInvocationContext) => {});
+      const cmd = new SonarCommand({
+        runtime: { auth: null, isAlphaEnabled: true, isPrivateBetaEnabled: () => false },
+      });
+      cmd.stage(Stage.Alpha).anonymousAction(handler);
+      await cmd.parseAsync([], { from: 'user' });
+      const receivedContext = handler.mock.calls[0][0];
+      expect(receivedContext.isAlphaEligible()).toBe(true);
+      expect(receivedContext.isBetaEligible()).toBe(false);
+    });
+
+    it('sets isBetaEligible() for Open Beta', async () => {
+      const handler = mock((_ctx: CommandInvocationContext) => {});
+      const cmd = new SonarCommand();
+      cmd.stage(Stage.Beta()).anonymousAction(handler);
+      await cmd.parseAsync([], { from: 'user' });
+      const receivedContext = handler.mock.calls[0][0];
+      expect(receivedContext.isAlphaEligible()).toBe(false);
+      expect(receivedContext.isBetaEligible()).toBe(true);
+    });
+
+    it('sets isBetaEligible() for Private Beta when the user is entitled', async () => {
+      const handler = mock((_ctx: CommandInvocationContext) => {});
+      const cmd = new SonarCommand({
+        runtime: {
+          auth: null,
+          isAlphaEnabled: false,
+          isPrivateBetaEnabled: (key) => key === 'cli.beta.demo',
+        },
+      });
+      cmd.stage(Stage.Beta('cli.beta.demo')).anonymousAction(handler);
+      await cmd.parseAsync([], { from: 'user' });
+      const receivedContext = handler.mock.calls[0][0];
+      expect(receivedContext.isBetaEligible()).toBe(true);
     });
 
     it('catches handler errors and sets process.exitCode to 1', async () => {
       const cmd = new SonarCommand();
-      cmd.anonymousAction(() => {
+      cmd.anonymousAction((_ctx) => {
         throw new Error('handler error');
       });
       await cmd.parseAsync([], { from: 'user' });
@@ -666,26 +713,52 @@ describe('SonarCommand', () => {
 
     it('catches handler errors and outputs the error message', async () => {
       const cmd = new SonarCommand();
-      cmd.anonymousAction(() => {
+      cmd.anonymousAction((_ctx) => {
         throw new Error('handler error');
       });
       await cmd.parseAsync([], { from: 'user' });
       const errCall = getMockUiCalls().find((c) => c.method === 'error');
       expect(errCall?.args[0]).toBe('handler error');
     });
+
+    it('ctx.recordTelemetry queues items before a thrown CommandFailedError', async () => {
+      const cmd = new SonarCommand();
+      cmd.anonymousAction((ctx) => {
+        ctx.recordTelemetry(
+          new TelemetryFact('CliAnalysisCompleted', {
+            caller_command: 'analyze secrets',
+            analyzer: 'sonar-secrets',
+            analysis_id: 'id-2',
+            findings_count: 1,
+            exit_code: 51,
+            errors_count: 0,
+            failures_count: 0,
+            scan_duration_ms: 2,
+            details: '',
+          }),
+        );
+        throw new CommandFailedError('secrets found', { exitCode: 51 });
+      });
+      await cmd.parseAsync([], { from: 'user' });
+      expect(process.exitCode).toBe(51);
+      expect(cmd.invocationContext?.telemetryFacts()).toHaveLength(1);
+    });
   });
 
   // ─── authenticatedAction() ────────────────────────────────────────────────
 
   describe('authenticatedAction()', () => {
-    it('calls handler with resolved auth as first argument', async () => {
+    it('calls handler with CommandAuthenticatedInvocationContext as first argument', async () => {
       resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
-      const handler = mock((_auth: typeof FAKE_AUTH) => Promise.resolve());
+      const handler = mock((_ctx: CommandAuthenticatedInvocationContext) => Promise.resolve());
       const cmd = new SonarCommand();
       cmd.authenticatedAction(handler);
       await cmd.parseAsync([], { from: 'user' });
       expect(handler).toHaveBeenCalledTimes(1);
-      expect(handler.mock.calls[0][0]).toBe(FAKE_AUTH);
+      const receivedContext = handler.mock.calls[0][0];
+      expect(receivedContext.auth).toBe(FAKE_AUTH);
+      expect(receivedContext.isAlphaEligible()).toBe(false);
+      expect(receivedContext.isBetaEligible()).toBe(false);
     });
 
     it('does not call handler when not authenticated', async () => {
@@ -724,6 +797,193 @@ describe('SonarCommand', () => {
       });
       await cmd.parseAsync([], { from: 'user' });
       expect(process.exitCode).toBe(5);
+    });
+
+    it('sets isAlphaEligible() when command has Stage.Alpha and alpha is enabled', async () => {
+      process.env[ALPHA_ENV_VAR] = 'true';
+      resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
+      const handler = mock((_ctx: CommandAuthenticatedInvocationContext) => Promise.resolve());
+      const cmd = new SonarCommand({
+        runtime: { auth: null, isAlphaEnabled: true, isPrivateBetaEnabled: () => false },
+      });
+      cmd.stage(Stage.Alpha).authenticatedAction(handler);
+      await cmd.parseAsync([], { from: 'user' });
+      expect(handler).toHaveBeenCalledTimes(1);
+      const receivedContext = handler.mock.calls[0][0];
+      expect(receivedContext.isAlphaEligible()).toBe(true);
+      expect(receivedContext.isBetaEligible()).toBe(false);
+    });
+
+    it('sets isBetaEligible() for Open Beta', async () => {
+      resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
+      const handler = mock((_ctx: CommandAuthenticatedInvocationContext) => Promise.resolve());
+      const cmd = new SonarCommand();
+      cmd.stage(Stage.Beta()).authenticatedAction(handler);
+      await cmd.parseAsync([], { from: 'user' });
+      expect(handler).toHaveBeenCalledTimes(1);
+      const receivedContext = handler.mock.calls[0][0];
+      expect(receivedContext.isAlphaEligible()).toBe(false);
+      expect(receivedContext.isBetaEligible()).toBe(true);
+    });
+  });
+
+  // ─── staged options ───────────────────────────────────────────────────────
+
+  describe('staged options', () => {
+    function commandWithStagedOption(
+      option: SonarOption,
+      runtime?: { isAlphaEnabled?: boolean; isPrivateBetaEnabled?: (flagKey: string) => boolean },
+    ): SonarCommand {
+      const cmd = new SonarCommand('cmd', {
+        runtime: {
+          auth: null,
+          isAlphaEnabled: runtime?.isAlphaEnabled ?? false,
+          isPrivateBetaEnabled: runtime?.isPrivateBetaEnabled ?? (() => false),
+        },
+      });
+      cmd.addOption(option).anonymousAction(() => {});
+      cmd.exitOverride().configureOutput({ writeErr: () => {}, writeOut: () => {} });
+      return cmd;
+    }
+
+    async function parseUnknownOption(
+      cmd: SonarCommand,
+      args: string[],
+    ): Promise<{ code?: string; message?: string }> {
+      try {
+        await cmd.parseAsync(args, { from: 'user' });
+        return {};
+      } catch (err) {
+        return err as { code?: string; message?: string };
+      }
+    }
+
+    it('creates SonarOption instances from .option()', () => {
+      const cmd = new SonarCommand('cmd').option('--plain', 'A plain option');
+      expect(cmd.options[0]).toBeInstanceOf(SonarOption);
+      expect(cmd.options[0].isStable).toBe(true);
+    });
+
+    it('throws when staging a mandatory option', () => {
+      expect(() =>
+        new SonarOption('--need', 'Required').makeOptionMandatory().stage(Stage.Alpha),
+      ).toThrow("Cannot stage a required option as Alpha or Beta: '--need'");
+    });
+
+    it('throws when adding a staged option that was later made mandatory', () => {
+      const option = new SonarOption('--need', 'Required').stage(Stage.Alpha).makeOptionMandatory();
+      expect(() =>
+        new SonarCommand('cmd', {
+          runtime: { auth: null, isAlphaEnabled: true, isPrivateBetaEnabled: () => false },
+        }).addOption(option),
+      ).toThrow("Cannot stage a required option as Alpha or Beta: '--need'");
+    });
+
+    it('allows staging an option that takes a required argument', () => {
+      const cmd = commandWithStagedOption(
+        new SonarOption('--file <path>', 'File to preview').stage(Stage.Alpha),
+        { isAlphaEnabled: true },
+      );
+
+      expect(cmd.options.map((option) => option.long)).toContain('--file');
+    });
+
+    it('omits an Alpha option from help and treats it as unknown when alpha is disabled', async () => {
+      const cmd = commandWithStagedOption(
+        new SonarOption('--preview', 'Preview the plan').stage(Stage.Alpha),
+      );
+
+      expect(cmd.helpInformation()).not.toContain('--preview');
+      const caught = await parseUnknownOption(cmd, ['--preview']);
+      expect(caught.code).toBe('commander.unknownOption');
+      expect(caught.message).toContain("unknown option '--preview'");
+    });
+
+    it('registers an Alpha option with an [ALPHA] tag when alpha is enabled', async () => {
+      const handler = mock(() => {});
+      const cmd = new SonarCommand('cmd', {
+        runtime: { auth: null, isAlphaEnabled: true, isPrivateBetaEnabled: () => false },
+      });
+      cmd
+        .addOption(new SonarOption('--preview', 'Preview the plan').stage(Stage.Alpha))
+        .anonymousAction(handler);
+
+      expect(cmd.helpInformation()).toContain('--preview');
+      expect(cmd.helpInformation()).toContain('Preview the plan [ALPHA]');
+      expect(cmd.options[0]?.description).toBe('Preview the plan');
+
+      await cmd.parseAsync(['--preview'], { from: 'user' });
+      expect(handler).toHaveBeenCalledTimes(1);
+      const warning = getMockUiCalls().find((call) => call.method === 'info');
+      expect(warning?.args[0]).toBe(
+        "'--preview' is in alpha; may change or be removed without notice.",
+      );
+    });
+
+    it('lists Alpha options in a separate group at the bottom of help', () => {
+      const cmd = new SonarCommand('cmd', {
+        runtime: { auth: null, isAlphaEnabled: true, isPrivateBetaEnabled: () => false },
+      });
+      cmd.option('--stable', 'A stable option');
+      cmd.addOption(new SonarOption('--preview', 'Preview the plan').stage(Stage.Alpha));
+
+      expect(cmd.helpInformation()).toBe(
+        [
+          'Usage: cmd [options]',
+          '',
+          'Options:',
+          '  --stable    A stable option',
+          '  -h, --help  display help for command',
+          '',
+          '  --preview   Preview the plan [ALPHA]',
+          '',
+        ].join('\n'),
+      );
+    });
+
+    it('keeps Open Beta options visible with a [BETA] tag and warns once on use', async () => {
+      const state = getDefaultState(VERSION);
+      loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
+      saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
+      const cmd = commandWithStagedOption(
+        new SonarOption('--preview', 'Preview the plan').stage(Stage.Beta()),
+      );
+
+      expect(cmd.helpInformation()).toContain('Preview the plan [BETA]');
+
+      await cmd.parseAsync(['--preview'], { from: 'user' });
+      await cmd.parseAsync(['--preview'], { from: 'user' });
+
+      const warnings = getMockUiCalls().filter((call) => call.method === 'info');
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]?.args[0]).toBe("'--preview' is in beta and may change.");
+      expect(state.config.betaCommandWarnings).toEqual({ 'cmd --preview': VERSION });
+    });
+
+    it('omits a Private Beta option when the flag is off', async () => {
+      const cmd = commandWithStagedOption(
+        new SonarOption('--preview', 'Preview the plan').stage(Stage.Beta('cli.beta.preview')),
+      );
+
+      expect(cmd.helpInformation()).not.toContain('--preview');
+      const caught = await parseUnknownOption(cmd, ['--preview']);
+      expect(caught.code).toBe('commander.unknownOption');
+    });
+
+    it('registers a Private Beta option when the flag is on', () => {
+      const cmd = commandWithStagedOption(
+        new SonarOption('--preview', 'Preview the plan').stage(Stage.Beta('cli.beta.preview')),
+        { isPrivateBetaEnabled: (key) => key === 'cli.beta.preview' },
+      );
+
+      expect(cmd.helpInformation()).toContain('Preview the plan [BETA]');
+    });
+
+    it('tags staged options in the custom root help menu', () => {
+      const root = new SonarCommand('sonar');
+      root.addOption(new SonarOption('--preview', 'Preview the plan').stage(Stage.Beta()));
+
+      expect(getCustomRootHelp(root, root.createHelp())).toContain('Preview the plan [BETA]');
     });
   });
 });

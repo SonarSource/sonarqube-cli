@@ -20,6 +20,11 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 
+import {
+  type CommandAuthenticatedInvocationContext,
+  type CommandInvocationContext,
+  TelemetryFact,
+} from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { buildSubprocessNetworkEnv } from '@/core/host/connectivity/network-config.ts';
@@ -27,13 +32,14 @@ import { installSecretsBinary } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
 import type { SpawnResult, StdioMode } from '@/core/process/process.ts';
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
+import { blank, print, success, warn } from '@/core/ui';
+import { green, yellow } from '@/core/ui/colors.ts';
+
+import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
 import {
   SECRETS_CALLER_COMMANDS,
   type SecretsCallerCommand,
-} from '@/core/telemetry/secrets-analysis-telemetry.ts';
-import { emitAnalysisCompleted } from '@/core/telemetry/telemetry-events.ts';
-import { blank, print, success, warn } from '@/core/ui';
-import { green, yellow } from '@/core/ui/colors.ts';
+} from './secrets-analysis-telemetry.ts';
 
 export interface AnalyzeSecretsOptions {
   paths?: string[];
@@ -97,20 +103,21 @@ export function parseSecretsJson(stdout: string): SecretsJsonOutput {
 }
 
 /**
- * Emits a single CliAnalysisCompleted event for one sonar-secrets run, carrying `details`
- * (JSON-encoded blob when findings were reported, `""` otherwise). Telemetry write failures
- * are swallowed by the emit helper.
+ * Builds one CliAnalysisCompleted fact for a sonar-secrets run (`details` is a
+ * JSON blob when findings were reported, `""` otherwise).
  *
- * Pass `result: null` for a run that failed to execute (spawn error or timeout): the completed
- * event is emitted with `exit_code: null` and `failures_count: 1` so failed-to-run scans are
- * still counted. Prefer {@link scanAndEmitSecrets}, which handles both outcomes for callers.
+ * Pass `result: null` for a run that failed to execute (spawn error or timeout):
+ * `exit_code: null` and `failures_count: 1` so failed-to-run scans are still counted.
  */
-async function emitSecretsRunTelemetry(
+function buildSecretsAnalysisTelemetryFact(
   callerCommand: SecretsCallerCommand,
-  auth: ResolvedAuth,
   result: { exitCode: number | null; stdout: string } | null,
   durationMs: number,
-): Promise<SecretsJsonOutput> {
+  auth: ResolvedAuth,
+): {
+  parsed: SecretsJsonOutput;
+  fact: TelemetryFact<AnalysisCompletedPayload>;
+} {
   const parsed = result ? parseSecretsJson(result.stdout) : { issues: [] };
 
   const { issues, errors } = parsed;
@@ -136,53 +143,63 @@ async function emitSecretsRunTelemetry(
     });
   }
 
-  await emitAnalysisCompleted(auth, {
-    caller_command: callerCommand,
-    analyzer: 'sonar-secrets',
-    analysis_id: analysisId,
-    findings_count: issues.length,
-    exit_code: exitCode,
-    errors_count: errors?.length ?? 0,
-    failures_count: failuresCount,
-    scan_duration_ms: durationMs,
-    details,
-  });
-
-  return parsed;
+  return {
+    parsed,
+    fact: new TelemetryFact(
+      CLI_ANALYSIS_COMPLETED,
+      {
+        caller_command: callerCommand,
+        analyzer: 'sonar-secrets',
+        analysis_id: analysisId,
+        findings_count: issues.length,
+        exit_code: exitCode,
+        errors_count: errors?.length ?? 0,
+        failures_count: failuresCount,
+        scan_duration_ms: durationMs,
+        details,
+      } satisfies AnalysisCompletedPayload,
+      { auth },
+    ),
+  };
 }
 
 /**
- * Runs one sonar-secrets spawn and emits CliAnalysisCompleted for either outcome:
- *  - the process ran (any exit code) → telemetry via {@link emitSecretsRunTelemetry};
+ * Runs one sonar-secrets spawn and records CliAnalysisCompleted for either outcome:
+ *  - the process ran (any exit code) → telemetry via {@link buildSecretsAnalysisTelemetryFact};
  *  - the process failed to run (spawn error or timeout, i.e. the promise rejected) →
  *    a failures_count:1 event with exit_code null, then the error is re-thrown.
  *
- * Re-throwing preserves each caller's own fail-open / fail-closed / block handling; because the
- * emit happens first, failed runs are recorded even when the caller then throws (e.g. git hooks
- * failing closed under environment-based auth).
+ * Telemetry is always deferred via {@link CommandInvocationContext.recordTelemetry} for
+ * `postAction` commit. `SonarCommand.runCommand` catches handler throws, so Commander
+ * still runs `postAction` and the buffer is drained. Re-throwing preserves each
+ * caller's fail-open / fail-closed handling; recording happens first so failed
+ * runs are still counted.
  */
 export async function scanAndEmitSecrets(
   callerCommand: SecretsCallerCommand,
   auth: ResolvedAuth,
   run: () => Promise<SpawnResult>,
+  ctx: CommandInvocationContext,
 ): Promise<{ result: SpawnResult; parsed: SecretsJsonOutput }> {
   const start = performance.now();
   try {
     const result = await run();
-    const parsed = await emitSecretsRunTelemetry(
+    const { parsed, fact } = buildSecretsAnalysisTelemetryFact(
       callerCommand,
-      auth,
       result,
       Math.round(performance.now() - start),
+      auth,
     );
+    ctx.recordTelemetry(fact);
     return { result, parsed };
   } catch (err) {
-    await emitSecretsRunTelemetry(
+    const { fact } = buildSecretsAnalysisTelemetryFact(
       callerCommand,
-      auth,
       null,
       Math.round(performance.now() - start),
-    ).catch(() => undefined);
+      auth,
+    );
+    ctx.recordTelemetry(fact);
     throw err;
   }
 }
@@ -193,9 +210,9 @@ interface ScanDisplayContext {
 
 export async function analyzeSecrets(
   options: AnalyzeSecretsOptions,
-  auth: ResolvedAuth,
+  ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  return handleCheckCommand(options, auth).catch(handleScanError);
+  return handleCheckCommand(options, ctx).catch(handleScanError);
 }
 
 // Env var names expected by the sonar-secrets binary
@@ -263,20 +280,31 @@ function buildAuthEnv(auth: ResolvedAuth): Record<string, string> {
 
 async function handleCheckCommand(
   options: AnalyzeSecretsOptions,
-  auth: ResolvedAuth,
+  ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
+  const { auth } = ctx;
   validateScanOptions(options);
   const binaryPath = await installSecretsBinary();
   const scanStartTime = Date.now();
   const callerCommand = options.telemetryCallerCommand ?? SECRETS_CALLER_COMMANDS.analyzeSecrets;
 
   if (options.stdin) {
-    const { result, parsed } = await scanAndEmitSecrets(callerCommand, auth, () =>
-      runSecretsBinary(binaryPath, ['--input'], auth, 'inherit'),
+    const { result, parsed } = await scanAndEmitSecrets(
+      callerCommand,
+      auth,
+      () => runSecretsBinary(binaryPath, ['--input'], auth, 'inherit'),
+      ctx,
     );
     reportScanResult(result, parsed, scanStartTime, { paths: [] });
   } else {
-    await performPathsScan(binaryPath, options.paths ?? [], auth, scanStartTime, callerCommand);
+    await performPathsScan(
+      binaryPath,
+      options.paths ?? [],
+      auth,
+      scanStartTime,
+      callerCommand,
+      ctx,
+    );
   }
 }
 
@@ -297,6 +325,7 @@ async function performPathsScan(
   auth: ResolvedAuth,
   scanStartTime: number,
   callerCommand: SecretsCallerCommand,
+  ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   if (paths.length === 0) {
     throw new InvalidOptionError('At least one path is required');
@@ -308,8 +337,11 @@ async function performPathsScan(
     }
   }
 
-  const { result, parsed } = await scanAndEmitSecrets(callerCommand, auth, () =>
-    runSecretsBinary(binaryPath, paths, auth),
+  const { result, parsed } = await scanAndEmitSecrets(
+    callerCommand,
+    auth,
+    () => runSecretsBinary(binaryPath, paths, auth),
+    ctx,
   );
   reportScanResult(result, parsed, scanStartTime, { paths });
 }

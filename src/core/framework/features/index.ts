@@ -22,10 +22,8 @@ export {
   type DependencyDeclaration,
   scaScannerBinaryDependency,
   sonarSecretsBinaryDependency,
-  SonarSourceBinary,
   sonarSourceBinary,
   type SonarSourceBinaryDependencyOptions,
-  type SonarSourceBinaryDescriptor,
 } from '../dependencies';
 export {
   jsonPatch,
@@ -58,6 +56,7 @@ export { buildApplications } from './feature-target.ts';
 export {
   installIntegration,
   type InstallIntegrationOptions,
+  type InstallIntegrationSuccessFacts,
   makeContext,
 } from './install-integration.ts';
 export {

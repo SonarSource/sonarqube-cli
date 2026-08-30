@@ -20,7 +20,6 @@
 
 import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -35,7 +34,10 @@ import { pemToPkcs12 } from '@/core/host/crypto/pkcs12.ts';
 
 import {
   ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
+  CLI_COMMAND_NAME,
   CLI_TMP_DIR,
+  ENV_SONAR_USER_HOME,
+  getSonarUserHome,
   SONARQUBE_MCP_DOCKER_IMAGE_NAME,
 } from '../../config-constants.ts';
 import { normalizePath } from '../../io/fs-utils.ts';
@@ -45,6 +47,7 @@ import type { RedactedUrl } from '../redacted-url.ts';
 export interface McpServerConfig {
   command: string;
   args: string[];
+  env?: Record<string, string>;
 }
 
 export interface McpContainerCommand {
@@ -66,8 +69,15 @@ export type McpServerContext =
       projectKey?: string;
     };
 
+function mcpServerEnv(): Record<string, string> | undefined {
+  const customHome = process.env[ENV_SONAR_USER_HOME];
+  if (customHome === undefined || customHome.trim() === '') {
+    return undefined;
+  }
+  return { [ENV_SONAR_USER_HOME]: getSonarUserHome() };
+}
+
 export function getMcpConfig(
-  cliPath: string,
   context: McpServerContext,
   options: McpServerOptions = {},
 ): McpServerConfig {
@@ -89,7 +99,10 @@ export function getMcpConfig(
     args.push('--toolsets', options.toolsets);
   }
 
-  return { command: cliPath, args };
+  const env = mcpServerEnv();
+  return env === undefined
+    ? { command: CLI_COMMAND_NAME, args }
+    : { command: CLI_COMMAND_NAME, args, env };
 }
 
 // Path where update-ca-certificates picks up custom CA certs inside the MCP container (Debian/Alpine convention).
@@ -363,28 +376,6 @@ export function resolveMcpContainerCommand(
     : getMcpContainerCommand(auth, detection.runtime, context, options, network);
 }
 
-export async function writeMcpServerEntry(filePath: string, serverConfig: object): Promise<void> {
-  let existing: Record<string, unknown> = {};
-  if (existsSync(filePath)) {
-    const raw = await readFile(filePath, 'utf-8');
-    if (raw.trim().length === 0) {
-      existing = {};
-    } else {
-      try {
-        existing = JSON.parse(raw) as Record<string, unknown>;
-      } catch {
-        throw new Error(`'${filePath}' contains invalid JSON. Please fix or delete it and re-run.`);
-      }
-    }
-  }
-
-  const mcpServers = (existing.mcpServers as Record<string, unknown> | undefined) ?? {};
-  existing.mcpServers = { ...mcpServers, sonarqube: serverConfig };
-
-  mkdirSync(dirname(filePath), { recursive: true });
-  await writeFile(filePath, JSON.stringify(existing, null, 2), 'utf-8');
-}
-
 export function getMcpConfigFilePath(
   agent: string,
   isGlobal: boolean,
@@ -409,19 +400,4 @@ export function getMcpConfigFilePath(
     return ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON;
   }
   throw new Error(`Unsupported agent: ${agent}`);
-}
-
-export async function setupMcpServerForAgent(
-  agent: 'claude' | 'copilot',
-  projectRoot: string,
-  isGlobal: boolean,
-  projectKey: string | undefined,
-): Promise<void> {
-  const targetFile = getMcpConfigFilePath(agent, isGlobal, projectRoot);
-  const serverConfig = getMcpConfig(
-    normalizePath(process.execPath),
-    isGlobal ? { withFsMount: false } : { withFsMount: true, projectRoot, projectKey },
-  );
-
-  await writeMcpServerEntry(targetFile, serverConfig);
 }

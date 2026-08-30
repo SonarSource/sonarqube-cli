@@ -43,7 +43,6 @@ export type ContextAugmentationBinaryDependencyOptions = BaseDependencyOptions;
 export class ContextAugmentationBinaryDependency implements DependencyDeclaration {
   readonly id: string;
   readonly displayName?: string;
-  readonly dependencyType = 'context-augmentation-binary';
   readonly version: string;
 
   constructor(options: ContextAugmentationBinaryDependencyOptions) {
@@ -62,7 +61,6 @@ export class ContextAugmentationBinaryDependency implements DependencyDeclaratio
     const binaryPath = await installContextAugmentationBinary();
     return {
       id: this.id,
-      dependencyType: this.dependencyType,
       version: this.version,
       path: binaryPath,
     };

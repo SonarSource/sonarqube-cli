@@ -20,7 +20,7 @@
 
 // Integrate command — setup SonarQube integration for Codex.
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 
 import { finalizeAgentInstall } from '../_common/agent-integrate-postlude.ts';
@@ -30,8 +30,9 @@ import { CODEX_INTEGRATION_ID, type CodexIntegrationOptions } from './declaratio
 
 export async function integrateCodex(
   options: IntegrateAgentOptions,
-  auth: ResolvedAuth,
+  ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
+  const { auth } = ctx;
   if (!options.nonInteractive) {
     printAgentNonInteractiveAlternativeHint(
       'sonar integrate codex --non-interactive',
@@ -39,12 +40,13 @@ export async function integrateCodex(
     );
   }
 
-  const ctx = await displayAgentIntegratePrelude('Codex', 'codex', options, auth);
+  const integrateCtx = await displayAgentIntegratePrelude('Codex', 'codex', options, auth);
 
   await finalizeAgentInstall<CodexIntegrationOptions>({
     integrationId: CODEX_INTEGRATION_ID,
-    context: ctx,
+    context: integrateCtx,
     options,
     auth,
+    ctx,
   });
 }

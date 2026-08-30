@@ -23,7 +23,7 @@ import { timed } from '@/core/observability/timed.ts';
 import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 
 import { readSqaaFileContent, toRelativePosixPath } from './sqaa-api.ts';
-import { resolveCloudAuthAndProject } from './sqaa-auth.ts';
+import { resolveSqaaAuthAndProject } from './sqaa-auth.ts';
 import {
   resolveChangeSet,
   resolveSqaaBranch,
@@ -51,7 +51,7 @@ import type {
 async function buildSqaaJsonReportFromEntries(
   entries: ResolvedSqaaFileEntry[],
   resolved: SqaaResolvedContext,
-  auth: ResolvedAuth,
+  _auth: ResolvedAuth,
   branch: string | undefined,
   wireDepth: SqaaDeepWireDepth | undefined,
   displayDepth: SqaaAnalysisDepth,
@@ -62,7 +62,7 @@ async function buildSqaaJsonReportFromEntries(
     const fileContent = readSqaaFileContent(absolutePath);
     const { result: fetchResult, durationMs } = await timed(() =>
       fetchSingleFileReport(
-        resolved.cloudAuth,
+        resolved.sqaaAuth,
         resolved.projectKey,
         absolutePath,
         fileContent,
@@ -71,7 +71,7 @@ async function buildSqaaJsonReportFromEntries(
         displayDepth,
       ),
     );
-    await finishSqaaTelemetryFromReport(fetchResult.report, auth, runOptions, durationMs);
+    finishSqaaTelemetryFromReport(fetchResult.report, runOptions, durationMs);
     return fetchResult.report;
   }
 
@@ -89,7 +89,7 @@ async function buildSqaaJsonReportFromEntries(
     ),
   );
   const report = buildJsonReport(tally, [], allPaths, cwd, displayDepth);
-  await finishSqaaTelemetryFromReport(report, auth, runOptions, durationMs);
+  finishSqaaTelemetryFromReport(report, runOptions, durationMs);
   return report;
 }
 
@@ -113,7 +113,7 @@ async function buildSqaaJsonReportFromChangeSet(
     );
   }
 
-  const resolution = await resolveCloudAuthAndProject(auth, project, changeSet.repoRoot);
+  const resolution = await resolveSqaaAuthAndProject(auth, project, changeSet.repoRoot);
   const resolved = resolveSqaaContext(resolution, { requireProject: false });
   if (!resolved) return null;
 
@@ -134,7 +134,7 @@ async function buildSqaaJsonReportFromChangeSet(
     ),
   );
   const report = buildJsonReport(tally, ignored, allPaths, repoRoot, displayDepth);
-  await finishSqaaTelemetryFromReport(report, auth, runOptions, durationMs);
+  finishSqaaTelemetryFromReport(report, runOptions, durationMs);
   return report;
 }
 
@@ -148,12 +148,13 @@ export async function buildSqaaJsonReport(
   auth: ResolvedAuth,
   runOptions: AnalyzeSqaaRunOptions = {},
 ): Promise<SqaaJsonReport | null> {
+  const telemetryOptions = { ...runOptions, auth };
   const { file: rawFiles, branch, project, force, depth: rawDepth, forcedDepth } = options;
 
   if (rawFiles?.length) {
     const entries = resolveSqaaFileArgs(rawFiles);
     const resolvedBranch = await resolveSqaaBranch(branch, entries[0].absolutePath);
-    const resolution = await resolveCloudAuthAndProject(auth, project);
+    const resolution = await resolveSqaaAuthAndProject(auth, project);
     const resolved = resolveSqaaContext(resolution, { requireProject: false });
     if (!resolved) return null;
 
@@ -166,7 +167,7 @@ export async function buildSqaaJsonReport(
         resolvedBranch,
         wireDepth,
         displayDepth,
-        runOptions,
+        telemetryOptions,
       );
     }
 
@@ -182,9 +183,9 @@ export async function buildSqaaJsonReport(
       resolvedBranch,
       wireDepth,
       displayDepth,
-      runOptions,
+      telemetryOptions,
     );
   }
 
-  return buildSqaaJsonReportFromChangeSet(options, auth, rawDepth, forcedDepth, runOptions);
+  return buildSqaaJsonReportFromChangeSet(options, auth, rawDepth, forcedDepth, telemetryOptions);
 }

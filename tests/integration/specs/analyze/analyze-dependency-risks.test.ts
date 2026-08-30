@@ -178,9 +178,9 @@ describe('analyze dependency-risks', () => {
         true,
       );
       const state = harness.stateJsonFile.asJson() as {
-        tools: { installed: Array<{ name: string; version: string }> };
+        dependencies: { installed: Array<{ id: string; version: string }> };
       };
-      const recorded = state.tools.installed.find((t) => t.name === 'sca-scanner-cli');
+      const recorded = state.dependencies.installed.find((d) => d.id === 'sca-scanner-cli');
       expect(recorded).toBeDefined();
       expect(recorded?.version).toBeDefined();
     },

@@ -26,8 +26,9 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
+import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
-import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 
 import { scanAndEmitSecrets } from '../analyze/secrets.ts';
 import {
@@ -36,6 +37,7 @@ import {
   scanTextForSecrets,
   secretsFoundInScan,
 } from './cursor-secrets-block.ts';
+import type { HookCommandResult } from './hook-command-result.ts';
 import {
   type HookDependencies,
   MissingDependenciesError,
@@ -46,19 +48,22 @@ import { readStdinJson } from './stdin.ts';
 interface CursorBeforeReadFilePayload {
   file_path?: string;
   content?: string;
+  conversation_id?: string;
 }
 
-export async function cursorPreFileRead(): Promise<void> {
+export async function cursorPreFileRead(ctx: CommandInvocationContext): Promise<HookCommandResult> {
   let payload: CursorBeforeReadFilePayload;
   try {
     payload = await readStdinJson<CursorBeforeReadFilePayload>();
   } catch {
-    return; // unparseable stdin — allow
+    return { agentSessionId: null }; // unparseable stdin — allow
   }
+
+  const agentSessionId = payload.conversation_id ?? null;
 
   const filePath = payload.file_path;
   const content = await resolveFileContent(payload, filePath);
-  if (content === undefined) return;
+  if (content === undefined) return { agentSessionId };
 
   let deps: HookDependencies;
   try {
@@ -66,24 +71,29 @@ export async function cursorPreFileRead(): Promise<void> {
   } catch (err) {
     if (err instanceof MissingDependenciesError) {
       await denyCursor(err.message);
-      return;
+      return { agentSessionId };
     }
     throw err;
   }
 
   let scan: Awaited<ReturnType<typeof scanAndEmitSecrets>>;
   try {
-    scan = await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.cursorPreFileRead, deps.auth, () =>
-      scanTextForSecrets(deps, content),
+    scan = await scanAndEmitSecrets(
+      SECRETS_CALLER_COMMANDS.cursorPreFileRead,
+      deps.auth,
+      () => scanTextForSecrets(deps, content),
+      ctx,
     );
   } catch (err) {
     logger.debug(`cursorPreFileRead secrets scan failed: ${(err as Error).message}`);
-    return;
+    return { agentSessionId };
   }
 
   if (secretsFoundInScan(scan.result)) {
     await denyCursorFileAccess(filePath);
   }
+
+  return { agentSessionId };
 }
 
 async function resolveFileContent(

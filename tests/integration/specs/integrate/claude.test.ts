@@ -160,7 +160,6 @@ describe('integrate claude', () => {
       expect(state.dependencies.installed).toMatchObject([
         {
           id: 'sonar-secrets',
-          dependencyType: 'sonarsource-binary',
         },
       ]);
     },
@@ -538,14 +537,17 @@ describe('integrate claude', () => {
       const command = String(
         spacedDir.file('.claude', 'settings.json').asJson().hooks.PreToolUse[0].hooks[0].command,
       );
-      // Project scope emits a relative, fully-quoted path (double quotes on
-      // Windows, single quotes on Unix) — deterministic regardless of the
-      // spaced project directory, so assert the exact command.
-      const scriptRel = '.claude/hooks/sonar-secrets/build-scripts/pretool-secrets';
+      // Project scope anchors the path to Claude Code's own `${CLAUDE_PROJECT_DIR}`
+      // placeholder (cwd-independent) and fully double-quotes it on both platforms —
+      // single-quoting on Unix would suppress the shell's `${var}` expansion and leave the
+      // placeholder unexpanded — deterministic regardless of the spaced project directory, so
+      // assert the exact command.
+      const scriptRel =
+        '${CLAUDE_PROJECT_DIR}/.claude/hooks/sonar-secrets/build-scripts/pretool-secrets';
       expect(command).toBe(
         IS_WINDOWS
           ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptRel}.ps1"`
-          : `'${scriptRel}.sh'`,
+          : `"${scriptRel}.sh"`,
       );
     },
     { timeout: 30000 },
@@ -653,7 +655,7 @@ describe('integrate claude — Vortex entitlement guard', () => {
         .start();
 
       // Point both Cloud URL constants at the fake server so SONARCLOUD_HOSTNAME check passes
-      // and getOrganizationId / checkSqaaEntitlement hit the same fake server
+      // and getOrganizationId / checkHubEntitlement hit the same fake server
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 
@@ -872,7 +874,7 @@ describe('integrate claude — Vortex entitlement guard', () => {
 
       expect(result.exitCode).toBe(0);
       expect(`${result.stdout}\n${result.stderr}`).toContain(
-        'Your organization has reached its Vortex usage limit',
+        'The Vortex usage limit has been reached',
       );
       const settings = harness.cwd.file('.claude', 'settings.json').asJson();
       expect(settings.hooks?.PostToolUse).toBeDefined();
@@ -1067,7 +1069,7 @@ describe('integrate claude — file placement (local vs global)', () => {
     );
 
     it(
-      'registers hook commands with relative paths in settings.json',
+      'registers hook commands anchored to ${CLAUDE_PROJECT_DIR} in settings.json',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -1088,11 +1090,13 @@ describe('integrate claude — file placement (local vs global)', () => {
           String(settings.hooks.UserPromptSubmit[0].hooks[0].command),
         );
 
-        // Must be relative (not absolute) so they resolve from the project root
+        // Must not be a real absolute path, and anchored to Claude Code's own
+        // project-root placeholder (not cwd) so they still resolve when cwd
+        // diverges from the project root (worktrees, cwd changes).
         expect(isAbsolute(preToolPath)).toBe(false);
-        expect(preToolPath.startsWith('.claude')).toBe(true);
+        expect(preToolPath.startsWith('${CLAUDE_PROJECT_DIR}/.claude')).toBe(true);
         expect(isAbsolute(promptPath)).toBe(false);
-        expect(promptPath.startsWith('.claude')).toBe(true);
+        expect(promptPath.startsWith('${CLAUDE_PROJECT_DIR}/.claude')).toBe(true);
       },
       { timeout: 30000 },
     );
@@ -1460,7 +1464,6 @@ describe.skipIf(IS_WINDOWS)('integrate claude — legacy state without agentExte
                 },
               },
             },
-            tools: { installed: [] },
             telemetry: { enabled: false },
           },
           null,
@@ -1510,7 +1513,8 @@ describe.skipIf(IS_WINDOWS)('integrate claude — legacy state without agentExte
       expect(pretoolContent).toContain('sonar hook claude-pre-tool-use');
       expect(pretoolContent).not.toContain('sonar analyze');
 
-      // settings.json must have correctly structured hook entries (relative paths, project-level)
+      // settings.json must have correctly structured hook entries (project-level,
+      // anchored to Claude Code's ${CLAUDE_PROJECT_DIR} placeholder rather than cwd)
       const settings = harness.cwd.file('.claude', 'settings.json').asJson();
       const preToolEntry = settings.hooks?.PreToolUse?.[0];
       const promptEntry = settings.hooks?.UserPromptSubmit?.[0];
@@ -1519,13 +1523,13 @@ describe.skipIf(IS_WINDOWS)('integrate claude — legacy state without agentExte
       expect(preToolEntry?.hooks?.[0]?.timeout).toBe(60);
       // Command is shell-quoted; compare the unquoted path.
       expect(hookScriptPath(String(preToolEntry?.hooks?.[0]?.command))).toBe(
-        '.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh',
+        '${CLAUDE_PROJECT_DIR}/.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh',
       );
       expect(promptEntry?.matcher).toBe('*');
       expect(promptEntry?.hooks?.[0]?.type).toBe('command');
       expect(promptEntry?.hooks?.[0]?.timeout).toBe(60);
       expect(hookScriptPath(String(promptEntry?.hooks?.[0]?.command))).toBe(
-        '.claude/hooks/sonar-secrets/build-scripts/prompt-secrets.sh',
+        '${CLAUDE_PROJECT_DIR}/.claude/hooks/sonar-secrets/build-scripts/prompt-secrets.sh',
       );
     },
     { timeout: 30000 },
@@ -1562,7 +1566,6 @@ describe.skipIf(IS_WINDOWS)('post-update migration on CLI upgrade', () => {
                 hooks: { installed: [] },
               },
             },
-            tools: { installed: [] },
             telemetry: { enabled: false },
           },
           null,
@@ -1683,7 +1686,6 @@ describe.skipIf(IS_WINDOWS)('post-update migration on CLI upgrade', () => {
                 updatedAt: now,
               },
             ],
-            tools: { installed: [] },
             telemetry: { enabled: false },
           },
           null,
@@ -1982,10 +1984,9 @@ describe('integrate claude — interactive feature selection', () => {
   it(
     'prompts per feature, installs accepted features, and shows the Vortex promotion when not entitled',
     async () => {
-      // On-premise auth with no org: SQAA is not available, so it is skipped
-      // without a prompt but surfaces the shared promotion message. Context
-      // Augmentation is skipped silently. The secret scanning hooks and MCP
-      // server features each ask.
+      // On-premise auth with no org and no CAG Hub: Vortex is skipped with the
+      // Server unavailable line. Context Augmentation is skipped silently. The
+      // secret scanning hooks and MCP server features each ask.
       const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
       harness.withAuth(server.baseUrl(), 'tok');
       harness.cwd.writeFile(
@@ -2003,10 +2004,8 @@ describe('integrate claude — interactive feature selection', () => {
       const output = `${result.stdout}\n${result.stderr}`;
       expect(output).toContain('Install secret scanning hooks?');
       expect(output).toContain('Install MCP server?');
-      // SQAA is not eligible, so it is skipped without a prompt but the shared
-      // promotion message is surfaced.
       expect(output).not.toContain('Install Vortex?');
-      expect(output).toContain('Vortex is available on SonarQube Cloud');
+      expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
 
       // Accepted features are installed on disk.
       expect(
@@ -2267,7 +2266,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
   );
 
   it(
-    'uninstalls the sonar-secrets binary when the removed feature was its last referrer',
+    'keeps the sonar-secrets binary when the removed feature was its last referrer',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
       harness.withAuth(server.baseUrl(), 'tok');
@@ -2278,8 +2277,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       // Project scope, decline keeping the secrets hooks ('n') then confirm removal
-      // (default Yes); keep the MCP server (default Yes). No other feature references
-      // sonar-secrets, so the binary is orphaned and uninstalled.
+      // (default Yes); keep the MCP server (default Yes).
       const result = await harness.run('integrate claude', {
         stdinChunks: ['\r', 'n', '\r', '\r'],
         stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
@@ -2290,14 +2288,14 @@ describe('integrate claude — keep/remove already-installed features', () => {
       expect(output).toContain('secret scanning hooks (currently installed)  Keep?');
       expect(output).toContain('secret scanning hooks will be removed.');
 
-      // The feature is gone and, being the last referrer, so is the binary.
+      // The feature is gone, but the binary and its record survive.
       expect(findClaudeFeature(harness, 'sonar-secrets-hooks')).toBeUndefined();
       const state = harness.stateJsonFile.asJson();
       expect(
         state.dependencies.installed.find((dep: { id: string }) => dep.id === 'sonar-secrets'),
-      ).toBeUndefined();
+      ).toBeDefined();
       expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
-        false,
+        true,
       );
     },
     { timeout: 30000 },
@@ -2402,14 +2400,14 @@ describe('integrate claude — keep/remove already-installed features', () => {
       expect(result.exitCode).toBe(0);
 
       // With no features left, the whole claude-code integration entry is pruned,
-      // and the orphaned sonar-secrets binary is uninstalled with it.
+      // while the sonar-secrets binary and its record stay behind.
       expect(getInstalledIntegration(harness, 'claude-code')).toBeUndefined();
       const state = harness.stateJsonFile.asJson();
       expect(
         state.dependencies.installed.find((dep: { id: string }) => dep.id === 'sonar-secrets'),
-      ).toBeUndefined();
+      ).toBeDefined();
       expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
-        false,
+        true,
       );
     },
     { timeout: 30000 },

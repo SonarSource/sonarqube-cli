@@ -20,25 +20,37 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import * as authResolver from '@/core/auth/auth-resolver.ts';
-import * as sqaaTelemetry from '@/core/telemetry/sqaa-analysis-telemetry.ts';
+import * as sqaaTelemetry from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import {
   SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
   SQAA_HOOK_TELEMETRY_EXIT_CODE,
-} from '@/core/telemetry/sqaa-analysis-telemetry.ts';
+} from '@/commands/analyze/sqaa-analysis-telemetry.ts';
+import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
+import * as authResolver from '@/core/auth/auth-resolver.ts';
+import * as projectInfo from '@/core/project-info.ts';
 
 import * as sqaaModule from '../../../../src/commands/analyze/sqaa.ts';
 import { codexPostToolUse } from '../../../../src/commands/hook/codex-post-tool-use.ts';
 import * as hookOutput from '../../../../src/commands/hook/format-sqaa-hook-context.ts';
+import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
 
 describe('codexPostToolUse', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;
   let resolveAuthSpy: ReturnType<typeof spyOn>;
   let buildSqaaJsonReportSpy: ReturnType<typeof spyOn>;
   let emitSqaaAnalysisTelemetrySpy: ReturnType<typeof spyOn>;
+  let readStdinJsonSpy: ReturnType<typeof spyOn>;
+  let ctx: CommandInvocationContext;
+  let discoverProjectSpy: ReturnType<typeof spyOn>;
+  const originalStdinIsTTY = process.stdin.isTTY;
 
   beforeEach(() => {
+    ctx = new CommandInvocationContext();
+    Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: false });
     stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
+    readStdinJsonSpy = spyOn(stdinModule, 'readStdinJson').mockRejectedValue(
+      new Error('no stdin in unit test'),
+    );
     resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue({
       token: 'tok',
       serverUrl: 'https://sonarcloud.io',
@@ -55,8 +67,15 @@ describe('codexPostToolUse', () => {
     });
     emitSqaaAnalysisTelemetrySpy = spyOn(
       sqaaTelemetry,
-      'emitSqaaAnalysisTelemetry',
-    ).mockImplementation(() => Promise.resolve());
+      'recordSqaaAnalysisTelemetry',
+    ).mockImplementation(() => {});
+    // Only exercised when a test omits `project` — an explicit project short-circuits it.
+    discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
+      repoRoot: process.cwd(),
+      projectRoot: process.cwd(),
+      projectKey: undefined,
+      configSources: [],
+    });
   });
 
   afterEach(() => {
@@ -64,10 +83,34 @@ describe('codexPostToolUse', () => {
     resolveAuthSpy.mockRestore();
     buildSqaaJsonReportSpy.mockRestore();
     emitSqaaAnalysisTelemetrySpy.mockRestore();
+    readStdinJsonSpy.mockRestore();
+    discoverProjectSpy.mockRestore();
+    Object.defineProperty(process.stdin, 'isTTY', {
+      configurable: true,
+      value: originalStdinIsTTY,
+    });
+  });
+
+  it('skips stdin when attached to a TTY', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: true });
+
+    await codexPostToolUse(ctx, { project: 'my-project' });
+
+    expect(readStdinJsonSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns session id from piped stdin JSON', async () => {
+    const payload = { session_id: 'codex-session-1' };
+    readStdinJsonSpy.mockResolvedValue(payload);
+
+    const returned = await codexPostToolUse(ctx, { project: 'my-project' });
+
+    expect(readStdinJsonSpy).toHaveBeenCalledTimes(1);
+    expect(returned).toEqual({ agentSessionId: 'codex-session-1' });
   });
 
   it('writes additionalContext when change-set analysis finds no issues', async () => {
-    await codexPostToolUse({ project: 'my-project' });
+    await codexPostToolUse(ctx, { project: 'my-project' });
 
     expect(buildSqaaJsonReportSpy).toHaveBeenCalledWith(
       { project: 'my-project', force: true, format: 'json', forcedDepth: 'STANDARD' },
@@ -75,6 +118,7 @@ describe('codexPostToolUse', () => {
       {
         telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
         telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
+        telemetryCtx: ctx,
       },
     );
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
@@ -99,7 +143,7 @@ describe('codexPostToolUse', () => {
       analysisDepth: 'STANDARD',
     });
 
-    await codexPostToolUse({ project: 'my-project' });
+    await codexPostToolUse(ctx, { project: 'my-project' });
 
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.hookSpecificOutput.additionalContext).not.toContain('no issues found');
@@ -128,7 +172,7 @@ describe('codexPostToolUse', () => {
       analysisDepth: 'STANDARD',
     });
 
-    await codexPostToolUse({ project: 'my-project' });
+    await codexPostToolUse(ctx, { project: 'my-project' });
 
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.hookSpecificOutput.additionalContext).toContain('Fix this');
@@ -137,20 +181,40 @@ describe('codexPostToolUse', () => {
   });
 
   it('skips output when project key is missing', async () => {
-    await codexPostToolUse({});
+    await codexPostToolUse(ctx, {});
 
     expect(buildSqaaJsonReportSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
 
-  it('skips output when auth is not Cloud', async () => {
+  it('runs analysis on a Server connection without an organization', async () => {
     resolveAuthSpy.mockResolvedValue({
       token: 'tok',
       serverUrl: 'https://sonar.example.com',
-      connectionType: 'server',
+      connectionType: 'on-premise',
     });
 
-    await codexPostToolUse({ project: 'my-project' });
+    await codexPostToolUse(ctx, { project: 'my-project' });
+
+    expect(buildSqaaJsonReportSpy).toHaveBeenCalledWith(
+      { project: 'my-project', force: true, format: 'json', forcedDepth: 'STANDARD' },
+      expect.objectContaining({ connectionType: 'on-premise' }),
+      expect.objectContaining({
+        telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
+      }),
+    );
+    expect(stdoutSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips output when cloud auth has no orgKey', async () => {
+    resolveAuthSpy.mockResolvedValue({
+      token: 'tok',
+      serverUrl: 'https://sonarcloud.io',
+      connectionType: 'cloud',
+      orgKey: undefined,
+    });
+
+    await codexPostToolUse(ctx, { project: 'my-project' });
 
     expect(buildSqaaJsonReportSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
@@ -166,7 +230,7 @@ describe('codexPostToolUse', () => {
       analysisDepth: 'STANDARD',
     });
 
-    await codexPostToolUse({ project: 'my-project' });
+    await codexPostToolUse(ctx, { project: 'my-project' });
 
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
@@ -174,12 +238,13 @@ describe('codexPostToolUse', () => {
   it('does not throw when buildSqaaJsonReport fails', async () => {
     buildSqaaJsonReportSpy.mockRejectedValue(new Error('git failed'));
 
-    await codexPostToolUse({ project: 'my-project' });
+    await codexPostToolUse(ctx, { project: 'my-project' });
 
     expect(stdoutSpy).not.toHaveBeenCalled();
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
+      ctx,
+      expect.objectContaining({ connectionType: 'cloud', orgKey: 'myorg' }),
       SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
-      expect.objectContaining({ connectionType: 'cloud' }),
       expect.objectContaining({ totalIssues: 0, totalFailures: 1 }),
       expect.any(Number),
       SQAA_HOOK_TELEMETRY_EXIT_CODE,
@@ -187,29 +252,24 @@ describe('codexPostToolUse', () => {
   });
 
   it('does not emit failure telemetry when hook output fails after analysis telemetry', async () => {
-    const emitSqaaHookFailureTelemetrySpy = spyOn(
-      sqaaTelemetry,
-      'emitSqaaHookFailureTelemetry',
-    ).mockImplementation(() => Promise.resolve());
     const writeHookOutputSpy = spyOn(hookOutput, 'writePostToolUseHookOutput').mockImplementation(
       () => {
         throw new Error('stdout closed');
       },
     );
 
-    await codexPostToolUse({ project: 'my-project' });
+    await codexPostToolUse(ctx, { project: 'my-project' });
 
-    expect(emitSqaaHookFailureTelemetrySpy).not.toHaveBeenCalled();
+    expect(emitSqaaAnalysisTelemetrySpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
 
-    emitSqaaHookFailureTelemetrySpy.mockRestore();
     writeHookOutputSpy.mockRestore();
   });
 
   it('skips output when buildSqaaJsonReport returns null', async () => {
     buildSqaaJsonReportSpy.mockResolvedValue(null);
 
-    await codexPostToolUse({ project: 'my-project' });
+    await codexPostToolUse(ctx, { project: 'my-project' });
 
     expect(stdoutSpy).not.toHaveBeenCalled();
   });

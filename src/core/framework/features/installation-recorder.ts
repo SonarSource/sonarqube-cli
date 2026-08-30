@@ -23,7 +23,6 @@ import { randomUUID } from 'node:crypto';
 import type {
   CliState,
   InstalledIntegration,
-  InstalledIntegrationDependency,
   InstalledIntegrationDependencyReference,
   InstalledIntegrationFeature,
   InstalledIntegrationOperation,
@@ -38,7 +37,6 @@ import type {
   AppliedOperation,
   AppliedResource,
   FeatureDeclaration,
-  InstalledDependency,
   IntegrationContext,
   IntegrationDeclaration,
   SubfeatureDeclaration,
@@ -164,79 +162,41 @@ export function recordInstalledFeature<TOptions>(
     installedIntegration.features.push(next);
   }
 
-  state.dependencies.installed = upsertDependencies(
-    state.dependencies.installed,
-    applied.dependencies,
-    now,
-    collectReferencedDependencyIds(state),
-  );
-
   return existing ?? next;
 }
 
 /**
  * Remove a recorded feature from state, matching by id + scope + targetRoot
  * (same key as {@link recordInstalledFeature}), and drop the owning integration
- * entry when no features remain. Prunes dependencies of the removed feature from
- * state and returns the orphaned ones so the caller can delete their binaries.
+ * entry when no features remain.
  */
 export function removeInstalledFeature<TOptions>(
   state: CliState,
   context: Pick<IntegrationContext, 'scope' | 'targetRoot'>,
   integration: IntegrationDeclaration<TOptions>,
   feature: FeatureDeclaration<TOptions>,
-): InstalledIntegrationDependency[] {
+): void {
   const installedIntegration = state.integrations.installed.find(
     (entry) => entry.integrationId === integration.id,
   );
   if (!installedIntegration) {
-    return [];
+    return;
   }
 
   const featureIndex = installedIntegration.features.findIndex((entry) =>
     matchesFeatureKey(entry, context, feature),
   );
   if (featureIndex < 0) {
-    return [];
+    return;
   }
 
-  const [removedFeature] = installedIntegration.features.splice(featureIndex, 1);
-  const removedDependencyIds = new Set(featureDependencyIds(removedFeature));
+  installedIntegration.features.splice(featureIndex, 1);
 
   if (installedIntegration.features.length === 0) {
     state.integrations.installed = state.integrations.installed.filter(
       (entry) => entry !== installedIntegration,
     );
   }
-
-  const stillReferenced = collectReferencedDependencyIds(state);
-  const orphanedIds = new Set([...removedDependencyIds].filter((id) => !stillReferenced.has(id)));
-  if (orphanedIds.size === 0) {
-    return [];
-  }
-
-  const orphanedDependencies = state.dependencies.installed.filter((dependency) =>
-    orphanedIds.has(dependency.id),
-  );
-  state.dependencies.installed = state.dependencies.installed.filter(
-    (dependency) => !orphanedIds.has(dependency.id),
-  );
-  return orphanedDependencies;
-}
-
-function featureDependencyIds(feature: InstalledIntegrationFeature): string[] {
-  return [
-    ...feature.dependencies.map((d) => d.id),
-    ...(feature.subfeatures?.flatMap((sub) => sub.dependencies.map((d) => d.id)) ?? []),
-  ];
-}
-
-export function collectReferencedDependencyIds(state: CliState): Set<string> {
-  return new Set(
-    state.integrations.installed.flatMap((integration) =>
-      integration.features.flatMap(featureDependencyIds),
-    ),
-  );
 }
 
 /** Find the recorded integration entry, or `undefined` if the integration has none. */
@@ -314,29 +274,6 @@ function upsertDependencyReferences(
         .filter((id) => !existing.some((dependency) => dependency.id === id))
         .map((id) => ({ id })),
     );
-}
-
-function upsertDependencies(
-  existing: InstalledIntegrationDependency[],
-  applied: InstalledDependency[],
-  now: string,
-  referencedIds: Set<string>,
-): InstalledIntegrationDependency[] {
-  const dependencies = existing.filter((dependency) => referencedIds.has(dependency.id));
-  for (const dependency of applied) {
-    const next: InstalledIntegrationDependency = {
-      ...dependency,
-      updatedByCliVersion: VERSION,
-      updatedAt: now,
-    };
-    const index = dependencies.findIndex((entry) => entry.id === dependency.id);
-    if (index >= 0) {
-      dependencies[index] = next;
-    } else {
-      dependencies.push(next);
-    }
-  }
-  return dependencies;
 }
 
 function upsertResources(

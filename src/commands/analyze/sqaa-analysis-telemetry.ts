@@ -20,12 +20,16 @@
 
 import { randomUUID } from 'node:crypto';
 
+import {
+  type CommandInvocationContext,
+  TelemetryFact,
+} from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { SqaaIssue } from '@/core/server/client.ts';
 
-import type { FileResult, RunTally } from '../../commands/analyze/sqaa-analysis.ts';
-import type { SqaaJsonReport } from '../../commands/analyze/sqaa-display-json.ts';
-import { emitAnalysisCompleted } from './telemetry-events.ts';
+import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
+import type { FileResult, RunTally } from './sqaa-analysis.ts';
+import type { SqaaJsonReport } from './sqaa-display-json.ts';
 
 export const SQAA_ANALYZE_CALLER_COMMAND = 'analyze';
 
@@ -50,25 +54,6 @@ export type SqaaTelemetryCallerCommand =
  * and failures_count for analysis outcomes.
  */
 export const SQAA_HOOK_TELEMETRY_EXIT_CODE = 0;
-
-/**
- * Emits CliAnalysisCompleted for a hook run that failed before or during analysis
- * (e.g. buildSqaaJsonReport threw). Uses {@link SQAA_HOOK_TELEMETRY_EXIT_CODE} because
- * hooks never block the agent process.
- */
-export async function emitSqaaHookFailureTelemetry(
-  callerCommand: SqaaTelemetryCallerCommand,
-  auth: ResolvedAuth,
-  durationMs: number,
-): Promise<void> {
-  await emitSqaaAnalysisTelemetry(
-    callerCommand,
-    auth,
-    { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 1 },
-    durationMs,
-    SQAA_HOOK_TELEMETRY_EXIT_CODE,
-  );
-}
 
 export interface SqaaRuleCountsDetails {
   rule_keys: string[];
@@ -129,46 +114,39 @@ export function tallyFromSqaaJsonReport(report: SqaaJsonReport): RunTally {
 }
 
 /**
- * Emits a single CliAnalysisCompleted event for one SQAA run, carrying `details`
- * (JSON-encoded blob when issues exist, `""` otherwise). No-ops when telemetry is disabled.
+ * Record a CliAnalysisCompleted fact for one SQAA run.
  *
  * Pass `exitCode` from the command handler. Omit or pass `null` when the invocation has no exit.
- * PostToolUse hooks pass {@link SQAA_HOOK_TELEMETRY_EXIT_CODE} (always 0) because they never
- * set `process.exitCode`; use counts fields for analysis outcomes.
- *
- * `errors_count` is {@link RunTally.totalErrors} only (API `errors[]` on successful analyses).
- * `failures_count` is {@link RunTally.totalFailures} (per-file analysis failures).
- *
- * The body is fully guarded, matching {@link emitScaAnalysisTelemetry}: this was the only
- * `emit*` path with no exception handling anywhere in its call chain, so a throw from identity
- * resolution or the event file write could turn a successful SQAA analysis into a reported
- * command failure. Telemetry is strictly fire-and-forget.
+ * PostToolUse hooks pass {@link SQAA_HOOK_TELEMETRY_EXIT_CODE} (always 0).
  */
-export async function emitSqaaAnalysisTelemetry(
-  callerCommand: SqaaTelemetryCallerCommand,
+export function recordSqaaAnalysisTelemetry(
+  ctx: CommandInvocationContext,
   auth: ResolvedAuth,
+  callerCommand: SqaaTelemetryCallerCommand,
   tally: RunTally,
   durationMs: number,
   exitCode?: number | null,
-): Promise<void> {
-  try {
-    const analysisId = randomUUID();
-    const findingsCount = tally.totalIssues;
-    const details =
-      findingsCount > 0 ? JSON.stringify(collectRuleCounts(collectIssuesFromTally(tally))) : '';
+): void {
+  const analysisId = randomUUID();
+  const findingsCount = tally.totalIssues;
+  const details =
+    findingsCount > 0 ? JSON.stringify(collectRuleCounts(collectIssuesFromTally(tally))) : '';
 
-    await emitAnalysisCompleted(auth, {
-      caller_command: callerCommand,
-      analyzer: 'sqaa',
-      analysis_id: analysisId,
-      findings_count: findingsCount,
-      exit_code: exitCode ?? null,
-      errors_count: tally.totalErrors,
-      failures_count: tally.totalFailures,
-      scan_duration_ms: durationMs,
-      details,
-    });
-  } catch {
-    // Telemetry is strictly fire-and-forget; never surface to the command handler.
-  }
+  ctx.recordTelemetry(
+    new TelemetryFact(
+      CLI_ANALYSIS_COMPLETED,
+      {
+        caller_command: callerCommand,
+        analyzer: 'sqaa',
+        analysis_id: analysisId,
+        findings_count: findingsCount,
+        exit_code: exitCode ?? null,
+        errors_count: tally.totalErrors,
+        failures_count: tally.totalFailures,
+        scan_duration_ms: durationMs,
+        details,
+      } satisfies AnalysisCompletedPayload,
+      { auth },
+    ),
+  );
 }

@@ -22,6 +22,9 @@
 
 import type { SonarQubeIssue } from '@/core/server/types.ts';
 
+import { columnFormatting } from './column-formatting.ts';
+
+const MIN_SEVERITY_WIDTH = 8;
 const MIN_RULE_WIDTH = 15;
 const MIN_MESSAGE_WIDTH = 50;
 
@@ -30,10 +33,10 @@ export function formatTable(issues: SonarQubeIssue[]): string {
     return 'No issues found';
   }
 
-  // Calculate column widths
-  const severityWidth = Math.max(8, ...issues.map((i) => i.severity.length));
-  const ruleWidth = Math.max(MIN_RULE_WIDTH, ...issues.map((i) => i.rule.length));
-  const messageWidth = Math.max(MIN_MESSAGE_WIDTH, ...issues.map((i) => i.message.length));
+  const [severityWidth, ruleWidth, messageWidth] = columnFormatting(
+    [issues.map((i) => i.severity), issues.map((i) => i.rule), issues.map((i) => i.message)],
+    [MIN_SEVERITY_WIDTH, MIN_RULE_WIDTH, MIN_MESSAGE_WIDTH],
+  );
 
   // Header
   const header = [

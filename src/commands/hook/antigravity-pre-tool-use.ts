@@ -30,8 +30,9 @@
 
 import { existsSync } from 'node:fs';
 
+import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
-import { SECRETS_CALLER_COMMANDS } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 
 import { EXIT_CODE_SECRETS_FOUND } from '../analyze/secrets.ts';
 import {
@@ -55,7 +56,7 @@ function denyToolUse(reason: string): void {
   process.stdout.write(JSON.stringify({ decision: 'deny', reason }) + '\n');
 }
 
-export async function antigravityPreToolUse(): Promise<void> {
+export async function antigravityPreToolUse(ctx: CommandInvocationContext): Promise<void> {
   let payload: AntigravityPreToolUsePayload;
   try {
     payload = await readStdinJson<AntigravityPreToolUsePayload>();
@@ -84,6 +85,7 @@ export async function antigravityPreToolUse(): Promise<void> {
       SECRETS_CALLER_COMMANDS.antigravityPreToolUse,
       deps,
       filePath,
+      ctx,
     );
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
       denyToolUse(`Sonar detected secrets in file: ${filePath}`);

@@ -27,11 +27,13 @@ import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:te
 
 import * as configConstants from '@/core/config-constants.ts';
 import { DISTRIBUTION } from '@/core/host/distribution.ts';
-import type { CliState, StoredCommandExecutedEvent } from '@/core/state/state.ts';
+import type { CliState } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import * as telemetryEvents from '@/core/telemetry/telemetry-events.ts';
 import { migrateLegacyTelemetryEvents } from '@/core/update/telemetry-migration.ts';
+
+import type { StoredCommandExecutedEvent } from '../../../_common/telemetry-helpers.ts';
 
 function makeState(): CliState {
   return getDefaultState('1.0.0');
@@ -56,6 +58,7 @@ function makeLegacyCommandEvent(command: string): StoredCommandExecutedEvent {
       organization_uuid_v4: null,
       sqs_installation_id: null,
       caller_agent: null,
+      agent_session_id: null,
       command,
       subcommand: null,
       result: 'success',

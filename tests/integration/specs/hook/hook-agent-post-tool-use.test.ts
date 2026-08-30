@@ -99,7 +99,7 @@ describe('sonar hook claude-post-tool-use', () => {
       expect(result.exitCode).toBe(0);
       const output = JSON.parse(result.stdout.trim());
       expect(output.hookSpecificOutput.additionalContext).toContain(
-        'no longer available for this organization',
+        'no longer available on this connection',
       );
       expect(output.hookSpecificOutput.additionalContext).toContain('remove the analysis hooks');
       expect(output.hookSpecificOutput.additionalContext).toContain(VORTEX_PRODUCT_URL);
@@ -214,7 +214,7 @@ describe('sonar hook claude-post-tool-use', () => {
       expect(result.stdout.trim()).toBe('');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(0);
       const logFile = harness.cliHome.dir('logs').file('sonarqube-cli.log');
       expect(logFile.exists()).toBe(true);
@@ -246,7 +246,7 @@ describe('sonar hook claude-post-tool-use', () => {
       expect(result.exitCode).toBe(0);
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       const body = parseSqaaRequestBody(sqaaCalls[0].body);
       expect(sqaaRequestFirstFilePath(sqaaCalls[0].body)).toBe('src/main.ts');

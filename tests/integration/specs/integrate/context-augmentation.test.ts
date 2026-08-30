@@ -27,7 +27,10 @@ import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.js';
-import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.js';
+import {
+  VORTEX_FEATURE_ID,
+  VORTEX_PROMOTION_MESSAGE,
+} from '@/commands/integrate/_common/vortex.js';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.js';
 import { CODEX_INTEGRATION_ID } from '@/commands/integrate/codex/declaration.js';
 import { COPILOT_INTEGRATION_ID } from '@/commands/integrate/copilot/declaration.js';
@@ -496,9 +499,7 @@ describe('integrate claude — Context Augmentation', () => {
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeUndefined();
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(
-        'Vortex is available on SonarQube Cloud',
-      );
+      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_PROMOTION_MESSAGE);
     },
     { timeout: 30000 },
   );
@@ -532,7 +533,7 @@ describe('integrate claude — Context Augmentation', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(`${result.stdout}\n${result.stderr}`).toContain('reached its Vortex usage limit');
+      expect(`${result.stdout}\n${result.stderr}`).toContain('Vortex usage limit has been reached');
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeDefined();
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(true);
@@ -611,12 +612,14 @@ describe('integrate claude — Context Augmentation', () => {
       const versionedName = buildLocalCagBinaryName(detectPlatform());
       expect(harness.cliHome.file('bin', versionedName).exists()).toBe(true);
 
-      // state.json records the installation in the legacy tools section even
-      // when the subsequent feature setup fails.
+      // state.json records the installed dependency even when the subsequent
+      // feature setup fails.
       const state = loadState(harness);
-      const installed = state.tools?.installed.find((t) => t.name === 'sonar-context-augmentation');
+      const installed = state.dependencies.installed.find(
+        (d) => d.id === 'sonar-context-augmentation',
+      );
       expect(installed).toBeDefined();
-      expect(installed?.version).toMatch(/^\d+\.\d+/);
+      expect(installed?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
     },
     { timeout: 60000 },
   );
@@ -794,9 +797,9 @@ describe('integrate claude — Context Augmentation', () => {
       const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
       expect(nonProbe).toEqual([]);
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
-      // The Cloud-only promotion info line must appear, not the misleading
-      // "organization required" warning
-      expect(result.stdout + result.stderr).toContain('Vortex is available on SonarQube Cloud');
+      expect(result.stdout + result.stderr).toContain(
+        'Vortex requires SonarQube Server 2026.5 Enterprise or later.',
+      );
       expect(result.stdout + result.stderr).not.toContain('organization are required');
     },
     { timeout: 30000 },
@@ -1014,9 +1017,7 @@ describe('integrate codex — Context Augmentation', () => {
       const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
       expect(nonProbe).toEqual([]);
       expect(harness.cwd.file(CODEX_SKILL_PATH).exists()).toBe(false);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(
-        'Vortex is available on SonarQube Cloud',
-      );
+      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_PROMOTION_MESSAGE);
     },
     { timeout: 30000 },
   );

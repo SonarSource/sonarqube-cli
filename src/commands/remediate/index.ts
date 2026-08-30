@@ -20,6 +20,7 @@
 
 // Remediate command - triggers AI agent remediation for eligible issues
 
+import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import {
@@ -57,7 +58,11 @@ const SEVERITY_COLORS: Record<string, (s: string) => string> = {
 // to avoid coupling the command surface to a UI implementation constant.
 const MAX_REMEDIATION_ISSUES = 20;
 
-export async function remediate(options: RemediateOptions, auth: ResolvedAuth): Promise<void> {
+export async function remediate(
+  options: RemediateOptions,
+  ctx: CommandAuthenticatedInvocationContext,
+): Promise<void> {
+  const { auth } = ctx;
   // Pure validation first (no I/O): catches malformed --issues with zero round-trips.
   const suppliedIssueKeys =
     options.issues === undefined ? undefined : parseIssueKeys(options.issues);
@@ -137,7 +142,7 @@ async function resolveProjectKey(options: RemediateOptions, auth: ResolvedAuth):
   if (options.project) {
     return options.project;
   }
-  const discovered = await discoverProject(process.cwd(), false, { auth });
+  const discovered = await discoverProject(process.cwd(), { auth });
   if (!discovered.projectKey) {
     throw new CommandFailedError('Could not determine project key.', {
       remediationHint: 'Use --project <key> to specify it.',

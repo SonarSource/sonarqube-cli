@@ -17,22 +17,21 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-import { setupMcpServerForAgent } from '@/core/host/mcp/mcp-helper.ts';
-import { type DiscoveredProject } from '@/core/project-info.ts';
-import { discreetSuccess, info, warn } from '@/core/ui';
 
-export async function setupMcpServer(
-  project: DiscoveredProject,
-  isGlobal: boolean,
-  projectKey: string | undefined,
-): Promise<void> {
-  info(`Setting up SonarQube MCP Server...`);
-  try {
-    await setupMcpServerForAgent('claude', project.rootDir, isGlobal, projectKey);
-    discreetSuccess(`SonarQube MCP Server configured`);
-  } catch (error) {
-    if (error instanceof Error) {
-      warn(`Failed to setup MCP server: ${error.message}`);
-    }
-  }
-}
+/** Short telemetry event name for one analyzer run. */
+export const CLI_ANALYSIS_COMPLETED = 'CliAnalysisCompleted';
+
+export type AnalysisTelemetryAnalyzer = 'sonar-secrets' | 'sqaa' | 'sca-scanner-cli';
+
+/** Domain payload for CliAnalysisCompleted (identity is filled at drain time). */
+export type AnalysisCompletedPayload = {
+  caller_command: string;
+  analyzer: AnalysisTelemetryAnalyzer;
+  analysis_id: string;
+  findings_count: number;
+  exit_code: number | null;
+  errors_count: number;
+  failures_count: number;
+  scan_duration_ms: number;
+  details: string;
+};

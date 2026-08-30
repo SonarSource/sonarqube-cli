@@ -32,15 +32,13 @@ import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
 import { version as VERSION } from '../../../package.json';
 import { getTelemetryDir, TELEMETRY_API_KEY, TELEMETRY_ENDPOINT } from '../config-constants.ts';
 import type {
-  AnalysisCompletedEventPayload,
   AuthConnection,
-  CommandExecutedEventPayload,
-  IntegrationConfiguredEventPayload,
   StoredTelemetryEvent,
   TelemetryConnectionType,
   TelemetryEventIdentityPayload,
 } from '../state/state.ts';
 import { getActiveConnection, tryLoadState } from '../state/state-manager.ts';
+import { resolveAgentSessionIdFromHookOrEnv } from './agent-session.ts';
 import { isTelemetryEnabled } from './enabled.ts';
 import {
   resolveCommandTelemetryIdentity,
@@ -83,6 +81,7 @@ type IdentityResolver = (
  */
 async function buildIdentityBase(
   resolve: IdentityResolver,
+  identityOptions?: IdentityEmitOptions,
 ): Promise<TelemetryEventIdentityPayload | null> {
   const state = tryLoadState();
   if (!state || !isTelemetryEnabled(state)) return null;
@@ -103,79 +102,49 @@ async function buildIdentityBase(
     organization_uuid_v4: identity.organization_uuid_v4,
     sqs_installation_id: identity.sqs_installation_id,
     caller_agent: detectCallerAgent(),
+    agent_session_id: resolveAgentSessionIdFromHookOrEnv(identityOptions?.agentSessionId ?? null),
   };
 }
 
-export type AnalysisCompletedFields = Omit<
-  AnalysisCompletedEventPayload,
-  keyof TelemetryEventIdentityPayload
->;
+/** Wire `event_type` prefix. Domain producers pass the short name only. */
+export const TELEMETRY_EVENT_TYPE_PREFIX = 'Analytics.Cli.';
 
-export type IntegrationConfiguredFields = Omit<
-  IntegrationConfiguredEventPayload,
-  keyof TelemetryEventIdentityPayload
->;
+export type IdentityEmitOptions = {
+  /**
+   * Agent session id for this emit. Prefers a hook-payload id when given;
+   * otherwise `buildIdentityBase` falls back to agent-native env vars.
+   */
+  agentSessionId?: string | null;
+};
 
-export type CommandExecutedFields = Omit<
-  CommandExecutedEventPayload,
-  keyof TelemetryEventIdentityPayload
->;
+export type TelemetryEmitOptions = IdentityEmitOptions & {
+  eventTimestampMs?: number;
+  /** When set, identity is resolved from this auth; otherwise the active connection. */
+  auth?: ResolvedAuth;
+};
 
 /**
- * Emits one CliAnalysisCompleted event when telemetry is enabled.
- * Resolves identity from state + auth; no-ops on opt-out or missing installationId.
+ * Appends one telemetry event. `name` is the short event name; identity and the
+ * `Analytics.Cli.` prefix are applied here. `fields` is an opaque domain payload.
  */
-export async function emitAnalysisCompleted(
-  auth: ResolvedAuth,
-  fields: AnalysisCompletedFields,
+export async function emitTelemetryEvent(
+  name: string,
+  fields: object,
+  options?: TelemetryEmitOptions,
 ): Promise<void> {
-  const base = await buildIdentityBase((conn) => resolveCommandTelemetryIdentity(conn, auth));
+  const auth = options?.auth;
+  const resolve: IdentityResolver =
+    auth === undefined
+      ? resolveStoreEventTelemetryIdentitySafely
+      : (conn) => resolveCommandTelemetryIdentity(conn, auth);
+  const base = await buildIdentityBase(resolve, options);
   if (!base) return;
   appendTelemetryEvent({
     metadata: {
       event_id: randomUUID(),
       source: { domain: 'CLI' },
-      event_type: 'Analytics.Cli.CliAnalysisCompleted',
-      event_timestamp: String(Date.now()),
-    },
-    event_payload: { ...base, ...fields },
-  });
-}
-
-/**
- * Emits one CliIntegrationConfigured event when telemetry is enabled.
- * Resolves identity from state + auth; no-ops on opt-out or missing installationId.
- */
-export async function emitIntegrationConfigured(
-  auth: ResolvedAuth,
-  fields: IntegrationConfiguredFields,
-): Promise<void> {
-  const base = await buildIdentityBase((conn) => resolveCommandTelemetryIdentity(conn, auth));
-  if (!base) return;
-  appendTelemetryEvent({
-    metadata: {
-      event_id: randomUUID(),
-      source: { domain: 'CLI' },
-      event_type: 'Analytics.Cli.CliIntegrationConfigured',
-      event_timestamp: String(Date.now()),
-    },
-    event_payload: { ...base, ...fields },
-  });
-}
-
-/**
- * Emits one CliCommandExecuted event when telemetry is enabled.
- * Resolves identity from the active connection; no-ops on opt-out or missing installationId.
- */
-export async function emitCommandExecuted(fields: CommandExecutedFields): Promise<void> {
-  const base = await buildIdentityBase(resolveStoreEventTelemetryIdentitySafely);
-  if (!base) return;
-  appendTelemetryEvent({
-    metadata: {
-      event_id: randomUUID(),
-      source: { domain: 'CLI' },
-      event_type: 'Analytics.Cli.CliCommandExecuted',
-      event_timestamp: String(Date.now()),
+      event_type: `${TELEMETRY_EVENT_TYPE_PREFIX}${name}`,
+      event_timestamp: String(options?.eventTimestampMs ?? Date.now()),
     },
     event_payload: { ...base, ...fields },
   });

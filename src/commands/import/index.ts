@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
 import {
@@ -226,7 +226,11 @@ function reportOutcome(
   );
 }
 
-export async function importHandler(options: ImportOptions, auth: ResolvedAuth): Promise<void> {
+export async function importHandler(
+  options: ImportOptions,
+  ctx: CommandAuthenticatedInvocationContext,
+): Promise<void> {
+  const { auth } = ctx;
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
 
   intro('Import repositories', 'SonarQube');

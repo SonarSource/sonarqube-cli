@@ -83,17 +83,23 @@ function getVisibleChildCommands(command: SonarCommand, helper: Help): SonarComm
   );
 }
 
+function getCommandNameWithAlias(command: SonarCommand): string {
+  const alias = command.alias();
+  return alias ? `${command.name()}|${alias}` : command.name();
+}
+
 function getRootCommandLabel(command: SonarCommand, helper: Help): string {
   if (command.rootHelpMetadata.label) {
     return command.rootHelpMetadata.label;
   }
+  const nameWithAlias = getCommandNameWithAlias(command);
   if (command.rootHelpMetadata.expandSubcommands) {
-    return command.name();
+    return nameWithAlias;
   }
 
   const visibleChildren = getVisibleChildCommands(command, helper);
   if (visibleChildren.length === 0) {
-    return command.name();
+    return nameWithAlias;
   }
 
   const childLabels = visibleChildren.map((child) => {
@@ -105,7 +111,7 @@ function getRootCommandLabel(command: SonarCommand, helper: Help): string {
     }
     return `${child.name()}${tag}`;
   });
-  return `${command.name()} <${childLabels.join('|')}>`;
+  return `${nameWithAlias} <${childLabels.join('|')}>`;
 }
 
 function getRootCommandCategory(command: SonarCommand): CommandCategory {
@@ -118,7 +124,7 @@ function getRootCommandSubcommandEntries(command: SonarCommand, helper: Help): H
   }
 
   return getVisibleChildCommands(command, helper).map((child) => ({
-    label: `${command.name()} ${child.name()}`,
+    label: `${getCommandNameWithAlias(command)} ${getCommandNameWithAlias(child)}`,
     summary: child.description(),
   }));
 }
@@ -177,7 +183,7 @@ function getRootOptionEntries(rootCommand: SonarCommand, helper: Help): HelpMenu
     .sort(compareRootOptions)
     .map((option) => ({
       label: option.flags,
-      summary: ROOT_OPTION_SUMMARIES.get(option.long ?? '') ?? option.description,
+      summary: ROOT_OPTION_SUMMARIES.get(option.long ?? '') ?? helper.optionDescription(option),
     }));
 }
 

@@ -20,7 +20,6 @@
 
 import { join } from 'node:path';
 
-import { CLI_COMMAND } from '@/core/config-constants.ts';
 import type { IntegrationContext, IntegrationDeclaration } from '@/core/framework/features';
 import { jsonPatch } from '@/core/framework/features';
 import { getMcpConfig } from '@/core/host/mcp/mcp-helper.ts';
@@ -50,7 +49,6 @@ function resolveOpenCodeConfigPath(context: IntegrationContext): string {
 
 function getDesiredOpenCodeMcpConfig(context: IntegrationContext) {
   const config = getMcpConfig(
-    CLI_COMMAND,
     context.scope === 'global'
       ? { withFsMount: false }
       : {

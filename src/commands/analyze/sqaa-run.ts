@@ -22,11 +22,6 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { timed } from '@/core/observability/timed.ts';
 import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
-import {
-  emitSqaaAnalysisTelemetry,
-  type SqaaTelemetryCallerCommand,
-  tallyFromSqaaJsonReport,
-} from '@/core/telemetry/sqaa-analysis-telemetry.ts';
 import { print } from '@/core/ui';
 import { SqaaProgress } from '@/core/ui/components/sqaa-progress.ts';
 import { vortexUnavailableCommandMessage } from '@/core/vortex/availability-messages.ts';
@@ -34,9 +29,10 @@ import { recheckVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 import type { RunContext, RunTally } from './sqaa-analysis.ts';
 import { runAnalyses } from './sqaa-analysis.ts';
+import { recordSqaaAnalysisTelemetry, tallyFromSqaaJsonReport } from './sqaa-analysis-telemetry.ts';
 import { fetchWithRetry, readSqaaFileContent, toRelativePosixPath } from './sqaa-api.ts';
-import type { CloudAuth } from './sqaa-auth.ts';
-import { resolveCloudAuthAndProject } from './sqaa-auth.ts';
+import type { SqaaAuth } from './sqaa-auth.ts';
+import { resolveSqaaAuthAndProject } from './sqaa-auth.ts';
 import type { ChangeSetResult } from './sqaa-changeset.ts';
 import { resolveSqaaContext } from './sqaa-context.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
@@ -71,24 +67,13 @@ function resolveSqaaCommandExitCode(
   return 0;
 }
 
-async function emitSqaaTelemetryIfRequested(
-  telemetryCallerCommand: SqaaTelemetryCallerCommand | undefined,
-  auth: ResolvedAuth,
-  tally: RunTally,
-  durationMs: number,
-  exitCode: number,
-): Promise<void> {
-  if (!telemetryCallerCommand) return;
-  await emitSqaaAnalysisTelemetry(telemetryCallerCommand, auth, tally, durationMs, exitCode);
-}
-
-export async function finishSqaaTelemetryFromReport(
+export function finishSqaaTelemetryFromReport(
   report: SqaaJsonReport,
-  auth: ResolvedAuth,
   runOptions: AnalyzeSqaaRunOptions,
   durationMs: number,
-): Promise<void> {
-  if (!runOptions.telemetryCallerCommand) return;
+): void {
+  const { telemetryCallerCommand, telemetryCtx, auth } = runOptions;
+  if (!telemetryCallerCommand || !telemetryCtx || !auth) return;
   const exitCode =
     runOptions.telemetryProcessExitCode ??
     resolveSqaaCommandExitCode(
@@ -96,20 +81,17 @@ export async function finishSqaaTelemetryFromReport(
       report.summary.totalFailures,
       report.globalError !== undefined,
     );
-  await emitSqaaTelemetryIfRequested(
-    runOptions.telemetryCallerCommand,
+  recordSqaaAnalysisTelemetry(
+    telemetryCtx,
     auth,
+    telemetryCallerCommand,
     tallyFromSqaaJsonReport(report),
     durationMs,
     exitCode,
   );
 }
 
-async function finishSqaaRun(
-  tally: RunTally,
-  durationMs: number,
-  options: SqaaBatchRunOptions,
-): Promise<void> {
+function finishSqaaRun(tally: RunTally, durationMs: number, options: SqaaBatchRunOptions): void {
   const hasGlobalError = tally.globalError !== undefined;
   const exitCode = resolveSqaaCommandExitCode(
     tally.totalIssues,
@@ -117,13 +99,16 @@ async function finishSqaaRun(
     hasGlobalError,
   );
   applyExitCode(tally.totalIssues, tally.totalFailures, hasGlobalError);
-  await emitSqaaTelemetryIfRequested(
-    options.telemetryCallerCommand,
-    options.auth,
-    tally,
-    durationMs,
-    exitCode,
-  );
+  if (options.telemetryCallerCommand && options.telemetryCtx) {
+    recordSqaaAnalysisTelemetry(
+      options.telemetryCtx,
+      options.auth,
+      options.telemetryCallerCommand,
+      tally,
+      durationMs,
+      exitCode,
+    );
+  }
 }
 
 /**
@@ -171,7 +156,7 @@ export async function runSqaaAnalysesTallyForResolved(
   const ctx: RunContext = {
     files,
     allPaths,
-    cloudAuth: resolved.cloudAuth,
+    sqaaAuth: resolved.sqaaAuth,
     projectKey: resolved.projectKey,
     branch,
     progress: silentProgress,
@@ -182,7 +167,7 @@ export async function runSqaaAnalysesTallyForResolved(
 }
 
 export async function fetchSingleFileReport(
-  cloudAuth: CloudAuth,
+  sqaaAuth: SqaaAuth,
   projectKey: string,
   file: string,
   fileContent: string,
@@ -192,7 +177,7 @@ export async function fetchSingleFileReport(
 ): Promise<{ report: SqaaJsonReport; error?: Error }> {
   const filePath = toRelativePosixPath(file);
   try {
-    const response = await fetchWithRetry(cloudAuth, projectKey, file, fileContent, branch, {
+    const response = await fetchWithRetry(sqaaAuth, projectKey, file, fileContent, branch, {
       analysisDepth: wireDepth,
     });
     return {
@@ -224,25 +209,18 @@ export async function runSqaaAnalysis(
     wireDepth,
     displayDepth = 'STANDARD',
     telemetryCallerCommand,
+    telemetryCtx,
   } = options;
 
-  const resolution = await resolveCloudAuthAndProject(auth, explicitProject);
+  const resolution = await resolveSqaaAuthAndProject(auth, explicitProject);
   const resolved = resolveSqaaContext(resolution, { requireProject });
   if (!resolved) return;
 
-  const { cloudAuth, projectKey } = resolved;
+  const { sqaaAuth, projectKey } = resolved;
   const fileContent = readSqaaFileContent(file);
 
   const { result: fetchResult, durationMs } = await timed(() =>
-    fetchSingleFileReport(
-      cloudAuth,
-      projectKey,
-      file,
-      fileContent,
-      branch,
-      wireDepth,
-      displayDepth,
-    ),
+    fetchSingleFileReport(sqaaAuth, projectKey, file, fileContent, branch, wireDepth, displayDepth),
   );
   const { report, error } = fetchResult;
   const filePath = toRelativePosixPath(file);
@@ -257,18 +235,8 @@ export async function runSqaaAnalysis(
     displaySingleFileReport(report, displayDepth);
   }
 
-  const exitCode = resolveSqaaCommandExitCode(
-    report.summary.totalIssues,
-    report.summary.totalFailures,
-  );
   applyExitCode(report.summary.totalIssues, report.summary.totalFailures);
-  await emitSqaaTelemetryIfRequested(
-    telemetryCallerCommand,
-    auth,
-    tallyFromSqaaJsonReport(report),
-    durationMs,
-    exitCode,
-  );
+  finishSqaaTelemetryFromReport(report, { telemetryCallerCommand, telemetryCtx, auth }, durationMs);
 }
 
 export async function runSqaaAnalysisOnExplicitFiles(
@@ -286,7 +254,7 @@ export async function runSqaaAnalysisOnExplicitFiles(
     );
     const report = buildJsonReport(tally, [], allPaths, cwd, displayDepth);
     await printSqaaJsonReport(report, options.auth);
-    await finishSqaaRun(tally, durationMs, options);
+    finishSqaaRun(tally, durationMs, options);
     return;
   }
 
@@ -294,7 +262,7 @@ export async function runSqaaAnalysisOnExplicitFiles(
   const ctx: RunContext = {
     files,
     allPaths,
-    cloudAuth: resolved.cloudAuth,
+    sqaaAuth: resolved.sqaaAuth,
     projectKey: resolved.projectKey,
     branch,
     progress,
@@ -307,7 +275,7 @@ export async function runSqaaAnalysisOnExplicitFiles(
     await printVortexUnavailableForForbidden(options.auth);
   }
   printSqaaTextReport({ tally, allPaths, ignoredPaths: [], analysisDepth: displayDepth });
-  await finishSqaaRun(tally, durationMs, options);
+  finishSqaaRun(tally, durationMs, options);
 }
 
 export async function runSqaaAnalysisOnFiles(
@@ -316,7 +284,7 @@ export async function runSqaaAnalysisOnFiles(
 ): Promise<void> {
   const { resolved, branch, format = 'text', wireDepth, displayDepth = 'STANDARD' } = options;
   const { files, ignored, repoRoot } = changeSet;
-  const { cloudAuth, projectKey } = resolved;
+  const { sqaaAuth, projectKey } = resolved;
   const allPaths = files.map((f) => toRelativePosixPath(f, repoRoot));
 
   if (format === 'json') {
@@ -325,7 +293,7 @@ export async function runSqaaAnalysisOnFiles(
     );
     const report = buildJsonReport(tally, ignored, allPaths, repoRoot, displayDepth);
     await printSqaaJsonReport(report, options.auth);
-    await finishSqaaRun(tally, durationMs, options);
+    finishSqaaRun(tally, durationMs, options);
     return;
   }
 
@@ -334,7 +302,7 @@ export async function runSqaaAnalysisOnFiles(
   const ctx: RunContext = {
     files,
     allPaths,
-    cloudAuth,
+    sqaaAuth,
     projectKey,
     branch,
     progress,
@@ -347,5 +315,5 @@ export async function runSqaaAnalysisOnFiles(
     await printVortexUnavailableForForbidden(options.auth);
   }
   printSqaaTextReport({ tally, allPaths, ignoredPaths, analysisDepth: displayDepth });
-  await finishSqaaRun(tally, durationMs, options);
+  finishSqaaRun(tally, durationMs, options);
 }

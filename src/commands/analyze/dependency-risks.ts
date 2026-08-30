@@ -18,17 +18,17 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
+import {
+  recordScaAnalysisTelemetry,
+  SCA_CALLER_COMMANDS,
+} from '@/commands/analyze/sca-analysis-telemetry.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
+import { InvalidOptionError } from '@/core/command-error.ts';
 import { DefaultScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import { DefaultSecretsInstaller } from '@/core/host/install/secrets.ts';
-import { discoverProject } from '@/core/project-info.ts';
+import { resolveProjectKey } from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
-import {
-  emitScaAnalysisTelemetry,
-  SCA_CALLER_COMMANDS,
-} from '@/core/telemetry/sca-analysis-telemetry.ts';
 import { error, print, warn } from '@/core/ui';
 
 import { countSelectedRisks } from './dependency-risk-helpers/count-selected-risks.ts';
@@ -59,8 +59,9 @@ export interface AnalyzeDependencyRisksOptions {
 
 export async function analyzeDependencyRisks(
   options: AnalyzeDependencyRisksOptions,
-  auth: ResolvedAuth,
+  ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
+  const { auth } = ctx;
   const filter = buildRiskFilter(options.statuses, options.minSeverity);
   if (!filter) {
     throw new InvalidOptionError(
@@ -82,7 +83,12 @@ export async function analyzeDependencyRisks(
 
   // The orchestrator emits the failures_count:1 event itself if the SCA scan throws (scoped so a
   // secrets pre-scan abort never counts as an SCA failure); any throw here just propagates.
-  const scan = await orchestrator.run(auth, projectKey, SCA_CALLER_COMMANDS.analyzeDependencyRisks);
+  const scan = await orchestrator.run(
+    auth,
+    projectKey,
+    SCA_CALLER_COMMANDS.analyzeDependencyRisks,
+    ctx,
+  );
 
   const viewModel = buildDependencyRisksViewModel(scan.response, filter);
   switch (options.format) {
@@ -98,35 +104,15 @@ export async function analyzeDependencyRisks(
 
   handleResult(countUnresolvedIssues(viewModel), scan.response.errors.length);
 
-  // Emit after handleResult so exit_code carries the CLI's final process.exitCode (0/1/51).
-  await emitScaAnalysisTelemetry(
-    SCA_CALLER_COMMANDS.analyzeDependencyRisks,
+  // Contribute after handleResult so exit_code carries the CLI's final process.exitCode (0/1/51).
+  recordScaAnalysisTelemetry(
+    ctx,
     auth,
+    SCA_CALLER_COMMANDS.analyzeDependencyRisks,
     scan.response,
     scan.scanDurationMs,
     typeof process.exitCode === 'number' ? process.exitCode : null,
   );
-}
-
-async function resolveProjectKey(
-  explicitProject: string | undefined,
-  auth: ResolvedAuth,
-): Promise<string> {
-  if (explicitProject) {
-    print(`     Using project key: ${explicitProject}`, 'stderr');
-    return explicitProject;
-  }
-
-  const discovered = await discoverProject(process.cwd(), true, { auth });
-  if (discovered.projectKey) {
-    print(`     Using auto-detected project key: ${discovered.projectKey}`, 'stderr');
-    return discovered.projectKey;
-  }
-
-  throw new CommandFailedError('Could not determine project key.', {
-    remediationHint:
-      'Use --project <key>, add sonar.projectKey to sonar-project.properties, or configure a .sonarlint/ binding.',
-  });
 }
 
 function handleResult(unresolvedRisksCount: number, errorCount: number) {

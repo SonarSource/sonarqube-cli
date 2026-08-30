@@ -98,25 +98,32 @@ export interface SonarSecretsHooksWriter {
   removePatch: (document: unknown, markers: string[]) => unknown;
 }
 
-/** Default writer: the nested `{ matcher, hooks: [{ type, command, timeout }] }` schema used by Claude and Codex. */
-const agentHooksWriter: SonarSecretsHooksWriter = {
-  defaultValue: { hooks: {} },
-  patch: (document, context, entries, configDir) =>
-    upsertAgentHooks(
-      document,
-      entries.map((entry) =>
-        createAgentHookEntry(
-          context,
-          configDir,
-          entry.eventType,
-          entry.matcher ?? '*',
-          entry.marker,
-          entry.scriptPath,
+/**
+ * Default writer: the nested `{ matcher, hooks: [{ type, command, timeout }] }` schema used by
+ * Claude and Codex. `projectDirPlaceholder` is Claude-specific (its `${CLAUDE_PROJECT_DIR}`); pass
+ * it in `SonarSecretsHooksFeatureConfig` only for Claude so Codex keeps its cwd-relative path.
+ */
+function createAgentHooksWriter(projectDirPlaceholder?: string): SonarSecretsHooksWriter {
+  return {
+    defaultValue: { hooks: {} },
+    patch: (document, context, entries, configDir) =>
+      upsertAgentHooks(
+        document,
+        entries.map((entry) =>
+          createAgentHookEntry(
+            context,
+            configDir,
+            entry.eventType,
+            entry.matcher ?? '*',
+            entry.marker,
+            entry.scriptPath,
+            { projectDirPlaceholder },
+          ),
         ),
       ),
-    ),
-  removePatch: (document, markers) => removeAgentHooks(document, markers),
-};
+    removePatch: (document, markers) => removeAgentHooks(document, markers),
+  };
+}
 
 export interface SonarSecretsHooksFeatureConfig {
   agentDisplayName: string;
@@ -135,6 +142,12 @@ export interface SonarSecretsHooksFeatureConfig {
   previewDescription?: FeaturePreview;
   /** Hook-config serializer. Defaults to the Claude/Codex schema; agents like Cursor inject their own. */
   hookWriter?: SonarSecretsHooksWriter;
+  /**
+   * Agent-specific path placeholder (e.g. Claude Code's `${CLAUDE_PROJECT_DIR}`) to anchor
+   * project-scope hook commands to, instead of a bare cwd-relative path. Omit for agents with no
+   * such placeholder. Ignored when `hookWriter` is set.
+   */
+  projectDirPlaceholder?: string;
 }
 
 export function resolveAgentHooksConfigPath(
@@ -149,7 +162,7 @@ export function createSonarSecretsHooksFeature<TOptions extends SonarSecretsHook
   config: SonarSecretsHooksFeatureConfig,
 ): FeatureDeclaration<TOptions> {
   const featureId = config.featureId ?? SONAR_SECRETS_HOOKS_FEATURE_ID;
-  const writer = config.hookWriter ?? agentHooksWriter;
+  const writer = config.hookWriter ?? createAgentHooksWriter(config.projectDirPlaceholder);
   const resolveHooksConfigPath = (context: IntegrationContext) =>
     resolveAgentHooksConfigPath(context, config.configDir, config.hooksConfigFileName);
 

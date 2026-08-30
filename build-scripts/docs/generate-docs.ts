@@ -67,12 +67,14 @@ interface ClidocOption {
   required: boolean;
   defaultValue: unknown;
   allowedValues?: string[];
+  stage?: 'stable' | 'beta';
 }
 
 interface ClidocCommand {
   id: string;
   name: string;
   fullName: string;
+  aliases: string[];
   description: string;
   isGroup: boolean;
   isRoot: boolean;
@@ -87,7 +89,7 @@ interface ClidocCommand {
 }
 
 // Docs use the default runtime (Private Beta omitted; Open Beta included).
-const COMMAND_TREE = createCommandTree();
+const COMMAND_TREE = await createCommandTree();
 const allCommands: ClidocCommand[] = [];
 const help = COMMAND_TREE.createHelp();
 
@@ -105,6 +107,34 @@ function descriptionWithoutBetaTag(cmd: SonarCommand): string {
     : description;
 }
 
+function serializeOptions(cmd: SonarCommand): ClidocOption[] {
+  return cmd.options
+    .filter((option) => {
+      if (option.hidden || option.long === '--help') {
+        return false;
+      }
+      // Alpha/Private Beta options are already detached from the default docs runtime;
+      // skip them explicitly so generating with SONARQUBE_CLI_ALPHA set cannot leak them.
+      return !option.isAlpha && !option.isPrivateBeta;
+    })
+    .map((option) => {
+      const serialized: ClidocOption = {
+        flags: option.flags,
+        long: option.long ?? '',
+        short: option.short,
+        description: option.description ?? '',
+        type: optionType(option),
+        required: option.mandatory,
+        defaultValue: option.defaultValue,
+        allowedValues: option.argChoices?.length ? option.argChoices : undefined,
+      };
+      if (option.isBeta) {
+        serialized.stage = 'beta';
+      }
+      return serialized;
+    });
+}
+
 function serializeCommand(
   cmd: SonarCommand,
   prefix: string,
@@ -119,6 +149,7 @@ function serializeCommand(
     id,
     name: cmd.name(),
     fullName,
+    aliases: cmd.aliases(),
     description: descriptionWithoutBetaTag(cmd),
     isGroup: visibleChildren.length > 0,
     isRoot: depth === 0,
@@ -132,18 +163,7 @@ function serializeCommand(
       required: a.required,
       variadic: a.variadic,
     })),
-    options: cmd.options
-      .filter((o) => !o.hidden && o.long !== '--help')
-      .map((o) => ({
-        flags: o.flags,
-        long: o.long ?? '',
-        short: o.short,
-        description: o.description ?? '',
-        type: optionType(o),
-        required: o.mandatory,
-        defaultValue: o.defaultValue,
-        allowedValues: o.argChoices?.length ? o.argChoices : undefined,
-      })),
+    options: serializeOptions(cmd),
     examples: EXAMPLES[fullName] ?? [],
     children: visibleChildren.map((c) => `${id}-${c.name()}`),
   };
@@ -163,6 +183,7 @@ const rootEntry: ClidocCommand = {
   id: rootId,
   name: 'sonar',
   fullName: 'sonar',
+  aliases: [],
   description: COMMAND_TREE.description() ?? 'SonarQube CLI',
   isGroup: true,
   isRoot: true,
@@ -192,6 +213,10 @@ mkdirSync(OUT_DIR, { recursive: true });
 writeFileSync(join(OUT_DIR, 'commands.json'), JSON.stringify(data, null, 2));
 
 // ── llms.txt ─────────────────────────────────────────────────
+function aliasSuffix(cmd: ClidocCommand): string {
+  return cmd.aliases.length > 0 ? `|${cmd.aliases.join('|')}` : '';
+}
+
 function buildLlmsTxt(): string {
   const template = readFileSync(join(__dirname, 'llms.txt.template'), 'utf-8');
   const commandLines: string[] = [];
@@ -201,7 +226,7 @@ function buildLlmsTxt(): string {
     if (cmd.isRoot) continue;
 
     const authMarker = cmd.requiresAuth ? ' *' : '';
-    commandLines.push(`### ${cmd.fullName}${authMarker}`);
+    commandLines.push(`### ${cmd.fullName}${aliasSuffix(cmd)}${authMarker}`);
     if (cmd.description) {
       const betaTag = cmd.stage === 'beta' ? ` ${BETA_HELP_TAG}` : '';
       commandLines.push(`${cmd.description}${betaTag}`);
@@ -225,7 +250,8 @@ function buildLlmsTxt(): string {
         for (const opt of cmd.options) {
           const flagPart = opt.short ? `${opt.long}, ${opt.short}` : opt.long;
           const typePart = opt.type === 'boolean' ? '' : `  <${opt.type}>`;
-          commandLines.push(`  ${flagPart}${typePart}   ${opt.description}`);
+          const betaTag = opt.stage === 'beta' ? ` ${BETA_HELP_TAG}` : '';
+          commandLines.push(`  ${flagPart}${typePart}   ${opt.description}${betaTag}`);
         }
       }
     }

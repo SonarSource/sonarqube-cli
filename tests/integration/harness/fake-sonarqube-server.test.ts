@@ -49,12 +49,17 @@ describe('FakeSonarQubeServer — UUID consistency', () => {
 
     const uuid = orgs[0].uuidV4;
 
-    // Step 2: fetch CAG entitlement using the UUID CAG received from step 1.
     const configResp = await fetch(`${base}/cag/cag-entitlement/${uuid}`);
-
     expect(configResp.status).toBe(HTTP_OK);
+    expect(((await configResp.json()) as { allowed: boolean }).allowed).toBe(true);
 
-    const config = (await configResp.json()) as { allowed: boolean };
-    expect(config.allowed).toBe(true);
+    const serverPathResp = await fetch(`${base}/api/v2/cag/cag-entitlement/${uuid}`);
+    expect(serverPathResp.status).toBe(HTTP_OK);
+    expect(((await serverPathResp.json()) as { allowed: boolean }).allowed).toBe(true);
+
+    const sqaaCloudResp = await fetch(`${base}/a3s-analysis/org-entitlement/${uuid}`);
+    expect(sqaaCloudResp.status).toBe(HTTP_OK);
+    const sqaaServerResp = await fetch(`${base}/api/v2/a3s/org-entitlement/${uuid}`);
+    expect(sqaaServerResp.status).toBe(HTTP_OK);
   });
 });

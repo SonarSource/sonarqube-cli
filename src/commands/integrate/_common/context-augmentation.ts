@@ -24,7 +24,6 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
-import { resolveRecordedRepoRoot } from '@/core/host/git/worktree.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
 import logger from '@/core/observability/logger.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
@@ -64,25 +63,18 @@ export function buildContextAugmentationAttrs(
   };
 }
 
-/**
- * Assemble the attrs persisted on an agent integration's features, shared by
- * every agent handler. Records the repository's main working tree as `repoRoot`
- * (resolved once from `projectRoot`) so `sonar analyze`/`sonar context` can match
- * the integration from any linked worktree — including ones created after
- * integrate ran; falls back to `projectRoot` outside a git repo. Layers the
- * agent's `baseAttrs` first, then the Context Augmentation connection attrs when
- * CAG was set up.
- */
-export async function buildRecordedIntegrationAttrs(params: {
+/** Assembles the attrs persisted on an agent integration's features, shared by every agent handler. `mainRepoRoot` should come from the caller's own `DiscoveredProject`; falls back to `projectRoot` when absent. */
+export function buildRecordedIntegrationAttrs(params: {
   baseAttrs: Record<string, IntegrationStateAttribute>;
   projectRoot: string;
+  mainRepoRoot?: string;
   serverUrl: string;
   orgKey: string | undefined;
   contextAugmentation: ResolvedVortexSetup | null;
-}): Promise<Record<string, IntegrationStateAttribute>> {
+}): Record<string, IntegrationStateAttribute> {
   return {
     ...params.baseAttrs,
-    repoRoot: await resolveRecordedRepoRoot(params.projectRoot),
+    repoRoot: params.mainRepoRoot ?? params.projectRoot,
     ...(params.contextAugmentation?.disposition === 'install'
       ? buildContextAugmentationAttrs(
           params.serverUrl,

@@ -21,11 +21,12 @@
 // Shared guard for hook handlers — resolves auth and binary path, throwing
 // MissingDependenciesError if either is unavailable so handlers fail loudly.
 
+import type { SecretsCallerCommand } from '@/commands/analyze/secrets-analysis-telemetry.ts';
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { isEnvBasedAuth, resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
-import type { SecretsCallerCommand } from '@/core/telemetry/secrets-analysis-telemetry.ts';
 import { warn } from '@/core/ui';
 
 import {
@@ -79,9 +80,13 @@ export async function runAndEmitFileSecretsScan(
   callerCommand: SecretsCallerCommand,
   deps: HookDependencies,
   filePath: string,
+  ctx: CommandInvocationContext,
 ): Promise<number> {
-  const { result } = await scanAndEmitSecrets(callerCommand, deps.auth, () =>
-    runSecretsBinary(deps.binaryPath, [filePath], deps.auth),
+  const { result } = await scanAndEmitSecrets(
+    callerCommand,
+    deps.auth,
+    () => runSecretsBinary(deps.binaryPath, [filePath], deps.auth),
+    ctx,
   );
   return result.exitCode ?? 1;
 }
@@ -90,9 +95,13 @@ export async function runAndEmitTextSecretsScan(
   callerCommand: SecretsCallerCommand,
   deps: HookDependencies,
   text: string,
+  ctx: CommandInvocationContext,
 ): Promise<number> {
-  const { result } = await scanAndEmitSecrets(callerCommand, deps.auth, () =>
-    runSecretsBinaryOnText(deps.binaryPath, text, deps.auth),
+  const { result } = await scanAndEmitSecrets(
+    callerCommand,
+    deps.auth,
+    () => runSecretsBinaryOnText(deps.binaryPath, text, deps.auth),
+    ctx,
   );
   return result.exitCode ?? 1;
 }

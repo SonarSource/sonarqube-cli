@@ -18,12 +18,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type {
+  CommandAuthenticatedInvocationContext,
+  CommandInvocationContext,
+} from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { InvalidOptionError } from '@/core/command-error.ts';
 import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 import { text } from '@/core/ui';
 
-import { resolveCloudAuthAndProject } from './sqaa-auth.ts';
+import { resolveSqaaAuthAndProject } from './sqaa-auth.ts';
 import {
   resolveChangeSet,
   resolveSqaaBranch,
@@ -57,10 +61,12 @@ export {
 
 export async function analyzeSqaa(
   options: AnalyzeSqaaOptions,
-  auth: ResolvedAuth,
+  ctx: CommandAuthenticatedInvocationContext,
   runOptions: AnalyzeSqaaRunOptions = {},
 ): Promise<void> {
+  const { auth } = ctx;
   const { requireProject = true, telemetryCallerCommand } = runOptions;
+  const telemetryCtx = runOptions.telemetryCtx ?? ctx;
   const {
     file: rawFiles,
     staged,
@@ -88,6 +94,7 @@ export async function analyzeSqaa(
       forcedDepth,
       requireProject,
       telemetryCallerCommand,
+      telemetryCtx,
     });
     return;
   }
@@ -104,6 +111,7 @@ export async function analyzeSqaa(
     forcedDepth,
     requireProject,
     telemetryCallerCommand,
+    telemetryCtx,
   });
 }
 
@@ -119,6 +127,7 @@ async function analyzeSqaaExplicitFiles(
     forcedDepth?: SqaaAnalysisDepth;
     requireProject: boolean;
     telemetryCallerCommand: SqaaBatchRunOptions['telemetryCallerCommand'];
+    telemetryCtx: CommandInvocationContext;
   },
 ): Promise<void> {
   const entries = resolveSqaaFileArgs(rawFiles);
@@ -132,6 +141,7 @@ async function analyzeSqaaExplicitFiles(
     forcedDepth,
     requireProject,
     telemetryCallerCommand,
+    telemetryCtx,
   } = params;
   const resolvedBranch = await resolveSqaaBranch(branch, entries[0].absolutePath);
 
@@ -145,12 +155,13 @@ async function analyzeSqaaExplicitFiles(
       wireDepth,
       displayDepth,
       telemetryCallerCommand,
+      telemetryCtx,
     });
     return;
   }
 
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'multi-file', forcedDepth);
-  const resolution = await resolveCloudAuthAndProject(auth, project);
+  const resolution = await resolveSqaaAuthAndProject(auth, project);
   const resolved = resolveSqaaContext(resolution, { requireProject });
   if (!resolved) return;
 
@@ -164,6 +175,7 @@ async function analyzeSqaaExplicitFiles(
     wireDepth,
     displayDepth,
     telemetryCallerCommand,
+    telemetryCtx,
   });
 }
 
@@ -179,6 +191,7 @@ async function analyzeSqaaChangeSet(params: {
   forcedDepth?: SqaaAnalysisDepth;
   requireProject: boolean;
   telemetryCallerCommand: SqaaBatchRunOptions['telemetryCallerCommand'];
+  telemetryCtx: CommandInvocationContext;
 }): Promise<void> {
   const {
     auth,
@@ -192,6 +205,7 @@ async function analyzeSqaaChangeSet(params: {
     forcedDepth,
     requireProject,
     telemetryCallerCommand,
+    telemetryCtx,
   } = params;
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'change-set', forcedDepth);
 
@@ -210,7 +224,7 @@ async function analyzeSqaaChangeSet(params: {
     return;
   }
 
-  const resolution = await resolveCloudAuthAndProject(auth, project, changeSet.repoRoot);
+  const resolution = await resolveSqaaAuthAndProject(auth, project, changeSet.repoRoot);
   const resolved = resolveSqaaContext(resolution, { requireProject });
   if (!resolved) return;
 
@@ -224,5 +238,6 @@ async function analyzeSqaaChangeSet(params: {
     wireDepth,
     displayDepth,
     telemetryCallerCommand,
+    telemetryCtx,
   });
 }

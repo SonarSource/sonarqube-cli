@@ -41,6 +41,7 @@ import { preCommitIntegration } from '@/commands/integrate/git/tools/pre-commit'
 import { CLI_TMP_DIR, SCA_SCANNER_CACHE_DIR } from '@/core/config-constants.ts';
 import { generateKeychainAccount } from '@/core/host/keychain.ts';
 
+import { version as CLI_VERSION } from '../../../../package.json';
 import { hookScriptName, TestHarness } from '../../harness';
 import { runCli } from '../../harness/cli-runner.js';
 import { buildHomeEnv, IS_WINDOWS } from '../../harness/platform';
@@ -99,7 +100,6 @@ interface TelemetrySnapshot {
 interface ResetStateSnapshot {
   auth: AuthSnapshot;
   telemetry: TelemetrySnapshot;
-  tools?: { installed: Array<{ name: string }> };
   dependencies: { installed: Array<{ id: string }> };
   agentExtensions: unknown[];
   integrations: { installed: unknown[] };
@@ -135,7 +135,6 @@ function buildRawState(overrides: {
       'claude-code': { configured: false, hooks: { installed: [] }, skills: { installed: [] } },
     },
     config: { cliVersion: '0.0.0' },
-    tools: { installed: [] },
     dependencies: { installed: [] },
     telemetry: {
       enabled: false,
@@ -342,18 +341,20 @@ describe('system reset --force', () => {
   it(
     'removes binaries recorded in state',
     async () => {
-      harness.state().withSecretsBinaryInstalled();
+      harness.state().withSecretsBinaryInstalled().withScaScannerBinaryInstalled();
 
       const result = await harness.run('system reset --force');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toMatch(/Binaries:.*Removed 1 binary/);
+      expect(result.stdout).toMatch(/Binaries:.*Removed 2 binaries/);
 
       const binDir = join(harness.cliHome.path, 'bin');
       const state = readState(harness.stateJsonFile.path);
       expect(state.dependencies.installed).toHaveLength(0);
       if (existsSync(binDir)) {
-        const remaining = readdirSync(binDir).filter((name) => name.includes('sonar'));
+        const remaining = readdirSync(binDir).filter(
+          (name) => name.includes('sonar-secrets') || name.includes('sca-scanner'),
+        );
         expect(remaining).toHaveLength(0);
       }
     },
@@ -378,7 +379,6 @@ describe('system reset --force', () => {
             },
           },
           config: { cliVersion: '0.0.0' },
-          tools: { installed: [] },
           dependencies: { installed: [] },
           telemetry: {
             enabled: true,
@@ -548,13 +548,11 @@ describe('system reset --force', () => {
               skills: { installed: [] },
             },
           },
-          config: { cliVersion: '0.0.0' },
-          tools: { installed: [] },
+          config: { cliVersion: CLI_VERSION },
           dependencies: {
             installed: [
               {
                 id: 'sonar-secrets',
-                dependencyType: 'binary',
                 path: outside,
                 updatedByCliVersion: '0.0.0',
                 updatedAt: new Date().toISOString(),
@@ -602,13 +600,11 @@ describe('system reset --force', () => {
               skills: { installed: [] },
             },
           },
-          config: { cliVersion: '0.0.0' },
-          tools: { installed: [] },
+          config: { cliVersion: CLI_VERSION },
           dependencies: {
             installed: [
               {
                 id: 'sonar-secrets',
-                dependencyType: 'binary',
                 path: stalePath,
                 updatedByCliVersion: '0.0.0',
                 updatedAt: new Date().toISOString(),
@@ -632,27 +628,6 @@ describe('system reset --force', () => {
       expect(result.stdout).toMatch(/Binaries:.*Cleared 1 stale binary entry from state/);
       expect(result.stdout).not.toMatch(/Removed 1 binary/);
       expect(readState(harness.stateJsonFile.path).dependencies.installed).toHaveLength(0);
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'removes sca-scanner-cli recorded only in tools.installed',
-    async () => {
-      harness.state().withScaScannerBinaryInstalled();
-
-      const result = await harness.run('system reset --force');
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toMatch(/Binaries:.*Removed 1 binary/);
-
-      const state = readState(harness.stateJsonFile.path);
-      expect(state.tools?.installed ?? []).toHaveLength(0);
-      const binDir = join(harness.cliHome.path, 'bin');
-      if (existsSync(binDir)) {
-        const remaining = readdirSync(binDir).filter((name) => name.includes('sca-scanner'));
-        expect(remaining).toHaveLength(0);
-      }
     },
     { timeout: 15000 },
   );

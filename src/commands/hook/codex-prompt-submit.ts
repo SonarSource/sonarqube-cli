@@ -27,8 +27,11 @@
 // Codex a named entry point that can diverge later if the wire format ever
 // changes.
 
-import { agentPromptSubmit } from './agent-prompt-submit.ts';
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 
-export function codexPromptSubmit(): Promise<void> {
-  return agentPromptSubmit();
+import { agentPromptSubmit } from './agent-prompt-submit.ts';
+import type { HookCommandResult } from './hook-command-result.ts';
+
+export function codexPromptSubmit(ctx: CommandInvocationContext): Promise<HookCommandResult> {
+  return agentPromptSubmit(ctx);
 }

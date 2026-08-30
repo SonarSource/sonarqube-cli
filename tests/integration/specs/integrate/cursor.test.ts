@@ -22,12 +22,14 @@
 // PR 1 (CLI-619): covers MCP server setup, scope semantics, idempotency, and
 // state recording. Hook and CAG tests are added in subsequent PRs.
 
-import { readFileSync } from 'node:fs';
-import { isAbsolute } from 'node:path';
+import { cpSync, readFileSync } from 'node:fs';
+import { isAbsolute, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { VORTEX_PROMOTION_MESSAGE } from '../../../../src/commands/integrate/_common/vortex.ts';
 import { cursorIntegration } from '../../../../src/commands/integrate/cursor/declaration';
+import { ENV_SONAR_USER_HOME } from '../../../../src/core/config-constants.ts';
 import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
@@ -42,7 +44,7 @@ const HOOKS_JSON_DIRS = ['.cursor', 'hooks.json'];
 const CURSOR_PROMPT_STDIN_DELAY_MS = 1000;
 
 interface CursorMcpFile {
-  mcpServers?: Record<string, { command?: string; args?: string[] }>;
+  mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
 }
 
 type CursorHookEntry = { command?: string; matcher?: string };
@@ -97,8 +99,44 @@ describe('integrate cursor', () => {
 
         const mcp: CursorMcpFile = harness.cwd.file(...MCP_JSON_DIRS).asJson();
         expect(mcp.mcpServers?.sonarqube).toBeDefined();
-        expect(mcp.mcpServers?.sonarqube?.command).toBeDefined();
+        expect(mcp.mcpServers?.sonarqube?.command).toBe('sonar');
         expect(mcp.mcpServers?.sonarqube?.args).toContain('mcp');
+        expect(mcp.mcpServers?.sonarqube).not.toHaveProperty('env');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'forwards SONAR_USER_HOME into the MCP server env and refreshes a prior entry',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withProject('my-project')
+          .start();
+        harness.withAuth(server.baseUrl(), 'test-token');
+        harness.cwd.writeFile(
+          'sonar-project.properties',
+          [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
+        );
+
+        const first = await harness.run('integrate cursor --non-interactive');
+        expect(first.exitCode).toBe(0);
+        expect(
+          (harness.cwd.file(...MCP_JSON_DIRS).asJson() as CursorMcpFile).mcpServers?.sonarqube,
+        ).not.toHaveProperty('env');
+
+        // Distinct from $HOME/.sonar. Copy cliHome because harness.run() always
+        // writes state there, and the child with a custom home must still find auth.
+        const customHome = join(harness.userHome.path, 'custom-sonar');
+        cpSync(harness.cliHome.path, join(customHome, 'sonarqube-cli'), { recursive: true });
+        const result = await harness.run('integrate cursor --non-interactive', {
+          extraEnv: { [ENV_SONAR_USER_HOME]: customHome },
+        });
+
+        expect(result.exitCode).toBe(0);
+        const mcp: CursorMcpFile = harness.cwd.file(...MCP_JSON_DIRS).asJson();
+        expect(mcp.mcpServers?.sonarqube?.env?.[ENV_SONAR_USER_HOME]).toBe(customHome);
       },
       { timeout: 30000 },
     );
@@ -632,9 +670,7 @@ describe('integrate cursor', () => {
         );
 
         expect(result.exitCode).toBe(0);
-        expect(`${result.stdout}\n${result.stderr}`).toContain(
-          'Vortex is available on SonarQube Cloud',
-        );
+        expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_PROMOTION_MESSAGE);
         expect(harness.cwd.file(...SQAA_RULE_DIRS).exists()).toBe(false);
         expect(findInstalledFeature(harness, 'cursor', 'vortex')).toBeUndefined();
       },

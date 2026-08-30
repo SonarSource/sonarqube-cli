@@ -17,22 +17,14 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-import { setupMcpServerForAgent } from '@/core/host/mcp/mcp-helper.ts';
-import { type DiscoveredProject } from '@/core/project-info.ts';
-import { discreetSuccess, info, warn } from '@/core/ui';
 
-export async function setupMcpServer(
-  project: DiscoveredProject,
-  isGlobal: boolean,
-  projectKey: string | undefined,
-): Promise<void> {
-  info(`Setting up SonarQube MCP Server...`);
-  try {
-    await setupMcpServerForAgent('copilot', project.rootDir, isGlobal, projectKey);
-    discreetSuccess(`SonarQube MCP Server configured`);
-  } catch (error) {
-    if (error instanceof Error) {
-      warn(`Failed to setup MCP server: ${error.message}`);
-    }
-  }
-}
+import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
+
+/**
+ * Condition for commands with a `--format` option: only notify for `table`,
+ * since JSON (and other machine-readable formats) stdout must stay pure.
+ */
+export const isTableFormatOption: UpdateNotificationCondition = (opts) => {
+  const format = typeof opts.format === 'string' ? opts.format : 'json';
+  return format.toLowerCase() === 'table';
+};

@@ -21,14 +21,19 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
+import type { AnalysisCompletedPayload } from '@/commands/analyze/analysis-completed.ts';
 import type {
   CliState,
-  StoredAnalysisCompletedEvent,
-  StoredCommandExecutedEvent,
-  StoredIntegrationConfiguredEvent,
   StoredTelemetryEvent,
+  TelemetryEventIdentityPayload,
 } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
+
+export type StoredAnalysisCompletedEvent = StoredTelemetryEvent & {
+  event_payload: TelemetryEventIdentityPayload & AnalysisCompletedPayload & Record<string, unknown>;
+};
+export type StoredCommandExecutedEvent = StoredTelemetryEvent;
+export type StoredIntegrationConfiguredEvent = StoredTelemetryEvent;
 
 export function makeTelemetryState(enabled = true): CliState {
   const state = getDefaultState('1.0.0');

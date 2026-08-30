@@ -194,7 +194,6 @@ export interface AppliedFeature {
 
 export interface InstalledDependency {
   id: string;
-  dependencyType: string;
   version?: string;
   path?: string;
 }
