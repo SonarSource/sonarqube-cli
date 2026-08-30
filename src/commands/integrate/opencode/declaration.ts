@@ -57,7 +57,10 @@ function getDesiredOpenCodeMcpConfig(context: IntegrationContext) {
           projectKey: getOptionalStringAttr(context, 'projectKey'),
         },
   );
-  return { type: 'local', command: [config.command, ...config.args] };
+  const command = [config.command, ...config.args];
+  return config.env === undefined
+    ? { type: 'local', command }
+    : { type: 'local', command, environment: config.env };
 }
 
 function resolveOpenCodeInstructionsPath(context: IntegrationContext): string {

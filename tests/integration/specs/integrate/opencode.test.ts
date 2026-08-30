@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-import { readFileSync } from 'node:fs';
+import { cpSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -29,6 +30,7 @@ import {
   VORTEX_GLOBAL_SKIP_MESSAGE,
 } from '@/commands/integrate/_common/vortex.ts';
 import { openCodeIntegration } from '@/commands/integrate/opencode/declaration.ts';
+import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 
 import { TestHarness } from '../../harness';
 import { findInstalledFeature, findInstalledSubfeature } from './state-helpers';
@@ -40,7 +42,7 @@ const TEST_ORG = 'test-org';
 const TEST_PROJECT = 'test-project';
 
 interface OpenCodeConfig {
-  mcp?: Record<string, { type?: string; command?: string[] }>;
+  mcp?: Record<string, { type?: string; command?: string[]; environment?: Record<string, string> }>;
   [key: string]: unknown;
 }
 
@@ -98,6 +100,7 @@ describe('integrate opencode', () => {
       expect(result.exitCode).toBe(0);
       const config: OpenCodeConfig = harness.cwd.file(...OPENCODE_CONFIG_DIRS).asJson();
       expect(config.mcp?.sonarqube).toMatchObject({ type: 'local' });
+      expect(config.mcp?.sonarqube).not.toHaveProperty('environment');
       expect(mcpCommand(config)).toContain('run');
       expect(mcpCommand(config)).toContain('mcp');
       expect(mcpCommand(config)).toContain('--project');
@@ -111,6 +114,27 @@ describe('integrate opencode', () => {
           },
         ],
       });
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'forwards SONAR_USER_HOME into the local MCP server environment',
+    async () => {
+      const first = await harness.run('integrate opencode --project my-project --non-interactive');
+      expect(first.exitCode).toBe(0);
+
+      const customHome = join(harness.userHome.path, 'custom-sonar');
+      cpSync(harness.cliHome.path, join(customHome, 'sonarqube-cli'), { recursive: true });
+
+      const result = await harness.run(
+        'integrate opencode --project my-project --non-interactive',
+        { extraEnv: { [ENV_SONAR_USER_HOME]: customHome } },
+      );
+
+      expect(result.exitCode).toBe(0);
+      const config: OpenCodeConfig = harness.cwd.file(...OPENCODE_CONFIG_DIRS).asJson();
+      expect(config.mcp?.sonarqube?.environment?.[ENV_SONAR_USER_HOME]).toBe(customHome);
     },
     { timeout: 30000 },
   );
