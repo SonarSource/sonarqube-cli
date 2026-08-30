@@ -86,6 +86,7 @@ import { integrateCopilot } from './integrate/copilot';
 import { integrateCursor } from './integrate/cursor';
 import { integrateGit, type IntegrateGitOptions } from './integrate/git';
 import { integrateBare, type IntegrateBareOptions } from './integrate/integrate-bare.ts';
+import { integrateOpenCode } from './integrate/opencode';
 import {
   listIssues,
   type ListIssuesOptions,
@@ -406,16 +407,18 @@ export function createCommandTree(runtime: CliRuntime = createDefaultCliRuntime(
   integrateCommand
     .command('opencode')
     .description(
-      'Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure Vortex analysis.',
+      'Setup SonarQube integration for OpenCode. This will configure the SonarQube MCP Server.',
     )
     .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
     .option(
       '-g, --global',
-      "Install config globally to ~/.cursor instead of project directory. Note: Cursor's cloud/background agents only pick up project-level hooks, not global ones.",
+      'Install config globally to ~/.config/opencode instead of project directory',
     )
     .addHelpText('after', projectKeyExtraHelp)
-    .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCursor(options, auth));
+    .authenticatedAction((auth, options: IntegrateAgentOptions) =>
+      integrateOpenCode(options, auth),
+    );
 
   // Analyze code for quality and security issues
   const analyze = COMMAND_TREE.command('analyze')

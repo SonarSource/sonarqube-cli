@@ -81,7 +81,11 @@ describe('integrate opencode', () => {
   it('is listed in sonar integrate --help', async () => {
     const result = await harness.run('integrate --help');
 
-    expect(result.stdout).toContain('opencode');
+    expect(result.stdout).toContain('opencode [options]');
+    expect(result.stdout).toContain('Setup SonarQube integration for OpenCode. This will');
+
+    const commandHelp = await harness.run('integrate opencode --help');
+    expect(commandHelp.stdout).toContain('Install config globally to ~/.config/opencode instead');
   });
 
   it(
