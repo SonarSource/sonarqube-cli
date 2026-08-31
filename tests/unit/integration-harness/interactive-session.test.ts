@@ -178,6 +178,51 @@ describe('InteractiveSession', () => {
     await session.finish().catch(() => undefined);
   });
 
+  it('waits for a repeated prompt only after a write', async () => {
+    const fake = createFakeProcess();
+    const session = InteractiveSession.fromProcess(fake.handle, { timeoutMs: 2000 });
+
+    fake.pushStdout('Enter server URL');
+    await session.waitText('Enter server URL');
+    session.write('bad');
+    session.enter();
+
+    const again = session.waitText('Enter server URL');
+    fake.pushStdout('Enter server URL');
+    await again;
+
+    session.kill();
+    await session.finish().catch(() => undefined);
+  });
+
+  it('does not treat a submitted clack line as the next live prompt', async () => {
+    const fake = createFakeProcess();
+    const session = InteractiveSession.fromProcess(fake.handle, { timeoutMs: 2000 });
+
+    fake.pushStdout('?  Enter server URL');
+    await session.waitText('?  Enter server URL');
+    session.write('bad-url');
+    session.enter();
+
+    const submitted = session.waitText('?  Enter server URL', 50);
+    fake.pushStdout('✓  Enter server URL bad-url');
+    let rematchError: unknown;
+    try {
+      await submitted;
+    } catch (error) {
+      rematchError = error;
+    }
+    expect(rematchError).toBeInstanceOf(Error);
+    expect(String(rematchError)).toContain('Timed out waiting for "?  Enter server URL"');
+
+    const live = session.waitText('?  Enter server URL');
+    fake.pushStdout('?  Enter server URL');
+    await live;
+
+    session.kill();
+    await session.finish().catch(() => undefined);
+  });
+
   it('throws when the process exits before the prompt appears', async () => {
     const fake = createFakeProcess();
     const session = InteractiveSession.fromProcess(fake.handle, { timeoutMs: 2000 });

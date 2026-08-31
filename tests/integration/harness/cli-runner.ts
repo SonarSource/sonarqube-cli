@@ -51,8 +51,6 @@ export function getCliBinaryPath(): string {
   return getBinaryPath(process.env.SONARQUBE_CLI_USE_COVERAGE === '1');
 }
 
-const STDIN_CHUNK_DELAY_MS = 300;
-
 export type SpawnedCliProcess = {
   proc: InteractiveProcessHandle;
   timeoutMs: number;
@@ -129,8 +127,6 @@ export async function runCli(
   env: Record<string, string>,
   options: {
     stdin?: string;
-    stdinChunks?: string[];
-    stdinChunkDelayMs?: number;
     timeoutMs?: number;
     cwd: string;
     browserToken?: string;
@@ -138,7 +134,7 @@ export async function runCli(
     binaryPath?: string;
   },
 ): Promise<CliResult> {
-  const hasStdin = options.stdin !== undefined || (options.stdinChunks?.length ?? 0) > 0;
+  const hasStdin = options.stdin !== undefined;
   const { proc, timeoutMs, startedAt } = spawnCliProcess(command, env, {
     cwd: options.cwd,
     timeoutMs: options.timeoutMs,
@@ -149,20 +145,6 @@ export async function runCli(
   if (options.stdin !== undefined && proc.stdin) {
     proc.stdin.write(new TextEncoder().encode(options.stdin));
     proc.stdin.end();
-  }
-
-  if (options.stdinChunks !== undefined && proc.stdin) {
-    const encoder = new TextEncoder();
-    // Write each chunk with a delay so readline in the CLI process finishes
-    // handling one prompt before the next chunk arrives for the next prompt.
-    const chunkDelayMs = options.stdinChunkDelayMs ?? STDIN_CHUNK_DELAY_MS;
-    await (async () => {
-      for (const chunk of options.stdinChunks ?? []) {
-        await new Promise((r) => setTimeout(r, chunkDelayMs));
-        proc.stdin?.write(encoder.encode(chunk));
-      }
-      proc.stdin?.end();
-    })();
   }
 
   let timedOut = false;

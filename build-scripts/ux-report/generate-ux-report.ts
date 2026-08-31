@@ -38,7 +38,7 @@ import { dirname, join } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, it } from 'bun:test';
 
 import type { CliResult } from '../../tests/integration/harness';
-import { TestHarness } from '../../tests/integration/harness';
+import { KEY, PROMPT, TestHarness } from '../../tests/integration/harness';
 import { commitFile, initGitRepo } from '../../tests/integration/specs/hook/git-test-helpers.ts';
 
 const OUTPUT_PATH = join(import.meta.dir, '../../ux-report/cli-output-report.md');
@@ -522,10 +522,13 @@ uxDescribe('SonarQube Cloud — Happy Path', () => {
         })
         .start();
       h.state().withAuth(server.baseUrl(), TOKEN, ORG);
-      return h.run(`remediate -p ${PROJECT}`, {
+      const session = h.runInteractive(`remediate -p ${PROJECT}`, {
         extraEnv: { SONARQUBE_CLI_MOCK_TTY: '1' },
-        stdinChunks: [' ', '\r'],
       });
+      await session.waitText(PROMPT.whichIssues);
+      session.write(KEY.space);
+      session.enter();
+      return session.finish();
     }),
   );
   uxIt('auth logout (Cloud)', () => harness.run('auth logout'));
@@ -886,11 +889,15 @@ uxDescribe('Interactive auth login', () => {
         .withOrganizations([{ key: ORG, name: 'My Org' }])
         .start();
       const cloudUrl = server.baseUrl();
-      return h.run('auth login', {
+      const session = h.runInteractive('auth login', {
         extraEnv: cloudEnvFor(cloudUrl),
         browserToken: TOKEN,
-        stdinChunks: ['\r', '\r'], // Enter (Cloud), Enter (EU)
       });
+      await session.waitText(PROMPT.connectWhere);
+      session.enter();
+      await session.waitText(PROMPT.cloudRegion);
+      session.enter();
+      return session.finish();
     }),
   );
 });

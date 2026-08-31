@@ -34,14 +34,13 @@ import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
-import { hookScriptName, hookScriptPath, normalizePath, TestHarness } from '../../harness';
+import { hookScriptName, hookScriptPath, normalizePath, PROMPT, TestHarness } from '../../harness';
 import { findInstalledFeature, getInstalledIntegration } from './state-helpers';
 
 const MCP_JSON_DIRS = ['.cursor', 'mcp.json'];
 const SQAA_RULE_DIRS = ['.cursor', 'rules', 'sonar-agentic-analysis.mdc'];
 const HOOK_BUILD_SCRIPT_DIRS = ['.cursor', 'hooks', 'sonar-secrets', 'build-scripts'];
 const HOOKS_JSON_DIRS = ['.cursor', 'hooks.json'];
-const CURSOR_PROMPT_STDIN_DELAY_MS = 1000;
 
 interface CursorMcpFile {
   mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
@@ -566,11 +565,16 @@ describe('integrate cursor', () => {
       async () => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
-        const result = await harness.run(`integrate cursor --project ${TEST_PROJECT}`, {
+        const session = harness.runInteractive(`integrate cursor --project ${TEST_PROJECT}`, {
           extraEnv: { ...extraEnv, __SQCLI_DEV_SKIP_CAG: '1' },
-          stdinChunks: ['\r', '\r', '\r', '\r'],
-          stdinChunkDelayMs: CURSOR_PROMPT_STDIN_DELAY_MS,
         });
+        await session.waitText(PROMPT.secretsHooks);
+        session.enter();
+        await session.waitText(PROMPT.vortex);
+        session.enter();
+        await session.waitText(PROMPT.mcp);
+        session.enter();
+        const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;
@@ -592,22 +596,29 @@ describe('integrate cursor', () => {
       async (isAgent, isInteractive, expectedShownPrompt) => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
-        const result = await harness.run(
-          `integrate cursor --project ${TEST_PROJECT}${isInteractive ? '' : ' --non-interactive'}`,
-          {
-            extraEnv: {
-              ...extraEnv,
-              __SQCLI_DEV_SKIP_CAG: '1',
-              ...(isAgent ? { CURSOR_AGENT: '1' } : {}),
-            },
-            ...(isInteractive
-              ? {
-                  stdinChunks: ['\r', '\r', '\r', '\r'],
-                  stdinChunkDelayMs: CURSOR_PROMPT_STDIN_DELAY_MS,
-                }
-              : {}),
-          },
-        );
+        const runEnv = {
+          ...extraEnv,
+          __SQCLI_DEV_SKIP_CAG: '1',
+          ...(isAgent ? { CURSOR_AGENT: '1' } : {}),
+        };
+        let result;
+        if (isInteractive) {
+          const session = harness.runInteractive(`integrate cursor --project ${TEST_PROJECT}`, {
+            extraEnv: runEnv,
+          });
+          await session.waitText(PROMPT.secretsHooks);
+          session.enter();
+          await session.waitText(PROMPT.vortex);
+          session.enter();
+          await session.waitText(PROMPT.mcp);
+          session.enter();
+          result = await session.finish();
+        } else {
+          result = await harness.run(
+            `integrate cursor --project ${TEST_PROJECT} --non-interactive`,
+            { extraEnv: runEnv },
+          );
+        }
 
         expect(result.exitCode).toBe(0);
         if (expectedShownPrompt) {

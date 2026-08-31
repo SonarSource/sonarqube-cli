@@ -22,7 +22,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { TestHarness } from '../../harness';
+import { type InteractiveSession, KEY, PROMPT, TestHarness } from '../../harness';
 
 const GITHUB_ALM = {
   key: 'github',
@@ -48,6 +48,20 @@ const ADMIN_ACTIONS = { admin: true };
 // `/organizations/organizations` defaults an org's legacy ID to its key
 // (see fake-sonarqube-server.ts), so repos are keyed by org key here too.
 const SAMPLE_REPOS = [{ id: 'repo-1', name: 'repo', slug: 'kevinmlsilva/repo' }];
+
+async function chooseManual(session: InteractiveSession): Promise<void> {
+  await session.waitText(PROMPT.importHow);
+  session.write(KEY.down);
+  session.enter();
+  await session.waitText(PROMPT.selectRepos);
+}
+
+async function chooseByPattern(session: InteractiveSession): Promise<void> {
+  await session.waitText(PROMPT.importHow);
+  session.write(KEY.down);
+  session.write(KEY.down);
+  session.enter();
+}
 
 describe('sonar import', () => {
   let harness: TestHarness;
@@ -417,12 +431,15 @@ describe('sonar import', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        // down+enter → Manual mode; 'q' → cancel the picker, back to the mode menu; enter →
-        // Recommended this time (the re-shown menu's default, first option).
-        const result = await harness.run('import', {
-          stdinChunks: ['\x1b[B\r', 'q', '\r'],
+        // Cancel the Manual picker, then Recommended on the re-shown mode menu.
+        const session = harness.runInteractive('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
+        await chooseManual(session);
+        session.write('q');
+        await session.waitText(PROMPT.importHow);
+        session.enter();
+        const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
         // The picker is cancelled (not treated as an error) and the mode menu re-appears,
@@ -491,10 +508,13 @@ describe('sonar import', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import', {
-          stdinChunks: ['\x1b[B\r', ' \r'], // down arrow+enter → Manual mode, space+enter → toggles and confirms the only repo
+        const session = harness.runInteractive('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
+        await chooseManual(session);
+        session.write(KEY.space);
+        session.enter();
+        const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('kevinmlsilva/repo');
@@ -519,11 +539,14 @@ describe('sonar import', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import', {
-          // down arrow+enter → Manual mode, down arrow+space+enter → toggles and confirms second repo
-          stdinChunks: ['\x1b[B\r', '\x1b[B \r'],
+        const session = harness.runInteractive('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
+        await chooseManual(session);
+        session.write(KEY.down);
+        session.write(KEY.space);
+        session.enter();
+        const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('kevinmlsilva/repo-two');
@@ -663,15 +686,16 @@ describe('sonar import', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import', {
-          stdinChunks: [
-            '\x1b[B\r', // down arrow+enter → Manual mode
-            // toggle the eligible repo (cursor starts on it), move down to the already-imported
-            // row, attempt to toggle it too (must be a no-op), then confirm.
-            ' \x1b[B \r',
-          ],
+        // Toggle the eligible repo, then attempt to toggle the already-imported row (no-op).
+        const session = harness.runInteractive('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
+        await chooseManual(session);
+        session.write(KEY.space);
+        session.write(KEY.down);
+        session.write(KEY.space);
+        session.enter();
+        const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
         // The already-imported repo is listed (dimmed/non-toggleable), not hidden.
@@ -741,15 +765,19 @@ describe('sonar import', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        // down arrow+enter → Manual mode, then navigate to "Load more..." (50 repos precede it
-        // on the first page), select it — which fetches page two — then toggle and confirm the
-        // newly revealed 51st repo (cursor carries over onto it, since the multi-select prompt
-        // never resets its cursor).
-        const result = await harness.run('import', {
-          stdinChunks: ['\x1b[B\r', '\x1b[B'.repeat(50) + '\r', ' \r'],
+        // 50 downs reach "Load more..."; after the next page loads, toggle the 51st repo
+        // (cursor carries over onto it).
+        const session = harness.runInteractive('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
           timeoutMs: 20000,
         });
+        await chooseManual(session);
+        session.write(KEY.down.repeat(50));
+        session.enter();
+        await session.waitText(PROMPT.selectRepos);
+        session.write(KEY.space);
+        session.enter();
+        const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('kevinmlsilva/repo-51');
@@ -782,11 +810,13 @@ describe('sonar import', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import', {
-          // down arrow+enter → Manual mode, space+enter → toggles and confirms the first repo
-          stdinChunks: ['\x1b[B\r', ' \r'],
+        const session = harness.runInteractive('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
+        await chooseManual(session);
+        session.write(KEY.space);
+        session.enter();
+        const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('kevinmlsilva/repo-01');
@@ -822,11 +852,13 @@ describe('sonar import', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import', {
-          // down arrow+enter → Manual mode, space+enter → toggles and confirms the first selectable repo
-          stdinChunks: ['\x1b[B\r', ' \r'],
+        const session = harness.runInteractive('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
+        await chooseManual(session);
+        session.write(KEY.space);
+        session.enter();
+        const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
         // Exactly the 10 selectable repos (02,04,06,08,10,11-15), no "Load more" needed.
@@ -871,13 +903,16 @@ describe('sonar import', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        // down arrow+enter → Manual mode; toggle the first repo, then (down+toggle) 25 more
-        // times — 26 toggle attempts across all 26 repos, all of which must be accepted.
-        const result = await harness.run('import', {
-          stdinChunks: ['\x1b[B\r', ' ' + '\x1b[B '.repeat(25) + '\r'],
+        // Toggle the first repo, then (down+toggle) 25 more times — all 26 must be accepted.
+        const session = harness.runInteractive('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
           timeoutMs: 20000,
         });
+        await chooseManual(session);
+        session.write(KEY.space);
+        session.write((KEY.down + KEY.space).repeat(25));
+        session.enter();
+        const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('26 of 26 selected');
@@ -911,11 +946,13 @@ describe('sonar import', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import', {
-          // down arrow+enter → Manual mode, space+enter → toggles and confirms the only repo
-          stdinChunks: ['\x1b[B\r', ' \r'],
+        const session = harness.runInteractive('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
+        await chooseManual(session);
+        session.write(KEY.space);
+        session.enter();
+        const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('Imported 1 repository');
@@ -945,10 +982,13 @@ describe('sonar import', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import', {
-          stdinChunks: ['\x1b[B\r', ' \r'],
+        const session = harness.runInteractive('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
+        await chooseManual(session);
+        session.write(KEY.space);
+        session.enter();
+        const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
         const recorded = server.getRecordedRequests();
@@ -1009,11 +1049,13 @@ describe('sonar import', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import', {
-          // down arrow+enter → Manual mode, space+enter → toggles and confirms the only repo
-          stdinChunks: ['\x1b[B\r', ' \r'],
+        const session = harness.runInteractive('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
+        await chooseManual(session);
+        session.write(KEY.space);
+        session.enter();
+        const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
         const recorded = server.getRecordedRequests();
@@ -1050,10 +1092,13 @@ describe('sonar import', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import', {
-          stdinChunks: ['\x1b[B\r', ' \r'], // down arrow+enter → Manual mode, space+enter → toggles and confirms the only repo
+        const session = harness.runInteractive('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
+        await chooseManual(session);
+        session.write(KEY.space);
+        session.enter();
+        const result = await session.finish();
 
         expect(result.exitCode).toBe(1);
         const output = result.stdout + result.stderr;
@@ -1208,11 +1253,13 @@ describe('sonar import', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import', {
-          // down arrow+enter → Manual mode, space+enter → toggles and confirms the only repo
-          stdinChunks: ['\x1b[B\r', ' \r'],
+        const session = harness.runInteractive('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
+        await chooseManual(session);
+        session.write(KEY.space);
+        session.enter();
+        const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('kevinmlsilva/repo - private');
@@ -1244,11 +1291,13 @@ describe('sonar import', () => {
 
         // No private-projects entitlement configured → org is public-only, so the private
         // repo must be dropped from the list rather than merely shown as disabled.
-        const result = await harness.run('import', {
-          // down arrow+enter → Manual mode, space+enter → toggles and confirms the only remaining (public) repo
-          stdinChunks: ['\x1b[B\r', ' \r'],
+        const session = harness.runInteractive('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
+        await chooseManual(session);
+        session.write(KEY.space);
+        session.enter();
+        const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('kevinmlsilva/public-repo');
@@ -1507,12 +1556,16 @@ describe('sonar import', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        // down arrow+enter → Manual mode, space (toggle repo-a), down, down,
-        // space (toggle repo-c), enter (confirm)
-        const result = await harness.run('import', {
-          stdinChunks: ['\x1b[B\r', ' \x1b[B\x1b[B \r'],
+        const session = harness.runInteractive('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
+        await chooseManual(session);
+        session.write(KEY.space);
+        session.write(KEY.down);
+        session.write(KEY.down);
+        session.write(KEY.space);
+        session.enter();
+        const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('Imported 2 repositories');
@@ -2057,12 +2110,14 @@ describe('sonar import', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        // down+down+enter → "By pattern" (3rd option after Recommended/Manual); type a
-        // regex + enter → the mandatory pattern prompt shown only for this mode.
-        const result = await harness.run('import', {
-          stdinChunks: ['\x1b[B\x1b[B\r', '^engineering-\r'],
+        const session = harness.runInteractive('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
+        await chooseByPattern(session);
+        await session.waitText(PROMPT.importRegex);
+        session.write('^engineering-');
+        session.enter();
+        const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain(
@@ -2090,12 +2145,19 @@ describe('sonar import', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        // down+down+enter → "By pattern"; blank enter (rejected, re-prompts); invalid regex
-        // syntax (rejected, re-prompts); finally a valid pattern + enter.
-        const result = await harness.run('import', {
-          stdinChunks: ['\x1b[B\x1b[B\r', '\r', '(\r', '^engineering-\r'],
+        const session = harness.runInteractive('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
+        await chooseByPattern(session);
+        await session.waitText(PROMPT.importRegex);
+        session.enter();
+        await session.waitText(PROMPT.importRegex);
+        session.write('(');
+        session.enter();
+        await session.waitText(PROMPT.importRegex);
+        session.write('^engineering-');
+        session.enter();
+        const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('my-org/engineering-tools');
@@ -2120,12 +2182,15 @@ describe('sonar import', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        // down+down+enter → "By pattern"; Ctrl+C → cancel, back to the mode menu; enter →
-        // Recommended this time (the re-shown menu's default, first option).
-        const result = await harness.run('import', {
-          stdinChunks: ['\x1b[B\x1b[B\r', '\x03', '\r'],
+        const session = harness.runInteractive('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
+        await chooseByPattern(session);
+        await session.waitText(PROMPT.importRegex);
+        session.cancel();
+        await session.waitText(PROMPT.importHow);
+        session.enter();
+        const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('Imported 2 repositories');

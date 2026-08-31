@@ -104,6 +104,8 @@ export class InteractiveSession {
   private rawStdout = '';
   private rawStderr = '';
   private consumed = 0;
+  /** Output already on screen when the last write happened; next waitText ignores it (clack echoes). */
+  private barrier = 0;
   private tokenDelivered = false;
   private stdinEnded = false;
   private killed = false;
@@ -159,7 +161,7 @@ export class InteractiveSession {
     const deadline = Date.now() + timeoutMs;
     while (true) {
       const stripped = stripControlSequences(this.rawStdout);
-      const window = stripped.slice(this.consumed);
+      const window = stripped.slice(Math.max(this.consumed, this.barrier));
       if (findPromptMatch(window, prompt) !== null) {
         // Consume everything already received so the next wait only sees later output.
         this.consumed = stripped.length;
@@ -182,6 +184,7 @@ export class InteractiveSession {
 
   write(keys: string): void {
     const stdin = this.assertWritable();
+    this.barrier = stripControlSequences(this.rawStdout).length;
     stdin.write(this.encoder.encode(keys));
   }
 

@@ -45,21 +45,8 @@ export interface RunOptions {
   /** Working directory for the CLI process. Defaults to harness.cwd.path. */
   cwd?: string;
   timeoutMs?: number;
+  /** Dump-all stdin for a single keystroke or non-prompted input. Use `runInteractive()` for sequential prompts. */
   stdin?: string;
-  /**
-   * Writes stdin in separate chunks with a delay between each (see
-   * `stdinChunkDelayMs`). Use this when the CLI shows multiple sequential
-   * interactive prompts: sending all bytes at once causes readline to buffer
-   * and discard later bytes before the next prompt has started listening.
-   */
-  stdinChunks?: string[];
-  /**
-   * Delay in milliseconds between successive `stdinChunks` writes. Defaults to
-   * 300 ms. The harness waits for the first stdout byte before writing any
-   * chunk, then pauses this long between chunks so readline is listening.
-   * Raise this when slow work happens between prompts (e.g. spawning `git`).
-   */
-  stdinChunkDelayMs?: number;
   /**
    * When set, the harness streams CLI stdout looking for the loopback OAuth
    * port (pattern: `port=\d+`), then delivers this token via POST request to
@@ -72,10 +59,7 @@ export interface RunOptions {
 }
 
 /** Options for `harness.runInteractive()`. Stdin is driven by the session, not dumped upfront. */
-export type RunInteractiveOptions = Omit<
-  RunOptions,
-  'stdin' | 'stdinChunks' | 'stdinChunkDelayMs'
-> & {
+export type RunInteractiveOptions = Omit<RunOptions, 'stdin'> & {
   /** Per-`waitText` timeout. Defaults to `timeoutMs`. */
   waitTimeoutMs?: number;
 };

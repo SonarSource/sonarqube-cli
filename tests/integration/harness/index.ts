@@ -45,6 +45,7 @@ export { FakeGitLabServer, FakeGitLabServerBuilder } from './fake-gitlab-server.
 export { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from './fake-sonarqube-server.js';
 export { InteractiveSession } from './interactive-session.js';
 export { hookScriptName, hookScriptPath, IS_WINDOWS, normalizePath } from './platform';
+export { KEY, PROMPT } from './prompt-text.js';
 export type { CliResult, RecordedRequest, RunInteractiveOptions } from './types.js';
 
 export class TestHarness {
@@ -224,8 +225,6 @@ export class TestHarness {
   async run(command: string, options?: RunOptions): Promise<CliResult> {
     return runCli(command, this.env(options), {
       stdin: options?.stdin,
-      stdinChunks: options?.stdinChunks,
-      stdinChunkDelayMs: options?.stdinChunkDelayMs,
       timeoutMs: options?.timeoutMs,
       cwd: options?.cwd ?? this.cwd.path,
       browserToken: options?.browserToken,
