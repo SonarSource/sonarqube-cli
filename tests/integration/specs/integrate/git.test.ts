@@ -39,7 +39,7 @@ import {
 } from '../../../_common/agent-hint-assertions.js';
 import { ISOLATED_CLI_SPAWN_ENV } from '../../../_common/isolated-cli-env.js';
 import { readCommandEvents } from '../../../_common/telemetry-helpers.ts';
-import { TestHarness } from '../../harness';
+import { type CliResult, TestHarness } from '../../harness';
 import { getCliBinaryPath } from '../../harness/cli-runner.js';
 import { buildHomeEnv, IS_WINDOWS } from '../../harness/platform';
 
@@ -447,7 +447,7 @@ describe('integrate git (native hooks)', () => {
       initGitRepo(harness);
 
       const extraEnv: Record<string, string> = isAgent ? { CLAUDECODE: '1' } : {};
-      let result;
+      let result: CliResult;
       if (isInteractive) {
         const session = harness.runInteractive('integrate git', { extraEnv });
         await session.waitText('Where should SonarQube be integrated?');
@@ -845,7 +845,7 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
 
       const extraEnv: Record<string, string> = isAgent ? { CLAUDECODE: '1' } : {};
-      let result;
+      let result: CliResult;
       if (isInteractive) {
         const session = harness.runInteractive('integrate git --global', { extraEnv });
         await session.waitText('Proceed with global installation?');

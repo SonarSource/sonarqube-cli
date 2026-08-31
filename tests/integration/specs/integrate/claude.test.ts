@@ -36,6 +36,7 @@ import {
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
 import {
+  type CliResult,
   hookScriptName,
   hookScriptPath,
   IS_WINDOWS,
@@ -2044,7 +2045,7 @@ describe('integrate claude — interactive feature selection', () => {
       );
 
       const extraEnv: Record<string, string> = isAgent ? { CLAUDECODE: '1' } : {};
-      let result;
+      let result: CliResult;
       if (isInteractive) {
         const session = harness.runInteractive('integrate claude', { extraEnv });
         await session.waitText('Where should SonarQube be integrated?');

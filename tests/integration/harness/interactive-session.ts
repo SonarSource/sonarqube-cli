@@ -132,8 +132,9 @@ export class InteractiveSession {
 
   private rawStdout = '';
   private rawStderr = '';
+  /** Byte offset into `rawStdout` (monotonic — that buffer only grows). */
   private consumed = 0;
-  /** Output already on screen when the last write happened; next waitText ignores it (clack echoes). */
+  /** Raw-stdout offset at the last write; next waitText ignores output already on screen. */
   private barrier = 0;
   private tokenDelivered = false;
   private stdinEnded = false;
@@ -189,23 +190,21 @@ export class InteractiveSession {
   async waitText(prompt: PromptText, timeoutMs = this.waitTimeoutMs): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (true) {
-      const stripped = stripControlSequences(this.rawStdout);
-      const window = stripped.slice(Math.max(this.consumed, this.barrier));
+      const window = stripControlSequences(
+        this.rawStdout.slice(Math.max(this.consumed, this.barrier)),
+      );
       if (findPromptMatch(window, prompt) !== null) {
-        // Consume everything already received so the next wait only sees later output.
-        this.consumed = stripped.length;
+        this.consumed = this.rawStdout.length;
         return;
       }
       if (this.timedOut) {
-        throw new Error(
-          `CLI process timed out after ${this.timeoutMs}ms waiting for ${formatPrompt(prompt)}\n${this.output()}`,
-        );
+        throw this.waitError(`CLI process timed out after ${this.timeoutMs}ms waiting for`, prompt);
       }
       if (this.exitCode !== undefined) {
-        throw new Error(`CLI exited before ${formatPrompt(prompt)} appeared\n${this.output()}`);
+        throw this.waitError('CLI exited before', prompt, 'appeared');
       }
       if (Date.now() >= deadline) {
-        throw new Error(`Timed out waiting for ${formatPrompt(prompt)}\n${this.output()}`);
+        throw this.waitError('Timed out waiting for', prompt);
       }
       await this.waitUntilChange(deadline);
     }
@@ -213,7 +212,7 @@ export class InteractiveSession {
 
   write(keys: string): void {
     const stdin = this.assertWritable();
-    this.barrier = stripControlSequences(this.rawStdout).length;
+    this.barrier = this.rawStdout.length;
     stdin.write(this.encoder.encode(keys));
   }
 
@@ -294,6 +293,13 @@ export class InteractiveSession {
     } catch {
       /* stdin may already be closed */
     }
+  }
+
+  private waitError(prefix: string, prompt: PromptText, suffix = ''): Error {
+    const after = suffix === '' ? '' : ` ${suffix}`;
+    return new Error(
+      `${prefix} ${formatPrompt(prompt)}${after} on stdout\n--- stdout ---\n${stripControlSequences(this.rawStdout)}\n--- stderr ---\n${stripControlSequences(this.rawStderr)}`,
+    );
   }
 
   private notify(): void {

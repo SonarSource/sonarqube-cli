@@ -34,7 +34,13 @@ import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
-import { hookScriptName, hookScriptPath, normalizePath, TestHarness } from '../../harness';
+import {
+  type CliResult,
+  hookScriptName,
+  hookScriptPath,
+  normalizePath,
+  TestHarness,
+} from '../../harness';
 import { findInstalledFeature, getInstalledIntegration } from './state-helpers';
 
 const MCP_JSON_DIRS = ['.cursor', 'mcp.json'];
@@ -601,7 +607,7 @@ describe('integrate cursor', () => {
           __SQCLI_DEV_SKIP_CAG: '1',
           ...(isAgent ? { CURSOR_AGENT: '1' } : {}),
         };
-        let result;
+        let result: CliResult;
         if (isInteractive) {
           const session = harness.runInteractive(`integrate cursor --project ${TEST_PROJECT}`, {
             extraEnv: runEnv,

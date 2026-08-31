@@ -776,7 +776,7 @@ describe('sonar import', () => {
           session.keyDown();
         }
         session.enter();
-        await session.waitText('Select repositories to import');
+        await session.waitText('kevinmlsilva/repo-51');
         session.keySpace();
         session.enter();
         const result = await session.finish();
@@ -2156,10 +2156,10 @@ describe('sonar import', () => {
         await chooseByPattern(session);
         await session.waitText('Import repositories whose name matches');
         session.enter();
-        await session.waitText('Import repositories whose name matches');
+        await session.waitText('Please enter a valid, non-empty regular expression');
         session.write('(');
         session.enter();
-        await session.waitText('Import repositories whose name matches');
+        await session.waitText('Please enter a valid, non-empty regular expression');
         session.write('^engineering-');
         session.enter();
         const result = await session.finish();

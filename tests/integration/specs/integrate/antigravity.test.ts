@@ -35,7 +35,7 @@ import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
-import { IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
+import { type CliResult, IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
 import {
   type AntigravityHooksJson,
   expectAntigravityAlwaysOnRule,
@@ -191,7 +191,7 @@ describe('integrate antigravity', () => {
         // (Server hubs absent) and prompt-secrets global rules are
         // skipped (project scope). --non-interactive skips those asks too.
         const extraEnv: Record<string, string> = isAgent ? { ANTIGRAVITY_AGENT: '1' } : {};
-        let result;
+        let result: CliResult;
         if (isInteractive) {
           const session = harness.runInteractive(
             `integrate antigravity --project ${TEST_PROJECT}`,

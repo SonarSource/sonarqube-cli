@@ -42,6 +42,7 @@ import {
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
 import {
+  type CliResult,
   hookScriptName,
   hookScriptPath,
   IS_WINDOWS,
@@ -755,7 +756,7 @@ describe('integrate codex', () => {
         const extraEnv: Record<string, string> = isAgent
           ? { CODEX_SANDBOX_NETWORK_DISABLED: '1' }
           : {};
-        let result;
+        let result: CliResult;
         if (isInteractive) {
           const session = harness.runInteractive('integrate codex', { extraEnv });
           await session.waitText('Where should SonarQube be integrated?');

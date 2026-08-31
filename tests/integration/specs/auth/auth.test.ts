@@ -902,7 +902,7 @@ describe('auth login — server selection', () => {
       session.enter();
       await session.waitText('Enter server URL');
       session.enter();
-      await session.waitText('Enter server URL');
+      await session.waitText('Please enter a valid URL');
       session.write(`${server.baseUrl()}`);
       session.enter();
       await session.waitText('Connect to:');
@@ -932,7 +932,7 @@ describe('auth login — server selection', () => {
       await session.waitText('Enter server URL');
       session.write('not-a-url');
       session.enter();
-      await session.waitText('Enter server URL');
+      await session.waitText('Please enter a valid URL');
       session.write(`${server.baseUrl()}`);
       session.enter();
       await session.waitText('Connect to:');
@@ -962,13 +962,13 @@ describe('auth login — server selection', () => {
       await session.waitText('Enter server URL');
       session.write('bad-url-1');
       session.enter();
-      await session.waitText('Enter server URL');
+      await session.waitText('Please enter a valid URL');
       session.write('bad-url-2');
       session.enter();
-      await session.waitText('Enter server URL');
+      await session.waitText('Please enter a valid URL');
       session.write('bad-url-3');
       session.enter();
-      await session.waitText('Enter server URL');
+      await session.waitText('Please enter a valid URL');
       session.write(`${server.baseUrl()}`);
       session.enter();
       await session.waitText('Connect to:');

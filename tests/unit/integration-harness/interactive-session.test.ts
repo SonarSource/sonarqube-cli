@@ -179,11 +179,28 @@ describe('InteractiveSession', () => {
       rematchError = error;
     }
     expect(rematchError).toBeInstanceOf(Error);
-    expect(String(rematchError)).toContain('Timed out waiting for "Hook"');
+    expect(String(rematchError)).toContain('Timed out waiting for "Hook" on stdout');
+    expect(String(rematchError)).toContain('--- stdout ---');
+    expect(String(rematchError)).toContain('--- stderr ---');
 
     const later = session.waitText('Hook');
     fake.pushStdout(' Hook again');
     await later;
+
+    session.kill();
+    await session.finish().catch(() => undefined);
+  });
+
+  it('does not lose later text when an escape sequence splits across chunks', async () => {
+    const fake = createFakeProcess();
+    const session = InteractiveSession.fromProcess(fake.handle, { timeoutMs: 2000 });
+
+    fake.pushStdout('Scope\x1b');
+    await session.waitText('Scope');
+    const later = session.waitText('Hook');
+    fake.pushStdout('[2KHook the repo');
+    await later;
+    expect(session.output()).toContain('Hook the repo');
 
     session.kill();
     await session.finish().catch(() => undefined);
@@ -225,7 +242,7 @@ describe('InteractiveSession', () => {
       rematchError = error;
     }
     expect(rematchError).toBeInstanceOf(Error);
-    expect(String(rematchError)).toContain('Timed out waiting for "Enter server URL"');
+    expect(String(rematchError)).toContain('Timed out waiting for "Enter server URL" on stdout');
 
     const live = session.waitText('Enter server URL');
     fake.pushStdout('?  Enter server URL');
@@ -248,7 +265,7 @@ describe('InteractiveSession', () => {
       exitError = error;
     }
     expect(exitError).toBeInstanceOf(Error);
-    expect(String(exitError)).toContain('CLI exited before "never shown" appeared');
+    expect(String(exitError)).toContain('CLI exited before "never shown" appeared on stdout');
   });
 
   it('sends Ctrl+C on keyCtrlC and treats kill as idempotent', async () => {

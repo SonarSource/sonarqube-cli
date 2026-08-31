@@ -26,7 +26,7 @@ import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
-import { normalizePath, TestHarness } from '../../harness';
+import { type CliResult, normalizePath, TestHarness } from '../../harness';
 import {
   CopilotHookEntry,
   CopilotHooksJson,
@@ -900,7 +900,7 @@ describe('integrate copilot', () => {
       'prints a non-interactive hint with --non-interactive plus -p/-g examples only for a detected AI agent without --non-interactive (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
       async (isAgent, isInteractive, expectedShownPrompt) => {
         const extraEnv: Record<string, string> = isAgent ? { COPILOT_CLI: '1' } : {};
-        let result;
+        let result: CliResult;
         if (isInteractive) {
           const session = harness.runInteractive('integrate copilot', { extraEnv });
           await session.waitText('Where should SonarQube be integrated?');
