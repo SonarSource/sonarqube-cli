@@ -12,7 +12,7 @@
     "dev": "bun run src/index.ts",
     "test:unit": "bun test --parallel ./tests/unit/",
     "pretest:integration": "bun build:binary && bun build-scripts/setup-integration-resources.ts",
-    "test:integration": "bun test ./tests/integration/",
+    "test:integration": "bun test --parallel=4 ./tests/integration/",
     "test:all": "bun run test:unit && bun run test:integration",
     "test:e2e": "bun test ./tests/e2e/",
     "test:coverage:unit": "COVERAGE_RAW_UNIT_DIR=tests/coverage/reports/raw-unit bun test ./tests/unit/",
