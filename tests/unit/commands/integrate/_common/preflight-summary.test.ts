@@ -41,15 +41,16 @@ const BASE_PROJECT: DiscoveredProject = {
 describe('printAgentPreflightSummary', () => {
   let checkTokenStatusSpy: ReturnType<typeof spyOn>;
   let checkComponentSpy: ReturnType<typeof spyOn>;
-  let checkOrganizationSpy: ReturnType<typeof spyOn>;
+  let isOrganizationAccessibleSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     setMockUi(true);
     checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
     checkComponentSpy = spyOn(SonarQubeClient.prototype, 'checkComponent').mockResolvedValue(true);
-    checkOrganizationSpy = spyOn(SonarQubeClient.prototype, 'checkOrganization').mockResolvedValue(
-      true,
-    );
+    isOrganizationAccessibleSpy = spyOn(
+      SonarQubeClient.prototype,
+      'isOrganizationAccessible',
+    ).mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -57,7 +58,7 @@ describe('printAgentPreflightSummary', () => {
     setMockUi(false);
     checkTokenStatusSpy.mockRestore();
     checkComponentSpy.mockRestore();
-    checkOrganizationSpy.mockRestore();
+    isOrganizationAccessibleSpy.mockRestore();
   });
 
   it('renders Connection and Project sections with config source from files', async () => {

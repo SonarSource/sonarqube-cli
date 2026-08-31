@@ -62,7 +62,9 @@ export async function authLogin(options: AuthLoginOptions): Promise<void> {
   await confirmServerTrust(server);
 
   const isCloud = isSonarQubeCloud(server);
-  const orgOption = options.org?.trim();
+  // SonarQube Server has no organizations, so --org cannot mean anything there. Dropping it here
+  // keeps the keychain account, the recorded connection and the resolved organization consistent.
+  const orgOption = isCloud ? options.org?.trim() : undefined;
 
   try {
     const auth = await getOrGenerateToken(server, orgOption);
@@ -114,7 +116,7 @@ export async function authLogin(options: AuthLoginOptions): Promise<void> {
 }
 
 /**
- * Resolve the organization.
+ * Resolve the organization, which only SonarQube Cloud has.
  *
  * When it is rejected, discard the token this login just minted, so a typo does not leave an
  * unusable token in the user's account.
@@ -125,10 +127,12 @@ async function resolveOrganization(
   orgOption: string | undefined,
   auth: BrowserAuthResult & { reusedExistingToken: boolean },
 ): Promise<string | undefined> {
+  if (!isCloud) {
+    return undefined;
+  }
+
   try {
-    return isCloud
-      ? await validateOrSelectOrganization(new SonarQubeClient(server, auth.token), orgOption)
-      : await setupOnPremiseOrganization(orgOption);
+    return await validateOrSelectOrganization(new SonarQubeClient(server, auth.token), orgOption);
   } catch (error) {
     if (!auth.reusedExistingToken) {
       await discardGeneratedToken(server, auth.token, auth.tokenName);
@@ -152,24 +156,6 @@ async function discardGeneratedToken(
   reportRevokeServerTokenOutcome(outcome, {
     continuingMessage: 'Revoke it manually on the server if needed.',
   });
-}
-
-/**
- * Handle on-premise server organization setup
- */
-async function setupOnPremiseOrganization(org: string | undefined): Promise<string | undefined> {
-  if (org) {
-    print(`Using organization: ${org}`);
-    return org;
-  }
-
-  const configOrg = await discoverOrganization();
-  if (configOrg) {
-    print(`Using organization from config: ${configOrg}`);
-    return configOrg;
-  }
-
-  return undefined;
 }
 
 /**
@@ -205,8 +191,7 @@ function organizationAccessError(
 ): CommandFailedError {
   if (access.status === 'not_found') {
     return new CommandFailedError(`Organization '${org}' not found or not accessible.`, {
-      remediationHint:
-        "Check the organization key (keys are lowercase) and your access, then rerun 'sonar auth login'.",
+      remediationHint: "Check the organization key and your access, then rerun 'sonar auth login'.",
     });
   }
 
@@ -255,11 +240,11 @@ async function promptForOrganizationKey(client: SonarQubeClient): Promise<string
     }
     const org = manualOrg.trim();
     if (!org) {
-      if (!process.stdin.isTTY) {
-        throw organizationRequiredError();
-      }
       lastError = organizationRequiredError();
-      warn('Organization key is required.');
+      if (!process.stdin.isTTY) {
+        throw lastError;
+      }
+      warn(lastError.message);
       continue;
     }
 
@@ -271,7 +256,7 @@ async function promptForOrganizationKey(client: SonarQubeClient): Promise<string
     if (access.status !== 'not_found' || !process.stdin.isTTY) {
       throw lastError;
     }
-    warn(`Organization '${org}' not found or not accessible. Keys are lowercase.`);
+    warn(lastError.message);
   }
 
   throw lastError;
@@ -358,7 +343,7 @@ async function validateOrSelectOrganization(
     if (access.status === 'check_failed') {
       throw organizationAccessError(configOrg, access);
     }
-    warn(`Organization '${configOrg}' from project config is not accessible. Keys are lowercase.`);
+    warn(`Organization '${configOrg}' from project config is not accessible.`);
   }
 
   return await getUserSelectedOrganization(client);

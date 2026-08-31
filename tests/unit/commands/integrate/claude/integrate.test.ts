@@ -71,8 +71,8 @@ describe('integrateCommand', () => {
   let checkComponentSpy: Mock<
     Extract<(typeof SonarQubeClient.prototype)['checkComponent'], (...args: any[]) => any>
   >;
-  let checkOrganizationSpy: Mock<
-    Extract<(typeof SonarQubeClient.prototype)['checkOrganization'], (...args: any[]) => any>
+  let isOrganizationAccessibleSpy: Mock<
+    Extract<(typeof SonarQubeClient.prototype)['isOrganizationAccessible'], (...args: any[]) => any>
   >;
   let discoverProjectSpy: Mock<
     Extract<(typeof discovery)['discoverProject'], (...args: any[]) => any>
@@ -101,9 +101,10 @@ describe('integrateCommand', () => {
 
     checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
     checkComponentSpy = spyOn(SonarQubeClient.prototype, 'checkComponent').mockResolvedValue(true);
-    checkOrganizationSpy = spyOn(SonarQubeClient.prototype, 'checkOrganization').mockResolvedValue(
-      true,
-    );
+    isOrganizationAccessibleSpy = spyOn(
+      SonarQubeClient.prototype,
+      'isOrganizationAccessible',
+    ).mockResolvedValue(true);
     discoverProjectSpy = spyOn(discovery, 'discoverProject');
     installIntegrationSpy = spyOn(registry, 'installIntegration').mockResolvedValue([]);
     detectGlobalSecretsHookSpy = spyOn(hooks, 'detectGlobalSecretsHook').mockResolvedValue(
@@ -121,7 +122,7 @@ describe('integrateCommand', () => {
     hasVortexEntitlementSpy.mockRestore();
     checkTokenStatusSpy.mockRestore();
     checkComponentSpy.mockRestore();
-    checkOrganizationSpy.mockRestore();
+    isOrganizationAccessibleSpy.mockRestore();
     discoverProjectSpy.mockRestore();
     installIntegrationSpy.mockRestore();
     detectGlobalSecretsHookSpy.mockRestore();
@@ -397,7 +398,7 @@ describe('integrateCommand', () => {
   it('still installs when organization access check fails in the summary', async () => {
     mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
     mockVortexEntitlement(true);
-    checkOrganizationSpy.mockResolvedValue(false);
+    isOrganizationAccessibleSpy.mockResolvedValue(false);
 
     await integrateClaude({}, CLOUD_CTX);
 

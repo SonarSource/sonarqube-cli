@@ -836,6 +836,36 @@ describe('auth login — server selection', () => {
   );
 
   it(
+    'ignores --org on a SonarQube Server connection, which has no organizations',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+      const login = `auth login --server ${server.baseUrl()} --org some-org`;
+
+      const first = await harness.run(login, {
+        browserToken: 'my-token',
+        stdin: '\r', // Enter (confirm trust, Yes is default)
+      });
+      const second = await harness.run(login, {
+        browserToken: 'my-token',
+        stdin: '\r', // Enter (confirm trust, Yes is default)
+      });
+
+      expect(first.exitCode).toBe(0);
+      expect(second.exitCode).toBe(0);
+      const state = harness.stateJsonFile.asJson() as {
+        auth: { connections: Array<{ type: string; orgKey?: string }> };
+      };
+      expect(state.auth.connections[0].type).toBe('on-premise');
+      expect(state.auth.connections[0].orgKey).toBeUndefined();
+      // The keychain account is derived from the organization, so an --org the connection never
+      // records must not reach the lookup either: the second login would miss the token it just
+      // saved and send the user through the browser flow again.
+      expect(second.stdout).toContain('You are already authenticated');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'retries when self-hosted URL is blank and succeeds on valid input',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('my-token').start();

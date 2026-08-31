@@ -90,11 +90,14 @@ export interface Organization {
   onlyPrivateProjects?: { enabled: boolean };
 }
 
-/** Result of an organization lookup: found, absent, or not checkable. */
+/**
+ * Result of an organization lookup: found, absent, or not checkable.
+ *
+ * Deliberately carries no organization record. Callers only need to know whether the key resolves;
+ * the one caller that needs the record itself uses `fetchOrganizationByKey`.
+ */
 export type OrganizationAccess =
-  | { status: 'accessible'; organization: Organization }
-  | { status: 'not_found' }
-  | { status: 'check_failed'; reason: string };
+  { status: 'accessible' } | { status: 'not_found' } | { status: 'check_failed'; reason: string };
 
 export interface DopRepository {
   id: string;
@@ -925,7 +928,7 @@ export class SonarQubeClient {
   async resolveOrganizationAccess(organizationKey: string): Promise<OrganizationAccess> {
     try {
       const organization = await this.fetchOrganizationByKey(organizationKey);
-      return organization ? { status: 'accessible', organization } : { status: 'not_found' };
+      return organization ? { status: 'accessible' } : { status: 'not_found' };
     } catch (error) {
       return { status: 'check_failed', reason: (error as Error).message };
     }
@@ -936,7 +939,7 @@ export class SonarQubeClient {
    *
    * Use `resolveOrganizationAccess` to tell a missing organization from a failed lookup.
    */
-  async checkOrganization(organizationKey: string): Promise<boolean> {
+  async isOrganizationAccessible(organizationKey: string): Promise<boolean> {
     const access = await this.resolveOrganizationAccess(organizationKey);
     return access.status === 'accessible';
   }
