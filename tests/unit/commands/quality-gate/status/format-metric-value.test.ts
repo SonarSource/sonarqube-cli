@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { formatMetricValue } from '@/commands/quality-gate/show/format-metric-value.ts';
+import { formatMetricValue } from '@/commands/quality-gate/status/format-metric-value.ts';
 
 describe('formatMetricValue', () => {
   it.each([

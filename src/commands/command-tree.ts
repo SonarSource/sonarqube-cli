@@ -100,10 +100,10 @@ import {
 } from './list/issues.ts';
 import { listProjects, type ListProjectsOptions } from './list/projects.ts';
 import {
-  showQualityGate,
-  type ShowQualityGateOptions,
+  qualityGateStatus,
+  type QualityGateStatusOptions,
   VALID_FORMATS as QUALITY_GATE_VALID_FORMATS,
-} from './quality-gate/show';
+} from './quality-gate/status';
 import { remediate, type RemediateOptions } from './remediate';
 import { getBanner, getCustomRootHelp } from './root-help.ts';
 import { runMcp } from './run/mcp.ts';
@@ -277,7 +277,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     });
 
   qualityGate
-    .command('show')
+    .command('status')
     .description('Show the quality gate verdict for a project')
     .showUpdateNotification(isTableFormatOption)
     .option('-p, --project <project>', 'Project key')
@@ -289,7 +289,9 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .option('--branch <branch>', 'Branch name. Cannot be combined with --pull-request.')
     .option('--pull-request <pull-request>', 'Pull request ID. Cannot be combined with --branch.')
     .option('--all', 'Also show passing conditions. By default only failing conditions are shown.')
-    .authenticatedAction((ctx, options: ShowQualityGateOptions) => showQualityGate(options, ctx));
+    .authenticatedAction((ctx, options: QualityGateStatusOptions) =>
+      qualityGateStatus(options, ctx),
+    );
 
   // Import repositories from DevOps platforms into SonarQube (hidden while in development)
   COMMAND_TREE.command('import', { hidden: true })
