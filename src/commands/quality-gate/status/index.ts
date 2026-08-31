@@ -37,12 +37,18 @@ import { exitCodeFor, toVerdict } from './verdict.ts';
 
 export const VALID_FORMATS = ['json', 'table'];
 
+export const VALID_CATEGORIES = ['coverage'];
+
+export const DEFAULT_TOP = 3;
+
 export interface QualityGateStatusOptions {
   project?: string;
   format?: string;
   branch?: string;
   pullRequest?: string;
   all?: boolean;
+  category?: string;
+  top?: number;
 }
 
 export async function qualityGateStatus(

@@ -100,8 +100,10 @@ import {
 } from './list/issues.ts';
 import { listProjects, type ListProjectsOptions } from './list/projects.ts';
 import {
+  DEFAULT_TOP as QUALITY_GATE_DEFAULT_TOP,
   qualityGateStatus,
   type QualityGateStatusOptions,
+  VALID_CATEGORIES as QUALITY_GATE_VALID_CATEGORIES,
   VALID_FORMATS as QUALITY_GATE_VALID_FORMATS,
 } from './quality-gate/status';
 import { remediate, type RemediateOptions } from './remediate';
@@ -289,6 +291,17 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .option('--branch <branch>', 'Branch name. Cannot be combined with --pull-request.')
     .option('--pull-request <pull-request>', 'Pull request ID. Cannot be combined with --branch.')
     .option('--all', 'Also show passing conditions. By default only failing conditions are shown.')
+    .addOption(
+      new SonarOption(
+        '--category <category>',
+        'Only show the breakdown for one category of failing conditions',
+      ).choices(QUALITY_GATE_VALID_CATEGORIES),
+    )
+    .addOption(
+      new SonarOption('--top <top>', 'Number of files to include in the breakdown, per condition')
+        .default(QUALITY_GATE_DEFAULT_TOP)
+        .argParser(parseInteger),
+    )
     .authenticatedAction((ctx, options: QualityGateStatusOptions) =>
       qualityGateStatus(options, ctx),
     );

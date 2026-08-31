@@ -735,6 +735,44 @@ describe('quality-gate status', () => {
   );
 
   it(
+    'rejects an invalid --category value',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK'))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status --project my-project --category duplications`,
+      );
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain('duplications');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'rejects a non-numeric --top value',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK'))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --top abc`);
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain('Not a number');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'rejects an invalid --format value',
     async () => {
       const server = await harness
