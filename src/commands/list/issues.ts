@@ -24,9 +24,8 @@ import { encode as encodeToToon } from '@toon-format/toon';
 
 import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { InvalidOptionError } from '@/core/command-error.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { MAX_PAGE_SIZE, SonarQubeClient } from '@/core/server/client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
-import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import type { IssuesSearchParams } from '@/core/server/types.ts';
 import { print } from '@/core/ui';
 import { formatCSV } from '@/core/ui/formatter/csv.ts';

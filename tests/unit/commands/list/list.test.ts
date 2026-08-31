@@ -26,9 +26,9 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:te
 
 import { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { MAX_PAGE_SIZE, SonarQubeClient } from '@/core/server/client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
-import { MAX_PAGE_SIZE, ProjectsClient } from '@/core/server/projects.ts';
+import { ProjectsClient } from '@/core/server/projects.ts';
 import type {
   IssuesSearchResponse,
   ProjectsSearchResponse,

@@ -160,6 +160,7 @@ export interface Metric {
   key: string;
   type: string;
   name: string;
+  decimalScale?: number;
 }
 
 export interface MetricsSearchResponse {
@@ -167,4 +168,32 @@ export interface MetricsSearchResponse {
   total: number;
   p: number;
   ps: number;
+}
+
+export interface ComponentTreeMeasurePeriod {
+  index: number;
+  value: string;
+  bestValue?: boolean;
+}
+
+export interface ComponentTreeMeasure {
+  metric: string;
+  value?: string;
+  bestValue?: boolean;
+  periods?: ComponentTreeMeasurePeriod[];
+}
+
+export interface ComponentTreeComponent {
+  key: string;
+  name: string;
+  qualifier: string;
+  path?: string;
+  language?: string;
+  measures: ComponentTreeMeasure[];
+}
+
+export interface ComponentTreeResponse {
+  paging: { pageIndex: number; pageSize: number; total: number };
+  baseComponent: ComponentTreeComponent;
+  components: ComponentTreeComponent[];
 }

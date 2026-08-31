@@ -37,9 +37,27 @@ describe('formatMetricValue', () => {
     expect(formatMetricValue('RATING', '6')).toBe('6');
   });
 
-  it('appends a % suffix for PERCENT, preserving server-provided precision', () => {
+  it('appends a % suffix for PERCENT, already at one decimal place', () => {
     expect(formatMetricValue('PERCENT', '95.4')).toBe('95.4%');
     expect(formatMetricValue('PERCENT', '100.0')).toBe('100.0%');
+  });
+
+  it('does not invent a decimal place for a whole-number PERCENT threshold', () => {
+    expect(formatMetricValue('PERCENT', '80')).toBe('80%');
+  });
+
+  it('rounds a PERCENT value to one decimal place by default - component_tree measures are not pre-rounded, unlike project_status conditions', () => {
+    expect(formatMetricValue('PERCENT', '38.84615384615385')).toBe('38.8%');
+    expect(formatMetricValue('PERCENT', '74.609375')).toBe('74.6%');
+  });
+
+  it("rounds a PERCENT value to the metric catalog's own decimalScale instead of always one", () => {
+    expect(formatMetricValue('PERCENT', '38.84615384615385', 2)).toBe('38.85%');
+    expect(formatMetricValue('PERCENT', '38.84615384615385', 0)).toBe('39%');
+  });
+
+  it('does not invent decimal places to match a non-zero decimalScale', () => {
+    expect(formatMetricValue('PERCENT', '80', 2)).toBe('80%');
   });
 
   it('appends a min suffix for WORK_DUR', () => {

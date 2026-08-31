@@ -30,18 +30,25 @@ const RATING_LETTERS: Record<string, string> = {
 };
 
 /**
- * Only RATING, PERCENT, and WORK_DUR get a real transformation. Every other type - including
- * INT, and any type this doesn't recognize - is returned unchanged: the server already provides
- * the correct precision/representation, and `create_condition` never allows a condition metric
- * whose type isn't one of the 7 documented as valid (RATING/PERCENT/WORK_DUR plus INT/MILLISEC/
- * FLOAT/LEVEL, none of which need formatting here).
+ * Only reduces precision when there are more decimal digits than `decimalScale` to begin with.
  */
-export function formatMetricValue(type: string, rawValue: string): string {
+function roundPercent(rawValue: string, decimalScale: number): string {
+  const [, decimals = ''] = rawValue.split('.');
+  return decimals.length > decimalScale ? Number(rawValue).toFixed(decimalScale) : rawValue;
+}
+
+/**
+ * Only RATING, PERCENT, and WORK_DUR get a real transformation. Every other type - including
+ * INT, and any type this doesn't recognize - is returned unchanged, and `create_condition` never
+ * allows a condition metric whose type isn't one of the 7 documented as valid (RATING/PERCENT/
+ * WORK_DUR plus INT/MILLISEC/FLOAT/LEVEL, none of which need formatting here).
+ */
+export function formatMetricValue(type: string, rawValue: string, decimalScale = 1): string {
   switch (type) {
     case 'RATING':
       return RATING_LETTERS[rawValue] ?? rawValue;
     case 'PERCENT':
-      return `${rawValue}%`;
+      return `${roundPercent(rawValue, decimalScale)}%`;
     case 'WORK_DUR':
       return `${rawValue} min`;
     default:

@@ -18,9 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { MAX_PAGE_SIZE } from '@/core/server/client.ts';
 import { cyan, green, red, yellow } from '@/core/ui/colors.ts';
 import { padColumns } from '@/core/ui/formatter/column-formatting.ts';
 
+import type { QualityGateMetricBreakdown } from './breakdown.ts';
 import type { QualityGateConditionSummary } from './condition-summary.ts';
 import type { QualityGateScope } from './scope.ts';
 import type { QualityGateVerdict } from './verdict.ts';
@@ -33,6 +35,11 @@ const MIN_CONDITION_LABEL_WIDTH = 20;
 const MIN_CONDITION_VALUE_WIDTH = 14;
 /** Guarantees at least this much space after each column even when its content sets the width. */
 const CONDITION_GAP = 2;
+
+/** Same floor/gap technique as the condition columns above, so a long file path never runs into its value. */
+const MIN_BREAKDOWN_PATH_WIDTH = 40;
+const BREAKDOWN_GAP = 2;
+const BREAKDOWN_INDENT = '       ';
 
 const VERDICT_BRACKETS: Record<QualityGateVerdict, string> = {
   OK: '[✓ Passed]',
@@ -56,6 +63,7 @@ export interface QualityGateTableViewModel {
   project: string;
   scope: QualityGateScope;
   conditions: QualityGateConditionSummary[];
+  breakdown?: QualityGateMetricBreakdown[];
 }
 
 export function formatQualityGateTable(vm: QualityGateTableViewModel): string {
@@ -81,7 +89,10 @@ export function formatQualityGateTable(vm: QualityGateTableViewModel): string {
     lines.push(
       '',
       'Conditions:',
-      ...vm.conditions.map((condition, i) => formatConditionLine(condition, labels[i], values[i])),
+      ...vm.conditions.flatMap((condition, i) => [
+        formatConditionLine(condition, labels[i], values[i]),
+        ...formatBreakdownLines(vm.breakdown, condition.metric),
+      ]),
     );
   }
 
@@ -118,6 +129,50 @@ function formatConditionLine(
       ? `(required ${INVERSE_COMPARATOR_SYMBOLS[condition.comparator] ?? condition.comparator} ${condition.formattedThreshold})`
       : '';
   return `    ${marker}  ${paddedLabel}${paddedValue}${requirement}`;
+}
+
+function formatBreakdownLines(
+  breakdown: QualityGateMetricBreakdown[] | undefined,
+  metric: string,
+): string[] {
+  const metricBreakdown = breakdown?.find((candidate) => candidate.metric === metric);
+  if (!metricBreakdown || metricBreakdown.entries.length === 0) {
+    return [];
+  }
+
+  const [paths, values] = padColumns(
+    [
+      metricBreakdown.entries.map((entry) => entry.path),
+      metricBreakdown.entries.map((entry) => entry.formattedValue),
+    ],
+    [MIN_BREAKDOWN_PATH_WIDTH],
+    BREAKDOWN_GAP,
+  );
+  const lines = metricBreakdown.entries.map((_, i) => `${BREAKDOWN_INDENT}${paths[i]}${values[i]}`);
+
+  const remaining = metricBreakdown.totalCount - metricBreakdown.fetchedCount;
+  if (remaining > 0) {
+    lines.push(formatMoreEntriesLine(metricBreakdown, remaining));
+  }
+
+  return lines;
+}
+
+function formatMoreEntriesLine(
+  metricBreakdown: QualityGateMetricBreakdown,
+  remaining: number,
+): string {
+  const suggestedTop = Math.min(metricBreakdown.totalCount, MAX_PAGE_SIZE);
+  const showsEverything = metricBreakdown.totalCount <= MAX_PAGE_SIZE;
+  // A suggestion that isn't higher than what was already requested would be a no-op - e.g.
+  // --top is already at MAX_PAGE_SIZE, so the API's own cap, not --top, is what's left out.
+  let suffix: string;
+  if (suggestedTop > metricBreakdown.fetchedCount) {
+    suffix = `use --top ${suggestedTop} to display ${showsEverything ? 'all' : 'more'}`;
+  } else {
+    suffix = `capped at ${MAX_PAGE_SIZE} results per fetch`;
+  }
+  return `${BREAKDOWN_INDENT}… ${remaining} more · ${suffix}`;
 }
 
 function notComputedHint(scope: QualityGateScope): string {
