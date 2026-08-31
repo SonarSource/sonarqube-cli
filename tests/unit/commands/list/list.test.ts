@@ -484,6 +484,7 @@ describe('issuesSearchCommand', () => {
 
     try {
       await listIssues({ project: 'my-project', page: 1, pageSize: 500 }, mockCtx);
+      expect(getSpy).toHaveBeenCalled();
     } finally {
       getSpy.mockRestore();
     }
