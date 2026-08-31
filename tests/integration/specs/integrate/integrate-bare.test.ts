@@ -46,8 +46,10 @@ describe('integrate (bare command)', () => {
       const server = await harness.newFakeServer().withAuthToken('test-token').start();
       harness.withAuth(server.baseUrl(), 'test-token');
 
-      // Ctrl+C cancels the single-select prompt.
-      const result = await harness.run('integrate', { stdinChunks: ['\x03'] });
+      const session = harness.runInteractive('integrate');
+      await session.waitText('Select the tool you want to integrate with');
+      session.cancel();
+      const result = await session.finish();
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('No integration selected');

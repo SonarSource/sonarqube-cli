@@ -20,6 +20,19 @@
 
 // Integration test harness — shared types
 
+export type SessionStdin = {
+  write(data: Uint8Array): number | void;
+  end(): void;
+};
+
+export type InteractiveProcessHandle = {
+  stdin: SessionStdin | null;
+  stdout: ReadableStream<Uint8Array>;
+  stderr: ReadableStream<Uint8Array>;
+  kill(): void;
+  readonly exited: Promise<number>;
+};
+
 export interface CliResult {
   exitCode: number;
   stdout: string;
@@ -57,6 +70,15 @@ export interface RunOptions {
   /** Override the compiled CLI binary path for this invocation. */
   binaryPath?: string;
 }
+
+/** Options for `harness.runInteractive()`. Stdin is driven by the session, not dumped upfront. */
+export type RunInteractiveOptions = Omit<
+  RunOptions,
+  'stdin' | 'stdinChunks' | 'stdinChunkDelayMs'
+> & {
+  /** Per-`waitText` timeout. Defaults to `timeoutMs`. */
+  waitTimeoutMs?: number;
+};
 
 export interface RecordedRequest {
   method: string;

@@ -136,7 +136,7 @@ The two inputs are separate because the single boolean made _collect but do not 
 
 **Writing tests that touch telemetry** — four traps, none of which lint or CI will catch:
 
-- **Spawn the CLI only through the harness** (`harness.run()`, `runCli()`) or by spreading `ISOLATED_CLI_SPAWN_ENV`. A hand-rolled `Bun.spawn` of the binary inherits production egress; the two such spawns in `tests/e2e/install-scripts.test.ts` are safe only because they spread it explicitly.
+- **Spawn the CLI only through the harness** (`harness.run()`, `harness.runInteractive()`, `runCli()`) or by spreading `ISOLATED_CLI_SPAWN_ENV`. A hand-rolled `Bun.spawn` of the binary inherits production egress; the two such spawns in `tests/e2e/install-scripts.test.ts` are safe only because they spread it explicitly.
 - **A unit test that enables telemetry must point `SONAR_USER_HOME` at a temp dir.** Egress `off` stops _that process_ transmitting, but events still land in the developer's real `~/.sonar` queue, and their next genuine `sonar` command drains and POSTs them. This is the one leak path the egress mode cannot close, because the transmitting process is legitimate.
 - **Clearing `__SQ_CLI_TELEMETRY_EGRESS`** to exercise the spawn or drain means the real code paths run: mock `Bun.spawn` and `fetch` in the same file.
 - **`flushTelemetryEvents` transmits unconditionally** — its guards are in `flushTelemetry`. Call it directly only with `fetch` mocked.
@@ -214,7 +214,7 @@ Before writing a test, find an existing spec for the same command area and follo
 
 ### Integration test harness
 
-Each test creates a fresh `TestHarness` and disposes it in `afterEach`. The harness runs the compiled binary in a fully isolated environment (temp dir, fake keychain, fake servers). For fine-grained state setup beyond `withAuth`, use `harness.state()` builder (see `tests/integration/harness/environment-builder.ts`). For git hook tests, use `initGitRepo` / `stageFile` from `tests/integration/specs/hook/git-test-helpers.ts`.
+Each test creates a fresh `TestHarness` and disposes it in `afterEach`. The harness runs the compiled binary in a fully isolated environment (temp dir, fake keychain, fake servers). For fine-grained state setup beyond `withAuth`, use `harness.state()` builder (see `tests/integration/harness/environment-builder.ts`). For git hook tests, use `initGitRepo` / `stageFile` from `tests/integration/specs/hook/git-test-helpers.ts`. Use `harness.run()` for non-interactive commands and dump-all stdin. Drive prompt-by-prompt flows with `harness.runInteractive()`, which returns an `InteractiveSession` (`waitText`, `write` / `enter` / `cancel`, then `finish()`). `dispose()` kills any session that is still running.
 
 ### Coverage
 

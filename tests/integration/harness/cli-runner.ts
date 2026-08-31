@@ -26,7 +26,7 @@ import { join } from 'node:path';
 import { applyIsolatedSpawnEnv } from '../../_common/isolated-cli-env.js';
 import { COVERAGE_BINARY, COVERAGE_RAW_DIR } from '../../coverage/paths.js';
 import { IS_WINDOWS } from './platform';
-import type { CliResult } from './types.js';
+import type { CliResult, InteractiveProcessHandle, SessionStdin } from './types.js';
 
 const PROJECT_ROOT = join(import.meta.dir, '../../..');
 const DEFAULT_BINARY = join(
@@ -34,7 +34,7 @@ const DEFAULT_BINARY = join(
   'dist',
   IS_WINDOWS ? 'sonarqube-cli.exe' : 'sonarqube-cli',
 );
-const DEFAULT_TIMEOUT_MS = 30000;
+export const DEFAULT_CLI_TIMEOUT_MS = 30000;
 
 function getBinaryPath(coverageMode: boolean, overridePath?: string): string {
   const binaryPath = overridePath ?? (coverageMode ? COVERAGE_BINARY : DEFAULT_BINARY);
@@ -53,6 +53,77 @@ export function getCliBinaryPath(): string {
 
 const STDIN_CHUNK_DELAY_MS = 300;
 
+export type SpawnedCliProcess = {
+  proc: InteractiveProcessHandle;
+  timeoutMs: number;
+  startedAt: number;
+};
+
+export function spawnCliProcess(
+  command: string,
+  env: Record<string, string>,
+  options: {
+    cwd: string;
+    timeoutMs?: number;
+    binaryPath?: string;
+    stdin: 'pipe' | 'ignore';
+  },
+): SpawnedCliProcess {
+  const coverageMode = process.env.SONARQUBE_CLI_USE_COVERAGE === '1';
+  const binaryPath = getBinaryPath(coverageMode, options.binaryPath);
+  const timeoutMs = options.timeoutMs ?? DEFAULT_CLI_TIMEOUT_MS;
+  const startedAt = Date.now();
+  mkdirSync(options.cwd, { recursive: true });
+
+  const spawnEnv = applyIsolatedSpawnEnv(env);
+  if (coverageMode) {
+    mkdirSync(COVERAGE_RAW_DIR, { recursive: true });
+    const unique = `${Date.now()}-${crypto.randomUUID()}`;
+    spawnEnv.COVERAGE_OUTPUT_FILE = join(COVERAGE_RAW_DIR, `coverage-${unique}.json`);
+  }
+
+  const args = tokenize(command);
+  const proc = wrapSpawnedProcess(
+    Bun.spawn([binaryPath, ...args], {
+      env: spawnEnv,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      stdin: options.stdin,
+      cwd: options.cwd,
+    }),
+  );
+
+  return { proc, timeoutMs, startedAt };
+}
+
+function wrapSpawnedProcess(proc: ReturnType<typeof Bun.spawn>): InteractiveProcessHandle {
+  return {
+    stdin: isSessionStdin(proc.stdin) ? proc.stdin : null,
+    stdout: requirePipedStream(proc.stdout, 'stdout'),
+    stderr: requirePipedStream(proc.stderr, 'stderr'),
+    kill() {
+      proc.kill();
+    },
+    get exited() {
+      return proc.exited;
+    },
+  };
+}
+
+function isSessionStdin(stdin: unknown): stdin is SessionStdin {
+  return typeof stdin === 'object' && stdin !== null && 'write' in stdin && 'end' in stdin;
+}
+
+function requirePipedStream(
+  stream: number | ReadableStream<Uint8Array> | undefined,
+  name: string,
+): ReadableStream<Uint8Array> {
+  if (typeof stream === 'object' && stream !== null) {
+    return stream;
+  }
+  throw new Error(`Expected piped ${name}`);
+}
+
 export async function runCli(
   command: string,
   env: Record<string, string>,
@@ -67,38 +138,20 @@ export async function runCli(
     binaryPath?: string;
   },
 ): Promise<CliResult> {
-  const coverageMode = process.env.SONARQUBE_CLI_USE_COVERAGE === '1';
-  const binaryPath = getBinaryPath(coverageMode, options.binaryPath);
-  const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const startTime = Date.now();
-  mkdirSync(options.cwd, { recursive: true });
-
-  const spawnEnv = applyIsolatedSpawnEnv(env);
-  if (coverageMode) {
-    mkdirSync(COVERAGE_RAW_DIR, { recursive: true });
-    const unique = `${Date.now()}-${crypto.randomUUID()}`;
-    spawnEnv.COVERAGE_OUTPUT_FILE = join(COVERAGE_RAW_DIR, `coverage-${unique}.json`);
-  }
-
-  const args = tokenize(command);
   const hasStdin = options.stdin !== undefined || (options.stdinChunks?.length ?? 0) > 0;
-  const proc = Bun.spawn([binaryPath, ...args], {
-    env: spawnEnv,
-    stdout: 'pipe',
-    stderr: 'pipe',
-    stdin: hasStdin ? 'pipe' : 'ignore',
+  const { proc, timeoutMs, startedAt } = spawnCliProcess(command, env, {
     cwd: options.cwd,
+    timeoutMs: options.timeoutMs,
+    binaryPath: options.binaryPath,
+    stdin: hasStdin ? 'pipe' : 'ignore',
   });
 
   if (options.stdin !== undefined && proc.stdin) {
-    // proc.stdin is a Bun FileSink (not a Web WritableStream)
-    const sink = proc.stdin as { write(data: Uint8Array): void; end(): void };
-    sink.write(new TextEncoder().encode(options.stdin));
-    sink.end();
+    proc.stdin.write(new TextEncoder().encode(options.stdin));
+    proc.stdin.end();
   }
 
   if (options.stdinChunks !== undefined && proc.stdin) {
-    const sink = proc.stdin as { write(data: Uint8Array): void; end(): void };
     const encoder = new TextEncoder();
     // Write each chunk with a delay so readline in the CLI process finishes
     // handling one prompt before the next chunk arrives for the next prompt.
@@ -106,9 +159,9 @@ export async function runCli(
     await (async () => {
       for (const chunk of options.stdinChunks ?? []) {
         await new Promise((r) => setTimeout(r, chunkDelayMs));
-        sink.write(encoder.encode(chunk));
+        proc.stdin?.write(encoder.encode(chunk));
       }
-      sink.end();
+      proc.stdin?.end();
     })();
   }
 
@@ -142,7 +195,7 @@ export async function runCli(
     exitCode,
     stdout,
     stderr,
-    durationMs: Date.now() - startTime,
+    durationMs: Date.now() - startedAt,
   };
 }
 
@@ -150,7 +203,7 @@ export async function runCli(
  * Extracts the loopback port from accumulated stdout and POSTs the token to it.
  * Returns true if the token was delivered, false if the port was not found yet.
  */
-function tryDeliverToken(accumulated: string, token: string, tokenName?: string): boolean {
+export function tryDeliverToken(accumulated: string, token: string, tokenName?: string): boolean {
   const match = /[?&]port=(\d+)/.exec(accumulated);
   if (!match) return false;
   const port = match[1];
