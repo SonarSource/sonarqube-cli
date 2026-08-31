@@ -214,8 +214,13 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
                 .asText(),
             ).toContain('sonar hook claude-post-tool-use');
 
+            // The compressed output invites the agent to run `sonar context distillate restore`.
+            // Asking for the "complete" stdout used to send it there, where the allowlist denies it
+            // and the run dies on max-turns. Ask for what the tool actually returned instead.
             const result = await claude.run(
-              'Run ./gradlew build exactly once. In your final response, copy the complete stdout you observed from the Bash tool verbatim. Do not summarize it.',
+              'Run ./gradlew build exactly once, then stop calling tools. In your final response, ' +
+                'copy the Bash tool output you observed verbatim, exactly as it was returned to ' +
+                'you. Do not summarize it, and do not run any other command to expand or restore it.',
               {
                 args: [
                   '--tools',

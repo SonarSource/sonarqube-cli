@@ -228,6 +228,7 @@ export class FakeSonarQubeServerBuilder {
   private systemVersion = '9.9.0.00001';
   private memberOrganizations: Organization[] = [];
   private memberOrganizationsTotal?: number;
+  private visibleOrganizations: Organization[] = [];
   private readonly dopRepositoriesByOrgId: Map<string, DopRepositoryConfig[]> = new Map();
   /** Keyed by org legacy id, for `GET /dop-translation/organization-bindings`. */
   private readonly organizationBindingsByOrgId: Map<string, string> = new Map();
@@ -306,6 +307,17 @@ export class FakeSonarQubeServerBuilder {
 
   withOrganizationTotal(total: number): this {
     this.memberOrganizationsTotal = total;
+    return this;
+  }
+
+  /**
+   * Seed public organizations: resolvable by key, but not a membership.
+   *
+   * They answer `/api/organizations/search?organizations=<key>` like the real API, and stay out
+   * of `member=true`.
+   */
+  withVisibleOrganizations(orgs: Organization[]): this {
+    this.visibleOrganizations = orgs;
     return this;
   }
 
@@ -590,6 +602,7 @@ export class FakeSonarQubeServerBuilder {
       systemVersion,
       memberOrganizations,
       memberOrganizationsTotal: rawMemberOrganizationsTotal,
+      visibleOrganizations,
       dopRepositoriesByOrgId,
       organizationBindingsByOrgId,
       revokeTokenStatusCode,
@@ -896,9 +909,12 @@ export class FakeSonarQubeServerBuilder {
               { headers: { 'Content-Type': 'application/json' } },
             );
           }
-          // organizations=KEY → validate a specific org key
+          // organizations=KEY → resolve a specific org key, membership-independent like the
+          // real API, which also resolves public orgs the caller does not belong to.
           if (query.organizations) {
-            const match = memberOrganizations.filter((o) => o.key === query.organizations);
+            const match = [...memberOrganizations, ...visibleOrganizations].filter(
+              (o) => o.key === query.organizations,
+            );
             return new Response(JSON.stringify({ organizations: match }), {
               headers: { 'Content-Type': 'application/json' },
             });

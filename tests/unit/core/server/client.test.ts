@@ -954,23 +954,49 @@ describe('SonarQubeClient', () => {
   });
 
   // -------------------------------------------------------------------------
-  // checkOrganization
+  // isOrganizationAccessible
   // -------------------------------------------------------------------------
 
-  describe('checkOrganization', () => {
+  describe('isOrganizationAccessible', () => {
     it('returns true when the organization is in the results', async () => {
       fetchSpy = mockFetch({ organizations: [{ key: 'my-org' }] });
-      expect(await client.checkOrganization('my-org')).toBe(true);
+      expect(await client.isOrganizationAccessible('my-org')).toBe(true);
     });
 
     it('returns false when the organization is not in the results', async () => {
       fetchSpy = mockFetch({ organizations: [{ key: 'other-org' }] });
-      expect(await client.checkOrganization('my-org')).toBe(false);
+      expect(await client.isOrganizationAccessible('my-org')).toBe(false);
     });
 
     it('returns false on error', async () => {
       fetchSpy = mockFetch({}, { ok: false, status: 500 });
-      expect(await client.checkOrganization('my-org')).toBe(false);
+      expect(await client.isOrganizationAccessible('my-org')).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // resolveOrganizationAccess
+  // -------------------------------------------------------------------------
+
+  describe('resolveOrganizationAccess', () => {
+    it('reports an organization the server resolves as accessible', async () => {
+      fetchSpy = mockFetch({ organizations: [{ key: 'my-org', name: 'My Org' }] });
+
+      expect(await client.resolveOrganizationAccess('my-org')).toEqual({ status: 'accessible' });
+    });
+
+    it('reports an empty result as not_found', async () => {
+      fetchSpy = mockFetch({ organizations: [] });
+
+      expect(await client.resolveOrganizationAccess('my-org')).toEqual({ status: 'not_found' });
+    });
+
+    it('reports a server error as check_failed rather than as a missing organization', async () => {
+      fetchSpy = mockFetch({}, { ok: false, status: 500 });
+
+      const access = await client.resolveOrganizationAccess('my-org');
+
+      expect(access.status).toBe('check_failed');
     });
   });
 

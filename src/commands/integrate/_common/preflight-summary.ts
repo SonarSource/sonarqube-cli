@@ -109,7 +109,7 @@ async function organizationAccessStatus(
 ): Promise<[StepStatus, string | undefined]> {
   try {
     const client = new SonarQubeClient(serverUrl, token);
-    const accessible = await client.checkOrganization(organization);
+    const accessible = await client.isOrganizationAccessible(organization);
     return accessible ? ['done', organization] : ['failed', `${organization} (not accessible)`];
   } catch {
     return ['failed', `${organization} (not accessible)`];
