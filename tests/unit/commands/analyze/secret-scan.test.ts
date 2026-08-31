@@ -27,6 +27,7 @@ import * as fs from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { analyzeSecrets, runSecretsBinaryOnText } from '@/commands/analyze/secrets.ts';
 import { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
@@ -35,11 +36,6 @@ import * as processLib from '@/core/process/process.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
-
-import {
-  analyzeSecrets,
-  runSecretsBinaryOnText,
-} from '../../../../src/commands/analyze/secrets.ts';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const TEST_ORG = 'test-org';
@@ -282,10 +278,15 @@ describe('secretCheckCommand: successful scan', () => {
 
 describe('secretCheckCommand: input validation', () => {
   it('throws InvalidOptionError when paths array is empty', async () => {
-    // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(analyzeSecrets({ paths: [] }, FAKE_AUTHENTICATED_CONTEXT)).rejects.toThrow(
-      new InvalidOptionError('Either provide file/directory paths or --stdin'),
-    );
+    try {
+      await analyzeSecrets({ paths: [] }, FAKE_AUTHENTICATED_CONTEXT);
+      expect.unreachable('expected analyzeSecrets to throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(InvalidOptionError);
+      expect((e as InvalidOptionError).message).toBe(
+        'Either provide file/directory paths or --stdin',
+      );
+    }
   });
 });
 
@@ -565,6 +566,8 @@ describe('secretCheckCommand: stdin scan', () => {
       existsSpy.mockRestore();
     }
 
+    expect(spawnSpy.mock.calls[0][1]).toEqual(['--non-interactive', '--json', '--input']);
+
     const successes = getMockUiCalls()
       .filter((c) => c.method === 'success')
       .map((c) => String(c.args[0]));
@@ -576,12 +579,12 @@ describe('secretCheckCommand: stdin scan', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(
-        withMockStdin('const secret = "abc123";\n', () =>
-          analyzeSecrets({ stdin: true }, FAKE_AUTHENTICATED_CONTEXT),
-        ),
-      ).rejects.toThrow(CommandFailedError);
+      await withMockStdin('const secret = "abc123";\n', () =>
+        analyzeSecrets({ stdin: true }, FAKE_AUTHENTICATED_CONTEXT),
+      );
+      expect.unreachable('expected analyzeSecrets to throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(CommandFailedError);
     } finally {
       existsSpy.mockRestore();
     }
@@ -619,10 +622,10 @@ describe('secretCheckCommand: throws CommandFailedError for scan failures', () =
 
     const existsSpy = mockBinaryExists(true);
     try {
-      // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(
-        analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT),
-      ).rejects.toThrow(CommandFailedError);
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
+      expect.unreachable('expected analyzeSecrets to throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(CommandFailedError);
     } finally {
       existsSpy.mockRestore();
     }
