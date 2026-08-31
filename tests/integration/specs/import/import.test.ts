@@ -22,7 +22,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { type InteractiveSession, KEY, PROMPT, TestHarness } from '../../harness';
+import { type InteractiveSession, TestHarness } from '../../harness';
 
 const GITHUB_ALM = {
   key: 'github',
@@ -50,16 +50,16 @@ const ADMIN_ACTIONS = { admin: true };
 const SAMPLE_REPOS = [{ id: 'repo-1', name: 'repo', slug: 'kevinmlsilva/repo' }];
 
 async function chooseManual(session: InteractiveSession): Promise<void> {
-  await session.waitText(PROMPT.importHow);
-  session.write(KEY.down);
+  await session.waitText('How do you want to import repositories?');
+  session.keyDown();
   session.enter();
-  await session.waitText(PROMPT.selectRepos);
+  await session.waitText('Select repositories to import');
 }
 
 async function chooseByPattern(session: InteractiveSession): Promise<void> {
-  await session.waitText(PROMPT.importHow);
-  session.write(KEY.down);
-  session.write(KEY.down);
+  await session.waitText('How do you want to import repositories?');
+  session.keyDown();
+  session.keyDown();
   session.enter();
 }
 
@@ -437,7 +437,7 @@ describe('sonar import', () => {
         });
         await chooseManual(session);
         session.write('q');
-        await session.waitText(PROMPT.importHow);
+        await session.waitText('How do you want to import repositories?');
         session.enter();
         const result = await session.finish();
 
@@ -512,7 +512,7 @@ describe('sonar import', () => {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
         await chooseManual(session);
-        session.write(KEY.space);
+        session.keySpace();
         session.enter();
         const result = await session.finish();
 
@@ -543,8 +543,8 @@ describe('sonar import', () => {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
         await chooseManual(session);
-        session.write(KEY.down);
-        session.write(KEY.space);
+        session.keyDown();
+        session.keySpace();
         session.enter();
         const result = await session.finish();
 
@@ -691,9 +691,9 @@ describe('sonar import', () => {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
         await chooseManual(session);
-        session.write(KEY.space);
-        session.write(KEY.down);
-        session.write(KEY.space);
+        session.keySpace();
+        session.keyDown();
+        session.keySpace();
         session.enter();
         const result = await session.finish();
 
@@ -772,10 +772,12 @@ describe('sonar import', () => {
           timeoutMs: 20000,
         });
         await chooseManual(session);
-        session.write(KEY.down.repeat(50));
+        for (let i = 0; i < 50; i++) {
+          session.keyDown();
+        }
         session.enter();
-        await session.waitText(PROMPT.selectRepos);
-        session.write(KEY.space);
+        await session.waitText('Select repositories to import');
+        session.keySpace();
         session.enter();
         const result = await session.finish();
 
@@ -814,7 +816,7 @@ describe('sonar import', () => {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
         await chooseManual(session);
-        session.write(KEY.space);
+        session.keySpace();
         session.enter();
         const result = await session.finish();
 
@@ -856,7 +858,7 @@ describe('sonar import', () => {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
         await chooseManual(session);
-        session.write(KEY.space);
+        session.keySpace();
         session.enter();
         const result = await session.finish();
 
@@ -909,8 +911,11 @@ describe('sonar import', () => {
           timeoutMs: 20000,
         });
         await chooseManual(session);
-        session.write(KEY.space);
-        session.write((KEY.down + KEY.space).repeat(25));
+        session.keySpace();
+        for (let i = 0; i < 25; i++) {
+          session.keyDown();
+          session.keySpace();
+        }
         session.enter();
         const result = await session.finish();
 
@@ -950,7 +955,7 @@ describe('sonar import', () => {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
         await chooseManual(session);
-        session.write(KEY.space);
+        session.keySpace();
         session.enter();
         const result = await session.finish();
 
@@ -986,7 +991,7 @@ describe('sonar import', () => {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
         await chooseManual(session);
-        session.write(KEY.space);
+        session.keySpace();
         session.enter();
         const result = await session.finish();
 
@@ -1053,7 +1058,7 @@ describe('sonar import', () => {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
         await chooseManual(session);
-        session.write(KEY.space);
+        session.keySpace();
         session.enter();
         const result = await session.finish();
 
@@ -1096,7 +1101,7 @@ describe('sonar import', () => {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
         await chooseManual(session);
-        session.write(KEY.space);
+        session.keySpace();
         session.enter();
         const result = await session.finish();
 
@@ -1257,7 +1262,7 @@ describe('sonar import', () => {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
         await chooseManual(session);
-        session.write(KEY.space);
+        session.keySpace();
         session.enter();
         const result = await session.finish();
 
@@ -1295,7 +1300,7 @@ describe('sonar import', () => {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
         await chooseManual(session);
-        session.write(KEY.space);
+        session.keySpace();
         session.enter();
         const result = await session.finish();
 
@@ -1560,10 +1565,10 @@ describe('sonar import', () => {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
         await chooseManual(session);
-        session.write(KEY.space);
-        session.write(KEY.down);
-        session.write(KEY.down);
-        session.write(KEY.space);
+        session.keySpace();
+        session.keyDown();
+        session.keyDown();
+        session.keySpace();
         session.enter();
         const result = await session.finish();
 
@@ -2114,7 +2119,7 @@ describe('sonar import', () => {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
         await chooseByPattern(session);
-        await session.waitText(PROMPT.importRegex);
+        await session.waitText('Import repositories whose name matches');
         session.write('^engineering-');
         session.enter();
         const result = await session.finish();
@@ -2149,12 +2154,12 @@ describe('sonar import', () => {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
         await chooseByPattern(session);
-        await session.waitText(PROMPT.importRegex);
+        await session.waitText('Import repositories whose name matches');
         session.enter();
-        await session.waitText(PROMPT.importRegex);
+        await session.waitText('Import repositories whose name matches');
         session.write('(');
         session.enter();
-        await session.waitText(PROMPT.importRegex);
+        await session.waitText('Import repositories whose name matches');
         session.write('^engineering-');
         session.enter();
         const result = await session.finish();
@@ -2186,9 +2191,9 @@ describe('sonar import', () => {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
         await chooseByPattern(session);
-        await session.waitText(PROMPT.importRegex);
-        session.cancel();
-        await session.waitText(PROMPT.importHow);
+        await session.waitText('Import repositories whose name matches');
+        session.keyCtrlC();
+        await session.waitText('How do you want to import repositories?');
         session.enter();
         const result = await session.finish();
 

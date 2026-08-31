@@ -46,7 +46,6 @@ import {
   hookScriptPath,
   IS_WINDOWS,
   normalizePath,
-  PROMPT,
   TestHarness,
 } from '../../harness';
 import { findInstalledFeature, findInstalledSubfeature } from './state-helpers';
@@ -708,13 +707,13 @@ describe('integrate codex', () => {
         // is not_applicable. The three remaining features
         // (secrets hook, secrets instructions, MCP) each ask after the scope prompt.
         const session = harness.runInteractive('integrate codex');
-        await session.waitText(PROMPT.scope);
+        await session.waitText('Where should SonarQube be integrated?');
         session.enter();
-        await session.waitText(PROMPT.secretsHooks);
+        await session.waitText('Install secret scanning hooks?');
         session.enter();
-        await session.waitText(PROMPT.secretsOnRead);
+        await session.waitText('Install secrets-on-read instructions?');
         session.enter();
-        await session.waitText(PROMPT.mcp);
+        await session.waitText('Install MCP server?');
         session.enter();
         const result = await session.finish();
 
@@ -759,13 +758,13 @@ describe('integrate codex', () => {
         let result;
         if (isInteractive) {
           const session = harness.runInteractive('integrate codex', { extraEnv });
-          await session.waitText(PROMPT.scope);
+          await session.waitText('Where should SonarQube be integrated?');
           session.enter();
-          await session.waitText(PROMPT.secretsHooks);
+          await session.waitText('Install secret scanning hooks?');
           session.enter();
-          await session.waitText(PROMPT.secretsOnRead);
+          await session.waitText('Install secrets-on-read instructions?');
           session.enter();
-          await session.waitText(PROMPT.mcp);
+          await session.waitText('Install MCP server?');
           session.enter();
           result = await session.finish();
         } else {
@@ -790,13 +789,13 @@ describe('integrate codex', () => {
       'skips a feature when the user declines its prompt',
       async () => {
         const session = harness.runInteractive('integrate codex');
-        await session.waitText(PROMPT.scope);
+        await session.waitText('Where should SonarQube be integrated?');
         session.enter();
-        await session.waitText(PROMPT.secretsHooks);
+        await session.waitText('Install secret scanning hooks?');
         session.write('n');
-        await session.waitText(PROMPT.secretsOnRead);
+        await session.waitText('Install secrets-on-read instructions?');
         session.enter();
-        await session.waitText(PROMPT.mcp);
+        await session.waitText('Install MCP server?');
         session.enter();
         const result = await session.finish();
 
@@ -827,13 +826,15 @@ describe('integrate codex', () => {
         // feature asks a custom "project-local copy" question instead of the
         // default one.
         const session = harness.runInteractive('integrate codex');
-        await session.waitText(PROMPT.scope);
+        await session.waitText('Where should SonarQube be integrated?');
         session.enter();
-        await session.waitText(PROMPT.secretsHooks);
+        await session.waitText('Install secret scanning hooks?');
         session.enter();
-        await session.waitText(PROMPT.codexLocalCopy);
+        await session.waitText(
+          'Global Codex instructions already exist. Do you also want to create a project-local copy for this repo?',
+        );
         session.enter();
-        await session.waitText(PROMPT.mcp);
+        await session.waitText('Install MCP server?');
         session.enter();
         const result = await session.finish();
 
@@ -871,13 +872,13 @@ describe('integrate codex', () => {
             __SQCLI_DEV_SKIP_CAG: '1',
           },
         });
-        await session.waitText(PROMPT.secretsHooks);
+        await session.waitText('Install secret scanning hooks?');
         session.enter();
-        await session.waitText(PROMPT.vortex);
+        await session.waitText('Install Vortex?');
         session.enter();
-        await session.waitText(PROMPT.secretsOnRead);
+        await session.waitText('Install secrets-on-read instructions?');
         session.enter();
-        await session.waitText(PROMPT.mcp);
+        await session.waitText('Install MCP server?');
         session.enter();
         const result = await session.finish();
 

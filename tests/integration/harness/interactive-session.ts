@@ -27,6 +27,9 @@ export type { InteractiveProcessHandle, SessionStdin } from './types.js';
 
 const ENTER = '\r';
 const CTRL_C = '\x03';
+const ARROW_UP = '\x1b[A';
+const ARROW_DOWN = '\x1b[B';
+const SPACE = ' ';
 
 export type PromptText = string | RegExp;
 
@@ -49,17 +52,43 @@ export function formatPrompt(prompt: PromptText): string {
   return typeof prompt === 'string' ? `"${prompt}"` : String(prompt);
 }
 
+/** Clack paints a submitted prompt as `✓  …`; that line is not a new wait target. */
+const SUBMITTED_PROMPT_PREFIX = '✓  ';
+
+function isSubmittedPrompt(window: string, matchIndex: number): boolean {
+  return window.endsWith(SUBMITTED_PROMPT_PREFIX, matchIndex);
+}
+
 export function findPromptMatch(window: string, prompt: PromptText): number | null {
   if (typeof prompt === 'string') {
-    const index = window.indexOf(prompt);
-    return index === -1 ? null : index + prompt.length;
-  }
-  const flags = prompt.flags.replaceAll('g', '').replaceAll('y', '');
-  const match = window.match(new RegExp(prompt.source, flags));
-  if (!match || match.index === undefined) {
+    let searchFrom = 0;
+    while (searchFrom <= window.length) {
+      const index = window.indexOf(prompt, searchFrom);
+      if (index === -1) {
+        return null;
+      }
+      if (!isSubmittedPrompt(window, index)) {
+        return index + prompt.length;
+      }
+      searchFrom = index + prompt.length;
+    }
     return null;
   }
-  return match.index + match[0].length;
+  const flags = prompt.flags.replaceAll('g', '').replaceAll('y', '');
+  const matcher = new RegExp(prompt.source, flags);
+  let offset = 0;
+  while (offset <= window.length) {
+    const match = window.slice(offset).match(matcher);
+    if (!match || match.index === undefined) {
+      return null;
+    }
+    const index = offset + match.index;
+    if (!isSubmittedPrompt(window, index)) {
+      return index + match[0].length;
+    }
+    offset = index + Math.max(match[0].length, 1);
+  }
+  return null;
 }
 
 export function startInteractiveSession(
@@ -192,7 +221,19 @@ export class InteractiveSession {
     this.write(ENTER);
   }
 
-  cancel(): void {
+  keyUp(): void {
+    this.write(ARROW_UP);
+  }
+
+  keyDown(): void {
+    this.write(ARROW_DOWN);
+  }
+
+  keySpace(): void {
+    this.write(SPACE);
+  }
+
+  keyCtrlC(): void {
     this.write(CTRL_C);
   }
 

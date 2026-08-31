@@ -38,7 +38,7 @@ import { dirname, join } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, it } from 'bun:test';
 
 import type { CliResult } from '../../tests/integration/harness';
-import { KEY, PROMPT, TestHarness } from '../../tests/integration/harness';
+import { TestHarness } from '../../tests/integration/harness';
 import { commitFile, initGitRepo } from '../../tests/integration/specs/hook/git-test-helpers.ts';
 
 const OUTPUT_PATH = join(import.meta.dir, '../../ux-report/cli-output-report.md');
@@ -525,8 +525,8 @@ uxDescribe('SonarQube Cloud — Happy Path', () => {
       const session = h.runInteractive(`remediate -p ${PROJECT}`, {
         extraEnv: { SONARQUBE_CLI_MOCK_TTY: '1' },
       });
-      await session.waitText(PROMPT.whichIssues);
-      session.write(KEY.space);
+      await session.waitText('Which issues should the agent fix?');
+      session.keySpace();
       session.enter();
       return session.finish();
     }),
@@ -893,9 +893,9 @@ uxDescribe('Interactive auth login', () => {
         extraEnv: cloudEnvFor(cloudUrl),
         browserToken: TOKEN,
       });
-      await session.waitText(PROMPT.connectWhere);
+      await session.waitText('Where would you like to connect?');
       session.enter();
-      await session.waitText(PROMPT.cloudRegion);
+      await session.waitText('Which SonarQube Cloud region?');
       session.enter();
       return session.finish();
     }),

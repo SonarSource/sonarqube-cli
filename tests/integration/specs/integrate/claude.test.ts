@@ -40,7 +40,6 @@ import {
   hookScriptPath,
   IS_WINDOWS,
   normalizePath,
-  PROMPT,
   TestHarness,
 } from '../../harness';
 import { findInstalledFeature, getInstalledIntegration } from './state-helpers';
@@ -1994,11 +1993,11 @@ describe('integrate claude — interactive feature selection', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
-      await session.waitText(PROMPT.scope);
+      await session.waitText('Where should SonarQube be integrated?');
       session.enter();
-      await session.waitText(PROMPT.secretsHooks);
+      await session.waitText('Install secret scanning hooks?');
       session.enter();
-      await session.waitText(PROMPT.mcp);
+      await session.waitText('Install MCP server?');
       session.enter();
       const result = await session.finish();
 
@@ -2048,11 +2047,11 @@ describe('integrate claude — interactive feature selection', () => {
       let result;
       if (isInteractive) {
         const session = harness.runInteractive('integrate claude', { extraEnv });
-        await session.waitText(PROMPT.scope);
+        await session.waitText('Where should SonarQube be integrated?');
         session.enter();
-        await session.waitText(PROMPT.secretsHooks);
+        await session.waitText('Install secret scanning hooks?');
         session.enter();
-        await session.waitText(PROMPT.mcp);
+        await session.waitText('Install MCP server?');
         session.enter();
         result = await session.finish();
       } else {
@@ -2085,11 +2084,11 @@ describe('integrate claude — interactive feature selection', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
-      await session.waitText(PROMPT.scope);
+      await session.waitText('Where should SonarQube be integrated?');
       session.enter();
-      await session.waitText(PROMPT.secretsHooks);
+      await session.waitText('Install secret scanning hooks?');
       session.write('n');
-      await session.waitText(PROMPT.mcp);
+      await session.waitText('Install MCP server?');
       session.enter();
       const result = await session.finish();
 
@@ -2124,11 +2123,11 @@ describe('integrate claude — interactive feature selection', () => {
           __SQCLI_DEV_SKIP_CAG: '1',
         },
       });
-      await session.waitText(PROMPT.secretsHooks);
+      await session.waitText('Install secret scanning hooks?');
       session.enter();
-      await session.waitText(PROMPT.vortex);
+      await session.waitText('Install Vortex?');
       session.enter();
-      await session.waitText(PROMPT.mcp);
+      await session.waitText('Install MCP server?');
       session.enter();
       const result = await session.finish();
 
@@ -2179,9 +2178,9 @@ describe('integrate claude — interactive feature selection', () => {
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
         },
       });
-      await session.waitText(PROMPT.secretsHooks);
+      await session.waitText('Install secret scanning hooks?');
       session.enter();
-      await session.waitText(PROMPT.mcp);
+      await session.waitText('Install MCP server?');
       session.enter();
       const result = await session.finish();
 
@@ -2238,13 +2237,13 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
-      await session.waitText(PROMPT.scope);
+      await session.waitText('Where should SonarQube be integrated?');
       session.enter();
-      await session.waitText(PROMPT.keepSecretsHooks);
+      await session.waitText('secret scanning hooks (currently installed)  Keep?');
       session.enter();
-      await session.waitText(PROMPT.keepMcp);
+      await session.waitText('MCP server (currently installed)  Keep?');
       session.write('n');
-      await session.waitText(PROMPT.proceedRemoval);
+      await session.waitText('Proceed with removal?');
       session.enter();
       const result = await session.finish();
 
@@ -2274,13 +2273,13 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
-      await session.waitText(PROMPT.scope);
+      await session.waitText('Where should SonarQube be integrated?');
       session.enter();
-      await session.waitText(PROMPT.keepSecretsHooks);
+      await session.waitText('secret scanning hooks (currently installed)  Keep?');
       session.enter();
-      await session.waitText(PROMPT.keepMcp);
+      await session.waitText('MCP server (currently installed)  Keep?');
       session.write('n');
-      await session.waitText(PROMPT.proceedRemoval);
+      await session.waitText('Proceed with removal?');
       session.write('n');
       const result = await session.finish();
 
@@ -2303,13 +2302,13 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
-      await session.waitText(PROMPT.scope);
+      await session.waitText('Where should SonarQube be integrated?');
       session.enter();
-      await session.waitText(PROMPT.keepSecretsHooks);
+      await session.waitText('secret scanning hooks (currently installed)  Keep?');
       session.write('n');
-      await session.waitText(PROMPT.proceedRemoval);
+      await session.waitText('Proceed with removal?');
       session.enter();
-      await session.waitText(PROMPT.keepMcp);
+      await session.waitText('MCP server (currently installed)  Keep?');
       session.enter();
       const result = await session.finish();
 
@@ -2353,13 +2352,13 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
-      await session.waitText(PROMPT.scope);
+      await session.waitText('Where should SonarQube be integrated?');
       session.enter();
-      await session.waitText(PROMPT.keepSecretsHooks);
+      await session.waitText('secret scanning hooks (currently installed)  Keep?');
       session.write('n');
-      await session.waitText(PROMPT.proceedRemoval);
+      await session.waitText('Proceed with removal?');
       session.enter();
-      await session.waitText(PROMPT.keepMcp);
+      await session.waitText('MCP server (currently installed)  Keep?');
       session.enter();
       const result = await session.finish();
 
@@ -2425,15 +2424,15 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
-      await session.waitText(PROMPT.scope);
+      await session.waitText('Where should SonarQube be integrated?');
       session.enter();
-      await session.waitText(PROMPT.keepSecretsHooks);
+      await session.waitText('secret scanning hooks (currently installed)  Keep?');
       session.write('n');
-      await session.waitText(PROMPT.proceedRemoval);
+      await session.waitText('Proceed with removal?');
       session.enter();
-      await session.waitText(PROMPT.keepMcp);
+      await session.waitText('MCP server (currently installed)  Keep?');
       session.write('n');
-      await session.waitText(PROMPT.proceedRemoval);
+      await session.waitText('Proceed with removal?');
       session.enter();
       const result = await session.finish();
 

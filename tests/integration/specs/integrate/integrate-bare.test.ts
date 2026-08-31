@@ -22,7 +22,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { hookScriptName, PROMPT, TestHarness } from '../../harness';
+import { hookScriptName, TestHarness } from '../../harness';
 import { findInstalledFeature } from './state-helpers';
 
 describe('integrate (bare command)', () => {
@@ -45,8 +45,8 @@ describe('integrate (bare command)', () => {
       harness.withAuth(server.baseUrl(), 'test-token');
 
       const session = harness.runInteractive('integrate');
-      await session.waitText(PROMPT.tool);
-      session.cancel();
+      await session.waitText('Select the tool you want to integrate with');
+      session.keyCtrlC();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(1);
@@ -88,13 +88,13 @@ describe('integrate (bare command)', () => {
 
       // Single-select: the cursor starts on Claude (index 0); Enter confirms it.
       const session = harness.runInteractive('integrate');
-      await session.waitText(PROMPT.tool);
+      await session.waitText('Select the tool you want to integrate with');
       session.enter();
-      await session.waitText(PROMPT.scope);
+      await session.waitText('Where should SonarQube be integrated?');
       session.enter();
-      await session.waitText(PROMPT.secretsHooks);
+      await session.waitText('Install secret scanning hooks?');
       session.enter();
-      await session.waitText(PROMPT.mcp);
+      await session.waitText('Install MCP server?');
       session.enter();
       const result = await session.finish();
       const output = result.stdout + result.stderr;
@@ -127,11 +127,11 @@ describe('integrate (bare command)', () => {
       // --global is passed through to the integration: scope prompt is skipped and
       // the integration installs at global scope.
       const session = harness.runInteractive('integrate --global');
-      await session.waitText(PROMPT.tool);
+      await session.waitText('Select the tool you want to integrate with');
       session.enter();
-      await session.waitText(PROMPT.secretsHooks);
+      await session.waitText('Install secret scanning hooks?');
       session.enter();
-      await session.waitText(PROMPT.mcp);
+      await session.waitText('Install MCP server?');
       session.enter();
       const result = await session.finish();
 
@@ -166,11 +166,11 @@ describe('integrate (bare command)', () => {
       // -p is passed through to the integration: scope prompt is skipped (explicit
       // project key implies project scope) and the key is baked into the install.
       const session = harness.runInteractive('integrate --project my-project');
-      await session.waitText(PROMPT.tool);
+      await session.waitText('Select the tool you want to integrate with');
       session.enter();
-      await session.waitText(PROMPT.secretsHooks);
+      await session.waitText('Install secret scanning hooks?');
       session.enter();
-      await session.waitText(PROMPT.mcp);
+      await session.waitText('Install MCP server?');
       session.enter();
       const result = await session.finish();
 

@@ -127,6 +127,14 @@ describe('prompt matching', () => {
     expect(findPromptMatch('Install Vortex?', 'missing')).toBeNull();
   });
 
+  it('skips a submitted prompt line and matches the live one', () => {
+    expect(findPromptMatch('✓  Enter server URL bad-url', 'Enter server URL')).toBeNull();
+    expect(findPromptMatch('?  Enter server URL', 'Enter server URL')).toBe(19);
+    expect(
+      findPromptMatch('✓  Enter server URL bad\n?  Enter server URL', 'Enter server URL'),
+    ).toBe('✓  Enter server URL bad\n?  Enter server URL'.length);
+  });
+
   it('strips CSI sequences so prompt text is visible', () => {
     expect(stripControlSequences('\x1b[?25lSelect the tool\x1b[2K\r')).toBe('Select the tool');
   });
@@ -143,7 +151,10 @@ describe('InteractiveSession', () => {
 
     session.write('n');
     session.enter();
-    expect(fake.writes).toEqual(['n', '\r']);
+    session.keyDown();
+    session.keyUp();
+    session.keySpace();
+    expect(fake.writes).toEqual(['n', '\r', '\x1b[B', '\x1b[A', ' ']);
     expect(session.output()).toContain('Select a tool');
 
     fake.close(0);
@@ -190,21 +201,22 @@ describe('InteractiveSession', () => {
     const again = session.waitText('Enter server URL');
     fake.pushStdout('Enter server URL');
     await again;
+    expect(fake.writes).toEqual(['bad', '\r']);
 
     session.kill();
     await session.finish().catch(() => undefined);
   });
 
-  it('does not treat a submitted clack line as the next live prompt', async () => {
+  it('does not treat a submitted prompt line as the next live prompt', async () => {
     const fake = createFakeProcess();
     const session = InteractiveSession.fromProcess(fake.handle, { timeoutMs: 2000 });
 
     fake.pushStdout('?  Enter server URL');
-    await session.waitText('?  Enter server URL');
+    await session.waitText('Enter server URL');
     session.write('bad-url');
     session.enter();
 
-    const submitted = session.waitText('?  Enter server URL', 50);
+    const submitted = session.waitText('Enter server URL', 50);
     fake.pushStdout('✓  Enter server URL bad-url');
     let rematchError: unknown;
     try {
@@ -213,9 +225,9 @@ describe('InteractiveSession', () => {
       rematchError = error;
     }
     expect(rematchError).toBeInstanceOf(Error);
-    expect(String(rematchError)).toContain('Timed out waiting for "?  Enter server URL"');
+    expect(String(rematchError)).toContain('Timed out waiting for "Enter server URL"');
 
-    const live = session.waitText('?  Enter server URL');
+    const live = session.waitText('Enter server URL');
     fake.pushStdout('?  Enter server URL');
     await live;
 
@@ -239,13 +251,13 @@ describe('InteractiveSession', () => {
     expect(String(exitError)).toContain('CLI exited before "never shown" appeared');
   });
 
-  it('sends Ctrl+C on cancel and treats kill as idempotent', async () => {
+  it('sends Ctrl+C on keyCtrlC and treats kill as idempotent', async () => {
     const fake = createFakeProcess();
     const session = InteractiveSession.fromProcess(fake.handle, { timeoutMs: 2000 });
 
     fake.pushStdout('pick one');
     await session.waitText('pick one');
-    session.cancel();
+    session.keyCtrlC();
     expect(fake.writes).toEqual(['\x03']);
 
     session.kill();

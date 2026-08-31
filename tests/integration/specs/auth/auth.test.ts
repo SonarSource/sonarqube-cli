@@ -28,7 +28,7 @@ import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/auth/auth-resolver.ts';
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 import { generateKeychainAccount } from '@/core/host/keychain.ts';
 
-import { KEY, PROMPT, TestHarness } from '../../harness';
+import { TestHarness } from '../../harness';
 
 function readKeychainToken(keychainFile: string, account: string): string | undefined {
   try {
@@ -745,9 +745,9 @@ describe('auth login — server selection', () => {
         },
         browserToken: 'my-token',
       });
-      await session.waitText(PROMPT.connectWhere);
+      await session.waitText('Where would you like to connect?');
       session.enter();
-      await session.waitText(PROMPT.cloudRegion);
+      await session.waitText('Which SonarQube Cloud region?');
       session.enter();
       const result = await session.finish();
 
@@ -777,10 +777,10 @@ describe('auth login — server selection', () => {
         },
         browserToken: 'my-token',
       });
-      await session.waitText(PROMPT.connectWhere);
+      await session.waitText('Where would you like to connect?');
       session.enter();
-      await session.waitText(PROMPT.cloudRegion);
-      session.write(KEY.down);
+      await session.waitText('Which SonarQube Cloud region?');
+      session.keyDown();
       session.enter();
       const result = await session.finish();
 
@@ -813,12 +813,12 @@ describe('auth login — server selection', () => {
         },
         browserToken: 'my-token',
       });
-      await session.waitText(PROMPT.connectWhere);
+      await session.waitText('Where would you like to connect?');
       session.enter();
-      await session.waitText(PROMPT.cloudRegion);
+      await session.waitText('Which SonarQube Cloud region?');
       session.enter();
-      await session.waitText(PROMPT.selectOrg);
-      session.write(KEY.down);
+      await session.waitText('Select an organization');
+      session.keyDown();
       session.enter();
       const result = await session.finish();
 
@@ -838,13 +838,13 @@ describe('auth login — server selection', () => {
       const session = harness.runInteractive('auth login', {
         browserToken: 'my-token',
       });
-      await session.waitText(PROMPT.connectWhere);
-      session.write(KEY.down);
+      await session.waitText('Where would you like to connect?');
+      session.keyDown();
       session.enter();
-      await session.waitText(PROMPT.enterServerUrl);
+      await session.waitText('Enter server URL');
       session.write(`${server.baseUrl()}`);
       session.enter();
-      await session.waitText(PROMPT.connectTo);
+      await session.waitText('Connect to:');
       session.enter();
       const result = await session.finish();
 
@@ -897,15 +897,15 @@ describe('auth login — server selection', () => {
       const session = harness.runInteractive('auth login', {
         browserToken: 'my-token',
       });
-      await session.waitText(PROMPT.connectWhere);
-      session.write(KEY.down);
+      await session.waitText('Where would you like to connect?');
+      session.keyDown();
       session.enter();
-      await session.waitText(PROMPT.enterServerUrl);
+      await session.waitText('Enter server URL');
       session.enter();
-      await session.waitText(PROMPT.enterServerUrl);
+      await session.waitText('Enter server URL');
       session.write(`${server.baseUrl()}`);
       session.enter();
-      await session.waitText(PROMPT.connectTo);
+      await session.waitText('Connect to:');
       session.enter();
       const result = await session.finish();
 
@@ -926,16 +926,16 @@ describe('auth login — server selection', () => {
       const session = harness.runInteractive('auth login', {
         browserToken: 'my-token',
       });
-      await session.waitText(PROMPT.connectWhere);
-      session.write(KEY.down);
+      await session.waitText('Where would you like to connect?');
+      session.keyDown();
       session.enter();
-      await session.waitText(PROMPT.enterServerUrl);
+      await session.waitText('Enter server URL');
       session.write('not-a-url');
       session.enter();
-      await session.waitText(PROMPT.enterServerUrl);
+      await session.waitText('Enter server URL');
       session.write(`${server.baseUrl()}`);
       session.enter();
-      await session.waitText(PROMPT.connectTo);
+      await session.waitText('Connect to:');
       session.enter();
       const result = await session.finish();
 
@@ -956,22 +956,22 @@ describe('auth login — server selection', () => {
       const session = harness.runInteractive('auth login', {
         browserToken: 'my-token',
       });
-      await session.waitText(PROMPT.connectWhere);
-      session.write(KEY.down);
+      await session.waitText('Where would you like to connect?');
+      session.keyDown();
       session.enter();
-      await session.waitText(PROMPT.enterServerUrl);
+      await session.waitText('Enter server URL');
       session.write('bad-url-1');
       session.enter();
-      await session.waitText(PROMPT.enterServerUrl);
+      await session.waitText('Enter server URL');
       session.write('bad-url-2');
       session.enter();
-      await session.waitText(PROMPT.enterServerUrl);
+      await session.waitText('Enter server URL');
       session.write('bad-url-3');
       session.enter();
-      await session.waitText(PROMPT.enterServerUrl);
+      await session.waitText('Enter server URL');
       session.write(`${server.baseUrl()}`);
       session.enter();
-      await session.waitText(PROMPT.connectTo);
+      await session.waitText('Connect to:');
       session.enter();
       const result = await session.finish();
 
@@ -1006,13 +1006,13 @@ describe('auth login — server selection', () => {
       const session = harness.runInteractive('auth login', {
         browserToken: 'my-token',
       });
-      await session.waitText(PROMPT.connectWhere);
-      session.write(KEY.down);
+      await session.waitText('Where would you like to connect?');
+      session.keyDown();
       session.enter();
-      await session.waitText(PROMPT.enterServerUrl);
+      await session.waitText('Enter server URL');
       session.write(`${server.baseUrl()}`);
       session.enter();
-      await session.waitText(PROMPT.connectTo);
+      await session.waitText('Connect to:');
       session.enter();
       const result = await session.finish();
 
@@ -1029,13 +1029,13 @@ describe('auth login — server selection', () => {
       const server = await harness.newFakeServer().start();
 
       const session = harness.runInteractive('auth login');
-      await session.waitText(PROMPT.connectWhere);
-      session.write(KEY.down);
+      await session.waitText('Where would you like to connect?');
+      session.keyDown();
       session.enter();
-      await session.waitText(PROMPT.enterServerUrl);
+      await session.waitText('Enter server URL');
       session.write(`${server.baseUrl()}`);
       session.enter();
-      await session.waitText(PROMPT.connectTo);
+      await session.waitText('Connect to:');
       session.write('n');
       const result = await session.finish();
 

@@ -27,7 +27,7 @@ import {
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
 import { readCommandEvents } from '../../../_common/telemetry-helpers';
-import { type CliResult, KEY, PROMPT, TestHarness } from '../../harness';
+import { type CliResult, TestHarness } from '../../harness';
 
 const VALID_TOKEN = 'integration-test-token';
 const TEST_ORG = 'my-org';
@@ -226,7 +226,7 @@ describe('sonar remediate', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
-      await session.waitText(PROMPT.whichIssues);
+      await session.waitText('Which issues should the agent fix?');
       session.write('q');
       const result = await session.finish();
 
@@ -249,7 +249,7 @@ describe('sonar remediate', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
-      await session.waitText(PROMPT.whichIssues);
+      await session.waitText('Which issues should the agent fix?');
       session.enter();
       const result = await session.finish();
 
@@ -283,7 +283,7 @@ describe('sonar remediate', () => {
       let result: CliResult;
       if (isInteractive) {
         const session = harness.runInteractive(command, { extraEnv });
-        await session.waitText(PROMPT.whichIssues);
+        await session.waitText('Which issues should the agent fix?');
         session.enter();
         result = await session.finish();
       } else {
@@ -316,8 +316,8 @@ describe('sonar remediate', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
-      await session.waitText(PROMPT.whichIssues);
-      session.write(KEY.space);
+      await session.waitText('Which issues should the agent fix?');
+      session.keySpace();
       session.enter();
       const result = await session.finish();
 
@@ -348,8 +348,8 @@ describe('sonar remediate', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
-      await session.waitText(PROMPT.whichIssues);
-      session.write(KEY.space);
+      await session.waitText('Which issues should the agent fix?');
+      session.keySpace();
       session.enter();
       await session.finish();
 
@@ -385,7 +385,7 @@ describe('sonar remediate', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
-      await session.waitText(PROMPT.whichIssues);
+      await session.waitText('Which issues should the agent fix?');
       session.enter();
       await session.finish();
 
@@ -419,8 +419,8 @@ describe('sonar remediate', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
-      await session.waitText(PROMPT.whichIssues);
-      session.write(KEY.space);
+      await session.waitText('Which issues should the agent fix?');
+      session.keySpace();
       session.enter();
       const result = await session.finish();
 
@@ -450,8 +450,8 @@ describe('sonar remediate', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
-      await session.waitText(PROMPT.whichIssues);
-      session.write(KEY.space);
+      await session.waitText('Which issues should the agent fix?');
+      session.keySpace();
       session.enter();
       const result = await session.finish();
 
@@ -477,7 +477,7 @@ describe('sonar remediate', () => {
       harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
 
       const session = harness.runInteractive('remediate');
-      await session.waitText(PROMPT.whichIssues);
+      await session.waitText('Which issues should the agent fix?');
       session.enter();
       const result = await session.finish();
 
@@ -525,10 +525,10 @@ describe('sonar remediate', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
-      await session.waitText(PROMPT.whichIssues);
-      session.write(KEY.space);
-      session.write(KEY.down);
-      session.write(KEY.space);
+      await session.waitText('Which issues should the agent fix?');
+      session.keySpace();
+      session.keyDown();
+      session.keySpace();
       session.enter();
       const result = await session.finish();
 
@@ -574,7 +574,7 @@ describe('sonar remediate', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
-      await session.waitText(PROMPT.whichIssues);
+      await session.waitText('Which issues should the agent fix?');
       session.write('q');
       const result = await session.finish();
 
@@ -619,8 +619,8 @@ describe('sonar remediate', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
-      await session.waitText(PROMPT.whichIssues);
-      session.write(KEY.space);
+      await session.waitText('Which issues should the agent fix?');
+      session.keySpace();
       session.enter();
       await session.finish();
 

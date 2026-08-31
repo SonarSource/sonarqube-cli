@@ -26,7 +26,7 @@ import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
-import { normalizePath, PROMPT, TestHarness } from '../../harness';
+import { normalizePath, TestHarness } from '../../harness';
 import {
   CopilotHookEntry,
   CopilotHooksJson,
@@ -681,13 +681,13 @@ describe('integrate copilot', () => {
         const session = harness.runInteractive(`integrate copilot --project ${TEST_PROJECT}`, {
           extraEnv: { ...extraEnv, __SQCLI_DEV_SKIP_CAG: '1' },
         });
-        await session.waitText(PROMPT.copilotHook);
+        await session.waitText('Install pre-tool-use hook?');
         session.enter();
-        await session.waitText(PROMPT.promptSecretsInstructions);
+        await session.waitText('Install prompt-secrets instructions?');
         session.enter();
-        await session.waitText(PROMPT.vortex);
+        await session.waitText('Install Vortex?');
         session.enter();
-        await session.waitText(PROMPT.mcp);
+        await session.waitText('Install MCP server?');
         session.enter();
         const result = await session.finish();
 
@@ -857,13 +857,13 @@ describe('integrate copilot', () => {
         // is not_applicable. The three remaining
         // features (hook, prompt-secrets, MCP) each ask.
         const session = harness.runInteractive('integrate copilot');
-        await session.waitText(PROMPT.scope);
+        await session.waitText('Where should SonarQube be integrated?');
         session.enter();
-        await session.waitText(PROMPT.copilotHook);
+        await session.waitText('Install pre-tool-use hook?');
         session.enter();
-        await session.waitText(PROMPT.promptSecretsInstructions);
+        await session.waitText('Install prompt-secrets instructions?');
         session.enter();
-        await session.waitText(PROMPT.mcp);
+        await session.waitText('Install MCP server?');
         session.enter();
         const result = await session.finish();
 
@@ -903,13 +903,13 @@ describe('integrate copilot', () => {
         let result;
         if (isInteractive) {
           const session = harness.runInteractive('integrate copilot', { extraEnv });
-          await session.waitText(PROMPT.scope);
+          await session.waitText('Where should SonarQube be integrated?');
           session.enter();
-          await session.waitText(PROMPT.copilotHook);
+          await session.waitText('Install pre-tool-use hook?');
           session.enter();
-          await session.waitText(PROMPT.promptSecretsInstructions);
+          await session.waitText('Install prompt-secrets instructions?');
           session.enter();
-          await session.waitText(PROMPT.mcp);
+          await session.waitText('Install MCP server?');
           session.enter();
           result = await session.finish();
         } else {
@@ -935,13 +935,13 @@ describe('integrate copilot', () => {
       'skips a feature when the user declines its prompt',
       async () => {
         const session = harness.runInteractive('integrate copilot');
-        await session.waitText(PROMPT.scope);
+        await session.waitText('Where should SonarQube be integrated?');
         session.enter();
-        await session.waitText(PROMPT.copilotHook);
+        await session.waitText('Install pre-tool-use hook?');
         session.write('n');
-        await session.waitText(PROMPT.promptSecretsInstructions);
+        await session.waitText('Install prompt-secrets instructions?');
         session.enter();
-        await session.waitText(PROMPT.mcp);
+        await session.waitText('Install MCP server?');
         session.enter();
         const result = await session.finish();
 
@@ -965,11 +965,13 @@ describe('integrate copilot', () => {
         writeExistingGlobalInstructions(harness);
 
         const session = harness.runInteractive('integrate copilot');
-        await session.waitText(PROMPT.scope);
+        await session.waitText('Where should SonarQube be integrated?');
         session.enter();
-        await session.waitText(PROMPT.copilotLocalCopy);
+        await session.waitText(
+          'Global Copilot instructions already exist. Do you also want to create a project-local copy for this repo?',
+        );
         session.enter();
-        await session.waitText(PROMPT.mcp);
+        await session.waitText('Install MCP server?');
         session.enter();
         const result = await session.finish();
 

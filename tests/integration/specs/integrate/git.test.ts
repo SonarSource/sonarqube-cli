@@ -39,7 +39,7 @@ import {
 } from '../../../_common/agent-hint-assertions.js';
 import { ISOLATED_CLI_SPAWN_ENV } from '../../../_common/isolated-cli-env.js';
 import { readCommandEvents } from '../../../_common/telemetry-helpers.ts';
-import { PROMPT, TestHarness } from '../../harness';
+import { TestHarness } from '../../harness';
 import { getCliBinaryPath } from '../../harness/cli-runner.js';
 import { buildHomeEnv, IS_WINDOWS } from '../../harness/platform';
 
@@ -419,11 +419,11 @@ describe('integrate git (native hooks)', () => {
 
       // Project scope, accept pre-commit, decline pre-push. Dep-risks is auto-skipped (no project key).
       const session = harness.runInteractive('integrate git');
-      await session.waitText(PROMPT.scope);
+      await session.waitText('Where should SonarQube be integrated?');
       session.enter();
-      await session.waitText(PROMPT.gitPreCommit);
+      await session.waitText('Install pre-commit code scanning hook?');
       session.enter();
-      await session.waitText(PROMPT.gitPrePush);
+      await session.waitText('Install pre-push code scanning hook?');
       session.write('n');
       const result = await session.finish();
 
@@ -450,11 +450,11 @@ describe('integrate git (native hooks)', () => {
       let result;
       if (isInteractive) {
         const session = harness.runInteractive('integrate git', { extraEnv });
-        await session.waitText(PROMPT.scope);
+        await session.waitText('Where should SonarQube be integrated?');
         session.enter();
-        await session.waitText(PROMPT.gitPreCommit);
+        await session.waitText('Install pre-commit code scanning hook?');
         session.enter();
-        await session.waitText(PROMPT.gitPrePush);
+        await session.waitText('Install pre-push code scanning hook?');
         session.write('n');
         result = await session.finish();
       } else {
@@ -541,11 +541,11 @@ describe('integrate git (native hooks)', () => {
       initGitRepo(harness);
 
       const session = harness.runInteractive('integrate git');
-      await session.waitText(PROMPT.scope);
+      await session.waitText('Where should SonarQube be integrated?');
       session.enter();
-      await session.waitText(PROMPT.gitPreCommit);
+      await session.waitText('Install pre-commit code scanning hook?');
       session.write('n');
-      await session.waitText(PROMPT.gitPrePush);
+      await session.waitText('Install pre-push code scanning hook?');
       session.enter();
       const result = await session.finish();
 
@@ -565,11 +565,11 @@ describe('integrate git (native hooks)', () => {
 
       // Project scope, accept pre-commit and pre-push. Dep-risks is auto-skipped (no project key).
       const session = harness.runInteractive('integrate git');
-      await session.waitText(PROMPT.scope);
+      await session.waitText('Where should SonarQube be integrated?');
       session.enter();
-      await session.waitText(PROMPT.gitPreCommit);
+      await session.waitText('Install pre-commit code scanning hook?');
       session.enter();
-      await session.waitText(PROMPT.gitPrePush);
+      await session.waitText('Install pre-push code scanning hook?');
       session.enter();
       const result = await session.finish();
 
@@ -602,7 +602,7 @@ describe('integrate git (native hooks)', () => {
 
       // -p implies project scope (no scope prompt). Pre-commit is forced by --hook; pre-push is skipped.
       const session = harness.runInteractive('integrate git --hook pre-commit -p my-project');
-      await session.waitText(PROMPT.gitDepRisks);
+      await session.waitText('Enable dependency-risks scanning on the pre-commit hook?');
       session.enter();
       const result = await session.finish();
 
@@ -662,7 +662,7 @@ describe('integrate git (native hooks)', () => {
       initGitRepo(harness);
 
       const session = harness.runInteractive('integrate git --hook pre-commit -p my-project');
-      await session.waitText(PROMPT.gitDepRisks);
+      await session.waitText('Enable dependency-risks scanning on the pre-commit hook?');
       session.write('n');
       const result = await session.finish();
 
@@ -756,13 +756,13 @@ describe('integrate git (native hooks)', () => {
 
       // Project key discovered from sonar-project.properties. Dep-risks prompts after pre-commit.
       const session = harness.runInteractive('integrate git');
-      await session.waitText(PROMPT.scope);
+      await session.waitText('Where should SonarQube be integrated?');
       session.enter();
-      await session.waitText(PROMPT.gitPreCommit);
+      await session.waitText('Install pre-commit code scanning hook?');
       session.enter();
-      await session.waitText(PROMPT.gitDepRisks);
+      await session.waitText('Enable dependency-risks scanning on the pre-commit hook?');
       session.enter();
-      await session.waitText(PROMPT.gitPrePush);
+      await session.waitText('Install pre-push code scanning hook?');
       session.write('n');
       const result = await session.finish();
 
@@ -794,11 +794,11 @@ describe('integrate git (native hooks)', () => {
       initGitRepo(harness);
 
       const session = harness.runInteractive('integrate git');
-      await session.waitText(PROMPT.scope);
+      await session.waitText('Where should SonarQube be integrated?');
       session.enter();
-      await session.waitText(PROMPT.gitPreCommit);
+      await session.waitText('Install pre-commit code scanning hook?');
       session.write('n');
-      await session.waitText(PROMPT.gitPrePush);
+      await session.waitText('Install pre-push code scanning hook?');
       session.write('n');
       const result = await session.finish();
 
@@ -818,11 +818,11 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
 
       const session = harness.runInteractive('integrate git --global');
-      await session.waitText(PROMPT.gitGlobalProceed);
+      await session.waitText('Proceed with global installation?');
       session.enter();
-      await session.waitText(PROMPT.gitPreCommit);
+      await session.waitText('Install pre-commit code scanning hook?');
       session.enter();
-      await session.waitText(PROMPT.gitPrePush);
+      await session.waitText('Install pre-push code scanning hook?');
       session.write('n');
       const result = await session.finish();
 
@@ -848,11 +848,11 @@ describe('integrate git (native hooks)', () => {
       let result;
       if (isInteractive) {
         const session = harness.runInteractive('integrate git --global', { extraEnv });
-        await session.waitText(PROMPT.gitGlobalProceed);
+        await session.waitText('Proceed with global installation?');
         session.enter();
-        await session.waitText(PROMPT.gitPreCommit);
+        await session.waitText('Install pre-commit code scanning hook?');
         session.enter();
-        await session.waitText(PROMPT.gitPrePush);
+        await session.waitText('Install pre-push code scanning hook?');
         session.write('n');
         result = await session.finish();
       } else {
@@ -896,11 +896,11 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
 
       const session = harness.runInteractive('integrate git --global');
-      await session.waitText(PROMPT.gitGlobalProceed);
+      await session.waitText('Proceed with global installation?');
       session.enter();
-      await session.waitText(PROMPT.gitPreCommit);
+      await session.waitText('Install pre-commit code scanning hook?');
       session.write('n');
-      await session.waitText(PROMPT.gitPrePush);
+      await session.waitText('Install pre-push code scanning hook?');
       session.enter();
       const result = await session.finish();
 

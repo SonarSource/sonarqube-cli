@@ -35,7 +35,7 @@ import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
-import { IS_WINDOWS, normalizePath, PROMPT, TestHarness } from '../../harness';
+import { IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
 import {
   type AntigravityHooksJson,
   expectAntigravityAlwaysOnRule,
@@ -199,11 +199,11 @@ describe('integrate antigravity', () => {
               extraEnv,
             },
           );
-          await session.waitText(PROMPT.secretsHooks);
+          await session.waitText('Install secret scanning hooks?');
           session.enter();
-          await session.waitText(PROMPT.mcp);
+          await session.waitText('Install MCP server?');
           session.enter();
-          await session.waitText(PROMPT.promptSecretsWorkspace);
+          await session.waitText('Install prompt-secrets workspace rules?');
           session.enter();
           result = await session.finish();
         } else {
@@ -334,9 +334,9 @@ describe('integrate antigravity', () => {
         const session = harness.runInteractive('integrate antigravity', {
           extraEnv: { __SQCLI_DEV_SKIP_CAG: '1' },
         });
-        await session.waitText(PROMPT.scope);
+        await session.waitText('Where should SonarQube be integrated?');
         session.enter();
-        await session.waitText(PROMPT.mcp);
+        await session.waitText('Install MCP server?');
         session.enter();
         await session.waitText(
           'Global Antigravity rules already exist. Do you also want to create a project-local copy for this repo?',

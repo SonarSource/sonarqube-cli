@@ -34,7 +34,7 @@ import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
-import { hookScriptName, hookScriptPath, normalizePath, PROMPT, TestHarness } from '../../harness';
+import { hookScriptName, hookScriptPath, normalizePath, TestHarness } from '../../harness';
 import { findInstalledFeature, getInstalledIntegration } from './state-helpers';
 
 const MCP_JSON_DIRS = ['.cursor', 'mcp.json'];
@@ -568,11 +568,11 @@ describe('integrate cursor', () => {
         const session = harness.runInteractive(`integrate cursor --project ${TEST_PROJECT}`, {
           extraEnv: { ...extraEnv, __SQCLI_DEV_SKIP_CAG: '1' },
         });
-        await session.waitText(PROMPT.secretsHooks);
+        await session.waitText('Install secret scanning hooks?');
         session.enter();
-        await session.waitText(PROMPT.vortex);
+        await session.waitText('Install Vortex?');
         session.enter();
-        await session.waitText(PROMPT.mcp);
+        await session.waitText('Install MCP server?');
         session.enter();
         const result = await session.finish();
 
@@ -606,11 +606,11 @@ describe('integrate cursor', () => {
           const session = harness.runInteractive(`integrate cursor --project ${TEST_PROJECT}`, {
             extraEnv: runEnv,
           });
-          await session.waitText(PROMPT.secretsHooks);
+          await session.waitText('Install secret scanning hooks?');
           session.enter();
-          await session.waitText(PROMPT.vortex);
+          await session.waitText('Install Vortex?');
           session.enter();
-          await session.waitText(PROMPT.mcp);
+          await session.waitText('Install MCP server?');
           session.enter();
           result = await session.finish();
         } else {

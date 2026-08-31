@@ -45,7 +45,6 @@ export { FakeGitLabServer, FakeGitLabServerBuilder } from './fake-gitlab-server.
 export { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from './fake-sonarqube-server.js';
 export { InteractiveSession } from './interactive-session.js';
 export { hookScriptName, hookScriptPath, IS_WINDOWS, normalizePath } from './platform';
-export { KEY, PROMPT } from './prompt-text.js';
 export type { CliResult, RecordedRequest, RunInteractiveOptions } from './types.js';
 
 export class TestHarness {
