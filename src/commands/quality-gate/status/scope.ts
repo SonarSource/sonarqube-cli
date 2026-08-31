@@ -18,13 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Resolves which branch or pull request `quality-gate show` reports on
+// Resolves which branch or pull request `quality-gate status` reports on
 
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { BranchesClient } from '@/core/server/branches.ts';
 import type { SonarQubeClient } from '@/core/server/client.ts';
 
-export interface ShowQualityGateScopeOptions {
+export interface QualityGateStatusScopeOptions {
   branch?: string;
   pullRequest?: string;
 }
@@ -46,7 +46,7 @@ export interface QualityGateScope {
  * When neither `--branch` nor `--pull-request` is given, the project_status API already defaults
  * to the main branch server-side, so `default` scope has nothing to forward here.
  */
-export function resolveScopeQueryParams(options: ShowQualityGateScopeOptions): {
+export function resolveScopeQueryParams(options: QualityGateStatusScopeOptions): {
   branch?: string;
   pullRequest?: string;
 } {
@@ -68,7 +68,7 @@ export function resolveScopeQueryParams(options: ShowQualityGateScopeOptions): {
 export async function resolveDisplayScope(
   client: SonarQubeClient,
   projectKey: string,
-  options: ShowQualityGateScopeOptions,
+  options: QualityGateStatusScopeOptions,
 ): Promise<QualityGateScope> {
   if (options.pullRequest) {
     return { kind: 'pullRequest', value: options.pullRequest };
