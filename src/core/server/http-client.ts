@@ -228,8 +228,6 @@ export class SonarHttpClient {
     return result.value;
   }
 
-  // false positive
-
   async getSafe<TValue>(
     endpoint: string,
     params?: QueryParams,
