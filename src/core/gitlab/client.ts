@@ -18,7 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
 import {
   HTTP_STATUS_BAD_GATEWAY,
   HTTP_STATUS_GATEWAY_TIMEOUT,
@@ -115,24 +114,12 @@ export class GitLabClient {
 
   private fetchGet(url: string): Promise<Response> {
     return callWithRetry(() =>
-      fetchGuarded(
-        url,
-        buildFetchInit(
-          'GET',
-          this.headers(),
-          GET_TIMEOUT_MS,
-          undefined,
-          buildFetchNetworkOptions(url),
-        ),
-      ),
+      fetchGuarded(url, buildFetchInit('GET', this.headers(), GET_TIMEOUT_MS, undefined)),
     );
   }
 
   private fetchWrite(url: string, method: string, body?: string): Promise<Response> {
-    return fetchGuarded(
-      url,
-      buildFetchInit(method, this.headers(), WRITE_TIMEOUT_MS, body, buildFetchNetworkOptions(url)),
-    );
+    return fetchGuarded(url, buildFetchInit(method, this.headers(), WRITE_TIMEOUT_MS, body));
   }
 
   private async fetchAllPages<T>(

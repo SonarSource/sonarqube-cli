@@ -169,6 +169,17 @@ The two inputs are separate because the single boolean made _collect but do not 
 
 Call `noteProject` wherever a project key resolves and auth is in hand: `resolveSqaaAuthAndProject` (`analyze/sqaa-auth.ts` — the choke point for bare `sonar analyze`, `analyze agentic`, and `verify`), `analyze/dependency-risks.ts`, `remediate/index.ts`, the three `hook/` handlers (`agent-post-tool-use`, `codex-post-tool-use`, `git-pre-commit`), and `framework/features/install-integration.ts` (project scope only, from the first non-empty `attrs.projectKey` — so a secrets-only `integrate git` and `--global` report `null`). `sonar run mcp` deliberately does not note it: it starts a long-running server, so its `CliCommandExecuted` may never fire.
 
+## Network access
+
+Every HTTP request the CLI issues itself must carry the proxy/TLS configuration resolved by `src/core/host/connectivity/network-config.ts`, so `src/core/server/fetch-guarded.ts` is the only module allowed to call the runtime `fetch` — an ESLint `no-restricted-syntax` rule (scoped to `src/**`, disabled in that one file) rejects `fetch(...)` and `<obj>.fetch(...)` anywhere else. It exports two wrappers, both of which resolve `buildFetchNetworkOptions(url)` themselves:
+
+- `fetchGuarded(url, init)` — the default. Applies the network configuration **and** blocks credential leaks through cross-origin redirects (`redirect: 'manual'`, same-origin and HTTP→HTTPS-upgrade hops only). Use it for anything sending a credential header.
+- `fetchWithNetworkConfig(url, init)` — applies the network configuration and lets the runtime follow redirects normally. Only for credential-free requests that need to follow a CDN redirect: `downloadBinary` (`core/host/install/sonarsource-releases.ts`), the `stable.version` check (`core/update/check.ts`), and `fetchServerVersion` (`core/server/server-info.ts`). It **throws** when `init.headers` carries `authorization`, `cookie`, `private-token`, or `x-api-key`, since the runtime would follow a cross-origin redirect with that header attached — the ESLint rule cannot tell the two wrappers apart, so this invariant is enforced at runtime instead.
+
+Call sites never pass proxy/TLS options: `buildFetchInit(method, headers, timeoutMs, body)` deliberately cannot carry them, and both wrappers drop any `proxy`/`tls` keys found on `init` before spreading the resolved ones, so the configuration cannot be overridden locally. `fetchGuarded` resolves options **per hop**, so a followed HTTP→HTTPS upgrade never reuses the options computed for the original scheme. An unusable configuration surfaces as `NetworkConfigError` rather than a silent direct connection — `flushTelemetryEvents` aborts the batch on it and requeues every event instead of retrying per event.
+
+Known gap: **Sentry** (`src/core/observability/sentry.ts`) transmits through the SDK's own transport, which never sees the `SONAR_*` proxy/CA settings, and the ESLint rule cannot reach into `node_modules`. Behind a mandatory corporate proxy, crash reports do not leave the machine. Anything else that reports outward through a third-party SDK inherits the same gap.
+
 ## Error handling
 
 Please use the exception types defined in `src/core/command-error.ts` for production code. If you need to throw an error from a mock in test code, it's fine to use the generic `Error` type.

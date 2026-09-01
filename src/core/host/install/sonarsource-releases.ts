@@ -22,7 +22,7 @@
 
 import { readFileSync } from 'node:fs';
 
-import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
+import { fetchWithNetworkConfig } from '@/core/server/fetch-guarded.ts';
 
 import { version as VERSION } from '../../../../package.json';
 import {
@@ -85,10 +85,9 @@ export function buildCagDownloadUrl(version: string, platform: PlatformInfo): st
 export async function downloadBinary(url: string, destinationPath: string): Promise<void> {
   logger.debug(`Downloading binary from: ${url}`);
 
-  const response = await fetch(url, {
+  const response = await fetchWithNetworkConfig(url, {
     headers: { 'User-Agent': `sonarqube-cli/${VERSION}` },
     signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
-    ...buildFetchNetworkOptions(url),
   });
 
   if (!response.ok) {

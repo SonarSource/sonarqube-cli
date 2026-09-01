@@ -23,8 +23,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync
 import { join } from 'node:path';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
-import type { FetchNetworkOptions } from '@/core/host/connectivity/types.ts';
+import { NetworkConfigError } from '@/core/errors.ts';
 import { detectCallerAgent } from '@/core/host/environment/agent-detector.ts';
 import { buildFetchInit, fetchGuarded } from '@/core/server/fetch-guarded.ts';
 import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
@@ -168,6 +167,30 @@ function parseValidEvents(content: string, now: number): StoredTelemetryEvent[] 
 }
 
 /**
+ * POSTs one event. `requeue` leaves it for the next flush attempt; `abort` means the
+ * proxy/TLS configuration is unusable, so the rest of the batch is not worth attempting.
+ */
+async function sendTelemetryEvent(
+  event: StoredTelemetryEvent,
+  timeoutMs: number,
+): Promise<'sent' | 'requeue' | 'abort'> {
+  try {
+    await fetchGuarded(
+      TELEMETRY_ENDPOINT,
+      buildFetchInit(
+        'POST',
+        { 'Content-Type': 'application/json', 'x-api-key': TELEMETRY_API_KEY },
+        timeoutMs,
+        JSON.stringify(event, (_key, value) => (value === null ? undefined : value)),
+      ),
+    );
+    return 'sent';
+  } catch (err) {
+    return err instanceof NetworkConfigError ? 'abort' : 'requeue';
+  }
+}
+
+/**
  * Atomically drains telemetry-events.ndjson: renames it to a UUID-suffixed .sending file so
  * concurrent flush workers each get their own slice, parses valid lines, discards
  * events older than 7 days, then POSTs each remaining event to the telemetry backend.
@@ -201,36 +224,15 @@ export async function flushTelemetryEvents(deadline: number): Promise<void> {
     const events = parseValidEvents(readFileSync(sendingPath, 'utf-8'), Date.now());
     const sentIndices = new Set<number>();
 
-    // Resolved once: every event targets the same endpoint, and buildFetchNetworkOptions
-    // copies the root certificate list on each call when a custom CA is configured.
-    let networkOptions: FetchNetworkOptions;
-    try {
-      networkOptions = buildFetchNetworkOptions(TELEMETRY_ENDPOINT);
-    } catch {
-      // Unusable proxy/TLS config: requeue everything rather than bypassing it.
-      unsent.push(...events);
-      return;
-    }
-
     for (let i = 0; i < events.length; i++) {
       const remainingTime = deadline - Date.now();
       if (remainingTime <= 0) break;
-      const requestTimeout = Math.min(remainingTime, TELEMETRY_REQUEST_TIMEOUT_MS);
-      try {
-        await fetchGuarded(
-          TELEMETRY_ENDPOINT,
-          buildFetchInit(
-            'POST',
-            { 'Content-Type': 'application/json', 'x-api-key': TELEMETRY_API_KEY },
-            requestTimeout,
-            JSON.stringify(events[i], (_key, value) => (value === null ? undefined : value)),
-            networkOptions,
-          ),
-        );
-        sentIndices.add(i);
-      } catch {
-        // event remains in unsent for the next flush attempt
-      }
+      const outcome = await sendTelemetryEvent(
+        events[i],
+        Math.min(remainingTime, TELEMETRY_REQUEST_TIMEOUT_MS),
+      );
+      if (outcome === 'abort') break;
+      if (outcome === 'sent') sentIndices.add(i);
     }
 
     unsent.push(...events.filter((_, i) => !sentIndices.has(i)));

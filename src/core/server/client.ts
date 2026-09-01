@@ -20,7 +20,6 @@
 
 // SonarQube API HTTP client
 
-import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
 import {
   HTTP_STATUS_BAD_REQUEST,
   HTTP_STATUS_FORBIDDEN,
@@ -218,10 +217,7 @@ export class SonarQubeClient {
       print(`request body: ${requestBody}`, 'stderr');
     }
 
-    const response = await fetchGuarded(
-      url,
-      buildFetchInit(method, headers, timeout, requestBody, buildFetchNetworkOptions(url)),
-    );
+    const response = await fetchGuarded(url, buildFetchInit(method, headers, timeout, requestBody));
 
     if (debug) {
       print(`response status: ${response.status}`, 'stderr');
@@ -290,13 +286,7 @@ export class SonarQubeClient {
     const urlString = url.toString();
     const response = await fetchGuarded(
       urlString,
-      buildFetchInit(
-        'GET',
-        this.commonHeaders(),
-        timeoutMs,
-        undefined,
-        buildFetchNetworkOptions(urlString),
-      ),
+      buildFetchInit('GET', this.commonHeaders(), timeoutMs, undefined),
     );
 
     const value = response.ok ? ((await response.json()) as TValue) : undefined;
@@ -318,13 +308,7 @@ export class SonarQubeClient {
 
     const response = await fetchGuarded(
       url,
-      buildFetchInit(
-        'POST',
-        headers,
-        POST_REQUEST_TIMEOUT_MS,
-        JSON.stringify(body),
-        buildFetchNetworkOptions(url),
-      ),
+      buildFetchInit('POST', headers, POST_REQUEST_TIMEOUT_MS, JSON.stringify(body)),
     );
 
     await this.raiseForStatus(response, 'POST');
@@ -350,7 +334,6 @@ export class SonarQubeClient {
         this.commonHeaders('form'),
         timeoutMs,
         new URLSearchParams(params).toString(),
-        buildFetchNetworkOptions(url),
       ),
     );
 
@@ -371,7 +354,6 @@ export class SonarQubeClient {
         this.commonHeaders('form'),
         POST_REQUEST_TIMEOUT_MS,
         new URLSearchParams(params).toString(),
-        buildFetchNetworkOptions(url),
       ),
     );
 

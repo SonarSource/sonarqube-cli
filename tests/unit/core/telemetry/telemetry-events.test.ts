@@ -40,6 +40,7 @@ import type { IntegrationConfiguredPayload } from '@/commands/integrate/_common/
 import { commitTelemetryFacts } from '@/commands/telemetry-facts.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { ENV_SONAR_USER_HOME, TELEMETRY_ENDPOINT } from '@/core/config-constants.ts';
+import { NetworkConfigError } from '@/core/errors.ts';
 import * as networkConfig from '@/core/host/connectivity/network-config.ts';
 import { DISTRIBUTION } from '@/core/host/distribution.ts';
 import * as agentDetector from '@/core/host/environment/agent-detector.ts';
@@ -799,7 +800,7 @@ describe('flushTelemetryEvents()', () => {
       }
     });
 
-    it('resolves the network options once for the whole batch', async () => {
+    it('resolves the network options for every request in the batch', async () => {
       writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent({ analysis_id: 'run-a' }));
       writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent({ analysis_id: 'run-b' }));
 
@@ -808,24 +809,27 @@ describe('flushTelemetryEvents()', () => {
       try {
         await flushTelemetryEvents(Date.now() + 60_000);
         expect(fetchSpy).toHaveBeenCalledTimes(2);
-        expect(networkSpy).toHaveBeenCalledTimes(1);
+        expect(networkSpy).toHaveBeenCalledTimes(2);
       } finally {
         fetchSpy.mockRestore();
         networkSpy.mockRestore();
       }
     });
 
-    it('requeues events instead of bypassing an unusable network config', async () => {
+    it('requeues the whole batch instead of bypassing an unusable network config', async () => {
       writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent({ analysis_id: 'run-a' }));
+      writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent({ analysis_id: 'run-b' }));
 
       const networkSpy = spyOn(networkConfig, 'buildFetchNetworkOptions').mockImplementation(() => {
-        throw new Error('unreadable client certificate');
+        throw new NetworkConfigError('unreadable client certificate');
       });
       const fetchSpy = mockFetch();
       try {
         await flushTelemetryEvents(Date.now() + 60_000);
         expect(fetchSpy).not.toHaveBeenCalled();
-        expect(readAnalysisEvents(testSonarUserHome)).toHaveLength(1);
+        expect(readAnalysisEvents(testSonarUserHome)).toHaveLength(2);
+        // The batch stops on the first unusable config instead of retrying per event.
+        expect(networkSpy).toHaveBeenCalledTimes(1);
       } finally {
         fetchSpy.mockRestore();
         networkSpy.mockRestore();

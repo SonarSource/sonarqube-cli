@@ -4,6 +4,11 @@ import prettierConfig from 'eslint-config-prettier';
 import headersPlugin from 'eslint-plugin-headers';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
 
+const NO_DIRECT_FETCH_MESSAGE =
+  "Don't call fetch() directly — use fetchGuarded() (credentialed requests) or " +
+  'fetchWithNetworkConfig() (credential-free requests) from @/core/server/fetch-guarded.ts, ' +
+  'so proxy and TLS configuration are always applied.';
+
 export default tseslint.config(
   // Global ignores
   {
@@ -93,6 +98,29 @@ export default tseslint.config(
     files: ['src/core/telemetry/telemetry-events.ts', 'src/core/observability/sentry.ts'],
     rules: {
       'no-restricted-imports': 'off',
+    },
+  },
+
+  // Every outbound HTTP request must carry the resolved proxy/TLS configuration, so the
+  // runtime fetch is reachable only from the module that owns the wrappers (exempted below).
+  {
+    files: ['src/**/*.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        // Bare `fetch(...)`, then every qualified form (globalThis.fetch, Bun.fetch, ...).
+        { selector: "CallExpression[callee.name='fetch']", message: NO_DIRECT_FETCH_MESSAGE },
+        {
+          selector: "CallExpression[callee.type='MemberExpression'][callee.property.name='fetch']",
+          message: NO_DIRECT_FETCH_MESSAGE,
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/core/server/fetch-guarded.ts'],
+    rules: {
+      'no-restricted-syntax': 'off',
     },
   },
 
