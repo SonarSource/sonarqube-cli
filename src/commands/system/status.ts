@@ -49,12 +49,15 @@ import {
   SONAR_CONTEXT_AUGMENTATION_VERSION,
 } from '@/core/host/install/signatures.ts';
 import { getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
-import type { VortexEntitlementResult } from '@/core/server/client.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { loadState } from '@/core/state/state-repository.ts';
 import { blank, print, success, text, warn } from '@/core/ui';
 import { isNewerVersion, stripBuildNumber } from '@/core/version.ts';
-import { isVortexEntitlementLoss, resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
+import {
+  isVortexEntitlementLoss,
+  resolveVortexEntitlement,
+  type VortexEntitlementResult,
+} from '@/core/vortex/entitlement.ts';
 
 import { version as VERSION } from '../../../package.json';
 import { supportedIntegrations } from '../integrate';

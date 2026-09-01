@@ -25,7 +25,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { resolveFromEndpoint } from '@/core/server/sonarcloud-region.ts';
 
 import { getTelemetryDir } from '../config-constants.ts';
@@ -222,7 +222,7 @@ interface OrganizationLookupResult {
   resolved: boolean;
 }
 
-async function fetchUserUuid(client: SonarQubeClient): Promise<FieldFetchResult> {
+async function fetchUserUuid(client: SonarHttpClient): Promise<FieldFetchResult> {
   try {
     const { response, value } = await client.getSafe<{ id: string }>('/api/users/current');
     if (!response.ok) {
@@ -235,7 +235,7 @@ async function fetchUserUuid(client: SonarQubeClient): Promise<FieldFetchResult>
 }
 
 async function fetchOrganizationRecord(
-  client: SonarQubeClient,
+  client: SonarHttpClient,
   serverUrl: string,
   orgKey: string,
 ): Promise<OrganizationLookupResult> {
@@ -256,7 +256,7 @@ async function fetchOrganizationRecord(
 }
 
 async function fetchEnterpriseUuid(
-  client: SonarQubeClient,
+  client: SonarHttpClient,
   serverUrl: string,
   organizationId: string,
 ): Promise<FieldFetchResult> {
@@ -277,7 +277,7 @@ async function fetchEnterpriseUuid(
 
 /** Unresolved stays `undefined` so the next command retries; `null` is confirmed-absent. */
 async function resolveEnterpriseUuid(
-  client: SonarQubeClient,
+  client: SonarHttpClient,
   serverUrl: string,
   org: OrganizationLookupResult,
 ): Promise<{ value: string | null | undefined; resolved: boolean }> {
@@ -294,7 +294,7 @@ async function resolveEnterpriseUuid(
   };
 }
 
-async function fetchSqsInstallationId(client: SonarQubeClient): Promise<FieldFetchResult> {
+async function fetchSqsInstallationId(client: SonarHttpClient): Promise<FieldFetchResult> {
   try {
     const { response, value } = await client.getSafe<{ id?: string }>('/api/system/status');
     if (!response.ok) {
@@ -316,7 +316,7 @@ async function fetchMissingFromApi(
   identity: TelemetryIdentity,
   fetchPlan: IdentityFetchPlan,
 ): Promise<IdentityFetchResult> {
-  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  const client = new SonarHttpClient(auth.serverUrl, auth.token);
   let { user_uuid, organization_uuid_v4, enterprise_uuid, sqs_installation_id } = identity;
   const resolved: IdentityFetchPlan = { user: false, org: false, enterprise: false, sqs: false };
 

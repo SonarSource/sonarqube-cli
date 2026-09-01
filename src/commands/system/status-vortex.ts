@@ -18,9 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { VortexEntitlementResult, VortexEntitlementStatus } from '@/core/server/client.ts';
 import { blank, text } from '@/core/ui';
-import { isVortexEntitlementLoss } from '@/core/vortex/entitlement.ts';
+import {
+  isVortexEntitlementLoss,
+  type VortexEntitlementResult,
+  type VortexEntitlementStatus,
+} from '@/core/vortex/entitlement.ts';
 
 const VORTEX_STATUS_LABELS: Record<VortexEntitlementStatus, string> = {
   enabled: 'Active',

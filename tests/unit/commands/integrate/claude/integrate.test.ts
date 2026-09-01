@@ -32,11 +32,14 @@ import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocatio
 import * as registry from '@/core/framework/features';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import * as discovery from '@/core/project-info.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { ComponentsClient } from '@/core/server/components.ts';
+import { OrganizationsClient } from '@/core/server/organizations.ts';
+import { ScaClient } from '@/core/server/sca.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import type { PhaseItem } from '@/core/ui';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+import { VortexEntitlementClient } from '@/core/vortex/entitlement.ts';
 
 const SERVER_AUTH: ResolvedAuth = {
   token: 'test-token',
@@ -63,16 +66,22 @@ describe('integrateCommand', () => {
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
   let hasVortexEntitlementSpy: Mock<
-    Extract<(typeof SonarQubeClient.prototype)['hasVortexEntitlement'], (...args: any[]) => any>
+    Extract<
+      (typeof VortexEntitlementClient.prototype)['hasVortexEntitlement'],
+      (...args: any[]) => any
+    >
   >;
   let checkTokenStatusSpy: Mock<
     Extract<(typeof token)['checkTokenStatus'], (...args: any[]) => any>
   >;
   let checkComponentSpy: Mock<
-    Extract<(typeof SonarQubeClient.prototype)['checkComponent'], (...args: any[]) => any>
+    Extract<(typeof ComponentsClient.prototype)['checkComponent'], (...args: any[]) => any>
   >;
   let isOrganizationAccessibleSpy: Mock<
-    Extract<(typeof SonarQubeClient.prototype)['isOrganizationAccessible'], (...args: any[]) => any>
+    Extract<
+      (typeof OrganizationsClient.prototype)['isOrganizationAccessible'],
+      (...args: any[]) => any
+    >
   >;
   let discoverProjectSpy: Mock<
     Extract<(typeof discovery)['discoverProject'], (...args: any[]) => any>
@@ -84,15 +93,15 @@ describe('integrateCommand', () => {
     Extract<(typeof hooks)['detectGlobalSecretsHook'], (...args: any[]) => any>
   >;
   let getScaEnablementSpy: Mock<
-    Extract<(typeof SonarQubeClient.prototype)['getScaEnablement'], (...args: any[]) => any>
+    Extract<(typeof ScaClient.prototype)['getScaEnablement'], (...args: any[]) => any>
   >;
 
   beforeEach(() => {
     setMockUi(true);
 
-    hasVortexEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasVortexEntitlement');
+    hasVortexEntitlementSpy = spyOn(VortexEntitlementClient.prototype, 'hasVortexEntitlement');
     hasVortexEntitlementSpy.mockResolvedValue({ status: 'not_entitled' });
-    getScaEnablementSpy = spyOn(SonarQubeClient.prototype, 'getScaEnablement').mockResolvedValue(
+    getScaEnablementSpy = spyOn(ScaClient.prototype, 'getScaEnablement').mockResolvedValue(
       'not_enabled',
     );
 
@@ -100,9 +109,9 @@ describe('integrateCommand', () => {
     saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
 
     checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
-    checkComponentSpy = spyOn(SonarQubeClient.prototype, 'checkComponent').mockResolvedValue(true);
+    checkComponentSpy = spyOn(ComponentsClient.prototype, 'checkComponent').mockResolvedValue(true);
     isOrganizationAccessibleSpy = spyOn(
-      SonarQubeClient.prototype,
+      OrganizationsClient.prototype,
       'isOrganizationAccessible',
     ).mockResolvedValue(true);
     discoverProjectSpy = spyOn(discovery, 'discoverProject');

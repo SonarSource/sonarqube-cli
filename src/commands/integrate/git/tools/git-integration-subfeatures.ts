@@ -26,7 +26,8 @@ import {
 } from '@/core/framework/dependencies';
 import { askUser, install, skip } from '@/core/framework/features/selection.ts';
 import type { FeaturePreview, SubfeatureDeclaration } from '@/core/framework/features/types.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
+import { ScaClient } from '@/core/server/sca.ts';
 import { assertScaAvailable } from '@/core/server/sca-availability.ts';
 
 import type { GitHookType, IntegrateGitOptions } from '../options.ts';
@@ -45,7 +46,7 @@ export function gitHookPreview(hook: GitHookType): FeaturePreview {
 }
 
 async function scaSkipReason(auth: ResolvedAuth) {
-  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  const client = new ScaClient(new SonarHttpClient(auth.serverUrl, auth.token));
   try {
     await assertScaAvailable(client, auth);
     return null;

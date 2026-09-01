@@ -24,11 +24,11 @@ import * as fs from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { SqaaAnalysisClient } from '@/commands/analyze/sqaa-analysis-client.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as processLib from '@/core/process/process.ts';
 import * as projectInfo from '@/core/project-info.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
@@ -97,7 +97,7 @@ beforeEach(() => {
     makeDiscoveredProject(TEST_PROJECT),
   );
 
-  createAnalysisSpy = spyOn(SonarQubeClient.prototype, 'createAnalysis').mockResolvedValue({
+  createAnalysisSpy = spyOn(SqaaAnalysisClient.prototype, 'createAnalysis').mockResolvedValue({
     id: 'analysis-1',
     issues: [],
     errors: null,

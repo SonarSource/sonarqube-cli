@@ -20,8 +20,8 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import type { DopRepository } from '@/core/server/client.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import type { DopRepository } from '@/commands/import/_common/import-api.ts';
+import { ImportApiClient } from '@/commands/import/_common/import-api.ts';
 
 import { RepositoryCollection } from '../../../../../src/commands/import/_common/repository-collection.ts';
 
@@ -41,7 +41,7 @@ function makeRepos(count: number, prefix: string): DopRepository[] {
 
 describe('RepositoryCollection.loadMore', () => {
   it('retries a failed page fetch on the next call instead of treating the collection as exhausted', async () => {
-    const firstPage = makeRepos(SonarQubeClient.DOP_REPOSITORIES_MAX_PAGE_SIZE, 'page1');
+    const firstPage = makeRepos(ImportApiClient.DOP_REPOSITORIES_MAX_PAGE_SIZE, 'page1');
     const secondPage = makeRepos(1, 'page2');
     const callsPerPage = new Map<number, number>();
 

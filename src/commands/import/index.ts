@@ -21,13 +21,13 @@
 import { CommandFailedError } from '@/core/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
-import {
-  type DopRepository,
-  type ProvisionedProject,
-  SonarQubeClient,
-} from '@/core/server/client.ts';
 import { info, intro, outro } from '@/core/ui';
 
+import {
+  type DopRepository,
+  ImportApiClient,
+  type ProvisionedProject,
+} from './_common/import-api.ts';
 import type {
   OnlyPrivateProjects,
   RepositoryCollection,
@@ -52,7 +52,7 @@ const IMPORT_PROVISION_CONCURRENCY_LIMIT = 10;
 
 /** Resolves the org tied to the active connection, then the repos to import into it. */
 async function resolveOrgAndRepos(
-  client: SonarQubeClient,
+  client: ImportApiClient,
   orgKey: string | undefined,
   options: ImportOptions,
 ): Promise<{ orgKey: string; almKey: string | undefined } & RepoResolution> {
@@ -85,7 +85,7 @@ async function resolveOrgAndRepos(
 
 /** Builds the `runWithConcurrencyLimit` task that provisions one repo and updates `progress`. */
 function createProvisionTask(
-  client: SonarQubeClient,
+  client: ImportApiClient,
   orgKey: string,
   progress: ImportProgress,
 ): (repo: ResolvedRepo) => Promise<ProvisionedProject> {
@@ -122,7 +122,7 @@ function createProvisionTask(
  * or matches its name.
  */
 async function runBulkImportJob(
-  client: SonarQubeClient,
+  client: ImportApiClient,
   orgKey: string,
   almKey: string | undefined,
   collection: RepositoryCollection,
@@ -231,7 +231,7 @@ export async function importHandler(
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   const { auth } = ctx;
-  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  const client = new ImportApiClient(auth.serverUrl, auth.token);
 
   intro('Import repositories', 'SonarQube');
 

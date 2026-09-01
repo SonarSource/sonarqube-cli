@@ -228,3 +228,179 @@ describe('fetchAnonymous', () => {
     }
   });
 });
+
+const SERVER_URL = 'https://sonarqube.example.com';
+
+describe('fetchAuthenticated — redirect semantics', () => {
+  let fetchSpy: ReturnType<typeof spyOn>;
+
+  afterEach(() => {
+    fetchSpy?.mockRestore();
+  });
+
+  it('follows a same-origin redirect and returns the final response', async () => {
+    fetchSpy = spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 301,
+        headers: new Headers({ location: `${SERVER_URL}/new-path` }),
+        text: () => Promise.resolve(''),
+        json: () => Promise.resolve({}),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: () => Promise.resolve({ data: 'ok' }),
+        text: () => Promise.resolve('{"data":"ok"}'),
+      } as unknown as Response);
+
+    const res = await fetchAuthenticated(`${SERVER_URL}/old-path`, {});
+    expect(res.ok).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws on cross-origin redirect before making a second request', async () => {
+    fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 302,
+      headers: new Headers({ location: 'https://evil.com/capture' }),
+      text: () => Promise.resolve(''),
+      json: () => Promise.resolve({}),
+    } as unknown as Response);
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(fetchAuthenticated(`${SERVER_URL}/api`, {})).rejects.toThrow('cross-origin redirect');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('follows an HTTP→HTTPS upgrade redirect on the same hostname', async () => {
+    const httpUrl = 'http://sonarqube.example.com/api/endpoint';
+    const httpsUrl = 'https://sonarqube.example.com/api/endpoint';
+    fetchSpy = spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 301,
+        headers: new Headers({ location: httpsUrl }),
+        text: () => Promise.resolve(''),
+        json: () => Promise.resolve({}),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: () => Promise.resolve({ ok: true }),
+        text: () => Promise.resolve('{"ok":true}'),
+      } as unknown as Response);
+
+    const res = await fetchAuthenticated(httpUrl, {});
+    expect(res.ok).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy.mock.calls[1][0] as string).toBe(httpsUrl);
+  });
+
+  it('returns 304 as-is without throwing (no Location header expected)', async () => {
+    fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 304,
+      headers: new Headers(),
+      text: () => Promise.resolve(''),
+      json: () => Promise.resolve({}),
+    } as unknown as Response);
+
+    const res = await fetchAuthenticated(`${SERVER_URL}/api`, {});
+    expect(res.status).toBe(304);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('downgrades POST to GET on 301/302/303 redirect (drops body)', async () => {
+    fetchSpy = spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 302,
+        headers: new Headers({ location: `${SERVER_URL}/new-endpoint` }),
+        text: () => Promise.resolve(''),
+        json: () => Promise.resolve({}),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: () => Promise.resolve({}),
+        text: () => Promise.resolve('{}'),
+      } as unknown as Response);
+
+    await fetchAuthenticated(`${SERVER_URL}/api`, { method: 'POST', body: '{"key":"val"}' });
+
+    const secondInit = fetchSpy.mock.calls[1][1] as RequestInit;
+    expect(secondInit.method).toBe('GET');
+    expect(secondInit.body).toBeUndefined();
+  });
+
+  it('strips Content-Type header when downgrading POST to GET on 301/302/303', async () => {
+    fetchSpy = spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 302,
+        headers: new Headers({ location: `${SERVER_URL}/new-endpoint` }),
+        text: () => Promise.resolve(''),
+        json: () => Promise.resolve({}),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: () => Promise.resolve({}),
+        text: () => Promise.resolve('{}'),
+      } as unknown as Response);
+
+    await fetchAuthenticated(`${SERVER_URL}/api`, {
+      method: 'POST',
+      body: '{"key":"val"}',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer tok' },
+    });
+
+    const secondInit = fetchSpy.mock.calls[1][1] as RequestInit;
+    const headers = secondInit.headers as Record<string, string>;
+    expect(headers['Content-Type']).toBeUndefined();
+    // Authorization is preserved — token still goes to the (same-origin) redirect target
+    expect(headers['Authorization']).toBe('Bearer tok');
+  });
+
+  it('preserves POST body on 307/308 redirect', async () => {
+    fetchSpy = spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 307,
+        headers: new Headers({ location: `${SERVER_URL}/new-endpoint` }),
+        text: () => Promise.resolve(''),
+        json: () => Promise.resolve({}),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: () => Promise.resolve({}),
+        text: () => Promise.resolve('{}'),
+      } as unknown as Response);
+
+    await fetchAuthenticated(`${SERVER_URL}/api`, { method: 'POST', body: '{"key":"val"}' });
+
+    const secondInit = fetchSpy.mock.calls[1][1] as RequestInit;
+    expect(secondInit.method).toBe('POST');
+    expect(secondInit.body).toBe('{"key":"val"}');
+  });
+
+  it('throws after too many same-origin redirects', async () => {
+    fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 302,
+      headers: new Headers({ location: `${SERVER_URL}/loop` }),
+      text: () => Promise.resolve(''),
+      json: () => Promise.resolve({}),
+    } as unknown as Response);
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(fetchAuthenticated(`${SERVER_URL}/loop`, {})).rejects.toThrow('too many redirects');
+  });
+});

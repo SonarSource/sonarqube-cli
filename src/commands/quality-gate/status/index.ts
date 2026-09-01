@@ -23,7 +23,8 @@
 import { CommandFailedError } from '@/core/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { ComponentsClient } from '@/core/server/components.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { MetricsClient } from '@/core/server/metrics.ts';
 import { QualityGatesClient } from '@/core/server/quality-gates.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
@@ -53,7 +54,7 @@ export async function qualityGateStatus(
   const projectKey = await resolveProjectKey(options.project, auth, true);
   noteProject(auth, projectKey);
 
-  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  const client = new SonarHttpClient(auth.serverUrl, auth.token);
   await assertProjectExists(client, projectKey);
 
   const queryParams = resolveScopeQueryParams(options);
@@ -85,8 +86,8 @@ export async function qualityGateStatus(
   process.exitCode = exitCodeFor(verdict);
 }
 
-async function assertProjectExists(client: SonarQubeClient, projectKey: string): Promise<void> {
-  if (!(await client.componentExists(projectKey))) {
+async function assertProjectExists(client: SonarHttpClient, projectKey: string): Promise<void> {
+  if (!(await new ComponentsClient(client).componentExists(projectKey))) {
     throw new CommandFailedError(`Project '${projectKey}' does not exist or not accessible.`, {
       remediationHint: 'Check the project key and your access to the project on the server.',
     });

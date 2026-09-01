@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { InvalidOptionError } from '@/core/command-error.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { ScaClient } from '@/core/server/sca.ts';
 
 import type { IntegrateGitOptions } from '../../../../../src/commands/integrate/git/options.ts';
 import {
@@ -100,7 +100,7 @@ describe('createDepRisksSubfeature', () => {
     let checkScaEnabledSpy: ReturnType<typeof spyOn>;
 
     beforeEach(() => {
-      checkScaEnabledSpy = spyOn(SonarQubeClient.prototype, 'checkScaEnabled');
+      checkScaEnabledSpy = spyOn(ScaClient.prototype, 'checkScaEnabled');
     });
 
     afterEach(() => {

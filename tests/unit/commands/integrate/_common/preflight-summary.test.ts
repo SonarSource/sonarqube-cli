@@ -28,7 +28,8 @@ import * as token from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import * as processLib from '@/core/process/process.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { ComponentsClient } from '@/core/server/components.ts';
+import { OrganizationsClient } from '@/core/server/organizations.ts';
 import type { PhaseItem } from '@/core/ui';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
@@ -46,9 +47,9 @@ describe('printAgentPreflightSummary', () => {
   beforeEach(() => {
     setMockUi(true);
     checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
-    checkComponentSpy = spyOn(SonarQubeClient.prototype, 'checkComponent').mockResolvedValue(true);
+    checkComponentSpy = spyOn(ComponentsClient.prototype, 'checkComponent').mockResolvedValue(true);
     isOrganizationAccessibleSpy = spyOn(
-      SonarQubeClient.prototype,
+      OrganizationsClient.prototype,
       'isOrganizationAccessible',
     ).mockResolvedValue(true);
   });

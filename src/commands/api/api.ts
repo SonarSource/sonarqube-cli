@@ -25,8 +25,8 @@ import {
   GENERIC_HTTP_METHODS,
   type HttpMethod,
   METHODS_WITH_BODY,
-  SonarQubeClient,
-} from '@/core/server/client.ts';
+  SonarHttpClient,
+} from '@/core/server/http-client.ts';
 import { print } from '@/core/ui';
 
 const VALID_METHODS = new Set<string>(GENERIC_HTTP_METHODS);
@@ -115,7 +115,7 @@ export async function apiCommand(
     contentType = 'form';
   }
 
-  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  const client = new SonarHttpClient(auth.serverUrl, auth.token);
 
   const response = await client.genericRequest(
     upperMethod,

@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { apiCommand } from '../../../../src/commands/api/api.ts';
@@ -46,7 +46,7 @@ describe('apiCommand', () => {
     setMockUi(true);
     clearMockUiCalls();
 
-    genericRequestSpy = spyOn(SonarQubeClient.prototype, 'genericRequest').mockResolvedValue(
+    genericRequestSpy = spyOn(SonarHttpClient.prototype, 'genericRequest').mockResolvedValue(
       '{"status":"UP"}',
     );
   });

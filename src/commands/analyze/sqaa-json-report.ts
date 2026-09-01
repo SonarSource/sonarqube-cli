@@ -20,7 +20,6 @@
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { timed } from '@/core/observability/timed.ts';
-import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 
 import { readSqaaFileContent, toRelativePosixPath } from './sqaa-api.ts';
 import { resolveSqaaAuthAndProject } from './sqaa-auth.ts';
@@ -47,6 +46,7 @@ import type {
   AnalyzeSqaaRunOptions,
   SqaaResolvedContext,
 } from './sqaa-types.ts';
+import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
 async function buildSqaaJsonReportFromEntries(
   entries: ResolvedSqaaFileEntry[],

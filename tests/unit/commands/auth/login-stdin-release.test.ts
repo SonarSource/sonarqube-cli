@@ -34,7 +34,8 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { authLogin } from '@/commands/auth/login.ts';
 import * as tokenModule from '@/core/auth/token.ts';
 import { SONARCLOUD_URL } from '@/core/config-constants.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { OrganizationsClient } from '@/core/server/organizations.ts';
+import { UsersClient } from '@/core/server/users.ts';
 import { clearMockUiCalls, setMockUi } from '@/core/ui';
 
 import { createKeychainTestHandle } from '../../core/host/keychain-test-handle.ts';
@@ -52,8 +53,8 @@ describe('authLogin stdin release', () => {
     keychain.setup();
     Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
     pauseSpy = spyOn(process.stdin, 'pause').mockReturnValue(process.stdin);
-    revokeSpy = spyOn(SonarQubeClient.prototype, 'revokeUserToken').mockResolvedValue(undefined);
-    resolveAccessSpy = spyOn(SonarQubeClient.prototype, 'resolveOrganizationAccess');
+    revokeSpy = spyOn(UsersClient.prototype, 'revokeUserToken').mockResolvedValue(undefined);
+    resolveAccessSpy = spyOn(OrganizationsClient.prototype, 'resolveOrganizationAccess');
     generateTokenSpy = spyOn(tokenModule, 'generateTokenViaBrowser').mockResolvedValue({
       token: 'minted-token',
       tokenName: 'cli-browser-token',

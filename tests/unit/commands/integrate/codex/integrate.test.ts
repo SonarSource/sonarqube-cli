@@ -28,8 +28,9 @@ import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocatio
 import * as registry from '@/core/framework/features';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import * as discovery from '@/core/project-info.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { ComponentsClient } from '@/core/server/components.ts';
 import { clearMockUiCalls, setMockUi } from '@/core/ui';
+import { VortexEntitlementClient } from '@/core/vortex/entitlement.ts';
 
 const SERVER_AUTH: ResolvedAuth = {
   token: 'test-token',
@@ -58,12 +59,12 @@ describe('integrateCodex', () => {
   >;
   let hasVortexEntitlementSpy: Mock<
     Extract<
-      (typeof SonarQubeClient.prototype)['hasVortexEntitlement'],
+      (typeof VortexEntitlementClient.prototype)['hasVortexEntitlement'],
       (...args: never[]) => unknown
     >
   >;
   let checkComponentSpy: Mock<
-    Extract<(typeof SonarQubeClient.prototype)['checkComponent'], (...args: never[]) => unknown>
+    Extract<(typeof ComponentsClient.prototype)['checkComponent'], (...args: never[]) => unknown>
   >;
   let resolveVortexSetupSpy: Mock<
     Extract<(typeof vortex)['resolveVortexSetup'], (...args: never[]) => unknown>
@@ -75,10 +76,10 @@ describe('integrateCodex', () => {
     discoverProjectSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(BASE_PROJECT);
     installIntegrationSpy = spyOn(registry, 'installIntegration').mockResolvedValue([]);
     hasVortexEntitlementSpy = spyOn(
-      SonarQubeClient.prototype,
+      VortexEntitlementClient.prototype,
       'hasVortexEntitlement',
     ).mockResolvedValue({ status: 'not_entitled' });
-    checkComponentSpy = spyOn(SonarQubeClient.prototype, 'checkComponent').mockResolvedValue(true);
+    checkComponentSpy = spyOn(ComponentsClient.prototype, 'checkComponent').mockResolvedValue(true);
     resolveVortexSetupSpy = spyOn(vortex, 'resolveVortexSetup').mockResolvedValue({
       disposition: 'preserve',
     });

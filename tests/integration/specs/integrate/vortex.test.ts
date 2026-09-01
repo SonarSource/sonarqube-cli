@@ -31,11 +31,11 @@ import {
   VORTEX_UNINSTALL_MESSAGE,
 } from '@/commands/integrate/_common/vortex.js';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
+import type { CliState } from '@/core/state/state.ts';
 import {
   SERVER_ORGANIZATION_ID_PLACEHOLDER,
   type VortexEntitlementStatus,
-} from '@/core/server/client.js';
-import type { CliState } from '@/core/state/state.ts';
+} from '@/core/vortex/entitlement.ts';
 
 import { TestHarness } from '../../harness';
 import { hookScriptName } from '../../harness/platform.ts';
