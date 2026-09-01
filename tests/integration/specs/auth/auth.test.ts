@@ -746,9 +746,9 @@ describe('auth login — server selection', () => {
         browserToken: 'my-token',
       });
       await session.waitText('Where would you like to connect?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Which SonarQube Cloud region?');
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);
@@ -778,10 +778,10 @@ describe('auth login — server selection', () => {
         browserToken: 'my-token',
       });
       await session.waitText('Where would you like to connect?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Which SonarQube Cloud region?');
       session.keyDown();
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);
@@ -814,12 +814,12 @@ describe('auth login — server selection', () => {
         browserToken: 'my-token',
       });
       await session.waitText('Where would you like to connect?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Which SonarQube Cloud region?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Select an organization');
       session.keyDown();
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);
@@ -840,12 +840,12 @@ describe('auth login — server selection', () => {
       });
       await session.waitText('Where would you like to connect?');
       session.keyDown();
-      session.enter();
+      session.keyEnter();
       await session.waitText('Enter server URL');
       session.write(`${server.baseUrl()}`);
-      session.enter();
+      session.keyEnter();
       await session.waitText('Connect to:');
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);
@@ -899,14 +899,14 @@ describe('auth login — server selection', () => {
       });
       await session.waitText('Where would you like to connect?');
       session.keyDown();
-      session.enter();
+      session.keyEnter();
       await session.waitText('Enter server URL');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Please enter a valid URL');
       session.write(`${server.baseUrl()}`);
-      session.enter();
+      session.keyEnter();
       await session.waitText('Connect to:');
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);
@@ -928,15 +928,15 @@ describe('auth login — server selection', () => {
       });
       await session.waitText('Where would you like to connect?');
       session.keyDown();
-      session.enter();
+      session.keyEnter();
       await session.waitText('Enter server URL');
       session.write('not-a-url');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Please enter a valid URL');
       session.write(`${server.baseUrl()}`);
-      session.enter();
+      session.keyEnter();
       await session.waitText('Connect to:');
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);
@@ -958,21 +958,21 @@ describe('auth login — server selection', () => {
       });
       await session.waitText('Where would you like to connect?');
       session.keyDown();
-      session.enter();
+      session.keyEnter();
       await session.waitText('Enter server URL');
       session.write('bad-url-1');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Please enter a valid URL');
       session.write('bad-url-2');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Please enter a valid URL');
       session.write('bad-url-3');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Please enter a valid URL');
       session.write(`${server.baseUrl()}`);
-      session.enter();
+      session.keyEnter();
       await session.waitText('Connect to:');
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);
@@ -1008,12 +1008,12 @@ describe('auth login — server selection', () => {
       });
       await session.waitText('Where would you like to connect?');
       session.keyDown();
-      session.enter();
+      session.keyEnter();
       await session.waitText('Enter server URL');
       session.write(`${server.baseUrl()}`);
-      session.enter();
+      session.keyEnter();
       await session.waitText('Connect to:');
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);
@@ -1031,10 +1031,10 @@ describe('auth login — server selection', () => {
       const session = harness.runInteractive('auth login');
       await session.waitText('Where would you like to connect?');
       session.keyDown();
-      session.enter();
+      session.keyEnter();
       await session.waitText('Enter server URL');
       session.write(`${server.baseUrl()}`);
-      session.enter();
+      session.keyEnter();
       await session.waitText('Connect to:');
       session.write('n');
       const result = await session.finish();

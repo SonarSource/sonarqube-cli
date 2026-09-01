@@ -1995,11 +1995,11 @@ describe('integrate claude — interactive feature selection', () => {
 
       const session = harness.runInteractive('integrate claude');
       await session.waitText('Where should SonarQube be integrated?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Install secret scanning hooks?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Install MCP server?');
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);
@@ -2049,11 +2049,11 @@ describe('integrate claude — interactive feature selection', () => {
       if (isInteractive) {
         const session = harness.runInteractive('integrate claude', { extraEnv });
         await session.waitText('Where should SonarQube be integrated?');
-        session.enter();
+        session.keyEnter();
         await session.waitText('Install secret scanning hooks?');
-        session.enter();
+        session.keyEnter();
         await session.waitText('Install MCP server?');
-        session.enter();
+        session.keyEnter();
         result = await session.finish();
       } else {
         result = await harness.run('integrate claude --non-interactive', { extraEnv });
@@ -2086,11 +2086,11 @@ describe('integrate claude — interactive feature selection', () => {
 
       const session = harness.runInteractive('integrate claude');
       await session.waitText('Where should SonarQube be integrated?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Install secret scanning hooks?');
       session.write('n');
       await session.waitText('Install MCP server?');
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);
@@ -2125,11 +2125,11 @@ describe('integrate claude — interactive feature selection', () => {
         },
       });
       await session.waitText('Install secret scanning hooks?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Install Vortex?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Install MCP server?');
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);
@@ -2180,9 +2180,9 @@ describe('integrate claude — interactive feature selection', () => {
         },
       });
       await session.waitText('Install secret scanning hooks?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Install MCP server?');
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);
@@ -2239,13 +2239,13 @@ describe('integrate claude — keep/remove already-installed features', () => {
 
       const session = harness.runInteractive('integrate claude');
       await session.waitText('Where should SonarQube be integrated?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('secret scanning hooks (currently installed)  Keep?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('MCP server (currently installed)  Keep?');
       session.write('n');
       await session.waitText('Proceed with removal?');
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);
@@ -2275,9 +2275,9 @@ describe('integrate claude — keep/remove already-installed features', () => {
 
       const session = harness.runInteractive('integrate claude');
       await session.waitText('Where should SonarQube be integrated?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('secret scanning hooks (currently installed)  Keep?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('MCP server (currently installed)  Keep?');
       session.write('n');
       await session.waitText('Proceed with removal?');
@@ -2304,13 +2304,13 @@ describe('integrate claude — keep/remove already-installed features', () => {
 
       const session = harness.runInteractive('integrate claude');
       await session.waitText('Where should SonarQube be integrated?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('secret scanning hooks (currently installed)  Keep?');
       session.write('n');
       await session.waitText('Proceed with removal?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('MCP server (currently installed)  Keep?');
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);
@@ -2354,13 +2354,13 @@ describe('integrate claude — keep/remove already-installed features', () => {
 
       const session = harness.runInteractive('integrate claude');
       await session.waitText('Where should SonarQube be integrated?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('secret scanning hooks (currently installed)  Keep?');
       session.write('n');
       await session.waitText('Proceed with removal?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('MCP server (currently installed)  Keep?');
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);
@@ -2426,15 +2426,15 @@ describe('integrate claude — keep/remove already-installed features', () => {
 
       const session = harness.runInteractive('integrate claude');
       await session.waitText('Where should SonarQube be integrated?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('secret scanning hooks (currently installed)  Keep?');
       session.write('n');
       await session.waitText('Proceed with removal?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('MCP server (currently installed)  Keep?');
       session.write('n');
       await session.waitText('Proceed with removal?');
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);

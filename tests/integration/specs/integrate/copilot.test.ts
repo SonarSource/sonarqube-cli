@@ -682,13 +682,13 @@ describe('integrate copilot', () => {
           extraEnv: { ...extraEnv, __SQCLI_DEV_SKIP_CAG: '1' },
         });
         await session.waitText('Install pre-tool-use hook?');
-        session.enter();
+        session.keyEnter();
         await session.waitText('Install prompt-secrets instructions?');
-        session.enter();
+        session.keyEnter();
         await session.waitText('Install Vortex?');
-        session.enter();
+        session.keyEnter();
         await session.waitText('Install MCP server?');
-        session.enter();
+        session.keyEnter();
         const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
@@ -858,13 +858,13 @@ describe('integrate copilot', () => {
         // features (hook, prompt-secrets, MCP) each ask.
         const session = harness.runInteractive('integrate copilot');
         await session.waitText('Where should SonarQube be integrated?');
-        session.enter();
+        session.keyEnter();
         await session.waitText('Install pre-tool-use hook?');
-        session.enter();
+        session.keyEnter();
         await session.waitText('Install prompt-secrets instructions?');
-        session.enter();
+        session.keyEnter();
         await session.waitText('Install MCP server?');
-        session.enter();
+        session.keyEnter();
         const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
@@ -904,13 +904,13 @@ describe('integrate copilot', () => {
         if (isInteractive) {
           const session = harness.runInteractive('integrate copilot', { extraEnv });
           await session.waitText('Where should SonarQube be integrated?');
-          session.enter();
+          session.keyEnter();
           await session.waitText('Install pre-tool-use hook?');
-          session.enter();
+          session.keyEnter();
           await session.waitText('Install prompt-secrets instructions?');
-          session.enter();
+          session.keyEnter();
           await session.waitText('Install MCP server?');
-          session.enter();
+          session.keyEnter();
           result = await session.finish();
         } else {
           result = await harness.run('integrate copilot --non-interactive', { extraEnv });
@@ -936,13 +936,13 @@ describe('integrate copilot', () => {
       async () => {
         const session = harness.runInteractive('integrate copilot');
         await session.waitText('Where should SonarQube be integrated?');
-        session.enter();
+        session.keyEnter();
         await session.waitText('Install pre-tool-use hook?');
         session.write('n');
         await session.waitText('Install prompt-secrets instructions?');
-        session.enter();
+        session.keyEnter();
         await session.waitText('Install MCP server?');
-        session.enter();
+        session.keyEnter();
         const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
@@ -966,13 +966,13 @@ describe('integrate copilot', () => {
 
         const session = harness.runInteractive('integrate copilot');
         await session.waitText('Where should SonarQube be integrated?');
-        session.enter();
+        session.keyEnter();
         await session.waitText(
           'Global Copilot instructions already exist. Do you also want to create a project-local copy for this repo?',
         );
-        session.enter();
+        session.keyEnter();
         await session.waitText('Install MCP server?');
-        session.enter();
+        session.keyEnter();
         const result = await session.finish();
 
         expect(result.exitCode).toBe(0);

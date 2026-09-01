@@ -89,13 +89,13 @@ describe('integrate (bare command)', () => {
       // Single-select: the cursor starts on Claude (index 0); Enter confirms it.
       const session = harness.runInteractive('integrate');
       await session.waitText('Select the tool you want to integrate with');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Where should SonarQube be integrated?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Install secret scanning hooks?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Install MCP server?');
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
       const output = result.stdout + result.stderr;
 
@@ -128,11 +128,11 @@ describe('integrate (bare command)', () => {
       // the integration installs at global scope.
       const session = harness.runInteractive('integrate --global');
       await session.waitText('Select the tool you want to integrate with');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Install secret scanning hooks?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Install MCP server?');
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);
@@ -167,11 +167,11 @@ describe('integrate (bare command)', () => {
       // project key implies project scope) and the key is baked into the install.
       const session = harness.runInteractive('integrate --project my-project');
       await session.waitText('Select the tool you want to integrate with');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Install secret scanning hooks?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Install MCP server?');
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);

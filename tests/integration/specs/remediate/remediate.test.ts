@@ -250,7 +250,7 @@ describe('sonar remediate', () => {
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
       await session.waitText('Which issues should the agent fix?');
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);
@@ -284,7 +284,7 @@ describe('sonar remediate', () => {
       if (isInteractive) {
         const session = harness.runInteractive(command, { extraEnv });
         await session.waitText('Which issues should the agent fix?');
-        session.enter();
+        session.keyEnter();
         result = await session.finish();
       } else {
         result = await harness.run(command, { extraEnv });
@@ -318,7 +318,7 @@ describe('sonar remediate', () => {
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
       await session.waitText('Which issues should the agent fix?');
       session.keySpace();
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);
@@ -350,7 +350,7 @@ describe('sonar remediate', () => {
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
       await session.waitText('Which issues should the agent fix?');
       session.keySpace();
-      session.enter();
+      session.keyEnter();
       await session.finish();
 
       const agentJobCalls = server
@@ -386,7 +386,7 @@ describe('sonar remediate', () => {
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
       await session.waitText('Which issues should the agent fix?');
-      session.enter();
+      session.keyEnter();
       await session.finish();
 
       const issuesSearchCalls = server
@@ -421,7 +421,7 @@ describe('sonar remediate', () => {
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
       await session.waitText('Which issues should the agent fix?');
       session.keySpace();
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(1);
@@ -452,7 +452,7 @@ describe('sonar remediate', () => {
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
       await session.waitText('Which issues should the agent fix?');
       session.keySpace();
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(1);
@@ -478,7 +478,7 @@ describe('sonar remediate', () => {
 
       const session = harness.runInteractive('remediate');
       await session.waitText('Which issues should the agent fix?');
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);
@@ -529,7 +529,7 @@ describe('sonar remediate', () => {
       session.keySpace();
       session.keyDown();
       session.keySpace();
-      session.enter();
+      session.keyEnter();
       const result = await session.finish();
 
       expect(result.exitCode).toBe(0);
@@ -621,7 +621,7 @@ describe('sonar remediate', () => {
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
       await session.waitText('Which issues should the agent fix?');
       session.keySpace();
-      session.enter();
+      session.keyEnter();
       await session.finish();
 
       const agentJobCalls = server

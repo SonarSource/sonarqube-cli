@@ -166,7 +166,7 @@ describe('InteractiveSession', () => {
     await waiting;
 
     session.write('n');
-    session.enter();
+    session.keyEnter();
     session.keyDown();
     session.keyUp();
     session.keySpace();
@@ -229,7 +229,7 @@ describe('InteractiveSession', () => {
     fake.pushStdout('Enter server URL');
     await session.waitText('Enter server URL');
     session.write('bad');
-    session.enter();
+    session.keyEnter();
 
     const again = session.waitText('Enter server URL');
     fake.pushStdout('Enter server URL');
@@ -247,7 +247,7 @@ describe('InteractiveSession', () => {
     fake.pushStdout('?  Enter server URL\n');
     await session.waitText('Enter server URL');
     session.write('bad-url');
-    session.enter();
+    session.keyEnter();
 
     const submitted = session.waitText('Enter server URL', 50);
     fake.pushStdout('✓  Enter server URL bad-url\n');

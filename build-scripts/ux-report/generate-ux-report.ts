@@ -527,7 +527,7 @@ uxDescribe('SonarQube Cloud — Happy Path', () => {
       });
       await session.waitText('Which issues should the agent fix?');
       session.keySpace();
-      session.enter();
+      session.keyEnter();
       return session.finish();
     }),
   );
@@ -894,9 +894,9 @@ uxDescribe('Interactive auth login', () => {
         browserToken: TOKEN,
       });
       await session.waitText('Where would you like to connect?');
-      session.enter();
+      session.keyEnter();
       await session.waitText('Which SonarQube Cloud region?');
-      session.enter();
+      session.keyEnter();
       return session.finish();
     }),
   );

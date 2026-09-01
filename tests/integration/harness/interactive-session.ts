@@ -211,7 +211,7 @@ export class InteractiveSession {
     stdin.write(this.encoder.encode(keys));
   }
 
-  enter(): void {
+  keyEnter(): void {
     this.write(ENTER);
   }
 

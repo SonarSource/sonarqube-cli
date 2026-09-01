@@ -214,7 +214,7 @@ Before writing a test, find an existing spec for the same command area and follo
 
 ### Integration test harness
 
-Each test creates a fresh `TestHarness` and disposes it in `afterEach`. The harness runs the compiled binary in a fully isolated environment (temp dir, fake keychain, fake servers). For fine-grained state setup beyond `withAuth`, use `harness.state()` builder (see `tests/integration/harness/environment-builder.ts`). For git hook tests, use `initGitRepo` / `stageFile` from `tests/integration/specs/hook/git-test-helpers.ts`. Use `harness.run()` for non-interactive commands and dump-all stdin. Drive prompt-by-prompt flows with `harness.runInteractive()`, which returns an `InteractiveSession` (`waitText`, `write` / `enter` / `keyUp` / `keyDown` / `keySpace` / `keyCtrlC`, then `finish()`). `dispose()` kills any session that is still running.
+Each test creates a fresh `TestHarness` and disposes it in `afterEach`. The harness runs the compiled binary in a fully isolated environment (temp dir, fake keychain, fake servers). For fine-grained state setup beyond `withAuth`, use `harness.state()` builder (see `tests/integration/harness/environment-builder.ts`). For git hook tests, use `initGitRepo` / `stageFile` from `tests/integration/specs/hook/git-test-helpers.ts`. Use `harness.run()` for non-interactive commands and dump-all stdin. Drive prompt-by-prompt flows with `harness.runInteractive()`, which returns an `InteractiveSession` (`waitText`, `write` / `keyEnter` / `keyUp` / `keyDown` / `keySpace` / `keyCtrlC`, then `finish()`). `dispose()` kills any session that is still running.
 
 ### Coverage
 

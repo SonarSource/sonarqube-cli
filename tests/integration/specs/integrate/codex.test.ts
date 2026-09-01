@@ -709,13 +709,13 @@ describe('integrate codex', () => {
         // (secrets hook, secrets instructions, MCP) each ask after the scope prompt.
         const session = harness.runInteractive('integrate codex');
         await session.waitText('Where should SonarQube be integrated?');
-        session.enter();
+        session.keyEnter();
         await session.waitText('Install secret scanning hooks?');
-        session.enter();
+        session.keyEnter();
         await session.waitText('Install secrets-on-read instructions?');
-        session.enter();
+        session.keyEnter();
         await session.waitText('Install MCP server?');
-        session.enter();
+        session.keyEnter();
         const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
@@ -760,13 +760,13 @@ describe('integrate codex', () => {
         if (isInteractive) {
           const session = harness.runInteractive('integrate codex', { extraEnv });
           await session.waitText('Where should SonarQube be integrated?');
-          session.enter();
+          session.keyEnter();
           await session.waitText('Install secret scanning hooks?');
-          session.enter();
+          session.keyEnter();
           await session.waitText('Install secrets-on-read instructions?');
-          session.enter();
+          session.keyEnter();
           await session.waitText('Install MCP server?');
-          session.enter();
+          session.keyEnter();
           result = await session.finish();
         } else {
           result = await harness.run('integrate codex --non-interactive', { extraEnv });
@@ -791,13 +791,13 @@ describe('integrate codex', () => {
       async () => {
         const session = harness.runInteractive('integrate codex');
         await session.waitText('Where should SonarQube be integrated?');
-        session.enter();
+        session.keyEnter();
         await session.waitText('Install secret scanning hooks?');
         session.write('n');
         await session.waitText('Install secrets-on-read instructions?');
-        session.enter();
+        session.keyEnter();
         await session.waitText('Install MCP server?');
-        session.enter();
+        session.keyEnter();
         const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
@@ -828,15 +828,15 @@ describe('integrate codex', () => {
         // default one.
         const session = harness.runInteractive('integrate codex');
         await session.waitText('Where should SonarQube be integrated?');
-        session.enter();
+        session.keyEnter();
         await session.waitText('Install secret scanning hooks?');
-        session.enter();
+        session.keyEnter();
         await session.waitText(
           'Global Codex instructions already exist. Do you also want to create a project-local copy for this repo?',
         );
-        session.enter();
+        session.keyEnter();
         await session.waitText('Install MCP server?');
-        session.enter();
+        session.keyEnter();
         const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
@@ -874,13 +874,13 @@ describe('integrate codex', () => {
           },
         });
         await session.waitText('Install secret scanning hooks?');
-        session.enter();
+        session.keyEnter();
         await session.waitText('Install Vortex?');
-        session.enter();
+        session.keyEnter();
         await session.waitText('Install secrets-on-read instructions?');
-        session.enter();
+        session.keyEnter();
         await session.waitText('Install MCP server?');
-        session.enter();
+        session.keyEnter();
         const result = await session.finish();
 
         expect(result.exitCode).toBe(0);
