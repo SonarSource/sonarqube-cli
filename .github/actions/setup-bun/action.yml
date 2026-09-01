@@ -14,7 +14,7 @@ runs:
   steps:
     - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
       with:
-        version: 2026.4.20
+        version: 2026.8.14
 
     - name: Cache Bun dependencies
       uses: SonarSource/gh-action_cache@339d9d71cc5210bfa866a831dd8eba8e32c40491 # v1.7.1
