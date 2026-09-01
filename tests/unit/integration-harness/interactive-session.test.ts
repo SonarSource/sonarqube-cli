@@ -135,6 +135,22 @@ describe('prompt matching', () => {
     ).toBe('✓  Enter server URL bad\n?  Enter server URL'.length);
   });
 
+  it('skips a submitted line even when the wait text is not a prefix', () => {
+    const submitted = '  ✓  MCP server (currently installed)  Keep? No';
+    const live = '  ?  MCP server (currently installed)  Keep?';
+    expect(findPromptMatch(submitted, 'Keep?')).toBeNull();
+    expect(findPromptMatch(live, 'Keep?')).toBe(live.length);
+    expect(findPromptMatch(`${submitted}\n${live}`, 'Keep?')).toBe(`${submitted}\n${live}`.length);
+    expect(findPromptMatch(submitted, /Keep\?/)).toBeNull();
+    expect(findPromptMatch(live, /Keep\?/)).toBe(live.length);
+  });
+
+  it('does not re-anchor a regexp at the next search offset', () => {
+    expect(findPromptMatch('✓  Keep?prompt', /Keep\?|^prompt/)).toBeNull();
+    expect(findPromptMatch('✓  Keep?\nprompt', /Keep\?|^prompt/m)).toBe('✓  Keep?\nprompt'.length);
+    expect(findPromptMatch('✓  KeepXfoo', /KeepX|\bfoo/)).toBeNull();
+  });
+
   it('strips CSI sequences so prompt text is visible', () => {
     expect(stripControlSequences('\x1b[?25lSelect the tool\x1b[2K\r')).toBe('Select the tool');
   });
@@ -228,13 +244,13 @@ describe('InteractiveSession', () => {
     const fake = createFakeProcess();
     const session = InteractiveSession.fromProcess(fake.handle, { timeoutMs: 2000 });
 
-    fake.pushStdout('?  Enter server URL');
+    fake.pushStdout('?  Enter server URL\n');
     await session.waitText('Enter server URL');
     session.write('bad-url');
     session.enter();
 
     const submitted = session.waitText('Enter server URL', 50);
-    fake.pushStdout('✓  Enter server URL bad-url');
+    fake.pushStdout('✓  Enter server URL bad-url\n');
     let rematchError: unknown;
     try {
       await submitted;

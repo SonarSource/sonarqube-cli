@@ -52,11 +52,12 @@ export function formatPrompt(prompt: PromptText): string {
   return typeof prompt === 'string' ? `"${prompt}"` : String(prompt);
 }
 
-/** Clack paints a submitted prompt as `✓  …`; that line is not a new wait target. */
+/** Clack paints a submitted prompt (and `discreetSuccess`) as `  ✓  …`; such a line is never a live wait target. */
 const SUBMITTED_PROMPT_PREFIX = '✓  ';
 
 function isSubmittedPrompt(window: string, matchIndex: number): boolean {
-  return window.endsWith(SUBMITTED_PROMPT_PREFIX, matchIndex);
+  const lineStart = window.lastIndexOf('\n', matchIndex) + 1;
+  return window.slice(lineStart, matchIndex).trimStart().startsWith(SUBMITTED_PROMPT_PREFIX);
 }
 
 export function findPromptMatch(window: string, prompt: PromptText): number | null {
@@ -75,18 +76,12 @@ export function findPromptMatch(window: string, prompt: PromptText): number | nu
     return null;
   }
   const flags = prompt.flags.replaceAll('g', '').replaceAll('y', '');
-  const matcher = new RegExp(prompt.source, flags);
-  let offset = 0;
-  while (offset <= window.length) {
-    const match = window.slice(offset).match(matcher);
-    if (!match || match.index === undefined) {
-      return null;
+  const matcher = new RegExp(prompt.source, `${flags}g`);
+  for (let match = matcher.exec(window); match !== null; match = matcher.exec(window)) {
+    if (!isSubmittedPrompt(window, match.index)) {
+      return match.index + match[0].length;
     }
-    const index = offset + match.index;
-    if (!isSubmittedPrompt(window, index)) {
-      return index + match[0].length;
-    }
-    offset = index + Math.max(match[0].length, 1);
+    matcher.lastIndex = match.index + Math.max(match[0].length, 1);
   }
   return null;
 }
