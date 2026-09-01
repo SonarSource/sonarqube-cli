@@ -638,6 +638,9 @@ describe('garbageCollectPreCommitFramework', () => {
 
     try {
       await garbageCollectPreCommitFramework(TEMP_DIR);
+
+      const calls = spawnSpy.mock.calls.map((c) => (c as [string, string[]])[1]);
+      expect(calls).toEqual([['gc']]);
     } finally {
       spawnSpy.mockRestore();
     }
