@@ -37,13 +37,15 @@ import { FakeGitLabServer, FakeGitLabServerBuilder } from './fake-gitlab-server.
 import { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from './fake-sonarqube-server.js';
 import { FakeUpdateScriptServer } from './fake-update-script-server.js';
 import { File } from './file';
+import { type InteractiveSession, startInteractiveSession } from './interactive-session.js';
 import { buildHomeEnv, IS_WINDOWS } from './platform';
-import type { CliResult, RunOptions } from './types.js';
+import type { CliResult, RunInteractiveOptions, RunOptions } from './types.js';
 
 export { FakeGitLabServer, FakeGitLabServerBuilder } from './fake-gitlab-server.js';
 export { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from './fake-sonarqube-server.js';
+export { InteractiveSession } from './interactive-session.js';
 export { hookScriptName, hookScriptPath, IS_WINDOWS, normalizePath } from './platform';
-export type { CliResult, RecordedRequest } from './types.js';
+export type { CliResult, RecordedRequest, RunInteractiveOptions } from './types.js';
 
 export class TestHarness {
   public readonly cwd: Dir;
@@ -59,6 +61,7 @@ export class TestHarness {
   private readonly updateScriptServers: FakeUpdateScriptServer[] = [];
   private _envBuilder?: EnvironmentBuilder;
   private systemEnvVars: Record<string, string> = {};
+  private readonly sessions: InteractiveSession[] = [];
 
   private constructor(tempDir: string) {
     this.tempDir = new Dir(tempDir);
@@ -232,6 +235,23 @@ export class TestHarness {
   }
 
   /**
+   * Spawns the CLI and returns a session the test drives prompt-by-prompt.
+   * Use `run()` when the command is non-interactive or only needs dump-all stdin.
+   */
+  runInteractive(command: string, options?: RunInteractiveOptions): InteractiveSession {
+    const session = startInteractiveSession(command, this.env(options), {
+      cwd: options?.cwd ?? this.cwd.path,
+      timeoutMs: options?.timeoutMs,
+      waitTimeoutMs: options?.waitTimeoutMs,
+      binaryPath: options?.binaryPath,
+      browserToken: options?.browserToken,
+      browserTokenName: options?.browserTokenName,
+    });
+    this.sessions.push(session);
+    return session;
+  }
+
+  /**
    * Builds the environment used to run the CLI from this harness.
    */
   env(options?: Pick<RunOptions, 'extraEnv'>): Record<string, string> {
@@ -293,6 +313,11 @@ export class TestHarness {
    * Stops all fake servers and removes the temporary directory.
    */
   async dispose(): Promise<void> {
+    for (const session of this.sessions) {
+      session.kill();
+    }
+    await Promise.all(this.sessions.map((session) => session.waitFinish().catch(() => undefined)));
+
     await Promise.all(
       [...this.servers, ...this.binariesServers, ...this.gitlabServers].map((s) =>
         s.stop().catch(() => {
