@@ -29,6 +29,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -656,6 +657,10 @@ const EXECUTABLE_PERMS = 0o755;
 function canWriteFile(path: string): boolean {
   if (!existsSync(path)) {
     return true;
+  }
+  // accessSync(W_OK) succeeds for root regardless of mode.
+  if ((statSync(path).mode & 0o222) === 0) {
+    return false;
   }
   try {
     accessSync(path, constants.W_OK);

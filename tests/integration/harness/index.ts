@@ -225,7 +225,15 @@ export class TestHarness {
    * when the command needs stdin.
    */
   async run(command: string, options?: RunOptions): Promise<CliResult> {
-    return this.runInteractive(command, options).waitFinish();
+    const session = this.runInteractive(command, options);
+    try {
+      return await session.waitFinish();
+    } finally {
+      const index = this.sessions.indexOf(session);
+      if (index >= 0) {
+        this.sessions.splice(index, 1);
+      }
+    }
   }
 
   /**
