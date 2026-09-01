@@ -56,7 +56,11 @@ import {
 } from '../_common/hooks.ts';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
-import { createVortexFeature, vortexInstallDecision } from '../_common/vortex.ts';
+import {
+  createVortexFeature,
+  isVortexInstalledForOtherProject,
+  vortexInstallDecision,
+} from '../_common/vortex.ts';
 import { createClaudeHookEventContainer } from './hook-container-feature.ts';
 import {
   getPostToolUseFailureTemplateUnix,
@@ -180,7 +184,19 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       subagentStartScriptPath: 'sonar-context-session-start/build-scripts/subagent-start',
       sessionStartCommand: 'sonar hook claude-session-start',
       subagentStartCommand: 'sonar hook claude-subagent-start',
-      shouldInstall: ({ options, attrs }) => shouldInstallCagHook(options, attrs),
+      shouldInstall: (invocation) => {
+        // The hook is a single global resource, not one record per project, so a project's
+        // own vortexDisposition (which can legitimately say "remove" for THIS project) must
+        // not tear it down while another project on this machine still has Vortex installed.
+        if (
+          isVortexInstalledForOtherProject(invocation.state, CLAUDE_INTEGRATION_ID, invocation.targetRoot)
+        ) {
+          return skip(
+            'Other projects on this machine still use Vortex — leaving the shared session-start hook installed.',
+          );
+        }
+        return shouldInstallCagHook(invocation.options, invocation.attrs);
+      },
     }),
     {
       id: 'mcp-server',

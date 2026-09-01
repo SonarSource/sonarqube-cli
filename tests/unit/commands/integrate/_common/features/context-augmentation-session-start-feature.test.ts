@@ -119,7 +119,7 @@ describe('createContextAugmentationSessionStartFeature — applying resources to
     }
   });
 
-  it('registers SessionStart (startup|clear) and SubagentStart (*) entries in settings.json', async () => {
+  it('registers SessionStart (startup|clear|resume|compact) and SubagentStart (*) entries in settings.json', async () => {
     const feature = buildFeature();
     const settingsResource = feature.resources![2];
 
@@ -127,7 +127,7 @@ describe('createContextAugmentationSessionStartFeature — applying resources to
 
     const settings = JSON.parse(readFileSync(join(workDir, '.claude', 'settings.json'), 'utf-8'));
     expect(settings.hooks.SessionStart).toHaveLength(1);
-    expect(settings.hooks.SessionStart[0].matcher).toBe('startup|clear');
+    expect(settings.hooks.SessionStart[0].matcher).toBe('startup|clear|resume|compact');
     expect(settings.hooks.SessionStart[0].hooks[0].command).toContain('session-start');
 
     expect(settings.hooks.SubagentStart).toHaveLength(1);

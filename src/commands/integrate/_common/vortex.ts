@@ -28,7 +28,7 @@ import type {
 } from '@/core/framework/features';
 import { askUser, install, skip, uninstall } from '@/core/framework/features';
 import { SonarQubeClient } from '@/core/server/client.ts';
-import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
+import type { CliState, InstalledIntegrationFeature } from '@/core/state/state.ts';
 import { info, warn } from '@/core/ui';
 import { resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
@@ -41,6 +41,30 @@ export const VORTEX_FEATURE_ID = 'vortex';
 /** Vortex is project-scoped, so only these records carry usable project metadata. */
 export function isProjectVortexFeature(feature: InstalledIntegrationFeature): boolean {
   return feature.featureId === VORTEX_FEATURE_ID && feature.scope === 'project';
+}
+
+/**
+ * True when some OTHER project (any recorded `targetRoot` except `excludeTargetRoot`)
+ * still has a project-scope Vortex install for `integrationId`. There is no per-project
+ * record for a globally-shared resource (e.g. the CAG session-start hook, always recorded
+ * once at `scope: 'global'`), so this project-scoped `vortex` record is the only reliable
+ * proxy for "some project on this machine still depends on the shared global Vortex
+ * assets" — used to avoid a single project's `sonar integrate` run tearing down a global
+ * resource other projects still rely on.
+ */
+export function isVortexInstalledForOtherProject(
+  state: CliState,
+  integrationId: string,
+  excludeTargetRoot: string,
+): boolean {
+  const installedIntegration = state.integrations.installed.find(
+    (entry) => entry.integrationId === integrationId,
+  );
+  return (
+    installedIntegration?.features.some(
+      (feature) => isProjectVortexFeature(feature) && feature.targetRoot !== excludeTargetRoot,
+    ) ?? false
+  );
 }
 
 /**

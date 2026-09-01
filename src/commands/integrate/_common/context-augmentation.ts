@@ -125,6 +125,8 @@ export interface CagSubprocessResult {
 interface CagSubprocessOptions {
   projectRoot: string;
   env?: NodeJS.ProcessEnv;
+  /** Kill the child after this many ms (best-effort; omit for callers with no deadline). */
+  timeoutMs?: number;
 }
 
 export class CagStepFailedError extends Error {
@@ -201,14 +203,22 @@ export interface ContextAugmentationSessionStartParams {
   serverUrl: string;
   token: string;
   workspaceDir?: string;
+  /**
+   * Kill the CAG subprocess after this many ms (passed straight through to `spawn`'s own
+   * `timeout`, so the child is actually terminated — not just abandoned by a caller giving
+   * up on the promise). Required here: an agent startup hook must never leave a hung CAG
+   * process attached to its stdio, since that alone would keep the hook process (and thus
+   * agent startup) blocked regardless of what this function returns.
+   */
+  timeoutMs: number;
 }
 
 /**
  * Best-effort `tool print-session-start-context` invocation for the agent
  * SessionStart/SubagentStart hooks (CLI-986). Unlike {@link printContextAugmentationSkill}
  * (used at install time, where a failure should abort), this never throws: any
- * failure (non-zero exit, empty output) resolves to null so the calling hook
- * can fail open and never block agent startup.
+ * failure (non-zero exit, empty output, or a timeout-triggered kill) resolves to null so
+ * the calling hook can fail open and never block agent startup.
  */
 export async function resolveContextAugmentationSessionStartText(
   params: ContextAugmentationSessionStartParams,
@@ -218,6 +228,7 @@ export async function resolveContextAugmentationSessionStartText(
     ['tool', 'print-session-start-context'],
     {
       projectRoot: params.workspaceDir ?? process.cwd(),
+      timeoutMs: params.timeoutMs,
       env: buildContextAugmentationEnv({
         organization: params.organization,
         projectKey: params.projectKey,
@@ -304,6 +315,11 @@ async function runCagSubprocess(
       child = spawn(binaryPath, args, {
         cwd: options.projectRoot,
         stdio: ['inherit', 'pipe', 'pipe'],
+        // When set, Node kills the child itself once timeoutMs elapses (default killSignal
+        // 'SIGTERM') — the `exit` handler below then resolves `{ ok: false }` from the signal,
+        // same as any other non-zero exit. Left undefined for every other caller, which
+        // matches spawn()'s own "no timeout" default.
+        timeout: options.timeoutMs,
         env: options.env ?? buildContextAugmentationEnv(),
       });
     } catch (error) {

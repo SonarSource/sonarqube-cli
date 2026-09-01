@@ -18,110 +18,40 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { afterAll, afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
+// Every collaborator below is spied on its real module namespace (never `mock.module`):
+// `mock.module` replaces the WHOLE module for the entire test process (bun test --parallel
+// interleaves files rather than isolating module registries per file), so a partial-export
+// replacement of a widely-imported module (auth-resolver, project-info, stdin, project-uuid,
+// context-augmentation — every one of these has other exports used by concurrently-running
+// specs) would silently strip those exports out from under them. `spyOn` on a real import
+// swaps only the one function and restores the real one on `mockRestore()`.
+import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
+import * as stdin from '@/commands/hook/stdin.ts';
+import * as commonContextAugmentation from '@/commands/integrate/_common/context-augmentation.ts';
+import * as authResolver from '@/core/auth/auth-resolver.ts';
+import * as installContextAugmentation from '@/core/host/install/context-augmentation.ts';
+import * as projectInfo from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
-
-// `mock.module` replaces a module for the whole test process (bun test --parallel interleaves
-// test files within the same process rather than isolating module registries per file), so
-// every module this file mocks with a partial implementation must be restored to its real one
-// in `afterAll` — otherwise other concurrently-running test files silently inherit our last
-// mock instead of the real module. Vortex entitlement is deliberately NOT mocked this way:
-// it's exercised via `spyOn(SonarQubeClient.prototype, 'hasVortexEntitlement')` instead (the
-// same pattern integrate.test.ts uses), since that module is exercised by many other specs.
-const realModules = await Promise.all([
-  import('@/commands/hook/stdin.ts'),
-  import('@/core/auth/auth-resolver.ts'),
-  import('@/core/project-info.ts'),
-  import('@/core/host/install/context-augmentation.ts'),
-  import('@/commands/integrate/_common/context-augmentation.ts'),
-  import('@/core/telemetry/project-uuid.ts'),
-] as const);
-const [
-  realStdin,
-  realAuthResolver,
-  realProjectInfo,
-  realInstallContextAugmentation,
-  realCommonContextAugmentation,
-  realProjectUuid,
-] = realModules;
-
-afterAll(() => {
-  void mock.module('@/commands/hook/stdin.ts', () => realStdin);
-  void mock.module('@/core/auth/auth-resolver.ts', () => realAuthResolver);
-  void mock.module('@/core/project-info.ts', () => realProjectInfo);
-  void mock.module(
-    '@/core/host/install/context-augmentation.ts',
-    () => realInstallContextAugmentation,
-  );
-  void mock.module(
-    '@/commands/integrate/_common/context-augmentation.ts',
-    () => realCommonContextAugmentation,
-  );
-  void mock.module('@/core/telemetry/project-uuid.ts', () => realProjectUuid);
-});
+import * as projectUuid from '@/core/telemetry/project-uuid.ts';
 
 const AUTH = { serverUrl: 'https://sonarcloud.io', token: 'tok', orgKey: 'my-org' };
 const PROJECT_KEY = 'my-project';
 
-function stubStdin(payload: Record<string, unknown>): void {
-  void mock.module('@/commands/hook/stdin.ts', () => ({
-    readStdinJsonWithRaw: mock(() =>
-      Promise.resolve({ raw: JSON.stringify(payload), parsed: payload }),
-    ),
-  }));
-}
-
-function stubProjectDiscovery(matched: boolean): void {
-  void mock.module('@/core/project-info.ts', () => ({
-    discoverProject: mock(() =>
-      Promise.resolve(
-        matched
-          ? { projectRoot: '/repo', projectKey: PROJECT_KEY, configSources: [] }
-          : { projectRoot: '/repo', configSources: [] },
-      ),
-    ),
-  }));
-}
-
-function stubCommonRuntime(overrides: {
-  auth?: typeof AUTH | null;
-  binaryPath?: string | null;
-  contextText?: string | null;
-}): { noteProjectMock: ReturnType<typeof mock>; captureMock: ReturnType<typeof mock> } {
-  const noteProjectMock = mock(() => undefined);
-  void mock.module('@/core/telemetry/project-uuid.ts', () => ({ noteProject: noteProjectMock }));
-
-  void mock.module('@/core/auth/auth-resolver.ts', () => ({
-    resolveAuth: mock(() => Promise.resolve(overrides.auth === undefined ? AUTH : overrides.auth)),
-  }));
-  void mock.module('@/core/host/install/context-augmentation.ts', () => ({
-    resolveContextAugmentationBinaryPath: mock(() =>
-      overrides.binaryPath === undefined ? '/bin/sonar-context-augmentation' : overrides.binaryPath,
-    ),
-  }));
-  const captureMock = mock(() =>
-    Promise.resolve(
-      overrides.contextText === undefined ? 'Vortex context text' : overrides.contextText,
-    ),
-  );
-  void mock.module('@/commands/integrate/_common/context-augmentation.ts', () => ({
-    resolveContextAugmentationSessionStartText: captureMock,
-  }));
-
-  return { noteProjectMock, captureMock };
-}
-
 describe('handleAgentSessionStart', () => {
   let writeSpy: ReturnType<typeof mock>;
   const originalWrite = process.stdout.write.bind(process.stdout);
-  // Same mocking primitive integrate.test.ts uses for Vortex entitlement, so this file
-  // never needs to (and must not) replace the whole @/core/vortex/entitlement.ts module.
-  let hasVortexEntitlementSpy: ReturnType<typeof spyOn>;
+  let spies: ReturnType<typeof spyOn>[] = [];
+
+  function track<T extends ReturnType<typeof spyOn>>(spy: T): T {
+    spies.push(spy);
+    return spy;
+  }
 
   afterEach(() => {
     process.stdout.write = originalWrite;
-    hasVortexEntitlementSpy?.mockRestore();
+    for (const spy of spies) spy.mockRestore();
+    spies = [];
   });
 
   function spyOnStdout(): void {
@@ -129,19 +59,63 @@ describe('handleAgentSessionStart', () => {
     process.stdout.write = writeSpy;
   }
 
+  function stubStdin(payload: Record<string, unknown>): void {
+    track(spyOn(stdin, 'readStdinJsonWithRaw')).mockResolvedValue({
+      raw: JSON.stringify(payload),
+      parsed: payload,
+    });
+  }
+
+  function stubStdinRejects(): void {
+    track(spyOn(stdin, 'readStdinJsonWithRaw')).mockRejectedValue(
+      new Error('stdin read timed out'),
+    );
+  }
+
+  function stubProjectDiscovery(matched: boolean): ReturnType<typeof spyOn> {
+    return track(
+      spyOn(projectInfo, 'discoverProject').mockResolvedValue(
+        matched
+          ? { projectRoot: '/repo', projectKey: PROJECT_KEY, configSources: [] }
+          : { projectRoot: '/repo', configSources: [] },
+      ),
+    );
+  }
+
   function stubEntitlement(result: { status: string } | Error): void {
-    hasVortexEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasVortexEntitlement');
+    const spy = track(spyOn(SonarQubeClient.prototype, 'hasVortexEntitlement'));
     if (result instanceof Error) {
-      hasVortexEntitlementSpy.mockRejectedValue(result);
+      spy.mockRejectedValue(result);
     } else {
-      hasVortexEntitlementSpy.mockResolvedValue(result);
+      spy.mockResolvedValue(result as never);
     }
   }
 
+  function stubCommonRuntime(overrides: {
+    auth?: typeof AUTH | null;
+    binaryPath?: string | null;
+    contextText?: string | null;
+  }): { noteProjectSpy: ReturnType<typeof spyOn>; captureSpy: ReturnType<typeof spyOn> } {
+    const noteProjectSpy = track(spyOn(projectUuid, 'noteProject')).mockReturnValue(undefined);
+    track(spyOn(authResolver, 'resolveAuth')).mockResolvedValue(
+      (overrides.auth === undefined ? AUTH : overrides.auth) as never,
+    );
+    track(
+      spyOn(installContextAugmentation, 'resolveContextAugmentationBinaryPath'),
+    ).mockReturnValue(
+      overrides.binaryPath === undefined ? '/bin/sonar-context-augmentation' : overrides.binaryPath,
+    );
+    const captureSpy = track(
+      spyOn(commonContextAugmentation, 'resolveContextAugmentationSessionStartText'),
+    ).mockResolvedValue(
+      overrides.contextText === undefined ? 'Vortex context text' : overrides.contextText,
+    );
+
+    return { noteProjectSpy, captureSpy };
+  }
+
   it('returns null agentSessionId and writes nothing on unparseable stdin', async () => {
-    void mock.module('@/commands/hook/stdin.ts', () => ({
-      readStdinJsonWithRaw: mock(() => Promise.reject(new Error('stdin read timed out'))),
-    }));
+    stubStdinRejects();
     spyOnStdout();
 
     const { handleAgentSessionStart } = await import('@/commands/hook/agent-session-start.ts');
@@ -151,9 +125,9 @@ describe('handleAgentSessionStart', () => {
     expect(writeSpy).not.toHaveBeenCalled();
   });
 
-  it('writes nothing when there is no resolved auth', async () => {
+  it('writes nothing when there is no resolved auth, without ever calling discoverProject', async () => {
     stubStdin({ session_id: 's1', cwd: '/repo' });
-    stubProjectDiscovery(true);
+    const discoverSpy = stubProjectDiscovery(true);
     stubCommonRuntime({ auth: null });
     spyOnStdout();
 
@@ -162,6 +136,7 @@ describe('handleAgentSessionStart', () => {
 
     expect(result).toEqual({ agentSessionId: 's1' });
     expect(writeSpy).not.toHaveBeenCalled();
+    expect(discoverSpy).not.toHaveBeenCalled();
   });
 
   it('writes nothing when no project resolves for the directory', async () => {
@@ -175,6 +150,24 @@ describe('handleAgentSessionStart', () => {
 
     expect(result).toEqual({ agentSessionId: 's1' });
     expect(writeSpy).not.toHaveBeenCalled();
+  });
+
+  it('resolves the project with the server-touching git-remote binding disabled', async () => {
+    // payload.cwd falls back to process.cwd() via existsSync() when it doesn't exist on disk,
+    // so use a real, existing directory here to assert exactly what gets passed through.
+    stubStdin({ session_id: 's1', cwd: process.cwd() });
+    const discoverSpy = stubProjectDiscovery(true);
+    stubCommonRuntime({});
+    stubEntitlement({ status: 'enabled' });
+    spyOnStdout();
+
+    const { handleAgentSessionStart } = await import('@/commands/hook/agent-session-start.ts');
+    await handleAgentSessionStart('SessionStart');
+
+    expect(discoverSpy).toHaveBeenCalledWith(
+      process.cwd(),
+      expect.objectContaining({ tryGitRemoteBinding: false }),
+    );
   });
 
   it('writes nothing when Vortex entitlement is not enabled', async () => {
@@ -219,10 +212,10 @@ describe('handleAgentSessionStart', () => {
     expect(writeSpy).not.toHaveBeenCalled();
   });
 
-  it('writes the Claude SessionStart hook envelope on success and notes the project', async () => {
+  it('writes the Claude SessionStart hook envelope on success, notes the project, and passes a capture deadline', async () => {
     stubStdin({ session_id: 's1', cwd: '/repo' });
     stubProjectDiscovery(true);
-    const { noteProjectMock } = stubCommonRuntime({});
+    const { noteProjectSpy, captureSpy } = stubCommonRuntime({});
     stubEntitlement({ status: 'enabled' });
     spyOnStdout();
 
@@ -238,7 +231,10 @@ describe('handleAgentSessionStart', () => {
         additionalContext: 'Vortex context text',
       },
     });
-    expect(noteProjectMock).toHaveBeenCalledWith(AUTH, PROJECT_KEY);
+    expect(noteProjectSpy).toHaveBeenCalledWith(AUTH, PROJECT_KEY);
+    expect(captureSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ timeoutMs: expect.any(Number) }),
+    );
   });
 
   it('uses SubagentStart as the hookEventName when invoked for that event', async () => {

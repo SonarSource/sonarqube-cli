@@ -42,20 +42,15 @@ interface SessionStartPayload {
   source?: string;
 }
 
-/** Max time to wait for CAG's session-start context before failing open. */
+/**
+ * Max time to wait for CAG's session-start context before failing open. Enforced by killing
+ * the CAG subprocess itself (see `resolveContextAugmentationSessionStartText`'s `timeoutMs`),
+ * not by racing a promise the caller then abandons — an abandoned-but-still-running child
+ * process (or a live network request) keeps holding stdio/socket handles open, and this CLI
+ * has no explicit `process.exit()`, so the hook process would stay alive exactly as long as
+ * anything it started keeps the event loop busy, regardless of what this function returns.
+ */
 const SESSION_START_CONTEXT_TIMEOUT_MS = 5000;
-
-/** Races `promise` against `timeoutMs`, resolving to `null` on timeout rather than rejecting. */
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
-  return Promise.race([
-    promise,
-    new Promise<null>((resolve) => {
-      setTimeout(() => {
-        resolve(null);
-      }, timeoutMs);
-    }),
-  ]);
-}
 
 export async function handleAgentSessionStart(
   hookEventName: 'SessionStart' | 'SubagentStart',
@@ -75,11 +70,26 @@ export async function handleAgentSessionStart(
     if (!auth) return { agentSessionId };
 
     // Same shared project-discovery pipeline as resolveSqaaProjectKey (CLI-970): known
-    // project mappings, local config files (sonar-project.properties/.sonarlint), then a
-    // git-remote-binding lookup — not limited to directories with a prior `sonar integrate`.
-    const discovered = await discoverProject(dir, { auth, silent: true });
+    // project mappings, then local config files (sonar-project.properties/.sonarlint) — not
+    // limited to directories with a prior `sonar integrate`. tryGitRemoteBinding is disabled:
+    // it's the one source that reaches the server, and unlike the CAG subprocess below its
+    // underlying HTTP call can't be killed from here, only bounded by the shared client's own
+    // (much longer) request timeout — not acceptable in a hot startup path fired on every
+    // session start and every subagent spawn. A repo relying solely on git-remote binding
+    // (no local config, no known mapping) simply gets no session-start context; `sonar
+    // analyze`/`sonar context` still resolve it normally since they call discoverProject
+    // without this override.
+    const discovered = await discoverProject(dir, {
+      auth,
+      silent: true,
+      tryGitRemoteBinding: false,
+    });
     if (!discovered.projectKey) return { agentSessionId };
 
+    // Bounded by the shared HTTP client's own (30s) request timeout — a pre-existing,
+    // non-cancellable ceiling this hook doesn't change. In the ordinary case this resolves
+    // in well under a second; Claude's own 60s hook timeout is the outer backstop if the
+    // network is genuinely slow.
     const { status } = await resolveVortexEntitlement(auth);
     if (status !== 'enabled') return { agentSessionId }; // over_consumption/not_entitled/etc. inject nothing
 
@@ -88,17 +98,15 @@ export async function handleAgentSessionStart(
 
     noteProject(auth, discovered.projectKey);
 
-    const contextText = await withTimeout(
-      resolveContextAugmentationSessionStartText({
-        binaryPath,
-        organization: discovered.organization ?? auth.orgKey,
-        projectKey: discovered.projectKey,
-        serverUrl: discovered.serverUrl ?? auth.serverUrl,
-        token: auth.token,
-        workspaceDir: discovered.projectRoot,
-      }),
-      SESSION_START_CONTEXT_TIMEOUT_MS,
-    );
+    const contextText = await resolveContextAugmentationSessionStartText({
+      binaryPath,
+      organization: discovered.organization ?? auth.orgKey,
+      projectKey: discovered.projectKey,
+      serverUrl: discovered.serverUrl ?? auth.serverUrl,
+      token: auth.token,
+      workspaceDir: discovered.projectRoot,
+      timeoutMs: SESSION_START_CONTEXT_TIMEOUT_MS,
+    });
     if (!contextText) return { agentSessionId };
 
     process.stdout.write(

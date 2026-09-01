@@ -106,7 +106,10 @@ export function createContextAugmentationSessionStartFeature<
               context,
               config.configDir,
               'SessionStart',
-              'startup|clear',
+              // Also resume/compact: compaction is exactly when a previously injected
+              // additionalContext is dropped from the conversation, so context must be
+              // re-injected there (and on resume) too, not only on a genuinely fresh start.
+              'startup|clear|resume|compact',
               SESSION_START_MARKER,
               config.sessionStartScriptPath,
             ),
