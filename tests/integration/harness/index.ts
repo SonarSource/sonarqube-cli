@@ -29,7 +29,7 @@ import { ENV_DO_NOT_TRACK, ENV_SQAA_RETRY_BASE_DELAY_MS } from '@/core/config-co
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 
 import { applyIsolatedSpawnEnv } from '../../_common/isolated-cli-env.js';
-import { getCliBinaryPath, runCli } from './cli-runner.js';
+import { getCliBinaryPath } from './cli-runner.js';
 import { Dir } from './dir';
 import { EnvironmentBuilder } from './environment-builder.js';
 import { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
@@ -215,23 +215,17 @@ export class TestHarness {
   }
 
   /**
-   * Runs the CLI binary with the given command string.
+   * Runs the CLI to completion with no stdin.
    *
    * Before spawning, applies the configured environment (writes state.json + seeds tokens).
    * Sets SONARQUBE_CLI_KEYCHAIN_FILE so the CLI uses the file-based keychain backend,
    * avoiding OS credential store access and macOS keychain prompts.
+   *
+   * Same process as `runInteractive()`, finished immediately. Use `runInteractive()`
+   * when the command needs stdin.
    */
   async run(command: string, options?: RunOptions): Promise<CliResult> {
-    return runCli(command, this.env(options), {
-      stdin: options?.stdin,
-      stdinChunks: options?.stdinChunks,
-      stdinChunkDelayMs: options?.stdinChunkDelayMs,
-      timeoutMs: options?.timeoutMs,
-      cwd: options?.cwd ?? this.cwd.path,
-      browserToken: options?.browserToken,
-      browserTokenName: options?.browserTokenName,
-      binaryPath: options?.binaryPath,
-    });
+    return this.runInteractive(command, options).waitFinish();
   }
 
   /**

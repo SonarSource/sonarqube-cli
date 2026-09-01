@@ -43,7 +43,6 @@ import { generateKeychainAccount } from '@/core/host/keychain.ts';
 
 import { version as CLI_VERSION } from '../../../../package.json';
 import { hookScriptName, TestHarness } from '../../harness';
-import { runCli } from '../../harness/cli-runner.js';
 import { buildHomeEnv, IS_WINDOWS } from '../../harness/platform';
 import {
   PROJECT_HOOK_SCRIPT_PATH,
@@ -274,10 +273,11 @@ describe('system reset --force', () => {
         .withKeychainToken(server.baseUrl(), 'reset-token');
 
       const account = generateKeychainAccount(server.baseUrl());
-      const env = harness.env();
+      // Write keychain.json so chmod can make that file read-only before run().
+      harness.env();
       try {
         chmodSync(harness.keychainJsonFile, 0o444);
-        const result = await runCli('system reset --force', env, { cwd: harness.cwd.path });
+        const result = await harness.run('system reset --force');
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toMatch(/Authentication:.*could not delete keychain entry/);
