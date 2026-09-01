@@ -146,8 +146,8 @@ export class InteractiveSession {
   private readonly browserTokenName?: string;
   private readonly encoder = new TextEncoder();
   private readonly waiters: Array<() => void> = [];
-  private readonly readersDone: Promise<void>;
-  private readonly timer: ReturnType<typeof setTimeout>;
+  private readersDone!: Promise<void>;
+  private timer!: ReturnType<typeof setTimeout>;
 
   private rawStdout = '';
   private rawStderr = '';
@@ -166,7 +166,9 @@ export class InteractiveSession {
     proc: InteractiveProcessHandle,
     options: InteractiveSessionOptions = {},
   ): InteractiveSession {
-    return new InteractiveSession(proc, options);
+    const session = new InteractiveSession(proc, options);
+    session.start();
+    return session;
   }
 
   private constructor(proc: InteractiveProcessHandle, options: InteractiveSessionOptions) {
@@ -176,9 +178,11 @@ export class InteractiveSession {
     this.startedAt = options.startedAt ?? Date.now();
     this.browserToken = options.browserToken;
     this.browserTokenName = options.browserTokenName;
+  }
 
+  private start(): void {
     this.readersDone = Promise.all([
-      this.consume(proc.stdout, (chunk) => {
+      this.consume(this.proc.stdout, (chunk) => {
         this.rawStdout += chunk;
         if (this.browserToken && !this.tokenDelivered) {
           this.tokenDelivered = tryDeliverToken(
@@ -189,13 +193,13 @@ export class InteractiveSession {
         }
         this.notify();
       }),
-      this.consume(proc.stderr, (chunk) => {
+      this.consume(this.proc.stderr, (chunk) => {
         this.rawStderr += chunk;
         this.notify();
       }),
     ]).then(() => undefined);
 
-    void proc.exited.then((code) => {
+    void this.proc.exited.then((code) => {
       this.exitCode = code;
       clearTimeout(this.timer);
       this.notify();
