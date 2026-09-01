@@ -38,7 +38,8 @@ import {
 import { ResolveOnlySecretsInstaller } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
-import { discreetSuccess, success, warn } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { countSelectedRisks } from '../analyze/dependency-risk-helpers/count-selected-risks.ts';
 import { DefaultScaScannerSpawner } from '../analyze/dependency-risk-helpers/default-sca-scanner-spawner.ts';
@@ -68,22 +69,23 @@ export interface DepRisksStageOptions {
 }
 
 export async function runDepRisksStage(options: DepRisksStageOptions): Promise<void> {
+  const { console } = options.ctx;
   const binaryPath = resolveScaScannerBinaryPath();
   if (!binaryPath) {
     logger.warn('Dependency-risks hook: sca-scanner binary not installed, skipping.');
-    warn(
+    console.warn(
       "Dependency-risks scan skipped: sca-scanner binary not installed; commit not blocked. Re-run 'sonar integrate git --dependency-risks -p <project>' to restore it.",
     );
     return;
   }
 
-  if (!(await shouldRunDependencyRiskAnalysis(binaryPath, options.changedFiles))) {
+  if (!(await shouldRunDependencyRiskAnalysis(binaryPath, options.changedFiles, console))) {
     return;
   }
 
   const filter = buildRiskFilter(HOOK_STATUS_FILTER, HOOK_MIN_SEVERITY);
   if (!filter) {
-    warn(
+    console.warn(
       `Dependency-risks hook: invalid filter (statuses='${HOOK_STATUS_FILTER}'); commit not blocked.`,
     );
     return;
@@ -103,7 +105,9 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
   } catch (err) {
     // The orchestrator already emitted a failures_count:1 event if the SCA scan itself failed;
     // a secrets pre-scan abort also lands here and must NOT be recorded as an SCA failure.
-    warn(`Dependency-risks scan failed; commit not blocked. Reason: ${(err as Error).message}`);
+    console.warn(
+      `Dependency-risks scan failed; commit not blocked. Reason: ${(err as Error).message}`,
+    );
     return;
   }
 
@@ -119,7 +123,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
 
   const matchedCount = countSelectedRisks(viewModel);
   if (matchedCount === 0) {
-    discreetSuccess('No dependency risks found.');
+    console.discreetSuccess('No dependency risks found.');
     return;
   }
 
@@ -141,7 +145,11 @@ function formatSeverityBreakdown(viewModel: DependencyRisksViewModel): string {
     .join(', ');
 }
 
-async function shouldRunDependencyRiskAnalysis(binaryPath: string, changedFiles: string[]) {
+async function shouldRunDependencyRiskAnalysis(
+  binaryPath: string,
+  changedFiles: string[],
+  console: Console = new TerminalConsole(),
+) {
   const patterns = await new ScaWatchPatternsRunner(
     new ScaScannerNoopInstaller(binaryPath),
     new DefaultScaScannerSpawner(),
@@ -152,7 +160,9 @@ async function shouldRunDependencyRiskAnalysis(binaryPath: string, changedFiles:
   }
 
   if (!anyFileMatches(changedFiles, patterns)) {
-    success('No dependency manifests changed in this commit — skipping dependency-risks scan.');
+    console.success(
+      'No dependency manifests changed in this commit — skipping dependency-risks scan.',
+    );
     return false;
   }
 

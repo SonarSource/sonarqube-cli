@@ -30,7 +30,7 @@ import type {
   FeatureDeclaration,
 } from '@/core/framework/features/types.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockTty, setMockUi } from '@/core/ui';
-
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 function application(feature: FeatureDeclaration): FeatureApplication {
   return { feature, targetRoot: '/repo', scope: 'project' };
 }
@@ -130,6 +130,7 @@ describe('install preview', () => {
       await renderInstallPreviewAndConfirm(
         [application({ id: 'a', displayName: 'Feature A', previewDescription: 'Does A.' })],
         false,
+        new TerminalConsole(),
       );
 
       const methods = getMockUiCalls().map((call) => call.method);
@@ -141,6 +142,7 @@ describe('install preview', () => {
       await renderInstallPreviewAndConfirm(
         [application({ id: 'a', displayName: 'Feature A', previewDescription: 'Does A.' })],
         true,
+        new TerminalConsole(),
       );
 
       const methods = getMockUiCalls().map((call) => call.method);
@@ -149,7 +151,7 @@ describe('install preview', () => {
     });
 
     it('renders nothing when there is nothing to install', async () => {
-      await renderInstallPreviewAndConfirm([], false);
+      await renderInstallPreviewAndConfirm([], false, new TerminalConsole());
       expect(getMockUiCalls()).toHaveLength(0);
     });
   });

@@ -20,7 +20,8 @@
 
 import { CommandFailedError } from '@/core/command-error.ts';
 import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
-import { warn } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import type { SqaaAuthResolution } from './sqaa-auth.ts';
 import { confirmLargeChangeset } from './sqaa-auth.ts';
@@ -54,6 +55,7 @@ interface SqaaDepthResolution {
 export function resolveSqaaContext(
   resolution: SqaaAuthResolution,
   policy: { requireProject: boolean },
+  console: Console = new TerminalConsole(),
 ): SqaaResolvedContext | null {
   switch (resolution.kind) {
     case 'resolved':
@@ -70,7 +72,7 @@ export function resolveSqaaContext(
           },
         );
       }
-      warn(
+      console.warn(
         'Vortex analysis skipped: no project configured. Specify one with --project or run: sonar integrate',
       );
       return null;
@@ -91,9 +93,10 @@ export async function confirmLargeRunIfNeeded(
   fileCount: number,
   force?: boolean,
   format: OutputFormat = 'text',
+  console: Console = new TerminalConsole(),
 ): Promise<boolean> {
   if (!force && format !== 'json' && fileCount > SQAA_LARGE_CHANGESET_THRESHOLD) {
-    return await confirmLargeChangeset(fileCount);
+    return await confirmLargeChangeset(fileCount, console);
   }
   return true;
 }

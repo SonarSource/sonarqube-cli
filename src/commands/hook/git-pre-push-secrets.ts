@@ -57,15 +57,15 @@ export async function runSecretsStage(
       ctx,
     );
   } catch (err) {
-    handleScanError('Push', err as Error);
+    handleScanError('Push', err as Error, ctx.console);
     return;
   }
 
   const { result, parsed } = scan;
-  warnScanErrors(parsed.errors);
+  warnScanErrors(parsed.errors, ctx.console);
 
   if ((result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND) {
-    printSecretsFindingsOrStderr(parsed.issues, result.stderr);
+    printSecretsFindingsOrStderr(parsed.issues, result.stderr, ctx.console);
     throw new CommandFailedError('Secrets detected in pushed commits.', {
       remediationHint:
         'Remove the reported secret, amend the commit if needed, then retry the push.',

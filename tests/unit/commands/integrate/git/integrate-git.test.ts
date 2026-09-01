@@ -469,7 +469,7 @@ describe('integrateGit', () => {
     } catch {
       // expected cancellation
     }
-    expect(printGitPreflightSummarySpy).toHaveBeenCalledWith('/my/project');
+    expect(printGitPreflightSummarySpy).toHaveBeenCalledWith('/my/project', MOCK_AUTH_CTX.console);
   });
 
   it('records the husky integration when core.hooksPath points to .husky', async () => {
@@ -591,7 +591,11 @@ describe('integrateGit', () => {
       spawnSpy.mockRestore();
       rmSync(TEMP_DIR, { recursive: true, force: true });
     }
-    expect(discoverProjectSpy).toHaveBeenCalledWith(TEMP_DIR, { auth: MOCK_AUTH, silent: true });
+    expect(discoverProjectSpy).toHaveBeenCalledWith(TEMP_DIR, {
+      auth: MOCK_AUTH,
+      silent: true,
+      console: MOCK_AUTH_CTX.console,
+    });
     expect(caughtError).toBeInstanceOf(CommandFailedError);
     expect((caughtError as Error).message).toContain('Installation cancelled');
   });

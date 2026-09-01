@@ -22,6 +22,7 @@ import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.t
 import { isSonarQubeCloud } from '@/core/auth/auth-resolver.ts';
 import { type BrowserAuthResult, generateTokenViaBrowser } from '@/core/auth/token.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
+import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 import {
   deleteStaleTokens,
@@ -37,16 +38,8 @@ import {
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
-import {
-  confirmPrompt,
-  discreetSuccess,
-  print,
-  promptUntilValid,
-  selectPrompt,
-  success,
-  textPrompt,
-  warn,
-} from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import {
   reportRevokeServerTokenOutcome,
@@ -56,10 +49,14 @@ import {
 /**
  * Login command - authenticate and save token with organization
  */
-export async function authLogin(options: AuthLoginOptions): Promise<void> {
+export async function authLogin(
+  options: AuthLoginOptions,
+  ctx: CommandInvocationContext = new CommandInvocationContext(new TerminalConsole()),
+): Promise<void> {
+  const { console } = ctx;
   validateLoginOptions(options);
-  const server = await resolveServer(options);
-  await confirmServerTrust(server);
+  const server = await resolveServer(options, console);
+  await confirmServerTrust(server, console);
 
   const isCloud = isSonarQubeCloud(server);
   // SonarQube Server has no organizations, so --org cannot mean anything there. Dropping it here
@@ -67,10 +64,10 @@ export async function authLogin(options: AuthLoginOptions): Promise<void> {
   const orgOption = isCloud ? options.org?.trim() : undefined;
 
   try {
-    const auth = await getOrGenerateToken(server, orgOption);
+    const auth = await getOrGenerateToken(server, orgOption, console);
     const { token, tokenName, reusedExistingToken } = auth;
 
-    const org = await resolveOrganization(server, isCloud, orgOption, auth);
+    const org = await resolveOrganization(server, isCloud, orgOption, auth, console);
 
     const state = loadState();
     await deleteStaleTokens(state.auth.connections, server, org);
@@ -104,7 +101,7 @@ export async function authLogin(options: AuthLoginOptions): Promise<void> {
     }
 
     const displayServer = isCloud ? `${server} (${org})` : server;
-    success(`Authentication successful for: ${displayServer}`);
+    console.success(`Authentication successful for: ${displayServer}`);
   } finally {
     // The token step leaves stdin resumed for Windows keypresses, and a resumed TTY keeps the
     // process alive. Release it on every exit path, not only on success. That step resumes stdin
@@ -126,16 +123,21 @@ async function resolveOrganization(
   isCloud: boolean,
   orgOption: string | undefined,
   auth: BrowserAuthResult & { reusedExistingToken: boolean },
+  console: Console,
 ): Promise<string | undefined> {
   if (!isCloud) {
     return undefined;
   }
 
   try {
-    return await validateOrSelectOrganization(new SonarQubeClient(server, auth.token), orgOption);
+    return await validateOrSelectOrganization(
+      new SonarQubeClient(server, auth.token),
+      orgOption,
+      console,
+    );
   } catch (error) {
     if (!auth.reusedExistingToken) {
-      await discardGeneratedToken(server, auth.token, auth.tokenName);
+      await discardGeneratedToken(server, auth.token, auth.tokenName, console);
     }
     throw error;
   }
@@ -151,10 +153,12 @@ async function discardGeneratedToken(
   serverUrl: string,
   token: string,
   tokenName: string | undefined,
+  console: Console,
 ): Promise<void> {
   const outcome = await revokeServerTokenIfPossible({ serverUrl, tokenName }, token);
   reportRevokeServerTokenOutcome(outcome, {
     continuingMessage: 'Revoke it manually on the server if needed.',
+    console,
   });
 }
 
@@ -164,18 +168,19 @@ async function discardGeneratedToken(
 async function getOrGenerateToken(
   server: string,
   org: string | undefined,
+  console: Console,
 ): Promise<BrowserAuthResult & { reusedExistingToken: boolean }> {
   const existingToken = await getKeystoreToken(server, org);
   if (existingToken) {
     const displayServer = isSonarQubeCloud(server) ? `${server} (${org})` : server;
-    print(`Token already exists for: ${displayServer}`);
-    print('You are already authenticated');
+    console.print(`Token already exists for: ${displayServer}`);
+    console.print('You are already authenticated');
     return { token: existingToken, reusedExistingToken: true };
   }
 
-  print(`\nAuthenticating with: ${server}`);
-  const authResult = await generateTokenViaBrowser(server);
-  discreetSuccess('Token received');
+  console.print(`\nAuthenticating with: ${server}`);
+  const authResult = await generateTokenViaBrowser(server, console);
+  console.discreetSuccess('Token received');
   return { ...authResult, reusedExistingToken: false };
 }
 
@@ -230,11 +235,14 @@ const MAX_ORGANIZATION_ATTEMPTS = 5;
  * Enter — is reported and asked again rather than ending the login. Asking again cannot fix an
  * outage, and piped input has nobody to ask, so those still abort on the first rejection.
  */
-async function promptForOrganizationKey(client: SonarQubeClient): Promise<string> {
+async function promptForOrganizationKey(
+  client: SonarQubeClient,
+  console: Console,
+): Promise<string> {
   let lastError = organizationRequiredError();
 
   for (let attempt = 0; attempt < MAX_ORGANIZATION_ATTEMPTS; attempt++) {
-    const manualOrg = await textPrompt('Enter organization key');
+    const manualOrg = await console.textPrompt('Enter organization key');
     if (manualOrg === null) {
       throw new CommandFailedError('Organization selection cancelled');
     }
@@ -244,7 +252,7 @@ async function promptForOrganizationKey(client: SonarQubeClient): Promise<string
       if (!process.stdin.isTTY) {
         throw lastError;
       }
-      warn(lastError.message);
+      console.warn(lastError.message);
       continue;
     }
 
@@ -256,7 +264,7 @@ async function promptForOrganizationKey(client: SonarQubeClient): Promise<string
     if (access.status !== 'not_found' || !process.stdin.isTTY) {
       throw lastError;
     }
-    warn(lastError.message);
+    console.warn(lastError.message);
   }
 
   throw lastError;
@@ -275,23 +283,26 @@ async function listMemberOrganizations(
   }
 }
 
-async function getUserSelectedOrganization(client: SonarQubeClient): Promise<string> {
+async function getUserSelectedOrganization(
+  client: SonarQubeClient,
+  console: Console,
+): Promise<string> {
   // Deduce organization from API: if user is member of exactly one org, use it
   const { organizations: memberOrgs, total: orgTotal } = await listMemberOrganizations(client);
   if (memberOrgs.length === 1 && orgTotal === 1) {
     const singleOrg = memberOrgs[0].key;
-    print(`Using organization (only member): ${singleOrg}`);
+    console.print(`Using organization (only member): ${singleOrg}`);
     return singleOrg;
   }
 
   // No org memberships — prompt for manual entry
   if (memberOrgs.length === 0) {
-    return promptForOrganizationKey(client);
+    return promptForOrganizationKey(client, console);
   }
 
   // Multiple orgs available — let user pick from a list or enter manually
   if (orgTotal > memberOrgs.length) {
-    print(
+    console.print(
       `Showing first ${memberOrgs.length} of ${orgTotal} organizations. Use manual entry to select a different organization.`,
     );
   }
@@ -304,13 +315,13 @@ async function getUserSelectedOrganization(client: SonarQubeClient): Promise<str
     { value: MANUAL_ENTRY, label: 'Enter organization key manually' },
   ];
 
-  const choice = await selectPrompt<string>('Select an organization', orgOptions);
+  const choice = await console.selectPrompt<string>('Select an organization', orgOptions);
   if (choice === null) {
     throw new CommandFailedError('Organization selection cancelled');
   }
 
   if (choice === MANUAL_ENTRY) {
-    return promptForOrganizationKey(client);
+    return promptForOrganizationKey(client, console);
   }
 
   return choice;
@@ -322,19 +333,20 @@ async function getUserSelectedOrganization(client: SonarQubeClient): Promise<str
 async function validateOrSelectOrganization(
   client: SonarQubeClient,
   org: string | undefined,
+  console: Console,
 ): Promise<string> {
   if (org) {
     await assertOrganizationAccessible(client, org);
-    print(`Using organization: ${org}`);
+    console.print(`Using organization: ${org}`);
     return org;
   }
 
   // Try to find organization in project configs first (skip the org listing)
-  const configOrg = await discoverOrganization();
+  const configOrg = await discoverOrganization(console);
   if (configOrg) {
     const access = await client.resolveOrganizationAccess(configOrg);
     if (access.status === 'accessible') {
-      print(`Using organization from config: ${configOrg}`);
+      console.print(`Using organization from config: ${configOrg}`);
       return configOrg;
     }
     // A stale key in a checked-in file cannot be corrected from here, so fall through to the
@@ -343,18 +355,21 @@ async function validateOrSelectOrganization(
     if (access.status === 'check_failed') {
       throw organizationAccessError(configOrg, access);
     }
-    warn(`Organization '${configOrg}' from project config is not accessible.`);
+    console.warn(`Organization '${configOrg}' from project config is not accessible.`);
   }
 
-  return await getUserSelectedOrganization(client);
+  return await getUserSelectedOrganization(client, console);
 }
 
-export async function confirmServerTrust(server: string): Promise<void> {
+export async function confirmServerTrust(
+  server: string,
+  console: Console = new TerminalConsole(),
+): Promise<void> {
   if (isSonarQubeCloud(server)) {
     return;
   }
-  warn('Only connect to servers you trust.');
-  const confirmed = await confirmPrompt(`Connect to: ${server}?`, true);
+  console.warn('Only connect to servers you trust.');
+  const confirmed = await console.confirmPrompt(`Connect to: ${server}?`, true);
   if (!confirmed) {
     throw new CommandFailedError('Login cancelled');
   }
@@ -369,8 +384,8 @@ function isValidUrl(url: string): boolean {
   }
 }
 
-async function selectServerFromPrompt(): Promise<string> {
-  const serverType = await selectPrompt('Where would you like to connect?', [
+async function selectServerFromPrompt(console: Console): Promise<string> {
+  const serverType = await console.selectPrompt('Where would you like to connect?', [
     { value: 'cloud', label: 'SonarQube Cloud' },
     { value: 'server', label: 'SonarQube Server (self-hosted)' },
   ]);
@@ -380,7 +395,7 @@ async function selectServerFromPrompt(): Promise<string> {
   }
 
   if (serverType === 'cloud') {
-    const region = await selectPrompt('Which SonarQube Cloud region?', [
+    const region = await console.selectPrompt('Which SonarQube Cloud region?', [
       { value: SONARCLOUD_URL, label: 'EU (sonarcloud.io)' },
       { value: SONARCLOUD_US_URL, label: 'US (sonarqube.us)' },
     ]);
@@ -390,7 +405,7 @@ async function selectServerFromPrompt(): Promise<string> {
     return region;
   }
 
-  const url = await promptUntilValid(
+  const url = await console.promptUntilValid(
     'Enter server URL',
     (v) => !!v.trim() && isValidUrl(v.trim()),
     'Please enter a valid URL (for example https://sonarqube.mycompany.com/sonarqube).',
@@ -401,15 +416,15 @@ async function selectServerFromPrompt(): Promise<string> {
   return url.trim();
 }
 
-async function resolveServer(options: AuthLoginOptions): Promise<string> {
+async function resolveServer(options: AuthLoginOptions, console: Console): Promise<string> {
   if (options.server) {
     return options.server;
   }
-  const configServer = await discoverServer();
+  const configServer = await discoverServer(console);
   if (configServer) {
     return configServer;
   }
-  return selectServerFromPrompt();
+  return selectServerFromPrompt(console);
 }
 
 function validateLoginOptions(options: AuthLoginOptions): void {

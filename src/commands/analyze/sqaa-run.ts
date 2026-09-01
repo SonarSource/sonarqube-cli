@@ -22,8 +22,9 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { timed } from '@/core/observability/timed.ts';
 import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
-import { print } from '@/core/ui';
 import { SqaaProgress } from '@/core/ui/components/sqaa-progress.ts';
+import type { Console } from '@/core/ui/console.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 import { vortexUnavailableCommandMessage } from '@/core/vortex/availability-messages.ts';
 import { recheckVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
@@ -128,20 +129,35 @@ async function enrichForbiddenGlobalError(
   };
 }
 
-async function printVortexUnavailableForForbidden(auth: ResolvedAuth): Promise<void> {
-  printVortexUnavailable(await recheckVortexEntitlement(auth));
+async function printVortexUnavailableForForbidden(
+  auth: ResolvedAuth,
+  console: Console,
+): Promise<void> {
+  printVortexUnavailable(await recheckVortexEntitlement(auth), console);
 }
 
-async function printSqaaJsonReport(report: SqaaJsonReport, auth: ResolvedAuth): Promise<void> {
+function resolveRunConsole(options: { telemetryCtx?: { console: Console } }): Console {
+  return options.telemetryCtx?.console ?? new TerminalConsole();
+}
+
+async function printSqaaJsonReport(
+  report: SqaaJsonReport,
+  auth: ResolvedAuth,
+  console: Console = new TerminalConsole(),
+): Promise<void> {
   if (report.globalError?.kind === 'forbidden') {
     await enrichForbiddenGlobalError(report, auth);
   }
-  print(JSON.stringify(report, null, 2));
+  console.print(JSON.stringify(report, null, 2));
 }
 
-function displaySingleFileReport(report: SqaaJsonReport, displayDepth: SqaaAnalysisDepth): void {
+function displaySingleFileReport(
+  report: SqaaJsonReport,
+  displayDepth: SqaaAnalysisDepth,
+  console: Console,
+): void {
   const file = report.files[0];
-  displaySqaaResults(file.issues, file.errors, file.path, displayDepth);
+  displaySqaaResults(file.issues, file.errors, file.path, displayDepth, console);
 }
 
 export async function runSqaaAnalysesTallyForResolved(
@@ -226,13 +242,13 @@ export async function runSqaaAnalysis(
   const filePath = toRelativePosixPath(file);
 
   if (format === 'json') {
-    await printSqaaJsonReport(report, auth);
+    await printSqaaJsonReport(report, auth, resolveRunConsole(options));
   } else if (error instanceof SqaaForbiddenError) {
-    await printVortexUnavailableForForbidden(auth);
+    await printVortexUnavailableForForbidden(auth, resolveRunConsole(options));
   } else if (error) {
-    printSingleFileTextFailure(filePath, error, displayDepth);
+    printSingleFileTextFailure(filePath, error, displayDepth, resolveRunConsole(options));
   } else {
-    displaySingleFileReport(report, displayDepth);
+    displaySingleFileReport(report, displayDepth, resolveRunConsole(options));
   }
 
   applyExitCode(report.summary.totalIssues, report.summary.totalFailures);
@@ -253,7 +269,7 @@ export async function runSqaaAnalysisOnExplicitFiles(
       runSqaaAnalysesTallyForResolved(files, allPaths, resolved, branch, wireDepth, displayDepth),
     );
     const report = buildJsonReport(tally, [], allPaths, cwd, displayDepth);
-    await printSqaaJsonReport(report, options.auth);
+    await printSqaaJsonReport(report, options.auth, resolveRunConsole(options));
     finishSqaaRun(tally, durationMs, options);
     return;
   }
@@ -272,9 +288,12 @@ export async function runSqaaAnalysisOnExplicitFiles(
   const { result: tally, durationMs } = await timed(() => runAnalyses(ctx));
   progress.finish();
   if (tally.globalError instanceof SqaaForbiddenError) {
-    await printVortexUnavailableForForbidden(options.auth);
+    await printVortexUnavailableForForbidden(options.auth, resolveRunConsole(options));
   }
-  printSqaaTextReport({ tally, allPaths, ignoredPaths: [], analysisDepth: displayDepth });
+  printSqaaTextReport(
+    { tally, allPaths, ignoredPaths: [], analysisDepth: displayDepth },
+    resolveRunConsole(options),
+  );
   finishSqaaRun(tally, durationMs, options);
 }
 
@@ -292,7 +311,7 @@ export async function runSqaaAnalysisOnFiles(
       runSqaaAnalysesTallyForResolved(files, allPaths, resolved, branch, wireDepth, displayDepth),
     );
     const report = buildJsonReport(tally, ignored, allPaths, repoRoot, displayDepth);
-    await printSqaaJsonReport(report, options.auth);
+    await printSqaaJsonReport(report, options.auth, resolveRunConsole(options));
     finishSqaaRun(tally, durationMs, options);
     return;
   }
@@ -312,8 +331,11 @@ export async function runSqaaAnalysisOnFiles(
   const { result: tally, durationMs } = await timed(() => runAnalyses(ctx));
   progress.finish();
   if (tally.globalError instanceof SqaaForbiddenError) {
-    await printVortexUnavailableForForbidden(options.auth);
+    await printVortexUnavailableForForbidden(options.auth, resolveRunConsole(options));
   }
-  printSqaaTextReport({ tally, allPaths, ignoredPaths, analysisDepth: displayDepth });
+  printSqaaTextReport(
+    { tally, allPaths, ignoredPaths, analysisDepth: displayDepth },
+    resolveRunConsole(options),
+  );
   finishSqaaRun(tally, durationMs, options);
 }

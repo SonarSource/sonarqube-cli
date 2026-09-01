@@ -29,7 +29,8 @@ import type {
 import { askUser, install, skip, uninstall } from '@/core/framework/features';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
-import { info, warn } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 import { resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 import { isContextAugmentationSkipped } from './context-augmentation.ts';
@@ -132,11 +133,15 @@ export function vortexInstallDecision(disposition: VortexDisposition | undefined
   return skip();
 }
 
-async function resolveScaEnabled(auth: ResolvedAuth, isServer: boolean): Promise<boolean> {
+async function resolveScaEnabled(
+  auth: ResolvedAuth,
+  isServer: boolean,
+  console: Console = new TerminalConsole(),
+): Promise<boolean> {
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
   const scaStatus = await client.getScaEnablement(isServer ? 'on-premise' : 'cloud', auth.orgKey);
   if (scaStatus === 'check_failed') {
-    warn(VORTEX_SCA_CHECK_FAILED_MESSAGE);
+    console.warn(VORTEX_SCA_CHECK_FAILED_MESSAGE);
   }
   return scaStatus === 'enabled';
 }
@@ -147,34 +152,35 @@ async function resolveScaEnabled(auth: ResolvedAuth, isServer: boolean): Promise
  */
 export async function resolveVortexSetup(
   params: ResolveVortexSetupParams,
+  console: Console = new TerminalConsole(),
 ): Promise<ResolvedVortexSetup> {
   const { status } = await resolveVortexEntitlement(params.auth);
   const isServer = !isSonarQubeCloud(params.auth.serverUrl);
   const settled = (disposition: VortexDisposition): ResolvedVortexSetup => ({ disposition });
 
   if (status === 'not_applicable') {
-    info(isServer ? VORTEX_SERVER_UNAVAILABLE_MESSAGE : VORTEX_PROMOTION_MESSAGE);
+    console.info(isServer ? VORTEX_SERVER_UNAVAILABLE_MESSAGE : VORTEX_PROMOTION_MESSAGE);
     return settled('remove');
   }
 
   if (status === 'check_failed') {
-    warn(VORTEX_CHECK_FAILED_MESSAGE);
+    console.warn(VORTEX_CHECK_FAILED_MESSAGE);
     return settled('preserve');
   }
   if (status === 'not_entitled') {
-    info(isServer ? VORTEX_SERVER_NOT_ENTITLED_MESSAGE : VORTEX_PROMOTION_MESSAGE);
+    console.info(isServer ? VORTEX_SERVER_NOT_ENTITLED_MESSAGE : VORTEX_PROMOTION_MESSAGE);
     return settled('remove');
   }
   if (params.isGlobal) {
-    warn(VORTEX_GLOBAL_SKIP_MESSAGE);
+    console.warn(VORTEX_GLOBAL_SKIP_MESSAGE);
     return settled('preserve');
   }
   if (!params.projectKey || (!isServer && !params.auth.orgKey)) {
-    warn(isServer ? VORTEX_MISSING_PROJECT_MESSAGE : VORTEX_MISSING_CLOUD_CONTEXT_MESSAGE);
+    console.warn(isServer ? VORTEX_MISSING_PROJECT_MESSAGE : VORTEX_MISSING_CLOUD_CONTEXT_MESSAGE);
     return settled('preserve');
   }
   if (status === 'over_consumption') {
-    warn(VORTEX_OVER_CONSUMPTION_MESSAGE);
+    console.warn(VORTEX_OVER_CONSUMPTION_MESSAGE);
   }
 
   if (isContextAugmentationSkipped()) {

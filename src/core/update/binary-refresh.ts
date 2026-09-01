@@ -24,6 +24,7 @@
 import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import { installScaScannerBinary } from '@/core/host/install/sca-scanner.ts';
 import { installSecretsBinary } from '@/core/host/install/secrets.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import logger from '../observability/logger.ts';
 import type { CliState } from '../state/state.ts';
@@ -41,7 +42,7 @@ export async function updateSecretsBinaryIfNeeded(): Promise<void> {
     return;
   }
 
-  await installSecretsBinary();
+  await installSecretsBinary(new TerminalConsole());
 }
 
 /**
@@ -56,7 +57,7 @@ export async function updateScaScannerBinaryIfNeeded(): Promise<void> {
     return;
   }
 
-  await installScaScannerBinary();
+  await installScaScannerBinary(new TerminalConsole());
 }
 
 function hasBinaryInState(state: CliState, binaryName: string): boolean {

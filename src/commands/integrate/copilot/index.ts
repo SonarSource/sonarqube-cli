@@ -31,19 +31,26 @@ export async function integrateCopilot(
   options: IntegrateAgentOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ) {
-  const { auth } = ctx;
+  const { auth, console } = ctx;
   if (!options.nonInteractive) {
     printAgentNonInteractiveAlternativeHint(
+      console,
       'sonar integrate copilot --non-interactive',
       'sonar integrate copilot --non-interactive -g',
     );
   }
 
-  const integrateCtx = await displayAgentIntegratePrelude('Copilot', 'copilot', options, auth);
+  const integrateCtx = await displayAgentIntegratePrelude(
+    'Copilot',
+    'copilot',
+    options,
+    auth,
+    console,
+  );
 
   const existingGlobalHookPath = integrateCtx.isGlobal
     ? undefined
-    : await detectGlobalSecretsHook();
+    : await detectGlobalSecretsHook(console);
 
   await finalizeAgentInstall<CopilotIntegrationOptions>({
     integrationId: COPILOT_INTEGRATION_ID,

@@ -37,6 +37,7 @@ import type {
 } from '@/core/framework/features';
 import { isContainerIntegrationContext } from '@/core/framework/features/types.ts';
 import { getDefaultState, type InstalledIntegrationFeature } from '@/core/state/state.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 const binaryInstall = await import('@/core/host/install/binary.ts');
 void mock.module('@/core/host/install/binary.ts', () => ({
@@ -72,7 +73,7 @@ async function selectForInvocation<TOptions>(
   invocation: IntegrationInvocation<TOptions>,
 ) {
   const applications = await buildApplications(invocation, integration.features);
-  return selectFeaturesForInvocation(integration, invocation, applications);
+  return selectFeaturesForInvocation(integration, invocation, applications, new TerminalConsole());
 }
 
 const { findMockUiCall, getMockUiCalls, queueMockResponse, setMockUi } = await import('@/core/ui');

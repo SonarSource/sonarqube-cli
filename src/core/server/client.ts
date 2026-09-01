@@ -29,7 +29,8 @@ import {
   HTTP_STATUS_TOO_MANY_REQUESTS,
 } from '@/core/http-constants.ts';
 import { INVOCATION_ID, SONAR_INVOCATION_ID_HEADER } from '@/core/telemetry/invocation-id.ts';
-import { print } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { version as VERSION } from '../../../package.json';
 import logger from '../observability/logger.ts';
@@ -187,6 +188,7 @@ export class SonarQubeClient {
     data?: string,
     contentType: 'json' | 'form' = 'json',
     debug?: boolean,
+    console: Console = new TerminalConsole(),
   ) {
     const headers = this.commonHeaders(contentType);
     let requestBody: string | undefined;
@@ -211,10 +213,13 @@ export class SonarQubeClient {
     const url = `${transformedServerURL}${normalizedEndpoint}`;
 
     if (debug) {
-      print(`request method: ${method}`, 'stderr');
-      print(`request url: ${url}`, 'stderr');
-      print(`request headers: ${JSON.stringify(redactSensitiveHeaders(headers))}`, 'stderr');
-      print(`request body: ${requestBody}`, 'stderr');
+      console.print(`request method: ${method}`, 'stderr');
+      console.print(`request url: ${url}`, 'stderr');
+      console.print(
+        `request headers: ${JSON.stringify(redactSensitiveHeaders(headers))}`,
+        'stderr',
+      );
+      console.print(`request body: ${requestBody}`, 'stderr');
     }
 
     const response = await fetchAuthenticated(
@@ -223,8 +228,8 @@ export class SonarQubeClient {
     );
 
     if (debug) {
-      print(`response status: ${response.status}`, 'stderr');
-      print(`response headers: ${JSON.stringify(response.headers)}`, 'stderr');
+      console.print(`response status: ${response.status}`, 'stderr');
+      console.print(`response headers: ${JSON.stringify(response.headers)}`, 'stderr');
     }
 
     await this.raiseForStatus(response, method);

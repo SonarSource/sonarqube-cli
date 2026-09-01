@@ -25,7 +25,6 @@ import type {
   CommandInvocationContext,
 } from '@/core/commands/invocation-context.ts';
 import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
-import { text } from '@/core/ui';
 
 import { resolveSqaaAuthAndProject } from './sqaa-auth.ts';
 import {
@@ -143,6 +142,7 @@ async function analyzeSqaaExplicitFiles(
     telemetryCallerCommand,
     telemetryCtx,
   } = params;
+  const { console } = telemetryCtx;
   const resolvedBranch = await resolveSqaaBranch(branch, entries[0].absolutePath);
 
   if (entries.length === 1) {
@@ -161,11 +161,11 @@ async function analyzeSqaaExplicitFiles(
   }
 
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'multi-file', forcedDepth);
-  const resolution = await resolveSqaaAuthAndProject(auth, project);
-  const resolved = resolveSqaaContext(resolution, { requireProject });
+  const resolution = await resolveSqaaAuthAndProject(auth, project, undefined, console);
+  const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
 
-  if (!(await confirmLargeRunIfNeeded(entries.length, force, format))) return;
+  if (!(await confirmLargeRunIfNeeded(entries.length, force, format, console))) return;
 
   await runSqaaAnalysisOnExplicitFiles(entries, {
     resolved,
@@ -207,28 +207,29 @@ async function analyzeSqaaChangeSet(params: {
     telemetryCallerCommand,
     telemetryCtx,
   } = params;
+  const { console } = telemetryCtx;
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'change-set', forcedDepth);
 
   const changeSet = await resolveChangeSet(process.cwd(), { staged, base });
   const resolvedBranch = await resolveSqaaBranchAtRepoRoot(branch, changeSet.repoRoot);
 
   if (changeSet.files.length === 0 && changeSet.ignored.length === 0) {
-    text('Vortex analysis: no files in the change set to analyze.');
+    console.text('Vortex analysis: no files in the change set to analyze.');
     return;
   }
 
   if (changeSet.files.length === 0) {
-    text(
+    console.text(
       'Vortex analysis: no files to analyze — all change set files were excluded (binary or oversized).',
     );
     return;
   }
 
-  const resolution = await resolveSqaaAuthAndProject(auth, project, changeSet.repoRoot);
-  const resolved = resolveSqaaContext(resolution, { requireProject });
+  const resolution = await resolveSqaaAuthAndProject(auth, project, changeSet.repoRoot, console);
+  const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
 
-  if (!(await confirmLargeRunIfNeeded(changeSet.files.length, force, format))) return;
+  if (!(await confirmLargeRunIfNeeded(changeSet.files.length, force, format, console))) return;
 
   await runSqaaAnalysisOnFiles(changeSet, {
     resolved,

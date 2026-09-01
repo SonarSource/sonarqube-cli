@@ -47,6 +47,7 @@ export interface GitPreCommitOptions {
 async function resolveDepRisksProjectKey(
   options: GitPreCommitOptions,
   auth: ResolvedAuth | null,
+  console: CommandInvocationContext['console'],
 ): Promise<string | undefined> {
   if (options.project) {
     return options.project;
@@ -54,7 +55,7 @@ async function resolveDepRisksProjectKey(
   if (!options.dependencyRisks || !auth) {
     return undefined;
   }
-  const discovered = await discoverProject(process.cwd(), { auth, silent: true });
+  const discovered = await discoverProject(process.cwd(), { auth, silent: true, console });
   return discovered.projectKey;
 }
 
@@ -67,7 +68,7 @@ export async function gitPreCommit(
 
   // Validated up front, independent of staged files, so a misconfigured hook
   // (--dependency-risks with no way to resolve a project) always fails loudly.
-  const projectKey = await resolveDepRisksProjectKey(options, auth);
+  const projectKey = await resolveDepRisksProjectKey(options, auth, ctx.console);
 
   if (options.dependencyRisks && !projectKey) {
     throw new InvalidOptionError('--dependency-risks requires -p <projectKey>.');

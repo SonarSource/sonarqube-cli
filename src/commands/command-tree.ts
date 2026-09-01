@@ -223,12 +223,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'SonarQube Server URL, SonarQube Cloud EU (https://sonarcloud.io), or SonarQube Cloud US (https://sonarqube.us). Defaults to SonarQube Cloud EU.',
     )
     .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
-    .anonymousAction((_ctx, options: AuthLoginOptions) => authLogin(options));
+    .anonymousAction((ctx, options: AuthLoginOptions) => authLogin(options, ctx));
 
   auth
     .command('logout')
     .description('Remove active connection token from keychain')
-    .anonymousAction((_ctx) => authLogout());
+    .anonymousAction((ctx) => authLogout(ctx));
 
   auth
     .command('status')
@@ -634,7 +634,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('Configure telemetry settings')
     .option('--enabled', 'Enable collection of anonymous usage statistics')
     .option('--disabled', 'Disable collection of anonymous usage statistics')
-    .anonymousAction((_ctx, options: ConfigureTelemetryOptions) => configureTelemetry(options));
+    .anonymousAction((ctx, options: ConfigureTelemetryOptions) => configureTelemetry(options, ctx));
 
   // System diagnostics and maintenance
   const system = COMMAND_TREE.command('system')
@@ -648,7 +648,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('Show overall system status: authentication, installed binaries, and integrations')
     .showUpdateNotification((opts) => !opts.json)
     .option('--json', 'Output as JSON for machine consumption')
-    .anonymousAction((_ctx, options: SystemStatusOptions) => systemStatus(options));
+    .anonymousAction((ctx, options: SystemStatusOptions) => systemStatus(options, ctx));
 
   system
     .command('reset')
@@ -660,7 +660,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       '--force',
       'Skip the interactive confirmation prompt (required for non-interactive use)',
     )
-    .anonymousAction((_ctx, options: SystemResetOptions) => systemReset(options));
+    .anonymousAction((ctx, options: SystemResetOptions) => systemReset(options, ctx));
 
   // Update the CLI to the latest version
   if (CURRENT_DISTRIBUTION.enableSelfUpdate) {
@@ -671,7 +671,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       })
       .option('--status', 'Check for a newer version without installing')
       .option('--force', 'Install the latest version even if already up to date')
-      .anonymousAction((_ctx, options: UpdateVersionOptions) => updateVersion(options));
+      .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx));
 
     // Hidden compatibility alias for `sonar update`.
     COMMAND_TREE.command('self-update', { hidden: true })
@@ -679,7 +679,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       .stage(Stage.Deprecated({ sinceVersion: '1.4', replacement: 'sonar update' }))
       .option('--status', 'Check for a newer version without installing')
       .option('--force', 'Install the latest version even if already up to date')
-      .anonymousAction((_ctx, options: UpdateVersionOptions) => updateVersion(options));
+      .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx));
   }
 
   const runCommand = COMMAND_TREE.command('run', { hidden: true }).description(

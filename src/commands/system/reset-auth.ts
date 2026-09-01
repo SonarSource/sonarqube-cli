@@ -22,6 +22,8 @@ import { deleteToken, getToken } from '@/core/host/keychain.ts';
 import type { AuthConnection, CliState } from '@/core/state/state.ts';
 import type { PhaseItem } from '@/core/ui';
 import { phaseItem } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import {
   reportRevokeServerTokenOutcome,
@@ -47,7 +49,10 @@ function formatKeychainWarning(target: string, operation: 'read' | 'delete', err
   return `${target}: could not ${operation} keychain entry (${detail})`;
 }
 
-async function purgeConnectionAuth(conn: AuthConnection): Promise<ConnectionOutcome> {
+async function purgeConnectionAuth(
+  conn: AuthConnection,
+  console: Console,
+): Promise<ConnectionOutcome> {
   const target = formatConnectionTarget(conn);
   const keychainWarnings: string[] = [];
 
@@ -62,6 +67,7 @@ async function purgeConnectionAuth(conn: AuthConnection): Promise<ConnectionOutc
   reportRevokeServerTokenOutcome(revokeOutcome, {
     serverUrl: conn.serverUrl,
     continuingMessage: 'Continuing with local reset.',
+    console,
   });
 
   try {
@@ -104,14 +110,17 @@ function buildAuthResetPhaseItem(
   );
 }
 
-export async function purgeAuth(state: CliState): Promise<AuthResetResult> {
+export async function purgeAuth(
+  state: CliState,
+  console: Console = new TerminalConsole(),
+): Promise<AuthResetResult> {
   // Delete tokens sequentially: the file-backed keychain (CI/tests) does an
   // unsynchronized read-modify-write of a single JSON store, so concurrent
   // deletions race and can clobber each other. Server-side revocation still
   // fails fast via its own 10s timeout.
   const outcomes: ConnectionOutcome[] = [];
   for (const conn of state.auth.connections) {
-    outcomes.push(await purgeConnectionAuth(conn));
+    outcomes.push(await purgeConnectionAuth(conn, console));
   }
 
   const authConnectionIds = outcomes.map((outcome) => outcome.connectionId);

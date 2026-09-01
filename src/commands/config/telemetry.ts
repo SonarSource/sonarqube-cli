@@ -20,22 +20,27 @@
 // Configure CLI settings
 
 import { InvalidOptionError } from '@/core/command-error.ts';
+import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
 import { describeTelemetryStatus, isDoNotTrackRequested } from '@/core/telemetry/enabled.ts';
-import { info, success } from '@/core/ui';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 export interface ConfigureTelemetryOptions {
   enabled?: boolean;
   disabled?: boolean;
 }
 
-export function configureTelemetry(options: ConfigureTelemetryOptions): Promise<void> {
+export function configureTelemetry(
+  options: ConfigureTelemetryOptions,
+  ctx: CommandInvocationContext = new CommandInvocationContext(new TerminalConsole()),
+): Promise<void> {
+  const { console } = ctx;
   if (options.enabled && options.disabled) {
     return Promise.reject(new InvalidOptionError('Cannot use both --enabled and --disabled'));
   }
   if (!options.enabled && !options.disabled) {
     const state = loadState();
-    info(describeTelemetryStatus(state));
+    console.info(describeTelemetryStatus(state));
     return Promise.resolve();
   }
   const state = loadState();
@@ -43,10 +48,10 @@ export function configureTelemetry(options: ConfigureTelemetryOptions): Promise<
   state.telemetry.enabled = persistedEnabled;
   saveState(state);
   if (persistedEnabled && isDoNotTrackRequested()) {
-    success('Telemetry preference saved as enabled.');
-    info('Telemetry is currently disabled (DO_NOT_TRACK is set).');
+    console.success('Telemetry preference saved as enabled.');
+    console.info('Telemetry is currently disabled (DO_NOT_TRACK is set).');
   } else {
-    success(`Telemetry ${persistedEnabled ? 'enabled' : 'disabled'}.`);
+    console.success(`Telemetry ${persistedEnabled ? 'enabled' : 'disabled'}.`);
   }
   return Promise.resolve();
 }

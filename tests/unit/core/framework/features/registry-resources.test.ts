@@ -433,7 +433,9 @@ describe('declarative integration framework - resources and state recording', ()
 
     const applied = await dependency.installOrUpdate(context);
 
-    expect(installBinarySpy).toHaveBeenCalledWith(SECRETS_SPEC);
+    expect(installBinarySpy).toHaveBeenCalledWith(SECRETS_SPEC, {
+      console: expect.anything(),
+    });
     expect(applied).toEqual({
       id: 'binary',
       version: SECRETS_SPEC.version,

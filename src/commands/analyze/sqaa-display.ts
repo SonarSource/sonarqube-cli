@@ -28,8 +28,9 @@ import type {
   SqaaIssue,
   VortexEntitlementStatus,
 } from '@/core/server/client.ts';
-import { text } from '@/core/ui';
 import { bold, dim, green, red, softBlue, yellow } from '@/core/ui/colors.ts';
+import type { Console } from '@/core/ui/console.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 import { vortexUnavailableCommandMessage } from '@/core/vortex/availability-messages.ts';
 
 import type { FileResult, FileSuccess, RunTally } from './sqaa-analysis.ts';
@@ -460,16 +461,19 @@ function renderChangeSetReportLines(
 }
 
 /** Unified change-set text report (file rows, inline issues, summary footer). */
-export function printSqaaTextReport(options: PrintSqaaTextReportOptions): void {
+export function printSqaaTextReport(
+  options: PrintSqaaTextReportOptions,
+  console: Console = new TerminalConsole(),
+): void {
   const { tally, allPaths, ignoredPaths = [], analysisDepth } = options;
   const stats = computeRunSummaryStats(tally, allPaths, analysisDepth);
 
   for (const line of renderChangeSetReportLines(tally, allPaths, ignoredPaths, true)) {
-    text(line);
+    console.text(line);
   }
 
-  text('');
-  text(formatSqaaRunSummaryColored(stats));
+  console.text('');
+  console.text(formatSqaaRunSummaryColored(stats));
   applyExitCode(stats);
 }
 
@@ -478,6 +482,7 @@ export function printSingleFileTextFailure(
   filePath: string,
   error: Error,
   analysisDepth: SqaaAnalysisDepth = 'STANDARD',
+  console: Console = new TerminalConsole(),
 ): void {
   const tally: RunTally = {
     allResults: [{ file: filePath, filePath, failure: error }],
@@ -485,11 +490,14 @@ export function printSingleFileTextFailure(
     totalErrors: 0,
     totalFailures: 1,
   };
-  printSqaaTextReport({ tally, allPaths: [filePath], analysisDepth });
+  printSqaaTextReport({ tally, allPaths: [filePath], analysisDepth }, console);
 }
 
-export function printVortexUnavailable(status: VortexEntitlementStatus): void {
-  text(vortexUnavailableCommandMessage(status));
+export function printVortexUnavailable(
+  status: VortexEntitlementStatus,
+  console: Console = new TerminalConsole(),
+): void {
+  console.text(vortexUnavailableCommandMessage(status));
 }
 
 export function applyExitCode(stats: SqaaRunSummaryStats): void;
@@ -518,6 +526,7 @@ export function displaySqaaResults(
   errors: Array<{ code: string; message: string }> | null | undefined,
   filePath: string,
   analysisDepth: SqaaAnalysisDepth = 'STANDARD',
+  console: Console = new TerminalConsole(),
 ): number {
   const result: FileSuccess = {
     file: filePath,
@@ -535,7 +544,7 @@ export function displaySqaaResults(
   }
 
   for (const line of lines) {
-    text(line);
+    console.text(line);
   }
 
   const stats: SqaaRunSummaryStats = {
@@ -549,8 +558,8 @@ export function displaySqaaResults(
     hasGlobalError: false,
   };
 
-  text('');
-  text(formatSqaaRunSummaryColored(stats));
+  console.text('');
+  console.text(formatSqaaRunSummaryColored(stats));
   applyExitCode(stats);
 
   return issues.length;

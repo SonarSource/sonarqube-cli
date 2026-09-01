@@ -35,10 +35,10 @@ import { IssuesClient } from '@/core/server/issues.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import type { SonarQubeIssue } from '@/core/server/types.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
-import { blank, info, multiSelectPrompt, print, success, withSpinner } from '@/core/ui';
 import { cyan, dim, red, yellow } from '@/core/ui/colors.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
-
+import type { Console } from '@/core/ui/console.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 export interface RemediateOptions {
   project?: string;
   issues?: string;
@@ -62,13 +62,16 @@ export async function remediate(
   options: RemediateOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const { auth } = ctx;
+  const { auth, console } = ctx;
   // Pure validation first (no I/O): catches malformed --issues with zero round-trips.
   const suppliedIssueKeys =
     options.issues === undefined ? undefined : parseIssueKeys(options.issues);
 
   if (suppliedIssueKeys === undefined) {
-    printAgentNonInteractiveAlternativeHint('sonar remediate --issues <issue-key-1>,<issue-key-2>');
+    printAgentNonInteractiveAlternativeHint(
+      console,
+      'sonar remediate --issues <issue-key-1>,<issue-key-2>',
+    );
   }
 
   assertCloudConnection(auth);
@@ -82,7 +85,7 @@ export async function remediate(
 
   if (!(await confirmEntitlement(client, orgKey))) return;
 
-  const projectKey = await resolveProjectKey(options, auth);
+  const projectKey = await resolveProjectKey(options, auth, console);
   noteProject(auth, projectKey);
   const selectedKeys =
     suppliedIssueKeys ?? (await selectIssuesInteractively(client, orgKey, projectKey));
@@ -115,16 +118,22 @@ function assertInteractiveOrIssuesSupplied(suppliedIssueKeys: string[] | undefin
  * Prints the applicable message and returns false when remediation is not
  * available for this organisation. Throws when entitlement could not be verified.
  */
-async function confirmEntitlement(client: SonarQubeClient, orgKey: string): Promise<boolean> {
+async function confirmEntitlement(
+  client: SonarQubeClient,
+  orgKey: string,
+  console: Console = new TerminalConsole(),
+): Promise<boolean> {
   const { status: entitlement } = await client.checkAiRemediationEntitlement(orgKey);
   if (entitlement === 'not_eligible') {
-    blank();
-    info(`The Remediation Agent is not available for your organisation. See ${AGENTIC_PACK_URL}`);
+    console.blank();
+    console.info(
+      `The Remediation Agent is not available for your organisation. See ${AGENTIC_PACK_URL}`,
+    );
     return false;
   }
   if (entitlement === 'not_enabled') {
-    blank();
-    info(
+    console.blank();
+    console.info(
       `The Remediation Agent is not enabled for your organisation. Contact your admin to enable it.`,
     );
     return false;
@@ -138,11 +147,15 @@ async function confirmEntitlement(client: SonarQubeClient, orgKey: string): Prom
   return true;
 }
 
-async function resolveProjectKey(options: RemediateOptions, auth: ResolvedAuth): Promise<string> {
+async function resolveProjectKey(
+  options: RemediateOptions,
+  auth: ResolvedAuth,
+  console: CommandAuthenticatedInvocationContext['console'],
+): Promise<string> {
   if (options.project) {
     return options.project;
   }
-  const discovered = await discoverProject(process.cwd(), { auth });
+  const discovered = await discoverProject(process.cwd(), { auth, console });
   if (!discovered.projectKey) {
     throw new CommandFailedError('Could not determine project key.', {
       remediationHint: 'Use --project <key> to specify it.',
@@ -163,12 +176,13 @@ async function submitRemediationJob(
   projectId: string,
   issueKeys: string[],
   orgKey: string,
+  console: Console = new TerminalConsole(),
 ): Promise<string> {
-  blank();
+  console.blank();
   const jobRequest = { projectId, issueKeys, triggerSource: 'CLI' as const };
   logger.debug(`scheduleAgentJob request: ${JSON.stringify(jobRequest)}`);
   try {
-    const response = await withSpinner('Submitting remediation job', () =>
+    const response = await console.withSpinner('Submitting remediation job', () =>
       client.scheduleAgentJob(jobRequest),
     );
     return response.taskId;
@@ -186,13 +200,16 @@ function reportSubmissionSuccess(
   projectKey: string,
   selectedKeys: string[],
   taskId: string,
+  console: Console = new TerminalConsole(),
 ): void {
   const issueWord = selectedKeys.length === 1 ? 'issue' : 'issues';
-  blank();
-  success(`Submitted ${selectedKeys.length} ${issueWord} for remediation\nJob: job/${taskId}`);
-  blank();
+  console.blank();
+  console.success(
+    `Submitted ${selectedKeys.length} ${issueWord} for remediation\nJob: job/${taskId}`,
+  );
+  console.blank();
   const activityUrl = `${auth.serverUrl}${AGENT_ACTIVITY_PATH}?id=${encodeURIComponent(projectKey)}`;
-  info(
+  console.info(
     `The agent will create pull requests for the selected issues. Track progress:\n${activityUrl}`,
   );
 }
@@ -238,19 +255,20 @@ async function selectIssuesInteractively(
   client: SonarQubeClient,
   orgKey: string,
   projectKey: string,
+  console: Console = new TerminalConsole(),
 ): Promise<string[] | null> {
   const issuesClient = new IssuesClient(client);
 
-  const issues = await withSpinner(`Fetching eligible issues for ${projectKey}`, () =>
+  const issues = await console.withSpinner(`Fetching eligible issues for ${projectKey}`, () =>
     fetchEligibleIssues(issuesClient, orgKey, projectKey),
   );
   if (issues.length > 0) {
-    print(`  ${issues.length} eligible issues found`);
+    console.print(`  ${issues.length} eligible issues found`);
   }
 
   if (issues.length === 0) {
-    blank();
-    info(
+    console.blank();
+    console.info(
       'No eligible issues found. The agent may not support the languages or rules in this project.',
     );
     return null;
@@ -260,8 +278,8 @@ async function selectIssuesInteractively(
     (a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity),
   );
 
-  blank();
-  const selection = await multiSelectPrompt(
+  console.blank();
+  const selection = await console.multiSelectPrompt(
     'Which issues should the agent fix?',
     sorted.map((issue) => ({
       value: issue.key,
@@ -270,8 +288,8 @@ async function selectIssuesInteractively(
   );
 
   if (!selection || selection.length === 0) {
-    blank();
-    print('No issues selected.');
+    console.blank();
+    console.print('No issues selected.');
     return null;
   }
   return selection;

@@ -29,8 +29,9 @@ import { startLoopbackServer } from '@/core/host/loopback-server.ts';
 import logger from '@/core/observability/logger.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { fetchServerVersion, isAtLeast } from '@/core/server/server-info.ts';
-import { isMockActive, pressEnterKeyPrompt, print, warn } from '@/core/ui';
+import { isMockActive } from '@/core/ui';
 import { blue } from '@/core/ui/colors.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_METHOD_NOT_ALLOWED = 405;
@@ -105,15 +106,15 @@ export function buildAuthURL(serverURL: string, port: number, serverVersion?: st
  * Open browser, with fallback message if it fails.
  * Skipped when CI=true — token must be delivered directly to the loopback server.
  */
-export async function openBrowserWithFallback(authURL: string): Promise<void> {
+export async function openBrowserWithFallback(authURL: string, console: Console): Promise<void> {
   if (process.env.CI === 'true') {
     return;
   }
   try {
     await openBrowser(authURL);
   } catch (error) {
-    warn(`Failed to open browser automatically: ${String(error)}`);
-    print('Copy the URL above and open it manually');
+    console.warn(`Failed to open browser automatically: ${String(error)}`);
+    console.print('Copy the URL above and open it manually');
   }
 }
 
@@ -186,6 +187,7 @@ export function createRequestHandler(onToken: (token: string, tokenName?: string
  */
 export async function waitForTokenInteractive(
   serverTokenPromise: Promise<BrowserAuthResult>,
+  console: Console,
 ): Promise<BrowserAuthResult> {
   return new Promise<BrowserAuthResult>((resolve, reject) => {
     let settled = false;
@@ -216,7 +218,7 @@ export async function waitForTokenInteractive(
       })
       .catch(() => undefined);
 
-    print('  ⏳  Waiting for authorization... or paste token and press Enter:');
+    console.print('  ⏳  Waiting for authorization... or paste token and press Enter:');
     rl.question('', (line) => {
       if (settled) return;
       const userToken = line.trim();
@@ -230,7 +232,8 @@ export async function waitForTokenInteractive(
  */
 export async function generateTokenViaBrowser(
   serverURL: string,
-  openBrowserFn: (url: string) => Promise<void> = openBrowserWithFallback,
+  console: Console,
+  openBrowserFn: (url: string) => Promise<void> = (url) => openBrowserWithFallback(url, console),
 ): Promise<BrowserAuthResult> {
   let resolveToken: ((result: BrowserAuthResult) => void) | null = null;
 
@@ -255,9 +258,9 @@ export async function generateTokenViaBrowser(
 
   const authURL = buildAuthURL(serverURL, server.port, serverVersion);
 
-  print('🔑 Obtaining access token from SonarQube...');
-  print(`URL: ${blue(authURL)}`);
-  await pressEnterKeyPrompt('Press Enter to open the browser');
+  console.print('🔑 Obtaining access token from SonarQube...');
+  console.print(`URL: ${blue(authURL)}`);
+  await console.pressEnterKeyPrompt('Press Enter to open the browser');
   await openBrowserFn(authURL);
 
   let authResult: BrowserAuthResult | undefined;
@@ -267,7 +270,7 @@ export async function generateTokenViaBrowser(
       authResult = await tokenPromise;
     } else {
       // Interactive: race between browser delivery and manual paste
-      authResult = await waitForTokenInteractive(tokenPromise);
+      authResult = await waitForTokenInteractive(tokenPromise, console);
     }
   } finally {
     await server.close().catch((err: unknown) => {
