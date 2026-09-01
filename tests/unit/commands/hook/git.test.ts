@@ -25,7 +25,7 @@ import * as authResolver from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 import * as processLib from '@/core/process/process.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+import { clearMockUiCalls, findMockUiCall, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import * as analyzeSecrets from '../../../../src/commands/analyze/secrets.ts';
 import { gitPreCommit } from '../../../../src/commands/hook/git-pre-commit.ts';
@@ -134,7 +134,11 @@ describe('gitPreCommit', () => {
   });
 
   it('resolves without throwing when no secrets are found', async () => {
-    await gitPreCommit({}, [], makeCtx()); // resolves cleanly — test fails if it throws
+    await gitPreCommit({}, [], makeCtx());
+
+    expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
+    expect(getMockUiCalls().filter((c) => c.method === 'print')).toHaveLength(0);
+    expect(findMockUiCall('warn', 'Secrets scan failed')).toBeUndefined();
   });
 
   it('skips scan when no staged files', async () => {
@@ -194,7 +198,13 @@ describe('gitPreCommit', () => {
   it('resolves without throwing when scan fails with keychain auth (fail soft)', async () => {
     runSecretsBinarySpy.mockRejectedValue(new Error('binary crashed'));
 
-    await gitPreCommit({}, [], makeCtx()); // must not throw
+    await gitPreCommit({}, [], makeCtx());
+
+    expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
+    expect(
+      findMockUiCall('warn', 'Commit is not blocked, but secrets were not checked'),
+    ).toBeDefined();
+    expect(findMockUiCall('warn', 'Reason: binary crashed')).toBeDefined();
   });
 
   it('skips scan when git spawn throws while listing staged files', async () => {
@@ -285,7 +295,11 @@ describe('gitPrePush', () => {
   });
 
   it('resolves without throwing when no secrets found', async () => {
-    await gitPrePush([], makeCtx()); // resolves cleanly — test fails if it throws
+    await gitPrePush([], makeCtx());
+
+    expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
+    expect(getMockUiCalls().filter((c) => c.method === 'print')).toHaveLength(0);
+    expect(findMockUiCall('warn', 'Secrets scan failed')).toBeUndefined();
   });
 
   it('skips scan when refs are empty', async () => {
@@ -363,7 +377,13 @@ describe('gitPrePush', () => {
   it('resolves without throwing when scan fails with keychain auth (fail soft)', async () => {
     runSecretsBinarySpy.mockRejectedValue(new Error('binary crashed'));
 
-    await gitPrePush([], makeCtx()); // must not throw
+    await gitPrePush([], makeCtx());
+
+    expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
+    expect(
+      findMockUiCall('warn', 'Push is not blocked, but secrets were not checked'),
+    ).toBeDefined();
+    expect(findMockUiCall('warn', 'Reason: binary crashed')).toBeDefined();
   });
 
   it('calls the secrets binary once per ref group', async () => {
