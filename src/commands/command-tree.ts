@@ -36,8 +36,7 @@ import {
 import { resolveGitlabToken } from '@/core/gitlab/token.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
-import { GENERIC_HTTP_METHODS } from '@/core/server/client.ts';
-import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
+import { GENERIC_HTTP_METHODS, MAX_PAGE_SIZE } from '@/core/server/client.ts';
 import { tryLoadState } from '@/core/state/state-repository.ts';
 import { flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
@@ -117,6 +116,7 @@ import {
 } from './list/issues.ts';
 import { listProjects, type ListProjectsOptions } from './list/projects.ts';
 import {
+  DEFAULT_TOP as QUALITY_GATE_DEFAULT_TOP,
   qualityGateStatus,
   type QualityGateStatusOptions,
   VALID_FORMATS as QUALITY_GATE_VALID_FORMATS,
@@ -297,6 +297,17 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .option('--branch <branch>', 'Branch name. Cannot be combined with --pull-request.')
     .option('--pull-request <pull-request>', 'Pull request ID. Cannot be combined with --branch.')
     .option('--all', 'Also show passing conditions. By default only failing conditions are shown.')
+    .addOption(
+      new SonarOption(
+        '--category <category>',
+        'Only show the breakdown for one category of failing conditions',
+      ),
+    )
+    .addOption(
+      new SonarOption('--top <top>', 'Number of files to include in the breakdown, per condition')
+        .default(QUALITY_GATE_DEFAULT_TOP)
+        .argParser(parseInteger),
+    )
     .authenticatedAction((ctx, options: QualityGateStatusOptions) =>
       qualityGateStatus(options, ctx),
     );

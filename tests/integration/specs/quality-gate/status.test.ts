@@ -733,6 +733,7 @@ describe('quality-gate status', () => {
     },
     { timeout: 15000 },
   );
+
   it(
     'includes a coverage breakdown in JSON for a failing new_coverage condition',
     async () => {
@@ -826,7 +827,7 @@ describe('quality-gate status', () => {
   );
 
   it(
-    'reports the total matching file count separately from the truncated default top-3 entries',
+    'reports the total matching file count separately from the truncated worst-N entries',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -855,7 +856,9 @@ describe('quality-gate status', () => {
         .start();
       harness.withAuth(server.baseUrl(), 'test-token');
 
-      const result = await harness.run(`quality-gate status --project my-project --format json`);
+      const result = await harness.run(
+        `quality-gate status --project my-project --top 2 --format json`,
+      );
 
       const parsed = JSON.parse(result.stdout);
       const condition = parsed.qualityGate.conditions.find(
@@ -863,11 +866,10 @@ describe('quality-gate status', () => {
       );
       expect(condition.breakdown).toEqual({
         totalCount: 5,
-        fetchedCount: 3,
+        fetchedCount: 2,
         entries: [
           { path: 'src/a.ts', value: '10.0', formattedValue: '10.0%' },
           { path: 'src/b.ts', value: '20.0', formattedValue: '20.0%' },
-          { path: 'src/c.ts', value: '30.0', formattedValue: '30.0%' },
         ],
       });
     },
@@ -1110,7 +1112,7 @@ describe('quality-gate status', () => {
   );
 
   it(
-    'shows a "N more" hint with no suggestion when the table omits entries the JSON totalCount accounts for',
+    'shows a "N more" hint with a --top suggestion when the table omits entries the JSON totalCount accounts for',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -1139,15 +1141,73 @@ describe('quality-gate status', () => {
         .start();
       harness.withAuth(server.baseUrl(), 'test-token');
 
-      const result = await harness.run(`quality-gate status --project my-project --format table`);
+      const result = await harness.run(
+        `quality-gate status --project my-project --top 2 --format table`,
+      );
 
       const lines = result.stdout.split('\n');
       const conditionIndex = lines.findIndex((l) => l.includes('Coverage on New Code'));
       expect(lines[conditionIndex + 1]).toContain('src/a.ts');
       expect(lines[conditionIndex + 2]).toContain('src/b.ts');
-      expect(lines[conditionIndex + 3]).toContain('src/c.ts');
-      expect(lines[conditionIndex + 4]).toContain('… 2 more not shown');
-      expect(lines[conditionIndex + 4]).not.toContain('--top');
+      expect(lines[conditionIndex + 3]).toContain('… 3 more');
+      expect(lines[conditionIndex + 3]).toContain('use --top 5 to display all');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'clamps the suggested --top to MAX_PAGE_SIZE and says "to display more" when totalCount exceeds it',
+    async () => {
+      const manyFiles = Array.from({ length: 501 }, (_, i) => ({
+        path: `src/file${i}.ts`,
+        value: '10.0',
+      }));
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '62.4',
+              },
+            ])
+            .withComponentTreeFiles('new_coverage', manyFiles),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status --project my-project --top 3 --format table`,
+      );
+
+      const lines = result.stdout.split('\n');
+      const hintLine = lines.find((l) => l.includes('more'));
+      expect(hintLine).toContain('… 498 more');
+      // 500 (MAX_PAGE_SIZE), not 501 (totalCount) - a suggested --top the command would reject
+      // defeats the purpose of the hint.
+      expect(hintLine).toContain('use --top 500 to display more');
+      expect(hintLine).not.toContain('use --top 501');
+
+      // The suggested --top must actually be runnable, not just look like a number.
+      const followUp = await harness.run(
+        `quality-gate status --project my-project --top 500 --format table`,
+      );
+      expect(followUp.exitCode).not.toBe(2);
+
+      // Having followed the suggestion, --top is now at MAX_PAGE_SIZE - raising it further
+      // wouldn't reveal the last remaining file, so the hint must stop suggesting a --top value
+      // instead of repeating the exact command the user just ran.
+      const followUpHintLine = followUp.stdout.split('\n').find((l) => l.includes('more'));
+      expect(followUpHintLine).toContain('… 1 more');
+      expect(followUpHintLine).toContain('capped at 500 results per fetch');
+      expect(followUpHintLine).not.toContain('--top');
     },
     { timeout: 15000 },
   );
@@ -1402,7 +1462,41 @@ describe('quality-gate status', () => {
   );
 
   it(
-    'requests the top 3 files by default',
+    'passes --top through to the component_tree request',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '62.4',
+              },
+            ])
+            .withComponentTreeFiles('new_coverage', [{ path: 'src/checkout.ts', value: '31.0' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      await harness.run(`quality-gate status --project my-project --top 7`);
+
+      const componentTreeRequests = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/measures/component_tree');
+      expect(componentTreeRequests).toHaveLength(1);
+      expect(componentTreeRequests[0].query.ps).toBe('7');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'requests the default --top of 500 files when --top is not given',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -1430,7 +1524,179 @@ describe('quality-gate status', () => {
         .getRecordedRequests()
         .filter((r) => r.path === '/api/measures/component_tree');
       expect(componentTreeRequests).toHaveLength(1);
-      expect(componentTreeRequests[0].query.ps).toBe('3');
+      expect(componentTreeRequests[0].query.ps).toBe('500');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'includes the coverage breakdown when --category coverage is passed explicitly',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '62.4',
+              },
+            ])
+            .withComponentTreeFiles('new_coverage', [{ path: 'src/checkout.ts', value: '31.0' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status --project my-project --category coverage --format json`,
+      );
+
+      expect(result.exitCode).toBe(51);
+      const parsed = JSON.parse(result.stdout);
+      const condition = parsed.qualityGate.conditions.find(
+        (c: { metric: string }) => c.metric === 'new_coverage',
+      );
+      expect(condition.breakdown).toEqual({
+        totalCount: 1,
+        fetchedCount: 1,
+        entries: [{ path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' }],
+      });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'omits the breakdown and warns on stderr for a non-coverage condition even when --category coverage is given',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withProjectStatus('ERROR').withConditions([
+            {
+              status: 'ERROR',
+              metricKey: 'new_violations',
+              comparator: 'GT',
+              errorThreshold: '0',
+              actualValue: '3',
+            },
+          ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status --project my-project --category coverage --format json`,
+      );
+
+      // stdout must stay valid JSON even though a warning was also emitted, on stderr.
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.conditions).toHaveLength(1);
+      expect(
+        parsed.qualityGate.conditions.every(
+          (c: { breakdown?: unknown }) => c.breakdown === undefined,
+        ),
+      ).toBe(true);
+      expect(result.stderr).toContain("No failing conditions match category 'coverage'");
+      const componentTreeRequests = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/measures/component_tree');
+      expect(componentTreeRequests).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'does not warn when --category matches a failing condition, even if enrichment finds no files',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code' }])
+        .withProject('my-project', (p) =>
+          p.withProjectStatus('ERROR').withConditions([
+            {
+              status: 'ERROR',
+              metricKey: 'new_coverage',
+              comparator: 'LT',
+              errorThreshold: '80',
+              actualValue: '62.4',
+            },
+          ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status --project my-project --category coverage --format json`,
+      );
+
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.conditions).toHaveLength(1);
+      expect(
+        parsed.qualityGate.conditions.every(
+          (c: { breakdown?: unknown }) => c.breakdown === undefined,
+        ),
+      ).toBe(true);
+      expect(result.stderr).not.toContain('No failing conditions match category');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'does not warn about an unmatched --category when the quality gate passed entirely',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withProjectStatus('OK').withConditions([
+            {
+              status: 'OK',
+              metricKey: 'new_violations',
+              comparator: 'GT',
+              errorThreshold: '0',
+              actualValue: '0',
+            },
+          ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status --project my-project --category coverage --format json`,
+      );
+
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.conditions).toEqual([]);
+      expect(result.stderr).not.toContain('No failing conditions match category');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'does not warn about an unmatched --category when the project has no quality gate status yet',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project')
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status --project my-project --category coverage --format json`,
+      );
+
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.conditions).toEqual([]);
+      expect(result.stderr).not.toContain('No failing conditions match category');
     },
     { timeout: 15000 },
   );
@@ -1577,6 +1843,94 @@ describe('quality-gate status', () => {
         .getRecordedRequests()
         .filter((r) => r.path === '/api/measures/component_tree');
       expect(componentTreeRequests).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'rejects an invalid --category value, before making any network call',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK'))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status --project my-project --category duplications`,
+      );
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain(
+        "Invalid --category option: 'duplications'. Must be one of: coverage",
+      );
+      const statusRequests = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/qualitygates/project_status');
+      expect(statusRequests).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'rejects a non-numeric --top value',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK'))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --top abc`);
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain('Not a number');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'rejects a --top value below 1, before making any network call',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK'))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --top 0`);
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain(
+        "Invalid --top option: '0'. Must be an integer between 1 and 500",
+      );
+      const statusRequests = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/qualitygates/project_status');
+      expect(statusRequests).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'rejects a --top value above 500',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK'))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --top 501`);
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain(
+        "Invalid --top option: '501'. Must be an integer between 1 and 500",
+      );
     },
     { timeout: 15000 },
   );

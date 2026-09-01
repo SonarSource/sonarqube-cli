@@ -20,8 +20,6 @@
 import { type SonarQubeClient } from './client.ts';
 import type { ProjectsSearchParams, ProjectsSearchResponse } from './types.ts';
 
-export const MAX_PAGE_SIZE = 500;
-
 export class ProjectsClient {
   private readonly client: SonarQubeClient;
 
