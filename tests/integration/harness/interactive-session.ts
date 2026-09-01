@@ -54,10 +54,34 @@ export function formatPrompt(prompt: PromptText): string {
 
 /** Clack paints a submitted prompt (and `discreetSuccess`) as `  ✓  …`; such a line is never a live wait target. */
 const SUBMITTED_PROMPT_PREFIX = '✓  ';
+const LIVE_PROMPT_PREFIX = '?  ';
 
 function isSubmittedPrompt(window: string, matchIndex: number): boolean {
   const lineStart = window.lastIndexOf('\n', matchIndex) + 1;
-  return window.slice(lineStart, matchIndex).trimStart().startsWith(SUBMITTED_PROMPT_PREFIX);
+  const prefix = window.slice(lineStart, matchIndex);
+  const submittedAt = prefix.lastIndexOf(SUBMITTED_PROMPT_PREFIX);
+  const liveAt = prefix.lastIndexOf(LIVE_PROMPT_PREFIX);
+  if (submittedAt === -1) {
+    return prefix.trimStart().startsWith(SUBMITTED_PROMPT_PREFIX);
+  }
+  return submittedAt > liveAt;
+}
+
+/** Raw index at `rawStart` plus enough bytes for `strippedCount` visible characters. */
+export function rawOffsetAfterStripped(
+  raw: string,
+  rawStart: number,
+  strippedCount: number,
+): number {
+  if (strippedCount <= 0) {
+    return rawStart;
+  }
+  for (let rawEnd = rawStart + 1; rawEnd <= raw.length; rawEnd++) {
+    if (stripControlSequences(raw.slice(rawStart, rawEnd)).length >= strippedCount) {
+      return rawEnd;
+    }
+  }
+  return raw.length;
 }
 
 export function findPromptMatch(window: string, prompt: PromptText): number | null {
@@ -173,6 +197,7 @@ export class InteractiveSession {
 
     void proc.exited.then((code) => {
       this.exitCode = code;
+      clearTimeout(this.timer);
       this.notify();
     });
 
@@ -185,11 +210,11 @@ export class InteractiveSession {
   async waitText(prompt: PromptText, timeoutMs = this.waitTimeoutMs): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (true) {
-      const window = stripControlSequences(
-        this.rawStdout.slice(Math.max(this.consumed, this.barrier)),
-      );
-      if (findPromptMatch(window, prompt) !== null) {
-        this.consumed = this.rawStdout.length;
+      const rawStart = Math.max(this.consumed, this.barrier);
+      const window = stripControlSequences(this.rawStdout.slice(rawStart));
+      const matchEnd = findPromptMatch(window, prompt);
+      if (matchEnd !== null) {
+        this.consumed = rawOffsetAfterStripped(this.rawStdout, rawStart, matchEnd);
         return;
       }
       if (this.timedOut) {
@@ -245,6 +270,7 @@ export class InteractiveSession {
       return;
     }
     this.killed = true;
+    clearTimeout(this.timer);
     try {
       this.proc.kill();
     } catch {
@@ -271,6 +297,14 @@ export class InteractiveSession {
   private assertWritable(): SessionStdin {
     if (this.exitCode !== undefined) {
       throw new Error('Cannot write to an interactive session that has already exited');
+    }
+    if (this.timedOut) {
+      throw new Error(
+        `Cannot write to an interactive session killed by the ${this.timeoutMs}ms timeout`,
+      );
+    }
+    if (this.killed) {
+      throw new Error('Cannot write to an interactive session after kill()');
     }
     if (this.stdinEnded || !this.proc.stdin) {
       throw new Error('Cannot write to an interactive session after waitFinish()');

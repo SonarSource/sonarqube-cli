@@ -145,6 +145,12 @@ describe('prompt matching', () => {
     expect(findPromptMatch(live, /Keep\?/)).toBe(live.length);
   });
 
+  it('skips a submitted frame concatenated onto the previous paint', () => {
+    const painted = '  › No  ✓  Keep? No  ?  Install Vortex?';
+    expect(findPromptMatch(painted, 'Keep?')).toBeNull();
+    expect(findPromptMatch(painted, 'Install Vortex?')).toBe(painted.length);
+  });
+
   it('does not re-anchor a regexp at the next search offset', () => {
     expect(findPromptMatch('✓  Keep?prompt', /Keep\?|^prompt/)).toBeNull();
     expect(findPromptMatch('✓  Keep?\nprompt', /Keep\?|^prompt/m)).toBe('✓  Keep?\nprompt'.length);
@@ -181,27 +187,36 @@ describe('InteractiveSession', () => {
     expect(fake.ended).toBe(true);
   });
 
-  it('does not rematch text that was already consumed', async () => {
+  it('keeps unread stdout for a later waitText', async () => {
     const fake = createFakeProcess();
     const session = InteractiveSession.fromProcess(fake.handle, { timeoutMs: 2000 });
 
     fake.pushStdout('Scope then Hook');
     await session.waitText('Scope');
+    await session.waitText('Hook');
+    expect(session.output()).toContain('Scope then Hook');
+
+    session.kill();
+    await session.waitFinish().catch(() => undefined);
+  });
+
+  it('does not rematch the same occurrence', async () => {
+    const fake = createFakeProcess();
+    const session = InteractiveSession.fromProcess(fake.handle, { timeoutMs: 2000 });
+
+    fake.pushStdout('Scope');
+    await session.waitText('Scope');
 
     let rematchError: unknown;
     try {
-      await session.waitText('Hook', 50);
+      await session.waitText('Scope', 50);
     } catch (error) {
       rematchError = error;
     }
     expect(rematchError).toBeInstanceOf(Error);
-    expect(String(rematchError)).toContain('Timed out waiting for "Hook" on stdout');
+    expect(String(rematchError)).toContain('Timed out waiting for "Scope" on stdout');
     expect(String(rematchError)).toContain('--- stdout ---');
     expect(String(rematchError)).toContain('--- stderr ---');
-
-    const later = session.waitText('Hook');
-    fake.pushStdout(' Hook again');
-    await later;
 
     session.kill();
     await session.waitFinish().catch(() => undefined);
@@ -296,6 +311,7 @@ describe('InteractiveSession', () => {
     session.kill();
     session.kill();
     expect(fake.killCount).toBe(1);
+    expect(() => session.write('x')).toThrow('after kill()');
 
     const result = await session.waitFinish();
     expect(result.exitCode).toBe(1);
