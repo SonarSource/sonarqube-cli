@@ -22,20 +22,26 @@ import { ENV_ORG, ENV_SERVER, ENV_TOKEN, resolveFromEnv } from '@/core/auth/auth
 import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { getToken as getKeystoreToken } from '@/core/host/keychain.ts';
 import { loadState } from '@/core/state/state-repository.ts';
-import { blank, note, print, withSpinner } from '@/core/ui';
+import type { CliConsole } from '@/core/ui/cli-console.ts';
 import { NOTE_STYLES } from '@/core/ui/colors.ts';
 
 function connectionLines(serverUrl: string, orgKey: string | undefined): string[] {
   return [`Server  ${serverUrl}`, ...(orgKey ? [`Org     ${orgKey}`] : [])];
 }
 
-function displayTokenMissing(serverUrl: string, orgKey: string | undefined): void {
-  note(connectionLines(serverUrl, orgKey), '✗ Token missing', NOTE_STYLES.error);
+function displayTokenMissing(
+  console: CliConsole,
+  serverUrl: string,
+  orgKey: string | undefined,
+): void {
+  console.note(connectionLines(serverUrl, orgKey), '✗ Token missing', NOTE_STYLES.error);
 }
 
 function displayTokenStatus(
+  console: CliConsole,
   serverUrl: string,
   orgKey: string | undefined,
   result: TokenCheckResult,
@@ -43,19 +49,20 @@ function displayTokenStatus(
   const lines = connectionLines(serverUrl, orgKey);
 
   if (result.status === 'valid') {
-    printConnected(serverUrl, 'OS Keychain', orgKey);
+    printConnected(console, serverUrl, 'OS Keychain', orgKey);
   } else if (result.status === 'invalid') {
-    note(lines, '✗ Token invalid', NOTE_STYLES.error);
+    console.note(lines, '✗ Token invalid', NOTE_STYLES.error);
   } else {
     const detail = result.errorMessage
       ? `Could not connect to the server to verify the token: ${result.errorMessage}`
       : 'Could not connect to the server to verify the token';
-    note([...lines, '', detail], '⚠ Cannot reach server', NOTE_STYLES.warn);
+    console.note([...lines, '', detail], '⚠ Cannot reach server', NOTE_STYLES.warn);
   }
 }
 
-export async function authStatus(): Promise<void> {
-  const envAuth = resolveFromEnv();
+export async function authStatus(ctx: CommandInvocationContext): Promise<void> {
+  const { console } = ctx;
+  const envAuth = resolveFromEnv({ console });
   if (envAuth) {
     let source: string;
     if (envAuth.connectionType === 'cloud') {
@@ -65,14 +72,14 @@ export async function authStatus(): Promise<void> {
     } else {
       source = `env vars:  ${ENV_TOKEN}, ${ENV_SERVER}`;
     }
-    printConnected(envAuth.serverUrl, source, envAuth.orgKey);
+    printConnected(console, envAuth.serverUrl, source, envAuth.orgKey);
     return;
   }
 
   const state = loadState();
 
   if (state.auth.connections.length === 0) {
-    print('No saved connection');
+    console.print('No saved connection');
     throw new CommandFailedError('Authentication check failed.', {
       remediationHint: "Run 'sonar auth login' to authenticate.",
     });
@@ -82,18 +89,18 @@ export async function authStatus(): Promise<void> {
   const token = await getKeystoreToken(conn.serverUrl, conn.orgKey);
 
   if (token === null) {
-    displayTokenMissing(conn.serverUrl, conn.orgKey);
+    displayTokenMissing(console, conn.serverUrl, conn.orgKey);
     throw new CommandFailedError('Authentication check failed.', {
       remediationHint: "Run 'sonar auth login' to restore the token.",
     });
   }
 
-  const status = await withSpinner('Verifying token...', () =>
+  const status = await console.withSpinner('Verifying token...', () =>
     checkTokenStatus(conn.serverUrl, token),
   );
-  blank();
+  console.blank();
 
-  displayTokenStatus(conn.serverUrl, conn.orgKey, status);
+  displayTokenStatus(console, conn.serverUrl, conn.orgKey, status);
 
   if (status.status === 'unreachable') {
     const message = status.errorMessage
@@ -110,8 +117,13 @@ export async function authStatus(): Promise<void> {
   }
 }
 
-function printConnected(serverUrl: string, source: string, orgKey?: string): void {
-  note(
+function printConnected(
+  console: CliConsole,
+  serverUrl: string,
+  source: string,
+  orgKey?: string,
+): void {
+  console.note(
     [...connectionLines(serverUrl, orgKey), '', `Source  ${source}`],
     '✓ Connected',
     NOTE_STYLES.success,

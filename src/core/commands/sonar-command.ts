@@ -41,7 +41,8 @@ import {
 } from '@/core/commands/stage.ts';
 import logger from '@/core/observability/logger.ts';
 import { loadState, saveState } from '@/core/state/state-manager.ts';
-import { blank, error, info, print, warn } from '@/core/ui';
+import type { CliConsole } from '@/core/ui/cli-console.ts';
+import { getDefaultCliConsole } from '@/core/ui/default-console.ts';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
 import { UpdateNotifier } from '@/core/update/notification.ts';
 
@@ -146,6 +147,7 @@ export interface RootHelpMetadata {
 export interface SonarCommandOptions {
   updateNotifier?: UpdateNotifier;
   runtime?: CliRuntime;
+  console?: CliConsole;
 }
 
 type CommandArgs = unknown[];
@@ -214,6 +216,7 @@ export class SonarCommand extends Command {
   private _rootHelp: RootHelpMetadata = {};
   private readonly _updateNotifier: UpdateNotifier;
   private readonly _runtime: CliRuntime;
+  private readonly _console: CliConsole;
   private _invocationContext: CommandInvocationContext | undefined;
 
   /**
@@ -231,11 +234,12 @@ export class SonarCommand extends Command {
     const name = hasName ? nameOrOptions : undefined;
     const options = (hasName ? maybeOptions : nameOrOptions) ?? {};
     super(name);
+    this._console = options.console ?? getDefaultCliConsole();
     this._updateNotifier = options.updateNotifier ?? new UpdateNotifier();
     this._runtime = options.runtime ?? createDefaultCliRuntime();
     this.hook('preAction', () => {
       if (this._lifecycle.stage === 'alpha') {
-        info(
+        this._console.info(
           `'${qualifiedCommandPath(this)}' is in alpha; may change or be removed without notice.`,
           'stderr',
         );
@@ -250,6 +254,7 @@ export class SonarCommand extends Command {
     return new SonarCommand(name, {
       updateNotifier: this._updateNotifier,
       runtime: this._runtime,
+      console: this._console,
     });
   }
 
@@ -299,6 +304,11 @@ export class SonarCommand extends Command {
   /** Startup auth / Private Beta gate shared by this command and its subtree. */
   get runtime(): CliRuntime {
     return this._runtime;
+  }
+
+  /** Human-facing terminal I/O shared by this command and its subtree. */
+  get console(): CliConsole {
+    return this._console;
   }
 
   /**
@@ -447,7 +457,7 @@ export class SonarCommand extends Command {
     super.action((...args: TArgs) =>
       this.runCommand(async () => {
         // Prefer auth resolved once at startup; fall back for isolated unit tests.
-        const auth = this._runtime.auth ?? (await resolveAuth());
+        const auth = this._runtime.auth ?? (await resolveAuth({ console: this._console }));
         if (!auth) {
           throw new CommandFailedError('Not authenticated.', {
             remediationHint: "Run 'sonar auth login' to authenticate.",
@@ -460,7 +470,7 @@ export class SonarCommand extends Command {
   }
 
   private createCommandInvocationContext(): CommandInvocationContext {
-    const ctx = new CommandInvocationContext(this._lifecycle, this._runtime);
+    const ctx = new CommandInvocationContext(this._lifecycle, this._runtime, this._console);
     this._invocationContext = ctx;
     return ctx;
   }
@@ -468,7 +478,12 @@ export class SonarCommand extends Command {
   private createCommandAuthenticatedInvocationContext(
     auth: ResolvedAuth,
   ): CommandAuthenticatedInvocationContext {
-    const ctx = new CommandAuthenticatedInvocationContext(auth, this._lifecycle, this._runtime);
+    const ctx = new CommandAuthenticatedInvocationContext(
+      auth,
+      this._lifecycle,
+      this._runtime,
+      this._console,
+    );
     this._invocationContext = ctx;
     return ctx;
   }
@@ -522,11 +537,11 @@ export class SonarCommand extends Command {
       const thrownError = err instanceof Error ? err : new Error(String(err));
       const cliError = err instanceof CliError ? err : undefined;
 
-      blank();
-      error(thrownError.message);
+      this._console.blank();
+      this._console.error(thrownError.message);
       const hint = remediationHintFor(err);
       if (hint) {
-        print(`  → ${hint}`, 'stderr');
+        this._console.print(`  → ${hint}`, 'stderr');
       }
       logger.error(thrownError.message);
       process.exitCode = cliError?.exitCode ?? 1;
@@ -545,14 +560,17 @@ export class SonarCommand extends Command {
       const flag = option.long ?? option.flags;
       const lifecycle = option.lifecycle;
       if (lifecycle.stage === 'alpha') {
-        info(`'${flag}' is in alpha; may change or be removed without notice.`, 'stderr');
+        this._console.info(
+          `'${flag}' is in alpha; may change or be removed without notice.`,
+          'stderr',
+        );
       } else if (lifecycle.stage === 'beta') {
         this.warnIfBetaOnce(
           `${qualifiedCommandPath(this)} ${flag}`,
           `'${flag}' is in beta and may change.`,
         );
       } else {
-        warn(deprecationWarning(flag, lifecycle.sinceVersion, lifecycle.replacement));
+        this._console.warn(deprecationWarning(flag, lifecycle.sinceVersion, lifecycle.replacement));
       }
     }
   }
@@ -562,7 +580,7 @@ export class SonarCommand extends Command {
       return;
     }
 
-    warn(
+    this._console.warn(
       deprecationWarning(
         qualifiedCommandPath(this),
         this._lifecycle.sinceVersion,
@@ -590,7 +608,7 @@ export class SonarCommand extends Command {
         return;
       }
       betaWarningsShownWithoutState.add(warningKey);
-      info(message, 'stderr');
+      this._console.info(message, 'stderr');
       return;
     }
 
@@ -598,7 +616,7 @@ export class SonarCommand extends Command {
       return;
     }
 
-    info(message, 'stderr');
+    this._console.info(message, 'stderr');
     state.config.betaCommandWarnings = {
       ...state.config.betaCommandWarnings,
       [warningKey]: VERSION,

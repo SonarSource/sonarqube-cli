@@ -41,7 +41,6 @@ import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { tryLoadState } from '@/core/state/state-repository.ts';
 import { flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
-import { blank, error } from '@/core/ui';
 import { parseInteger } from '@/core/ui/parsing.ts';
 
 import { version as VERSION } from '../../package.json';
@@ -179,8 +178,8 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .enablePositionalOptions()
     .configureOutput({
       outputError: (str) => {
-        blank();
-        error(str.trim());
+        COMMAND_TREE.console.blank();
+        COMMAND_TREE.console.error(str.trim());
       },
     })
     .configureHelp({
@@ -230,7 +229,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
   auth
     .command('status')
     .description('Show active authentication connection with token verification')
-    .anonymousAction((_ctx) => authStatus());
+    .anonymousAction((ctx) => authStatus(ctx));
 
   // List Sonar resources
   const list = COMMAND_TREE.command('list')

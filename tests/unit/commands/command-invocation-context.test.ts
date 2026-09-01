@@ -70,6 +70,11 @@ describe('CommandInvocationContext stage accessors', () => {
     ).toBe(true);
   });
 
+  it('exposes a console (defaults to the process TerminalConsole)', () => {
+    const ctx = new CommandInvocationContext();
+    expect(typeof ctx.console.info).toBe('function');
+  });
+
   it('recordTelemetry appends facts onto the context', () => {
     const fact = new TelemetryFact('CliAnalysisCompleted', {
       caller_command: 'analyze secrets',
