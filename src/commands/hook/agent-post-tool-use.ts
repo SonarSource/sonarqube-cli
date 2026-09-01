@@ -70,7 +70,11 @@ async function handleSqaaPostToolUse(
     return { decision: 'none' };
   }
 
-  const { projectKey } = await discoverProject(process.cwd(), { auth, silent: true });
+  const { projectKey } = await discoverProject(process.cwd(), {
+    auth,
+    silent: true,
+    console: ctx.console,
+  });
   if (!projectKey) {
     return { decision: 'none' };
   }

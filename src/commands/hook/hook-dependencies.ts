@@ -27,7 +27,8 @@ import { isEnvBasedAuth, resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
-import { warn } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import {
   runSecretsBinary,
@@ -54,14 +55,18 @@ export class MissingDependenciesError extends Error {
   }
 }
 
-export function handleScanError(context: 'Commit' | 'Push', err: Error): void {
+export function handleScanError(
+  context: 'Commit' | 'Push',
+  err: Error,
+  console: Console = new TerminalConsole(),
+): void {
   if (isEnvBasedAuth()) {
     throw new CommandFailedError('Secrets scan failed.', {
       remediationHint:
         "Run 'sonar integrate' again or run 'sonar analyze secrets -- <files>' manually to debug the analyzer.",
     });
   }
-  warn(
+  console.warn(
     `Secrets scan failed. ${context} is not blocked, but secrets were not checked. Reason: ${err.message}`,
   );
 }

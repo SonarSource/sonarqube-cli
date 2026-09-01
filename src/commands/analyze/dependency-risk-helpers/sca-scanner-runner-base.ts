@@ -26,7 +26,8 @@ import { buildSubprocessNetworkEnv } from '@/core/host/connectivity/network-conf
 import { type ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import logger from '@/core/observability/logger.ts';
 import type { SpawnResult } from '@/core/process/process.ts';
-import { warn, withSpinner } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { type ScaScannerSpawner } from './sca-scanner-spawner.ts';
 
@@ -63,13 +64,16 @@ export abstract class ScaScannerRunnerBase<T> {
     protected readonly spawner: ScaScannerSpawner,
   ) {}
 
-  async run(invocation: ScaScannerInvocation): Promise<T> {
+  async run(
+    invocation: ScaScannerInvocation,
+    console: Console = new TerminalConsole(),
+  ): Promise<T> {
     const args = this.buildArgs(invocation);
     logger.debug(`sca-scanner args: ${JSON.stringify(args)}`);
     const env = { ...buildSubprocessNetworkEnv(), [SONAR_TOKEN_ENV]: invocation.sonarToken };
     const binaryPath = await this.installer.install();
     try {
-      const result = await withSpinner(
+      const result = await console.withSpinner(
         this.spinnerLabel,
         () => this.spawnScanner(binaryPath, args, env),
         'stderr',
@@ -79,7 +83,7 @@ export abstract class ScaScannerRunnerBase<T> {
       this.assertSuccessfulExit(result);
       return this.parseResult(result);
     } finally {
-      this.cleanupWorkDir(invocation.workDir);
+      this.cleanupWorkDir(invocation.workDir, console);
     }
   }
 
@@ -160,12 +164,12 @@ export abstract class ScaScannerRunnerBase<T> {
     }
   }
 
-  private cleanupWorkDir(workDir: string): void {
+  private cleanupWorkDir(workDir: string, console: Console): void {
     try {
       rmSync(workDir, { recursive: true, force: true });
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
-      warn(`Failed to clean up SCA scanner working directory ${workDir}: ${reason}`);
+      console.warn(`Failed to clean up SCA scanner working directory ${workDir}: ${reason}`);
     }
   }
 }

@@ -23,6 +23,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
+
 // ─── readline mock ───────────────────────────────────────────────────────────
 // Control question callback and close event so we can drive the flow without a real TTY.
 
@@ -62,7 +64,6 @@ import {
   openBrowserWithFallback,
   waitForTokenInteractive,
 } from '@/core/auth/token.ts';
-
 // ─── Shared setup ─────────────────────────────────────────────────────────────
 
 function makeSharedSpies() {
@@ -94,7 +95,10 @@ describe('waitForTokenInteractive: printed messages', () => {
   });
 
   it('prints the waiting message when started', async () => {
-    const p = waitForTokenInteractive(new Promise<BrowserAuthResult>(() => {}));
+    const p = waitForTokenInteractive(
+      new Promise<BrowserAuthResult>(() => {}),
+      new TerminalConsole(),
+    );
     await Promise.resolve();
     const out = spies.writeSpy.mock.calls.map((c) => (c[0] as string).toString()).join('');
     expect(out).toContain('Waiting for authorization');
@@ -118,12 +122,18 @@ describe('waitForTokenInteractive: server delivers token', () => {
   });
 
   it('resolves with the server token', async () => {
-    const result = await waitForTokenInteractive(Promise.resolve({ token: 'squ_server_abc' }));
+    const result = await waitForTokenInteractive(
+      Promise.resolve({ token: 'squ_server_abc' }),
+      new TerminalConsole(),
+    );
     expect(result).toEqual({ token: 'squ_server_abc' });
   });
 
   it('closes readline when server delivers (releases stdin for next prompt on Windows)', async () => {
-    await waitForTokenInteractive(Promise.resolve({ token: 'squ_server_abc' }));
+    await waitForTokenInteractive(
+      Promise.resolve({ token: 'squ_server_abc' }),
+      new TerminalConsole(),
+    );
     expect(closeCalled).toBe(true);
   });
 
@@ -132,7 +142,7 @@ describe('waitForTokenInteractive: server delivers token', () => {
     const serverPromise = new Promise<BrowserAuthResult>((r) => {
       resolveServer = r;
     });
-    const resultPromise = waitForTokenInteractive(serverPromise);
+    const resultPromise = waitForTokenInteractive(serverPromise, new TerminalConsole());
     await Promise.resolve();
 
     questionCallback?.('squ_user_token');
@@ -157,21 +167,30 @@ describe('waitForTokenInteractive: user input', () => {
   });
 
   it('resolves with the user-entered token', async () => {
-    const resultPromise = waitForTokenInteractive(new Promise<BrowserAuthResult>(() => {}));
+    const resultPromise = waitForTokenInteractive(
+      new Promise<BrowserAuthResult>(() => {}),
+      new TerminalConsole(),
+    );
     await Promise.resolve();
     questionCallback?.('squ_user_abc');
     expect(await resultPromise).toEqual({ token: 'squ_user_abc' });
   });
 
   it('trims whitespace from the user-entered token', async () => {
-    const resultPromise = waitForTokenInteractive(new Promise<BrowserAuthResult>(() => {}));
+    const resultPromise = waitForTokenInteractive(
+      new Promise<BrowserAuthResult>(() => {}),
+      new TerminalConsole(),
+    );
     await Promise.resolve();
     questionCallback?.('  squ_padded  ');
     expect(await resultPromise).toEqual({ token: 'squ_padded' });
   });
 
   it('rejects when the user cancels (Ctrl+C)', async () => {
-    const resultPromise = waitForTokenInteractive(new Promise<BrowserAuthResult>(() => {}));
+    const resultPromise = waitForTokenInteractive(
+      new Promise<BrowserAuthResult>(() => {}),
+      new TerminalConsole(),
+    );
     await Promise.resolve();
     rlMock.simulateCtrlC();
     // eslint-disable-next-line @typescript-eslint/await-thenable
@@ -179,7 +198,10 @@ describe('waitForTokenInteractive: user input', () => {
   });
 
   it('closes readline when user submits', async () => {
-    const resultPromise = waitForTokenInteractive(new Promise<BrowserAuthResult>(() => {}));
+    const resultPromise = waitForTokenInteractive(
+      new Promise<BrowserAuthResult>(() => {}),
+      new TerminalConsole(),
+    );
     await Promise.resolve();
     questionCallback?.('squ_user_abc');
     await resultPromise;
@@ -191,7 +213,7 @@ describe('waitForTokenInteractive: user input', () => {
     const serverPromise = new Promise<BrowserAuthResult>((r) => {
       resolveServer = r;
     });
-    const resultPromise = waitForTokenInteractive(serverPromise);
+    const resultPromise = waitForTokenInteractive(serverPromise, new TerminalConsole());
     await Promise.resolve();
 
     questionCallback?.('');
@@ -220,20 +242,22 @@ describe('openBrowserWithFallback', () => {
   });
 
   it('calls openBrowser with the auth URL', async () => {
-    await openBrowserWithFallback('https://sonarcloud.io/test');
+    await openBrowserWithFallback('https://sonarcloud.io/test', new TerminalConsole());
     expect(mockOpenBrowser).toHaveBeenCalledWith('https://sonarcloud.io/test');
   });
 
   it('does not throw when browser opening fails', async () => {
     mockOpenBrowser.mockImplementationOnce(() => Promise.reject(new Error('No browser found')));
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(openBrowserWithFallback('https://sonarcloud.io/test')).resolves.toBeUndefined();
+    await expect(
+      openBrowserWithFallback('https://sonarcloud.io/test', new TerminalConsole()),
+    ).resolves.toBeUndefined();
   });
 
   it('skips browser when CI=true', async () => {
     process.env['CI'] = 'true';
     try {
-      await openBrowserWithFallback('https://sonarcloud.io/test');
+      await openBrowserWithFallback('https://sonarcloud.io/test', new TerminalConsole());
       expect(mockOpenBrowser).not.toHaveBeenCalled();
     } finally {
       delete process.env['CI'];

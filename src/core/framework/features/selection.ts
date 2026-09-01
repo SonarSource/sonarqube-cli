@@ -19,8 +19,8 @@
  */
 
 import { CommandFailedError } from '@/core/command-error.ts';
-import { confirmPrompt, discreetSuccess, info, text } from '@/core/ui';
 import { red } from '@/core/ui/colors.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import { findInstalledFeature } from './installation-recorder.ts';
 import type {
@@ -91,6 +91,7 @@ export async function selectFeaturesForInvocation<TOptions>(
   integration: IntegrationDeclaration<TOptions>,
   invocation: IntegrationInvocation<TOptions>,
   applications: FeatureApplication<TOptions>[],
+  console: Console,
 ): Promise<FeatureSelectionResult<TOptions>> {
   const toInstall: FeatureApplication<TOptions>[] = [];
   const toRemove: FeatureApplication<TOptions>[] = [];
@@ -99,9 +100,9 @@ export async function selectFeaturesForInvocation<TOptions>(
   for (const application of applications) {
     const feature = application.feature;
     const installed = isFeatureInstalled(integration, invocation, application);
-    const outcome = await shouldInstallFeature(feature, invocation, installed);
+    const outcome = await shouldInstallFeature(feature, invocation, console, installed);
     if (outcome === 'install') {
-      toInstall.push(await materializeApplication(application, invocation, declined));
+      toInstall.push(await materializeApplication(application, invocation, declined, console));
     } else if (outcome === 'uninstall' && installed) {
       toRemove.push(application);
     } else if (outcome === 'declined') {
@@ -131,12 +132,16 @@ function isFeatureInstalled<TOptions>(
 async function shouldRemoveInstalledFeature<TOptions>(
   feature: FeatureDeclaration<TOptions>,
   invocation: IntegrationInvocation<TOptions>,
+  console: Console,
 ): Promise<boolean> {
   if (invocation.nonInteractive) {
     return false;
   }
 
-  const keep = await confirmPrompt(`${feature.displayName} (currently installed)  Keep?`, true);
+  const keep = await console.confirmPrompt(
+    `${feature.displayName} (currently installed)  Keep?`,
+    true,
+  );
   if (keep === null) {
     throw new CommandFailedError('Installation cancelled');
   }
@@ -144,8 +149,8 @@ async function shouldRemoveInstalledFeature<TOptions>(
     return false;
   }
 
-  warnFeatureRemoval(`${feature.displayName} will be removed.`);
-  const proceed = await confirmPrompt('Proceed with removal?', true);
+  warnFeatureRemoval(console, `${feature.displayName} will be removed.`);
+  const proceed = await console.confirmPrompt('Proceed with removal?', true);
   if (proceed === null) {
     throw new CommandFailedError('Installation cancelled');
   }
@@ -160,8 +165,8 @@ async function shouldRemoveInstalledFeature<TOptions>(
  * `  <glyph>  <message>` on stdout, with a single-width `✗` (U+2717) —
  * the emoji is double-width and shifts the text a column.
  */
-function warnFeatureRemoval(message: string): void {
-  text(`  ${red('✗')}  ${message}`);
+function warnFeatureRemoval(console: Console, message: string): void {
+  console.text(`  ${red('✗')}  ${message}`);
 }
 
 type FeatureSelectionOutcome = 'install' | 'skip' | 'uninstall' | 'declined';
@@ -175,6 +180,7 @@ async function materializeApplication<TOptions>(
   application: FeatureApplication<TOptions>,
   invocation: IntegrationInvocation<TOptions>,
   declined: string[],
+  console: Console,
 ): Promise<FeatureApplication<TOptions>> {
   const feature = application.feature;
   if (!isFeatureContainer(feature)) {
@@ -182,7 +188,7 @@ async function materializeApplication<TOptions>(
   }
   return {
     ...application,
-    feature: await selectActiveSubfeatures(feature, invocation, declined),
+    feature: await selectActiveSubfeatures(feature, invocation, declined, console),
   };
 }
 
@@ -190,10 +196,11 @@ async function selectActiveSubfeatures<TOptions>(
   container: FeatureContainer<TOptions>,
   invocation: IntegrationInvocation<TOptions>,
   declined: string[],
+  console: Console,
 ): Promise<FeatureContainer<TOptions>> {
   const active: SubfeatureDeclaration<TOptions>[] = [];
   for (const subfeature of container.subfeatures) {
-    const outcome = await shouldInstallFeature(subfeature, invocation);
+    const outcome = await shouldInstallFeature(subfeature, invocation, console);
     if (outcome === 'install') {
       active.push(subfeature);
     } else if (outcome === 'declined') {
@@ -206,17 +213,19 @@ async function selectActiveSubfeatures<TOptions>(
 async function shouldInstallFeature<TOptions>(
   feature: FeatureDeclaration<TOptions>,
   invocation: IntegrationInvocation<TOptions>,
+  console: Console,
   installed = false,
 ): Promise<FeatureSelectionOutcome> {
   const decision = normalizeDecision(await feature.shouldInstall?.(invocation));
   if (decision.action === 'ask') {
-    return resolveAskDecision(feature, invocation, decision.question, installed);
+    return resolveAskDecision(feature, invocation, decision.question, installed, console);
   }
-  displayDecisionMessage(decision.action, decision.message, installed);
+  displayDecisionMessage(console, decision.action, decision.message, installed);
   return decision.action;
 }
 
 function displayDecisionMessage(
+  console: Console,
   action: 'install' | 'skip' | 'uninstall',
   message: string | undefined,
   installed: boolean,
@@ -224,8 +233,11 @@ function displayDecisionMessage(
   if (!message || (action === 'uninstall' && !installed)) {
     return;
   }
-  const display = action === 'install' ? discreetSuccess : info;
-  display(message);
+  if (action === 'install') {
+    console.discreetSuccess(message);
+  } else {
+    console.info(message);
+  }
 }
 
 async function resolveAskDecision<TOptions>(
@@ -233,9 +245,12 @@ async function resolveAskDecision<TOptions>(
   invocation: IntegrationInvocation<TOptions>,
   question: string | undefined,
   installed: boolean,
+  console: Console,
 ): Promise<FeatureSelectionOutcome> {
   if (installed) {
-    return (await shouldRemoveInstalledFeature(feature, invocation)) ? 'uninstall' : 'install';
+    return (await shouldRemoveInstalledFeature(feature, invocation, console))
+      ? 'uninstall'
+      : 'install';
   }
   if (invocation.nonInteractive) {
     return 'install';
@@ -243,7 +258,7 @@ async function resolveAskDecision<TOptions>(
   const defaultQuestion = feature.benefitDescription
     ? `Install ${feature.displayName}? (${feature.benefitDescription})`
     : `Install ${feature.displayName}?`;
-  const confirmed = await confirmPrompt(question ?? defaultQuestion, true);
+  const confirmed = await console.confirmPrompt(question ?? defaultQuestion, true);
   if (confirmed === null) {
     throw new CommandFailedError('Installation cancelled');
   }

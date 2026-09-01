@@ -54,29 +54,39 @@ export async function integrateClaude(
   options: IntegrateAgentOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const { auth } = ctx;
+  const { auth, console } = ctx;
   if (!options.nonInteractive) {
     printAgentNonInteractiveAlternativeHint(
+      console,
       'sonar integrate claude --non-interactive',
       'sonar integrate claude --non-interactive -g',
     );
   }
 
-  const integrateCtx = await displayAgentIntegratePrelude('Claude Code', 'claude', options, auth);
+  const integrateCtx = await displayAgentIntegratePrelude(
+    'Claude Code',
+    'claude',
+    options,
+    auth,
+    console,
+  );
 
   const config = toConfigurationData(integrateCtx);
   // Probe for a global Claude hook; warns on orphaned installs and returns
   // the hook dir when project-level secrets hooks should be skipped.
   const existingGlobalHookPath = integrateCtx.isGlobal
     ? undefined
-    : await detectGlobalSecretsHook(homedir());
+    : await detectGlobalSecretsHook(homedir(), console);
   const skipSecretsHooks = !!existingGlobalHookPath;
 
-  const vortex = await resolveVortexSetup({
-    auth,
-    projectKey: integrateCtx.projectKey,
-    isGlobal: integrateCtx.isGlobal,
-  });
+  const vortex = await resolveVortexSetup(
+    {
+      auth,
+      projectKey: integrateCtx.projectKey,
+      isGlobal: integrateCtx.isGlobal,
+    },
+    console,
+  );
   const featureAttrs = buildRecordedIntegrationAttrs({
     baseAttrs: buildIntegrationAttrs(config),
     projectRoot: integrateCtx.project.projectRoot,
@@ -103,6 +113,7 @@ export async function integrateClaude(
       options: integrationOptions,
       targetRoot: installRoot,
       scope: installScope,
+      console: ctx.console,
       auth,
       attrs: featureAttrs,
       nonInteractive: options.nonInteractive,

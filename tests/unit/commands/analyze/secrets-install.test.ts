@@ -33,7 +33,7 @@ import * as processLib from '@/core/process/process.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
-
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 // Import the real module first, then register it as a mock with the same object.
 // Because mock.module returns a plain mutable object (not a frozen ES namespace),
 // spyOn can patch individual exports per-test and restore them in afterEach —
@@ -91,7 +91,10 @@ describe('resolveSecretsBinary: happy path', () => {
   });
 
   it('returns freshlyInstalled: true and binaryPath when install succeeds', async () => {
-    const result = await resolveSecretsBinary({ force: true }, { binDir: tempBinDir });
+    const result = await resolveSecretsBinary(
+      { force: true, console: new TerminalConsole() },
+      { binDir: tempBinDir },
+    );
 
     expect(result.freshlyInstalled).toBe(true);
     expect(result.binaryPath).toContain('sonar-secrets');
@@ -103,7 +106,10 @@ describe('resolveSecretsBinary: happy path', () => {
     const binaryPath = join(tempBinDir, buildLocalBinaryName(detectPlatform()));
     writeFileSync(binaryPath, '');
 
-    const result = await resolveSecretsBinary({ force: false }, { binDir: tempBinDir });
+    const result = await resolveSecretsBinary(
+      { force: false, console: new TerminalConsole() },
+      { binDir: tempBinDir },
+    );
 
     expect(result.freshlyInstalled).toBe(false);
     expect(downloadBinarySpy).not.toHaveBeenCalled();
@@ -123,7 +129,10 @@ describe('resolveSecretsBinary: happy path', () => {
     writeFileSync(oldBinary1, '');
     writeFileSync(oldBinary2, '');
 
-    await resolveSecretsBinary({ force: true }, { binDir: tempBinDir });
+    await resolveSecretsBinary(
+      { force: true, console: new TerminalConsole() },
+      { binDir: tempBinDir },
+    );
 
     expect(existsSync(oldBinary1)).toBe(false);
     expect(existsSync(oldBinary2)).toBe(false);
@@ -174,7 +183,10 @@ describe('resolveSecretsBinary: error paths', () => {
 
     let error: unknown;
     try {
-      await resolveSecretsBinary({ force: true }, { binDir: tempBinDir });
+      await resolveSecretsBinary(
+        { force: true, console: new TerminalConsole() },
+        { binDir: tempBinDir },
+      );
     } catch (err) {
       error = err;
     }
@@ -201,7 +213,10 @@ describe('resolveSecretsBinary: error paths', () => {
 
     let caughtError: unknown;
     try {
-      await resolveSecretsBinary({ force: true }, { binDir: tempBinDir });
+      await resolveSecretsBinary(
+        { force: true, console: new TerminalConsole() },
+        { binDir: tempBinDir },
+      );
     } catch (err) {
       caughtError = err;
     }
@@ -232,7 +247,10 @@ describe('resolveSecretsBinary: error paths', () => {
     });
 
     // Act: should not throw despite state error
-    const result = await resolveSecretsBinary({ force: true }, { binDir: tempBinDir });
+    const result = await resolveSecretsBinary(
+      { force: true, console: new TerminalConsole() },
+      { binDir: tempBinDir },
+    );
 
     // Assert: install succeeded; user is warned but not blocked
     const warns = getMockUiCalls()

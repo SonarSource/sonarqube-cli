@@ -61,11 +61,14 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
   params: FinalizeAgentInstallParams<TOptions>,
 ): Promise<void> {
   const { context, options, auth } = params;
-  const vortex = await resolveVortexSetup({
-    auth,
-    projectKey: context.projectKey,
-    isGlobal: context.isGlobal,
-  });
+  const vortex = await resolveVortexSetup(
+    {
+      auth,
+      projectKey: context.projectKey,
+      isGlobal: context.isGlobal,
+    },
+    params.ctx.console,
+  );
   const { installRoot, installScope } = resolveIntegrateInstallTarget(
     context.isGlobal,
     context.project.projectRoot,
@@ -89,6 +92,7 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
     },
     targetRoot: installRoot,
     scope: installScope,
+    console: params.ctx.console,
     auth,
     nonInteractive: options.nonInteractive,
     attrs,

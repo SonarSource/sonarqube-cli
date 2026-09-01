@@ -28,7 +28,8 @@ import { homedir } from 'node:os';
 import { sep } from 'node:path';
 
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
-import { info, note, outro, phase, phaseItem, text } from '@/core/ui';
+import { phaseItem } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
 import { recordedFeatureResources } from './installation-recorder.ts';
 import type { FeatureDeclaration, IntegrationDeclaration, PostInstallExample } from './types.ts';
@@ -37,29 +38,34 @@ export function renderCompletionSummary<TOptions>(
   integration: IntegrationDeclaration<TOptions>,
   installedFeatures: InstalledIntegrationFeature[],
   removedFeatures: FeatureDeclaration<TOptions>[],
+  console: Console,
 ): void {
   if (installedFeatures.length === 0 && removedFeatures.length === 0) {
     return;
   }
 
   if (installedFeatures.length > 0) {
-    renderInstalledList(integration, installedFeatures);
+    renderInstalledList(integration, installedFeatures, console);
   }
   if (removedFeatures.length > 0) {
-    renderRemovedList(removedFeatures);
+    renderRemovedList(removedFeatures, console);
   }
-  outro('Setup complete!', 'success');
-  renderPostInstallExamples(integration, installedFeatures);
+  console.outro('Setup complete!', 'success');
+  renderPostInstallExamples(integration, installedFeatures, console);
 }
 
-function renderRemovedList<TOptions>(removedFeatures: FeatureDeclaration<TOptions>[]): void {
+function renderRemovedList<TOptions>(
+  removedFeatures: FeatureDeclaration<TOptions>[],
+  console: Console,
+): void {
   const items = removedFeatures.map((feature) => phaseItem(feature.displayName, 'done'));
-  phase('Removed', items);
+  console.phase('Removed', items);
 }
 
 function renderInstalledList<TOptions>(
   integration: IntegrationDeclaration<TOptions>,
   installedFeatures: InstalledIntegrationFeature[],
+  console: Console,
 ): void {
   const home = homedir();
   const items = installedFeatures.map((installed) => {
@@ -70,7 +76,7 @@ function renderInstalledList<TOptions>(
       .map((p) => formatPath(p, home));
     return phaseItem(declaration.displayName, 'done', undefined, paths);
   });
-  phase('Installed', items);
+  console.phase('Installed', items);
 }
 
 function formatPath(path: string, home: string): string {
@@ -81,6 +87,7 @@ function formatPath(path: string, home: string): string {
 function renderPostInstallExamples<TOptions>(
   integration: IntegrationDeclaration<TOptions>,
   installedFeatures: InstalledIntegrationFeature[],
+  console: Console,
 ): void {
   // An integration may collapse its per-feature examples into a single combined
   // one when a specific set of features is installed together (e.g. both git
@@ -89,24 +96,24 @@ function renderPostInstallExamples<TOptions>(
     installedFeatures.map((f) => f.featureId),
   );
   if (combined) {
-    renderPostInstallExample(combined);
+    renderPostInstallExample(combined, console);
     return;
   }
   for (const installed of installedFeatures) {
     const { postInstallExample } = featureDeclaration(integration, installed.featureId);
     if (postInstallExample) {
-      renderPostInstallExample(postInstallExample);
+      renderPostInstallExample(postInstallExample, console);
     }
   }
 }
 
-function renderPostInstallExample(example: PostInstallExample): void {
+function renderPostInstallExample(example: PostInstallExample, console: Console): void {
   if (example.intro) {
-    info(example.intro);
+    console.info(example.intro);
   }
-  note(example.lines.join('\n'), example.title);
+  console.note(example.lines.join('\n'), example.title);
   if (example.footer) {
-    text(example.footer);
+    console.text(example.footer);
   }
 }
 

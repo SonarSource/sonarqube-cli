@@ -22,8 +22,14 @@ import { EventEmitter } from 'node:events';
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { clearNetworkConfigCache } from '@/core/host/connectivity/network-config.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
+
+function updateCtx(): CommandInvocationContext {
+  return new CommandInvocationContext(new TerminalConsole());
+}
 
 // Spy on the real node:child_process / platform-detector modules rather than
 // mock.module()-ing them: mock.module() swaps the module in the global registry for the
@@ -205,7 +211,7 @@ describe('updateVersion --status', () => {
   it('reports an available update without installing', async () => {
     fetchSpy.mockResolvedValue(stableVersionResponse('99.0.0.241'));
 
-    await updateVersion({ status: true });
+    await updateVersion({ status: true }, updateCtx());
 
     const messages = getMockUiCalls().map((c) => c.args.join(' '));
     // Build number must be stripped from displayed versions
@@ -216,7 +222,7 @@ describe('updateVersion --status', () => {
   it('reports already up to date', async () => {
     fetchSpy.mockResolvedValue(stableVersionResponse('0.0.1'));
 
-    await updateVersion({ status: true });
+    await updateVersion({ status: true }, updateCtx());
 
     const messages = getMockUiCalls().map((c) => c.args.join(' '));
     expect(messages.some((m) => /up to date/i.test(m))).toBe(true);
@@ -241,7 +247,7 @@ describe('updateVersion (no options)', () => {
     const [major, minor, patch] = (await import('../../../../package.json')).version.split('.');
     fetchSpy.mockResolvedValue(stableVersionResponse(`${major}.${minor}.${patch}.999`));
 
-    await updateVersion();
+    await updateVersion({}, updateCtx());
 
     const messages = getMockUiCalls().map((c) => c.args.join(' '));
     expect(messages.some((m) => /already up to date/i.test(m))).toBe(true);
@@ -285,7 +291,7 @@ describe('updateVersion --force', () => {
       }
       return Promise.reject(new Error(`Unexpected fetch: ${url}`));
     });
-    await updateVersion({ force: true });
+    await updateVersion({ force: true }, updateCtx());
   }
 
   it('installs even when already up to date', async () => {

@@ -19,15 +19,15 @@
  */
 
 import { CommandFailedError } from '@/core/command-error.ts';
-import { passwordPrompt } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
-export async function resolveGitlabToken(): Promise<string> {
+export async function resolveGitlabToken(console: Console): Promise<string> {
   const canPrompt = process.stdin.isTTY || Boolean(process.env.SONARQUBE_CLI_MOCK_TTY);
   const envToken = process.env.GITLAB_TOKEN;
 
   if (canPrompt) {
     const hint = envToken ? ' (press Enter to use GITLAB_TOKEN)' : '';
-    const prompted = await passwordPrompt(`GitLab personal access token${hint}:`);
+    const prompted = await console.passwordPrompt(`GitLab personal access token${hint}:`);
     if (prompted === null) {
       throw new CommandFailedError('GitLab token is required.');
     }

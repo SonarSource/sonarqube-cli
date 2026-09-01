@@ -18,10 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { deleteToken, getToken } from '@/core/host/keychain.ts';
 import { getActiveConnection, removeConnection } from '@/core/state/state-manager.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
-import { print, success } from '@/core/ui';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import {
   reportRevokeServerTokenOutcome,
@@ -31,7 +32,10 @@ import {
 /**
  * Logout command - remove token from keychain
  */
-export async function authLogout(): Promise<void> {
+export async function authLogout(
+  ctx: CommandInvocationContext = new CommandInvocationContext(new TerminalConsole()),
+): Promise<void> {
+  const { console } = ctx;
   const state = loadState();
   const active = getActiveConnection(state);
 
@@ -41,7 +45,7 @@ export async function authLogout(): Promise<void> {
     state.auth.connections.length === 0 ||
     active.envOnly
   ) {
-    print('You are already logged out.');
+    console.print('You are already logged out.');
     return;
   }
 
@@ -52,6 +56,7 @@ export async function authLogout(): Promise<void> {
   const revokeOutcome = await revokeServerTokenIfPossible(active, token);
   reportRevokeServerTokenOutcome(revokeOutcome, {
     continuingMessage: 'Continuing with local logout.',
+    console,
   });
 
   await deleteToken(server, org);
@@ -62,5 +67,5 @@ export async function authLogout(): Promise<void> {
 
   const displayServerLogout =
     active.type === 'cloud' && org !== undefined ? `${server} (${org})` : server;
-  success(`Logged out from: ${displayServerLogout}`);
+  console.success(`Logged out from: ${displayServerLogout}`);
 }

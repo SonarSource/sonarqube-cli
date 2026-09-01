@@ -19,14 +19,17 @@
  */
 
 import { detectCallerAgent } from '@/core/host/environment/agent-detector.ts';
-import { info, print } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
-export function printAgentNonInteractiveAlternativeHint(...nonInteractiveExamples: string[]): void {
+export function printAgentNonInteractiveAlternativeHint(
+  console: Console,
+  ...nonInteractiveExamples: string[]
+): void {
   if (detectCallerAgent() === null) {
     return;
   }
-  info('Agent environment detected. To run non-interactively:');
+  console.info('Agent environment detected. To run non-interactively:');
   for (const example of nonInteractiveExamples) {
-    print(`   → ${example}`);
+    console.print(`   → ${example}`);
   }
 }

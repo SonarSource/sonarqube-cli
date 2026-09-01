@@ -27,7 +27,7 @@ import { type IntegrationDeclaration, renderCompletionSummary } from '@/core/fra
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
 import type { PhaseItem } from '@/core/ui';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
-
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 function installedFeature(
   featureId: string,
   overrides: Partial<InstalledIntegrationFeature> = {},
@@ -71,6 +71,7 @@ function renderWithResourcePath(path: string): string[] {
       }),
     ],
     [],
+    new TerminalConsole(),
   );
 
   const phaseCall = getMockUiCalls().find((c) => c.method === 'phase' && c.args[0] === 'Installed');
@@ -95,7 +96,7 @@ describe('renderCompletionSummary', () => {
       features: [{ id: 'a', displayName: 'Feature A' }],
     };
 
-    renderCompletionSummary(integration, [], []);
+    renderCompletionSummary(integration, [], [], new TerminalConsole());
 
     expect(getMockUiCalls()).toHaveLength(0);
   });
@@ -127,6 +128,7 @@ describe('renderCompletionSummary', () => {
         installedFeature('b'),
       ],
       [],
+      new TerminalConsole(),
     );
 
     const phaseCall = getMockUiCalls().find(
@@ -181,6 +183,7 @@ describe('renderCompletionSummary', () => {
         }),
       ],
       [],
+      new TerminalConsole(),
     );
 
     const phaseCall = getMockUiCalls().find(
@@ -203,7 +206,12 @@ describe('renderCompletionSummary', () => {
       ],
     };
 
-    renderCompletionSummary(integration, [installedFeature('a')], [integration.features[1]]);
+    renderCompletionSummary(
+      integration,
+      [installedFeature('a')],
+      [integration.features[1]],
+      new TerminalConsole(),
+    );
 
     const removedPhase = getMockUiCalls().find(
       (c) => c.method === 'phase' && c.args[0] === 'Removed',
@@ -235,9 +243,9 @@ describe('renderCompletionSummary', () => {
       features: [],
     };
 
-    expect(() => renderCompletionSummary(integration, [installedFeature('orphan')], [])).toThrow(
-      'No declaration found for installed feature test.orphan',
-    );
+    expect(() =>
+      renderCompletionSummary(integration, [installedFeature('orphan')], [], new TerminalConsole()),
+    ).toThrow('No declaration found for installed feature test.orphan');
   });
 
   it('renders a feature post-install example (intro, boxed note, footer)', () => {
@@ -258,7 +266,7 @@ describe('renderCompletionSummary', () => {
       ],
     };
 
-    renderCompletionSummary(integration, [installedFeature('a')], []);
+    renderCompletionSummary(integration, [installedFeature('a')], [], new TerminalConsole());
 
     const calls = getMockUiCalls();
     expect(
@@ -283,7 +291,12 @@ describe('renderCompletionSummary', () => {
           : undefined,
     };
 
-    renderCompletionSummary(integration, [installedFeature('a'), installedFeature('b')], []);
+    renderCompletionSummary(
+      integration,
+      [installedFeature('a'), installedFeature('b')],
+      [],
+      new TerminalConsole(),
+    );
 
     const notes = getMockUiCalls().filter((c) => c.method === 'note');
     expect(notes).toHaveLength(1);
@@ -302,7 +315,12 @@ describe('renderCompletionSummary', () => {
       combinedPostInstallExample: () => undefined,
     };
 
-    renderCompletionSummary(integration, [installedFeature('a'), installedFeature('b')], []);
+    renderCompletionSummary(
+      integration,
+      [installedFeature('a'), installedFeature('b')],
+      [],
+      new TerminalConsole(),
+    );
 
     const noteBodies = getMockUiCalls()
       .filter((c) => c.method === 'note')

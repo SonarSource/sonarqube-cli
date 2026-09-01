@@ -23,6 +23,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import {
   assertSonarCloudOrganization,
@@ -69,7 +70,7 @@ describe('warnMissingIntegrateProjectKey', () => {
   });
 
   it('warns for project-scoped install without a project key', () => {
-    warnMissingIntegrateProjectKey('codex', false, undefined);
+    warnMissingIntegrateProjectKey('codex', false, undefined, new TerminalConsole());
 
     expect(
       getMockUiCalls().some(
@@ -79,7 +80,7 @@ describe('warnMissingIntegrateProjectKey', () => {
   });
 
   it('stays silent for global install without a project key', () => {
-    warnMissingIntegrateProjectKey('copilot', true, undefined);
+    warnMissingIntegrateProjectKey('copilot', true, undefined, new TerminalConsole());
 
     expect(getMockUiCalls().some((c) => c.method === 'warn')).toBe(false);
   });

@@ -26,6 +26,7 @@ import {
 } from '@/core/host/install/binary.ts';
 import { SCA_SCANNER_SPEC } from '@/core/host/install/sca-scanner.ts';
 import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import type {
   DependencyInstallContext,
@@ -56,7 +57,9 @@ export class SonarSourceBinaryDependency implements DependencyDeclaration {
   }
 
   async installOrUpdate(_context: DependencyInstallContext): Promise<InstalledDependency> {
-    const result = await installBinary(this.options.spec);
+    const result = await installBinary(this.options.spec, {
+      console: new TerminalConsole(),
+    });
     return {
       id: this.id,
       version: this.version,

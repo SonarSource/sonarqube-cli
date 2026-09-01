@@ -20,6 +20,8 @@
 
 import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test';
 
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
+
 const binaryModule = await import('@/core/host/install/binary.ts');
 
 type InstallBinaryFn = typeof binaryModule.installBinary;
@@ -86,7 +88,7 @@ describe('DefaultSecretsInstaller', () => {
     installBinaryImpl = () =>
       Promise.resolve({ binaryPath: '/bin/sonar-secrets', freshlyInstalled: false });
 
-    const result = await new DefaultSecretsInstaller().install();
+    const result = await new DefaultSecretsInstaller(new TerminalConsole()).install();
 
     expect(result).toBe('/bin/sonar-secrets');
   });
@@ -95,6 +97,8 @@ describe('DefaultSecretsInstaller', () => {
     installBinaryImpl = () => Promise.reject(new Error('download failed'));
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(new DefaultSecretsInstaller().install()).rejects.toThrow(/download failed/);
+    await expect(new DefaultSecretsInstaller(new TerminalConsole()).install()).rejects.toThrow(
+      /download failed/,
+    );
   });
 });

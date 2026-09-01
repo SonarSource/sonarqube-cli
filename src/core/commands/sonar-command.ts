@@ -234,7 +234,7 @@ export class SonarCommand extends Command {
     }
     super(name);
     this._console = options.console;
-    this._updateNotifier = options.updateNotifier ?? new UpdateNotifier();
+    this._updateNotifier = options.updateNotifier ?? new UpdateNotifier(this._console);
     this._runtime = options.runtime ?? createDefaultCliRuntime();
     this.hook('preAction', () => {
       if (this._lifecycle.stage === 'alpha') {

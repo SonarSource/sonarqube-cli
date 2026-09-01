@@ -25,9 +25,9 @@ import { CommandFailedError } from '@/core/command-error.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
-import { blank, confirmPrompt, text, warn } from '@/core/ui';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
-
+import type { Console } from '@/core/ui/console.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 const LARGE_CHANGESET_HINT =
   'For faster feedback, try targeting your changes:\n' +
   '  --staged          analyze only staged files\n' +
@@ -72,11 +72,12 @@ export async function resolveSqaaAuthAndProject(
   auth: ResolvedAuth,
   explicitProject: string | undefined,
   projectRoot?: string,
+  console: Console = new TerminalConsole(),
 ): Promise<SqaaAuthResolution> {
-  const sqaaAuth = resolveSqaaAuth(auth, explicitProject);
+  const sqaaAuth = resolveSqaaAuth(auth, explicitProject, console);
   if (!sqaaAuth) return { kind: 'no-org' };
 
-  const projectKey = explicitProject ?? (await resolveSqaaProjectKey(auth, projectRoot));
+  const projectKey = explicitProject ?? (await resolveSqaaProjectKey(auth, projectRoot, console));
   if (!projectKey) return { kind: 'no-project' };
 
   noteProject(auth, projectKey);
@@ -93,6 +94,7 @@ export async function resolveSqaaAuthAndProject(
 export function resolveSqaaAuth(
   auth: ResolvedAuth,
   explicitProject: string | undefined,
+  console: Console = new TerminalConsole(),
 ): SqaaAuth | null {
   if (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey) {
     if (explicitProject) {
@@ -100,7 +102,7 @@ export function resolveSqaaAuth(
         remediationHint: "Run 'sonar auth login' and select an organization, then retry.",
       });
     }
-    warn(
+    console.warn(
       'Vortex analysis skipped: a SonarQube Cloud organization is required. Run: sonar auth login',
     );
     return null;
@@ -123,8 +125,13 @@ export function resolveSqaaAuth(
 export async function resolveSqaaProjectKey(
   auth: ResolvedAuth,
   projectRoot?: string,
+  console: Console = new TerminalConsole(),
 ): Promise<string | null> {
-  const discovered = await discoverProject(projectRoot ?? process.cwd(), { auth, silent: true });
+  const discovered = await discoverProject(projectRoot ?? process.cwd(), {
+    auth,
+    silent: true,
+    console,
+  });
   if (!discovered.projectKey) {
     logger.debug('Vortex analysis skipped: no project key found');
   }
@@ -136,9 +143,12 @@ export async function resolveSqaaProjectKey(
  * In non-interactive contexts (no stdin TTY — e.g. CI/agent runs), prints a
  * warning and auto-proceeds. Returns false only when the user explicitly declines in an interactive terminal.
  */
-export async function confirmLargeChangeset(fileCount: number): Promise<boolean> {
-  blank();
-  warn(
+export async function confirmLargeChangeset(
+  fileCount: number,
+  console: Console = new TerminalConsole(),
+): Promise<boolean> {
+  console.blank();
+  console.warn(
     `You are about to analyze a large number of files (${fileCount}). This may take longer to process.\n${LARGE_CHANGESET_HINT}`,
   );
 
@@ -146,12 +156,12 @@ export async function confirmLargeChangeset(fileCount: number): Promise<boolean>
     return true;
   }
 
-  blank();
-  printAgentNonInteractiveAlternativeHint('sonar analyze --force');
-  const confirmed = await confirmPrompt('Do you wish to proceed?', true);
+  console.blank();
+  printAgentNonInteractiveAlternativeHint(console, 'sonar analyze --force');
+  const confirmed = await console.confirmPrompt('Do you wish to proceed?', true);
   if (!confirmed) {
-    blank();
-    text('Analysis cancelled. Use --force to bypass the file count check.');
+    console.blank();
+    console.text('Analysis cancelled. Use --force to bypass the file count check.');
     return false;
   }
   return true;

@@ -23,13 +23,8 @@ import { SQAA_ANALYZE_CALLER_COMMAND } from '@/commands/analyze/sqaa-analysis-te
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
-import {
-  blank,
-  getMessagesForFormattedOutput,
-  print,
-  setFormattedOutputMode,
-  text,
-} from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import type { SecretsJsonIssue } from './secrets.ts';
 import {
@@ -73,8 +68,18 @@ function secretsReport(
   return report;
 }
 
-function printCombinedReport(secrets: SecretsReport | null, agentic: SqaaJsonReport | null): void {
-  print(JSON.stringify({ secrets, agentic, messages: getMessagesForFormattedOutput() }, null, 2));
+function printCombinedReport(
+  secrets: SecretsReport | null,
+  agentic: SqaaJsonReport | null,
+  console: Console = new TerminalConsole(),
+): void {
+  console.print(
+    JSON.stringify(
+      { secrets, agentic, messages: console.getMessagesForFormattedOutput() },
+      null,
+      2,
+    ),
+  );
 }
 
 /**
@@ -88,6 +93,7 @@ export async function analyzeAll(
   options: AnalyzeAllOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
+  const { console } = ctx;
   if (options.format === 'json') {
     return analyzeAllJson(options, ctx);
   }
@@ -108,8 +114,8 @@ export async function analyzeAll(
   const changeSet = await resolveChangeSet(process.cwd(), { staged, base });
 
   if (changeSet.files.length === 0) {
-    blank();
-    text(
+    console.blank();
+    console.text(
       'SonarQube Analysis: no files in the change set to analyze. ' +
         'Untracked files are included by default; if you expected files here, check your git status.',
     );
@@ -134,8 +140,8 @@ async function analyzeAllJson(
   options: AnalyzeAllOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const { auth } = ctx;
-  setFormattedOutputMode(true);
+  const { auth, console } = ctx;
+  console.setFormattedOutputMode(true);
   try {
     const { file: rawFiles, staged, base } = options;
 
@@ -153,13 +159,13 @@ async function analyzeAllJson(
     const changeSet = await resolveChangeSet(process.cwd(), { staged, base });
 
     if (changeSet.files.length === 0) {
-      printCombinedReport(secretsReport([]), makeReport([], [], changeSet.ignored));
+      printCombinedReport(secretsReport([]), makeReport([], [], changeSet.ignored), console);
       return;
     }
 
     await runSecretsAndAgentic(changeSet.files, options, auth, ctx);
   } finally {
-    setFormattedOutputMode(false);
+    console.setFormattedOutputMode(false);
   }
 }
 
@@ -178,7 +184,7 @@ async function runSecretsAndAgentic(
         telemetryCtx: ctx,
       });
 
-  printCombinedReport(secrets?.report ?? null, agentic);
+  printCombinedReport(secrets?.report ?? null, agentic, ctx.console);
 
   if (secretsFailed) {
     process.exitCode = secrets.exitCode;

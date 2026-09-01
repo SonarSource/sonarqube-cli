@@ -27,7 +27,7 @@ import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-en
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
 import { getToken } from '@/core/host/keychain.ts';
 import { discoverProject } from '@/core/project-info.ts';
-
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 // Commander may assign --help/-h to the optional [action] positional on some platforms.
 function buildForwardedArgs(
   action: string | undefined,
@@ -89,7 +89,11 @@ async function resolveRecordedContextAugmentationConfig(
   cwd: string,
   auth: ResolvedAuth,
 ): Promise<RecordedContextAugmentationConfig> {
-  const discovered = await discoverProject(cwd, { auth, silent: true });
+  const discovered = await discoverProject(cwd, {
+    auth,
+    silent: true,
+    console: new TerminalConsole(),
+  });
   if (!discovered.projectKey) {
     return {};
   }
