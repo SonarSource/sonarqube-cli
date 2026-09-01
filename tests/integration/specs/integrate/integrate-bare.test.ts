@@ -25,8 +25,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { hookScriptName, TestHarness } from '../../harness';
 import { findInstalledFeature } from './state-helpers';
 
-const CLAUDE_PROMPT_STDIN_DELAY_MS = 1000;
-
 describe('integrate (bare command)', () => {
   let harness: TestHarness;
 
@@ -46,8 +44,10 @@ describe('integrate (bare command)', () => {
       const server = await harness.newFakeServer().withAuthToken('test-token').start();
       harness.withAuth(server.baseUrl(), 'test-token');
 
-      // Ctrl+C cancels the single-select prompt.
-      const result = await harness.run('integrate', { stdinChunks: ['\x03'] });
+      const session = harness.runInteractive('integrate');
+      await session.waitText('Select the tool you want to integrate with');
+      session.keyCtrlC();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('No integration selected');
@@ -87,18 +87,16 @@ describe('integrate (bare command)', () => {
       );
 
       // Single-select: the cursor starts on Claude (index 0); Enter confirms it.
-      const result = await harness.run('integrate', {
-        stdinChunks: [
-          // select Claude
-          '\r',
-          // scope prompt: keep "This project"
-          '\r',
-          // Claude: Install secret scanning hooks? + Install MCP server?
-          '\r',
-          '\r',
-        ],
-        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
-      });
+      const session = harness.runInteractive('integrate');
+      await session.waitText('Select the tool you want to integrate with');
+      session.keyEnter();
+      await session.waitText('Where should SonarQube be integrated?');
+      session.keyEnter();
+      await session.waitText('Install secret scanning hooks?');
+      session.keyEnter();
+      await session.waitText('Install MCP server?');
+      session.keyEnter();
+      const result = await session.waitFinish();
       const output = result.stdout + result.stderr;
 
       expect(result.exitCode).toBe(0);
@@ -128,16 +126,14 @@ describe('integrate (bare command)', () => {
 
       // --global is passed through to the integration: scope prompt is skipped and
       // the integration installs at global scope.
-      const result = await harness.run('integrate --global', {
-        stdinChunks: [
-          // select Claude
-          '\r',
-          // Claude: Install secret scanning hooks? + Install MCP server?
-          '\r',
-          '\r',
-        ],
-        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
-      });
+      const session = harness.runInteractive('integrate --global');
+      await session.waitText('Select the tool you want to integrate with');
+      session.keyEnter();
+      await session.waitText('Install secret scanning hooks?');
+      session.keyEnter();
+      await session.waitText('Install MCP server?');
+      session.keyEnter();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const feature = findInstalledFeature(harness, 'claude-code', 'sonar-secrets-hooks');
@@ -169,16 +165,14 @@ describe('integrate (bare command)', () => {
 
       // -p is passed through to the integration: scope prompt is skipped (explicit
       // project key implies project scope) and the key is baked into the install.
-      const result = await harness.run('integrate --project my-project', {
-        stdinChunks: [
-          // select Claude
-          '\r',
-          // Claude: Install secret scanning hooks? + Install MCP server?
-          '\r',
-          '\r',
-        ],
-        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
-      });
+      const session = harness.runInteractive('integrate --project my-project');
+      await session.waitText('Select the tool you want to integrate with');
+      session.keyEnter();
+      await session.waitText('Install secret scanning hooks?');
+      session.keyEnter();
+      await session.waitText('Install MCP server?');
+      session.keyEnter();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const feature = findInstalledFeature(harness, 'claude-code', 'sonar-secrets-hooks');

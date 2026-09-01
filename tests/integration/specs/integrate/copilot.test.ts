@@ -26,7 +26,7 @@ import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
-import { normalizePath, TestHarness } from '../../harness';
+import { type CliResult, normalizePath, TestHarness } from '../../harness';
 import {
   CopilotHookEntry,
   CopilotHooksJson,
@@ -678,10 +678,18 @@ describe('integrate copilot', () => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
         // Interactive (no --non-interactive): the entitled org makes Vortex an ask.
-        const result = await harness.run(`integrate copilot --project ${TEST_PROJECT}`, {
+        const session = harness.runInteractive(`integrate copilot --project ${TEST_PROJECT}`, {
           extraEnv: { ...extraEnv, __SQCLI_DEV_SKIP_CAG: '1' },
-          stdinChunks: ['\r', '\r', '\r', '\r', '\r'],
         });
+        await session.waitText('Install pre-tool-use hook?');
+        session.keyEnter();
+        await session.waitText('Install prompt-secrets instructions?');
+        session.keyEnter();
+        await session.waitText('Install Vortex?');
+        session.keyEnter();
+        await session.waitText('Install MCP server?');
+        session.keyEnter();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;
@@ -838,8 +846,8 @@ describe('integrate copilot', () => {
   // ─── Interactive feature selection ──────────────────────────────────────────
   //
   // Without --non-interactive each feature is gated by a prompt (ask) or an
-  // automatic skip. The harness drives the confirm prompts via stdin chunks
-  // (one keypress per prompt: '\r' accepts the default Yes, 'n' declines).
+  // automatic skip. InteractiveSession waits for each prompt, then enter()
+  // accepts the default Yes and write('n') declines.
 
   describe('interactive feature selection', () => {
     it(
@@ -848,9 +856,16 @@ describe('integrate copilot', () => {
         // Default beforeEach is on-premise with no entitlement stubs, so Vortex
         // is not_applicable. The three remaining
         // features (hook, prompt-secrets, MCP) each ask.
-        const result = await harness.run('integrate copilot', {
-          stdinChunks: ['\r', '\r', '\r', '\r'],
-        });
+        const session = harness.runInteractive('integrate copilot');
+        await session.waitText('Where should SonarQube be integrated?');
+        session.keyEnter();
+        await session.waitText('Install pre-tool-use hook?');
+        session.keyEnter();
+        await session.waitText('Install prompt-secrets instructions?');
+        session.keyEnter();
+        await session.waitText('Install MCP server?');
+        session.keyEnter();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;
@@ -884,13 +899,22 @@ describe('integrate copilot', () => {
     ])(
       'prints a non-interactive hint with --non-interactive plus -p/-g examples only for a detected AI agent without --non-interactive (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
       async (isAgent, isInteractive, expectedShownPrompt) => {
-        const result = await harness.run(
-          `integrate copilot${isInteractive ? '' : ' --non-interactive'}`,
-          {
-            ...(isInteractive ? { stdinChunks: ['\r', '\r', '\r', '\r'] } : {}),
-            extraEnv: isAgent ? { COPILOT_CLI: '1' } : {},
-          },
-        );
+        const extraEnv: Record<string, string> = isAgent ? { COPILOT_CLI: '1' } : {};
+        let result: CliResult;
+        if (isInteractive) {
+          const session = harness.runInteractive('integrate copilot', { extraEnv });
+          await session.waitText('Where should SonarQube be integrated?');
+          session.keyEnter();
+          await session.waitText('Install pre-tool-use hook?');
+          session.keyEnter();
+          await session.waitText('Install prompt-secrets instructions?');
+          session.keyEnter();
+          await session.waitText('Install MCP server?');
+          session.keyEnter();
+          result = await session.waitFinish();
+        } else {
+          result = await harness.run('integrate copilot --non-interactive', { extraEnv });
+        }
 
         expect(result.exitCode).toBe(0);
         if (expectedShownPrompt) {
@@ -910,10 +934,16 @@ describe('integrate copilot', () => {
     it(
       'skips a feature when the user declines its prompt',
       async () => {
-        // '\r' selects project scope; 'n' + '\r' declines the hook; '\r' accepts the rest.
-        const result = await harness.run('integrate copilot', {
-          stdinChunks: ['\r', 'n', '\r', '\r', '\r'],
-        });
+        const session = harness.runInteractive('integrate copilot');
+        await session.waitText('Where should SonarQube be integrated?');
+        session.keyEnter();
+        await session.waitText('Install pre-tool-use hook?');
+        session.write('n');
+        await session.waitText('Install prompt-secrets instructions?');
+        session.keyEnter();
+        await session.waitText('Install MCP server?');
+        session.keyEnter();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         // Hook was declined: no project-level hook artifacts and no state entry.
@@ -934,9 +964,16 @@ describe('integrate copilot', () => {
         writeExistingGlobalHook(harness);
         writeExistingGlobalInstructions(harness);
 
-        const result = await harness.run('integrate copilot', {
-          stdinChunks: ['\r', '\r', '\r'],
-        });
+        const session = harness.runInteractive('integrate copilot');
+        await session.waitText('Where should SonarQube be integrated?');
+        session.keyEnter();
+        await session.waitText(
+          'Global Copilot instructions already exist. Do you also want to create a project-local copy for this repo?',
+        );
+        session.keyEnter();
+        await session.waitText('Install MCP server?');
+        session.keyEnter();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;

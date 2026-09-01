@@ -39,7 +39,7 @@ import {
 } from '../../../_common/agent-hint-assertions.js';
 import type { StoredAnalysisCompletedEvent } from '../../../_common/telemetry-helpers';
 import { readAnalysisEvents, readCommandEvents } from '../../../_common/telemetry-helpers';
-import { TestHarness } from '../../harness';
+import { type CliResult, TestHarness } from '../../harness';
 import { commitFile, git, initGitRepo, stageFile } from '../hook/git-test-helpers';
 import {
   allSqaaRequestsUseDeep,
@@ -1636,13 +1636,19 @@ describe('analyze agentic — change-set mode (no --file)', () => {
         harness.cwd.writeFile(`file${i}.ts`, `const x${i} = ${i};`);
       }
 
-      const result = await harness.run(`analyze agentic${isInteractive ? '' : ' --force'}`, {
-        ...(isInteractive ? { stdinChunks: ['\r'] } : {}),
-        extraEnv: {
-          SONARQUBE_CLI_MOCK_TTY: '1',
-          ...(isAgent ? { CLAUDECODE: '1' } : {}),
-        },
-      });
+      const extraEnv = {
+        SONARQUBE_CLI_MOCK_TTY: '1',
+        ...(isAgent ? { CLAUDECODE: '1' } : {}),
+      };
+      let result: CliResult;
+      if (isInteractive) {
+        const session = harness.runInteractive('analyze agentic', { extraEnv });
+        await session.waitText('Do you wish to proceed?');
+        session.keyEnter();
+        result = await session.waitFinish();
+      } else {
+        result = await harness.run('analyze agentic --force', { extraEnv });
+      }
 
       expect(result.exitCode).toBe(0);
       if (expectedShownPrompt) {
