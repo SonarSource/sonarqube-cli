@@ -29,6 +29,7 @@ import { QualityGatesClient } from '@/core/server/quality-gates.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { print } from '@/core/ui';
 
+import { buildBreakdown } from './breakdown.ts';
 import { selectConditions } from './condition-summary.ts';
 import { formatQualityGateJson } from './format-json.ts';
 import { formatQualityGateTable } from './format-table.ts';
@@ -36,6 +37,8 @@ import { resolveDisplayScope, resolveScopeQueryParams } from './scope.ts';
 import { exitCodeFor, toVerdict } from './verdict.ts';
 
 export const VALID_FORMATS = ['json', 'table'];
+
+const DEFAULT_TOP = 3;
 
 export interface QualityGateStatusOptions {
   project?: string;
@@ -65,21 +68,31 @@ export async function qualityGateStatus(
   ]);
 
   const rawConditions = projectStatus?.conditions ?? [];
-  const hasConditionsToRender = options.all
-    ? rawConditions.length > 0
-    : rawConditions.some((condition) => condition.status !== 'OK');
+  const hasFailingConditions = rawConditions.some((condition) => condition.status !== 'OK');
+  const hasConditionsToRender = options.all ? rawConditions.length > 0 : hasFailingConditions;
 
   const metricsClient = new MetricsClient(client);
   const metrics = hasConditionsToRender ? await metricsClient.searchMetrics() : [];
 
   const verdict = toVerdict(projectStatus?.status);
   const conditions = selectConditions(rawConditions, metrics, options.all);
+  const breakdown = hasFailingConditions
+    ? await buildBreakdown({
+        client,
+        projectKey,
+        conditions: rawConditions,
+        metrics,
+        top: DEFAULT_TOP,
+        branch: queryParams.branch,
+        pullRequest: queryParams.pullRequest,
+      })
+    : [];
 
   const format = options.format ?? 'table';
   const message =
     format === 'table'
-      ? formatQualityGateTable({ verdict, project: projectKey, scope, conditions })
-      : formatQualityGateJson({ verdict, project: projectKey, scope, conditions });
+      ? formatQualityGateTable({ verdict, project: projectKey, scope, conditions, breakdown })
+      : formatQualityGateJson({ verdict, project: projectKey, scope, conditions, breakdown });
   print(message);
 
   process.exitCode = exitCodeFor(verdict);

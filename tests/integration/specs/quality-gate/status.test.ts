@@ -733,6 +733,834 @@ describe('quality-gate status', () => {
     },
     { timeout: 15000 },
   );
+  it(
+    'includes a coverage breakdown in JSON for a failing new_coverage condition',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '62.4',
+              },
+            ])
+            .withComponentTreeFiles('new_coverage', [
+              { path: 'src/checkout.ts', value: '31.0' },
+              { path: 'src/cart.ts', value: '45.2' },
+            ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --format json`);
+
+      expect(result.exitCode).toBe(51);
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.breakdown).toEqual([
+        {
+          metric: 'new_coverage',
+          totalCount: 2,
+          fetchedCount: 2,
+          entries: [
+            { path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' },
+            { path: 'src/cart.ts', value: '45.2', formattedValue: '45.2%' },
+          ],
+        },
+      ]);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'includes a coverage breakdown in JSON for a failing overall coverage condition',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'coverage', type: 'PERCENT', name: 'Coverage' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '62.4',
+              },
+            ])
+            .withComponentTreeFiles('coverage', [
+              { path: 'src/checkout.ts', value: '31.0' },
+              { path: 'src/cart.ts', value: '45.2' },
+            ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --format json`);
+
+      expect(result.exitCode).toBe(51);
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.breakdown).toEqual([
+        {
+          metric: 'coverage',
+          totalCount: 2,
+          fetchedCount: 2,
+          entries: [
+            { path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' },
+            { path: 'src/cart.ts', value: '45.2', formattedValue: '45.2%' },
+          ],
+        },
+      ]);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports the total matching file count separately from the truncated default top-3 entries',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '62.4',
+              },
+            ])
+            .withComponentTreeFiles('new_coverage', [
+              { path: 'src/a.ts', value: '10.0' },
+              { path: 'src/b.ts', value: '20.0' },
+              { path: 'src/c.ts', value: '30.0' },
+              { path: 'src/d.ts', value: '40.0' },
+              { path: 'src/e.ts', value: '50.0' },
+            ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --format json`);
+
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.breakdown).toEqual([
+        {
+          metric: 'new_coverage',
+          totalCount: 5,
+          fetchedCount: 3,
+          entries: [
+            { path: 'src/a.ts', value: '10.0', formattedValue: '10.0%' },
+            { path: 'src/b.ts', value: '20.0', formattedValue: '20.0%' },
+            { path: 'src/c.ts', value: '30.0', formattedValue: '30.0%' },
+          ],
+        },
+      ]);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'excludes a fetched component with no readable value from entries, but not from fetchedCount',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '62.4',
+              },
+            ])
+            .withComponentTreeFiles('new_coverage', [
+              { path: 'src/checkout.ts', value: '31.0' },
+              { path: 'src/generated.ts' }, // no measure for this metric - toBreakdownEntry drops it
+              { path: 'src/cart.ts', value: '45.2' },
+            ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --format json`);
+
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.breakdown).toEqual([
+        {
+          metric: 'new_coverage',
+          totalCount: 3,
+          fetchedCount: 3,
+          entries: [
+            { path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' },
+            { path: 'src/cart.ts', value: '45.2', formattedValue: '45.2%' },
+          ],
+        },
+      ]);
+
+      // The page already covered every matching file (fetchedCount === totalCount), so there's
+      // no "N more" hint to show, even though entries.length (2) is less than totalCount (3).
+      const tableResult = await harness.run(
+        `quality-gate status --project my-project --format table`,
+      );
+      expect(tableResult.stdout).not.toContain('more');
+      expect(tableResult.stdout).not.toContain('--top');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'rounds a full-precision component_tree coverage value to one decimal place',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '62.4',
+              },
+            ])
+            // Real SonarQube Cloud project_status conditions arrive pre-rounded, but
+            // component_tree per-file measures don't - e.g. 38.84615384615385.
+            .withComponentTreeFiles('new_coverage', [
+              { path: 'src/checkout.ts', value: '38.84615384615385' },
+            ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --format json`);
+
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.breakdown).toEqual([
+        {
+          metric: 'new_coverage',
+          totalCount: 1,
+          fetchedCount: 1,
+          entries: [
+            {
+              path: 'src/checkout.ts',
+              value: '38.84615384615385',
+              formattedValue: '38.8%',
+            },
+          ],
+        },
+      ]);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    "rounds a full-precision component_tree coverage value to the metric catalog's own decimalScale, not always one",
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([
+          { key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code', decimalScale: 2 },
+        ])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '62.4',
+              },
+            ])
+            .withComponentTreeFiles('new_coverage', [
+              { path: 'src/checkout.ts', value: '38.84615384615385' },
+            ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --format json`);
+
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.breakdown).toEqual([
+        {
+          metric: 'new_coverage',
+          totalCount: 1,
+          fetchedCount: 1,
+          entries: [
+            {
+              path: 'src/checkout.ts',
+              value: '38.84615384615385',
+              formattedValue: '38.85%',
+            },
+          ],
+        },
+      ]);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'renders the coverage breakdown in the table, nested under its condition, without long paths colliding with the value',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '62.4',
+              },
+            ])
+            .withComponentTreeFiles('new_coverage', [
+              { path: 'src/checkout.ts', value: '31.0' },
+              { path: 'src/a-very-long-file-name-that-should-not-collide.ts', value: '45.2' },
+            ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --format table`);
+
+      const lines = result.stdout.split('\n');
+      const shortLine = lines.find((l) => l.includes('src/checkout.ts'));
+      const longLine = lines.find((l) =>
+        l.includes('src/a-very-long-file-name-that-should-not-collide.ts'),
+      );
+      expect(shortLine).toBeDefined();
+      expect(longLine).toBeDefined();
+      // Both value columns must start at the same offset, proving the short path was padded
+      // out to the long path's width rather than butting straight up against its own value.
+      expect(shortLine?.indexOf('31.0')).toBe(longLine?.indexOf('45.2'));
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'renders the coverage breakdown in the table for a failing overall coverage condition',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'coverage', type: 'PERCENT', name: 'Coverage' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '62.4',
+              },
+            ])
+            .withComponentTreeFiles('coverage', [
+              { path: 'src/checkout.ts', value: '31.0' },
+              { path: 'src/cart.ts', value: '45.2' },
+            ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --format table`);
+
+      const lines = result.stdout.split('\n');
+      const conditionIndex = lines.findIndex((l) => l.includes('Coverage'));
+      expect(lines[conditionIndex + 1]).toContain('src/checkout.ts');
+      // Asserting the '%' suffix, not just the bare number, proves the table renders
+      // `formattedValue`, not the raw `value` the JSON breakdown also carries.
+      expect(lines[conditionIndex + 1]).toContain('31.0%');
+      expect(lines[conditionIndex + 2]).toContain('src/cart.ts');
+      expect(lines[conditionIndex + 2]).toContain('45.2%');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows a "N more" hint with no suggestion when the table omits entries the JSON totalCount accounts for',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '62.4',
+              },
+            ])
+            .withComponentTreeFiles('new_coverage', [
+              { path: 'src/a.ts', value: '10.0' },
+              { path: 'src/b.ts', value: '20.0' },
+              { path: 'src/c.ts', value: '30.0' },
+              { path: 'src/d.ts', value: '40.0' },
+              { path: 'src/e.ts', value: '50.0' },
+            ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --format table`);
+
+      const lines = result.stdout.split('\n');
+      const conditionIndex = lines.findIndex((l) => l.includes('Coverage on New Code'));
+      expect(lines[conditionIndex + 1]).toContain('src/a.ts');
+      expect(lines[conditionIndex + 2]).toContain('src/b.ts');
+      expect(lines[conditionIndex + 3]).toContain('src/c.ts');
+      expect(lines[conditionIndex + 4]).toContain('… 2 more not shown');
+      expect(lines[conditionIndex + 4]).not.toContain('--top');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'omits the "N more" hint when the table already shows every entry',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '62.4',
+              },
+            ])
+            .withComponentTreeFiles('new_coverage', [{ path: 'src/checkout.ts', value: '31.0' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --format table`);
+
+      expect(result.stdout).not.toContain('more');
+      expect(result.stdout).not.toContain('--top');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'omits the breakdown entirely when no failing condition matches an implemented category',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withProjectStatus('ERROR').withConditions([
+            {
+              status: 'ERROR',
+              metricKey: 'new_violations',
+              comparator: 'GT',
+              errorThreshold: '0',
+              actualValue: '3',
+            },
+          ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --format json`);
+
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.breakdown).toBeUndefined();
+      const componentTreeRequests = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/measures/component_tree');
+      expect(componentTreeRequests).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'does not fetch a breakdown at all when the quality gate passes',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK'))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      await harness.run(`quality-gate status --project my-project`);
+
+      const componentTreeRequests = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/measures/component_tree');
+      expect(componentTreeRequests).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'still reports the real verdict and exit code when the breakdown fetch itself fails',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '62.4',
+              },
+            ])
+            .withComponentTreeError(500),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --format json`);
+
+      expect(result.exitCode).toBe(51);
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.status).toBe('ERROR');
+      expect(parsed.qualityGate.breakdown).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    "keeps a sibling condition's breakdown when only one condition's fetch fails",
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([
+          { key: 'coverage', type: 'PERCENT', name: 'Coverage' },
+          { key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code' },
+        ])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '62.4',
+              },
+              {
+                status: 'ERROR',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '55.0',
+              },
+            ])
+            .withComponentTreeErrorForMetric('coverage', 500)
+            .withComponentTreeFiles('new_coverage', [{ path: 'src/checkout.ts', value: '31.0' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --format json`);
+
+      expect(result.exitCode).toBe(51);
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.breakdown).toEqual([
+        {
+          metric: 'new_coverage',
+          totalCount: 1,
+          fetchedCount: 1,
+          entries: [{ path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' }],
+        },
+      ]);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'includes an entry for every matching condition, in condition order, when several fetch concurrently',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([
+          { key: 'coverage', type: 'PERCENT', name: 'Coverage' },
+          { key: 'branch_coverage', type: 'PERCENT', name: 'Condition Coverage' },
+          { key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code' },
+        ])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '62.4',
+              },
+              {
+                status: 'ERROR',
+                metricKey: 'branch_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '50.0',
+              },
+              {
+                status: 'ERROR',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '55.0',
+              },
+            ])
+            .withComponentTreeFiles('coverage', [{ path: 'src/checkout.ts', value: '31.0' }])
+            .withComponentTreeFiles('branch_coverage', [{ path: 'src/cart.ts', value: '40.0' }])
+            .withComponentTreeFiles('new_coverage', [{ path: 'src/pay.ts', value: '55.0' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --format json`);
+
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.breakdown).toEqual([
+        {
+          metric: 'coverage',
+          totalCount: 1,
+          fetchedCount: 1,
+          entries: [{ path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' }],
+        },
+        {
+          metric: 'branch_coverage',
+          totalCount: 1,
+          fetchedCount: 1,
+          entries: [{ path: 'src/cart.ts', value: '40.0', formattedValue: '40.0%' }],
+        },
+        {
+          metric: 'new_coverage',
+          totalCount: 1,
+          fetchedCount: 1,
+          entries: [{ path: 'src/pay.ts', value: '55.0', formattedValue: '55.0%' }],
+        },
+      ]);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'requests the top 3 files by default',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '62.4',
+              },
+            ])
+            .withComponentTreeFiles('new_coverage', [{ path: 'src/checkout.ts', value: '31.0' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      await harness.run(`quality-gate status --project my-project`);
+
+      const componentTreeRequests = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/measures/component_tree');
+      expect(componentTreeRequests).toHaveLength(1);
+      expect(componentTreeRequests[0].query.ps).toBe('3');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'only enriches the coverage condition when multiple conditions fail together',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'new_violations',
+                comparator: 'GT',
+                errorThreshold: '0',
+                actualValue: '3',
+              },
+              {
+                status: 'ERROR',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '62.4',
+              },
+            ])
+            .withComponentTreeFiles('new_coverage', [{ path: 'src/checkout.ts', value: '31.0' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --format json`);
+
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.breakdown).toEqual([
+        {
+          metric: 'new_coverage',
+          totalCount: 1,
+          fetchedCount: 1,
+          entries: [{ path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' }],
+        },
+      ]);
+      const componentTreeRequests = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/measures/component_tree');
+      expect(componentTreeRequests).toHaveLength(1);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'attaches the breakdown to the correct condition in the table when multiple conditions fail',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'new_violations',
+                comparator: 'GT',
+                errorThreshold: '0',
+                actualValue: '3',
+              },
+              {
+                status: 'ERROR',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '62.4',
+              },
+            ])
+            .withComponentTreeFiles('new_coverage', [{ path: 'src/checkout.ts', value: '31.0' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --format table`);
+
+      const lines = result.stdout.split('\n');
+      const violationsIndex = lines.findIndex((l) => l.includes('new_violations'));
+      const coverageIndex = lines.findIndex((l) => l.includes('new_coverage'));
+      const fileIndex = lines.findIndex((l) => l.includes('src/checkout.ts'));
+
+      expect(violationsIndex).toBeGreaterThanOrEqual(0);
+      expect(coverageIndex).toBeGreaterThan(violationsIndex);
+      // The breakdown line must sit directly after the coverage condition's own line - proving
+      // it's attached to that condition specifically, not bleeding onto new_violations above it.
+      expect(fileIndex).toBe(coverageIndex + 1);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'does not enrich a passing coverage condition even when --all is given',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withProjectStatus('ERROR').withConditions([
+            {
+              status: 'OK',
+              metricKey: 'new_coverage',
+              comparator: 'LT',
+              errorThreshold: '80',
+              actualValue: '95.0',
+            },
+            {
+              status: 'ERROR',
+              metricKey: 'new_violations',
+              comparator: 'GT',
+              errorThreshold: '0',
+              actualValue: '3',
+            },
+          ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status --project my-project --all --format json`,
+      );
+
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.breakdown).toBeUndefined();
+      const componentTreeRequests = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/measures/component_tree');
+      expect(componentTreeRequests).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
 
   it(
     'rejects an invalid --format value',

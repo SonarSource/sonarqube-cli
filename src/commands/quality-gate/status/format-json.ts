@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { QualityGateMetricBreakdown } from './breakdown.ts';
 import type { QualityGateConditionSummary } from './condition-summary.ts';
 import type { QualityGateScope } from './scope.ts';
 import type { QualityGateVerdict } from './verdict.ts';
@@ -27,6 +28,7 @@ export interface QualityGateJsonViewModel {
   project: string;
   scope: QualityGateScope;
   conditions: QualityGateConditionSummary[];
+  breakdown?: QualityGateMetricBreakdown[];
 }
 
 export function formatQualityGateJson(vm: QualityGateJsonViewModel): string {
@@ -39,6 +41,7 @@ export function formatQualityGateJson(vm: QualityGateJsonViewModel): string {
         branch: isPullRequest ? undefined : vm.scope.value,
         pullRequest: isPullRequest ? vm.scope.value : undefined,
         conditions: vm.conditions,
+        breakdown: vm.breakdown && vm.breakdown.length > 0 ? vm.breakdown : undefined,
       },
     },
     null,

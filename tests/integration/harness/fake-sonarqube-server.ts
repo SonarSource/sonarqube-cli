@@ -56,6 +56,16 @@ export interface SqaaResponseConfig {
   errors?: Array<{ code: string; message: string }>;
 }
 
+export interface ComponentTreeFileConfig {
+  path: string;
+  value?: string;
+}
+
+interface ComponentTreeErrorConfig {
+  statusCode: number;
+  body?: string;
+}
+
 interface ProjectData {
   key: string;
   name: string;
@@ -64,6 +74,10 @@ interface ProjectData {
   qualityGateConditions?: QualityGateCondition[];
   defaultBranchName: string | null;
   unanalyzedBranch?: string;
+  componentTreeFilesByMetric: Map<string, ComponentTreeFileConfig[]>;
+  componentTreeStatusCode?: number;
+  componentTreeStatusBody?: string;
+  componentTreeErrorsByMetric: Map<string, ComponentTreeErrorConfig>;
 }
 
 export interface DopRepositoryConfig {
@@ -83,6 +97,10 @@ export class ProjectBuilder {
   private qualityGateConditions?: QualityGateCondition[];
   private defaultBranchName: string | null = 'main';
   private unanalyzedBranch?: string;
+  private readonly componentTreeFilesByMetric: Map<string, ComponentTreeFileConfig[]> = new Map();
+  private componentTreeStatusCode?: number;
+  private componentTreeStatusBody?: string;
+  private readonly componentTreeErrorsByMetric: Map<string, ComponentTreeErrorConfig> = new Map();
 
   constructor(projectKey: string) {
     this.projectKey = projectKey;
@@ -145,6 +163,38 @@ export class ProjectBuilder {
     return this;
   }
 
+  /**
+   * Files `GET /api/measures/component_tree` returns for one metric key, in the order given -
+   * this fake server doesn't replicate the real sort/filter query params (covered by
+   * `MeasuresClient`'s own unit tests), it just hands back whatever worst-first order the test
+   * configured, truncated to the request's `ps`.
+   */
+  withComponentTreeFiles(metricKey: string, files: ComponentTreeFileConfig[]): this {
+    this.componentTreeFilesByMetric.set(metricKey, files);
+    return this;
+  }
+
+  /**
+   * Force `GET /api/measures/component_tree` to fail with the given HTTP status code for this
+   * project, simulating a quality-gate breakdown enrichment failure (network error, a server
+   * rejecting the sort params, a permission error) independent of the primary verdict call.
+   */
+  withComponentTreeError(statusCode: number, body?: string): this {
+    this.componentTreeStatusCode = statusCode;
+    this.componentTreeStatusBody = body;
+    return this;
+  }
+
+  /**
+   * Scopes a `component_tree` failure to one metric key, leaving other metrics' requests
+   * unaffected - proves a per-condition enrichment failure doesn't discard sibling conditions'
+   * already-fetched breakdowns.
+   */
+  withComponentTreeErrorForMetric(metricKey: string, statusCode: number, body?: string): this {
+    this.componentTreeErrorsByMetric.set(metricKey, { statusCode, body });
+    return this;
+  }
+
   getData(): ProjectData {
     return {
       key: this.projectKey,
@@ -154,6 +204,10 @@ export class ProjectBuilder {
       qualityGateConditions: this.qualityGateConditions,
       defaultBranchName: this.defaultBranchName,
       unanalyzedBranch: this.unanalyzedBranch,
+      componentTreeFilesByMetric: this.componentTreeFilesByMetric,
+      componentTreeStatusCode: this.componentTreeStatusCode,
+      componentTreeStatusBody: this.componentTreeStatusBody,
+      componentTreeErrorsByMetric: this.componentTreeErrorsByMetric,
     };
   }
 }
@@ -756,6 +810,51 @@ export class FakeSonarQubeServerBuilder {
           return new Response(JSON.stringify({ metrics, total: metrics.length, p: 1, ps: 500 }), {
             headers: { 'Content-Type': 'application/json' },
           });
+        }
+
+        if (path === '/api/measures/component_tree') {
+          const projectKey = query.component;
+          const projectData = projectKey ? projects.get(projectKey) : undefined;
+          const metricKey = query.metricKeys;
+
+          const perMetricError = metricKey
+            ? projectData?.componentTreeErrorsByMetric.get(metricKey)
+            : undefined;
+          if (perMetricError) {
+            return new Response(perMetricError.body ?? '', { status: perMetricError.statusCode });
+          }
+
+          if (projectData?.componentTreeStatusCode !== undefined) {
+            return new Response(projectData.componentTreeStatusBody ?? '', {
+              status: projectData.componentTreeStatusCode,
+            });
+          }
+          const configuredFiles =
+            (metricKey && projectData?.componentTreeFilesByMetric.get(metricKey)) || [];
+          const pageSize = Number.parseInt(query.ps ?? '100', 10);
+          const pagedFiles = configuredFiles.slice(0, pageSize);
+
+          return new Response(
+            JSON.stringify({
+              paging: { pageIndex: 1, pageSize, total: configuredFiles.length },
+              baseComponent: { key: projectKey, name: projectKey, qualifier: 'TRK', measures: [] },
+              components: pagedFiles.map((file) => ({
+                key: `${projectKey}:${file.path}`,
+                name: file.path.split('/').pop() ?? file.path,
+                qualifier: 'FIL',
+                path: file.path,
+                measures:
+                  file.value === undefined
+                    ? []
+                    : [
+                        metricKey?.startsWith('new_')
+                          ? { metric: metricKey, periods: [{ index: 1, value: file.value }] }
+                          : { metric: metricKey, value: file.value },
+                      ],
+              })),
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
         }
 
         // sonar-context-augmentation calls /api/project_branches/list to

@@ -54,7 +54,7 @@ function formatOptionalValue(
   if (rawValue === undefined || metric === undefined) {
     return rawValue;
   }
-  return formatMetricValue(metric.type, rawValue);
+  return formatMetricValue(metric.type, rawValue, metric.decimalScale);
 }
 
 function toSummary(
