@@ -228,7 +228,7 @@ describe('sonar remediate', () => {
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
       await session.waitText('Which issues should the agent fix?');
       session.write('q');
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('No issues selected');
@@ -251,7 +251,7 @@ describe('sonar remediate', () => {
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
       await session.waitText('Which issues should the agent fix?');
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('No issues selected');
@@ -285,7 +285,7 @@ describe('sonar remediate', () => {
         const session = harness.runInteractive(command, { extraEnv });
         await session.waitText('Which issues should the agent fix?');
         session.keyEnter();
-        result = await session.finish();
+        result = await session.waitFinish();
       } else {
         result = await harness.run(command, { extraEnv });
       }
@@ -319,7 +319,7 @@ describe('sonar remediate', () => {
       await session.waitText('Which issues should the agent fix?');
       session.keySpace();
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
@@ -351,7 +351,7 @@ describe('sonar remediate', () => {
       await session.waitText('Which issues should the agent fix?');
       session.keySpace();
       session.keyEnter();
-      await session.finish();
+      await session.waitFinish();
 
       const agentJobCalls = server
         .getRecordedRequests()
@@ -387,7 +387,7 @@ describe('sonar remediate', () => {
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
       await session.waitText('Which issues should the agent fix?');
       session.keyEnter();
-      await session.finish();
+      await session.waitFinish();
 
       const issuesSearchCalls = server
         .getRecordedRequests()
@@ -422,7 +422,7 @@ describe('sonar remediate', () => {
       await session.waitText('Which issues should the agent fix?');
       session.keySpace();
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(1);
       const output = result.stdout + result.stderr;
@@ -453,7 +453,7 @@ describe('sonar remediate', () => {
       await session.waitText('Which issues should the agent fix?');
       session.keySpace();
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(1);
       const output = result.stdout + result.stderr;
@@ -479,7 +479,7 @@ describe('sonar remediate', () => {
       const session = harness.runInteractive('remediate');
       await session.waitText('Which issues should the agent fix?');
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain(TEST_PROJECT);
@@ -530,7 +530,7 @@ describe('sonar remediate', () => {
       session.keyDown();
       session.keySpace();
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
@@ -576,7 +576,7 @@ describe('sonar remediate', () => {
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
       await session.waitText('Which issues should the agent fix?');
       session.write('q');
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
@@ -622,7 +622,7 @@ describe('sonar remediate', () => {
       await session.waitText('Which issues should the agent fix?');
       session.keySpace();
       session.keyEnter();
-      await session.finish();
+      await session.waitFinish();
 
       const agentJobCalls = server
         .getRecordedRequests()

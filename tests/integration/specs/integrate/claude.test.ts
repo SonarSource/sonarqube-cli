@@ -2000,7 +2000,7 @@ describe('integrate claude — interactive feature selection', () => {
       session.keyEnter();
       await session.waitText('Install MCP server?');
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const output = `${result.stdout}\n${result.stderr}`;
@@ -2054,7 +2054,7 @@ describe('integrate claude — interactive feature selection', () => {
         session.keyEnter();
         await session.waitText('Install MCP server?');
         session.keyEnter();
-        result = await session.finish();
+        result = await session.waitFinish();
       } else {
         result = await harness.run('integrate claude --non-interactive', { extraEnv });
       }
@@ -2091,7 +2091,7 @@ describe('integrate claude — interactive feature selection', () => {
       session.write('n');
       await session.waitText('Install MCP server?');
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       // Hooks were declined: no hook artifacts and no state entry.
@@ -2130,7 +2130,7 @@ describe('integrate claude — interactive feature selection', () => {
       session.keyEnter();
       await session.waitText('Install MCP server?');
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const output = `${result.stdout}\n${result.stderr}`;
@@ -2183,7 +2183,7 @@ describe('integrate claude — interactive feature selection', () => {
       session.keyEnter();
       await session.waitText('Install MCP server?');
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const output = `${result.stdout}\n${result.stderr}`;
@@ -2246,7 +2246,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       session.write('n');
       await session.waitText('Proceed with removal?');
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const output = `${result.stdout}\n${result.stderr}`;
@@ -2282,7 +2282,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       session.write('n');
       await session.waitText('Proceed with removal?');
       session.write('n');
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       // Declining removal leaves the MCP server installed.
@@ -2311,7 +2311,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       session.keyEnter();
       await session.waitText('MCP server (currently installed)  Keep?');
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const output = `${result.stdout}\n${result.stderr}`;
@@ -2361,7 +2361,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       session.keyEnter();
       await session.waitText('MCP server (currently installed)  Keep?');
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
 
@@ -2435,7 +2435,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       session.write('n');
       await session.waitText('Proceed with removal?');
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
 

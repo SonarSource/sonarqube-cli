@@ -21,7 +21,15 @@
 // Declarative builder for the isolated test environment: state.json + binary setup
 
 import { randomUUID } from 'node:crypto';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import {
+  accessSync,
+  chmodSync,
+  constants,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
@@ -551,6 +559,7 @@ export class EnvironmentBuilder {
 
   /**
    * Writes state.json and the keychain JSON file, and if withSecretsBinaryInstalled() was called, copies the mock binary.
+   * Leaves an existing read-only keychain in place so a test can exercise delete failure.
    */
   writeTo(cliHome: string, keychainFile: string): void {
     mkdirSync(cliHome, { recursive: true });
@@ -558,7 +567,7 @@ export class EnvironmentBuilder {
       this._rawStateJson ?? JSON.stringify(this.build(join(cliHome, 'bin')), null, 2);
     writeFileSync(join(cliHome, 'state.json'), stateJson, 'utf-8');
 
-    if (this.keychainTokens.length > 0) {
+    if (this.keychainTokens.length > 0 && canWriteFile(keychainFile)) {
       const tokens: Record<string, string> = {};
       for (const { serverURL, token, org } of this.keychainTokens) {
         const account = generateKeychainAccount(serverURL, org);
@@ -637,6 +646,18 @@ export class EnvironmentBuilder {
 }
 
 const EXECUTABLE_PERMS = 0o755;
+
+function canWriteFile(path: string): boolean {
+  if (!existsSync(path)) {
+    return true;
+  }
+  try {
+    accessSync(path, constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function copyBinaryFixtureInto(cliHome: string, fixture: BinarySpec, versionedName: string): void {
   const binDir = join(cliHome, 'bin');

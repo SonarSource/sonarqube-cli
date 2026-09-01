@@ -47,7 +47,7 @@ describe('integrate (bare command)', () => {
       const session = harness.runInteractive('integrate');
       await session.waitText('Select the tool you want to integrate with');
       session.keyCtrlC();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('No integration selected');
@@ -96,7 +96,7 @@ describe('integrate (bare command)', () => {
       session.keyEnter();
       await session.waitText('Install MCP server?');
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
       const output = result.stdout + result.stderr;
 
       expect(result.exitCode).toBe(0);
@@ -133,7 +133,7 @@ describe('integrate (bare command)', () => {
       session.keyEnter();
       await session.waitText('Install MCP server?');
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const feature = findInstalledFeature(harness, 'claude-code', 'sonar-secrets-hooks');
@@ -172,7 +172,7 @@ describe('integrate (bare command)', () => {
       session.keyEnter();
       await session.waitText('Install MCP server?');
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const feature = findInstalledFeature(harness, 'claude-code', 'sonar-secrets-hooks');

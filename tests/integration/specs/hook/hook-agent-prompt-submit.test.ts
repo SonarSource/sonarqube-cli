@@ -61,9 +61,9 @@ describe('sonar hook claude-prompt-submit', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, 'fake-token');
 
-      const result = await harness.run('hook claude-prompt-submit', {
-        stdin: JSON.stringify({ prompt: `my token is ${GITHUB_TEST_TOKEN}` }),
-      });
+      const session = harness.runInteractive('hook claude-prompt-submit');
+      session.write(JSON.stringify({ prompt: `my token is ${GITHUB_TEST_TOKEN}` }));
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const blockLine = result.stdout
@@ -84,9 +84,9 @@ describe('sonar hook claude-prompt-submit', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, 'fake-token');
 
-      const result = await harness.run('hook claude-prompt-submit', {
-        stdin: JSON.stringify({ prompt: 'please help me refactor this function' }),
-      });
+      const session = harness.runInteractive('hook claude-prompt-submit');
+      session.write(JSON.stringify({ prompt: 'please help me refactor this function' }));
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"block"');
@@ -100,9 +100,9 @@ describe('sonar hook claude-prompt-submit', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, 'fake-token');
 
-      const result = await harness.run('hook claude-prompt-submit', {
-        stdin: 'not valid json {{',
-      });
+      const session = harness.runInteractive('hook claude-prompt-submit');
+      session.write('not valid json {{');
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"block"');
@@ -116,9 +116,9 @@ describe('sonar hook claude-prompt-submit', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, 'fake-token');
 
-      const result = await harness.run('hook claude-prompt-submit', {
-        stdin: JSON.stringify({ tool_name: 'Read' }),
-      });
+      const session = harness.runInteractive('hook claude-prompt-submit');
+      session.write(JSON.stringify({ tool_name: 'Read' }));
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"block"');
@@ -132,9 +132,9 @@ describe('sonar hook claude-prompt-submit', () => {
       harness.state().withSecretsBinaryInstalled();
       // no withAuth — no active connection
 
-      const result = await harness.run('hook claude-prompt-submit', {
-        stdin: JSON.stringify({ prompt: `my token is ${GITHUB_TEST_TOKEN}` }),
-      });
+      const session = harness.runInteractive('hook claude-prompt-submit');
+      session.write(JSON.stringify({ prompt: `my token is ${GITHUB_TEST_TOKEN}` }));
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const payload = JSON.parse(result.stdout.trim()) as { decision: string; reason: string };
@@ -149,9 +149,9 @@ describe('sonar hook claude-prompt-submit', () => {
     async () => {
       harness.withAuth(FAKE_SERVER, 'fake-token');
 
-      const result = await harness.run('hook claude-prompt-submit', {
-        stdin: JSON.stringify({ prompt: `my token is ${GITHUB_TEST_TOKEN}` }),
-      });
+      const session = harness.runInteractive('hook claude-prompt-submit');
+      session.write(JSON.stringify({ prompt: `my token is ${GITHUB_TEST_TOKEN}` }));
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const payload = JSON.parse(result.stdout.trim()) as { decision: string; reason: string };
@@ -172,9 +172,9 @@ describe('sonar hook claude-prompt-submit', () => {
       harness.cliHome.writeFile(`bin/${binaryName}`, 'not-a-binary');
       chmodSync(harness.cliHome.file('bin', binaryName).path, 0o644);
 
-      const result = await harness.run('hook claude-prompt-submit', {
-        stdin: JSON.stringify({ prompt: 'please help me refactor' }),
-      });
+      const session = harness.runInteractive('hook claude-prompt-submit');
+      session.write(JSON.stringify({ prompt: 'please help me refactor' }));
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"block"');

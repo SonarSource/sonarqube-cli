@@ -157,7 +157,7 @@ describe('prompt matching', () => {
 });
 
 describe('InteractiveSession', () => {
-  it('waits for new text, writes keys, and finishes idempotently', async () => {
+  it('waits for new text, writes keys, and waitFinish is idempotent', async () => {
     const fake = createFakeProcess();
     const session = InteractiveSession.fromProcess(fake.handle, { timeoutMs: 2000 });
 
@@ -174,8 +174,8 @@ describe('InteractiveSession', () => {
     expect(session.output()).toContain('Select a tool');
 
     fake.close(0);
-    const first = await session.finish();
-    const second = await session.finish();
+    const first = await session.waitFinish();
+    const second = await session.waitFinish();
     expect(first.exitCode).toBe(0);
     expect(second).toBe(first);
     expect(fake.ended).toBe(true);
@@ -204,7 +204,7 @@ describe('InteractiveSession', () => {
     await later;
 
     session.kill();
-    await session.finish().catch(() => undefined);
+    await session.waitFinish().catch(() => undefined);
   });
 
   it('does not lose later text when an escape sequence splits across chunks', async () => {
@@ -219,7 +219,7 @@ describe('InteractiveSession', () => {
     expect(session.output()).toContain('Hook the repo');
 
     session.kill();
-    await session.finish().catch(() => undefined);
+    await session.waitFinish().catch(() => undefined);
   });
 
   it('waits for a repeated prompt only after a write', async () => {
@@ -237,7 +237,7 @@ describe('InteractiveSession', () => {
     expect(fake.writes).toEqual(['bad', '\r']);
 
     session.kill();
-    await session.finish().catch(() => undefined);
+    await session.waitFinish().catch(() => undefined);
   });
 
   it('does not treat a submitted prompt line as the next live prompt', async () => {
@@ -265,7 +265,7 @@ describe('InteractiveSession', () => {
     await live;
 
     session.kill();
-    await session.finish().catch(() => undefined);
+    await session.waitFinish().catch(() => undefined);
   });
 
   it('throws when the process exits before the prompt appears', async () => {
@@ -297,7 +297,7 @@ describe('InteractiveSession', () => {
     session.kill();
     expect(fake.killCount).toBe(1);
 
-    const result = await session.finish();
+    const result = await session.waitFinish();
     expect(result.exitCode).toBe(1);
     expect(session.output()).toContain('pick one');
   });

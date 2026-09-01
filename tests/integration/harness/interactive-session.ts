@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Interactive CLI session — wait for prompt text, type, then finish or kill
+// Interactive CLI session — wait for prompt text, type, then waitFinish or kill
 
 import { DEFAULT_CLI_TIMEOUT_MS, spawnCliProcess, tryDeliverToken } from './cli-runner.js';
 import type { CliResult, InteractiveProcessHandle, SessionStdin } from './types.js';
@@ -235,7 +235,7 @@ export class InteractiveSession {
     return stripControlSequences(this.rawStdout + this.rawStderr);
   }
 
-  async finish(): Promise<CliResult> {
+  async waitFinish(): Promise<CliResult> {
     this.resultPromise ??= this.collectResult();
     return this.resultPromise;
   }
@@ -273,7 +273,7 @@ export class InteractiveSession {
       throw new Error('Cannot write to an interactive session that has already exited');
     }
     if (this.stdinEnded || !this.proc.stdin) {
-      throw new Error('Cannot write to an interactive session after finish()');
+      throw new Error('Cannot write to an interactive session after waitFinish()');
     }
     return this.proc.stdin;
   }

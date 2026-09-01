@@ -45,8 +45,6 @@ export interface RunOptions {
   /** Working directory for the CLI process. Defaults to harness.cwd.path. */
   cwd?: string;
   timeoutMs?: number;
-  /** Dump-all stdin for a single keystroke or non-prompted input. Use `runInteractive()` for sequential prompts. */
-  stdin?: string;
   /**
    * When set, the harness streams CLI stdout looking for the loopback OAuth
    * port (pattern: `port=\d+`), then delivers this token via POST request to
@@ -58,8 +56,8 @@ export interface RunOptions {
   binaryPath?: string;
 }
 
-/** Options for `harness.runInteractive()`. Stdin is driven by the session, not dumped upfront. */
-export type RunInteractiveOptions = Omit<RunOptions, 'stdin'> & {
+/** Options for `harness.runInteractive()`. Stdin is driven by the session. */
+export type RunInteractiveOptions = RunOptions & {
   /** Per-`waitText` timeout. Defaults to `timeoutMs`. */
   waitTimeoutMs?: number;
 };

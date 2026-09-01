@@ -263,11 +263,13 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
       serverUrl: string,
       options?: IntegrateOptions,
     ) {
-      const login = await harness.run(`auth login --server ${serverUrl}`, {
+      const session = harness.runInteractive(`auth login --server ${serverUrl}`, {
         extraEnv,
         browserToken: TEST_TOKEN,
-        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
+      await session.waitText('Connect to:');
+      session.keyEnter();
+      const login = await session.waitFinish();
       const integrate = await harness.run(
         `integrate claude --non-interactive${options?.global ? ' -g' : ''}`,
         {

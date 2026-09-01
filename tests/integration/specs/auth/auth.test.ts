@@ -28,7 +28,29 @@ import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/auth/auth-resolver.ts';
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 import { generateKeychainAccount } from '@/core/host/keychain.ts';
 
-import { TestHarness } from '../../harness';
+import { type RunInteractiveOptions, TestHarness } from '../../harness';
+
+async function confirmTrust(
+  harness: TestHarness,
+  command: string,
+  options?: RunInteractiveOptions,
+) {
+  const session = harness.runInteractive(command, options);
+  await session.waitText('Connect to:');
+  session.keyEnter();
+  return session.waitFinish();
+}
+
+async function declineTrust(
+  harness: TestHarness,
+  command: string,
+  options?: RunInteractiveOptions,
+) {
+  const session = harness.runInteractive(command, options);
+  await session.waitText('Connect to:');
+  session.write('n');
+  return session.waitFinish();
+}
 
 function readKeychainToken(keychainFile: string, account: string): string | undefined {
   try {
@@ -68,9 +90,8 @@ describe('auth login', () => {
     async () => {
       const server = await harness.newFakeServer().withAuthToken('my-login-token').start();
 
-      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+      const result = await confirmTrust(harness, `auth login --server ${server.baseUrl()}`, {
         browserToken: 'my-login-token',
-        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
 
       expect(result.exitCode).toBe(0);
@@ -92,10 +113,9 @@ describe('auth login', () => {
     async () => {
       const server = await harness.newFakeServer().withAuthToken('browser-login-token').start();
 
-      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+      const result = await confirmTrust(harness, `auth login --server ${server.baseUrl()}`, {
         browserToken: 'browser-login-token',
         browserTokenName: 'cli-browser-token',
-        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
 
       expect(result.exitCode).toBe(0);
@@ -119,9 +139,7 @@ describe('auth login', () => {
         .withTokenName('cli-browser-token')
         .withKeychainToken(server.baseUrl(), 'browser-login-token');
 
-      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
-        stdin: '\r', // Enter (confirm trust, Yes is default)
-      });
+      const result = await confirmTrust(harness, `auth login --server ${server.baseUrl()}`);
 
       expect(result.exitCode).toBe(0);
       const state = harness.stateJsonFile.asJson() as {
@@ -214,17 +232,15 @@ describe('auth login', () => {
       const server1 = await harness.newFakeServer().withAuthToken('tok-1').start();
       const server2 = await harness.newFakeServer().withAuthToken('tok-2').start();
 
-      await harness.run(`auth login --server ${server1.baseUrl()}`, {
+      await confirmTrust(harness, `auth login --server ${server1.baseUrl()}`, {
         browserToken: 'tok-1',
-        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
       const { installationId } = (
         harness.stateJsonFile.asJson() as { telemetry: { installationId: string } }
       ).telemetry;
 
-      await harness.run(`auth login --server ${server2.baseUrl()}`, {
+      await confirmTrust(harness, `auth login --server ${server2.baseUrl()}`, {
         browserToken: 'tok-2',
-        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
       const stateAfter = harness.stateJsonFile.asJson() as {
         telemetry: { installationId: string };
@@ -242,9 +258,8 @@ describe('auth login', () => {
     async () => {
       const server = await harness.newFakeServer().withAuthToken('my-token').start();
 
-      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+      const result = await confirmTrust(harness, `auth login --server ${server.baseUrl()}`, {
         browserToken: 'my-token',
-        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
 
       expect(result.exitCode).toBe(0);
@@ -259,9 +274,7 @@ describe('auth login', () => {
     async () => {
       const server = await harness.newFakeServer().start();
 
-      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
-        stdin: 'n\n', // n (decline trust)
-      });
+      const result = await declineTrust(harness, `auth login --server ${server.baseUrl()}`);
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
@@ -323,14 +336,17 @@ describe('auth login — organization selection', () => {
         .withVisibleOrganizations([{ key: 'open-source-org', name: 'Open Source Org' }])
         .start();
 
-      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+      const session = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
           SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
         },
         browserToken: 'my-token',
-        stdin: 'open-source-org\r',
       });
+      await session.waitText('Enter organization key');
+      session.write('open-source-org');
+      session.keyEnter();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain(
@@ -345,14 +361,16 @@ describe('auth login — organization selection', () => {
     async () => {
       const server = await harness.newFakeServer().withAuthToken('my-token').start();
 
-      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+      const session = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
           SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
         },
         browserToken: 'my-token',
-        stdin: '\x03', // Ctrl+C
       });
+      await session.waitText('Enter organization key');
+      session.keyCtrlC();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).not.toBe(0);
       expect(result.stderr).toContain('Organization selection cancelled');
@@ -363,14 +381,16 @@ describe('auth login — organization selection', () => {
   it('exits with error when user enters an empty organization key', async () => {
     const server = await harness.newFakeServer().withAuthToken('my-token').start();
 
-    const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+    const session = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
       extraEnv: {
         SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
         SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
       },
       browserToken: 'my-token',
-      stdin: '\r', // Enter
     });
+    await session.waitText('Enter organization key');
+    session.keyEnter();
+    const result = await session.waitFinish();
 
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain('Organization key is required');
@@ -386,14 +406,17 @@ describe('auth login — organization selection', () => {
       ])
       .start();
 
-    const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+    const session = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
       extraEnv: {
         SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
         SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
       },
       browserToken: 'my-token',
-      stdin: '\x1b[B\r', // down once, enter
     });
+    await session.waitText('Select an organization');
+    session.keyDown();
+    session.keyEnter();
+    const result = await session.waitFinish();
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain(
@@ -411,14 +434,18 @@ describe('auth login — organization selection', () => {
       .withOrganizationTotal(LARGE_ORG_TOTAL)
       .start();
 
-    const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+    const session = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
       extraEnv: {
         SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
         SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
       },
       browserToken: 'my-token',
-      stdin: '\x1b[B\x1b[B\r', // down twice, enter
     });
+    await session.waitText('Select an organization');
+    session.keyDown();
+    session.keyDown();
+    session.keyEnter();
+    const result = await session.waitFinish();
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain(
@@ -437,14 +464,17 @@ describe('auth login — organization selection', () => {
       ])
       .start();
 
-    const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+    const session = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
       extraEnv: {
         SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
         SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
       },
       browserToken: 'my-token',
-      stdin: '\x1b[B\r', // down once, enter
     });
+    await session.waitText('Select an organization');
+    session.keyDown();
+    session.keyEnter();
+    const result = await session.waitFinish();
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain(
@@ -526,11 +556,14 @@ describe('auth login — organization validation', () => {
     async () => {
       const server = await harness.newFakeServer().withAuthToken('my-token').start();
 
-      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+      const session = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
         extraEnv: cloudEnv(server.baseUrl()),
         browserToken: 'my-token',
-        stdin: 'hgfjhgfhj\r',
       });
+      await session.waitText('Enter organization key');
+      session.write('hgfjhgfhj');
+      session.keyEnter();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain("Organization 'hgfjhgfhj' not found or not accessible");
@@ -749,7 +782,7 @@ describe('auth login — server selection', () => {
       session.keyEnter();
       await session.waitText('Which SonarQube Cloud region?');
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Authentication successful');
@@ -782,7 +815,7 @@ describe('auth login — server selection', () => {
       await session.waitText('Which SonarQube Cloud region?');
       session.keyDown();
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Authentication successful');
@@ -820,7 +853,7 @@ describe('auth login — server selection', () => {
       await session.waitText('Select an organization');
       session.keyDown();
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain(
@@ -846,7 +879,7 @@ describe('auth login — server selection', () => {
       session.keyEnter();
       await session.waitText('Connect to:');
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Authentication successful');
@@ -865,13 +898,11 @@ describe('auth login — server selection', () => {
       const server = await harness.newFakeServer().withAuthToken('my-token').start();
       const login = `auth login --server ${server.baseUrl()} --org some-org`;
 
-      const first = await harness.run(login, {
+      const first = await confirmTrust(harness, login, {
         browserToken: 'my-token',
-        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
-      const second = await harness.run(login, {
+      const second = await confirmTrust(harness, login, {
         browserToken: 'my-token',
-        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
 
       expect(first.exitCode).toBe(0);
@@ -907,7 +938,7 @@ describe('auth login — server selection', () => {
       session.keyEnter();
       await session.waitText('Connect to:');
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain(
@@ -937,7 +968,7 @@ describe('auth login — server selection', () => {
       session.keyEnter();
       await session.waitText('Connect to:');
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain(
@@ -973,7 +1004,7 @@ describe('auth login — server selection', () => {
       session.keyEnter();
       await session.waitText('Connect to:');
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const errorMsg =
@@ -988,9 +1019,10 @@ describe('auth login — server selection', () => {
   it(
     'exits with error when user cancels the server selection prompt',
     async () => {
-      const result = await harness.run('auth login', {
-        stdin: '\x03', // Ctrl+C
-      });
+      const session = harness.runInteractive('auth login');
+      await session.waitText('Where would you like to connect?');
+      session.keyCtrlC();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).not.toBe(0);
       expect(result.stderr).toContain('Server selection cancelled');
@@ -1014,7 +1046,7 @@ describe('auth login — server selection', () => {
       session.keyEnter();
       await session.waitText('Connect to:');
       session.keyEnter();
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
@@ -1037,7 +1069,7 @@ describe('auth login — server selection', () => {
       session.keyEnter();
       await session.waitText('Connect to:');
       session.write('n');
-      const result = await session.finish();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
@@ -1053,9 +1085,8 @@ describe('auth login — server selection', () => {
       const server = await harness.newFakeServer().withAuthToken('my-token').start();
       harness.cwd.writeFile('sonar-project.properties', `sonar.host.url=${server.baseUrl()}\n`);
 
-      const result = await harness.run('auth login', {
+      const result = await confirmTrust(harness, 'auth login', {
         browserToken: 'my-token',
-        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
 
       expect(result.exitCode).toBe(0);
@@ -1071,9 +1102,7 @@ describe('auth login — server selection', () => {
       const server = await harness.newFakeServer().start();
       harness.cwd.writeFile('sonar-project.properties', `sonar.host.url=${server.baseUrl()}\n`);
 
-      const result = await harness.run('auth login', {
-        stdin: 'n\n', // n (decline trust)
-      });
+      const result = await declineTrust(harness, 'auth login');
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
@@ -1092,9 +1121,8 @@ describe('auth login — server selection', () => {
         JSON.stringify({ sonarQubeUri: server.baseUrl(), projectKey: 'my-project' }),
       );
 
-      const result = await harness.run('auth login', {
+      const result = await confirmTrust(harness, 'auth login', {
         browserToken: 'my-token',
-        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
 
       expect(result.exitCode).toBe(0);
@@ -1289,9 +1317,8 @@ describe('auth login — auth URL', () => {
         .withVersion('2026.2')
         .start();
 
-      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+      const result = await confirmTrust(harness, `auth login --server ${server.baseUrl()}`, {
         browserToken: 'my-token',
-        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
 
       expect(result.exitCode).toBe(0);
@@ -1310,9 +1337,8 @@ describe('auth login — auth URL', () => {
         .withVersion('26.2')
         .start();
 
-      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+      const result = await confirmTrust(harness, `auth login --server ${server.baseUrl()}`, {
         browserToken: 'my-token',
-        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
 
       expect(result.exitCode).toBe(0);
@@ -1331,9 +1357,8 @@ describe('auth login — auth URL', () => {
         .withVersion('2025.1')
         .start();
 
-      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+      const result = await confirmTrust(harness, `auth login --server ${server.baseUrl()}`, {
         browserToken: 'my-token',
-        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
 
       expect(result.exitCode).toBe(0);
@@ -1351,9 +1376,8 @@ describe('auth login — auth URL', () => {
         .withVersion('25.1')
         .start();
 
-      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+      const result = await confirmTrust(harness, `auth login --server ${server.baseUrl()}`, {
         browserToken: 'my-token',
-        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
 
       expect(result.exitCode).toBe(0);
@@ -1371,9 +1395,8 @@ describe('auth login — auth URL', () => {
         .withSystemStatusCode(HTTP_503_SERVICE_UNAVAILABLE)
         .start();
 
-      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+      const result = await confirmTrust(harness, `auth login --server ${server.baseUrl()}`, {
         browserToken: 'my-token',
-        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
 
       expect(result.exitCode).toBe(0);

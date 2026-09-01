@@ -1645,7 +1645,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
         const session = harness.runInteractive('analyze agentic', { extraEnv });
         await session.waitText('Do you wish to proceed?');
         session.keyEnter();
-        result = await session.finish();
+        result = await session.waitFinish();
       } else {
         result = await harness.run('analyze agentic --force', { extraEnv });
       }

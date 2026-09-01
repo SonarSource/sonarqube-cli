@@ -389,10 +389,12 @@ describe('sonar import', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-        const result = await harness.run('import', {
-          stdin: '\r', // enter → Recommended (the default, first option)
+        const session = harness.runInteractive('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
+        await session.waitText('How do you want to import repositories?');
+        session.keyEnter();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('How do you want to import repositories?');
@@ -439,7 +441,7 @@ describe('sonar import', () => {
         session.write('q');
         await session.waitText('How do you want to import repositories?');
         session.keyEnter();
-        const result = await session.finish();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         // The picker is cancelled (not treated as an error) and the mode menu re-appears,
@@ -514,7 +516,7 @@ describe('sonar import', () => {
         await chooseManual(session);
         session.keySpace();
         session.keyEnter();
-        const result = await session.finish();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('kevinmlsilva/repo');
@@ -546,7 +548,7 @@ describe('sonar import', () => {
         session.keyDown();
         session.keySpace();
         session.keyEnter();
-        const result = await session.finish();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('kevinmlsilva/repo-two');
@@ -695,7 +697,7 @@ describe('sonar import', () => {
         session.keyDown();
         session.keySpace();
         session.keyEnter();
-        const result = await session.finish();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         // The already-imported repo is listed (dimmed/non-toggleable), not hidden.
@@ -779,7 +781,7 @@ describe('sonar import', () => {
         await session.waitText('kevinmlsilva/repo-51');
         session.keySpace();
         session.keyEnter();
-        const result = await session.finish();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('kevinmlsilva/repo-51');
@@ -818,7 +820,7 @@ describe('sonar import', () => {
         await chooseManual(session);
         session.keySpace();
         session.keyEnter();
-        const result = await session.finish();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('kevinmlsilva/repo-01');
@@ -860,7 +862,7 @@ describe('sonar import', () => {
         await chooseManual(session);
         session.keySpace();
         session.keyEnter();
-        const result = await session.finish();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         // Exactly the 10 selectable repos (02,04,06,08,10,11-15), no "Load more" needed.
@@ -917,7 +919,7 @@ describe('sonar import', () => {
           session.keySpace();
         }
         session.keyEnter();
-        const result = await session.finish();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('26 of 26 selected');
@@ -957,7 +959,7 @@ describe('sonar import', () => {
         await chooseManual(session);
         session.keySpace();
         session.keyEnter();
-        const result = await session.finish();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('Imported 1 repository');
@@ -993,7 +995,7 @@ describe('sonar import', () => {
         await chooseManual(session);
         session.keySpace();
         session.keyEnter();
-        const result = await session.finish();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         const recorded = server.getRecordedRequests();
@@ -1060,7 +1062,7 @@ describe('sonar import', () => {
         await chooseManual(session);
         session.keySpace();
         session.keyEnter();
-        const result = await session.finish();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         const recorded = server.getRecordedRequests();
@@ -1103,7 +1105,7 @@ describe('sonar import', () => {
         await chooseManual(session);
         session.keySpace();
         session.keyEnter();
-        const result = await session.finish();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(1);
         const output = result.stdout + result.stderr;
@@ -1264,7 +1266,7 @@ describe('sonar import', () => {
         await chooseManual(session);
         session.keySpace();
         session.keyEnter();
-        const result = await session.finish();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('kevinmlsilva/repo - private');
@@ -1302,7 +1304,7 @@ describe('sonar import', () => {
         await chooseManual(session);
         session.keySpace();
         session.keyEnter();
-        const result = await session.finish();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('kevinmlsilva/public-repo');
@@ -1570,7 +1572,7 @@ describe('sonar import', () => {
         session.keyDown();
         session.keySpace();
         session.keyEnter();
-        const result = await session.finish();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('Imported 2 repositories');
@@ -2122,7 +2124,7 @@ describe('sonar import', () => {
         await session.waitText('Import repositories whose name matches');
         session.write('^engineering-');
         session.keyEnter();
-        const result = await session.finish();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain(
@@ -2162,7 +2164,7 @@ describe('sonar import', () => {
         await session.waitText('Please enter a valid, non-empty regular expression');
         session.write('^engineering-');
         session.keyEnter();
-        const result = await session.finish();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('my-org/engineering-tools');
@@ -2195,7 +2197,7 @@ describe('sonar import', () => {
         session.keyCtrlC();
         await session.waitText('How do you want to import repositories?');
         session.keyEnter();
-        const result = await session.finish();
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('Imported 2 repositories');

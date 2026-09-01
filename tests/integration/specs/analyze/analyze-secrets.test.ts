@@ -107,7 +107,9 @@ describe('analyze secrets', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, 'fake-token');
 
-      const result = await harness.run('analyze secrets --stdin', { stdin: CLEAN_CONTENT });
+      const session = harness.runInteractive('analyze secrets --stdin');
+      session.write(CLEAN_CONTENT);
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('No issues found');
@@ -121,9 +123,9 @@ describe('analyze secrets', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, 'fake-token');
 
-      const result = await harness.run('analyze secrets --stdin', {
-        stdin: `const token = "${GITHUB_TEST_TOKEN}";`,
-      });
+      const session = harness.runInteractive('analyze secrets --stdin');
+      session.write(`const token = "${GITHUB_TEST_TOKEN}";`);
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
       // Binary reports auth failure when credentials point to an unreachable server

@@ -64,9 +64,9 @@ describe('sonar hook claude-pre-tool-use', () => {
   it(
     'exits 0 and allows when stdin is malformed JSON',
     async () => {
-      const result = await harness.run('hook claude-pre-tool-use', {
-        stdin: 'not valid json',
-      });
+      const session = harness.runInteractive('hook claude-pre-tool-use');
+      session.write('not valid json');
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"deny"');
@@ -82,9 +82,9 @@ describe('sonar hook claude-pre-tool-use', () => {
       harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
       const filePath = join(harness.cwd.path, 'secret.js');
 
-      const result = await harness.run('hook claude-pre-tool-use', {
-        stdin: JSON.stringify({ tool_name: 'Write', tool_input: { file_path: filePath } }),
-      });
+      const session = harness.runInteractive('hook claude-pre-tool-use');
+      session.write(JSON.stringify({ tool_name: 'Write', tool_input: { file_path: filePath } }));
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"deny"');
@@ -98,9 +98,9 @@ describe('sonar hook claude-pre-tool-use', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, VALID_TOKEN);
 
-      const result = await harness.run('hook claude-pre-tool-use', {
-        stdin: readPayload('/nonexistent/path/file.js'),
-      });
+      const session = harness.runInteractive('hook claude-pre-tool-use');
+      session.write(readPayload('/nonexistent/path/file.js'));
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"deny"');
@@ -116,9 +116,9 @@ describe('sonar hook claude-pre-tool-use', () => {
       const filePath = join(harness.cwd.path, 'secret.js');
       // No auth configured
 
-      const result = await harness.run('hook claude-pre-tool-use', {
-        stdin: readPayload(filePath),
-      });
+      const session = harness.runInteractive('hook claude-pre-tool-use');
+      session.write(readPayload(filePath));
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const output = JSON.parse(result.stdout.trim());
@@ -138,9 +138,9 @@ describe('sonar hook claude-pre-tool-use', () => {
       const filePath = join(harness.cwd.path, 'secret.js');
       // No binary installed
 
-      const result = await harness.run('hook claude-pre-tool-use', {
-        stdin: readPayload(filePath),
-      });
+      const session = harness.runInteractive('hook claude-pre-tool-use');
+      session.write(readPayload(filePath));
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const output = JSON.parse(result.stdout.trim());
@@ -160,9 +160,9 @@ describe('sonar hook claude-pre-tool-use', () => {
       harness.cwd.writeFile('clean.js', CLEAN_CONTENT);
       const filePath = join(harness.cwd.path, 'clean.js');
 
-      const result = await harness.run('hook claude-pre-tool-use', {
-        stdin: readPayload(filePath),
-      });
+      const session = harness.runInteractive('hook claude-pre-tool-use');
+      session.write(readPayload(filePath));
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"deny"');
@@ -178,9 +178,9 @@ describe('sonar hook claude-pre-tool-use', () => {
       harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
       const filePath = join(harness.cwd.path, 'secret.js');
 
-      const result = await harness.run('hook claude-pre-tool-use', {
-        stdin: readPayload(filePath),
-      });
+      const session = harness.runInteractive('hook claude-pre-tool-use');
+      session.write(readPayload(filePath));
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('"permissionDecision"');

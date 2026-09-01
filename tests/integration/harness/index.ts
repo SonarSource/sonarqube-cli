@@ -29,7 +29,7 @@ import { ENV_DO_NOT_TRACK, ENV_SQAA_RETRY_BASE_DELAY_MS } from '@/core/config-co
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 
 import { applyIsolatedSpawnEnv } from '../../_common/isolated-cli-env.js';
-import { getCliBinaryPath, runCli } from './cli-runner.js';
+import { getCliBinaryPath } from './cli-runner.js';
 import { Dir } from './dir';
 import { EnvironmentBuilder } from './environment-builder.js';
 import { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
@@ -215,26 +215,22 @@ export class TestHarness {
   }
 
   /**
-   * Runs the CLI binary with the given command string.
+   * Runs the CLI to completion with no stdin.
    *
    * Before spawning, applies the configured environment (writes state.json + seeds tokens).
    * Sets SONARQUBE_CLI_KEYCHAIN_FILE so the CLI uses the file-based keychain backend,
    * avoiding OS credential store access and macOS keychain prompts.
+   *
+   * Same process as `runInteractive()`, finished immediately. Use `runInteractive()`
+   * when the command needs stdin.
    */
   async run(command: string, options?: RunOptions): Promise<CliResult> {
-    return runCli(command, this.env(options), {
-      stdin: options?.stdin,
-      timeoutMs: options?.timeoutMs,
-      cwd: options?.cwd ?? this.cwd.path,
-      browserToken: options?.browserToken,
-      browserTokenName: options?.browserTokenName,
-      binaryPath: options?.binaryPath,
-    });
+    return this.runInteractive(command, options).waitFinish();
   }
 
   /**
    * Spawns the CLI and returns a session the test drives prompt-by-prompt.
-   * Use `run()` when the command is non-interactive or stdin can be dumped upfront.
+   * Use `run()` when the command is non-interactive. Drive stdin through the session.
    */
   runInteractive(command: string, options?: RunInteractiveOptions): InteractiveSession {
     const session = startInteractiveSession(command, this.env(options), {
@@ -314,7 +310,7 @@ export class TestHarness {
     for (const session of this.sessions) {
       session.kill();
     }
-    await Promise.all(this.sessions.map((session) => session.finish().catch(() => undefined)));
+    await Promise.all(this.sessions.map((session) => session.waitFinish().catch(() => undefined)));
 
     await Promise.all(
       [...this.servers, ...this.binariesServers, ...this.gitlabServers].map((s) =>
