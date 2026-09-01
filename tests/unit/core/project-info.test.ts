@@ -572,7 +572,8 @@ describe('discoverProject', () => {
       expect(result.configSources).toEqual([KNOWN_SERVER_PROJECT_MAPPING_SOURCE]);
     });
 
-    it('prefers the persisted table over the live fallback when both would match', async () => {
+    it('prefers the live fallback over a stale persisted-table entry for the same targetRoot', async () => {
+      // Re-integration must not be shadowed by a stale persisted entry awaiting migration.
       const state = getDefaultState('1.0.0');
       state.knownServerProjectMappings = [
         makeKnownMapping({
@@ -609,7 +610,7 @@ describe('discoverProject', () => {
 
       const result = await discoverProject(testDir);
 
-      expect(result.projectKey).toBe('persisted-project');
+      expect(result.projectKey).toBe('live-project');
     });
 
     it('prefers a nearer live-derived mapping over a farther persisted-table one', async () => {

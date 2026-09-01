@@ -344,11 +344,7 @@ interface KnownMappingsResult {
   mappings: KnownServerProjectMapping[];
 }
 
-/**
- * Loaded upfront so `discoverProject()` can derive knownRoots and share one lookupPaths list.
- * Combines the persisted mapping table with live-derived mappings so match-time picks the
- * nearest one regardless of source.
- */
+/** Loaded upfront so `discoverProject()` can derive knownRoots and share one lookupPaths list. */
 function loadKnownMappings(): KnownMappingsResult | undefined {
   try {
     const state = loadState();

@@ -81,15 +81,14 @@ describe('mergeKnownServerProjectMappings', () => {
     expect(merged).toEqual(existing);
   });
 
-  it('keeps both entries when they share a targetRoot but resolve to different project keys', () => {
-    // Same folder, two different projects: a genuine conflict, not a duplicate — left for
-    // match-time resolution (selectFeatureForLookupPaths), not silently dropped.
+  it('keeps both entries when they share a targetRoot but resolve to different project keys, with discovered first', () => {
+    // A genuine conflict, not a duplicate — left for match-time resolution.
     const existing = [makeMapping({ projectKey: 'old-project' })];
     const discovered = [makeMapping({ projectKey: 'new-project' })];
 
     const merged = mergeKnownServerProjectMappings(existing, discovered);
 
-    expect(merged).toEqual([...existing, ...discovered]);
+    expect(merged).toEqual([...discovered, ...existing]);
   });
 
   it('keeps two mappings with different targetRoots even when they share the same repoRoot', () => {

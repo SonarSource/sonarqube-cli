@@ -61,13 +61,13 @@ function addMapping(
   }
 }
 
-/** Merges `discovered` into `existing` (see `addMapping`); a `targetRoot` present only in `existing` is never dropped. */
+/** Merges `existing` into `discovered` (see `addMapping`); `discovered` stays first so it wins match-time ties on a shared `targetRoot`. */
 export function mergeKnownServerProjectMappings(
   existing: KnownServerProjectMapping[],
   discovered: KnownServerProjectMapping[],
 ): KnownServerProjectMapping[] {
-  const mappings = [...existing];
-  for (const mapping of discovered) {
+  const mappings = [...discovered];
+  for (const mapping of existing) {
     addMapping(mappings, mapping);
   }
 
