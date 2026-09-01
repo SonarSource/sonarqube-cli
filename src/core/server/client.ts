@@ -62,6 +62,15 @@ export type HttpMethod = (typeof GENERIC_HTTP_METHODS)[number];
 export type QueryParams = Record<string, string | number | boolean>;
 
 /**
+ * The `ps` (page size) ceiling on nearly every paginated SonarQube list endpoint - not specific
+ * to any one resource. Confirmed identical across `components/search_projects`,
+ * `measures/component_tree`, `issues/search`, and `metrics/search`'s own param docs ("must be
+ * greater than 0 and less or equal than 500"). The unrelated, narrower
+ * `DOP_REPOSITORIES_MAX_PAGE_SIZE` below is a real exception specific to that one API.
+ */
+export const MAX_PAGE_SIZE = 500;
+
+/**
  * `not_applicable` is returned when Vortex cannot apply to this connection: Cloud without
  * an organization (see `resolveVortexEntitlement`), or a Server missing either hub (HTTP 404).
  */

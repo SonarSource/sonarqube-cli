@@ -20,16 +20,20 @@
 
 // quality-gate status command - fetch the quality gate verdict for a project
 
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { MAX_PAGE_SIZE, SonarQubeClient } from '@/core/server/client.ts';
 import { MetricsClient } from '@/core/server/metrics.ts';
 import { QualityGatesClient } from '@/core/server/quality-gates.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
-import { print } from '@/core/ui';
+import { print, warn } from '@/core/ui';
 
-import { attachBreakdowns } from './breakdown.ts';
+import {
+  attachBreakdowns,
+  hasFailingConditionInCategory,
+  IMPLEMENTED_CATEGORIES,
+} from './breakdown.ts';
 import { selectConditions } from './condition-summary.ts';
 import { formatQualityGateJson } from './format-json.ts';
 import { formatQualityGateTable } from './format-table.ts';
@@ -38,7 +42,9 @@ import { exitCodeFor, toVerdict } from './verdict.ts';
 
 export const VALID_FORMATS = ['json', 'table'];
 
-const DEFAULT_TOP = 3;
+export const VALID_CATEGORIES = IMPLEMENTED_CATEGORIES;
+
+export const DEFAULT_TOP = MAX_PAGE_SIZE;
 
 export interface QualityGateStatusOptions {
   project?: string;
@@ -46,6 +52,8 @@ export interface QualityGateStatusOptions {
   branch?: string;
   pullRequest?: string;
   all?: boolean;
+  category?: string;
+  top?: number;
 }
 
 export async function qualityGateStatus(
@@ -53,6 +61,18 @@ export async function qualityGateStatus(
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   const { auth } = ctx;
+  const top = options.top ?? DEFAULT_TOP;
+  if (top < 1 || top > MAX_PAGE_SIZE) {
+    throw new InvalidOptionError(
+      `Invalid --top option: '${top}'. Must be an integer between 1 and ${MAX_PAGE_SIZE}`,
+    );
+  }
+  if (options.category && !VALID_CATEGORIES.includes(options.category)) {
+    throw new InvalidOptionError(
+      `Invalid --category option: '${options.category}'. Must be one of: ${VALID_CATEGORIES.join(', ')}`,
+    );
+  }
+
   const projectKey = await resolveProjectKey(options.project, auth, true);
   noteProject(auth, projectKey);
 
@@ -81,11 +101,20 @@ export async function qualityGateStatus(
         client,
         projectKey,
         metrics,
-        top: DEFAULT_TOP,
+        category: options.category,
+        top,
         branch: queryParams.branch,
         pullRequest: queryParams.pullRequest,
       })
     : summaries;
+
+  if (
+    options.category &&
+    hasFailingConditions &&
+    !hasFailingConditionInCategory(rawConditions, options.category)
+  ) {
+    warn(`No failing conditions match category '${options.category}'.`);
+  }
 
   const format = options.format ?? 'table';
   const message =

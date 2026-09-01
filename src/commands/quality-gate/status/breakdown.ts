@@ -23,7 +23,7 @@
 import logger from '@/core/observability/logger.ts';
 import type { SonarQubeClient } from '@/core/server/client.ts';
 import { isNewCodeMetric, MeasuresClient } from '@/core/server/measures.ts';
-import type { ComponentTreeComponent, Metric } from '@/core/server/types.ts';
+import type { ComponentTreeComponent, Metric, QualityGateCondition } from '@/core/server/types.ts';
 
 import type {
   QualityGateBreakdownEntry,
@@ -41,18 +41,51 @@ const METRIC_CATEGORIES: Record<string, string> = {
   new_line_coverage: 'coverage',
 };
 
+export const IMPLEMENTED_CATEGORIES = [...new Set(Object.values(METRIC_CATEGORIES))];
+
 export interface AttachBreakdownsParams {
   client: SonarQubeClient;
   projectKey: string;
   metrics: Metric[];
+  category?: string;
   top: number;
   branch?: string;
   pullRequest?: string;
 }
 
-/** A failing condition whose metric falls into an implemented category. */
-function isEnrichableCondition(condition: QualityGateConditionSummary): boolean {
-  return condition.status !== 'OK' && !!METRIC_CATEGORIES[condition.metric];
+/**
+ * True when a failing condition's metric falls into an implemented category, filtered to
+ * `category` when given.
+ */
+function isFailingMetricInCategory(
+  metricKey: string,
+  status: string,
+  category: string | undefined,
+): boolean {
+  const conditionCategory = METRIC_CATEGORIES[metricKey];
+  return status !== 'OK' && !!conditionCategory && (!category || category === conditionCategory);
+}
+
+/**
+ * True when at least one failing condition falls into `category` - distinct from the resulting
+ * breakdown being empty for another reason (a matching condition's enrichment fetch failing, or
+ * returning no files), which should stay silent rather than warn.
+ */
+export function hasFailingConditionInCategory(
+  conditions: QualityGateCondition[],
+  category: string,
+): boolean {
+  return conditions.some((condition) =>
+    isFailingMetricInCategory(condition.metricKey, condition.status, category),
+  );
+}
+
+/** A failing condition whose metric falls into an implemented category, when given. */
+function isEnrichableCondition(
+  condition: QualityGateConditionSummary,
+  category: string | undefined,
+): boolean {
+  return isFailingMetricInCategory(condition.metric, condition.status, category);
 }
 
 /**
@@ -69,7 +102,7 @@ export async function attachBreakdowns(
 
   return Promise.all(
     conditions.map(async (condition) => {
-      if (!isEnrichableCondition(condition)) {
+      if (!isEnrichableCondition(condition, params.category)) {
         return condition;
       }
       const breakdown = await fetchMetricBreakdown(measuresClient, params, condition, metricsByKey);

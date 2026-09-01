@@ -18,10 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { MAX_PAGE_SIZE } from '@/core/server/client.ts';
 import { cyan, green, red, yellow } from '@/core/ui/colors.ts';
 import { padColumns } from '@/core/ui/formatter/column-formatting.ts';
 
-import type { QualityGateConditionSummary } from './condition-summary.ts';
+import type {
+  QualityGateConditionSummary,
+  QualityGateMetricBreakdown,
+} from './condition-summary.ts';
 import type { QualityGateScope } from './scope.ts';
 import type { QualityGateVerdict } from './verdict.ts';
 
@@ -146,10 +150,27 @@ function formatBreakdownLines(condition: QualityGateConditionSummary): string[] 
 
   const remaining = metricBreakdown.totalCount - metricBreakdown.fetchedCount;
   if (remaining > 0) {
-    lines.push(`${BREAKDOWN_INDENT}… ${remaining} more not shown`);
+    lines.push(formatMoreEntriesLine(metricBreakdown, remaining));
   }
 
   return lines;
+}
+
+function formatMoreEntriesLine(
+  metricBreakdown: QualityGateMetricBreakdown,
+  remaining: number,
+): string {
+  const suggestedTop = Math.min(metricBreakdown.totalCount, MAX_PAGE_SIZE);
+  const showsEverything = metricBreakdown.totalCount <= MAX_PAGE_SIZE;
+  // A suggestion that isn't higher than what was already requested would be a no-op - e.g.
+  // --top is already at MAX_PAGE_SIZE, so the API's own cap, not --top, is what's left out.
+  let suffix: string;
+  if (suggestedTop > metricBreakdown.fetchedCount) {
+    suffix = `use --top ${suggestedTop} to display ${showsEverything ? 'all' : 'more'}`;
+  } else {
+    suffix = `capped at ${MAX_PAGE_SIZE} results per fetch`;
+  }
+  return `${BREAKDOWN_INDENT}… ${remaining} more · ${suffix}`;
 }
 
 function notComputedHint(scope: QualityGateScope): string {
