@@ -251,6 +251,8 @@ jobs:
       - build-binaries
       - sign-macos
       - scan
+      - integration-and-e2e-linux
+      - integration-and-e2e-windows
     if: ${{ !cancelled() && !failure() && (github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-')) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -476,7 +478,7 @@ jobs:
   scan:
     name: SonarQube Analysis
     runs-on: github-ubuntu-latest-s
-    # Coverage artifacts are Linux-only; Windows tests still gate promote.
+    # Coverage artifacts are Linux-only; Windows tests still gate publish and promote.
     needs: [prepare, lint, unit-tests, integration-and-e2e-linux]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
