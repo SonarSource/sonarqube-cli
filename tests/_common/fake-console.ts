@@ -24,6 +24,7 @@ import type {
   MultiSelectPromptOptions,
   SelectOption,
 } from '@/core/ui/components/prompts.ts';
+import { findUiCall, type UiCall } from '@/core/ui/mock.ts';
 import type {
   ColorFn,
   NoteOptions,
@@ -32,10 +33,7 @@ import type {
   PhaseOptions,
 } from '@/core/ui/types.ts';
 
-export interface UiCall {
-  method: string;
-  args: unknown[];
-}
+export type { UiCall };
 
 /**
  * Test double for {@link CliConsole}. Records calls and returns queued prompt answers.
@@ -62,9 +60,7 @@ export class FakeConsole implements CliConsole {
   }
 
   findCall(method: string, substring: string): UiCall | undefined {
-    return this.calls.find(
-      (c) => c.method === method && typeof c.args[0] === 'string' && c.args[0].includes(substring),
-    );
+    return findUiCall(this.calls, method, substring);
   }
 
   info(message: string, _channel?: OutputChannel): void {

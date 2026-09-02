@@ -37,15 +37,8 @@ import {
 import { intro as writeIntro, outro as writeOutro } from './components/sections.ts';
 import { withSpinner as runWithSpinner } from './components/spinner.ts';
 import { isMockActive, recordCall } from './mock.ts';
+import { channelStream, print as writePrint, write } from './streams.ts';
 import type { ColorFn, NoteOptions, OutputChannel, PhaseItem, PhaseOptions } from './types.ts';
-
-function write(stream: NodeJS.WriteStream, line: string): void {
-  stream.write(line + '\n');
-}
-
-function channelStream(channel: OutputChannel): NodeJS.WriteStream {
-  return channel === 'stderr' ? process.stderr : process.stdout;
-}
 
 /**
  * Production {@link CliConsole}: writes to stdout/stderr.
@@ -127,7 +120,7 @@ export class TerminalConsole implements CliConsole {
       recordCall('print', message);
       return;
     }
-    channelStream(channel).write(message + (message.endsWith('\n') ? '' : '\n'));
+    writePrint(message, channel);
   }
 
   blank(): void {

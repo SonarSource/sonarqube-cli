@@ -24,6 +24,8 @@
 import { getDefaultCliConsole } from './default-console.ts';
 import type { ColorFn, OutputChannel } from './types.ts';
 
+export { channelStream } from './streams.ts';
+
 export function setFormattedOutputMode(active: boolean): void {
   getDefaultCliConsole().setFormattedOutputMode(active);
 }
@@ -34,10 +36,6 @@ export function isFormattedOutputMode(): boolean {
 
 export function getMessagesForFormattedOutput(): string[] {
   return getDefaultCliConsole().getMessagesForFormattedOutput();
-}
-
-export function channelStream(channel: OutputChannel): NodeJS.WriteStream {
-  return channel === 'stderr' ? process.stderr : process.stdout;
 }
 
 export function info(message: string, channel: OutputChannel = 'stdout'): void {
