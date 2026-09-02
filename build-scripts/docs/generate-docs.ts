@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 import type { Option } from 'commander';
 
 import { createCommandTree } from '@/commands/command-tree.ts';
-import { BETA_HELP_TAG, type SonarCommand } from '@/commands/sonar-command.ts';
+import { BETA_HELP_TAG, DEPRECATED_HELP_TAG, type SonarCommand } from '@/commands/sonar-command.ts';
 
 import { version } from '../../package.json';
 import { EXAMPLES } from './examples';
@@ -67,7 +67,29 @@ interface ClidocOption {
   required: boolean;
   defaultValue: unknown;
   allowedValues?: string[];
-  stage?: 'stable' | 'beta';
+  stage?: 'stable' | 'beta' | 'deprecated';
+}
+
+type PublicStage = 'stable' | 'beta' | 'deprecated';
+
+function publicStage(item: { isBeta: boolean; isDeprecated: boolean }): PublicStage {
+  if (item.isDeprecated) {
+    return 'deprecated';
+  }
+  if (item.isBeta) {
+    return 'beta';
+  }
+  return 'stable';
+}
+
+function lifecycleHelpTag(stage: PublicStage): string {
+  if (stage === 'beta') {
+    return ` ${BETA_HELP_TAG}`;
+  }
+  if (stage === 'deprecated') {
+    return ` ${DEPRECATED_HELP_TAG}`;
+  }
+  return '';
 }
 
 interface ClidocCommand {
@@ -78,7 +100,7 @@ interface ClidocCommand {
   description: string;
   isGroup: boolean;
   isRoot: boolean;
-  stage: 'stable' | 'beta';
+  stage: PublicStage;
   requiresAuth: boolean;
   depth: number;
   parentId: string | null;
@@ -88,7 +110,7 @@ interface ClidocCommand {
   children: string[];
 }
 
-// Docs use the default runtime (Private Beta omitted; Open Beta included).
+// Docs use the default runtime (Private Beta omitted; Open Beta and Deprecated included).
 const COMMAND_TREE = await createCommandTree();
 const allCommands: ClidocCommand[] = [];
 const help = COMMAND_TREE.createHelp();
@@ -99,10 +121,10 @@ function visibleDocumentedCommands(cmd: SonarCommand): SonarCommand[] {
   );
 }
 
-function descriptionWithoutBetaTag(cmd: SonarCommand): string {
+function descriptionWithoutLifecycleTag(cmd: SonarCommand): string {
   const description = cmd.description() ?? '';
-  const suffix = ` ${BETA_HELP_TAG}`;
-  return cmd.isBeta && description.endsWith(suffix)
+  const suffix = lifecycleHelpTag(publicStage(cmd));
+  return suffix && description.endsWith(suffix)
     ? description.slice(0, -suffix.length)
     : description;
 }
@@ -128,8 +150,9 @@ function serializeOptions(cmd: SonarCommand): ClidocOption[] {
         defaultValue: option.defaultValue,
         allowedValues: option.argChoices?.length ? option.argChoices : undefined,
       };
-      if (option.isBeta) {
-        serialized.stage = 'beta';
+      const stage = publicStage(option);
+      if (stage !== 'stable') {
+        serialized.stage = stage;
       }
       return serialized;
     });
@@ -150,10 +173,10 @@ function serializeCommand(
     name: cmd.name(),
     fullName,
     aliases: cmd.aliases(),
-    description: descriptionWithoutBetaTag(cmd),
+    description: descriptionWithoutLifecycleTag(cmd),
     isGroup: visibleChildren.length > 0,
     isRoot: depth === 0,
-    stage: cmd.isBeta ? 'beta' : 'stable',
+    stage: publicStage(cmd),
     requiresAuth: cmd.requiresAuth,
     depth,
     parentId,
@@ -228,8 +251,8 @@ function buildLlmsTxt(): string {
     const authMarker = cmd.requiresAuth ? ' *' : '';
     commandLines.push(`### ${cmd.fullName}${aliasSuffix(cmd)}${authMarker}`);
     if (cmd.description) {
-      const betaTag = cmd.stage === 'beta' ? ` ${BETA_HELP_TAG}` : '';
-      commandLines.push(`${cmd.description}${betaTag}`);
+      const lifecycleTag = lifecycleHelpTag(cmd.stage);
+      commandLines.push(`${cmd.description}${lifecycleTag}`);
     }
 
     if (!cmd.isGroup) {
@@ -250,8 +273,8 @@ function buildLlmsTxt(): string {
         for (const opt of cmd.options) {
           const flagPart = opt.short ? `${opt.long}, ${opt.short}` : opt.long;
           const typePart = opt.type === 'boolean' ? '' : `  <${opt.type}>`;
-          const betaTag = opt.stage === 'beta' ? ` ${BETA_HELP_TAG}` : '';
-          commandLines.push(`  ${flagPart}${typePart}   ${opt.description}${betaTag}`);
+          const lifecycleTag = lifecycleHelpTag(opt.stage ?? 'stable');
+          commandLines.push(`  ${flagPart}${typePart}   ${opt.description}${lifecycleTag}`);
         }
       }
     }

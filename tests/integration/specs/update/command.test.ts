@@ -60,8 +60,9 @@ describe('update command', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain(`Update available: v${newerVersion}`);
-      expect(result.stderr).toContain('deprecated');
-      expect(result.stderr).toContain('sonar update');
+      expect(result.stderr).toContain(
+        "'self-update' is deprecated since 1.4. Use 'sonar update' instead.",
+      );
     },
     { timeout: 15000 },
   );

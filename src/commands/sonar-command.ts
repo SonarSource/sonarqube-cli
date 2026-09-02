@@ -42,28 +42,51 @@ import {
 export const ALPHA_ENV_VAR = 'SONARQUBE_CLI_ALPHA';
 export const ALPHA_HELP_TAG = '[ALPHA]';
 export const BETA_HELP_TAG = '[BETA]';
+export const DEPRECATED_HELP_TAG = '[DEPRECATED]';
 
-export type StageName = 'stable' | 'alpha' | 'beta';
+export type StageName = 'stable' | 'alpha' | 'beta' | 'deprecated';
+
+/** Arguments for {@link Stage.Deprecated}. */
+export type DeprecatedStageOptions = {
+  readonly sinceVersion: string;
+  readonly replacementCommand: string | null;
+};
 
 /** Descriptor passed to {@link SonarCommand.stage}. */
 export type StageDescriptor =
   | { readonly name: 'stable' }
   | { readonly name: 'alpha' }
-  | { readonly name: 'beta'; readonly flagKey?: string };
+  | { readonly name: 'beta'; readonly flagKey?: string }
+  | {
+      readonly name: 'deprecated';
+      readonly sinceVersion: string;
+      readonly replacementCommand: string | null;
+    };
 
 function betaStage(flagKey?: string): StageDescriptor {
   return flagKey === undefined ? { name: 'beta' } : { name: 'beta', flagKey };
 }
 
+function deprecatedStage(options: DeprecatedStageOptions): StageDescriptor {
+  return {
+    name: 'deprecated',
+    sinceVersion: options.sinceVersion,
+    replacementCommand: options.replacementCommand,
+  };
+}
+
 /**
  * Command lifecycle stage.
  * Stable/Alpha are constants; Beta is a function so an optional LaunchDarkly
- * flag key can only be attached to Private Beta commands.
+ * flag key can only be attached to Private Beta commands; Deprecated is a
+ * function so `sinceVersion` and `replacementCommand` (`null` when there is
+ * none) are required at the call site.
  */
 export const Stage = {
   Stable: { name: 'stable' } as const satisfies StageDescriptor,
   Alpha: { name: 'alpha' } as const satisfies StageDescriptor,
   Beta: betaStage,
+  Deprecated: deprecatedStage,
 };
 
 const ALPHA_HELP_GROUP = '__SONARQUBE_CLI_ALPHA_COMMANDS__';
@@ -118,11 +141,38 @@ function withLifecycleTag(description: string, stage: StageName): string {
   if (stage === 'beta') {
     return `${description} ${BETA_HELP_TAG}`;
   }
+  if (stage === 'deprecated') {
+    return `${description} ${DEPRECATED_HELP_TAG}`;
+  }
   return description;
 }
 
+function deprecationWarning(
+  subject: string,
+  sinceVersion: string,
+  replacementCommand: string | null,
+): string {
+  const base = `'${subject}' is deprecated since ${sinceVersion}`;
+  return replacementCommand === null
+    ? `${base}. There is no replacement.`
+    : `${base}. Use '${replacementCommand}' instead.`;
+}
+
+function betaFlagKeyOf(stage: StageDescriptor): string | undefined {
+  return stage.name === 'beta' ? stage.flagKey : undefined;
+}
+
+function deprecationOf(stage: StageDescriptor): {
+  sinceVersion: string | undefined;
+  replacementCommand: string | null | undefined;
+} {
+  return stage.name === 'deprecated'
+    ? { sinceVersion: stage.sinceVersion, replacementCommand: stage.replacementCommand }
+    : { sinceVersion: undefined, replacementCommand: undefined };
+}
+
 /**
- * Commander Option subclass that can be marked Alpha or Beta.
+ * Commander Option subclass that can be marked Alpha, Beta, or Deprecated.
  *
  * `.option()` returns the command, so `.option().stage()` cannot type-check.
  * Stage options by passing a {@link SonarOption} to {@link SonarCommand.addOption}:
@@ -136,25 +186,36 @@ function withLifecycleTag(description: string, stage: StageName): string {
 export class SonarOption extends Option {
   private _stage: StageName = 'stable';
   private _betaFlagKey: string | undefined;
+  private _deprecatedSinceVersion: string | undefined;
+  private _deprecatedReplacementCommand: string | null | undefined;
 
   /**
-   * Mark this option as Stable, Alpha, or Beta (optionally Private Beta via a flag key).
-   * Required options cannot be staged; when the caller is not entitled the option is
-   * omitted from help and treated as unknown.
+   * Mark this option as Stable, Alpha, Beta (optionally Private Beta via a flag
+   * key), or Deprecated. Required options cannot be staged as Alpha or Beta;
+   * when the caller is not entitled the option is omitted from help and treated
+   * as unknown. Deprecated options stay registered and warn on every use.
    */
   stage(stage: StageDescriptor): this {
-    if (this.mandatory) {
+    if (this.mandatory && (stage.name === 'alpha' || stage.name === 'beta')) {
       throw new Error(`Cannot stage a required option as Alpha or Beta: '${this.flags}'`);
     }
 
     const newStage = stage.name;
-    const newFlagKey = stage.name === 'beta' ? stage.flagKey : undefined;
-    if (this._stage === newStage && this._betaFlagKey === newFlagKey) {
+    const newFlagKey = betaFlagKeyOf(stage);
+    const deprecation = deprecationOf(stage);
+    if (
+      this._stage === newStage &&
+      this._betaFlagKey === newFlagKey &&
+      this._deprecatedSinceVersion === deprecation.sinceVersion &&
+      this._deprecatedReplacementCommand === deprecation.replacementCommand
+    ) {
       return this;
     }
 
     this._stage = newStage;
     this._betaFlagKey = newFlagKey;
+    this._deprecatedSinceVersion = deprecation.sinceVersion;
+    this._deprecatedReplacementCommand = deprecation.replacementCommand;
 
     if (newStage === 'alpha') {
       this.helpGroup(ALPHA_HELP_GROUP);
@@ -180,12 +241,24 @@ export class SonarOption extends Option {
     return this._stage === 'beta';
   }
 
+  get isDeprecated(): boolean {
+    return this._stage === 'deprecated';
+  }
+
   get isPrivateBeta(): boolean {
     return this._stage === 'beta' && this._betaFlagKey !== undefined;
   }
 
   get betaFlagKey(): string | undefined {
     return this._betaFlagKey;
+  }
+
+  get deprecatedSinceVersion(): string | undefined {
+    return this._deprecatedSinceVersion;
+  }
+
+  get deprecatedReplacementCommand(): string | null | undefined {
+    return this._deprecatedReplacementCommand;
   }
 }
 
@@ -253,8 +326,8 @@ class SonarHelp extends Help {
  *                          with runCommand(); auth is prepended to the handler args
  *  - requiresAuth          metadata flag, set to true by authenticatedAction();
  *                          useful for documentation generation
- *  - stage()               marks a command as Stable, Alpha, or Beta, controlling its
- *                          availability, help, documentation, and warnings
+ *  - stage()               marks a command as Stable, Alpha, Beta, or Deprecated,
+ *                          controlling its availability, help, documentation, and warnings
  *  - createOption()        returns {@link SonarOption}; stage via addOption(), not .option()
  *  - addOption()           accepts {@link SonarOption} only; omits Alpha/Private Beta options
  *                          the caller is not entitled to use
@@ -264,6 +337,8 @@ export class SonarCommand extends Command {
   declare readonly options: readonly SonarOption[];
   private _stage: StageName = 'stable';
   private _betaFlagKey: string | undefined;
+  private _deprecatedSinceVersion: string | undefined;
+  private _deprecatedReplacementCommand: string | null | undefined;
   private _requiresAuth = false;
   private _rootHelp: RootHelpMetadata = {};
   private readonly _updateNotifier: UpdateNotifier;
@@ -291,6 +366,7 @@ export class SonarCommand extends Command {
       if (this.isAlpha) {
         info(`'${this.name()}' is in alpha; may change or be removed without notice.`, 'stderr');
       }
+      this.warnIfDeprecated();
       this.warnIfStagedOptionsUsed();
     });
   }
@@ -313,7 +389,7 @@ export class SonarCommand extends Command {
    * is not entitled, so they do not appear in help and parse as unknown.
    */
   addOption(option: SonarOption): this {
-    if (!option.isStable && option.mandatory) {
+    if (option.mandatory && (option.isAlpha || option.isBeta)) {
       throw new Error(`Cannot stage a required option as Alpha or Beta: '${option.flags}'`);
     }
     if (!isStageVisible(option.lifecycleStage, option.betaFlagKey, this._runtime)) {
@@ -369,16 +445,24 @@ export class SonarCommand extends Command {
     return this;
   }
 
-  /** Mark this command as Stable, Alpha, or Beta (optionally Private Beta via a flag key). */
+  /** Mark this command as Stable, Alpha, Beta (optionally Private Beta via a flag key), or Deprecated. */
   stage(stage: StageDescriptor): this {
     const newStage = stage.name;
-    const newFlagKey = stage.name === 'beta' ? stage.flagKey : undefined;
-    if (this._stage === newStage && this._betaFlagKey === newFlagKey) {
+    const newFlagKey = betaFlagKeyOf(stage);
+    const deprecation = deprecationOf(stage);
+    if (
+      this._stage === newStage &&
+      this._betaFlagKey === newFlagKey &&
+      this._deprecatedSinceVersion === deprecation.sinceVersion &&
+      this._deprecatedReplacementCommand === deprecation.replacementCommand
+    ) {
       return this;
     }
 
     this._stage = newStage;
     this._betaFlagKey = newFlagKey;
+    this._deprecatedSinceVersion = deprecation.sinceVersion;
+    this._deprecatedReplacementCommand = deprecation.replacementCommand;
 
     if (newStage === 'alpha') {
       this.helpGroup(ALPHA_HELP_GROUP);
@@ -589,6 +673,21 @@ export class SonarCommand extends Command {
     return this._stage === 'beta' && this._betaFlagKey !== undefined;
   }
 
+  /** True when this command is Deprecated. */
+  get isDeprecated(): boolean {
+    return this._stage === 'deprecated';
+  }
+
+  /** Version in which this command was deprecated; undefined when not Deprecated. */
+  get deprecatedSinceVersion(): string | undefined {
+    return this._deprecatedSinceVersion;
+  }
+
+  /** Suggested replacement command; `null` when none, undefined when not Deprecated. */
+  get deprecatedReplacementCommand(): string | null | undefined {
+    return this._deprecatedReplacementCommand;
+  }
+
   /** LaunchDarkly flag key for Private Beta; undefined for Open Beta / non-Beta. */
   get betaFlagKey(): string | undefined {
     return this._betaFlagKey;
@@ -646,8 +745,40 @@ export class SonarCommand extends Command {
           `${this.commandPath()} ${flag}`,
           `'${flag}' is in beta and may change.`,
         );
+      } else if (
+        option.isDeprecated &&
+        option.deprecatedSinceVersion !== undefined &&
+        option.deprecatedReplacementCommand !== undefined
+      ) {
+        info(
+          deprecationWarning(
+            flag,
+            option.deprecatedSinceVersion,
+            option.deprecatedReplacementCommand,
+          ),
+          'stderr',
+        );
       }
     }
+  }
+
+  private warnIfDeprecated(): void {
+    if (
+      !this.isDeprecated ||
+      this._deprecatedSinceVersion === undefined ||
+      this._deprecatedReplacementCommand === undefined
+    ) {
+      return;
+    }
+
+    info(
+      deprecationWarning(
+        this.commandPath(),
+        this._deprecatedSinceVersion,
+        this._deprecatedReplacementCommand,
+      ),
+      'stderr',
+    );
   }
 
   private warnIfBeta(): void {

@@ -28,6 +28,7 @@ import {
   BETA_HELP_TAG,
   COMMAND_CATEGORIES,
   type CommandCategory,
+  DEPRECATED_HELP_TAG,
   type SonarCommand,
 } from './sonar-command.ts';
 
@@ -108,6 +109,8 @@ function getRootCommandLabel(command: SonarCommand, helper: Help): string {
       tag = ALPHA_HELP_TAG;
     } else if (child.isBeta) {
       tag = BETA_HELP_TAG;
+    } else if (child.isDeprecated) {
+      tag = DEPRECATED_HELP_TAG;
     }
     return `${child.name()}${tag}`;
   });

@@ -29,7 +29,7 @@ import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { tryLoadState } from '@/core/state/state-repository.ts';
 import { flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
-import { blank, error, warn } from '@/core/ui';
+import { blank, error } from '@/core/ui';
 import { parseInteger } from '@/core/ui/parsing.ts';
 
 import { version as VERSION } from '../../package.json';
@@ -114,6 +114,7 @@ import {
   isAlphaEnabledFromEnv,
   SonarCommand,
   SonarOption,
+  Stage,
 } from './sonar-command.ts';
 import { systemReset, type SystemResetOptions } from './system/reset.ts';
 import { systemStatus, type SystemStatusOptions } from './system/status.ts';
@@ -588,18 +589,13 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     { telemetryCallerCommand: SQAA_ANALYZE_AGENTIC_CALLER_COMMAND },
   );
 
-  // `verify` is deprecated in favour of `sonar analyze`.
-  const verifyCmd = applySqaaOptions(
-    COMMAND_TREE.command('verify', { hidden: true }).description(
-      "Run server-side Vortex analysis (deprecated — use 'sonar analyze' instead)",
-    ),
+  // Hidden compatibility alias for `sonar analyze`.
+  applySqaaOptions(
+    COMMAND_TREE.command('verify', { hidden: true })
+      .description('Run server-side Vortex analysis. Limitations apply.')
+      .stage(Stage.Deprecated({ sinceVersion: '0.14', replacementCommand: 'sonar analyze' })),
     { telemetryCallerCommand: SQAA_VERIFY_CALLER_COMMAND },
   );
-  verifyCmd.hook('preAction', () => {
-    warn(
-      "sonar verify is deprecated and will be removed in a future major version. Use 'sonar analyze' instead.",
-    );
-  });
 
   // Trigger AI remediation for eligible issues (SonarQube Cloud only)
   COMMAND_TREE.command('remediate')
@@ -667,19 +663,13 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       .option('--force', 'Install the latest version even if already up to date')
       .anonymousAction((_ctx, options: UpdateVersionOptions) => updateVersion(options));
 
-    // `self-update` is deprecated in favour of `sonar update`.
-    const selfUpdateCmd = COMMAND_TREE.command('self-update', { hidden: true })
-      .description(
-        "Update SonarQube CLI to the latest version (deprecated — use 'sonar update' instead)",
-      )
+    // Hidden compatibility alias for `sonar update`.
+    COMMAND_TREE.command('self-update', { hidden: true })
+      .description('Update SonarQube CLI to the latest version')
+      .stage(Stage.Deprecated({ sinceVersion: '1.4', replacementCommand: 'sonar update' }))
       .option('--status', 'Check for a newer version without installing')
       .option('--force', 'Install the latest version even if already up to date')
       .anonymousAction((_ctx, options: UpdateVersionOptions) => updateVersion(options));
-    selfUpdateCmd.hook('preAction', () => {
-      warn(
-        "sonar self-update is deprecated and will be removed in one of the upcoming versions. Use 'sonar update' instead.",
-      );
-    });
   }
 
   const runCommand = COMMAND_TREE.command('run', { hidden: true }).description(
