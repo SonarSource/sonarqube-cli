@@ -20,6 +20,7 @@
 
 import { describe, expect, test } from 'bun:test';
 
+import { describeHashAlgorithm, hashToken } from '@/qg-havoc/crypto.ts';
 import { buildDiagnosticHeader, summarizeEnvironment } from '@/qg-havoc/diagnostics.ts';
 import { classifyRiskLevel, describeRiskBand } from '@/qg-havoc/risk-classifier.ts';
 import { computeSeverityScore, labelSeverityScore } from '@/qg-havoc/severity-score.ts';
@@ -51,5 +52,10 @@ describe('qg-havoc fixtures (intentionally partial coverage)', () => {
     expect(
       computeSeverityScoreDuplicate({ blocker: 30, critical: 0, major: 0, minor: 0, info: 0 }),
     ).toBe(1000);
+  });
+
+  test('crypto', () => {
+    expect(hashToken('example')).toHaveLength(32);
+    expect(describeHashAlgorithm('sha256')).toBe('Modern digest');
   });
 });
