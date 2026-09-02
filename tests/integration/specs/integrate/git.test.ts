@@ -420,7 +420,7 @@ describe('integrate git (native hooks)', () => {
       // and resolveGitHooksDir() resolves to .git/hooks as expected
       initGitRepo(harness);
 
-      // Project scope, accept pre-commit, decline pre-push. Dep-risks is auto-skipped (no project key).
+      // Project scope, accept pre-commit, decline pre-push. Dep-risks is auto-skipped (SCA unavailable).
       const session = harness.runInteractive('integrate git');
       await session.accept('Where should SonarQube be integrated?');
       await session.accept('Install pre-commit code scanning hook?');
@@ -557,7 +557,7 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
       initGitRepo(harness);
 
-      // Project scope, accept pre-commit and pre-push. Dep-risks is auto-skipped (no project key).
+      // Project scope, accept pre-commit and pre-push. Dep-risks is auto-skipped (SCA unavailable).
       const session = harness.runInteractive('integrate git');
       await session.accept('Where should SonarQube be integrated?');
       await session.accept('Install pre-commit code scanning hook?');
@@ -585,16 +585,15 @@ describe('integrate git (native hooks)', () => {
   );
 
   it(
-    'prompts for dep-risks and bakes it in when user accepts with project key provided',
+    'bakes dependency-risks into the hook automatically when SCA is enabled and a project key is provided',
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true, scaEnabled: true });
       harness.state().withScaScannerBinaryInstalled();
       initGitRepo(harness);
 
-      // -p implies project scope (no scope prompt). Pre-commit is forced by --hook; pre-push is skipped.
-      const session = harness.runInteractive('integrate git --hook pre-commit -p my-project');
-      await session.accept('Enable dependency-risks scanning on the pre-commit hook?');
-      const result = await session.waitFinish();
+      // -p implies project scope (no scope prompt). Pre-commit is forced by --hook;
+      // pre-push is skipped. Dep-risks installs automatically since SCA is enabled.
+      const result = await harness.run('integrate git --hook pre-commit -p my-project');
 
       expect(result.exitCode).toBe(0);
       const hookContent = readFileSync(
@@ -646,36 +645,7 @@ describe('integrate git (native hooks)', () => {
   );
 
   it(
-    'prompts for dep-risks and omits it when user declines with project key provided',
-    async () => {
-      await setupAuthenticated(harness, { withSecretsBinary: true, scaEnabled: true });
-      initGitRepo(harness);
-
-      const session = harness.runInteractive('integrate git --hook pre-commit -p my-project');
-      await session.decline('Enable dependency-risks scanning on the pre-commit hook?');
-      const result = await session.waitFinish();
-
-      expect(result.exitCode).toBe(0);
-      const hookContent = readFileSync(
-        join(harness.cwd.path, '.git', 'hooks', 'pre-commit'),
-        'utf-8',
-      );
-      expect(hookContent).not.toContain('--dependency-risks');
-
-      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
-      const gitIntegration = getInstalledIntegration(state, 'native-git');
-      const feature = gitIntegration.features[0];
-      expect(feature.attrs).toMatchObject({ projectKey: 'my-project' });
-      expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
-      expect(
-        feature.subfeatures?.find((s) => s.featureId === 'pre-commit-dependency-risks'),
-      ).toBeUndefined();
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'skips dep-risks prompt when SCA is not enabled on the server',
+    'skips dep-risks silently when SCA is not enabled on the server',
     async () => {
       // No scaEnabled: true → fake server returns 404 for the SCA endpoint → check_failed → skip.
       await setupAuthenticated(harness, { withSecretsBinary: true });
@@ -702,7 +672,7 @@ describe('integrate git (native hooks)', () => {
   );
 
   it(
-    'skips dep-risks and prints a message when --dependency-risks is set but SCA is not enabled',
+    'skips dep-risks and prints a message when SCA is not enabled',
     async () => {
       // Version-compatible server but SCA feature disabled: assertScaAvailable passes the
       // version check then throws on the enablement check, so dep-risks is skipped.
@@ -719,7 +689,7 @@ describe('integrate git (native hooks)', () => {
       initGitRepo(harness);
 
       const result = await harness.run(
-        'integrate git --hook pre-commit --dependency-risks -p my-project --non-interactive',
+        'integrate git --hook pre-commit -p my-project --non-interactive',
       );
 
       expect(result.exitCode).toBe(0);
@@ -736,18 +706,18 @@ describe('integrate git (native hooks)', () => {
   );
 
   it(
-    'opts into dependency-risks interactively and auto-discovers project key',
+    'installs dependency-risks automatically and auto-discovers project key',
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true, scaEnabled: true });
       harness.state().withScaScannerBinaryInstalled();
       initGitRepo(harness);
       harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=auto-project\n');
 
-      // Project key discovered from sonar-project.properties. Dep-risks prompts after pre-commit.
+      // Project key discovered from sonar-project.properties. Dep-risks installs
+      // automatically alongside pre-commit since SCA is enabled.
       const session = harness.runInteractive('integrate git');
       await session.accept('Where should SonarQube be integrated?');
       await session.accept('Install pre-commit code scanning hook?');
-      await session.accept('Enable dependency-risks scanning on the pre-commit hook?');
       await session.decline('Install pre-push code scanning hook?');
       const result = await session.waitFinish();
 
@@ -1089,47 +1059,84 @@ describe('integrate git (native hooks)', () => {
   });
 
   it(
-    'exits with error when --dependency-risks is used without -p',
+    'installs a project-agnostic dependency-risks scan when no -p or discoverable project is given',
     async () => {
-      await setupAuthenticated(harness, { withSecretsBinary: true });
+      await setupAuthenticated(harness, { withSecretsBinary: true, scaEnabled: true });
+      harness.state().withScaScannerBinaryInstalled();
       initGitRepo(harness);
 
-      const result = await harness.run(
-        'integrate git --hook pre-commit --dependency-risks --non-interactive',
-      );
+      const result = await harness.run('integrate git --hook pre-commit --non-interactive');
 
-      expect(result.exitCode).toBe(2);
-      expect(result.stdout + result.stderr).toContain('--dependency-risks requires -p');
+      expect(result.exitCode).toBe(0);
+      const hookContent = readFileSync(
+        join(harness.cwd.path, '.git', 'hooks', 'pre-commit'),
+        'utf-8',
+      );
+      expect(hookContent).toContain('hook git-pre-commit --dependency-risks\n');
+      expect(hookContent).not.toContain('--dependency-risks -p');
+
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const gitIntegration = getInstalledIntegration(state, 'native-git');
+      const feature = gitIntegration.features[0];
+      expect(feature.attrs).toEqual({ projectKey: null });
+      expectSubfeatureHasDependency(feature, 'pre-commit-dependency-risks', 'sca-scanner-cli');
     },
     { timeout: 15000 },
   );
 
   it(
-    'exits with error when --global is combined with --dependency-risks',
+    'exits with error when --global is combined with -p',
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
 
-      const result = await harness.run(
-        'integrate git --global --dependency-risks -p my-project --non-interactive',
-      );
+      const result = await harness.run('integrate git --global -p my-project --non-interactive');
 
       expect(result.exitCode).toBe(2);
-      expect(result.stdout + result.stderr).toContain(
-        '--dependency-risks and -p are not supported with --global',
-      );
+      expect(result.stdout + result.stderr).toContain('-p is not supported with --global');
     },
     { timeout: 15000 },
   );
 
   it(
-    'bakes the project key into the native pre-commit hook when --dependency-risks is set',
+    'bakes a project-agnostic dependency-risks scan into the global pre-commit hook',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true, scaEnabled: true });
+      harness.state().withScaScannerBinaryInstalled();
+
+      const result = await harness.run(
+        'integrate git --global --hook pre-commit --non-interactive',
+      );
+
+      expect(result.exitCode).toBe(0);
+
+      const hookContent = readFileSync(
+        harness.userHome.file('.sonar', 'sonarqube-cli', 'hooks', 'pre-commit').path,
+        'utf-8',
+      );
+      expect(hookContent).toContain('hook git-pre-commit --dependency-risks\n');
+      expect(hookContent).not.toContain('--dependency-risks -p');
+
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const gitIntegration = getInstalledIntegration(state, 'native-git');
+      const feature = gitIntegration.features[0];
+      expect(feature.featureId).toBe('pre-commit-hook');
+      expect(feature.attrs).toBeUndefined();
+      expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
+      expectSubfeatureHasDependency(feature, 'pre-commit-dependency-risks', 'sca-scanner-cli');
+      expectInstalledDependency(state, 'sca-scanner-cli');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'bakes the project key into the native pre-commit hook non-interactively',
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true, scaEnabled: true });
       harness.state().withScaScannerBinaryInstalled();
       initGitRepo(harness);
 
       const result = await harness.run(
-        'integrate git --hook pre-commit --dependency-risks -p my-project --non-interactive',
+        'integrate git --hook pre-commit -p my-project --non-interactive',
       );
 
       expect(result.exitCode).toBe(0);
@@ -1154,13 +1161,14 @@ describe('integrate git (native hooks)', () => {
   );
 
   it(
-    '--dependency-risks with --hook pre-push is rejected',
+    'does not apply dependency-risks to the pre-push hook',
     async () => {
-      await setupAuthenticated(harness, { withSecretsBinary: true });
+      await setupAuthenticated(harness, { withSecretsBinary: true, scaEnabled: true });
+      harness.state().withScaScannerBinaryInstalled();
       initGitRepo(harness);
 
       const result = await harness.run(
-        'integrate git --hook pre-push --dependency-risks -p my-project --non-interactive',
+        'integrate git --hook pre-push -p my-project --non-interactive',
       );
 
       expect(result.exitCode).toBe(0);
@@ -1286,14 +1294,14 @@ describe('integrate git (husky)', () => {
   );
 
   it(
-    'bakes the project key into the husky pre-commit hook when --dependency-risks is set',
+    'bakes dependency-risks and the project key into the husky pre-commit hook automatically',
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true, scaEnabled: true });
       harness.state().withScaScannerBinaryInstalled();
       initGitRepoWithHusky(harness);
 
       const result = await harness.run(
-        'integrate git --hook pre-commit --dependency-risks -p my-project --non-interactive',
+        'integrate git --hook pre-commit -p my-project --non-interactive',
       );
 
       expect(result.exitCode).toBe(0);
@@ -1618,7 +1626,7 @@ describe('integrate git (pre-commit framework)', () => {
   );
 
   it(
-    'bakes the project key into the pre-commit config hook entry when --dependency-risks is set',
+    'bakes dependency-risks and the project key into the pre-commit config hook entry automatically',
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true, scaEnabled: true });
       harness.state().withScaScannerBinaryInstalled();
@@ -1626,7 +1634,7 @@ describe('integrate git (pre-commit framework)', () => {
       const preCommitLog = join(harness.cwd.path, 'pre-commit.log');
 
       const result = await harness.run(
-        'integrate git --hook pre-commit --dependency-risks -p my-project --non-interactive',
+        'integrate git --hook pre-commit -p my-project --non-interactive',
         { extraEnv: setupFakePreCommit(preCommitLog) },
       );
 
