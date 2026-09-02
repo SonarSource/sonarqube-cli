@@ -164,8 +164,8 @@ export class SonarOption extends Option {
     return this._lifecycle.deprecatedSinceVersion;
   }
 
-  get deprecatedReplacementCommand(): string | null | undefined {
-    return this._lifecycle.deprecatedReplacementCommand;
+  get deprecatedReplacement(): string | null | undefined {
+    return this._lifecycle.deprecatedReplacement;
   }
 }
 
@@ -579,9 +579,9 @@ export class SonarCommand extends Command {
     return this._lifecycle.deprecatedSinceVersion;
   }
 
-  /** Suggested replacement command; `null` when none, undefined when not Deprecated. */
-  get deprecatedReplacementCommand(): string | null | undefined {
-    return this._lifecycle.deprecatedReplacementCommand;
+  /** Suggested replacement; `null` when none, undefined when not Deprecated. */
+  get deprecatedReplacement(): string | null | undefined {
+    return this._lifecycle.deprecatedReplacement;
   }
 
   /** LaunchDarkly flag key for Private Beta; undefined for Open Beta / non-Beta. */
@@ -634,14 +634,10 @@ export class SonarCommand extends Command {
       } else if (
         option.isDeprecated &&
         option.deprecatedSinceVersion !== undefined &&
-        option.deprecatedReplacementCommand !== undefined
+        option.deprecatedReplacement !== undefined
       ) {
         info(
-          deprecationWarning(
-            flag,
-            option.deprecatedSinceVersion,
-            option.deprecatedReplacementCommand,
-          ),
+          deprecationWarning(flag, option.deprecatedSinceVersion, option.deprecatedReplacement),
           'stderr',
         );
       }
@@ -652,7 +648,7 @@ export class SonarCommand extends Command {
     if (
       !this.isDeprecated ||
       this._lifecycle.deprecatedSinceVersion === undefined ||
-      this._lifecycle.deprecatedReplacementCommand === undefined
+      this._lifecycle.deprecatedReplacement === undefined
     ) {
       return;
     }
@@ -661,7 +657,7 @@ export class SonarCommand extends Command {
       deprecationWarning(
         qualifiedCommandPath(this),
         this._lifecycle.deprecatedSinceVersion,
-        this._lifecycle.deprecatedReplacementCommand,
+        this._lifecycle.deprecatedReplacement,
       ),
       'stderr',
     );

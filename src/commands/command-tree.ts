@@ -592,8 +592,8 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
   // Hidden compatibility alias for `sonar analyze`.
   applySqaaOptions(
     COMMAND_TREE.command('verify', { hidden: true })
-      .description('Run server-side Vortex analysis. Limitations apply.')
-      .stage(Stage.Deprecated({ sinceVersion: '0.14', replacementCommand: 'sonar analyze' })),
+      .description('Run server-side Vortex analysis')
+      .stage(Stage.Deprecated({ sinceVersion: '0.14', replacement: 'sonar analyze' })),
     { telemetryCallerCommand: SQAA_VERIFY_CALLER_COMMAND },
   );
 
@@ -666,7 +666,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     // Hidden compatibility alias for `sonar update`.
     COMMAND_TREE.command('self-update', { hidden: true })
       .description('Update SonarQube CLI to the latest version')
-      .stage(Stage.Deprecated({ sinceVersion: '1.4', replacementCommand: 'sonar update' }))
+      .stage(Stage.Deprecated({ sinceVersion: '1.4', replacement: 'sonar update' }))
       .option('--status', 'Check for a newer version without installing')
       .option('--force', 'Install the latest version even if already up to date')
       .anonymousAction((_ctx, options: UpdateVersionOptions) => updateVersion(options));

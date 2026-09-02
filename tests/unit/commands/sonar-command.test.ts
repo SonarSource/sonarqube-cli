@@ -612,28 +612,28 @@ describe('SonarCommand', () => {
       const command = parent
         .command('legacy')
         .description('Legacy command')
-        .stage(Stage.Deprecated({ sinceVersion: '1.8', replacementCommand: null }));
+        .stage(Stage.Deprecated({ sinceVersion: '1.8', replacement: null }));
 
       expect(command.isDeprecated).toBe(true);
       expect(command.isStable).toBe(false);
       expect(command.deprecatedSinceVersion).toBe('1.8');
-      expect(command.deprecatedReplacementCommand).toBeNull();
+      expect(command.deprecatedReplacement).toBeNull();
       expect(parent.createHelp().visibleCommands(parent)).toContain(command);
     });
 
-    it('stores a replacement command', () => {
+    it('stores a replacement', () => {
       const command = new SonarCommand('legacy').stage(
-        Stage.Deprecated({ sinceVersion: '1.8', replacementCommand: 'sonar update' }),
+        Stage.Deprecated({ sinceVersion: '1.8', replacement: 'sonar update' }),
       );
 
       expect(command.deprecatedSinceVersion).toBe('1.8');
-      expect(command.deprecatedReplacementCommand).toBe('sonar update');
+      expect(command.deprecatedReplacement).toBe('sonar update');
     });
 
     it('adds the Deprecated tag to command help', () => {
       const command = new SonarCommand('legacy')
         .description('Legacy command')
-        .stage(Stage.Deprecated({ sinceVersion: '1.8', replacementCommand: null }));
+        .stage(Stage.Deprecated({ sinceVersion: '1.8', replacement: null }));
 
       expect(command.helpInformation()).toContain('Legacy command [DEPRECATED]');
     });
@@ -648,7 +648,7 @@ describe('SonarCommand', () => {
       system
         .command('legacy')
         .description('Legacy command')
-        .stage(Stage.Deprecated({ sinceVersion: '1.8', replacementCommand: null }));
+        .stage(Stage.Deprecated({ sinceVersion: '1.8', replacement: null }));
 
       const help = getCustomRootHelp(root, root.createHelp());
 
@@ -657,7 +657,7 @@ describe('SonarCommand', () => {
 
     it('warns on every invocation', async () => {
       const command = new SonarCommand('legacy')
-        .stage(Stage.Deprecated({ sinceVersion: '1.8', replacementCommand: null }))
+        .stage(Stage.Deprecated({ sinceVersion: '1.8', replacement: null }))
         .anonymousAction((_ctx) => {});
 
       await command.parseAsync([], { from: 'user' });
@@ -675,7 +675,7 @@ describe('SonarCommand', () => {
 
     it('includes the replacement in the warning when provided', async () => {
       const command = new SonarCommand('self-update')
-        .stage(Stage.Deprecated({ sinceVersion: '1.2', replacementCommand: 'sonar update' }))
+        .stage(Stage.Deprecated({ sinceVersion: '1.2', replacement: 'sonar update' }))
         .anonymousAction((_ctx) => {});
 
       await command.parseAsync([], { from: 'user' });
@@ -690,7 +690,7 @@ describe('SonarCommand', () => {
       const root = new SonarCommand('sonar');
       root
         .command('verify')
-        .stage(Stage.Deprecated({ sinceVersion: '0.14', replacementCommand: 'sonar analyze' }))
+        .stage(Stage.Deprecated({ sinceVersion: '0.14', replacement: 'sonar analyze' }))
         .anonymousAction((_ctx) => {});
 
       await root.parseAsync(['verify'], { from: 'user' });
@@ -704,7 +704,7 @@ describe('SonarCommand', () => {
     it('uses Deprecated when it is assigned after Beta', () => {
       const command = new SonarCommand('legacy')
         .stage(Stage.Beta())
-        .stage(Stage.Deprecated({ sinceVersion: '1.8', replacementCommand: null }));
+        .stage(Stage.Deprecated({ sinceVersion: '1.8', replacement: null }));
 
       expect(command.isDeprecated).toBe(true);
       expect(command.isBeta).toBe(false);
@@ -718,7 +718,7 @@ describe('SonarCommand', () => {
 
       expect(parent.commands).not.toContain(command);
 
-      command.stage(Stage.Deprecated({ sinceVersion: '1.8', replacementCommand: null }));
+      command.stage(Stage.Deprecated({ sinceVersion: '1.8', replacement: null }));
 
       expect(parent.commands).toContain(command);
       expect(parent.helpInformation()).toContain('Legacy command [DEPRECATED]');
@@ -1112,7 +1112,7 @@ describe('SonarCommand', () => {
     it('allows deprecating a required option', () => {
       const option = new SonarOption('--need', 'Required')
         .makeOptionMandatory()
-        .stage(Stage.Deprecated({ sinceVersion: '1.8', replacementCommand: null }));
+        .stage(Stage.Deprecated({ sinceVersion: '1.8', replacement: null }));
 
       expect(option.isDeprecated).toBe(true);
       expect(new SonarCommand('cmd').addOption(option).helpInformation()).toContain('--need');
@@ -1121,7 +1121,7 @@ describe('SonarCommand', () => {
     it('keeps Deprecated options visible with a [DEPRECATED] tag and warns on every use', async () => {
       const cmd = commandWithStagedOption(
         new SonarOption('--legacy', 'Legacy flag').stage(
-          Stage.Deprecated({ sinceVersion: '1.8', replacementCommand: '--next' }),
+          Stage.Deprecated({ sinceVersion: '1.8', replacement: '--next' }),
         ),
       );
 
@@ -1140,7 +1140,7 @@ describe('SonarCommand', () => {
     it('does not warn about a Deprecated option that was not passed', async () => {
       const cmd = commandWithStagedOption(
         new SonarOption('--legacy', 'Legacy flag').stage(
-          Stage.Deprecated({ sinceVersion: '1.8', replacementCommand: null }),
+          Stage.Deprecated({ sinceVersion: '1.8', replacement: null }),
         ),
       );
 
@@ -1153,7 +1153,7 @@ describe('SonarCommand', () => {
       const root = new SonarCommand('sonar');
       root.addOption(
         new SonarOption('--legacy', 'Legacy flag').stage(
-          Stage.Deprecated({ sinceVersion: '1.8', replacementCommand: null }),
+          Stage.Deprecated({ sinceVersion: '1.8', replacement: null }),
         ),
       );
 

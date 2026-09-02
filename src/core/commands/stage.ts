@@ -29,7 +29,7 @@ export type StageName = 'stable' | 'alpha' | 'beta' | 'deprecated';
 /** Arguments for {@link Stage.Deprecated}. */
 export type DeprecatedStageOptions = {
   readonly sinceVersion: string;
-  readonly replacementCommand: string | null;
+  readonly replacement: string | null;
 };
 
 /** Descriptor passed to `SonarCommand.stage` / `SonarOption.stage`. */
@@ -40,7 +40,7 @@ export type StageDescriptor =
   | {
       readonly name: 'deprecated';
       readonly sinceVersion: string;
-      readonly replacementCommand: string | null;
+      readonly replacement: string | null;
     };
 
 function betaStage(flagKey?: string): StageDescriptor {
@@ -51,7 +51,7 @@ function deprecatedStage(options: DeprecatedStageOptions): StageDescriptor {
   return {
     name: 'deprecated',
     sinceVersion: options.sinceVersion,
-    replacementCommand: options.replacementCommand,
+    replacement: options.replacement,
   };
 }
 
@@ -59,7 +59,7 @@ function deprecatedStage(options: DeprecatedStageOptions): StageDescriptor {
  * Command lifecycle stage.
  * Stable/Alpha are constants; Beta is a function so an optional LaunchDarkly
  * flag key can only be attached to Private Beta commands; Deprecated is a
- * function so `sinceVersion` and `replacementCommand` (`null` when there is
+ * function so `sinceVersion` and `replacement` (`null` when there is
  * none) are required at the call site.
  */
 export const Stage = {
@@ -73,14 +73,14 @@ export type LifecycleState = {
   readonly stage: StageName;
   readonly betaFlagKey: string | undefined;
   readonly deprecatedSinceVersion: string | undefined;
-  readonly deprecatedReplacementCommand: string | null | undefined;
+  readonly deprecatedReplacement: string | null | undefined;
 };
 
 export const STABLE_LIFECYCLE: LifecycleState = Object.freeze({
   stage: 'stable',
   betaFlagKey: undefined,
   deprecatedSinceVersion: undefined,
-  deprecatedReplacementCommand: undefined,
+  deprecatedReplacement: undefined,
 });
 
 export function withLifecycleTag(description: string, stage: StageName): string {
@@ -99,12 +99,12 @@ export function withLifecycleTag(description: string, stage: StageName): string 
 export function deprecationWarning(
   subject: string,
   sinceVersion: string,
-  replacementCommand: string | null,
+  replacement: string | null,
 ): string {
   const base = `'${subject}' is deprecated since ${sinceVersion}`;
-  return replacementCommand === null
+  return replacement === null
     ? `${base}. There is no replacement.`
-    : `${base}. Use '${replacementCommand}' instead.`;
+    : `${base}. Use '${replacement}' instead.`;
 }
 
 export function resolveLifecycle(stage: StageDescriptor): LifecycleState {
@@ -113,13 +113,13 @@ export function resolveLifecycle(stage: StageDescriptor): LifecycleState {
         stage: 'deprecated',
         betaFlagKey: undefined,
         deprecatedSinceVersion: stage.sinceVersion,
-        deprecatedReplacementCommand: stage.replacementCommand,
+        deprecatedReplacement: stage.replacement,
       }
     : {
         stage: stage.name,
         betaFlagKey: stage.name === 'beta' ? stage.flagKey : undefined,
         deprecatedSinceVersion: undefined,
-        deprecatedReplacementCommand: undefined,
+        deprecatedReplacement: undefined,
       };
 }
 
@@ -128,7 +128,7 @@ export function isSameLifecycle(left: LifecycleState, right: LifecycleState): bo
     left.stage === right.stage &&
     left.betaFlagKey === right.betaFlagKey &&
     left.deprecatedSinceVersion === right.deprecatedSinceVersion &&
-    left.deprecatedReplacementCommand === right.deprecatedReplacementCommand
+    left.deprecatedReplacement === right.deprecatedReplacement
   );
 }
 
