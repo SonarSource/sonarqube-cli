@@ -112,6 +112,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: binary-linux-x86-64
+          if-no-files-found: error
           path: |
             dist/*-linux-x86-64.bin
             dist/*-linux-x86-64.bin.asc
@@ -120,6 +121,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: binary-linux-arm64
+          if-no-files-found: error
           path: |
             dist/*-linux-arm64.bin
             dist/*-linux-arm64.bin.asc
@@ -128,6 +130,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: binary-macos-arm64
+          if-no-files-found: error
           path: |
             dist/*-macos-arm64.bin
             dist/*-macos-arm64.bin.asc
@@ -136,6 +139,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: binary-windows-x86-64
+          if-no-files-found: error
           path: |
             dist/*-windows-x86-64.exe
             dist/*-windows-x86-64.exe.asc
