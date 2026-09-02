@@ -108,48 +108,37 @@ jobs:
             bun build-scripts/sign.ts "$binary"
           done < <(find dist -maxdepth 1 -type f \( -name '*.bin' -o -name '*.exe' \) -print0)
 
-      - name: Stage per-platform artifacts
-        shell: bash
-        env:
-          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
-        run: |
-          set -euo pipefail
-          stage() {
-            local classifier="$1"
-            local ext="$2"
-            local dest="artifacts/${classifier}"
-            mkdir -p "${dest}"
-            cp "dist/sonarqube-cli-${PROJECT_VERSION}-${classifier}.${ext}" "${dest}/"
-            cp "dist/sonarqube-cli-${PROJECT_VERSION}-${classifier}.${ext}.asc" "${dest}/"
-          }
-          stage linux-x86-64 bin
-          stage linux-arm64 bin
-          stage macos-arm64 bin
-          stage windows-x86-64 exe
-
       - name: Upload linux-x86-64 binary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: binary-linux-x86-64
-          path: artifacts/linux-x86-64/
+          path: |
+            dist/*-linux-x86-64.bin
+            dist/*-linux-x86-64.bin.asc
 
       - name: Upload linux-arm64 binary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: binary-linux-arm64
-          path: artifacts/linux-arm64/
+          path: |
+            dist/*-linux-arm64.bin
+            dist/*-linux-arm64.bin.asc
 
       - name: Upload macos-arm64 binary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: binary-macos-arm64
-          path: artifacts/macos-arm64/
+          path: |
+            dist/*-macos-arm64.bin
+            dist/*-macos-arm64.bin.asc
 
       - name: Upload windows-x86-64 binary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: binary-windows-x86-64
-          path: artifacts/windows-x86-64/
+          path: |
+            dist/*-windows-x86-64.exe
+            dist/*-windows-x86-64.exe.asc
 
   sign-macos:
     name: Sign and Notarize macOS Binaries
