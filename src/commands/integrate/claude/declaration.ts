@@ -185,21 +185,29 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       sessionStartCommand: 'sonar hook claude-session-start',
       subagentStartCommand: 'sonar hook claude-subagent-start',
       shouldInstall: (invocation) => {
+        const decision = shouldInstallCagHook(invocation.options, invocation.attrs);
         // The hook is a single global resource, not one record per project, so a project's
-        // own vortexDisposition (which can legitimately say "remove" for THIS project) must
-        // not tear it down while another project on this machine still has Vortex installed.
+        // own 'uninstall' disposition (legitimate for THIS project) must not tear it down
+        // while another project on this machine still has Vortex installed. Gated on the
+        // decision actually being a teardown — an 'install'/'skip'/'ask' decision passes
+        // through untouched, otherwise a second project (or any --global run, where
+        // targetRoot is homedir() and so never matches a project's own record) could never
+        // install the shared hook at all. Compares against options.projectRoot (falling back
+        // to targetRoot), matching how createVortexFeature itself records a project's own
+        // targetRoot, so "this project" is excluded correctly.
         if (
+          decision.action === 'uninstall' &&
           isVortexInstalledForOtherProject(
             invocation.state,
             CLAUDE_INTEGRATION_ID,
-            invocation.targetRoot,
+            invocation.options.projectRoot ?? invocation.targetRoot,
           )
         ) {
           return skip(
             'Other projects on this machine still use Vortex — leaving the shared session-start hook installed.',
           );
         }
-        return shouldInstallCagHook(invocation.options, invocation.attrs);
+        return decision;
       },
     }),
     {

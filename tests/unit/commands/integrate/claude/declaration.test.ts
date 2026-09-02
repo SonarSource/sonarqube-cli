@@ -83,7 +83,7 @@ function fakeInvocation(overrides: Partial<IntegrationInvocation>): IntegrationI
 }
 
 describe('claude declaration — context-augmentation-session-start-hook shouldInstall', () => {
-  it('skips (leaves installed) when another project still has vortex, even on a remove disposition', async () => {
+  it('skips (leaves installed) when another project still has vortex, on a remove disposition', async () => {
     const feature = sessionStartFeature();
     const invocation = fakeInvocation({
       options: { vortexDisposition: 'remove' },
@@ -137,5 +137,39 @@ describe('claude declaration — context-augmentation-session-start-hook shouldI
     const decision = await feature.shouldInstall!(invocation);
 
     expect(decision).toMatchObject({ action: 'skip' });
+  });
+
+  it('still installs for a second project even though another project already has vortex', async () => {
+    // The guard must only ever block a TEARDOWN, never an install — otherwise integrating a
+    // second project could never install the shared hook (regression caught by review).
+    const feature = sessionStartFeature();
+    const invocation = fakeInvocation({
+      options: { vortexDisposition: 'install' },
+      attrs: { orgKey: 'sonarsource' },
+      targetRoot: '/repo-b',
+      state: fakeState([fakeVortexFeature('/repo-a')]),
+    });
+
+    const decision = await feature.shouldInstall!(invocation);
+
+    expect(decision).toMatchObject({ action: 'install' });
+  });
+
+  it('still installs on a --global run even though a project already has vortex', async () => {
+    // A --global invocation's targetRoot is homedir(), which never equals any project-scope
+    // vortex record's targetRoot — so the naive guard would treat every existing project as
+    // "other" and permanently block the very global install this feature exists for.
+    const feature = sessionStartFeature();
+    const invocation = fakeInvocation({
+      options: { vortexDisposition: 'install' },
+      attrs: { orgKey: 'sonarsource' },
+      scope: 'global',
+      targetRoot: '/home/user',
+      state: fakeState([fakeVortexFeature('/repo-a')]),
+    });
+
+    const decision = await feature.shouldInstall!(invocation);
+
+    expect(decision).toMatchObject({ action: 'install' });
   });
 });
