@@ -18,11 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Unit tests for the shared worktree-aware feature-selection policy. Exercises the
-// pure selectFeatureForLookupPaths so the ranking (targetRoot before repoRoot,
-// current worktree before main, nearest ancestor, then recency) is covered
-// without spawning git. Paths are absolute and non-existent so canonicalizePath
-// falls back to a deterministic path.resolve() on every platform.
+// Unit tests for the pure exact-match selection policy over an already-expanded,
+// nearest-first lookup-path list.
 
 import { describe, expect, it } from 'bun:test';
 
@@ -31,11 +28,10 @@ import {
   selectFeatureForLookupPaths,
 } from '@/core/host/recorded-feature-resolver.ts';
 
-const BASE = '/nonexistent-sqcli-resolver-test';
-const MAIN = `${BASE}/main`;
-const WORKTREE = `${BASE}/linked-worktree`;
-const NESTED = `${MAIN}/packages/api`;
-const OUTSIDE = `${BASE}/unrelated`;
+const MAIN = '/repo';
+const MAIN_SUBDIR = `${MAIN}/src`;
+const WORKTREE = '/repo-worktrees/feature-x';
+const OUTSIDE = '/unrelated-project';
 
 function candidate(
   id: string,
@@ -45,7 +41,7 @@ function candidate(
 }
 
 describe('selectFeatureForLookupPaths', () => {
-  it('prefers a targetRoot match over a more recent repoRoot-only match', () => {
+  it('prefers a targetRoot match over a more recent repoRoot-only match at the same path', () => {
     const candidates = [
       // Sibling worktree: matches only via repoRoot, updated later.
       candidate('sibling', {
@@ -61,40 +57,71 @@ describe('selectFeatureForLookupPaths', () => {
       }),
     ];
 
-    expect(selectFeatureForLookupPaths(candidates, [MAIN])).toBe('here');
+    expect(
+      selectFeatureForLookupPaths(candidates, [{ checkPath: MAIN, projectRoot: MAIN }]),
+    ).toEqual({
+      feature: 'here',
+      matchedPath: MAIN,
+    });
   });
 
-  it('prefers the current worktree over the main working tree', () => {
+  it('checks lookup paths in order, so the current worktree wins when listed before the main tree', () => {
     const candidates = [
       candidate('main', { targetRoot: MAIN, repoRoot: MAIN }),
       candidate('worktree', { targetRoot: WORKTREE, repoRoot: MAIN }),
     ];
 
-    // Lookup order is current-worktree-first, then main.
-    expect(selectFeatureForLookupPaths(candidates, [WORKTREE, MAIN])).toBe('worktree');
+    expect(
+      selectFeatureForLookupPaths(candidates, [
+        { checkPath: WORKTREE, projectRoot: WORKTREE },
+        // Translated main-tree entry: from inside WORKTREE, this always anchors
+        // back to WORKTREE, never to MAIN itself.
+        { checkPath: MAIN, projectRoot: WORKTREE },
+      ]),
+    ).toEqual({
+      feature: 'worktree',
+      matchedPath: WORKTREE,
+    });
   });
 
-  it('falls back to the main working tree when the current worktree has no integration', () => {
+  it('falls through to a later path when an earlier one has no match', () => {
     const candidates = [candidate('main', { targetRoot: MAIN, repoRoot: MAIN })];
 
-    expect(selectFeatureForLookupPaths(candidates, [WORKTREE, MAIN])).toBe('main');
+    // Plain climb within one worktree, from a subdirectory up to the repo root.
+    expect(
+      selectFeatureForLookupPaths(candidates, [
+        { checkPath: MAIN_SUBDIR, projectRoot: MAIN_SUBDIR },
+        { checkPath: MAIN, projectRoot: MAIN },
+      ]),
+    ).toEqual({
+      feature: 'main',
+      matchedPath: MAIN,
+    });
   });
 
   it('matches via repoRoot when targetRoot points at a different worktree', () => {
     const candidates = [candidate('sibling', { targetRoot: WORKTREE, repoRoot: MAIN })];
 
-    expect(selectFeatureForLookupPaths(candidates, [MAIN])).toBe('sibling');
+    expect(
+      selectFeatureForLookupPaths(candidates, [{ checkPath: MAIN, projectRoot: MAIN }]),
+    ).toEqual({
+      feature: 'sibling',
+      matchedPath: MAIN,
+    });
   });
 
-  it('prefers the nearest ancestor (longest targetRoot) for nested integrations', () => {
-    const candidates = [
-      candidate('root', { targetRoot: MAIN }),
-      candidate('nested', { targetRoot: NESTED }),
-    ];
+  it('reports projectRoot, not checkPath, when matched via a translated main-tree entry', () => {
+    const candidates = [candidate('via-main-tree', { targetRoot: MAIN, repoRoot: MAIN })];
 
-    expect(selectFeatureForLookupPaths(candidates, [`${NESTED}/src`])).toBe('nested');
-    // Outside the nested subtree, the repo-root integration still wins.
-    expect(selectFeatureForLookupPaths(candidates, [`${MAIN}/lib`])).toBe('root');
+    expect(
+      selectFeatureForLookupPaths(candidates, [
+        { checkPath: WORKTREE, projectRoot: WORKTREE },
+        { checkPath: MAIN, projectRoot: WORKTREE },
+      ]),
+    ).toEqual({
+      feature: 'via-main-tree',
+      matchedPath: WORKTREE,
+    });
   });
 
   it('breaks ties on the same root by most recent update', () => {
@@ -103,38 +130,28 @@ describe('selectFeatureForLookupPaths', () => {
       candidate('new', { targetRoot: MAIN, updatedAt: '2026-02-01T00:00:00.000Z' }),
     ];
 
-    expect(selectFeatureForLookupPaths(candidates, [MAIN])).toBe('new');
+    expect(
+      selectFeatureForLookupPaths(candidates, [{ checkPath: MAIN, projectRoot: MAIN }])?.feature,
+    ).toBe('new');
   });
 
-  it('matches a feature recorded at an ancestor directory (subdirectory invocation)', () => {
-    const candidates = [candidate('root', { targetRoot: MAIN })];
-
-    expect(selectFeatureForLookupPaths(candidates, [`${MAIN}/deep/sub`])).toBe('root');
-  });
-
-  it('treats a directory whose name starts with ".." as inside, not a parent traversal', () => {
-    const candidates = [candidate('root', { targetRoot: MAIN })];
-
-    // `..config` is a real child of MAIN, not a `../` escape: as a canonical path
-    // it stays under MAIN (`.../main/..config` starts with `.../main/`) and must
-    // not be mistaken for a leading `..` segment.
-    expect(selectFeatureForLookupPaths(candidates, [`${MAIN}/..config`])).toBe('root');
-  });
-
-  it('returns undefined when a candidate is a sibling whose name starts with ".."', () => {
-    const candidates = [candidate('main', { targetRoot: MAIN })];
-
-    // `${BASE}/..evil` is a sibling of MAIN, not under it, so it must not match.
-    expect(selectFeatureForLookupPaths(candidates, [`${BASE}/..evil`])).toBeUndefined();
-  });
-
-  it('returns undefined when no candidate contains the directory', () => {
+  it('returns undefined when no candidate matches any lookup path', () => {
     const candidates = [candidate('main', { targetRoot: MAIN, repoRoot: MAIN })];
 
-    expect(selectFeatureForLookupPaths(candidates, [OUTSIDE])).toBeUndefined();
+    expect(
+      selectFeatureForLookupPaths(candidates, [{ checkPath: OUTSIDE, projectRoot: OUTSIDE }]),
+    ).toBeUndefined();
   });
 
   it('returns undefined when there are no candidates', () => {
-    expect(selectFeatureForLookupPaths<string>([], [MAIN])).toBeUndefined();
+    expect(
+      selectFeatureForLookupPaths<string>([], [{ checkPath: MAIN, projectRoot: MAIN }]),
+    ).toBeUndefined();
+  });
+
+  it('returns undefined when there are no lookup paths', () => {
+    const candidates = [candidate('main', { targetRoot: MAIN })];
+
+    expect(selectFeatureForLookupPaths(candidates, [])).toBeUndefined();
   });
 });

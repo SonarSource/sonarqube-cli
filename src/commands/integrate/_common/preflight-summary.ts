@@ -109,7 +109,7 @@ async function organizationAccessStatus(
 ): Promise<[StepStatus, string | undefined]> {
   try {
     const client = new SonarQubeClient(serverUrl, token);
-    const accessible = await client.checkOrganization(organization);
+    const accessible = await client.isOrganizationAccessible(organization);
     return accessible ? ['done', organization] : ['failed', `${organization} (not accessible)`];
   } catch {
     return ['failed', `${organization} (not accessible)`];
@@ -120,9 +120,9 @@ async function buildProjectItems(
   options: AgentPreflightSummaryOptions,
   tokenStatus: TokenStatus,
 ): Promise<PhaseItem[]> {
-  const items: PhaseItem[] = [phaseItem('Root', 'done', options.project.rootDir)];
+  const items: PhaseItem[] = [phaseItem('Root', 'done', options.project.projectRoot)];
 
-  if (options.project.isGitRepo) {
+  if (options.project.repoRoot) {
     items.push(phaseItem('Git repository', 'done', 'detected'));
   } else {
     items.push(phaseItem('Git repository', 'warn', 'not detected'));

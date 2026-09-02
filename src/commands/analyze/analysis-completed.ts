@@ -23,7 +23,7 @@ export const CLI_ANALYSIS_COMPLETED = 'CliAnalysisCompleted';
 
 export type AnalysisTelemetryAnalyzer = 'sonar-secrets' | 'sqaa' | 'sca-scanner-cli';
 
-/** Domain payload for CliAnalysisCompleted (identity is filled by core emit). */
+/** Domain payload for CliAnalysisCompleted (identity is filled at drain time). */
 export type AnalysisCompletedPayload = {
   caller_command: string;
   analyzer: AnalysisTelemetryAnalyzer;

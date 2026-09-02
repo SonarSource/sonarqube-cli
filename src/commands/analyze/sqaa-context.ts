@@ -48,8 +48,8 @@ interface SqaaDepthResolution {
  * - otherwise (the bare `sonar analyze` catch-all): warn and return null so the
  *   surrounding command can proceed with its other analyses.
  *
- * A non-Cloud connection is always a graceful skip (the warning was already emitted
- * by resolveCloudAuth), since agentic analysis is Cloud-only.
+ * A Cloud connection without an organization is always a graceful skip (the warning was
+ * already emitted by resolveSqaaAuth).
  */
 export function resolveSqaaContext(
   resolution: SqaaAuthResolution,
@@ -57,8 +57,8 @@ export function resolveSqaaContext(
 ): SqaaResolvedContext | null {
   switch (resolution.kind) {
     case 'resolved':
-      return { cloudAuth: resolution.cloudAuth, projectKey: resolution.projectKey };
-    case 'no-cloud':
+      return { sqaaAuth: resolution.sqaaAuth, projectKey: resolution.projectKey };
+    case 'no-org':
       return null;
     case 'no-project':
       if (policy.requireProject) {

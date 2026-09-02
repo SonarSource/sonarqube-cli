@@ -66,9 +66,10 @@ describe('sonar hook claude-post-tool-use', () => {
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
       const filePath = join(harness.cwd.path, 'src/main.ts');
 
-      const result = await harness.run(`hook claude-post-tool-use --project ${TEST_PROJECT}`, {
-        stdin: postToolUseStdin(filePath),
-      });
+      const result = await harness.runWithStdin(
+        `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+        postToolUseStdin(filePath),
+      );
 
       expect(result.exitCode).toBe(0);
       const output = JSON.parse(result.stdout.trim());
@@ -92,14 +93,15 @@ describe('sonar hook claude-post-tool-use', () => {
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
       const filePath = join(harness.cwd.path, 'src/main.ts');
 
-      const result = await harness.run(`hook claude-post-tool-use --project ${TEST_PROJECT}`, {
-        stdin: postToolUseStdin(filePath),
-      });
+      const result = await harness.runWithStdin(
+        `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+        postToolUseStdin(filePath),
+      );
 
       expect(result.exitCode).toBe(0);
       const output = JSON.parse(result.stdout.trim());
       expect(output.hookSpecificOutput.additionalContext).toContain(
-        'no longer available for this organization',
+        'no longer available on this connection',
       );
       expect(output.hookSpecificOutput.additionalContext).toContain('remove the analysis hooks');
       expect(output.hookSpecificOutput.additionalContext).toContain(VORTEX_PRODUCT_URL);
@@ -128,9 +130,10 @@ describe('sonar hook claude-post-tool-use', () => {
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
       const filePath = join(harness.cwd.path, 'src/main.ts');
 
-      const result = await harness.run(`hook claude-post-tool-use --project ${TEST_PROJECT}`, {
-        stdin: postToolUseStdin(filePath),
-      });
+      const result = await harness.runWithStdin(
+        `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+        postToolUseStdin(filePath),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout.trim()).toBe('');
@@ -151,10 +154,12 @@ describe('sonar hook claude-post-tool-use', () => {
       harness.state().withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
       const filePath = join(harness.cwd.path, 'src/main.ts');
-      const runHook = () =>
-        harness.run(`hook claude-post-tool-use --project ${TEST_PROJECT}`, {
-          stdin: postToolUseStdin(filePath),
-        });
+      const runHook = async () => {
+        return harness.runWithStdin(
+          `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+          postToolUseStdin(filePath),
+        );
+      };
 
       const firstResult = await runHook();
       const secondResult = await runHook();
@@ -180,9 +185,10 @@ describe('sonar hook claude-post-tool-use', () => {
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
       const filePath = join(harness.cwd.path, 'src/main.ts');
 
-      const result = await harness.run(`hook claude-post-tool-use --project ${TEST_PROJECT}`, {
-        stdin: postToolUseStdin(filePath),
-      });
+      const result = await harness.runWithStdin(
+        `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+        postToolUseStdin(filePath),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout.trim()).toBe('');
@@ -205,16 +211,17 @@ describe('sonar hook claude-post-tool-use', () => {
       harness.cwd.writeFile('../outside.ts', 'const x = 1;');
       const outsidePath = join(harness.cwd.path, '..', 'outside.ts');
 
-      const result = await harness.run(`hook claude-post-tool-use --project ${TEST_PROJECT}`, {
-        stdin: postToolUseStdin(outsidePath),
-        extraEnv: { LOG_LEVEL: 'DEBUG' },
-      });
+      const result = await harness.runWithStdin(
+        `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+        postToolUseStdin(outsidePath),
+        { extraEnv: { LOG_LEVEL: 'DEBUG' } },
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout.trim()).toBe('');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(0);
       const logFile = harness.cliHome.dir('logs').file('sonarqube-cli.log');
       expect(logFile.exists()).toBe(true);
@@ -239,14 +246,15 @@ describe('sonar hook claude-post-tool-use', () => {
       // The helper must rewrite them to POSIX before sending to SQAA.
       const filePath = join(harness.cwd.path, 'src', 'main.ts');
 
-      const result = await harness.run(`hook claude-post-tool-use --project ${TEST_PROJECT}`, {
-        stdin: postToolUseStdin(filePath),
-      });
+      const result = await harness.runWithStdin(
+        `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+        postToolUseStdin(filePath),
+      );
 
       expect(result.exitCode).toBe(0);
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       const body = parseSqaaRequestBody(sqaaCalls[0].body);
       expect(sqaaRequestFirstFilePath(sqaaCalls[0].body)).toBe('src/main.ts');
@@ -274,9 +282,10 @@ describe('sonar hook claude-post-tool-use', () => {
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
       const filePath = join(harness.cwd.path, 'src/main.ts');
 
-      const result = await harness.run(`hook claude-post-tool-use --project ${TEST_PROJECT}`, {
-        stdin: postToolUseStdin(filePath),
-      });
+      const result = await harness.runWithStdin(
+        `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+        postToolUseStdin(filePath),
+      );
 
       expect(result.exitCode).toBe(0);
       const [analysisEvent] = readAnalysisEvents(harness.sonarUserHome.path);

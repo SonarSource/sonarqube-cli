@@ -23,6 +23,7 @@
 // agent-specific feature flags, resolve Vortex, assemble the integration
 // options and recorded attrs, and run the install.
 
+import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { installIntegration } from '@/core/framework/features';
 
@@ -32,7 +33,7 @@ import {
   resolveIntegrateInstallTarget,
 } from './agent-integrate-prelude.ts';
 import { buildRecordedIntegrationAttrs } from './context-augmentation.ts';
-import { emitIntegrationConfiguredTelemetry } from './integrate-telemetry.ts';
+import { recordIntegrationConfigured } from './integrate-telemetry.ts';
 import type { IntegrateAgentOptions } from './types.ts';
 import { resolveVortexSetup } from './vortex.ts';
 
@@ -41,6 +42,7 @@ export interface FinalizeAgentInstallParams<TOptions extends IntegrateAgentOptio
   context: AgentIntegrateContext;
   options: IntegrateAgentOptions;
   auth: ResolvedAuth;
+  ctx: CommandInvocationContext;
   /**
    * Agent-specific feature flags merged into the integration options (e.g. the
    * SQAA flag, whose name differs per agent). `projectRoot` and `vortexDisposition`
@@ -66,11 +68,12 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
   });
   const { installRoot, installScope } = resolveIntegrateInstallTarget(
     context.isGlobal,
-    context.project.rootDir,
+    context.project.projectRoot,
   );
-  const attrs = await buildRecordedIntegrationAttrs({
+  const attrs = buildRecordedIntegrationAttrs({
     baseAttrs: { projectKey: context.projectKey ?? null },
-    projectRoot: context.project.rootDir,
+    projectRoot: context.project.projectRoot,
+    mainRepoRoot: context.project.mainRepoRoot,
     serverUrl: context.serverUrl,
     orgKey: context.organization,
     contextAugmentation: vortex,
@@ -81,7 +84,7 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
     options: {
       ...options,
       ...params.featureOptions,
-      projectRoot: context.project.rootDir,
+      projectRoot: context.project.projectRoot,
       vortexDisposition: vortex.disposition,
     },
     targetRoot: installRoot,
@@ -89,14 +92,15 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
     auth,
     nonInteractive: options.nonInteractive,
     attrs,
-    onSuccess: (facts) =>
-      emitIntegrationConfiguredTelemetry({
+    onSuccess: (facts) => {
+      recordIntegrationConfigured(params.ctx, {
         auth,
         integrationId: params.integrationId,
         scope: installScope,
         nonInteractive: options.nonInteractive ?? false,
         isFromRouter: options.isFromRouter ?? false,
         ...facts,
-      }),
+      });
+    },
   });
 }

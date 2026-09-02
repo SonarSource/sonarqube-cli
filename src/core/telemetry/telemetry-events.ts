@@ -118,6 +118,7 @@ export type IdentityEmitOptions = {
 };
 
 export type TelemetryEmitOptions = IdentityEmitOptions & {
+  eventTimestampMs?: number;
   /** When set, identity is resolved from this auth; otherwise the active connection. */
   auth?: ResolvedAuth;
 };
@@ -143,7 +144,7 @@ export async function emitTelemetryEvent(
       event_id: randomUUID(),
       source: { domain: 'CLI' },
       event_type: `${TELEMETRY_EVENT_TYPE_PREFIX}${name}`,
-      event_timestamp: String(Date.now()),
+      event_timestamp: String(options?.eventTimestampMs ?? Date.now()),
     },
     event_payload: { ...base, ...fields },
   });

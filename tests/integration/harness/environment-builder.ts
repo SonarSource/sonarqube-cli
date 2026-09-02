@@ -21,7 +21,17 @@
 // Declarative builder for the isolated test environment: state.json + binary setup
 
 import { randomUUID } from 'node:crypto';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import {
+  accessSync,
+  chmodSync,
+  constants,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
@@ -348,8 +358,9 @@ export class EnvironmentBuilder {
    *
    * Safe on its own — no extra env needed. Every spawned CLI carries egress mode `off`, so
    * the flush worker is never created and nothing is POSTed. Do not reach for
-   * `__SQ_CLI_TELEMETRY_FLUSH__=1`: it also no-ops storeEvent(), which owns
-   * CliCommandExecuted, so specs asserting on that event cannot use it.
+   * `__SQ_CLI_TELEMETRY_FLUSH__=1`: it no-ops `commitTelemetryFacts()`, so neither
+   * handler facts (`CliAnalysisCompleted`, `CliIntegrationConfigured`) nor
+   * `CliCommandExecuted` are written.
    */
   withTelemetryEnabled(): this {
     this._telemetryEnabled = true;
@@ -550,6 +561,8 @@ export class EnvironmentBuilder {
 
   /**
    * Writes state.json and the keychain JSON file, and if withSecretsBinaryInstalled() was called, copies the mock binary.
+   * Leaves an existing read-only keychain in place when it already holds the
+   * intended tokens, so a test can exercise delete failure.
    */
   writeTo(cliHome: string, keychainFile: string): void {
     mkdirSync(cliHome, { recursive: true });
@@ -560,10 +573,14 @@ export class EnvironmentBuilder {
     if (this.keychainTokens.length > 0) {
       const tokens: Record<string, string> = {};
       for (const { serverURL, token, org } of this.keychainTokens) {
-        const account = generateKeychainAccount(serverURL, org);
-        tokens[account] = token;
+        tokens[generateKeychainAccount(serverURL, org)] = token;
       }
-      writeFileSync(keychainFile, JSON.stringify({ tokens }, null, 2), 'utf-8');
+      const payload = JSON.stringify({ tokens }, null, 2);
+      if (canWriteFile(keychainFile)) {
+        writeFileSync(keychainFile, payload, 'utf-8');
+      } else if (readFileSync(keychainFile, 'utf-8') !== payload) {
+        throw new Error(`Cannot seed read-only keychain with different tokens: ${keychainFile}`);
+      }
     }
 
     if (this._installSecretsBinary) {
@@ -636,6 +653,22 @@ export class EnvironmentBuilder {
 }
 
 const EXECUTABLE_PERMS = 0o755;
+
+function canWriteFile(path: string): boolean {
+  if (!existsSync(path)) {
+    return true;
+  }
+  // accessSync(W_OK) succeeds for root regardless of mode.
+  if ((statSync(path).mode & 0o222) === 0) {
+    return false;
+  }
+  try {
+    accessSync(path, constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function copyBinaryFixtureInto(cliHome: string, fixture: BinarySpec, versionedName: string): void {
   const binDir = join(cliHome, 'bin');

@@ -20,8 +20,8 @@
 
 // Shared installation filesystem helpers used by multiple binary installers
 // (sonar-secrets, sonar-context-augmentation). Lives separately so installers
-// with different download/verify pipelines can still share cleanup and version
-// probing.
+// with different download/verify pipelines can still share cleanup and
+// post-install probing.
 
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -31,13 +31,11 @@ import { BIN_DIR } from '@/core/config-constants.ts';
 import logger from '@/core/observability/logger.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 
-const VERSION_REGEX_MAX_SEGMENT = 20;
-
 /**
  * Verify the installation by probing the binary; throws with captured stdout/stderr
  * when the binary does not respond to `--version` or exits non-zero.
  */
-export async function verifyInstallation(path: string): Promise<string> {
+export async function verifyInstallation(path: string): Promise<void> {
   let result: Awaited<ReturnType<typeof spawnProcess>>;
   try {
     result = await spawnProcess(path, ['--version'], { stdout: 'pipe', stderr: 'pipe' });
@@ -53,16 +51,6 @@ export async function verifyInstallation(path: string): Promise<string> {
         formatSpawnOutput(result.stdout, result.stderr),
     );
   }
-
-  const pattern = String.raw`(\d{1,${VERSION_REGEX_MAX_SEGMENT}}(?:\.\d{1,${VERSION_REGEX_MAX_SEGMENT}}){2,3})`;
-  const match = new RegExp(pattern).exec(result.stdout);
-  if (!match) {
-    throw new CommandFailedError(
-      `Installation verification failed: could not parse version from --version output.\n` +
-        formatSpawnOutput(result.stdout, result.stderr),
-    );
-  }
-  return match[1];
 }
 
 export function formatSpawnOutput(stdout: string, stderr: string): string {

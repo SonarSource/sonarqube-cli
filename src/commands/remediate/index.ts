@@ -142,7 +142,7 @@ async function resolveProjectKey(options: RemediateOptions, auth: ResolvedAuth):
   if (options.project) {
     return options.project;
   }
-  const discovered = await discoverProject(process.cwd(), false, { auth });
+  const discovered = await discoverProject(process.cwd(), { auth });
   if (!discovered.projectKey) {
     throw new CommandFailedError('Could not determine project key.', {
       remediationHint: 'Use --project <key> to specify it.',

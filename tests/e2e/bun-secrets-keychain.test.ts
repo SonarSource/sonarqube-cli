@@ -36,8 +36,12 @@ import { generateKeychainAccount } from '@/core/host/keychain.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import { addOrUpdateConnection } from '@/core/state/state-manager.ts';
 
-import { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from '../integration/harness';
-import { getCliBinaryPath, runCli } from '../integration/harness/cli-runner';
+import {
+  type CliResult,
+  FakeSonarQubeServer,
+  FakeSonarQubeServerBuilder,
+} from '../integration/harness';
+import { getCliBinaryPath, spawnCliProcess } from '../integration/harness/cli-runner';
 import { buildHomeEnv } from '../integration/harness/platform';
 
 setDefaultTimeout(30_000);
@@ -101,13 +105,49 @@ async function setupAuth(ctx: E2eContext): Promise<string> {
   return account;
 }
 
+async function runCli(
+  command: string,
+  env: Record<string, string>,
+  options: { cwd: string; timeoutMs?: number },
+): Promise<CliResult> {
+  const { proc, timeoutMs, startedAt } = spawnCliProcess(command, env, {
+    cwd: options.cwd,
+    timeoutMs: options.timeoutMs,
+    stdin: 'ignore',
+  });
+
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    proc.kill();
+  }, timeoutMs);
+
+  const [exitCode, stdout, stderr] = await Promise.all([
+    proc.exited,
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+
+  clearTimeout(timer);
+
+  if (timedOut) {
+    throw new Error(`CLI process timed out after ${timeoutMs}ms`);
+  }
+
+  return {
+    exitCode,
+    stdout,
+    stderr,
+    durationMs: Date.now() - startedAt,
+  };
+}
+
 // macOS Keychain attaches a per-process ACL to entries written via
 // `Bun.secrets.set`. The test process is on the ACL list; the CLI subprocess
-// spawned by `runCli` is not, so its `Bun.secrets.get` call fails with
-// `errSecAuthFailed` (no GUI in headless test mode to grant access). CI never
-// runs e2e on macOS (only Linux + Windows in the Build workflow), so skip here
-// to keep `bun run test:e2e` clean on macOS dev machines without losing any
-// coverage CI relies on.
+// is not, so its `Bun.secrets.get` call fails with `errSecAuthFailed` (no GUI
+// in headless test mode to grant access). CI never runs e2e on macOS (only
+// Linux + Windows in the Build workflow), so skip here to keep `bun run test:e2e`
+// clean on macOS dev machines without losing any coverage CI relies on.
 const describeKeychain =
   process.platform === 'darwin' && process.env.CI !== 'true' ? describe.skip : describe;
 

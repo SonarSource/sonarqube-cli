@@ -36,6 +36,7 @@ import {
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
 import {
+  type CliResult,
   hookScriptName,
   hookScriptPath,
   IS_WINDOWS,
@@ -43,8 +44,6 @@ import {
   TestHarness,
 } from '../../harness';
 import { findInstalledFeature, getInstalledIntegration } from './state-helpers';
-
-const CLAUDE_PROMPT_STDIN_DELAY_MS = 1000;
 
 function findClaudeFeature(harness: TestHarness, featureId: string, scope?: string) {
   return findInstalledFeature(harness, 'claude-code', featureId, scope);
@@ -655,7 +654,7 @@ describe('integrate claude — Vortex entitlement guard', () => {
         .start();
 
       // Point both Cloud URL constants at the fake server so SONARCLOUD_HOSTNAME check passes
-      // and getOrganizationId / checkSqaaEntitlement hit the same fake server
+      // and getOrganizationId / checkHubEntitlement hit the same fake server
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 
@@ -874,7 +873,7 @@ describe('integrate claude — Vortex entitlement guard', () => {
 
       expect(result.exitCode).toBe(0);
       expect(`${result.stdout}\n${result.stderr}`).toContain(
-        'Your organization has reached its Vortex usage limit',
+        'The Vortex usage limit has been reached',
       );
       const settings = harness.cwd.file('.claude', 'settings.json').asJson();
       expect(settings.hooks?.PostToolUse).toBeDefined();
@@ -1984,10 +1983,9 @@ describe('integrate claude — interactive feature selection', () => {
   it(
     'prompts per feature, installs accepted features, and shows the Vortex promotion when not entitled',
     async () => {
-      // On-premise auth with no org: SQAA is not available, so it is skipped
-      // without a prompt but surfaces the shared promotion message. Context
-      // Augmentation is skipped silently. The secret scanning hooks and MCP
-      // server features each ask.
+      // On-premise auth with no org and no CAG Hub: Vortex is skipped with the
+      // Server unavailable line. Context Augmentation is skipped silently. The
+      // secret scanning hooks and MCP server features each ask.
       const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
       harness.withAuth(server.baseUrl(), 'tok');
       harness.cwd.writeFile(
@@ -1995,20 +1993,18 @@ describe('integrate claude — interactive feature selection', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
       );
 
-      // '\r' selects project scope, then the hook + MCP feature prompts.
-      const result = await harness.run('integrate claude', {
-        stdinChunks: ['\r', '\r', '\r'],
-        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
-      });
+      const session = harness.runInteractive('integrate claude');
+      await session.accept('Where should SonarQube be integrated?');
+      await session.accept('Install secret scanning hooks?');
+      await session.accept('Install MCP server?');
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const output = `${result.stdout}\n${result.stderr}`;
       expect(output).toContain('Install secret scanning hooks?');
       expect(output).toContain('Install MCP server?');
-      // SQAA is not eligible, so it is skipped without a prompt but the shared
-      // promotion message is surfaced.
       expect(output).not.toContain('Install Vortex?');
-      expect(output).toContain('Vortex is available on SonarQube Cloud');
+      expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
 
       // Accepted features are installed on disk.
       expect(
@@ -2045,15 +2041,17 @@ describe('integrate claude — interactive feature selection', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
       );
 
-      const result = await harness.run(
-        `integrate claude${isInteractive ? '' : ' --non-interactive'}`,
-        {
-          ...(isInteractive
-            ? { stdinChunks: ['\r', '\r', '\r'], stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS }
-            : {}),
-          extraEnv: isAgent ? { CLAUDECODE: '1' } : {},
-        },
-      );
+      const extraEnv: Record<string, string> = isAgent ? { CLAUDECODE: '1' } : {};
+      let result: CliResult;
+      if (isInteractive) {
+        const session = harness.runInteractive('integrate claude', { extraEnv });
+        await session.accept('Where should SonarQube be integrated?');
+        await session.accept('Install secret scanning hooks?');
+        await session.accept('Install MCP server?');
+        result = await session.waitFinish();
+      } else {
+        result = await harness.run('integrate claude --non-interactive', { extraEnv });
+      }
 
       expect(result.exitCode).toBe(0);
       if (expectedShownPrompt) {
@@ -2080,11 +2078,11 @@ describe('integrate claude — interactive feature selection', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
       );
 
-      // '\r' selects project scope; decline the secret scanning hooks ('n'), accept MCP ('\r').
-      const result = await harness.run('integrate claude', {
-        stdinChunks: ['\r', 'n', '\r'],
-        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
-      });
+      const session = harness.runInteractive('integrate claude');
+      await session.accept('Where should SonarQube be integrated?');
+      await session.decline('Install secret scanning hooks?');
+      await session.accept('Install MCP server?');
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       // Hooks were declined: no hook artifacts and no state entry.
@@ -2110,16 +2108,17 @@ describe('integrate claude — interactive feature selection', () => {
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 
-      // '\r' selects project scope, then the secrets, Vortex, and MCP prompts.
-      const result = await harness.run('integrate claude --project my-project', {
-        stdinChunks: ['\r', '\r', '\r', '\r'],
-        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
+      const session = harness.runInteractive('integrate claude --project my-project', {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
           __SQCLI_DEV_SKIP_CAG: '1',
         },
       });
+      await session.accept('Install secret scanning hooks?');
+      await session.accept('Install Vortex?');
+      await session.accept('Install MCP server?');
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const output = `${result.stdout}\n${result.stderr}`;
@@ -2160,16 +2159,17 @@ describe('integrate claude — interactive feature selection', () => {
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 
-      // '\r' selects project scope, then the secret scanning hooks + MCP prompts.
-      // Vortex is skipped without a prompt because entitlement could not be resolved.
-      const result = await harness.run('integrate claude --project my-project', {
-        stdinChunks: ['\r', '\r', '\r'],
-        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
+      // --project skips the scope prompt. Vortex is skipped without a prompt
+      // because entitlement could not be resolved.
+      const session = harness.runInteractive('integrate claude --project my-project', {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
         },
       });
+      await session.accept('Install secret scanning hooks?');
+      await session.accept('Install MCP server?');
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const output = `${result.stdout}\n${result.stderr}`;
@@ -2223,12 +2223,12 @@ describe('integrate claude — keep/remove already-installed features', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
       );
 
-      // Project scope, keep the hooks (default Yes), decline the MCP server ('n')
-      // then confirm removal (default Yes).
-      const result = await harness.run('integrate claude', {
-        stdinChunks: ['\r', '\r', 'n', '\r'],
-        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
-      });
+      const session = harness.runInteractive('integrate claude');
+      await session.accept('Where should SonarQube be integrated?');
+      await session.accept('secret scanning hooks (currently installed)  Keep?');
+      await session.decline('MCP server (currently installed)  Keep?');
+      await session.accept('Proceed with removal?');
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const output = `${result.stdout}\n${result.stderr}`;
@@ -2255,11 +2255,12 @@ describe('integrate claude — keep/remove already-installed features', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
       );
 
-      // Project scope, keep the hooks, decline MCP keep ('n') then decline removal ('n').
-      const result = await harness.run('integrate claude', {
-        stdinChunks: ['\r', '\r', 'n', 'n'],
-        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
-      });
+      const session = harness.runInteractive('integrate claude');
+      await session.accept('Where should SonarQube be integrated?');
+      await session.accept('secret scanning hooks (currently installed)  Keep?');
+      await session.decline('MCP server (currently installed)  Keep?');
+      await session.decline('Proceed with removal?');
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       // Declining removal leaves the MCP server installed.
@@ -2279,12 +2280,12 @@ describe('integrate claude — keep/remove already-installed features', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
       );
 
-      // Project scope, decline keeping the secrets hooks ('n') then confirm removal
-      // (default Yes); keep the MCP server (default Yes).
-      const result = await harness.run('integrate claude', {
-        stdinChunks: ['\r', 'n', '\r', '\r'],
-        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
-      });
+      const session = harness.runInteractive('integrate claude');
+      await session.accept('Where should SonarQube be integrated?');
+      await session.decline('secret scanning hooks (currently installed)  Keep?');
+      await session.accept('Proceed with removal?');
+      await session.accept('MCP server (currently installed)  Keep?');
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const output = `${result.stdout}\n${result.stderr}`;
@@ -2325,12 +2326,12 @@ describe('integrate claude — keep/remove already-installed features', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
       );
 
-      // Project scope, decline keeping this project's secrets hooks ('n') then confirm
-      // removal (default Yes); keep the MCP server (default Yes).
-      const result = await harness.run('integrate claude', {
-        stdinChunks: ['\r', 'n', '\r', '\r'],
-        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
-      });
+      const session = harness.runInteractive('integrate claude');
+      await session.accept('Where should SonarQube be integrated?');
+      await session.decline('secret scanning hooks (currently installed)  Keep?');
+      await session.accept('Proceed with removal?');
+      await session.accept('MCP server (currently installed)  Keep?');
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
 
@@ -2393,12 +2394,13 @@ describe('integrate claude — keep/remove already-installed features', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
       );
 
-      // Project scope, then decline + confirm removal for both installed features
-      // (secret scanning hooks, then MCP server). No feature remains afterwards.
-      const result = await harness.run('integrate claude', {
-        stdinChunks: ['\r', 'n', '\r', 'n', '\r'],
-        stdinChunkDelayMs: CLAUDE_PROMPT_STDIN_DELAY_MS,
-      });
+      const session = harness.runInteractive('integrate claude');
+      await session.accept('Where should SonarQube be integrated?');
+      await session.decline('secret scanning hooks (currently installed)  Keep?');
+      await session.accept('Proceed with removal?');
+      await session.decline('MCP server (currently installed)  Keep?');
+      await session.accept('Proceed with removal?');
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
 

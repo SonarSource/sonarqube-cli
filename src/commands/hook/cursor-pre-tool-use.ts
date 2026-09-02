@@ -49,6 +49,7 @@ interface CursorPreToolUsePayload {
   tool_name?: string;
   tool_input?: { file_path?: string; path?: string };
   conversation_id?: string;
+  workspace_roots?: string[];
 }
 
 export async function cursorPreToolUse(ctx: CommandInvocationContext): Promise<HookCommandResult> {
@@ -65,6 +66,8 @@ export async function cursorPreToolUse(ctx: CommandInvocationContext): Promise<H
 
   const filePath = payload.tool_input?.file_path ?? payload.tool_input?.path;
   if (!filePath || !existsSync(filePath)) return { agentSessionId };
+
+  const workspaceRoots = Array.isArray(payload.workspace_roots) ? payload.workspace_roots : [];
 
   let deps: HookDependencies;
   try {
@@ -92,7 +95,7 @@ export async function cursorPreToolUse(ctx: CommandInvocationContext): Promise<H
   }
 
   if (secretsFoundInScan(scan.result)) {
-    await denyCursorFileAccess(filePath);
+    await denyCursorFileAccess(filePath, workspaceRoots);
   }
 
   return { agentSessionId };

@@ -20,20 +20,13 @@
 
 import { spawn } from 'node:child_process';
 
-import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
-import { isProjectVortexFeature } from '@/commands/integrate/_common/vortex.ts';
 import { resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
-import { resolveContextWorkspaceRoot } from '@/core/host/git/worktree.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
 import { getToken } from '@/core/host/keychain.ts';
-import { selectRecordedFeatureForDir } from '@/core/host/recorded-feature-resolver.ts';
-import { canonicalizePath } from '@/core/io/fs-utils.ts';
-import logger from '@/core/observability/logger.ts';
-import type { InstalledIntegrationFeature, IntegrationStateAttribute } from '@/core/state/state.ts';
-import { loadState } from '@/core/state/state-manager.ts';
+import { discoverProject } from '@/core/project-info.ts';
 
 // Commander may assign --help/-h to the optional [action] positional on some platforms.
 function buildForwardedArgs(
@@ -81,59 +74,31 @@ interface RecordedContextAugmentationConfig {
   organization?: string;
   projectKey?: string;
   serverUrl?: string;
-  /** Git working tree root containing the current invocation; set only when a recorded integration matched. */
+  /** The discovered project's own directory; set only when a project actually resolved. */
   workspaceDir?: string;
 }
 
-function isProjectContextAugmentationFeature(feature: InstalledIntegrationFeature): boolean {
-  return (
-    isProjectVortexFeature(feature) ||
-    (feature.featureId === CONTEXT_AUGMENTATION_FEATURE_ID && feature.scope === 'project')
-  );
-}
-
-function getOptionalStringAttr(
-  attrs: Record<string, IntegrationStateAttribute> | undefined,
-  key: string,
-): string | undefined {
-  const value = attrs?.[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
+/**
+ * Resolve org/project/server via the shared project-discovery pipeline (`discoverProject`),
+ * the same one SQAA's project-key lookup uses (see resolveSqaaProjectKey). `workspaceDir` is
+ * `discovered.projectRoot` directly — `discoverProject()` itself always anchors it to the
+ * current worktree (never a different one a matched mapping happens to point at), so no
+ * extra resolution is needed here.
+ */
 async function resolveRecordedContextAugmentationConfig(
   cwd: string,
+  auth: ResolvedAuth,
 ): Promise<RecordedContextAugmentationConfig> {
-  try {
-    // Worktree-aware matching (current worktree, then main tree; targetRoot before
-    // repoRoot; nearest ancestor; most recent) is owned by the shared resolver, so
-    // this stays identical to SQAA's project-key lookup (see resolveSqaaProjectKey).
-    const candidates = loadState().integrations.installed.flatMap((integration) =>
-      integration.features.filter(isProjectContextAugmentationFeature).map((feature) => ({
-        feature,
-        targetRoot: feature.targetRoot,
-        repoRoot: getOptionalStringAttr(feature.attrs, 'repoRoot'),
-        updatedAt: feature.updatedAt,
-      })),
-    );
-    const match = await selectRecordedFeatureForDir(cwd, candidates);
-    if (!match) {
-      return {};
-    }
-    return {
-      organization: getOptionalStringAttr(match.attrs, 'orgKey'),
-      projectKey: getOptionalStringAttr(match.attrs, 'projectKey'),
-      serverUrl: getOptionalStringAttr(match.attrs, 'serverUrl'),
-      // CAG daemon folder: git working-tree root (climbs up from subdirs), or the
-      // physical integrate targetRoot outside a git repo. Project metadata above
-      // comes from recorded state matched via targetRoot / repoRoot.
-      workspaceDir: canonicalizePath(await resolveContextWorkspaceRoot(cwd, match.targetRoot)),
-    };
-  } catch (err) {
-    logger.debug(
-      `Failed to resolve recorded context augmentation config: ${(err as Error).message}`,
-    );
+  const discovered = await discoverProject(cwd, { auth, silent: true });
+  if (!discovered.projectKey) {
     return {};
   }
+  return {
+    organization: discovered.organization,
+    projectKey: discovered.projectKey,
+    serverUrl: discovered.serverUrl,
+    workspaceDir: discovered.projectRoot,
+  };
 }
 
 async function resolveContextToken(
@@ -182,7 +147,7 @@ export async function runContextPassthrough(
         remediationHint: 'Run: sonar auth login',
       });
     }
-    const recordedConfig = await resolveRecordedContextAugmentationConfig(process.cwd());
+    const recordedConfig = await resolveRecordedContextAugmentationConfig(process.cwd(), auth);
     const serverUrl = recordedConfig.serverUrl ?? auth.serverUrl;
     const organization = recordedConfig.organization ?? auth.orgKey;
     env = buildContextAugmentationEnv({

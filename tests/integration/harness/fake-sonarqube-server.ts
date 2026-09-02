@@ -228,6 +228,7 @@ export class FakeSonarQubeServerBuilder {
   private systemVersion = '9.9.0.00001';
   private memberOrganizations: Organization[] = [];
   private memberOrganizationsTotal?: number;
+  private visibleOrganizations: Organization[] = [];
   private readonly dopRepositoriesByOrgId: Map<string, DopRepositoryConfig[]> = new Map();
   /** Keyed by org legacy id, for `GET /dop-translation/organization-bindings`. */
   private readonly organizationBindingsByOrgId: Map<string, string> = new Map();
@@ -240,6 +241,8 @@ export class FakeSonarQubeServerBuilder {
   private scaEnabled?: boolean;
   private cagEntitlementStatusCode?: number;
   private cagEntitlementStatusBody?: string;
+  private sqaaEntitlementStatusCode?: number;
+  private sqaaEntitlementStatusBody?: string;
   private readonly projectSettings: Map<string, SettingsValue[]> = new Map();
   private agentJobErrorCode?: number;
   private agentJobErrorMessage?: string;
@@ -255,6 +258,13 @@ export class FakeSonarQubeServerBuilder {
   private provisionProjectsDelayMs?: number;
   private autoscanEligibilityStatusCode?: number;
   private autoscanEligibilityStatusBody?: string;
+  private dopSettings: Array<{ id: string; key: string; type: string; url: string }> = [];
+  private projectBindings: Array<{ projectKey: string; repository: string; dopSettingId: string }> =
+    [];
+  private hasProvisionProjects = true;
+  private boundProjectsStatusCode?: number;
+  private analyzedProjectKeys = new Set<string>();
+
   private metrics: Metric[] = [];
 
   /** Configure the server-wide metric catalog `GET /api/metrics/search` returns. */
@@ -297,6 +307,17 @@ export class FakeSonarQubeServerBuilder {
 
   withOrganizationTotal(total: number): this {
     this.memberOrganizationsTotal = total;
+    return this;
+  }
+
+  /**
+   * Seed public organizations: resolvable by key, but not a membership.
+   *
+   * They answer `/api/organizations/search?organizations=<key>` like the real API, and stay out
+   * of `member=true`.
+   */
+  withVisibleOrganizations(orgs: Organization[]): this {
+    this.visibleOrganizations = orgs;
     return this;
   }
 
@@ -455,12 +476,23 @@ export class FakeSonarQubeServerBuilder {
   }
 
   /**
-   * Force GET /cag/cag-entitlement/{uuid} to return a specific HTTP
-   * status code. Useful for testing entitlement check failure paths.
+   * Force GET /cag/cag-entitlement/{uuid} (and the Server /api/v2 prefix) to
+   * return a specific HTTP status code. Useful for testing entitlement check
+   * failure paths.
    */
   withCagEntitlementStatusCode(status: number, body?: string): this {
     this.cagEntitlementStatusCode = status;
     this.cagEntitlementStatusBody = body;
+    return this;
+  }
+
+  /**
+   * Force GET /a3s-analysis/org-entitlement/{uuid} (and the Server /api/v2 prefix) to
+   * return a specific HTTP status code.
+   */
+  withSqaaEntitlementStatusCode(status: number, body?: string): this {
+    this.sqaaEntitlementStatusCode = status;
+    this.sqaaEntitlementStatusBody = body;
     return this;
   }
 
@@ -532,6 +564,35 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  withDopSettings(settings: Array<{ id: string; key: string; type: string; url: string }>): this {
+    this.dopSettings = settings;
+    return this;
+  }
+
+  withProjectBindings(
+    bindings: Array<{ projectKey: string; repository: string; dopSettingId: string }>,
+  ): this {
+    this.projectBindings = bindings;
+    return this;
+  }
+
+  withProvisionProjectsPermission(has: boolean): this {
+    this.hasProvisionProjects = has;
+    return this;
+  }
+
+  withBoundProjectsError(statusCode: number): this {
+    this.boundProjectsStatusCode = statusCode;
+    return this;
+  }
+
+  withAnalyzedProjects(projectKeys: string[]): this {
+    for (const key of projectKeys) {
+      this.analyzedProjectKeys.add(key);
+    }
+    return this;
+  }
+
   start(): Promise<FakeSonarQubeServer> {
     const projects = new Map([...this.projectBuilders.entries()].map(([k, v]) => [k, v.getData()]));
     const {
@@ -541,6 +602,7 @@ export class FakeSonarQubeServerBuilder {
       systemVersion,
       memberOrganizations,
       memberOrganizationsTotal: rawMemberOrganizationsTotal,
+      visibleOrganizations,
       dopRepositoriesByOrgId,
       organizationBindingsByOrgId,
       revokeTokenStatusCode,
@@ -555,6 +617,8 @@ export class FakeSonarQubeServerBuilder {
       scaEnabled,
       cagEntitlementStatusCode,
       cagEntitlementStatusBody,
+      sqaaEntitlementStatusCode,
+      sqaaEntitlementStatusBody,
       projectSettings,
       agentJobErrorCode,
       agentJobErrorMessage,
@@ -571,6 +635,11 @@ export class FakeSonarQubeServerBuilder {
       autoscanEligibilityStatusCode,
       autoscanEligibilityStatusBody,
       metrics,
+      dopSettings,
+      projectBindings,
+      hasProvisionProjects,
+      boundProjectsStatusCode,
+      analyzedProjectKeys,
     } = this;
     const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
@@ -840,9 +909,12 @@ export class FakeSonarQubeServerBuilder {
               { headers: { 'Content-Type': 'application/json' } },
             );
           }
-          // organizations=KEY → validate a specific org key
+          // organizations=KEY → resolve a specific org key, membership-independent like the
+          // real API, which also resolves public orgs the caller does not belong to.
           if (query.organizations) {
-            const match = memberOrganizations.filter((o) => o.key === query.organizations);
+            const match = [...memberOrganizations, ...visibleOrganizations].filter(
+              (o) => o.key === query.organizations,
+            );
             return new Response(JSON.stringify({ organizations: match }), {
               headers: { 'Content-Type': 'application/json' },
             });
@@ -1069,8 +1141,18 @@ export class FakeSonarQubeServerBuilder {
           });
         }
 
-        const orgEntitlementMatch = /^\/a3s-analysis\/org-entitlement\/(.+)$/.exec(path);
+        const orgEntitlementMatch =
+          /^(?:\/api\/v2)?\/a3s(?:-analysis)?\/org-entitlement\/(.+)$/.exec(path);
         if (orgEntitlementMatch) {
+          if (sqaaEntitlementStatusCode !== undefined) {
+            return new Response(
+              sqaaEntitlementStatusBody ?? JSON.stringify({ errors: [{ msg: 'SQAA failed' }] }),
+              {
+                status: sqaaEntitlementStatusCode,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
+          }
           const uuid = orgEntitlementMatch[1];
           const entitlement = [...sqaaEntitlementOrgs.values()].find((e) => e.uuid === uuid);
           if (!entitlement) {
@@ -1089,7 +1171,7 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
-        const cagEntitlementMatch = /^\/cag\/cag-entitlement\/(.+)$/.exec(path);
+        const cagEntitlementMatch = /^(?:\/api\/v2)?\/cag\/cag-entitlement\/(.+)$/.exec(path);
         if (cagEntitlementMatch) {
           if (cagEntitlementStatusCode !== undefined) {
             return new Response(
@@ -1150,7 +1232,10 @@ export class FakeSonarQubeServerBuilder {
           });
         }
 
-        if (path === '/a3s-analysis/analyses' && req.method === 'POST') {
+        if (
+          (path === '/a3s-analysis/analyses' || path === '/api/v2/a3s/analyses') &&
+          req.method === 'POST'
+        ) {
           if (sqaaStatusCode !== undefined) {
             return new Response(JSON.stringify({ message: sqaaStatusBody ?? 'simulated error' }), {
               status: sqaaStatusCode,
@@ -1236,6 +1321,77 @@ export class FakeSonarQubeServerBuilder {
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );
+        }
+
+        if (path === '/api/users/current') {
+          const global = hasProvisionProjects ? ['provisioning'] : [];
+          return new Response(
+            JSON.stringify({ id: 'fake-user-uuid', login: 'fake-user', permissions: { global } }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path === '/api/v2/dop-translation/dop-settings') {
+          return new Response(JSON.stringify({ dopSettings }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (path === '/api/v2/dop-translation/project-bindings' && req.method === 'GET') {
+          const { dopSettingId, pageSize: pageSizeStr, pageIndex: pageIndexStr } = query;
+          const pageSize = Number.parseInt(pageSizeStr ?? '500', 10);
+          const pageIndex = Number.parseInt(pageIndexStr ?? '1', 10);
+          const filtered = dopSettingId
+            ? projectBindings.filter((b) => b.dopSettingId === dopSettingId)
+            : projectBindings;
+          const start = (pageIndex - 1) * pageSize;
+          const page = filtered.slice(start, start + pageSize);
+          return new Response(
+            JSON.stringify({
+              projectBindings: page.map(({ projectKey, repository }) => ({
+                projectKey,
+                repository,
+              })),
+              page: { total: filtered.length, pageSize, pageIndex },
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path === '/api/project_analyses/search' && req.method === 'GET') {
+          const projectKey = query.project ?? '';
+          const hasAnalysis = analyzedProjectKeys.has(projectKey);
+          const analyses = hasAnalysis ? [{ key: 'AX1', date: '2024-01-01T00:00:00+0000' }] : [];
+          return new Response(
+            JSON.stringify({
+              paging: { pageIndex: 1, pageSize: 1, total: analyses.length },
+              analyses,
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path === '/api/v2/dop-translation/bound-projects' && req.method === 'POST') {
+          if (boundProjectsStatusCode !== undefined) {
+            return new Response(JSON.stringify({ errors: [{ msg: 'Bound project error' }] }), {
+              status: boundProjectsStatusCode,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          const payload = JSON.parse(body ?? '{}') as {
+            projectKey: string;
+            repositoryIdentifier: string;
+            devOpsPlatformSettingId: string;
+          };
+          projectBindings.push({
+            projectKey: payload.projectKey,
+            repository: payload.repositoryIdentifier,
+            dopSettingId: payload.devOpsPlatformSettingId,
+          });
+          return new Response(JSON.stringify({}), {
+            status: 201,
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
 
         return new Response(JSON.stringify({ errors: [{ msg: `Unknown endpoint: ${path}` }] }), {

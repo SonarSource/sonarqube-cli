@@ -20,16 +20,14 @@
 
 import { type Command } from 'commander';
 
+import { TelemetryFact } from '@/commands/command-invocation-context.ts';
+import { commitTelemetryFacts } from '@/commands/telemetry-facts.ts';
 import { DISTRIBUTION, type Distribution } from '@/core/host/distribution.ts';
-import { tryLoadState } from '@/core/state/state-manager.ts';
-import { isTelemetryEnabled } from '@/core/telemetry/enabled.ts';
-import { scheduleTelemetryFlush, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry/index.ts';
 import { currentProjectUuid } from '@/core/telemetry/project-uuid.ts';
-import { emitTelemetryEvent } from '@/core/telemetry/telemetry-events.ts';
 
 export const CLI_COMMAND_EXECUTED = 'CliCommandExecuted';
 
-/** Domain payload for CliCommandExecuted (identity is filled by core emit). */
+/** Domain payload for CliCommandExecuted (identity is filled at drain time). */
 export type CommandExecutedPayload = {
   command: string | undefined;
   subcommand: string | null;
@@ -38,9 +36,6 @@ export type CommandExecutedPayload = {
   project_uuid: string | null;
 };
 
-// Passthrough commands (e.g. `sonar context`) own a single Command node, so the
-// usual parent-chain walk cannot recover the forwarded subcommand. The handler
-// publishes the resolved subcommand here and storeEvent reads it back.
 const passthroughSubcommands = new WeakMap<Command, string | null>();
 
 export function setPassthroughSubcommand(command: Command, subcommand: string | null): void {
@@ -48,48 +43,46 @@ export function setPassthroughSubcommand(command: Command, subcommand: string | 
 }
 
 /**
- * Emit one CliCommandExecuted event for a finished command and spawn the detached flush
- * worker that drains telemetry-events.ndjson.
+ * Build a CliCommandExecuted fact for a finished command.
  *
- * No-ops when called from within a flush worker (prevents infinite recursion) or when
- * telemetry is disabled.
- *
- * `agentSessionId` is resolved by the caller (buildCommandTree postAction) so session
- * identification stays outside SonarCommand / CliRuntime.
+ * `result` is derived from `process.exitCode` (`success` when 0 or unset).
+ * `project_uuid` is resolved here (async, never rejects). Identity is applied at commit.
  */
-export async function storeEvent(
+export async function buildCommandExecutedFact(
   command: Command,
-  success: boolean,
-  agentSessionId: string | null = null,
-): Promise<void> {
-  if (process.env[TELEMETRY_FLUSH_MODE_ENV]) return;
-  const state = tryLoadState();
-  if (!state || !isTelemetryEnabled(state)) return;
-
+): Promise<TelemetryFact<CommandExecutedPayload>> {
   const commandNames: string[] = [];
   let current: Command = command;
   while (current.parent !== null) {
     commandNames.unshift(current.name());
     current = current.parent;
   }
-  const topCommand = commandNames[0];
   const commandPathTail = commandNames.slice(1);
   const fallbackSubcommand = commandPathTail.length > 0 ? commandPathTail.join(' ') : null;
   const subcommand = passthroughSubcommands.has(command)
     ? (passthroughSubcommands.get(command) ?? null)
     : fallbackSubcommand;
 
-  await emitTelemetryEvent(
-    CLI_COMMAND_EXECUTED,
-    {
-      command: topCommand,
-      subcommand,
-      result: success ? 'success' : 'failure',
-      distribution: DISTRIBUTION,
-      project_uuid: await currentProjectUuid(),
-    } satisfies CommandExecutedPayload,
-    { agentSessionId },
-  );
+  return new TelemetryFact(CLI_COMMAND_EXECUTED, {
+    command: commandNames[0],
+    subcommand,
+    result: (process.exitCode ?? 0) === 0 ? 'success' : 'failure',
+    distribution: DISTRIBUTION,
+    project_uuid: await currentProjectUuid(),
+  });
+}
 
-  scheduleTelemetryFlush();
+/**
+ * Record and commit one CliCommandExecuted fact, then schedule the flush.
+ *
+ * Used by unit tests that do not go through the command tree `postAction`.
+ * Production drains this fact together with handler facts in `postAction`.
+ */
+export async function storeEvent(
+  command: Command,
+  agentSessionId: string | null = null,
+): Promise<void> {
+  await commitTelemetryFacts([await buildCommandExecutedFact(command)], {
+    agentSessionId,
+  });
 }

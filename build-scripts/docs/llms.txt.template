@@ -17,6 +17,7 @@ sonar integrate claude -g
 Use `sonar list issues --format toon` to output issues in a format optimized for LLM consumption.
 Use `sonar list projects` to discover available projects before running analysis.
 Commands marked with * require prior authentication via `sonar auth login`.
+Aliases are shown next to a command name as `name|alias`.
 
 ## Commands
 

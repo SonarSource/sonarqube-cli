@@ -38,8 +38,8 @@ const AUTH: ResolvedAuth = {
 };
 
 const PROJECT: DiscoveredProject = {
-  rootDir: '/workspace',
-  isGitRepo: false,
+  repoRoot: undefined,
+  projectRoot: '/workspace',
   configSources: [],
   projectKey: 'discovered-key',
 };

@@ -65,7 +65,7 @@ describe('sonar hook git-pre-push', () => {
   it(
     'exits 0 when stdin is empty (no refs)',
     async () => {
-      const result = await harness.run('hook git-pre-push', { stdin: '' });
+      const result = await harness.runWithStdin('hook git-pre-push', '');
       expect(result.exitCode).toBe(0);
     },
     { timeout: 15000 },
@@ -75,7 +75,7 @@ describe('sonar hook git-pre-push', () => {
     'exits 0 for branch deletion (localSha is all zeros)',
     async () => {
       const stdin = pushRefLine(GIT_NULL_OID, 'abc1234abc1234abc1234abc1234abc1234abc123');
-      const result = await harness.run('hook git-pre-push', { stdin });
+      const result = await harness.runWithStdin('hook git-pre-push', stdin);
       expect(result.exitCode).toBe(0);
     },
     { timeout: 15000 },
@@ -85,7 +85,7 @@ describe('sonar hook git-pre-push', () => {
     'exits 0 when all lines are malformed (missing fields)',
     async () => {
       const stdin = 'invalid-line\nrefs/heads/main only-one-field\n';
-      const result = await harness.run('hook git-pre-push', { stdin });
+      const result = await harness.runWithStdin('hook git-pre-push', stdin);
       expect(result.exitCode).toBe(0);
     },
     { timeout: 15000 },
@@ -99,9 +99,10 @@ describe('sonar hook git-pre-push', () => {
       harness.state().withSecretsBinaryInstalled();
       // No auth configured
 
-      const result = await harness.run('hook git-pre-push', {
-        stdin: pushRefLine(sha, GIT_NULL_OID),
-      });
+      const result = await harness.runWithStdin(
+        'hook git-pre-push',
+        pushRefLine(sha, GIT_NULL_OID),
+      );
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain(SECRETS_INACTIVE_UNAUTHENTICATED);
@@ -117,9 +118,10 @@ describe('sonar hook git-pre-push', () => {
       harness.withAuth(FAKE_SERVER, VALID_TOKEN);
       // No binary installed
 
-      const result = await harness.run('hook git-pre-push', {
-        stdin: pushRefLine(sha, GIT_NULL_OID),
-      });
+      const result = await harness.runWithStdin(
+        'hook git-pre-push',
+        pushRefLine(sha, GIT_NULL_OID),
+      );
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain(SECRETS_INACTIVE_BINARY_MISSING);
@@ -132,9 +134,10 @@ describe('sonar hook git-pre-push', () => {
     async () => {
       harness.state().withSecretsBinaryInstalled();
       const sha = 'abc1234abc1234abc1234abc1234abc1234abc123';
-      const result = await harness.run('hook git-pre-push', {
-        stdin: pushRefLine(sha, GIT_NULL_OID),
-      });
+      const result = await harness.runWithStdin(
+        'hook git-pre-push',
+        pushRefLine(sha, GIT_NULL_OID),
+      );
       expect(result.exitCode).toBe(0);
     },
     { timeout: 15000 },
@@ -149,9 +152,10 @@ describe('sonar hook git-pre-push', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, VALID_TOKEN);
 
-      const result = await harness.run('hook git-pre-push', {
-        stdin: pushRefLine(sha, GIT_NULL_OID),
-      });
+      const result = await harness.runWithStdin(
+        'hook git-pre-push',
+        pushRefLine(sha, GIT_NULL_OID),
+      );
 
       expect(result.exitCode).toBe(0);
     },
@@ -171,9 +175,10 @@ describe('sonar hook git-pre-push', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, VALID_TOKEN);
 
-      const result = await harness.run('hook git-pre-push', {
-        stdin: pushRefLine(sha, GIT_NULL_OID),
-      });
+      const result = await harness.runWithStdin(
+        'hook git-pre-push',
+        pushRefLine(sha, GIT_NULL_OID),
+      );
 
       expect(result.exitCode).toBe(1);
     },
@@ -190,9 +195,10 @@ describe('sonar hook git-pre-push', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, VALID_TOKEN);
 
-      const result = await harness.run('hook git-pre-push', {
-        stdin: pushRefLine(localSha, remoteSha),
-      });
+      const result = await harness.runWithStdin(
+        'hook git-pre-push',
+        pushRefLine(localSha, remoteSha),
+      );
 
       expect(result.exitCode).toBe(0);
     },
@@ -213,9 +219,10 @@ describe('sonar hook git-pre-push', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, VALID_TOKEN);
 
-      const result = await harness.run('hook git-pre-push', {
-        stdin: pushRefLine(localSha, remoteSha),
-      });
+      const result = await harness.runWithStdin(
+        'hook git-pre-push',
+        pushRefLine(localSha, remoteSha),
+      );
 
       expect(result.exitCode).toBe(1);
     },
@@ -233,10 +240,13 @@ describe('sonar hook git-pre-push', () => {
       harness.cliHome.writeFile(`bin/${binaryName}`, 'not-a-binary');
       chmodSync(harness.cliHome.file('bin', binaryName).path, NON_EXECUTABLE_MODE);
 
-      const result = await harness.run('hook git-pre-push', {
-        stdin: pushRefLine(sha, GIT_NULL_OID),
-        extraEnv: { SONARQUBE_CLI_TOKEN: VALID_TOKEN, SONARQUBE_CLI_SERVER: FAKE_SERVER },
-      });
+      const result = await harness.runWithStdin(
+        'hook git-pre-push',
+        pushRefLine(sha, GIT_NULL_OID),
+        {
+          extraEnv: { SONARQUBE_CLI_TOKEN: VALID_TOKEN, SONARQUBE_CLI_SERVER: FAKE_SERVER },
+        },
+      );
 
       expect(result.exitCode).toBe(1);
     },
@@ -256,9 +266,10 @@ describe('sonar hook git-pre-push', () => {
 
       harness.withAuth(FAKE_SERVER, VALID_TOKEN);
 
-      const result = await harness.run('hook git-pre-push', {
-        stdin: pushRefLine(sha, GIT_NULL_OID),
-      });
+      const result = await harness.runWithStdin(
+        'hook git-pre-push',
+        pushRefLine(sha, GIT_NULL_OID),
+      );
 
       expect(result.exitCode).toBe(0);
     },

@@ -31,6 +31,7 @@ import {
 import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
 import * as processLib from '@/core/process/process.ts';
+import * as projectInfo from '@/core/project-info.ts';
 import * as clientModule from '@/core/server/client.ts';
 
 import { agentPostToolUse } from '../../../../src/commands/hook/agent-post-tool-use.ts';
@@ -40,8 +41,6 @@ import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
 
 // Real path inside cwd so realpathSync resolves consistently for file and cwd.
 const TEST_FILE = join(process.cwd(), 'src/index.ts');
-
-const ctx = new CommandInvocationContext();
 
 describe('agentPostToolUse', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;
@@ -53,6 +52,8 @@ describe('agentPostToolUse', () => {
   let emitSqaaAnalysisTelemetrySpy: ReturnType<typeof spyOn>;
   let spawnProcessSpy: ReturnType<typeof spyOn>;
   let cagMatchesSpy: ReturnType<typeof spyOn>;
+  let ctx: CommandInvocationContext;
+  let discoverProjectSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     // Deterministic git branch auto-detection (hook resolves branch from the edited file).
@@ -83,14 +84,22 @@ describe('agentPostToolUse', () => {
     );
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
     readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue('const x = 1;');
+    // Only exercised when a test omits `project` — an explicit project short-circuits it.
+    discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
+      repoRoot: process.cwd(),
+      projectRoot: process.cwd(),
+      projectKey: undefined,
+      configSources: [],
+    });
     createAnalysisSpy = spyOn(
       clientModule.SonarQubeClient.prototype,
       'createAnalysis',
     ).mockResolvedValue({ id: 'analysis-id', issues: [], errors: null });
     emitSqaaAnalysisTelemetrySpy = spyOn(
       sqaaTelemetry,
-      'emitSqaaAnalysisTelemetry',
-    ).mockImplementation(() => Promise.resolve());
+      'recordSqaaAnalysisTelemetry',
+    ).mockImplementation(() => {});
+    ctx = new CommandInvocationContext();
   });
 
   afterEach(() => {
@@ -103,18 +112,19 @@ describe('agentPostToolUse', () => {
     emitSqaaAnalysisTelemetrySpy.mockRestore();
     spawnProcessSpy.mockRestore();
     cagMatchesSpy.mockRestore();
+    discoverProjectSpy.mockRestore();
   });
 
   it('emits SQAA analysis telemetry after a successful PostToolUse analysis', async () => {
     await agentPostToolUse(ctx, { project: 'my-project' });
 
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
+      ctx,
+      expect.objectContaining({ connectionType: 'cloud', orgKey: 'myorg' }),
       SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
-      expect.objectContaining({ connectionType: 'cloud' }),
       expect.objectContaining({ totalIssues: 0, totalFailures: 0 }),
       expect.any(Number),
       SQAA_HOOK_TELEMETRY_EXIT_CODE,
-      null,
     );
   });
 
@@ -134,12 +144,12 @@ describe('agentPostToolUse', () => {
     await agentPostToolUse(ctx, { project: 'my-project' });
 
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
+      ctx,
+      expect.objectContaining({ connectionType: 'cloud', orgKey: 'myorg' }),
       SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
-      expect.objectContaining({ connectionType: 'cloud' }),
       expect.objectContaining({ totalIssues: 1, totalFailures: 0 }),
       expect.any(Number),
       SQAA_HOOK_TELEMETRY_EXIT_CODE,
-      null,
     );
   });
 
@@ -227,7 +237,7 @@ describe('agentPostToolUse', () => {
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
 
-  it('returns without output when connection is not cloud', async () => {
+  it('runs analysis on a Server connection without an organization', async () => {
     resolveAuthSpy.mockResolvedValue({
       token: 'tok',
       serverUrl: 'https://sonar.example.com',
@@ -236,8 +246,11 @@ describe('agentPostToolUse', () => {
 
     await agentPostToolUse(ctx, { project: 'my-project' });
 
-    expect(createAnalysisSpy).not.toHaveBeenCalled();
-    expect(stdoutSpy).not.toHaveBeenCalled();
+    expect(createAnalysisSpy).toHaveBeenCalledWith({
+      projectKey: 'my-project',
+      files: [{ path: 'src/index.ts', content: 'const x = 1;' }],
+      branchName: 'feature/hook-branch',
+    });
   });
 
   it('returns without output when project key is not provided', async () => {
@@ -288,12 +301,12 @@ describe('agentPostToolUse', () => {
 
     expect(stdoutSpy).not.toHaveBeenCalled();
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
+      ctx,
+      expect.objectContaining({ connectionType: 'cloud', orgKey: 'myorg' }),
       SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
-      expect.objectContaining({ connectionType: 'cloud' }),
       expect.objectContaining({ totalIssues: 0, totalFailures: 1 }),
       expect.any(Number),
       SQAA_HOOK_TELEMETRY_EXIT_CODE,
-      null,
     );
   });
 
@@ -307,12 +320,12 @@ describe('agentPostToolUse', () => {
     expect(createAnalysisSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
+      ctx,
+      expect.objectContaining({ connectionType: 'cloud', orgKey: 'myorg' }),
       SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
-      expect.objectContaining({ connectionType: 'cloud' }),
       expect.objectContaining({ totalIssues: 0, totalFailures: 1 }),
       expect.any(Number),
       SQAA_HOOK_TELEMETRY_EXIT_CODE,
-      null,
     );
   });
 
@@ -323,20 +336,16 @@ describe('agentPostToolUse', () => {
 
     expect(stdoutSpy).not.toHaveBeenCalled();
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
+      ctx,
+      expect.objectContaining({ connectionType: 'cloud', orgKey: 'myorg' }),
       SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
-      expect.objectContaining({ connectionType: 'cloud' }),
       expect.objectContaining({ totalIssues: 0, totalFailures: 1 }),
       expect.any(Number),
       SQAA_HOOK_TELEMETRY_EXIT_CODE,
-      null,
     );
   });
 
   it('does not emit failure telemetry when hook output fails after analysis telemetry', async () => {
-    const emitSqaaHookFailureTelemetrySpy = spyOn(
-      sqaaTelemetry,
-      'emitSqaaHookFailureTelemetry',
-    ).mockImplementation(() => Promise.resolve());
     const writeHookOutputSpy = spyOn(hookOutput, 'writePostToolUseHookOutput').mockImplementation(
       () => {
         throw new Error('stdout closed');
@@ -346,10 +355,8 @@ describe('agentPostToolUse', () => {
     await agentPostToolUse(ctx, { project: 'my-project' });
 
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledTimes(1);
-    expect(emitSqaaHookFailureTelemetrySpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
 
-    emitSqaaHookFailureTelemetrySpy.mockRestore();
     writeHookOutputSpy.mockRestore();
   });
 

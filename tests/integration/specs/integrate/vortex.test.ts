@@ -27,13 +27,18 @@ import {
   VORTEX_FEATURE_ID,
   VORTEX_OVER_CONSUMPTION_MESSAGE,
   VORTEX_PROMOTION_MESSAGE,
+  VORTEX_SERVER_UNAVAILABLE_MESSAGE,
   VORTEX_UNINSTALL_MESSAGE,
 } from '@/commands/integrate/_common/vortex.js';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
-import type { VortexEntitlementStatus } from '@/core/server/client.js';
+import {
+  SERVER_ORGANIZATION_ID_PLACEHOLDER,
+  type VortexEntitlementStatus,
+} from '@/core/server/client.js';
 import type { CliState } from '@/core/state/state.ts';
 
 import { TestHarness } from '../../harness';
+import { hookScriptName } from '../../harness/platform.ts';
 
 const PROJECT_KEY = 'my-project';
 const ORG_KEY = 'my-org';
@@ -72,6 +77,24 @@ describe('integrate claude — Vortex entitlement', () => {
     return sqaaHook && recordedCag && harness.cwd.file(CLAUDE_SKILL_PATH).exists();
   }
 
+  /** Hook entries are owned by the marker appearing in their command (see `ownsHookEntry`). */
+  function postToolUseHooks(): string {
+    const settingsFile = harness.cwd.file('.claude', 'settings.json');
+    return settingsFile.exists()
+      ? JSON.stringify(settingsFile.asJson().hooks?.PostToolUse ?? [])
+      : '';
+  }
+
+  function sqaaHookScriptExists(): boolean {
+    return harness.cwd.exists(
+      '.claude',
+      'hooks',
+      'sonar-sqaa',
+      'build-scripts',
+      hookScriptName('posttool-sqaa'),
+    );
+  }
+
   function entitlementBody(status: Exclude<VortexEntitlementStatus, 'check_failed'>): {
     allowed: boolean;
     hasEntitlement: boolean;
@@ -96,36 +119,46 @@ describe('integrate claude — Vortex entitlement', () => {
     if (scaEnabled !== undefined) {
       builder.withScaEnabled(scaEnabled);
     }
-    if (sqaa !== 'check_failed') {
-      builder.withSqaaEntitlement(ORG_KEY, ORG_UUID, entitlementBody(sqaa));
+    if (sqaa === 'check_failed') {
+      builder.withSqaaEntitlementStatusCode(500);
+    } else if (sqaa === 'not_applicable') {
+      builder.withSqaaEntitlementStatusCode(404);
+    } else {
+      const uuid = cloud ? ORG_UUID : SERVER_ORGANIZATION_ID_PLACEHOLDER;
+      builder.withSqaaEntitlement(ORG_KEY, uuid, entitlementBody(sqaa));
     }
     if (cag === 'check_failed') {
       builder.withCagEntitlementStatusCode(500);
+    } else if (cag === 'not_applicable') {
+      builder.withCagEntitlementStatusCode(404);
     } else {
-      builder.withCagEntitlement(ORG_KEY, ORG_UUID, entitlementBody(cag));
+      const uuid = cloud ? ORG_UUID : SERVER_ORGANIZATION_ID_PLACEHOLDER;
+      builder.withCagEntitlement(ORG_KEY, uuid, entitlementBody(cag));
     }
 
     const server = await builder.start();
     const serverUrl = server.baseUrl();
-    harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+    // withAuth infers connectionType from whether an org is supplied.
+    harness.withAuth(serverUrl, TOKEN, cloud ? ORG_KEY : undefined);
     if (persistedState) {
       const activeConnection = persistedState.auth.connections.find(
         (connection) => connection.id === persistedState.auth.activeConnectionId,
       );
       if (activeConnection) {
         activeConnection.serverUrl = serverUrl;
+        if (!cloud) {
+          activeConnection.type = 'on-premise';
+          activeConnection.orgKey = undefined;
+        }
       }
       harness.state().withRawState(JSON.stringify(persistedState));
     }
     harness.state().withContextAugmentationBinaryInstalled();
-    harness.cwd.writeFile(
-      'sonar-project.properties',
-      [
-        `sonar.host.url=${serverUrl}`,
-        `sonar.projectKey=${PROJECT_KEY}`,
-        `sonar.organization=${ORG_KEY}`,
-      ].join('\n'),
-    );
+    const projectProperties = [`sonar.host.url=${serverUrl}`, `sonar.projectKey=${PROJECT_KEY}`];
+    if (cloud) {
+      projectProperties.push(`sonar.organization=${ORG_KEY}`);
+    }
+    harness.cwd.writeFile('sonar-project.properties', projectProperties.join('\n'));
     return harness.run('integrate claude --non-interactive', {
       extraEnv: cloud
         ? {
@@ -222,13 +255,86 @@ describe('integrate claude — Vortex entitlement', () => {
   );
 
   it(
-    'skips Vortex on a SonarQube Server connection',
+    'skips Vortex on a SonarQube Server with neither hub',
     async () => {
-      const result = await runIntegrateClaude({ sqaa: 'enabled', cag: 'enabled', cloud: false });
+      const result = await runIntegrateClaude({
+        sqaa: 'not_applicable',
+        cag: 'not_applicable',
+        cloud: false,
+      });
 
       expect(result.exitCode).toBe(0);
       expect(isVortexInstalled()).toBe(false);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_PROMOTION_MESSAGE);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_SERVER_UNAVAILABLE_MESSAGE);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'installs Vortex on a licensed SonarQube Server when both hubs are entitled',
+    async () => {
+      const result = await runIntegrateClaude({
+        sqaa: 'enabled',
+        cag: 'enabled',
+        scaEnabled: true,
+        cloud: false,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(isVortexInstalled()).toBe(true);
+      expect(harness.cwd.file('CLAUDE.md').asText()).toContain('# Vortex analysis protocol');
+      expect(postToolUseHooks()).toContain('sonar-sqaa');
+      expect(sqaaHookScriptExists()).toBe(true);
+    },
+    { timeout: 30000 },
+  );
+
+  it.each([
+    ['A3S', 'not_applicable', 'enabled'],
+    ['CAG', 'enabled', 'not_applicable'],
+  ] as const)(
+    'does not install Vortex on a Server whose %s hub is absent',
+    async (_hub, sqaa, cag) => {
+      const result = await runIntegrateClaude({
+        sqaa,
+        cag,
+        scaEnabled: true,
+        cloud: false,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(isVortexInstalled()).toBe(false);
+      expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
+      expect(harness.cwd.file('CLAUDE.md').exists()).toBe(false);
+      expect(postToolUseHooks()).not.toContain('sonar-sqaa');
+      expect(sqaaHookScriptExists()).toBe(false);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_SERVER_UNAVAILABLE_MESSAGE);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'tears down Vortex when a Cloud install is repointed at a Server missing a hub',
+    async () => {
+      const installed = await runIntegrateClaude({ scaEnabled: true });
+      expect(installed.exitCode).toBe(0);
+      expect(isVortexInstalled()).toBe(true);
+
+      const repointed = await runIntegrateClaude({
+        sqaa: 'not_applicable',
+        cag: 'enabled',
+        scaEnabled: true,
+        cloud: false,
+        preserveState: true,
+      });
+
+      expect(repointed.exitCode).toBe(0);
+      expect(isVortexInstalled()).toBe(false);
+      expect(postToolUseHooks()).not.toContain('sonar-sqaa');
+      expect(sqaaHookScriptExists()).toBe(false);
+      expect(harness.cwd.file('CLAUDE.md').exists()).toBe(false);
+      expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
+      expect(`${repointed.stdout}\n${repointed.stderr}`).toContain(VORTEX_UNINSTALL_MESSAGE);
     },
     { timeout: 30000 },
   );

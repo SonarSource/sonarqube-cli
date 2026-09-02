@@ -26,7 +26,7 @@ import { join } from 'node:path';
 import { applyIsolatedSpawnEnv } from '../../_common/isolated-cli-env.js';
 import { COVERAGE_BINARY, COVERAGE_RAW_DIR } from '../../coverage/paths.js';
 import { IS_WINDOWS } from './platform';
-import type { CliResult } from './types.js';
+import type { InteractiveProcessHandle, SessionStdin } from './types.js';
 
 const PROJECT_ROOT = join(import.meta.dir, '../../..');
 const DEFAULT_BINARY = join(
@@ -34,7 +34,7 @@ const DEFAULT_BINARY = join(
   'dist',
   IS_WINDOWS ? 'sonarqube-cli.exe' : 'sonarqube-cli',
 );
-const DEFAULT_TIMEOUT_MS = 30000;
+export const DEFAULT_CLI_TIMEOUT_MS = 30000;
 
 function getBinaryPath(coverageMode: boolean, overridePath?: string): string {
   const binaryPath = overridePath ?? (coverageMode ? COVERAGE_BINARY : DEFAULT_BINARY);
@@ -46,31 +46,31 @@ function getBinaryPath(coverageMode: boolean, overridePath?: string): string {
   return binaryPath;
 }
 
-/** Same executable `runCli` uses (coverage binary when `SONARQUBE_CLI_USE_COVERAGE=1`). */
+/** Same executable the harness spawns (coverage binary when `SONARQUBE_CLI_USE_COVERAGE=1`). */
 export function getCliBinaryPath(): string {
   return getBinaryPath(process.env.SONARQUBE_CLI_USE_COVERAGE === '1');
 }
 
-const STDIN_CHUNK_DELAY_MS = 300;
+export type SpawnedCliProcess = {
+  proc: InteractiveProcessHandle;
+  timeoutMs: number;
+  startedAt: number;
+};
 
-export async function runCli(
+export function spawnCliProcess(
   command: string,
   env: Record<string, string>,
   options: {
-    stdin?: string;
-    stdinChunks?: string[];
-    stdinChunkDelayMs?: number;
-    timeoutMs?: number;
     cwd: string;
-    browserToken?: string;
-    browserTokenName?: string;
+    timeoutMs?: number;
     binaryPath?: string;
+    stdin: 'pipe' | 'ignore';
   },
-): Promise<CliResult> {
+): SpawnedCliProcess {
   const coverageMode = process.env.SONARQUBE_CLI_USE_COVERAGE === '1';
   const binaryPath = getBinaryPath(coverageMode, options.binaryPath);
-  const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const startTime = Date.now();
+  const timeoutMs = options.timeoutMs ?? DEFAULT_CLI_TIMEOUT_MS;
+  const startedAt = Date.now();
   mkdirSync(options.cwd, { recursive: true });
 
   const spawnEnv = applyIsolatedSpawnEnv(env);
@@ -81,76 +81,52 @@ export async function runCli(
   }
 
   const args = tokenize(command);
-  const hasStdin = options.stdin !== undefined || (options.stdinChunks?.length ?? 0) > 0;
-  const proc = Bun.spawn([binaryPath, ...args], {
-    env: spawnEnv,
-    stdout: 'pipe',
-    stderr: 'pipe',
-    stdin: hasStdin ? 'pipe' : 'ignore',
-    cwd: options.cwd,
-  });
+  const proc = wrapSpawnedProcess(
+    Bun.spawn([binaryPath, ...args], {
+      env: spawnEnv,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      stdin: options.stdin,
+      cwd: options.cwd,
+    }),
+  );
 
-  if (options.stdin !== undefined && proc.stdin) {
-    // proc.stdin is a Bun FileSink (not a Web WritableStream)
-    const sink = proc.stdin as { write(data: Uint8Array): void; end(): void };
-    sink.write(new TextEncoder().encode(options.stdin));
-    sink.end();
-  }
+  return { proc, timeoutMs, startedAt };
+}
 
-  if (options.stdinChunks !== undefined && proc.stdin) {
-    const sink = proc.stdin as { write(data: Uint8Array): void; end(): void };
-    const encoder = new TextEncoder();
-    // Write each chunk with a delay so readline in the CLI process finishes
-    // handling one prompt before the next chunk arrives for the next prompt.
-    const chunkDelayMs = options.stdinChunkDelayMs ?? STDIN_CHUNK_DELAY_MS;
-    await (async () => {
-      for (const chunk of options.stdinChunks ?? []) {
-        await new Promise((r) => setTimeout(r, chunkDelayMs));
-        sink.write(encoder.encode(chunk));
-      }
-      sink.end();
-    })();
-  }
-
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    proc.kill();
-  }, timeoutMs);
-
-  let stdout: string;
-
-  if (options.browserToken) {
-    stdout = await streamStdoutAndDeliverToken(
-      proc.stdout,
-      options.browserToken,
-      options.browserTokenName,
-    );
-  } else {
-    stdout = await new Response(proc.stdout).text();
-  }
-
-  const [exitCode, stderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
-
-  clearTimeout(timer);
-
-  if (timedOut) {
-    throw new Error(`CLI process timed out after ${timeoutMs}ms`);
-  }
-
+function wrapSpawnedProcess(proc: ReturnType<typeof Bun.spawn>): InteractiveProcessHandle {
   return {
-    exitCode,
-    stdout,
-    stderr,
-    durationMs: Date.now() - startTime,
+    stdin: isSessionStdin(proc.stdin) ? proc.stdin : null,
+    stdout: requirePipedStream(proc.stdout, 'stdout'),
+    stderr: requirePipedStream(proc.stderr, 'stderr'),
+    kill() {
+      proc.kill();
+    },
+    get exited() {
+      return proc.exited;
+    },
   };
+}
+
+function isSessionStdin(stdin: unknown): stdin is SessionStdin {
+  return typeof stdin === 'object' && stdin !== null && 'write' in stdin && 'end' in stdin;
+}
+
+function requirePipedStream(
+  stream: number | ReadableStream<Uint8Array> | undefined,
+  name: string,
+): ReadableStream<Uint8Array> {
+  if (typeof stream === 'object' && stream !== null) {
+    return stream;
+  }
+  throw new Error(`Expected piped ${name}`);
 }
 
 /**
  * Extracts the loopback port from accumulated stdout and POSTs the token to it.
  * Returns true if the token was delivered, false if the port was not found yet.
  */
-function tryDeliverToken(accumulated: string, token: string, tokenName?: string): boolean {
+export function tryDeliverToken(accumulated: string, token: string, tokenName?: string): boolean {
   const match = /[?&]port=(\d+)/.exec(accumulated);
   if (!match) return false;
   const port = match[1];
@@ -162,39 +138,6 @@ function tryDeliverToken(accumulated: string, token: string, tokenName?: string)
     /* loopback server may close before response completes */
   });
   return true;
-}
-
-/**
- * Reads stdout incrementally. When the loopback auth port appears in the output
- * (pattern: `port=NNNNN`), delivers the token via POST to the loopback server.
- * Returns the full accumulated stdout once the stream ends.
- */
-async function streamStdoutAndDeliverToken(
-  stream: ReadableStream<Uint8Array>,
-  token: string,
-  tokenName?: string,
-): Promise<string> {
-  const decoder = new TextDecoder();
-  const reader = stream.getReader();
-  let accumulated = '';
-  let tokenDelivered = false;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      accumulated += decoder.decode(value, { stream: true });
-
-      if (!tokenDelivered) {
-        tokenDelivered = tryDeliverToken(accumulated, token, tokenName);
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  return accumulated;
 }
 
 /**

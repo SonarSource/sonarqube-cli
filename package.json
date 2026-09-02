@@ -1,7 +1,7 @@
 {
   "name": "sonarqube-cli",
   "type": "module",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "SonarQube CLI",
   "bin": {
     "sonar": "./dist/index.js"
@@ -12,7 +12,7 @@
     "dev": "bun run src/index.ts",
     "test:unit": "bun test --parallel ./tests/unit/",
     "pretest:integration": "bun build:binary && bun build-scripts/setup-integration-resources.ts",
-    "test:integration": "bun test ./tests/integration/",
+    "test:integration": "bun test --parallel=4 ./tests/integration/",
     "test:all": "bun run test:unit && bun run test:integration",
     "test:e2e": "bun test ./tests/e2e/",
     "test:coverage:unit": "COVERAGE_RAW_UNIT_DIR=tests/coverage/reports/raw-unit bun test ./tests/unit/",
@@ -100,7 +100,7 @@
   },
   "dependencies": {
     "@clack/core": "1.4.3",
-    "@sentry/bun": "10.68.0",
+    "@sentry/bun": "10.71.0",
     "@toon-format/toon": "2.3.1",
     "commander": "15.0.0",
     "js-yaml": "5.4.0",
@@ -114,7 +114,7 @@
   "devDependencies": {
     "@sentry/cli": "3.6.2",
     "@sonar/scan": "5.0.0",
-    "@types/bun": "1.3.14",
+    "@types/bun": "1.4.0",
     "@types/istanbul-lib-coverage": "2.0.6",
     "@types/istanbul-lib-instrument": "1.7.8",
     "@types/istanbul-lib-report": "3.0.3",

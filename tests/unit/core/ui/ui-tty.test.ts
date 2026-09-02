@@ -23,41 +23,15 @@
 
 import { describe, expect, it, spyOn } from 'bun:test';
 
-void mock.module('@/core/ui/colors.js', () => ({
-  isTTY: true,
-  bold: (s: string) => s,
-  dim: (s: string) => s,
-  green: (s: string) => s,
-  red: (s: string) => s,
-  cyan: (s: string) => s,
-  yellow: (s: string) => s,
-  gray: (s: string) => s,
-  white: (s: string) => s,
-  STATUS_COLORS: {
-    done: (s: string) => s,
-    running: (s: string) => s,
-    failed: (s: string) => s,
-    skipped: (s: string) => s,
-    warn: (s: string) => s,
-    pending: (s: string) => s,
-    info: (s: string) => s,
-  },
-  STATUS_ICONS: {
-    done: '✓',
-    running: '→',
-    failed: '✗',
-    skipped: '⏭',
-    warn: '⚠',
-    pending: '○',
-    info: 'ℹ',
-  },
-}));
+void mock.module('@/core/ui/colors.js', mockColorsTTY);
 
 import { mock } from 'bun:test';
 
 import { phase, phaseItem } from '@/core/ui';
 import { intro, outro } from '@/core/ui';
 import { blank } from '@/core/ui';
+
+import { mockColorsTTY } from '../../../_common/colors-mock.ts';
 
 // ─── phase: TTY rendering ─────────────────────────────────────────────────────
 

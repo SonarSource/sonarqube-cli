@@ -41,8 +41,8 @@ const SERVER_AUTH: ResolvedAuth = {
 const SERVER_CTX = new CommandAuthenticatedInvocationContext(SERVER_AUTH);
 
 const BASE_PROJECT: DiscoveredProject = {
-  rootDir: '/project/root',
-  isGitRepo: true,
+  repoRoot: '/project/root',
+  projectRoot: '/project/root',
   configSources: [],
   projectKey: 'my-project',
 };

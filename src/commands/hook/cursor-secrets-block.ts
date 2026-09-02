@@ -64,8 +64,11 @@ export async function denyCursor(message: string): Promise<never> {
 }
 
 /** Deny access because secrets were found in `filePath`, adding it to `.cursorignore`. */
-export async function denyCursorFileAccess(filePath: string | undefined): Promise<never> {
-  const ignored = filePath === undefined ? false : appendToCursorIgnore(filePath);
+export async function denyCursorFileAccess(
+  filePath: string | undefined,
+  workspaceRoots: string[],
+): Promise<never> {
+  const ignored = filePath === undefined ? false : appendToCursorIgnore(filePath, workspaceRoots);
   let message: string;
   if (filePath === undefined) {
     message = `${SECRETS_IN_FILE_MESSAGE}.`;

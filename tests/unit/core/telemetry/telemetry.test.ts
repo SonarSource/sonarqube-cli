@@ -47,10 +47,10 @@ import * as userModule from '@/core/telemetry/user.ts';
 import * as ui from '@/core/ui';
 
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
+import type { StoredAnalysisCompletedEvent } from '../../../_common/telemetry-helpers.ts';
 import {
   readCommandEvents,
   readTelemetryEvents,
-  type StoredAnalysisCompletedEvent,
   writeTelemetryEvent,
 } from '../../../_common/telemetry-helpers.ts';
 import { mockIdentityGetSafe } from './identity-api-mock.ts';
@@ -121,6 +121,7 @@ beforeEach(() => {
   spawnSpy = spyOn(Bun, 'spawn').mockReturnValue({ unref: () => {} } as ReturnType<
     typeof Bun.spawn
   >);
+  process.exitCode = undefined;
 });
 
 afterEach(() => {
@@ -146,6 +147,7 @@ afterEach(() => {
   delete process.env[ENV_ORG];
   delete process.env[ENV_SERVER];
   delete process.env.SONARQUBE_CLI_SERVER;
+  process.exitCode = undefined;
   rmSync(testDir, { recursive: true, force: true });
 });
 
@@ -155,7 +157,7 @@ describe('storeEvent', () => {
   describe('no-op conditions', () => {
     it('does nothing when running inside a flush worker', async () => {
       process.env[TELEMETRY_FLUSH_MODE_ENV] = '1';
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
       expect(loadStateSpy).not.toHaveBeenCalled();
       expect(readCommandEvents(testDir)).toHaveLength(0);
       expect(spawnSpy).not.toHaveBeenCalled();
@@ -166,7 +168,7 @@ describe('storeEvent', () => {
       state.telemetry.enabled = false;
       loadStateSpy.mockReturnValue(state);
 
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
 
       expect(readCommandEvents(testDir)).toHaveLength(0);
       expect(spawnSpy).not.toHaveBeenCalled();
@@ -175,7 +177,7 @@ describe('storeEvent', () => {
     it('does nothing when DO_NOT_TRACK is set', async () => {
       process.env[ENV_DO_NOT_TRACK] = '1';
 
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
 
       expect(readCommandEvents(testDir)).toHaveLength(0);
       expect(spawnSpy).not.toHaveBeenCalled();
@@ -184,32 +186,32 @@ describe('storeEvent', () => {
 
   describe('event building', () => {
     it('appends one CliCommandExecuted event to telemetry-events.ndjson', async () => {
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
 
       const events = readCommandEvents(testDir);
       expect(events).toHaveLength(1);
     });
 
     it('sets command to the first word of the command string', async () => {
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
 
       expect(readCommandEvents(testDir)[0].event_payload.command).toBe('auth');
     });
 
     it('sets subcommand to the rest of the command string', async () => {
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
 
       expect(readCommandEvents(testDir)[0].event_payload.subcommand).toBe('login');
     });
 
     it('sets subcommand to null for single-word commands', async () => {
-      await storeEvent(makeCommand('auth'), true);
+      await storeEvent(makeCommand('auth'));
 
       expect(readCommandEvents(testDir)[0].event_payload.subcommand).toBeNull();
     });
 
     it('joins multiple subcommand words with a space', async () => {
-      await storeEvent(makeCommand('analyze secrets check'), true);
+      await storeEvent(makeCommand('analyze secrets check'));
 
       const event = readCommandEvents(testDir)[0];
       expect(event.event_payload.command).toBe('analyze');
@@ -220,7 +222,7 @@ describe('storeEvent', () => {
       const command = makeCommand('context');
       setPassthroughSubcommand(command, 'get-source');
 
-      await storeEvent(command, true);
+      await storeEvent(command);
 
       const event = readCommandEvents(testDir)[0];
       expect(event.event_payload.command).toBe('context');
@@ -231,25 +233,26 @@ describe('storeEvent', () => {
       const command = makeCommand('context child');
       setPassthroughSubcommand(command, null);
 
-      await storeEvent(command, true);
+      await storeEvent(command);
 
       expect(readCommandEvents(testDir)[0].event_payload.subcommand).toBeNull();
     });
 
-    it('sets result to "success" when success is true', async () => {
-      await storeEvent(makeCommand('auth login'), true);
+    it('sets result to "success" when process.exitCode is 0 or unset', async () => {
+      await storeEvent(makeCommand('auth login'));
 
       expect(readCommandEvents(testDir)[0].event_payload.result).toBe('success');
     });
 
-    it('sets result to "failure" when success is false', async () => {
-      await storeEvent(makeCommand('auth login'), false);
+    it('sets result to "failure" when process.exitCode is non-zero', async () => {
+      process.exitCode = 1;
+      await storeEvent(makeCommand('auth login'));
 
       expect(readCommandEvents(testDir)[0].event_payload.result).toBe('failure');
     });
 
     it('sets distribution from the resolved CLI distribution', async () => {
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
 
       expect(readCommandEvents(testDir)[0].event_payload.distribution).toBe(DISTRIBUTION);
     });
@@ -257,7 +260,7 @@ describe('storeEvent', () => {
     it('sets event_payload.caller_agent from detectCallerAgent', async () => {
       const spy = spyOn(agentDetector, 'detectCallerAgent').mockReturnValue('claude');
       try {
-        await storeEvent(makeCommand('auth login'), true);
+        await storeEvent(makeCommand('auth login'));
         expect(spy).toHaveBeenCalled();
         expect(readCommandEvents(testDir)[0].event_payload.caller_agent).toBe('claude');
       } finally {
@@ -266,14 +269,14 @@ describe('storeEvent', () => {
     });
 
     it('sets event_payload.agent_session_id from the storeEvent argument', async () => {
-      await storeEvent(makeCommand('auth login'), true, 'claude-sess-1');
+      await storeEvent(makeCommand('auth login'), 'claude-sess-1');
       expect(readCommandEvents(testDir)[0].event_payload.agent_session_id).toBe('claude-sess-1');
     });
 
     it('sets event_payload.agent_session_id from env when the argument is omitted', async () => {
       process.env.CLAUDE_CODE_SESSION_ID = 'env-command-session';
       try {
-        await storeEvent(makeCommand('auth login'), true);
+        await storeEvent(makeCommand('auth login'));
         expect(readCommandEvents(testDir)[0].event_payload.agent_session_id).toBe(
           'env-command-session',
         );
@@ -283,14 +286,14 @@ describe('storeEvent', () => {
     });
 
     it('sets event_payload.agent_session_id to null when omitted and env has no session', async () => {
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
       expect(readCommandEvents(testDir)[0].event_payload.agent_session_id).toBeNull();
     });
 
     it('uses the machine_id returned by getOrCreateUserId', async () => {
       getUserIdSpy.mockReturnValue('my-stable-machine-id');
 
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
 
       expect(readCommandEvents(testDir)[0].event_payload.machine_id).toBe('my-stable-machine-id');
     });
@@ -300,7 +303,7 @@ describe('storeEvent', () => {
       state.telemetry.installationId = 'fixed-install-id';
       loadStateSpy.mockReturnValue(state);
 
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
 
       expect(readCommandEvents(testDir)[0].event_payload.cli_installation_id).toBe(
         'fixed-install-id',
@@ -308,7 +311,7 @@ describe('storeEvent', () => {
     });
 
     it('sets correct event_type in metadata', async () => {
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
 
       expect(readCommandEvents(testDir)[0].metadata.event_type).toBe(
         'Analytics.Cli.CliCommandExecuted',
@@ -316,7 +319,7 @@ describe('storeEvent', () => {
     });
 
     it('sets source.domain to "CLI" in metadata', async () => {
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
 
       expect(readCommandEvents(testDir)[0].metadata.source.domain).toBe('CLI');
     });
@@ -330,7 +333,7 @@ describe('storeEvent', () => {
       });
       loadStateSpy.mockReturnValue(state);
 
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
 
       expect(readCommandEvents(testDir)[0].event_payload.connection_type).toBe('sqc');
     });
@@ -340,14 +343,14 @@ describe('storeEvent', () => {
       stateManager.addOrUpdateConnection(state, 'https://sonarqube.example.com', 'on-premise', {});
       loadStateSpy.mockReturnValue(state);
 
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
 
       expect(readCommandEvents(testDir)[0].event_payload.connection_type).toBe('sqs');
     });
 
     it('sets connection_type to null when there is no active connection', async () => {
       // Default state has no connections
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
 
       expect(readCommandEvents(testDir)[0].event_payload.connection_type).toBeNull();
     });
@@ -360,7 +363,7 @@ describe('storeEvent', () => {
       conn.userUuid = 'user-uuid-abc';
       loadStateSpy.mockReturnValue(state);
 
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
 
       expect(readCommandEvents(testDir)[0].event_payload.user_uuid).toBe('user-uuid-abc');
     });
@@ -373,7 +376,7 @@ describe('storeEvent', () => {
       conn.organizationUuidV4 = 'org-uuid-xyz';
       loadStateSpy.mockReturnValue(state);
 
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
 
       expect(readCommandEvents(testDir)[0].event_payload.organization_uuid_v4).toBe('org-uuid-xyz');
     });
@@ -389,7 +392,7 @@ describe('storeEvent', () => {
       conn.enterpriseUuid = null;
       loadStateSpy.mockReturnValue(state);
 
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
 
       expect(resolveFromStateSpy).not.toHaveBeenCalled();
       resolveFromStateSpy.mockRestore();
@@ -405,7 +408,7 @@ describe('storeEvent', () => {
       });
       loadStateSpy.mockReturnValue(state);
 
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
 
       const event = readCommandEvents(testDir)[0];
       expect(event.event_payload.connection_type).toBe('sqc');
@@ -427,7 +430,7 @@ describe('storeEvent', () => {
       conn.sqsInstallationId = 'sqs-install-id-123';
       loadStateSpy.mockReturnValue(state);
 
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
 
       expect(readCommandEvents(testDir)[0].event_payload.sqs_installation_id).toBe(
         'sqs-install-id-123',
@@ -440,7 +443,7 @@ describe('storeEvent', () => {
       const warnSpy = spyOn(ui, 'warn').mockImplementation(() => undefined);
       process.env[ENV_TOKEN] = 'partial-env-token';
 
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
 
       expect(warnSpy).not.toHaveBeenCalled();
       warnSpy.mockRestore();
@@ -455,7 +458,7 @@ describe('storeEvent', () => {
         org: [{ ok: true, uuidV4: 'org-from-api' }],
       });
 
-      await storeEvent(makeCommand('context'), true);
+      await storeEvent(makeCommand('context'));
 
       const event = readCommandEvents(testDir)[0];
       expect(event.event_payload.user_uuid).toBe('user-from-api');
@@ -476,8 +479,8 @@ describe('storeEvent', () => {
         org: [{ ok: true }],
       });
 
-      await storeEvent(makeCommand('context'), true);
-      await storeEvent(makeCommand('analyze'), true);
+      await storeEvent(makeCommand('context'));
+      await storeEvent(makeCommand('analyze'));
 
       expect(
         getSafeSpy.mock.calls.filter((call: [string]) => call[0] === '/api/users/current'),
@@ -533,7 +536,7 @@ describe('storeEvent', () => {
         status: [{ ok: true, id: 'sqs-from-api' }],
       });
 
-      await storeEvent(makeCommand('context'), true);
+      await storeEvent(makeCommand('context'));
 
       const event = readCommandEvents(testDir)[0];
       expect(event.event_payload.connection_type).toBe('sqs');
@@ -552,8 +555,8 @@ describe('storeEvent', () => {
         org: [{ ok: true, uuidV4: 'cached-org' }],
       });
 
-      await storeEvent(makeCommand('context'), true);
-      await storeEvent(makeCommand('analyze'), true);
+      await storeEvent(makeCommand('context'));
+      await storeEvent(makeCommand('analyze'));
 
       expect(
         getSafeSpy.mock.calls.filter((call: [string]) => call[0] === '/api/users/current'),
@@ -574,12 +577,12 @@ describe('storeEvent', () => {
 
   describe('flush worker', () => {
     it('spawns a flush worker process after storing the event', async () => {
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
       expect(spawnSpy).toHaveBeenCalledTimes(1);
     });
 
     it('inherits the parent environment and sets the flush worker flag', async () => {
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
 
       const spawnOptions = spawnSpy.mock.calls[0][1] as { env: Record<string, string> };
       expect(spawnOptions.env[TELEMETRY_FLUSH_MODE_ENV]).toBe('1');
@@ -589,7 +592,7 @@ describe('storeEvent', () => {
     it('does not spawn a worker when egress is off, but still queues the event', async () => {
       process.env[ENV_TELEMETRY_EGRESS] = TELEMETRY_EGRESS_OFF;
 
-      await storeEvent(makeCommand('auth login'), true);
+      await storeEvent(makeCommand('auth login'));
 
       expect(spawnSpy).not.toHaveBeenCalled();
       expect(readCommandEvents(testDir)).toHaveLength(1);

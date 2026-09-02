@@ -77,6 +77,12 @@ export interface ClaudeHookEventContainerConfig<TOptions = Record<string, unknow
   legacyCleanups?: (ResourceIdentity & RemovableResource)[];
 }
 
+/**
+ * The container owns one marked settings entry whose matcher is the union of its
+ * active subfeatures, so it cannot partially uninstall. Any subfeature voting
+ * uninstall, with none voting install, therefore tears the whole entry down —
+ * skipping instead would leave the previous matcher in place untouched.
+ */
 async function resolveContainerInstallDecision<TOptions>(
   subfeatures: SubfeatureDeclaration<TOptions>[],
   invocation: IntegrationInvocation<TOptions>,
@@ -91,7 +97,7 @@ async function resolveContainerInstallDecision<TOptions>(
       uninstallCount += 1;
     }
   }
-  return subfeatures.length > 0 && uninstallCount === subfeatures.length ? uninstall() : skip();
+  return uninstallCount > 0 ? uninstall() : skip();
 }
 
 export function createClaudeHookEventContainer<TOptions = Record<string, unknown>>(

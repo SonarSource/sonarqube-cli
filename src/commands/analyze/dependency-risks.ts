@@ -19,7 +19,7 @@
  */
 
 import {
-  emitScaAnalysisTelemetry,
+  recordScaAnalysisTelemetry,
   SCA_CALLER_COMMANDS,
 } from '@/commands/analyze/sca-analysis-telemetry.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
@@ -104,10 +104,11 @@ export async function analyzeDependencyRisks(
 
   handleResult(countUnresolvedIssues(viewModel), scan.response.errors.length);
 
-  // Emit after handleResult so exit_code carries the CLI's final process.exitCode (0/1/51).
-  await emitScaAnalysisTelemetry(
-    SCA_CALLER_COMMANDS.analyzeDependencyRisks,
+  // Contribute after handleResult so exit_code carries the CLI's final process.exitCode (0/1/51).
+  recordScaAnalysisTelemetry(
+    ctx,
     auth,
+    SCA_CALLER_COMMANDS.analyzeDependencyRisks,
     scan.response,
     scan.scanDurationMs,
     typeof process.exitCode === 'number' ? process.exitCode : null,

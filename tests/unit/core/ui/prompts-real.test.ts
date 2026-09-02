@@ -24,12 +24,20 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-import { confirmPrompt, pressEnterKeyPrompt, selectPrompt, textPrompt } from '@/core/ui';
+import {
+  confirmPrompt,
+  passwordPrompt,
+  pressEnterKeyPrompt,
+  selectPrompt,
+  textPrompt,
+} from '@/core/ui';
 
 // Mutable state for controlling what each prompt returns
 let mockTextResult: string | symbol = 'default';
 let mockConfirmResult: boolean | symbol = true;
 let mockSelectResult: unknown = 'default';
+let mockPasswordResult: string | symbol = 'default';
+let capturedPasswordRenders: string[] = [];
 
 void mock.module('@clack/core', () => {
   class TextPromptMock {
@@ -108,10 +116,34 @@ void mock.module('@clack/core', () => {
     }
   }
 
+  class PasswordPromptMock {
+    state: string = 'initial';
+    value: string = '';
+    // Simulates @clack/core masking: userInputWithCursor shows bullets, not the real value
+    userInputWithCursor: string = '•••';
+    private _render: () => string;
+
+    constructor(opts: { render: () => string }) {
+      this._render = opts.render;
+    }
+
+    prompt() {
+      this.state = 'initial';
+      capturedPasswordRenders.push(this._render.call(this));
+      this.state = 'submit';
+      this.value = typeof mockPasswordResult === 'string' ? mockPasswordResult : '';
+      capturedPasswordRenders.push(this._render.call(this));
+      this.state = 'cancel';
+      capturedPasswordRenders.push(this._render.call(this));
+      return mockPasswordResult;
+    }
+  }
+
   return {
     TextPrompt: TextPromptMock,
     ConfirmPrompt: ConfirmPromptMock,
     SelectPrompt: SelectPromptMock,
+    PasswordPrompt: PasswordPromptMock,
     isCancel: (value: unknown) => typeof value === 'symbol',
   };
 });
@@ -190,6 +222,43 @@ describe('selectPrompt: real prompt path', () => {
     mockSelectResult = Symbol('cancel');
     const result = await selectPrompt('Pick one', options);
     expect(result).toBeNull();
+  });
+});
+
+// ─── passwordPrompt non-mock ──────────────────────────────────────────────────
+
+describe('passwordPrompt: real prompt path', () => {
+  beforeEach(() => {
+    mockPasswordResult = 'default';
+    capturedPasswordRenders = [];
+  });
+
+  it('returns the string value from prompt', async () => {
+    mockPasswordResult = 's3cr3t';
+    const result = await passwordPrompt('Enter token');
+    expect(result).toBe('s3cr3t');
+  });
+
+  it('returns null when prompt is cancelled (symbol returned)', async () => {
+    mockPasswordResult = Symbol('cancel');
+    const result = await passwordPrompt('Enter token');
+    expect(result).toBeNull();
+  });
+
+  it('submit render omits the actual value — password is never echoed', async () => {
+    mockPasswordResult = 's3cr3t';
+    await passwordPrompt('Enter token');
+    const submitRender = capturedPasswordRenders[1]; // [0]=initial, [1]=submit, [2]=cancel
+    expect(submitRender).toContain('Enter token');
+    expect(submitRender).not.toContain('s3cr3t');
+  });
+
+  it('initial render shows masked input (bullets) not the real value', async () => {
+    mockPasswordResult = 's3cr3t';
+    await passwordPrompt('Enter token');
+    const initialRender = capturedPasswordRenders[0];
+    expect(initialRender).toContain('•••');
+    expect(initialRender).not.toContain('s3cr3t');
   });
 });
 

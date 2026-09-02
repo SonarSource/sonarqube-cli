@@ -35,7 +35,7 @@ import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
-import { IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
+import { type CliResult, IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
 import {
   type AntigravityHooksJson,
   expectAntigravityAlwaysOnRule,
@@ -187,16 +187,28 @@ describe('integrate antigravity', () => {
       'prints a non-interactive hint with --non-interactive plus -p/-g examples only for a detected AI agent without --non-interactive (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
       async (isAgent, isInteractive, expectedShownPrompt) => {
         // -p skips the scope prompt; three features ask by default (secrets
-        // hooks, MCP server, prompt-secrets project rules) — SQAA is skipped
-        // silently (not entitled) and prompt-secrets global rules are
+        // hooks, MCP server, prompt-secrets project rules) — Vortex is skipped
+        // (Server hubs absent) and prompt-secrets global rules are
         // skipped (project scope). --non-interactive skips those asks too.
-        const result = await harness.run(
-          `integrate antigravity --project ${TEST_PROJECT}${isInteractive ? '' : ' --non-interactive'}`,
-          {
-            ...(isInteractive ? { stdinChunks: ['\r', '\r', '\r', '\r'] } : {}),
-            extraEnv: isAgent ? { ANTIGRAVITY_AGENT: '1' } : {},
-          },
-        );
+        const extraEnv: Record<string, string> = isAgent ? { ANTIGRAVITY_AGENT: '1' } : {};
+        let result: CliResult;
+        if (isInteractive) {
+          const session = harness.runInteractive(
+            `integrate antigravity --project ${TEST_PROJECT}`,
+            {
+              extraEnv,
+            },
+          );
+          await session.accept('Install secret scanning hooks?');
+          await session.accept('Install MCP server?');
+          await session.accept('Install prompt-secrets workspace rules?');
+          result = await session.waitFinish();
+        } else {
+          result = await harness.run(
+            `integrate antigravity --project ${TEST_PROJECT} --non-interactive`,
+            { extraEnv },
+          );
+        }
 
         expect(result.exitCode).toBe(0);
         if (expectedShownPrompt) {
@@ -316,10 +328,15 @@ describe('integrate antigravity', () => {
         writeExistingGlobalHook(harness);
         writeExistingGlobalInstructions(harness);
 
-        const result = await harness.run('integrate antigravity', {
+        const session = harness.runInteractive('integrate antigravity', {
           extraEnv: { __SQCLI_DEV_SKIP_CAG: '1' },
-          stdinChunks: ['\r', '\r', '\r'],
         });
+        await session.accept('Where should SonarQube be integrated?');
+        await session.accept('Install MCP server?');
+        await session.accept(
+          'Global Antigravity rules already exist. Do you also want to create a project-local copy for this repo?',
+        );
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;

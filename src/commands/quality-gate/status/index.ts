@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Get quality-gate command - fetch the quality gate verdict for a project
+// quality-gate status command - fetch the quality gate verdict for a project
 
 import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
@@ -37,7 +37,7 @@ import { exitCodeFor, toVerdict } from './verdict.ts';
 
 export const VALID_FORMATS = ['json', 'table'];
 
-export interface GetQualityGateOptions {
+export interface QualityGateStatusOptions {
   project?: string;
   format?: string;
   branch?: string;
@@ -45,8 +45,8 @@ export interface GetQualityGateOptions {
   all?: boolean;
 }
 
-export async function getQualityGate(
-  options: GetQualityGateOptions,
+export async function qualityGateStatus(
+  options: QualityGateStatusOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   const { auth } = ctx;

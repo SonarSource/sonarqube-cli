@@ -1,6 +1,8 @@
 node_modules/
 /ux-report/
 dist/
+# `bun build --compile` leaves a copy of the Bun runtime in the working directory.
+*.bun-build
 *.log
 .DS_Store
 *.sock

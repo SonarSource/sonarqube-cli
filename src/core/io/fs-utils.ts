@@ -19,7 +19,7 @@
  */
 
 import { realpathSync } from 'node:fs';
-import { isAbsolute, relative, resolve } from 'node:path';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 
 export const normalizePath = (p: string): string => p.replaceAll('\\', '/');
 
@@ -92,4 +92,10 @@ export function toRelativePosixPath(file: string, base: string = process.cwd()):
   const rel = normalizePath(relative(canonicalBase, canonicalFile));
   if (isAbsolute(rel) || rel.split('/').includes('..')) return null;
   return rel;
+}
+
+/** True when `path` is `ancestor` itself or nested under it. Both args must already be canonicalized. */
+export function isAncestorOrSelf(ancestor: string, path: string): boolean {
+  const rel = relative(ancestor, path);
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
 }

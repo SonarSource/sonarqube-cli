@@ -32,18 +32,14 @@ import {
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
 import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
-import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 
 import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
-import {
-  readAnalysisEvents,
-  readCommandEvents,
-  type StoredAnalysisCompletedEvent,
-} from '../../../_common/telemetry-helpers';
-import { TestHarness } from '../../harness';
+import type { StoredAnalysisCompletedEvent } from '../../../_common/telemetry-helpers';
+import { readAnalysisEvents, readCommandEvents } from '../../../_common/telemetry-helpers';
+import { type CliResult, TestHarness } from '../../harness';
 import { commitFile, git, initGitRepo, stageFile } from '../hook/git-test-helpers';
 import {
   allSqaaRequestsUseDeep,
@@ -114,7 +110,7 @@ describe('analyze (no subcommand)', () => {
       expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(sqaaCalls[0].headers['x-sonar-invocation-id']).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
@@ -250,7 +246,7 @@ describe('analyze (no subcommand)', () => {
       // Fail-fast: agentic analysis must not be called when secrets are found.
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(0);
     },
     { timeout: 15000 },
@@ -280,7 +276,7 @@ describe('analyze (no subcommand)', () => {
       expect(result.exitCode).toBe(0);
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
     },
     { timeout: 15000 },
@@ -313,7 +309,7 @@ describe('analyze (no subcommand)', () => {
       expect(output).not.toContain('Usage: sonar analyze');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(0);
     },
     { timeout: 15000 },
@@ -347,7 +343,7 @@ describe('analyze (no subcommand)', () => {
 
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       const request = parseSqaaRequestBody(sqaaCalls[0].body);
       expect(sqaaRequestFirstFilePath(sqaaCalls[0].body)).toBe('new.ts');
@@ -390,7 +386,7 @@ describe('analyze (no subcommand)', () => {
 
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       const request = JSON.parse(sqaaCalls[0].body ?? '{}') as { projectKey?: string };
       expect(request.projectKey).toBe('explicit-project');
@@ -510,11 +506,19 @@ describe('analyze (no subcommand)', () => {
   );
 
   it(
-    'outputs combined JSON report with agentic null for on-premise connection',
+    'outputs combined JSON report with agentic results for an on-premise connection',
     async () => {
-      const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
 
-      harness.state().withSecretsBinaryInstalled().withAuth(server.baseUrl(), VALID_TOKEN);
+      harness
+        .state()
+        .withSecretsBinaryInstalled()
+        .withAuth(server.baseUrl(), VALID_TOKEN)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, undefined, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       harness.cwd.writeFile('new.ts', 'const x = 1;');
@@ -526,10 +530,11 @@ describe('analyze (no subcommand)', () => {
       expect(result.exitCode).toBe(0);
       const report = JSON.parse(result.stdout) as {
         secrets: { issues: unknown[]; summary: { totalIssues: number } };
-        agentic: null;
+        agentic: { summary: { totalIssues: number } } | null;
       };
       expect(report.secrets.issues).toHaveLength(0);
-      expect(report.agentic).toBeNull();
+      expect(report.agentic).not.toBeNull();
+      expect(report.agentic?.summary.totalIssues).toBe(0);
     },
     { timeout: 15000 },
   );
@@ -576,23 +581,27 @@ describe('analyze agentic', () => {
   );
 
   it(
-    'exits with code 0, warns, and skips SQAA for on-premise server',
+    'calls SQAA on SonarQube Server via /api/v2/a3s/analyses',
     async () => {
-      const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN);
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
-      const result = await harness.run('analyze agentic --file src/index.ts');
+      const result = await harness.run(
+        `analyze agentic --file src/index.ts --project ${TEST_PROJECT}`,
+      );
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain(
-        'Vortex analysis skipped: a SonarQube Cloud connection is required. Run: sonar auth login (ensure you connect to SonarQube Cloud)',
-      );
+      expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
-      expect(sqaaCalls).toHaveLength(0);
+        .filter((r) => r.path === '/api/v2/a3s/analyses');
+      expect(sqaaCalls).toHaveLength(1);
     },
     { timeout: 15000 },
   );
@@ -619,7 +628,7 @@ describe('analyze agentic', () => {
       );
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(0);
     },
     { timeout: 15000 },
@@ -647,7 +656,7 @@ describe('analyze agentic', () => {
       expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
     },
     { timeout: 15000 },
@@ -671,7 +680,7 @@ describe('analyze agentic', () => {
       );
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(0);
     },
     { timeout: 15000 },
@@ -699,7 +708,7 @@ describe('analyze agentic', () => {
       expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(result.stdout + result.stderr).toContain('STANDARD analysis');
       expect(parseSqaaRequestBody(sqaaCalls[0].body).analysisDepth).toBeUndefined();
@@ -729,7 +738,7 @@ describe('analyze agentic', () => {
       expect(result.exitCode).toBe(0);
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(parseSqaaRequestBody(sqaaCalls[0].body).projectKey).toBe(TEST_PROJECT);
     },
@@ -765,7 +774,7 @@ describe('analyze agentic', () => {
       expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(parseSqaaRequestBody(sqaaCalls[0].body).projectKey).toBe(TEST_PROJECT);
     },
@@ -802,7 +811,7 @@ describe('analyze agentic', () => {
       expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(parseSqaaRequestBody(sqaaCalls[0].body).projectKey).toBe(TEST_PROJECT);
     },
@@ -844,7 +853,7 @@ describe('analyze agentic', () => {
       expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(parseSqaaRequestBody(sqaaCalls[0].body).projectKey).toBe(linkedProject);
     },
@@ -875,7 +884,7 @@ describe('analyze agentic', () => {
       expect(result.exitCode).toBe(0);
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(sqaaRequestFileCount(sqaaCalls[0].body)).toBe(2);
       expect(allSqaaRequestsUseDeep(sqaaCalls)).toBe(true);
@@ -910,7 +919,7 @@ describe('analyze agentic', () => {
       expect(result.exitCode).toBe(0);
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(parseSqaaRequestBody(sqaaCalls[0].body).analysisDepth).toBeUndefined();
       expect(result.stdout + result.stderr).toContain('STANDARD analysis');
@@ -942,7 +951,7 @@ describe('analyze agentic', () => {
       expect(result.exitCode).toBe(0);
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(parseSqaaRequestBody(sqaaCalls[0].body).analysisDepth).toBeUndefined();
       expect(result.stdout + result.stderr).toContain('STANDARD analysis');
@@ -973,7 +982,7 @@ describe('analyze agentic', () => {
       expect(result.exitCode).toBe(0);
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(parseSqaaRequestBody(sqaaCalls[0].body).analysisDepth).toBe('DEEP');
       expect(result.stdout + result.stderr).toContain('DEEP analysis');
@@ -1101,10 +1110,6 @@ describe('analyze agentic — analysis telemetry', () => {
     await harness.dispose();
   });
 
-  function enableFlushTelemetry(): void {
-    harness.withExtraEnv({ [TELEMETRY_FLUSH_MODE_ENV]: '1' });
-  }
-
   it(
     'writes CliAnalysisCompleted to telemetry-events.ndjson on a clean run',
     async () => {
@@ -1114,7 +1119,6 @@ describe('analyze agentic — analysis telemetry', () => {
         .withSqaaResponse({ issues: [] })
         .start();
 
-      enableFlushTelemetry();
       harness
         .state()
         .withTelemetryEnabled()
@@ -1151,7 +1155,6 @@ describe('analyze agentic — analysis telemetry', () => {
         .withSqaaResponse({ issues: [] })
         .start();
 
-      enableFlushTelemetry();
       harness
         .state()
         .withTelemetryEnabled()
@@ -1185,7 +1188,6 @@ describe('analyze agentic — analysis telemetry', () => {
         })
         .start();
 
-      enableFlushTelemetry();
       harness
         .state()
         .withTelemetryEnabled()
@@ -1220,9 +1222,9 @@ describe('analyze agentic — analysis telemetry', () => {
         .withProject(TEST_PROJECT)
         .start();
 
-      // Deliberately do NOT set TELEMETRY_FLUSH_MODE_ENV: it makes storeEvent() (which owns
-      // CliCommandExecuted) no-op, since it also doubles as the guard that stops the detached
-      // flush worker from recursively emitting its own CliCommandExecuted event.
+      // Deliberately do NOT set TELEMETRY_FLUSH_MODE_ENV: it makes commitTelemetryFacts()
+      // no-op, since it also doubles as the guard that stops the detached flush worker
+      // from recursively emitting its own events.
       harness
         .state()
         .withTelemetryEnabled()
@@ -1261,10 +1263,6 @@ describe('sonar analyze — analysis telemetry', () => {
     await harness.dispose();
   });
 
-  function enableFlushTelemetry(): void {
-    harness.withExtraEnv({ [TELEMETRY_FLUSH_MODE_ENV]: '1' });
-  }
-
   function readCompletedEventsForAnalyzer(
     analyzer: 'sqaa' | 'sonar-secrets',
   ): StoredAnalysisCompletedEvent[] {
@@ -1282,7 +1280,6 @@ describe('sonar analyze — analysis telemetry', () => {
         .withSqaaResponse({ issues: [] })
         .start();
 
-      enableFlushTelemetry();
       harness
         .state()
         .withTelemetryEnabled()
@@ -1316,7 +1313,6 @@ describe('sonar analyze — analysis telemetry', () => {
         .withSqaaResponse({ issues: [] })
         .start();
 
-      enableFlushTelemetry();
       harness
         .state()
         .withTelemetryEnabled()
@@ -1349,8 +1345,8 @@ describe('sonar analyze — analysis telemetry', () => {
         .withProject(TEST_PROJECT)
         .start();
 
-      // Do NOT enable flush mode: TELEMETRY_FLUSH_MODE_ENV no-ops storeEvent(), which owns
-      // CliCommandExecuted, so the command event would never be written.
+      // Do NOT enable flush mode: TELEMETRY_FLUSH_MODE_ENV no-ops commitTelemetryFacts(),
+      // so neither analysis events nor CliCommandExecuted would be written.
       harness
         .state()
         .withTelemetryEnabled()
@@ -1443,7 +1439,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       expect(result.stdout + result.stderr).toContain('no files in the change set');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(0);
     },
     { timeout: 15000 },
@@ -1473,7 +1469,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
     },
     { timeout: 15000 },
@@ -1503,7 +1499,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
     },
     { timeout: 15000 },
@@ -1578,7 +1574,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       expect(result.stdout + result.stderr).toContain('large number of files (51)');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(sqaaRequestFileCount(sqaaCalls[0].body)).toBe(51);
       expect(allSqaaRequestsUseDeep(sqaaCalls)).toBe(true);
@@ -1610,7 +1606,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       expect(result.stdout + result.stderr).not.toContain('large number of files');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(totalSqaaFilesSent(sqaaCalls)).toBe(51);
     },
@@ -1640,13 +1636,18 @@ describe('analyze agentic — change-set mode (no --file)', () => {
         harness.cwd.writeFile(`file${i}.ts`, `const x${i} = ${i};`);
       }
 
-      const result = await harness.run(`analyze agentic${isInteractive ? '' : ' --force'}`, {
-        ...(isInteractive ? { stdinChunks: ['\r'] } : {}),
-        extraEnv: {
-          SONARQUBE_CLI_MOCK_TTY: '1',
-          ...(isAgent ? { CLAUDECODE: '1' } : {}),
-        },
-      });
+      const extraEnv = {
+        SONARQUBE_CLI_MOCK_TTY: '1',
+        ...(isAgent ? { CLAUDECODE: '1' } : {}),
+      };
+      let result: CliResult;
+      if (isInteractive) {
+        const session = harness.runInteractive('analyze agentic', { extraEnv });
+        await session.accept('Do you wish to proceed?');
+        result = await session.waitFinish();
+      } else {
+        result = await harness.run('analyze agentic --force', { extraEnv });
+      }
 
       expect(result.exitCode).toBe(0);
       if (expectedShownPrompt) {
@@ -1708,7 +1709,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       expect(result.exitCode).toBe(0);
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(4);
       expect(sqaaRequestFileCount(sqaaCalls[0]?.body)).toBe(3);
       for (const call of sqaaCalls.slice(1)) {
@@ -1744,7 +1745,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
     },
     { timeout: 15000 },
@@ -1772,7 +1773,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       expect(result.stdout + result.stderr).toContain('no files in the change set');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(0);
     },
     { timeout: 15000 },
@@ -1804,7 +1805,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
     },
     { timeout: 15000 },
@@ -1838,10 +1839,17 @@ describe('analyze agentic — change-set mode (no --file)', () => {
   );
 
   it(
-    'exits with code 0 and skips SQAA for on-premise server in change-set mode',
+    'calls SQAA on SonarQube Server in change-set mode',
     async () => {
-      const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
-      harness.withAuth(server.baseUrl(), VALID_TOKEN); // no orgKey → on-premise
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, undefined, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       harness.cwd.writeFile('app.ts', 'const a = 1;');
@@ -1851,8 +1859,8 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       expect(result.exitCode).toBe(0);
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
-      expect(sqaaCalls).toHaveLength(0);
+        .filter((r) => r.path === '/api/v2/a3s/analyses');
+      expect(sqaaCalls).toHaveLength(1);
     },
     { timeout: 15000 },
   );
@@ -1880,7 +1888,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       );
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(0);
     },
     { timeout: 15000 },
@@ -1910,7 +1918,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       );
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(0);
     },
     { timeout: 15000 },
@@ -1941,7 +1949,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       expect(result.stdout + result.stderr).toContain('all change set files were excluded');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(0);
     },
     { timeout: 15000 },
@@ -1972,7 +1980,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       expect(result.stdout + result.stderr).toContain('all change set files were excluded');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(0);
     },
     { timeout: 15000 },
@@ -2074,7 +2082,7 @@ describe('verify — change-set mode (no --file)', () => {
       expect(result.stderr).toContain('sonar analyze');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
     },
     { timeout: 15000 },
@@ -2104,7 +2112,7 @@ describe('verify — change-set mode (no --file)', () => {
       expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       // Only staged.ts is sent — unstaged.ts is excluded
       expect(sqaaCalls).toHaveLength(1);
     },
@@ -2135,7 +2143,7 @@ describe('verify — change-set mode (no --file)', () => {
       expect(result.stdout + result.stderr).toContain('large number of files (51)');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(sqaaRequestFileCount(sqaaCalls[0].body)).toBe(51);
       expect(allSqaaRequestsUseDeep(sqaaCalls)).toBe(true);
@@ -2167,7 +2175,7 @@ describe('verify — change-set mode (no --file)', () => {
       expect(result.stdout + result.stderr).not.toContain('large number of files');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(totalSqaaFilesSent(sqaaCalls)).toBe(51);
     },
@@ -2237,7 +2245,7 @@ describe('analyze agentic — API error codes', () => {
       // 4 total attempts: 1 initial + 3 retries
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(4);
     },
     { timeout: 15000 },
@@ -2269,7 +2277,7 @@ describe('analyze agentic — API error codes', () => {
       // One chunk with two files: 1 initial + 3 retries = 4 attempts.
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(4);
       expect(sqaaRequestFileCount(sqaaCalls[0].body)).toBe(2);
       expect(result.stdout).toContain('a.ts');
@@ -2346,7 +2354,7 @@ describe('analyze agentic — SQAA 403 (Vortex unavailable)', () => {
 
       expect(result.exitCode).toBe(1);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('not available for your organization');
+      expect(output).toContain('not available on this connection');
       expect(output).toContain(VORTEX_PRODUCT_URL);
       // The explicit command never suggests re-running integrate.
       expect(output).not.toContain('remove the analysis hooks');
@@ -2405,7 +2413,7 @@ describe('analyze agentic — SQAA 403 (Vortex unavailable)', () => {
 
       expect(result.exitCode).toBe(1);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('not available for your organization');
+      expect(output).toContain('not available on this connection');
       expect(output).toContain(VORTEX_PRODUCT_URL);
       // The explicit command never suggests re-running integrate.
       expect(output).not.toContain('remove the analysis hooks');
@@ -2658,7 +2666,7 @@ describe('analyze agentic — --format json', () => {
       expect(output).toContain('→ Reduce file sizes');
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
     },
     { timeout: 15000 },
@@ -2689,7 +2697,7 @@ describe('analyze agentic — --format json', () => {
         globalError?: { kind: string; message: string };
       };
       expect(report.globalError?.kind).toBe('forbidden');
-      expect(report.globalError?.message).toContain('not available for your organization');
+      expect(report.globalError?.message).toContain('not available on this connection');
       expect(report.globalError?.message).toContain(VORTEX_PRODUCT_URL);
     },
     { timeout: 15000 },
@@ -2721,7 +2729,7 @@ describe('analyze agentic — --format json', () => {
         globalError?: { kind: string; message: string };
       };
       expect(report.globalError?.kind).toBe('forbidden');
-      expect(report.globalError?.message).toContain('not available for your organization');
+      expect(report.globalError?.message).toContain('not available on this connection');
       expect(report.globalError?.message).toContain(VORTEX_PRODUCT_URL);
     },
     { timeout: 15000 },
@@ -2836,7 +2844,7 @@ describe('analyze agentic — running from a subdirectory', () => {
 
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(sqaaRequestFileCount(sqaaCalls[0].body)).toBe(2);
       expect(allSqaaRequestsUseDeep(sqaaCalls)).toBe(true);
@@ -2871,7 +2879,7 @@ describe('analyze agentic — running from a subdirectory', () => {
       expect(result.exitCode).toBe(0);
       const sqaaCalls = server
         .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(sqaaRequestFirstFilePath(sqaaCalls[0].body)).toBe('with space.ts');
     },

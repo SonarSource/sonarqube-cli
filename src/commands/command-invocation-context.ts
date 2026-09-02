@@ -38,6 +38,41 @@ export type CommandInvocationContextRuntime = {
   isPrivateBetaEnabled: (flagKey: string) => boolean;
 };
 
+/**
+ * Named domain observation recorded by a command handler.
+ *
+ * Not the wire event: only the business-specific bits. Enrichment (identity,
+ * `invocation_id`, etc.) happens when the tree drains the buffer into a
+ * telemetry event.
+ *
+ * - `name` — short event name (no shared domain prefix)
+ * - `payload` — business data; typed at the producer, opaque here
+ * - `timestamp` — ms since epoch, defaulted at construction, overridable
+ * - `auth` — command auth to resolve identity at drain; omit for store-event identity
+ */
+export type TelemetryFactOptions = {
+  timestamp?: number;
+  auth?: ResolvedAuth;
+};
+
+export class TelemetryFact<TPayload = unknown> {
+  readonly timestamp: number;
+  readonly auth?: ResolvedAuth;
+
+  constructor(
+    readonly name: string,
+    readonly payload: TPayload,
+    timestampOrOptions: number | TelemetryFactOptions = Date.now(),
+  ) {
+    if (typeof timestampOrOptions === 'number') {
+      this.timestamp = timestampOrOptions;
+    } else {
+      this.timestamp = timestampOrOptions.timestamp ?? Date.now();
+      this.auth = timestampOrOptions.auth;
+    }
+  }
+}
+
 const STABLE_STAGE: CommandInvocationContextStage = {
   isAlpha: false,
   isBeta: false,
@@ -55,8 +90,14 @@ const DISABLED_RUNTIME: CommandInvocationContextRuntime = {
  * Built by `SonarCommand.anonymousAction`. Stage accessors are methods so they
  * can combine the command's `.stage()` with runtime entitlement (alpha env /
  * Private Beta LaunchDarkly), not merely echo the stage name.
+ *
+ * Facts are recorded with {@link recordTelemetry} and read via
+ * {@link telemetryFacts} from `postAction` on the action command's context.
+ * Payload shapes inside {@link TelemetryFact.payload} are owned by producers.
  */
 export class CommandInvocationContext {
+  private readonly facts: TelemetryFact[] = [];
+
   constructor(
     private readonly stage: CommandInvocationContextStage = STABLE_STAGE,
     private readonly runtime: CommandInvocationContextRuntime = DISABLED_RUNTIME,
@@ -80,6 +121,19 @@ export class CommandInvocationContext {
     }
     const flagKey = this.stage.betaFlagKey;
     return flagKey !== undefined && this.runtime.isPrivateBetaEnabled(flagKey);
+  }
+
+  /** Record telemetry facts for `postAction` drain. */
+  recordTelemetry(...facts: TelemetryFact[]): void {
+    if (facts.length === 0) {
+      return;
+    }
+    this.facts.push(...facts);
+  }
+
+  /** Snapshot of facts recorded during this invocation. */
+  telemetryFacts(): readonly TelemetryFact[] {
+    return this.facts.slice();
   }
 }
 

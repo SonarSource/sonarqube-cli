@@ -27,7 +27,6 @@ import type {
 } from '@/core/framework/features';
 import {
   askUser,
-  install,
   isFeatureInstalledGloballyForProject,
   jsonPatch,
   textSnippet,
@@ -61,7 +60,7 @@ import {
 import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates.ts';
 import { removeCodexMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
-import { createVortexFeature } from '../_common/vortex.ts';
+import { createVortexFeature, vortexInstallDecision } from '../_common/vortex.ts';
 import {
   getSecretPromptTemplateUnix,
   getSecretPromptTemplateWindows,
@@ -177,7 +176,7 @@ function createSqaaHookSubfeature(): SubfeatureDeclaration<CodexIntegrationOptio
   return {
     id: SQAA_HOOK_FEATURE_ID,
     displayName: 'Vortex analysis hook',
-    shouldInstall: () => install(),
+    shouldInstall: ({ options }) => vortexInstallDecision(options.vortexDisposition),
     resources: [
       wholeFile({
         id: 'posttool-sqaa-script',

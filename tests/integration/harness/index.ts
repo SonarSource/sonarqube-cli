@@ -29,19 +29,23 @@ import { ENV_DO_NOT_TRACK, ENV_SQAA_RETRY_BASE_DELAY_MS } from '@/core/config-co
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 
 import { applyIsolatedSpawnEnv } from '../../_common/isolated-cli-env.js';
-import { getCliBinaryPath, runCli } from './cli-runner.js';
+import { getCliBinaryPath } from './cli-runner.js';
 import { Dir } from './dir';
 import { EnvironmentBuilder } from './environment-builder.js';
 import { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
+import { FakeGitLabServer, FakeGitLabServerBuilder } from './fake-gitlab-server.js';
 import { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from './fake-sonarqube-server.js';
 import { FakeUpdateScriptServer } from './fake-update-script-server.js';
 import { File } from './file';
+import { type InteractiveSession, startInteractiveSession } from './interactive-session.js';
 import { buildHomeEnv, IS_WINDOWS } from './platform';
-import type { CliResult, RunOptions } from './types.js';
+import type { CliResult, RunInteractiveOptions, RunOptions } from './types.js';
 
+export { FakeGitLabServer, FakeGitLabServerBuilder } from './fake-gitlab-server.js';
 export { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from './fake-sonarqube-server.js';
+export { InteractiveSession } from './interactive-session.js';
 export { hookScriptName, hookScriptPath, IS_WINDOWS, normalizePath } from './platform';
-export type { CliResult, RecordedRequest } from './types.js';
+export type { CliResult, RecordedRequest, RunInteractiveOptions } from './types.js';
 
 export class TestHarness {
   public readonly cwd: Dir;
@@ -53,9 +57,11 @@ export class TestHarness {
   private readonly tempDir: Dir;
   private readonly servers: FakeSonarQubeServer[] = [];
   private readonly binariesServers: FakeBinariesServer[] = [];
+  private readonly gitlabServers: FakeGitLabServer[] = [];
   private readonly updateScriptServers: FakeUpdateScriptServer[] = [];
   private _envBuilder?: EnvironmentBuilder;
   private systemEnvVars: Record<string, string> = {};
+  private readonly sessions: InteractiveSession[] = [];
 
   private constructor(tempDir: string) {
     this.tempDir = new Dir(tempDir);
@@ -163,6 +169,20 @@ export class TestHarness {
     return builder;
   }
 
+  /** Creates a fake GitLab server. Call .start() on the result; stopped automatically on dispose(). */
+  newFakeGitLabServer(): FakeGitLabServerBuilder & {
+    start: () => Promise<FakeGitLabServer>;
+  } {
+    const builder = new FakeGitLabServerBuilder();
+    const originalStart = builder.start.bind(builder);
+    builder.start = async () => {
+      const server = await originalStart();
+      this.gitlabServers.push(server);
+      return server;
+    };
+    return builder;
+  }
+
   /**
    * Creates a new FakeBinariesServerBuilder. Call .start() on the result to get a
    * running server. The server serves the mock sonar-secrets binary for any request
@@ -195,23 +215,57 @@ export class TestHarness {
   }
 
   /**
-   * Runs the CLI binary with the given command string.
+   * Runs the CLI to completion with no stdin.
    *
    * Before spawning, applies the configured environment (writes state.json + seeds tokens).
    * Sets SONARQUBE_CLI_KEYCHAIN_FILE so the CLI uses the file-based keychain backend,
    * avoiding OS credential store access and macOS keychain prompts.
+   *
+   * Same process as `runInteractive()`, finished immediately. Use `runInteractive()`
+   * when the command needs stdin.
    */
   async run(command: string, options?: RunOptions): Promise<CliResult> {
-    return runCli(command, this.env(options), {
-      stdin: options?.stdin,
-      stdinChunks: options?.stdinChunks,
-      stdinChunkDelayMs: options?.stdinChunkDelayMs,
-      timeoutMs: options?.timeoutMs,
+    const session = this.runInteractive(command, options);
+    try {
+      return await session.waitFinish();
+    } finally {
+      this.dropSession(session);
+    }
+  }
+
+  /**
+   * Dump stdin on a session and wait for exit. Use `waitText` + keystrokes for prompts.
+   */
+  async runWithStdin(
+    command: string,
+    stdin: string,
+    options?: RunInteractiveOptions,
+  ): Promise<CliResult> {
+    const session = this.runInteractive(command, options);
+    try {
+      session.write(stdin);
+      return await session.waitFinish();
+    } finally {
+      this.dropSession(session);
+    }
+  }
+
+  /**
+   * Spawns the CLI and returns a session the test drives prompt-by-prompt.
+   * Use `run()` when the command is non-interactive. Drive stdin through the session
+   * (`runWithStdin` for dump-all, or `waitText` + keys for prompts).
+   */
+  runInteractive(command: string, options?: RunInteractiveOptions): InteractiveSession {
+    const session = startInteractiveSession(command, this.env(options), {
       cwd: options?.cwd ?? this.cwd.path,
+      timeoutMs: options?.timeoutMs,
+      waitTimeoutMs: options?.waitTimeoutMs,
+      binaryPath: options?.binaryPath,
       browserToken: options?.browserToken,
       browserTokenName: options?.browserTokenName,
-      binaryPath: options?.binaryPath,
     });
+    this.sessions.push(session);
+    return session;
   }
 
   /**
@@ -272,12 +326,24 @@ export class TestHarness {
     return applyIsolatedSpawnEnv(composed);
   }
 
+  private dropSession(session: InteractiveSession): void {
+    const index = this.sessions.indexOf(session);
+    if (index >= 0) {
+      this.sessions.splice(index, 1);
+    }
+  }
+
   /**
    * Stops all fake servers and removes the temporary directory.
    */
   async dispose(): Promise<void> {
+    for (const session of this.sessions) {
+      session.kill();
+    }
+    await Promise.all(this.sessions.map((session) => session.waitFinish().catch(() => undefined)));
+
     await Promise.all(
-      [...this.servers, ...this.binariesServers].map((s) =>
+      [...this.servers, ...this.binariesServers, ...this.gitlabServers].map((s) =>
         s.stop().catch(() => {
           /* ignore stop errors */
         }),

@@ -26,7 +26,7 @@ import {
   SONARCLOUD_US_API_URL,
   SONARCLOUD_US_URL,
 } from '@/core/config-constants.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { SERVER_ORGANIZATION_ID_PLACEHOLDER, SonarQubeClient } from '@/core/server/client.ts';
 import {
   ForbiddenApiError,
   RateLimitError,
@@ -37,28 +37,14 @@ import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { version as VERSION } from '../../../../package.json';
+import { lastFetchInit, lastFetchUrl, mockFetch } from '../../helpers/mock-fetch.ts';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function mockFetch(body: unknown, ok = true, status = 200): ReturnType<typeof spyOn> {
-  const statusText = ok ? 'OK' : 'Internal Server Error';
-  return spyOn(globalThis, 'fetch').mockResolvedValue({
-    ok,
-    status,
-    statusText,
-    json: () => Promise.resolve(body),
-    text: () => Promise.resolve(JSON.stringify(body)),
-  } as Response);
-}
-
-function lastFetchUrl(fetchSpy: ReturnType<typeof spyOn>): string {
-  return (fetchSpy.mock.calls[0][0] as URL).toString();
-}
-
-function lastFetchInit(fetchSpy: ReturnType<typeof spyOn>): RequestInit {
-  return fetchSpy.mock.calls[0][1] as RequestInit;
+function fetchPathnames(fetchSpy: ReturnType<typeof spyOn>): string[] {
+  const paths: string[] = [];
+  for (let index = 0; index < fetchSpy.mock.calls.length; index += 1) {
+    paths.push(new URL(fetchSpy.mock.calls[index][0] as URL).pathname);
+  }
+  return paths;
 }
 
 // ---------------------------------------------------------------------------
@@ -140,7 +126,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('throws when response is not ok', async () => {
-      fetchSpy = mockFetch({}, false, 401);
+      fetchSpy = mockFetch({}, { ok: false, status: 401 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.get('/api/authentication/validate')).rejects.toThrow(
         'SonarQube API error: 401',
@@ -174,7 +160,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('postForm uses redirect: manual so the runtime cannot auto-follow', async () => {
-      fetchSpy = mockFetch({}, true, 204);
+      fetchSpy = mockFetch({}, { status: 204 });
       await client.postForm('/api/endpoint', { k: 'v' });
       expect(lastFetchInit(fetchSpy).redirect).toBe('manual');
     });
@@ -407,7 +393,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('returns response with undefined value on non-ok status (does not throw)', async () => {
-      fetchSpy = mockFetch({ errors: [{ msg: 'Not found' }] }, false, 404);
+      fetchSpy = mockFetch({ errors: [{ msg: 'Not found' }] }, { ok: false, status: 404 });
       const result = await client.getSafe('/api/settings/values', { component: 'missing' });
       expect(result.response.ok).toBe(false);
       expect(result.response.status).toBe(404);
@@ -456,7 +442,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('throws "Project ... not found" on 404', async () => {
-      fetchSpy = mockFetch({ errors: [{ msg: 'Not found' }] }, false, 404);
+      fetchSpy = mockFetch({ errors: [{ msg: 'Not found' }] }, { ok: false, status: 404 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.getProjectSettings('missing')).rejects.toThrow(
         "Project 'missing' not found",
@@ -464,7 +450,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('throws a generic API error on other non-ok statuses', async () => {
-      fetchSpy = mockFetch({}, false, 500);
+      fetchSpy = mockFetch({}, { ok: false, status: 500 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.getProjectSettings('demo')).rejects.toThrow('SonarQube API error: 500');
     });
@@ -492,7 +478,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('throws with error body text when response is not ok', async () => {
-      fetchSpy = mockFetch({ message: 'Not found' }, false, 404);
+      fetchSpy = mockFetch({ message: 'Not found' }, { ok: false, status: 404 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.post('/api/some/endpoint', {})).rejects.toThrow('404');
     });
@@ -504,7 +490,7 @@ describe('SonarQubeClient', () => {
 
   describe('postForm', () => {
     it('sends a form-encoded POST with URL-encoded body', async () => {
-      fetchSpy = mockFetch({}, true, 204);
+      fetchSpy = mockFetch({}, { status: 204 });
       await client.postForm('/api/some/form', { foo: 'bar baz', qux: 'a&b' });
       const init = lastFetchInit(fetchSpy);
       expect(init.method).toBe('POST');
@@ -512,7 +498,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('sets Content-Type: application/x-www-form-urlencoded and Bearer auth', async () => {
-      fetchSpy = mockFetch({}, true, 204);
+      fetchSpy = mockFetch({}, { status: 204 });
       await client.postForm('/api/some/form', { name: 'test' });
       expect(lastFetchInit(fetchSpy).headers).toMatchObject({
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -521,13 +507,13 @@ describe('SonarQubeClient', () => {
     });
 
     it('targets the exact endpoint on the configured server URL', async () => {
-      fetchSpy = mockFetch({}, true, 204);
+      fetchSpy = mockFetch({}, { status: 204 });
       await client.postForm('/api/some/form', { name: 'test' });
       expect(lastFetchUrl(fetchSpy)).toBe(`${SERVER_URL}/api/some/form`);
     });
 
     it('throws with error body text when response is not ok', async () => {
-      fetchSpy = mockFetch({ message: 'boom' }, false, 500);
+      fetchSpy = mockFetch({ message: 'boom' }, { ok: false, status: 500 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.postForm('/api/some/form', { name: 'test' })).rejects.toThrow(
         'SonarQube API error: 500 Internal Server Error',
@@ -537,7 +523,7 @@ describe('SonarQubeClient', () => {
 
   describe('revokeUserToken', () => {
     it('POSTs name=<tokenName> to /api/user_tokens/revoke', async () => {
-      fetchSpy = mockFetch({}, true, 204);
+      fetchSpy = mockFetch({}, { status: 204 });
       await client.revokeUserToken('cli-token-name');
       expect(lastFetchUrl(fetchSpy)).toBe(`${SERVER_URL}/api/user_tokens/revoke`);
       const init = lastFetchInit(fetchSpy);
@@ -550,13 +536,13 @@ describe('SonarQubeClient', () => {
     });
 
     it('URL-encodes special characters in the token name', async () => {
-      fetchSpy = mockFetch({}, true, 204);
+      fetchSpy = mockFetch({}, { status: 204 });
       await client.revokeUserToken('cli token+with/special&chars');
       expect(lastFetchInit(fetchSpy).body).toBe('name=cli+token%2Bwith%2Fspecial%26chars');
     });
 
     it('propagates server errors to the caller', async () => {
-      fetchSpy = mockFetch('revocation boom', false, 500);
+      fetchSpy = mockFetch('revocation boom', { ok: false, status: 500 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.revokeUserToken('cli-token-name')).rejects.toThrow(
         'SonarQube API error: 500 Internal Server Error',
@@ -617,7 +603,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('returns null on error', async () => {
-      fetchSpy = mockFetch({}, false, 401);
+      fetchSpy = mockFetch({}, { ok: false, status: 401 });
       expect(await client.getCurrentUser()).toBeNull();
     });
   });
@@ -657,7 +643,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('returns null on error', async () => {
-      fetchSpy = mockFetch({}, false, 404);
+      fetchSpy = mockFetch({}, { ok: false, status: 404 });
       expect(await client.getOrganizationId('unknown-org')).toBeNull();
     });
 
@@ -668,59 +654,15 @@ describe('SonarQubeClient', () => {
   });
 
   // -------------------------------------------------------------------------
-  // checkSqaaEntitlement
+  // checkHubEntitlement
   // -------------------------------------------------------------------------
 
-  describe('checkSqaaEntitlement', () => {
+  describe('checkHubEntitlement', () => {
     const UUID = 'org-uuid';
-    let cloudClient: SonarQubeClient;
-
-    beforeEach(() => {
-      cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
-    });
-
-    it("returns 'enabled' when the org is currently allowed", async () => {
-      fetchSpy = mockFetch({ id: UUID, allowed: true, hasEntitlement: true });
-      expect((await cloudClient['checkSqaaEntitlement'](UUID)).status).toBe('enabled');
-    });
-
-    it("returns 'over_consumption' when entitled but over its usage limit", async () => {
-      fetchSpy = mockFetch({ id: UUID, allowed: false, hasEntitlement: true });
-      expect((await cloudClient['checkSqaaEntitlement'](UUID)).status).toBe('over_consumption');
-    });
-
-    it("returns 'not_entitled' when the org is not entitled at all", async () => {
-      fetchSpy = mockFetch({ id: UUID, allowed: false, hasEntitlement: false });
-      expect((await cloudClient['checkSqaaEntitlement'](UUID)).status).toBe('not_entitled');
-    });
-
-    it("returns 'check_failed' when the entitlement API errors out", async () => {
-      fetchSpy = mockFetch({}, false, 403);
-      expect((await cloudClient['checkSqaaEntitlement'](UUID)).status).toBe('check_failed');
-    });
-
-    it('hits the SQAA entitlement endpoint with the given UUID', async () => {
-      fetchSpy = mockFetch({ id: UUID, allowed: true, hasEntitlement: true });
-      await cloudClient['checkSqaaEntitlement'](UUID);
-      expect(new URL(lastFetchUrl(fetchSpy)).pathname).toBe(
-        `/a3s-analysis/org-entitlement/${UUID}`,
-      );
-    });
-
-    it('routes to the US API host for SonarQube Cloud US', async () => {
-      const usClient = new SonarQubeClient(SONARCLOUD_US_URL, TOKEN);
-      fetchSpy = mockFetch({ id: UUID, allowed: true, hasEntitlement: true });
-      expect((await usClient['checkSqaaEntitlement'](UUID)).status).toBe('enabled');
-      expect(lastFetchUrl(fetchSpy)).toContain(SONARCLOUD_US_API_URL);
-    });
-  });
-
-  // -------------------------------------------------------------------------
-  // checkCagEntitlement
-  // -------------------------------------------------------------------------
-
-  describe('checkCagEntitlement', () => {
-    const UUID = 'org-uuid';
+    const CLOUD_CAG = `/cag/cag-entitlement/${UUID}`;
+    const CLOUD_SQAA = `/a3s-analysis/org-entitlement/${UUID}`;
+    const SERVER_CAG = `/api/v2/cag/cag-entitlement/${UUID}`;
+    const SERVER_SQAA = `/api/v2/a3s/org-entitlement/${UUID}`;
     let cloudClient: SonarQubeClient;
 
     beforeEach(() => {
@@ -729,33 +671,73 @@ describe('SonarQubeClient', () => {
 
     it("returns 'enabled' when the org is currently allowed", async () => {
       fetchSpy = mockFetch({ allowed: true, hasEntitlement: true });
-      expect((await cloudClient['checkCagEntitlement'](UUID)).status).toBe('enabled');
+      expect((await cloudClient['checkHubEntitlement'](CLOUD_CAG)).status).toBe('enabled');
     });
 
     it("returns 'over_consumption' when entitled but over its usage limit", async () => {
       fetchSpy = mockFetch({ allowed: false, hasEntitlement: true });
-      expect((await cloudClient['checkCagEntitlement'](UUID)).status).toBe('over_consumption');
+      expect((await cloudClient['checkHubEntitlement'](CLOUD_CAG)).status).toBe('over_consumption');
     });
 
     it("returns 'not_entitled' when hasEntitlement is false", async () => {
       fetchSpy = mockFetch({ allowed: false, hasEntitlement: false });
-      expect((await cloudClient['checkCagEntitlement'](UUID)).status).toBe('not_entitled');
+      expect((await cloudClient['checkHubEntitlement'](CLOUD_CAG)).status).toBe('not_entitled');
     });
 
     it("returns 'not_entitled' when hasEntitlement is absent", async () => {
       fetchSpy = mockFetch({});
-      expect((await cloudClient['checkCagEntitlement'](UUID)).status).toBe('not_entitled');
+      expect((await cloudClient['checkHubEntitlement'](CLOUD_CAG)).status).toBe('not_entitled');
     });
 
     it("returns 'check_failed' when the entitlement API errors out", async () => {
-      fetchSpy = mockFetch({}, false, 500);
-      expect((await cloudClient['checkCagEntitlement'](UUID)).status).toBe('check_failed');
+      fetchSpy = mockFetch({}, { ok: false, status: 500 });
+      expect((await cloudClient['checkHubEntitlement'](CLOUD_CAG)).status).toBe('check_failed');
     });
 
-    it('hits the CAG entitlement endpoint with the given UUID', async () => {
+    it("returns 'check_failed' when a Cloud hub is missing (HTTP 404)", async () => {
+      fetchSpy = mockFetch({}, { ok: false, status: 404 });
+      expect((await cloudClient['checkHubEntitlement'](CLOUD_SQAA)).status).toBe('check_failed');
+    });
+
+    it("returns 'not_applicable' when a Server hub is absent (HTTP 404)", async () => {
+      fetchSpy = mockFetch({}, { ok: false, status: 404 });
+      expect((await client['checkHubEntitlement'](SERVER_SQAA)).status).toBe('not_applicable');
+    });
+
+    it("returns 'check_failed' when the hub is unavailable (HTTP 503)", async () => {
+      fetchSpy = mockFetch({}, { ok: false, status: 503 });
+      expect((await cloudClient['checkHubEntitlement'](CLOUD_CAG)).status).toBe('check_failed');
+    });
+
+    it('GETs the Cloud SQAA entitlement path', async () => {
       fetchSpy = mockFetch({ allowed: true, hasEntitlement: true });
-      await cloudClient['checkCagEntitlement'](UUID);
-      expect(new URL(lastFetchUrl(fetchSpy)).pathname).toBe(`/cag/cag-entitlement/${UUID}`);
+      await cloudClient['checkHubEntitlement'](CLOUD_SQAA);
+      expect(new URL(lastFetchUrl(fetchSpy)).pathname).toBe(CLOUD_SQAA);
+    });
+
+    it('GETs the Cloud CAG entitlement path', async () => {
+      fetchSpy = mockFetch({ allowed: true, hasEntitlement: true });
+      await cloudClient['checkHubEntitlement'](CLOUD_CAG);
+      expect(new URL(lastFetchUrl(fetchSpy)).pathname).toBe(CLOUD_CAG);
+    });
+
+    it('GETs the Server SQAA entitlement path', async () => {
+      fetchSpy = mockFetch({ allowed: true, hasEntitlement: true });
+      await client['checkHubEntitlement'](SERVER_SQAA);
+      expect(new URL(lastFetchUrl(fetchSpy)).pathname).toBe(SERVER_SQAA);
+    });
+
+    it('GETs the Server CAG entitlement path', async () => {
+      fetchSpy = mockFetch({ allowed: true, hasEntitlement: true });
+      await client['checkHubEntitlement'](SERVER_CAG);
+      expect(new URL(lastFetchUrl(fetchSpy)).pathname).toBe(SERVER_CAG);
+    });
+
+    it('routes to the US API host for SonarQube Cloud US', async () => {
+      const usClient = new SonarQubeClient(SONARCLOUD_US_URL, TOKEN);
+      fetchSpy = mockFetch({ allowed: true, hasEntitlement: true });
+      expect((await usClient['checkHubEntitlement'](CLOUD_SQAA)).status).toBe('enabled');
+      expect(lastFetchUrl(fetchSpy)).toContain(SONARCLOUD_US_API_URL);
     });
 
     it('forwards the consumption payload when present', async () => {
@@ -764,13 +746,13 @@ describe('SonarQubeClient', () => {
         hasEntitlement: true,
         consumption: { consumed: 15860, limit: 1000000 },
       });
-      const result = await cloudClient['checkCagEntitlement'](UUID);
+      const result = await cloudClient['checkHubEntitlement'](CLOUD_CAG);
       expect(result.consumption).toEqual({ consumed: 15860, limit: 1000000 });
     });
 
     it('omits consumption when the response does not include it', async () => {
       fetchSpy = mockFetch({ allowed: true, hasEntitlement: true });
-      const result = await cloudClient['checkCagEntitlement'](UUID);
+      const result = await cloudClient['checkHubEntitlement'](CLOUD_CAG);
       expect(result.consumption).toBeUndefined();
     });
   });
@@ -798,15 +780,52 @@ describe('SonarQubeClient', () => {
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
-    it('returns not_entitled when server is not SonarQube Cloud', async () => {
+    it('queries SQAA and CAG on SonarQube Server, using the placeholder org id', async () => {
+      expect(SERVER_ORGANIZATION_ID_PLACEHOLDER).toBe('00000000-0000-0000-0000-000000000000');
       const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
-      fetchSpy = mockFetch({});
-      expect((await serverClient.hasVortexEntitlement('my-org')).status).toBe('not_entitled');
-      expect(fetchSpy).not.toHaveBeenCalled();
+      fetchSpy = mockFetch({ allowed: true, hasEntitlement: true });
+      expect((await serverClient.hasVortexEntitlement()).status).toBe('enabled');
+      expect(fetchPathnames(fetchSpy)).toEqual([
+        `/api/v2/a3s/org-entitlement/${SERVER_ORGANIZATION_ID_PLACEHOLDER}`,
+        `/api/v2/cag/cag-entitlement/${SERVER_ORGANIZATION_ID_PLACEHOLDER}`,
+      ]);
+    });
+
+    it("returns 'not_applicable' when both Server hubs are absent", async () => {
+      const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
+      fetchSpy = mockFetch({}, { ok: false, status: 404 });
+      expect((await serverClient.hasVortexEntitlement()).status).toBe('not_applicable');
+    });
+
+    it.each(['/a3s/', '/cag/'] as const)(
+      "returns 'not_applicable' when the Server %s hub is absent even if the other is entitled",
+      async (missingPath) => {
+        const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
+        fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(((url: string | URL) => {
+          const pathname = new URL(url).pathname;
+          const missing = pathname.includes(missingPath);
+          const body = missing ? {} : { allowed: true, hasEntitlement: true };
+          return Promise.resolve({
+            ok: !missing,
+            status: missing ? 404 : 200,
+            statusText: missing ? 'Not Found' : 'OK',
+            json: () => Promise.resolve(body),
+            text: () => Promise.resolve(JSON.stringify(body)),
+          } as Response);
+        }) as typeof fetch);
+
+        expect((await serverClient.hasVortexEntitlement()).status).toBe('not_applicable');
+      },
+    );
+
+    it("returns 'check_failed' when the Server Hub is unavailable", async () => {
+      const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
+      fetchSpy = mockFetch({}, { ok: false, status: 503 });
+      expect((await serverClient.hasVortexEntitlement()).status).toBe('check_failed');
     });
 
     it('returns check_failed when org UUID cannot be resolved', async () => {
-      fetchSpy = mockFetch({}, false, 404);
+      fetchSpy = mockFetch({}, { ok: false, status: 404 });
       expect((await cloudClient.hasVortexEntitlement('unknown-org')).status).toBe('check_failed');
     });
 
@@ -871,7 +890,9 @@ describe('SonarQubeClient', () => {
 
       const result = await cloudClient.hasVortexEntitlement('my-org');
 
-      expect(result).toEqual({ status: 'over_consumption' });
+      expect(result).toEqual({
+        status: 'over_consumption',
+      });
     });
   });
 
@@ -886,7 +907,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('returns false when component is not found', async () => {
-      fetchSpy = mockFetch({}, false, 404);
+      fetchSpy = mockFetch({}, { ok: false, status: 404 });
       expect(await client.checkComponent('missing-project')).toBe(false);
     });
 
@@ -909,47 +930,73 @@ describe('SonarQubeClient', () => {
     });
 
     it('returns false when component is not found (404)', async () => {
-      fetchSpy = mockFetch({}, false, 404);
+      fetchSpy = mockFetch({}, { ok: false, status: 404 });
       expect(await client.componentExists('missing-project')).toBe(false);
     });
 
     it('propagates a rate-limit error instead of reporting the component as missing', async () => {
-      fetchSpy = mockFetch({}, false, 429);
+      fetchSpy = mockFetch({}, { ok: false, status: 429 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.componentExists('my-project')).rejects.toThrow(RateLimitError);
     });
 
     it('propagates a service-unavailable error instead of reporting the component as missing', async () => {
-      fetchSpy = mockFetch({}, false, 503);
+      fetchSpy = mockFetch({}, { ok: false, status: 503 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.componentExists('my-project')).rejects.toThrow(ServiceUnavailableError);
     });
 
     it('propagates a forbidden/auth failure instead of reporting the component as missing', async () => {
-      fetchSpy = mockFetch({}, false, 403);
+      fetchSpy = mockFetch({}, { ok: false, status: 403 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.componentExists('my-project')).rejects.toThrow('Access denied');
     });
   });
 
   // -------------------------------------------------------------------------
-  // checkOrganization
+  // isOrganizationAccessible
   // -------------------------------------------------------------------------
 
-  describe('checkOrganization', () => {
+  describe('isOrganizationAccessible', () => {
     it('returns true when the organization is in the results', async () => {
       fetchSpy = mockFetch({ organizations: [{ key: 'my-org' }] });
-      expect(await client.checkOrganization('my-org')).toBe(true);
+      expect(await client.isOrganizationAccessible('my-org')).toBe(true);
     });
 
     it('returns false when the organization is not in the results', async () => {
       fetchSpy = mockFetch({ organizations: [{ key: 'other-org' }] });
-      expect(await client.checkOrganization('my-org')).toBe(false);
+      expect(await client.isOrganizationAccessible('my-org')).toBe(false);
     });
 
     it('returns false on error', async () => {
-      fetchSpy = mockFetch({}, false, 500);
-      expect(await client.checkOrganization('my-org')).toBe(false);
+      fetchSpy = mockFetch({}, { ok: false, status: 500 });
+      expect(await client.isOrganizationAccessible('my-org')).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // resolveOrganizationAccess
+  // -------------------------------------------------------------------------
+
+  describe('resolveOrganizationAccess', () => {
+    it('reports an organization the server resolves as accessible', async () => {
+      fetchSpy = mockFetch({ organizations: [{ key: 'my-org', name: 'My Org' }] });
+
+      expect(await client.resolveOrganizationAccess('my-org')).toEqual({ status: 'accessible' });
+    });
+
+    it('reports an empty result as not_found', async () => {
+      fetchSpy = mockFetch({ organizations: [] });
+
+      expect(await client.resolveOrganizationAccess('my-org')).toEqual({ status: 'not_found' });
+    });
+
+    it('reports a server error as check_failed rather than as a missing organization', async () => {
+      fetchSpy = mockFetch({}, { ok: false, status: 500 });
+
+      const access = await client.resolveOrganizationAccess('my-org');
+
+      expect(access.status).toBe('check_failed');
     });
   });
 
@@ -985,7 +1032,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('returns false on error', async () => {
-      fetchSpy = mockFetch({}, false, 403);
+      fetchSpy = mockFetch({}, { ok: false, status: 403 });
       expect(await client.checkQualityProfiles('my-project')).toBe(false);
     });
   });
@@ -1089,7 +1136,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('throws BadRequestError on non-ok POST response', async () => {
-      fetchSpy = mockFetch({ message: 'Bad request' }, false, 400);
+      fetchSpy = mockFetch({ message: 'Bad request' }, { ok: false, status: 400 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(
         client.genericRequest('POST', '/api/issues/do_transition', '{"k":"v"}', 'form'),
@@ -1097,7 +1144,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('preserves raw body for non-SQAA POST 400 responses', async () => {
-      fetchSpy = mockFetch({ errors: [{ msg: 'Transition failed' }] }, false, 400);
+      fetchSpy = mockFetch({ errors: [{ msg: 'Transition failed' }] }, { ok: false, status: 400 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(
         client.genericRequest('POST', '/api/issues/do_transition', '{"k":"v"}', 'form'),
@@ -1108,7 +1155,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('throws access denied on GET 403', async () => {
-      fetchSpy = mockFetch({}, false, 403);
+      fetchSpy = mockFetch({}, { ok: false, status: 403 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.genericRequest('GET', '/api/system/status')).rejects.toThrow(
         'Access denied',
@@ -1163,6 +1210,15 @@ describe('SonarQubeClient', () => {
 
       const url = lastFetchUrl(fetchSpy);
       expect(url).toBe(`${SONARCLOUD_US_API_URL}/a3s-analysis/analyses`);
+    });
+
+    it('sends POST to the instance /api/v2 path on SonarQube Server', async () => {
+      fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
+
+      await client.createAnalysis(singleFileRequest);
+
+      const url = lastFetchUrl(fetchSpy);
+      expect(url).toBe(`${SERVER_URL}/api/v2/a3s/analyses`);
     });
 
     it('sends Bearer token in Authorization header', async () => {
@@ -1250,8 +1306,7 @@ describe('SonarQubeClient', () => {
     it('throws BadRequestError on structured 400 response', async () => {
       fetchSpy = mockFetch(
         { message: 'Invalid request body', code: 'INVALID_FILE_PATH' },
-        false,
-        400,
+        { ok: false, status: 400 },
       );
 
       // eslint-disable-next-line @typescript-eslint/await-thenable
@@ -1269,8 +1324,7 @@ describe('SonarQubeClient', () => {
           code: 'REQUEST_TOO_LARGE',
           meta: { maxRequestSize: 512_000 },
         },
-        false,
-        413,
+        { ok: false, status: 413 },
       );
 
       // eslint-disable-next-line @typescript-eslint/await-thenable
@@ -1294,7 +1348,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('returns null when component is not found', async () => {
-      fetchSpy = mockFetch({}, false, 404);
+      fetchSpy = mockFetch({}, { ok: false, status: 404 });
       expect(await client.getComponentId('missing-project')).toBeNull();
     });
 
@@ -1369,7 +1423,7 @@ describe('SonarQubeClient', () => {
 
     it('throws ForbiddenApiError on 403 response', async () => {
       const cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
-      fetchSpy = mockFetch({ message: 'Insufficient privileges' }, false, 403);
+      fetchSpy = mockFetch({ message: 'Insufficient privileges' }, { ok: false, status: 403 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(
         cloudClient.scheduleAgentJob({
@@ -1424,7 +1478,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('returns null when SQS project-bindings request fails', async () => {
-      fetchSpy = mockFetch({ message: 'not found' }, false, 404);
+      fetchSpy = mockFetch({ message: 'not found' }, { ok: false, status: 404 });
       expect(await client.getProjectKeyByGitRemote(remoteUrl)).toBeNull();
     });
 
@@ -1508,7 +1562,7 @@ describe('SonarQubeClient', () => {
 
     it('returns null when SonarCloud project-bindings request fails', async () => {
       const cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
-      fetchSpy = mockFetch({ message: 'not found' }, false, 404);
+      fetchSpy = mockFetch({ message: 'not found' }, { ok: false, status: 404 });
       expect(await cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org')).toBeNull();
       expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
@@ -1593,6 +1647,134 @@ describe('SonarQubeClient', () => {
       } as Response);
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.getServerMode()).rejects.toThrow();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // listGitlabDopSettings
+  // -------------------------------------------------------------------------
+
+  describe('listGitlabDopSettings', () => {
+    it('returns only gitlab-type settings', async () => {
+      fetchSpy = mockFetch({
+        dopSettings: [
+          { id: 'g1', key: 'my-gitlab', type: 'gitlab', url: 'https://gitlab.com' },
+          { id: 'gh1', key: 'my-github', type: 'github', url: 'https://github.com' },
+        ],
+      });
+      const result = await client.listGitlabDopSettings();
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({ id: 'g1', key: 'my-gitlab', url: 'https://gitlab.com' });
+    });
+
+    it('returns empty array when no gitlab settings exist', async () => {
+      fetchSpy = mockFetch({ dopSettings: [] });
+      expect(await client.listGitlabDopSettings()).toEqual([]);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // getAllProjectBindings
+  // -------------------------------------------------------------------------
+
+  describe('getAllProjectBindings', () => {
+    it('returns a map of repository → projectKey for a single page', async () => {
+      fetchSpy = mockFetch({
+        projectBindings: [{ projectKey: 'my-project', repository: '123' }],
+        page: { total: 1, pageSize: 500, pageIndex: 1 },
+      });
+      const result = await client.getAllProjectBindings('dop-id');
+      expect(result.get('123')).toBe('my-project');
+      expect(result.size).toBe(1);
+    });
+
+    it('paginates using the server-returned pageSize', async () => {
+      // Server caps at 2 items per page even though we request 500
+      const page1 = {
+        projectBindings: [
+          { projectKey: 'p1', repository: '1' },
+          { projectKey: 'p2', repository: '2' },
+        ],
+        page: { total: 3, pageSize: 2, pageIndex: 1 },
+      };
+      const page2 = {
+        projectBindings: [{ projectKey: 'p3', repository: '3' }],
+        page: { total: 3, pageSize: 2, pageIndex: 2 },
+      };
+      fetchSpy = spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(page1),
+          text: () => Promise.resolve(''),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(page2),
+          text: () => Promise.resolve(''),
+        } as Response);
+      const result = await client.getAllProjectBindings('dop-id');
+      expect(result.size).toBe(3);
+      expect(result.get('3')).toBe('p3');
+    });
+
+    it('passes dopSettingId as a query parameter', async () => {
+      fetchSpy = mockFetch({
+        projectBindings: [],
+        page: { total: 0, pageSize: 500, pageIndex: 1 },
+      });
+      await client.getAllProjectBindings('my-dop-id');
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.searchParams.get('dopSettingId')).toBe('my-dop-id');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // hasProjectBeenAnalyzed
+  // -------------------------------------------------------------------------
+
+  describe('hasProjectBeenAnalyzed', () => {
+    it('returns true when analyses array is non-empty', async () => {
+      fetchSpy = mockFetch({ analyses: [{ key: 'abc' }] });
+      expect(await client.hasProjectBeenAnalyzed('my-project')).toBe(true);
+    });
+
+    it('returns false when analyses array is empty', async () => {
+      fetchSpy = mockFetch({ analyses: [] });
+      expect(await client.hasProjectBeenAnalyzed('my-project')).toBe(false);
+    });
+
+    it('returns false on 404 (project has no analysis history)', async () => {
+      fetchSpy = mockFetch({}, { ok: false, status: 404 });
+      expect(await client.hasProjectBeenAnalyzed('my-project')).toBe(false);
+    });
+
+    it('throws on 403 so access errors are not silently treated as unanalyzed', async () => {
+      fetchSpy = mockFetch({}, { ok: false, status: 403 });
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.hasProjectBeenAnalyzed('my-project')).rejects.toThrow('403');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // hasProvisionProjectsPermission
+  // -------------------------------------------------------------------------
+
+  describe('hasProvisionProjectsPermission', () => {
+    it('returns true when provisioning is in global permissions', async () => {
+      fetchSpy = mockFetch({ permissions: { global: ['provisioning', 'scan'] } });
+      expect(await client.hasProvisionProjectsPermission()).toBe(true);
+    });
+
+    it('returns false when provisioning is absent', async () => {
+      fetchSpy = mockFetch({ permissions: { global: ['scan'] } });
+      expect(await client.hasProvisionProjectsPermission()).toBe(false);
+    });
+
+    it('returns false when permissions field is absent', async () => {
+      fetchSpy = mockFetch({});
+      expect(await client.hasProvisionProjectsPermission()).toBe(false);
     });
   });
 });

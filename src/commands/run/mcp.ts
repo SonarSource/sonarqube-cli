@@ -66,7 +66,7 @@ export async function runMcp(
 
   const cwd = process.cwd();
   const cwdIsHomeDir = canonicalizePath(cwd) === canonicalizePath(homedir());
-  const discovered = cwdIsHomeDir ? undefined : await discoverProject(cwd, true, { auth });
+  const discovered = cwdIsHomeDir ? undefined : await discoverProject(cwd, { auth, silent: true });
   // Deliberately does NOT call `noteProject` (telemetry/project-uuid.ts), unlike the other
   // commands that resolve a project key: this starts a long-running server, and
   // CliCommandExecuted is only emitted from the postAction hook once it exits — or never, if
@@ -78,8 +78,8 @@ export async function runMcp(
     );
   }
   const discoveredRootIsHomeDir =
-    discovered && canonicalizePath(discovered.rootDir) === canonicalizePath(homedir());
-  const projectRoot = discoveredRootIsHomeDir ? undefined : discovered?.rootDir;
+    discovered && canonicalizePath(discovered.projectRoot) === canonicalizePath(homedir());
+  const projectRoot = discoveredRootIsHomeDir ? undefined : discovered?.projectRoot;
 
   const context: McpServerContext = projectRoot
     ? { withFsMount: true, projectRoot, projectKey }

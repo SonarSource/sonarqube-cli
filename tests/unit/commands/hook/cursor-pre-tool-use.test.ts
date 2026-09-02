@@ -43,7 +43,9 @@ const TEST_FILE = '/sonar-test/secret.ts';
 const SECRET_CONTENT = 'const secret = "ghp_test";';
 const { EXIT_CODE_SECRETS_FOUND } = analyzeSecrets;
 
-const ctx = new CommandInvocationContext();
+function makeCtx() {
+  return new CommandInvocationContext();
+}
 
 describe('cursorPreToolUse', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;
@@ -103,6 +105,7 @@ describe('cursorPreToolUse', () => {
       stderr: '',
     });
 
+    const ctx = makeCtx();
     await cursorPreToolUse(ctx);
 
     expect(readFileSpy).toHaveBeenCalledWith(TEST_FILE, 'utf-8');
@@ -111,6 +114,7 @@ describe('cursorPreToolUse', () => {
     expect(output.permission).toBe('deny');
     expect(output.user_message).toContain(TEST_FILE);
     expect(exitSpy).toHaveBeenCalledWith(2);
+    expect(ctx.telemetryFacts()).toHaveLength(1);
   });
 
   it('returns without scanning when tool_name is not Read', async () => {
@@ -119,7 +123,7 @@ describe('cursorPreToolUse', () => {
       tool_input: { file_path: TEST_FILE },
     });
 
-    await cursorPreToolUse(ctx);
+    await cursorPreToolUse(makeCtx());
 
     expect(readFileSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
@@ -131,7 +135,7 @@ describe('cursorPreToolUse', () => {
       tool_input: { path: TEST_FILE },
     });
 
-    await cursorPreToolUse(ctx);
+    await cursorPreToolUse(makeCtx());
 
     expect(readFileSpy).toHaveBeenCalledWith(TEST_FILE, 'utf-8');
   });
@@ -139,7 +143,7 @@ describe('cursorPreToolUse', () => {
   it('denies with the unauthenticated message and exits 2 when auth is unavailable', async () => {
     resolveAuthSpy.mockResolvedValue(null);
 
-    await cursorPreToolUse(ctx);
+    await cursorPreToolUse(makeCtx());
 
     expect(readFileSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
@@ -152,7 +156,7 @@ describe('cursorPreToolUse', () => {
   it('denies with the binary-missing message and exits 2 when the analyzer is not installed', async () => {
     resolveSecretsBinaryPathSpy.mockReturnValue(null);
 
-    await cursorPreToolUse(ctx);
+    await cursorPreToolUse(makeCtx());
 
     expect(readFileSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
@@ -174,7 +178,6 @@ describe('cursorPreToolUse — .cursorignore side effect', () => {
 
   beforeEach(() => {
     projectRoot = mkdtempSync(join(tmpdir(), 'cursor-pre-tool-use-'));
-    mkdirSync(join(projectRoot, '.cursor'));
 
     stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(
       (_data: unknown, cb?: unknown) => {
@@ -218,9 +221,10 @@ describe('cursorPreToolUse — .cursorignore side effect', () => {
     readStdinJsonSpy.mockResolvedValue({
       tool_name: 'Read',
       tool_input: { file_path: filePath },
+      workspace_roots: [projectRoot],
     });
 
-    await cursorPreToolUse(ctx);
+    await cursorPreToolUse(makeCtx());
 
     const ignoreContent = readFileSync(join(projectRoot, CURSOR_IGNORE_FILE), 'utf-8');
     expect(ignoreContent).toContain('src/secret.ts');

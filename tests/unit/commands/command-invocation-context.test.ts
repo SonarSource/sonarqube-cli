@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
+import { CommandInvocationContext, TelemetryFact } from '@/commands/command-invocation-context.ts';
 
 describe('CommandInvocationContext stage accessors', () => {
   it('defaults to non-alpha / non-beta', () => {
@@ -72,5 +72,51 @@ describe('CommandInvocationContext stage accessors', () => {
         isPrivateBetaEnabled: (key) => key === 'cli.beta.demo',
       }).isBetaEligible(),
     ).toBe(true);
+  });
+
+  it('recordTelemetry appends facts onto the context', () => {
+    const fact = new TelemetryFact('CliAnalysisCompleted', {
+      caller_command: 'analyze secrets',
+      analyzer: 'sonar-secrets' as const,
+      analysis_id: 'a',
+      findings_count: 0,
+      exit_code: 0,
+      errors_count: 0,
+      failures_count: 0,
+      scan_duration_ms: 1,
+      details: '',
+    });
+
+    const ctx = new CommandInvocationContext();
+    ctx.recordTelemetry(fact);
+    expect(ctx.telemetryFacts()).toEqual([fact]);
+    expect(ctx.telemetryFacts()).not.toBe(ctx.telemetryFacts());
+  });
+});
+
+describe('TelemetryFact', () => {
+  it('stamps timestamp on construction', () => {
+    const before = Date.now();
+    const fact = new TelemetryFact('CliAnalysisCompleted', { ok: true });
+    const after = Date.now();
+    expect(fact.timestamp).toBeGreaterThanOrEqual(before);
+    expect(fact.timestamp).toBeLessThanOrEqual(after);
+  });
+
+  it('accepts an explicit timestamp override', () => {
+    const fact = new TelemetryFact('CliAnalysisCompleted', { ok: true }, 1_700_000_000_000);
+    expect(fact.timestamp).toBe(1_700_000_000_000);
+  });
+
+  it('accepts auth via options', () => {
+    const auth = {
+      connectionType: 'cloud' as const,
+      serverUrl: 'https://sonarcloud.io',
+      token: 't',
+      orgKey: 'org',
+    };
+    const fact = new TelemetryFact('CliAnalysisCompleted', { ok: true }, { auth });
+    expect(fact.auth).toBe(auth);
+    expect(fact.timestamp).toBeGreaterThan(0);
   });
 });

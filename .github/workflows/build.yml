@@ -34,7 +34,7 @@ jobs:
 
       - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
-          version: 2026.4.20
+          version: 2026.8.14
 
       - uses: SonarSource/ci-github-actions/get-build-number@d41706a4180f70b6c0d0479795309a6c99726022 # 2.0.0
         id: get-build-number
@@ -108,11 +108,41 @@ jobs:
             bun build-scripts/sign.ts "$binary"
           done < <(find dist -maxdepth 1 -type f \( -name '*.bin' -o -name '*.exe' \) -print0)
 
-      - name: Upload all binaries
+      - name: Upload linux-x86-64 binary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: binaries
-          path: dist/
+          name: binary-linux-x86-64
+          if-no-files-found: error
+          path: |
+            dist/*-linux-x86-64.bin
+            dist/*-linux-x86-64.bin.asc
+
+      - name: Upload linux-arm64 binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: binary-linux-arm64
+          if-no-files-found: error
+          path: |
+            dist/*-linux-arm64.bin
+            dist/*-linux-arm64.bin.asc
+
+      - name: Upload macos-arm64 binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: binary-macos-arm64
+          if-no-files-found: error
+          path: |
+            dist/*-macos-arm64.bin
+            dist/*-macos-arm64.bin.asc
+
+      - name: Upload windows-x86-64 binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: binary-windows-x86-64
+          if-no-files-found: error
+          path: |
+            dist/*-windows-x86-64.exe
+            dist/*-windows-x86-64.exe.asc
 
   sign-macos:
     name: Sign and Notarize macOS Binaries
@@ -125,10 +155,10 @@ jobs:
       - name: Setup Cloudflare WARP
         uses: SonarSource/gh-action_setup-cloudflare-warp@fe31a2b2f31595cffdef290985700732cb3469d6 # v2.1.0
 
-      - name: Download binaries
+      - name: Download macos binary
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: binaries
+          name: binary-macos-arm64
           path: dist/
 
       - name: Vault Secrets
@@ -249,7 +279,8 @@ jobs:
       - name: Download all binaries
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: binaries
+          pattern: binary-*
+          merge-multiple: true
           path: dist/
 
       - name: Download signed macOS binaries
@@ -383,8 +414,10 @@ jobs:
         include:
           - os: linux
             runner: github-ubuntu-latest-m
+            binary_artifact: binary-linux-x86-64
           - os: windows
             runner: warp-custom-windows-2022-s
+            binary_artifact: binary-windows-x86-64
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -409,10 +442,10 @@ jobs:
           artifactory-username: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
           artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
 
-      - name: Download cross-compiled binaries
+      - name: Download platform binary
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: binaries
+          name: ${{ matrix.binary_artifact }}
           path: dist/
 
       - name: Place platform binary

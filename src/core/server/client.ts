@@ -21,6 +21,14 @@
 // SonarQube API HTTP client
 
 import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
+import {
+  HTTP_STATUS_BAD_REQUEST,
+  HTTP_STATUS_FORBIDDEN,
+  HTTP_STATUS_NOT_FOUND,
+  HTTP_STATUS_PAYLOAD_TOO_LARGE,
+  HTTP_STATUS_SERVICE_UNAVAILABLE,
+  HTTP_STATUS_TOO_MANY_REQUESTS,
+} from '@/core/http-constants.ts';
 import { INVOCATION_ID, SONAR_INVOCATION_ID_HEADER } from '@/core/telemetry/invocation-id.ts';
 import { print } from '@/core/ui';
 
@@ -48,12 +56,6 @@ const GET_REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 const POST_REQUEST_TIMEOUT_MS = 60000; // 60 seconds for analysis
 /** Best-effort token revocation should fail fast when the server is unreachable. */
 const REVOKE_USER_TOKEN_TIMEOUT_MS = 10_000;
-const HTTP_STATUS_BAD_REQUEST = 400;
-const HTTP_STATUS_FORBIDDEN = 403;
-const HTTP_STATUS_NOT_FOUND = 404;
-const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
-const HTTP_STATUS_TOO_MANY_REQUESTS = 429;
-const HTTP_STATUS_SERVICE_UNAVAILABLE = 503;
 
 export const GENERIC_HTTP_METHODS = ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'] as const;
 export const METHODS_WITH_BODY = new Set<HttpMethod>(['POST', 'PATCH', 'PUT']);
@@ -61,12 +63,19 @@ export type HttpMethod = (typeof GENERIC_HTTP_METHODS)[number];
 export type QueryParams = Record<string, string | number | boolean>;
 
 /**
- * `not_applicable` is never returned by `hasVortexEntitlement()` itself — it's reserved for
- * callers that pre-check whether Vortex applies to a connection before ever asking the
- * entitlement API (see `resolveVortexEntitlement`).
+ * `not_applicable` is returned when Vortex cannot apply to this connection: Cloud without
+ * an organization (see `resolveVortexEntitlement`), or a Server missing either hub (HTTP 404).
  */
 export type VortexEntitlementStatus =
   'enabled' | 'over_consumption' | 'not_entitled' | 'check_failed' | 'not_applicable';
+
+/**
+ * Server has no organizations, but entitlement lives on `/…/{id}` — omitting the
+ * segment 404s. The nil UUID is a valid UUID the CLI can send without knowing
+ * Server's default-org id (a backend internal). CAG's `@OrganizationId` overwrites
+ * it; A3S parses then ignores it.
+ */
+export const SERVER_ORGANIZATION_ID_PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
 
 export interface VortexEntitlementResult {
   status: VortexEntitlementStatus;
@@ -80,6 +89,15 @@ export interface Organization {
   actions?: { admin: boolean };
   onlyPrivateProjects?: { enabled: boolean };
 }
+
+/**
+ * Result of an organization lookup: found, absent, or not checkable.
+ *
+ * Deliberately carries no organization record. Callers only need to know whether the key resolves;
+ * the one caller that needs the record itself uses `fetchOrganizationByKey`.
+ */
+export type OrganizationAccess =
+  { status: 'accessible' } | { status: 'not_found' } | { status: 'check_failed'; reason: string };
 
 export interface DopRepository {
   id: string;
@@ -453,29 +471,37 @@ export class SonarQubeClient {
     }
   }
 
+  private sqaaEntitlementEndpoint(organizationUuid: string): string {
+    return this.isCloud
+      ? `/a3s-analysis/org-entitlement/${organizationUuid}`
+      : `/api/v2/a3s/org-entitlement/${organizationUuid}`;
+  }
+
   /**
-   * Check if an organization has SQAA entitlement via `/a3s-analysis/org-entitlement/{id}`.
-   *
-   * The endpoint distinguishes two negative cases:
-   * - `allowed` — whether the org may use A3S right now (billing consumption check).
-   * - `hasEntitlement` — whether the org is entitled at all.
-   *
-   * Returns `'enabled'` when currently allowed, `'over_consumption'` when entitled but
-   * over its current usage limit, `'not_entitled'` when not entitled, and
-   * `'check_failed'` when the API call errors out.
+   * Shared entitlement GET. Both hubs return `{ allowed, hasEntitlement }`; CAG may also
+   * send `consumption`. Only the path differs. A Server 404 means that hub is not
+   * installed. A Cloud 404 is a fault — those services always exist.
    */
-  private async checkSqaaEntitlement(organizationUuid: string): Promise<VortexEntitlementResult> {
+  private async checkHubEntitlement(endpoint: string): Promise<VortexEntitlementResult> {
     try {
-      const endpoint = `/a3s-analysis/org-entitlement/${organizationUuid}`;
-      const result = await this.get<{ id: string; allowed: boolean; hasEntitlement: boolean }>(
-        endpoint,
-        undefined,
-        resolveFromEndpoint(this.serverURL, endpoint),
-      );
-      if (result.allowed) {
-        return { status: 'enabled' };
+      const { response, value } = await this.getSafe<{
+        allowed?: boolean;
+        hasEntitlement?: boolean;
+        consumption?: { consumed: number; limit: number };
+      }>(endpoint, undefined, resolveFromEndpoint(this.serverURL, endpoint));
+      if (response.status === HTTP_STATUS_NOT_FOUND && !this.isCloud) {
+        return { status: 'not_applicable' };
       }
-      return { status: result.hasEntitlement ? 'over_consumption' : 'not_entitled' };
+      if (!response.ok || value === undefined) {
+        return { status: 'check_failed' };
+      }
+      if (value.allowed) {
+        return { status: 'enabled', consumption: value.consumption };
+      }
+      return {
+        status: value.hasEntitlement ? 'over_consumption' : 'not_entitled',
+        consumption: value.consumption,
+      };
     } catch {
       return { status: 'check_failed' };
     }
@@ -516,62 +542,51 @@ export class SonarQubeClient {
     return (await this.getScaEnablement(connectionType, orgKey)) === 'enabled';
   }
 
-  private async checkCagEntitlement(organizationUuid: string): Promise<VortexEntitlementResult> {
+  private cagEntitlementEndpoint(organizationUuid: string): string {
+    return this.isCloud
+      ? `/cag/cag-entitlement/${organizationUuid}`
+      : `/api/v2/cag/cag-entitlement/${organizationUuid}`;
+  }
+
+  /**
+   * Vortex is two hubs with no shared backend. Both are probed with the same GET mapper
+   * on every connection. Server fills `{id}` with {@link SERVER_ORGANIZATION_ID_PLACEHOLDER}
+   * rather than a second org-less route — a valid UUID the CLI can send without
+   * knowing Server's default-org id. CAG's `@OrganizationId` rewrites that path; A3S
+   * ignores it. See `mergeVortexEntitlement`: either hub
+   * missing or unlicensed means Vortex is not available.
+   */
+  async hasVortexEntitlement(organizationKey?: string): Promise<VortexEntitlementResult> {
     try {
-      const endpoint = `/cag/cag-entitlement/${organizationUuid}`;
-      const result = await this.get<{
-        allowed?: boolean;
-        hasEntitlement?: boolean;
-        consumption?: { consumed: number; limit: number };
-      }>(endpoint, undefined, resolveFromEndpoint(this.serverURL, endpoint));
-      if (result.allowed) {
-        return { status: 'enabled', consumption: result.consumption };
+      const uuid = await this.resolveEntitlementOrganizationId(organizationKey);
+      if (typeof uuid !== 'string') {
+        return uuid;
       }
-      return {
-        status: result.hasEntitlement ? 'over_consumption' : 'not_entitled',
-        consumption: result.consumption,
-      };
+      const [sqaa, cag] = await Promise.all([
+        this.checkHubEntitlement(this.sqaaEntitlementEndpoint(uuid)),
+        this.checkHubEntitlement(this.cagEntitlementEndpoint(uuid)),
+      ]);
+      return mergeVortexEntitlement(sqaa, cag);
     } catch {
       return { status: 'check_failed' };
     }
   }
 
   /**
-   * Vortex is exposed through separate SQAA and CAG services, each with its own
-   * entitlement endpoint. Although both should eventually use one entitlement,
-   * there is no shared Vortex backend yet. Require both checks so the CLI does not
-   * enable both capabilities when only one is available, which would fail later.
-   *
-   * Usage `consumption` is CAG-specific (the SQAA endpoint does not report it) and is
-   * only forwarded for `enabled`: once over the limit the remaining headroom is no
-   * longer meaningful, and the API's consumption figures are not guaranteed there.
+   * The organization id both entitlement endpoints are keyed by, or the terminal result
+   * when it cannot be resolved. Server has no organizations; the path still requires
+   * `{id}`, so we send {@link SERVER_ORGANIZATION_ID_PLACEHOLDER}.
    */
-  async hasVortexEntitlement(organizationKey?: string): Promise<VortexEntitlementResult> {
-    try {
-      if (!organizationKey || !isSonarQubeCloud(this.serverURL)) {
-        return { status: 'not_entitled' };
-      }
-      const uuid = await this.getOrganizationId(organizationKey);
-      if (!uuid) {
-        return { status: 'check_failed' };
-      }
-      const [sqaa, cag] = await Promise.all([
-        this.checkSqaaEntitlement(uuid),
-        this.checkCagEntitlement(uuid),
-      ]);
-      if (sqaa.status === 'check_failed' || cag.status === 'check_failed') {
-        return { status: 'check_failed' };
-      }
-      if (sqaa.status === 'not_entitled' || cag.status === 'not_entitled') {
-        return { status: 'not_entitled' };
-      }
-      if (sqaa.status === 'over_consumption' || cag.status === 'over_consumption') {
-        return { status: 'over_consumption' };
-      }
-      return { status: 'enabled', consumption: cag.consumption };
-    } catch {
-      return { status: 'check_failed' };
+  private async resolveEntitlementOrganizationId(
+    organizationKey?: string,
+  ): Promise<string | VortexEntitlementResult> {
+    if (!this.isCloud) {
+      return SERVER_ORGANIZATION_ID_PLACEHOLDER;
     }
+    if (!organizationKey) {
+      return { status: 'not_entitled' };
+    }
+    return (await this.getOrganizationId(organizationKey)) ?? { status: 'check_failed' };
   }
 
   /**
@@ -626,20 +641,15 @@ export class SonarQubeClient {
     }
   }
 
+  /**
+   * List the organizations the caller is a member of.
+   *
+   * Errors are not swallowed here. An empty list sends the login flow to the manual
+   * organization prompt, so a failed request must not look like an empty list.
+   */
   async listUserOrganizations(
     page = 1,
     ps = 10,
-  ): Promise<{ organizations: Organization[]; total: number }> {
-    try {
-      return await this.fetchUserOrganizationsPage(page, ps);
-    } catch {
-      return { organizations: [], total: 0 };
-    }
-  }
-
-  private async fetchUserOrganizationsPage(
-    page: number,
-    ps: number,
   ): Promise<{ organizations: Organization[]; total: number }> {
     const result = await this.get<{
       organizations: Organization[];
@@ -828,6 +838,58 @@ export class SonarQubeClient {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Admin / CI setup — SonarQube Server only (SQS v2 endpoints)
+  // ---------------------------------------------------------------------------
+
+  async listGitlabDopSettings(): Promise<Array<{ id: string; key: string; url: string }>> {
+    const result = await this.get<{
+      dopSettings: Array<{ id: string; key: string; type: string; url: string }>;
+    }>('/api/v2/dop-translation/dop-settings');
+    return result.dopSettings.filter((s) => s.type === 'gitlab');
+  }
+
+  // filters by dopSettingId to avoid cross-ALM collisions (GitHub, Azure also populate `repository`)
+  async getAllProjectBindings(dopSettingId: string): Promise<Map<string, string>> {
+    const bindingMap = new Map<string, string>();
+    let pageIndex = 1;
+    const pageSize = 500;
+    for (;;) {
+      const result = await this.get<{
+        projectBindings: Array<{ projectKey: string; repository: string }>;
+        page: { total: number; pageSize: number; pageIndex: number };
+      }>('/api/v2/dop-translation/project-bindings', {
+        pageSize,
+        pageIndex,
+        dopSettingId,
+      });
+      for (const binding of result.projectBindings) {
+        bindingMap.set(binding.repository, binding.projectKey);
+      }
+      const effectivePageSize = result.page.pageSize || pageSize;
+      if (result.projectBindings.length === 0 || pageIndex * effectivePageSize >= result.page.total)
+        break;
+      pageIndex++;
+    }
+    return bindingMap;
+  }
+
+  async hasProjectBeenAnalyzed(projectKey: string): Promise<boolean> {
+    const { response, value } = await this.getSafe<{ analyses: unknown[] }>(
+      '/api/project_analyses/search',
+      { project: projectKey, ps: 1 },
+    );
+    if (response.status === HTTP_STATUS_NOT_FOUND) return false;
+    await this.raiseForStatus(response, 'GET');
+    return (value?.analyses.length ?? 0) > 0;
+  }
+
+  async hasProvisionProjectsPermission(): Promise<boolean> {
+    const result = await this.get<{ permissions?: { global?: string[] } }>('/api/users/current');
+
+    return result.permissions?.global?.includes('provisioning') ?? false;
+  }
+
   /**
    * Like `checkComponent`, but only treats a 404 as "missing" - every other
    * failure (auth, rate limit, outage, network error) propagates as its
@@ -855,20 +917,31 @@ export class SonarQubeClient {
   }
 
   /**
-   * Check if organization exists and is accessible
+   * Resolve an organization key.
+   *
+   * `/api/organizations/search` answers an unknown key with `200` and an empty list. An error
+   * therefore never means "no such organization", so the two cases are reported apart.
+   *
+   * The `organizations` filter is not limited to the caller's memberships: it also resolves
+   * public organizations. That is why a hand-typed key can be validated with it.
    */
-  async checkOrganization(organizationKey: string): Promise<boolean> {
+  async resolveOrganizationAccess(organizationKey: string): Promise<OrganizationAccess> {
     try {
-      const result = await this.get<{ organizations: Array<{ key: string }> }>(
-        '/api/organizations/search',
-        {
-          organizations: organizationKey,
-        },
-      );
-      return result.organizations.some((org) => org.key === organizationKey);
-    } catch {
-      return false;
+      const organization = await this.fetchOrganizationByKey(organizationKey);
+      return organization ? { status: 'accessible' } : { status: 'not_found' };
+    } catch (error) {
+      return { status: 'check_failed', reason: (error as Error).message };
     }
+  }
+
+  /**
+   * Check if organization exists and is accessible.
+   *
+   * Use `resolveOrganizationAccess` to tell a missing organization from a failed lookup.
+   */
+  async isOrganizationAccessible(organizationKey: string): Promise<boolean> {
+    const access = await this.resolveOrganizationAccess(organizationKey);
+    return access.status === 'accessible';
   }
 
   /**
@@ -919,11 +992,11 @@ export class SonarQubeClient {
   }
 
   /**
-   * Create a Vortex analysis (single- or multi-file).
-   * SonarQube Cloud only — endpoint lives on the region-specific API host.
+   * Create a Vortex analysis (single- or multi-file). On Cloud the endpoint lives on the
+   * region-specific API host; on Server the A3S hub serves it from the instance itself.
    */
   async createAnalysis(request: SqaaAnalysisRequest): Promise<SqaaAnalysisResponse> {
-    const endpoint = '/a3s-analysis/analyses';
+    const endpoint = this.isCloud ? '/a3s-analysis/analyses' : '/api/v2/a3s/analyses';
     try {
       return await this.post<SqaaAnalysisResponse>(
         endpoint,
@@ -939,6 +1012,34 @@ export class SonarQubeClient {
       throw err;
     }
   }
+}
+
+/**
+ * Vortex is one product: if either hub is missing or unlicensed, neither capability
+ * loads. Priority among remaining outcomes: `check_failed > not_entitled >
+ * over_consumption > enabled`.
+ *
+ * Only the CAG hub's `consumption` is surfaced today (A3S is licensed instance-wide and
+ * reports no quota), and only for `enabled`: once over the limit the remaining headroom
+ * is no longer meaningful.
+ */
+function mergeVortexEntitlement(
+  sqaa: VortexEntitlementResult,
+  cag: VortexEntitlementResult,
+): VortexEntitlementResult {
+  if (sqaa.status === 'not_applicable' || cag.status === 'not_applicable') {
+    return { status: 'not_applicable' };
+  }
+  if (sqaa.status === 'check_failed' || cag.status === 'check_failed') {
+    return { status: 'check_failed' };
+  }
+  if (sqaa.status === 'not_entitled' || cag.status === 'not_entitled') {
+    return { status: 'not_entitled' };
+  }
+  if (sqaa.status === 'over_consumption' || cag.status === 'over_consumption') {
+    return { status: 'over_consumption' };
+  }
+  return { status: 'enabled', consumption: cag.consumption };
 }
 
 /** Returns the sole binding, or null when there are none or more than one (ambiguous). */
@@ -1034,7 +1135,8 @@ export interface SqaaAnalysisFile {
 }
 
 export interface SqaaAnalysisRequest {
-  organizationKey: string;
+  /** Cloud-only: the Server hub forces the request onto the instance's default organization. */
+  organizationKey?: string;
   projectKey: string;
   branchName?: string;
   files: SqaaAnalysisFile[];

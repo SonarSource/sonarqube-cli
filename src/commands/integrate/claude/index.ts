@@ -33,7 +33,7 @@ import {
   resolveIntegrateInstallTarget,
 } from '../_common/agent-integrate-prelude.ts';
 import { buildRecordedIntegrationAttrs } from '../_common/context-augmentation.ts';
-import { emitIntegrationConfiguredTelemetry } from '../_common/integrate-telemetry.ts';
+import { recordIntegrationConfigured } from '../_common/integrate-telemetry.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { resolveVortexSetup } from '../_common/vortex.ts';
 import { supportedIntegrations } from '../index.ts';
@@ -77,20 +77,21 @@ export async function integrateClaude(
     projectKey: integrateCtx.projectKey,
     isGlobal: integrateCtx.isGlobal,
   });
-  const featureAttrs = await buildRecordedIntegrationAttrs({
+  const featureAttrs = buildRecordedIntegrationAttrs({
     baseAttrs: buildIntegrationAttrs(config),
-    projectRoot: integrateCtx.project.rootDir,
+    projectRoot: integrateCtx.project.projectRoot,
+    mainRepoRoot: integrateCtx.project.mainRepoRoot,
     serverUrl: config.serverURL,
     orgKey: config.organization,
     contextAugmentation: vortex,
   });
   const { installRoot, installScope } = resolveIntegrateInstallTarget(
     integrateCtx.isGlobal,
-    integrateCtx.project.rootDir,
+    integrateCtx.project.projectRoot,
   );
   const integrationOptions = {
     ...options,
-    projectRoot: integrateCtx.project.rootDir,
+    projectRoot: integrateCtx.project.projectRoot,
     globalSecretsHookExists: skipSecretsHooks,
     vortexDisposition: vortex.disposition,
   } satisfies ClaudeIntegrationOptions;
@@ -105,20 +106,21 @@ export async function integrateClaude(
       auth,
       attrs: featureAttrs,
       nonInteractive: options.nonInteractive,
-      onSuccess: (facts) =>
-        emitIntegrationConfiguredTelemetry({
+      onSuccess: (facts) => {
+        recordIntegrationConfigured(ctx, {
           auth,
           integrationId: CLAUDE_INTEGRATION_ID,
           scope: installScope,
           nonInteractive: options.nonInteractive ?? false,
           isFromRouter: options.isFromRouter ?? false,
           ...facts,
-        }),
+        });
+      },
     });
   } catch (error) {
     installError = error instanceof Error ? error : new Error(String(error));
   }
-  await removeObsoleteHookArtifacts(integrateCtx.project.rootDir);
+  await removeObsoleteHookArtifacts(integrateCtx.project.projectRoot);
   if (installError) {
     throw installError;
   }

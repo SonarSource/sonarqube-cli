@@ -522,10 +522,13 @@ uxDescribe('SonarQube Cloud — Happy Path', () => {
         })
         .start();
       h.state().withAuth(server.baseUrl(), TOKEN, ORG);
-      return h.run(`remediate -p ${PROJECT}`, {
+      const session = h.runInteractive(`remediate -p ${PROJECT}`, {
         extraEnv: { SONARQUBE_CLI_MOCK_TTY: '1' },
-        stdinChunks: [' ', '\r'],
       });
+      await session.waitText('Which issues should the agent fix?');
+      session.keySpace();
+      session.keyEnter();
+      return session.waitFinish();
     }),
   );
   uxIt('auth logout (Cloud)', () => harness.run('auth logout'));
@@ -827,11 +830,14 @@ uxDescribe('Interactive auth login', () => {
         ])
         .start();
       const cloudUrl = server.baseUrl();
-      return h.run(`auth login --server ${cloudUrl}`, {
+      const session = h.runInteractive(`auth login --server ${cloudUrl}`, {
         extraEnv: cloudEnvFor(cloudUrl),
         browserToken: TOKEN,
-        stdin: '\x1b[B\r',
       });
+      await session.waitText('Select an organization');
+      session.keyDown();
+      session.keyEnter();
+      return session.waitFinish();
     }),
   );
 
@@ -846,11 +852,12 @@ uxDescribe('Interactive auth login', () => {
         .withOrganizationTotal(200)
         .start();
       const cloudUrl = server.baseUrl();
-      return h.run(`auth login --server ${cloudUrl}`, {
+      const session = h.runInteractive(`auth login --server ${cloudUrl}`, {
         extraEnv: cloudEnvFor(cloudUrl),
         browserToken: TOKEN,
-        stdin: '\r',
       });
+      await session.accept('Select an organization');
+      return session.waitFinish();
     }),
   );
 
@@ -858,11 +865,14 @@ uxDescribe('Interactive auth login', () => {
     withHarness(async (h) => {
       const server = await h.newFakeServer().withAuthToken(TOKEN).start();
       const cloudUrl = server.baseUrl();
-      return h.run(`auth login --server ${cloudUrl}`, {
+      const session = h.runInteractive(`auth login --server ${cloudUrl}`, {
         extraEnv: cloudEnvFor(cloudUrl),
         browserToken: TOKEN,
-        stdin: 'open-source-org\r',
       });
+      await session.waitText('Enter organization key');
+      session.write('open-source-org');
+      session.keyEnter();
+      return session.waitFinish();
     }),
   );
 
@@ -870,11 +880,13 @@ uxDescribe('Interactive auth login', () => {
     withHarness(async (h) => {
       const server = await h.newFakeServer().withAuthToken(TOKEN).start();
       const cloudUrl = server.baseUrl();
-      return h.run(`auth login --server ${cloudUrl}`, {
+      const session = h.runInteractive(`auth login --server ${cloudUrl}`, {
         extraEnv: cloudEnvFor(cloudUrl),
         browserToken: TOKEN,
-        stdin: '\x03',
       });
+      await session.waitText('Enter organization key');
+      session.keyCtrlC();
+      return session.waitFinish();
     }),
   );
 
@@ -886,11 +898,13 @@ uxDescribe('Interactive auth login', () => {
         .withOrganizations([{ key: ORG, name: 'My Org' }])
         .start();
       const cloudUrl = server.baseUrl();
-      return h.run('auth login', {
+      const session = h.runInteractive('auth login', {
         extraEnv: cloudEnvFor(cloudUrl),
         browserToken: TOKEN,
-        stdinChunks: ['\r', '\r'], // Enter (Cloud), Enter (EU)
       });
+      await session.accept('Where would you like to connect?');
+      await session.accept('Which SonarQube Cloud region?');
+      return session.waitFinish();
     }),
   );
 });

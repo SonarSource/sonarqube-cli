@@ -20,6 +20,19 @@
 
 // Integration test harness — shared types
 
+export type SessionStdin = {
+  write(data: Uint8Array): number | void;
+  end(): void;
+};
+
+export type InteractiveProcessHandle = {
+  stdin: SessionStdin | null;
+  stdout: ReadableStream<Uint8Array>;
+  stderr: ReadableStream<Uint8Array>;
+  kill(): void;
+  readonly exited: Promise<number>;
+};
+
 export interface CliResult {
   exitCode: number;
   stdout: string;
@@ -32,21 +45,6 @@ export interface RunOptions {
   /** Working directory for the CLI process. Defaults to harness.cwd.path. */
   cwd?: string;
   timeoutMs?: number;
-  stdin?: string;
-  /**
-   * Writes stdin in separate chunks with a delay between each (see
-   * `stdinChunkDelayMs`). Use this when the CLI shows multiple sequential
-   * interactive prompts: sending all bytes at once causes readline to buffer
-   * and discard later bytes before the next prompt has started listening.
-   */
-  stdinChunks?: string[];
-  /**
-   * Delay in milliseconds between successive `stdinChunks` writes. Defaults to
-   * 300 ms. The harness waits for the first stdout byte before writing any
-   * chunk, then pauses this long between chunks so readline is listening.
-   * Raise this when slow work happens between prompts (e.g. spawning `git`).
-   */
-  stdinChunkDelayMs?: number;
   /**
    * When set, the harness streams CLI stdout looking for the loopback OAuth
    * port (pattern: `port=\d+`), then delivers this token via POST request to
@@ -57,6 +55,12 @@ export interface RunOptions {
   /** Override the compiled CLI binary path for this invocation. */
   binaryPath?: string;
 }
+
+/** Options for `harness.runInteractive()`. Stdin is driven by the session. */
+export type RunInteractiveOptions = RunOptions & {
+  /** Per-`waitText` timeout. Defaults to `timeoutMs`. */
+  waitTimeoutMs?: number;
+};
 
 export interface RecordedRequest {
   method: string;

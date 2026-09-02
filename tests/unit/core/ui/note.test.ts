@@ -26,20 +26,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
+import { mockColorsTTY } from '../../../_common/colors-mock.ts';
+
 // Override colors to simulate TTY environment — must be before any imports
-void mock.module('@/core/ui/colors.js', () => ({
-  isTTY: true,
-  bold: (s: string) => s,
-  dim: (s: string) => s,
-  green: (s: string) => s,
-  red: (s: string) => s,
-  yellow: (s: string) => s,
-  cyan: (s: string) => s,
-  gray: (s: string) => s,
-  white: (s: string) => s,
-  stripAnsi: (s: string) => s.replace(/\x1b\[[0-9;]*m/g, ''),
-  visibleLength: (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '').length,
-}));
+void mock.module('@/core/ui/colors.js', mockColorsTTY);
 
 import { clearMockUiCalls, getMockUiCalls, note, setMockUi, stripAnsi } from '@/core/ui';
 

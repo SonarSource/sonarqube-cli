@@ -27,11 +27,27 @@ import {
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
 import { readCommandEvents } from '../../../_common/telemetry-helpers';
-import { TestHarness } from '../../harness';
+import { type CliResult, type InteractiveSession, TestHarness } from '../../harness';
 
 const VALID_TOKEN = 'integration-test-token';
 const TEST_ORG = 'my-org';
 const TEST_PROJECT = 'my-project';
+const ISSUE_PICKER = 'Which issues should the agent fix?';
+
+async function acceptIssuePicker(session: InteractiveSession) {
+  await session.accept(ISSUE_PICKER);
+}
+
+async function quitIssuePicker(session: InteractiveSession) {
+  await session.waitText(ISSUE_PICKER);
+  session.write('q');
+}
+
+async function selectFirstIssue(session: InteractiveSession) {
+  await session.waitText(ISSUE_PICKER);
+  session.keySpace();
+  session.keyEnter();
+}
 
 describe('sonar remediate', () => {
   let harness: TestHarness;
@@ -225,9 +241,9 @@ describe('sonar remediate', () => {
         .start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-      const result = await harness.run(`remediate --project ${TEST_PROJECT}`, {
-        stdinChunks: ['q'],
-      });
+      const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
+      await quitIssuePicker(session);
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('No issues selected');
@@ -247,10 +263,9 @@ describe('sonar remediate', () => {
         .start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-      // Enter immediately without selecting any issue
-      const result = await harness.run(`remediate --project ${TEST_PROJECT}`, {
-        stdinChunks: ['\r'],
-      });
+      const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
+      await acceptIssuePicker(session);
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('No issues selected');
@@ -278,10 +293,15 @@ describe('sonar remediate', () => {
       const command = isInteractive
         ? `remediate --project ${TEST_PROJECT}`
         : `remediate --project ${TEST_PROJECT} --issues PROJ-1,PROJ-2`;
-      const result = await harness.run(command, {
-        ...(isInteractive ? { stdinChunks: ['\r'] } : {}),
-        extraEnv: isAgent ? { CLAUDECODE: '1' } : {},
-      });
+      const extraEnv: Record<string, string> = isAgent ? { CLAUDECODE: '1' } : {};
+      let result: CliResult;
+      if (isInteractive) {
+        const session = harness.runInteractive(command, { extraEnv });
+        await acceptIssuePicker(session);
+        result = await session.waitFinish();
+      } else {
+        result = await harness.run(command, { extraEnv });
+      }
 
       expect(result.exitCode).toBe(0);
       if (expectedShownPrompt) {
@@ -308,10 +328,9 @@ describe('sonar remediate', () => {
         .start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-      // Space to select the first issue, then Enter to confirm
-      const result = await harness.run(`remediate --project ${TEST_PROJECT}`, {
-        stdinChunks: [' ', '\r'],
-      });
+      const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
+      await selectFirstIssue(session);
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
@@ -339,9 +358,9 @@ describe('sonar remediate', () => {
         .start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-      await harness.run(`remediate --project ${TEST_PROJECT}`, {
-        stdinChunks: [' ', '\r'],
-      });
+      const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
+      await selectFirstIssue(session);
+      await session.waitFinish();
 
       const agentJobCalls = server
         .getRecordedRequests()
@@ -374,8 +393,9 @@ describe('sonar remediate', () => {
         .start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-      // Enter without selecting to avoid submitting a job
-      await harness.run(`remediate --project ${TEST_PROJECT}`, { stdinChunks: ['\r'] });
+      const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
+      await acceptIssuePicker(session);
+      await session.waitFinish();
 
       const issuesSearchCalls = server
         .getRecordedRequests()
@@ -406,9 +426,9 @@ describe('sonar remediate', () => {
         .start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-      const result = await harness.run(`remediate --project ${TEST_PROJECT}`, {
-        stdinChunks: [' ', '\r'],
-      });
+      const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
+      await selectFirstIssue(session);
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(1);
       const output = result.stdout + result.stderr;
@@ -435,9 +455,9 @@ describe('sonar remediate', () => {
         .start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-      const result = await harness.run(`remediate --project ${TEST_PROJECT}`, {
-        stdinChunks: [' ', '\r'],
-      });
+      const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
+      await selectFirstIssue(session);
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(1);
       const output = result.stdout + result.stderr;
@@ -460,7 +480,9 @@ describe('sonar remediate', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
       harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
 
-      const result = await harness.run('remediate', { stdinChunks: ['\r'] });
+      const session = harness.runInteractive('remediate');
+      await acceptIssuePicker(session);
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain(TEST_PROJECT);
@@ -505,10 +527,13 @@ describe('sonar remediate', () => {
         .start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-      // Space selects item at cursor 0, Down moves cursor, Space selects cursor 1, Enter confirms
-      const result = await harness.run(`remediate --project ${TEST_PROJECT}`, {
-        stdinChunks: [' ', '\x1b[B', ' ', '\r'],
-      });
+      const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
+      await session.waitText(ISSUE_PICKER);
+      session.keySpace();
+      session.keyDown();
+      session.keySpace();
+      session.keyEnter();
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
@@ -551,9 +576,9 @@ describe('sonar remediate', () => {
         .start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-      const result = await harness.run(`remediate --project ${TEST_PROJECT}`, {
-        stdinChunks: ['q'],
-      });
+      const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
+      await quitIssuePicker(session);
+      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
@@ -595,10 +620,9 @@ describe('sonar remediate', () => {
         .start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-      // Space selects the first item in the list - must be the BLOCKER after sorting
-      await harness.run(`remediate --project ${TEST_PROJECT}`, {
-        stdinChunks: [' ', '\r'],
-      });
+      const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
+      await selectFirstIssue(session);
+      await session.waitFinish();
 
       const agentJobCalls = server
         .getRecordedRequests()
