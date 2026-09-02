@@ -23,10 +23,10 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync
 import { join } from 'node:path';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
-import type { FetchNetworkOptions } from '@/core/host/connectivity/types.ts';
+import { NetworkConfigError } from '@/core/errors.ts';
 import { detectCallerAgent } from '@/core/host/environment/agent-detector.ts';
-import { buildFetchInit, fetchGuarded } from '@/core/server/fetch-guarded.ts';
+import logger from '@/core/observability/logger.ts';
+import { buildRequest, fetchAuthenticated } from '@/core/server/fetch.ts';
 import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
 
 import { version as VERSION } from '../../../package.json';
@@ -167,6 +167,40 @@ function parseValidEvents(content: string, now: number): StoredTelemetryEvent[] 
   return events;
 }
 
+/** What happened to one event. What to do about it is the caller's decision. */
+type SendOutcome = 'success' | 'send_error' | 'config_error';
+
+/**
+ * POSTs one event. The failure is logged here because the caller only sees the outcome,
+ * and the detached flush worker discards stdout and stderr: the log file is the only
+ * place the cause survives.
+ */
+async function sendTelemetryEvent(
+  event: StoredTelemetryEvent,
+  timeoutMs: number,
+): Promise<SendOutcome> {
+  try {
+    await fetchAuthenticated(
+      TELEMETRY_ENDPOINT,
+      buildRequest(
+        'POST',
+        { 'Content-Type': 'application/json', 'x-api-key': TELEMETRY_API_KEY },
+        timeoutMs,
+        JSON.stringify(event, (_key, value) => (value === null ? undefined : value)),
+      ),
+    );
+    return 'success';
+  } catch (err) {
+    const outcome: SendOutcome = err instanceof NetworkConfigError ? 'config_error' : 'send_error';
+    // The logger JSON-stringifies its extra args, and an Error serializes to {}.
+    logger.error(
+      `Telemetry event not sent (${outcome})`,
+      err instanceof Error ? (err.stack ?? `${err.name}: ${err.message}`) : String(err),
+    );
+    return outcome;
+  }
+}
+
 /**
  * Atomically drains telemetry-events.ndjson: renames it to a UUID-suffixed .sending file so
  * concurrent flush workers each get their own slice, parses valid lines, discards
@@ -201,36 +235,16 @@ export async function flushTelemetryEvents(deadline: number): Promise<void> {
     const events = parseValidEvents(readFileSync(sendingPath, 'utf-8'), Date.now());
     const sentIndices = new Set<number>();
 
-    // Resolved once: every event targets the same endpoint, and buildFetchNetworkOptions
-    // copies the root certificate list on each call when a custom CA is configured.
-    let networkOptions: FetchNetworkOptions;
-    try {
-      networkOptions = buildFetchNetworkOptions(TELEMETRY_ENDPOINT);
-    } catch {
-      // Unusable proxy/TLS config: requeue everything rather than bypassing it.
-      unsent.push(...events);
-      return;
-    }
-
     for (let i = 0; i < events.length; i++) {
       const remainingTime = deadline - Date.now();
       if (remainingTime <= 0) break;
-      const requestTimeout = Math.min(remainingTime, TELEMETRY_REQUEST_TIMEOUT_MS);
-      try {
-        await fetchGuarded(
-          TELEMETRY_ENDPOINT,
-          buildFetchInit(
-            'POST',
-            { 'Content-Type': 'application/json', 'x-api-key': TELEMETRY_API_KEY },
-            requestTimeout,
-            JSON.stringify(events[i], (_key, value) => (value === null ? undefined : value)),
-            networkOptions,
-          ),
-        );
-        sentIndices.add(i);
-      } catch {
-        // event remains in unsent for the next flush attempt
-      }
+      const outcome = await sendTelemetryEvent(
+        events[i],
+        Math.min(remainingTime, TELEMETRY_REQUEST_TIMEOUT_MS),
+      );
+      // An unusable proxy/TLS configuration fails every remaining event too.
+      if (outcome === 'config_error') break;
+      if (outcome === 'success') sentIndices.add(i);
     }
 
     unsent.push(...events.filter((_, i) => !sentIndices.has(i)));

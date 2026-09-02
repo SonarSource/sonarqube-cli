@@ -20,15 +20,13 @@
 
 // Real Bun server tests: verify that redirect: 'manual' exposes a readable
 // 3xx status and Location header in this runtime, which is the assumption
-// fetchGuarded() relies on.
+// fetchAuthenticated() relies on.
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import {
-  buildFetchNetworkOptions,
-  clearNetworkConfigCache,
-} from '@/core/host/connectivity/network-config.ts';
-import { buildFetchInit, fetchGuarded } from '@/core/server/fetch-guarded.ts';
+import { NetworkConfigError } from '@/core/errors.ts';
+import { clearNetworkConfigCache } from '@/core/host/connectivity/network-config.ts';
+import { buildRequest, fetchAnonymous, fetchAuthenticated } from '@/core/server/fetch.ts';
 
 let server: ReturnType<typeof Bun.serve>;
 let base: string;
@@ -68,7 +66,7 @@ afterAll(async () => {
   await server.stop();
 });
 
-describe('fetchGuarded — proxy recomputation on scheme change', () => {
+describe('fetchAuthenticated — proxy recomputation on scheme change', () => {
   beforeEach(() => {
     process.env.SONAR_HTTP_PROXY_URL = 'https://http-proxy:3128';
     process.env.SONAR_HTTPS_PROXY_URL = 'https://https-proxy:8443';
@@ -83,7 +81,7 @@ describe('fetchGuarded — proxy recomputation on scheme change', () => {
 
   it('switches from HTTP proxy to HTTPS proxy after HTTP→HTTPS upgrade redirect', async () => {
     const originalUrl = 'http://sonar.internal:8080/api';
-    const init = buildFetchInit('GET', {}, 30000, undefined, buildFetchNetworkOptions(originalUrl));
+    const init = buildRequest('GET', {}, 30000, undefined);
 
     const captured: Array<Record<string, unknown>> = [];
     const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(((
@@ -103,7 +101,7 @@ describe('fetchGuarded — proxy recomputation on scheme change', () => {
     }) as unknown as typeof fetch);
 
     try {
-      await fetchGuarded(originalUrl, init);
+      await fetchAuthenticated(originalUrl, init);
       expect(captured[0]?.proxy).toBe('https://http-proxy:3128');
       expect(captured[1]?.proxy).toBe('https://https-proxy:8443');
     } finally {
@@ -112,7 +110,7 @@ describe('fetchGuarded — proxy recomputation on scheme change', () => {
   });
 });
 
-describe('fetchGuarded — real Bun runtime redirect behavior', () => {
+describe('fetchAuthenticated — real Bun runtime redirect behavior', () => {
   it('redirect: manual returns readable 3xx status and Location in Bun', async () => {
     // Verifies the core runtime assumption: Bun exposes status and Location
     // header for redirect: 'manual' responses (unlike spec-compliant opaque redirects).
@@ -122,20 +120,111 @@ describe('fetchGuarded — real Bun runtime redirect behavior', () => {
   });
 
   it('follows a same-origin redirect to the final response', async () => {
-    const res = await fetchGuarded(`${base}/redirect-same-origin`, {});
+    const res = await fetchAuthenticated(`${base}/redirect-same-origin`, {});
     expect(res.status).toBe(200);
     expect(await res.text()).toBe('ok');
   });
 
   it('follows a 301 redirect chain', async () => {
-    const res = await fetchGuarded(`${base}/redirect-chain`, {});
+    const res = await fetchAuthenticated(`${base}/redirect-chain`, {});
     expect(res.status).toBe(200);
   });
 
   it('throws on a cross-origin redirect without making a second request', async () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(fetchGuarded(`${base}/redirect-cross-origin`, {})).rejects.toThrow(
+    await expect(fetchAuthenticated(`${base}/redirect-cross-origin`, {})).rejects.toThrow(
       'cross-origin redirect',
     );
+  });
+});
+
+describe('fetchAnonymous', () => {
+  beforeEach(() => {
+    process.env.SONAR_HTTPS_PROXY_URL = 'https://https-proxy:8443';
+    clearNetworkConfigCache();
+  });
+
+  afterEach(() => {
+    delete process.env.SONAR_HTTPS_PROXY_URL;
+    clearNetworkConfigCache();
+  });
+
+  function spyOnFetch(captured: Array<Record<string, unknown>>) {
+    return spyOn(globalThis, 'fetch').mockImplementation(((
+      _url: string | URL | Request,
+      options?: RequestInit,
+    ) => {
+      captured.push({ ...(options as Record<string, unknown>) });
+      return Promise.resolve(new Response('ok', { status: 200 }));
+    }) as unknown as typeof fetch);
+  }
+
+  it('applies the resolved proxy for the requested URL', async () => {
+    const captured: Array<Record<string, unknown>> = [];
+    const fetchSpy = spyOnFetch(captured);
+
+    try {
+      await fetchAnonymous('https://sonar.example.com/api', { method: 'GET' });
+      expect(captured[0]?.proxy).toBe('https://https-proxy:8443');
+      expect(captured[0]?.method).toBe('GET');
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('drops proxy and TLS options set by the call site', async () => {
+    const captured: Array<Record<string, unknown>> = [];
+    const fetchSpy = spyOnFetch(captured);
+
+    try {
+      await fetchAnonymous('https://sonar.example.com/api', {
+        proxy: 'https://attacker-proxy:3128',
+        tls: { rejectUnauthorized: false },
+      } as RequestInit);
+      expect(captured[0]?.proxy).toBe('https://https-proxy:8443');
+      expect(captured[0]?.tls).toBeUndefined();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('rejects a credentialed request, which must go through fetchAuthenticated', async () => {
+    const captured: Array<Record<string, unknown>> = [];
+    const fetchSpy = spyOnFetch(captured);
+
+    try {
+      for (const header of ['Authorization', 'private-token', 'X-Api-Key', 'Cookie']) {
+        // eslint-disable-next-line @typescript-eslint/await-thenable
+        await expect(
+          fetchAnonymous('https://sonar.example.com/api', {
+            headers: { [header]: 's3cret' },
+          }),
+        ).rejects.toThrow('use fetchAuthenticated');
+      }
+      expect(captured).toHaveLength(0);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('propagates a network configuration error instead of connecting directly', async () => {
+    process.env.SONAR_TLS_CLIENT_CERT = '/does/not/exist.pem';
+    process.env.SONAR_TLS_CLIENT_KEY_FILE = '/does/not/exist.key';
+    clearNetworkConfigCache();
+    const captured: Array<Record<string, unknown>> = [];
+    const fetchSpy = spyOnFetch(captured);
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(fetchAnonymous('https://sonar.example.com/api')).rejects.toThrow(
+        NetworkConfigError,
+      );
+      expect(captured).toHaveLength(0);
+    } finally {
+      fetchSpy.mockRestore();
+      delete process.env.SONAR_TLS_CLIENT_CERT;
+      delete process.env.SONAR_TLS_CLIENT_KEY_FILE;
+      clearNetworkConfigCache();
+    }
   });
 });

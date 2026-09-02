@@ -196,13 +196,13 @@ export async function fetchSqaaResponse(
 }
 
 async function with503Retry<T>(
-  fetch: () => Promise<T>,
+  attemptRequest: () => Promise<T>,
   onRetry?: (attempt: number) => Promise<void>,
 ): Promise<T> {
   let lastServiceError: ServiceUnavailableError | undefined;
   for (let attempt = 1; attempt <= MAX_503_RETRIES + 1; attempt++) {
     try {
-      return await fetch();
+      return await attemptRequest();
     } catch (err) {
       if (!(err instanceof ServiceUnavailableError)) {
         throw err;

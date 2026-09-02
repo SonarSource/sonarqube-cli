@@ -18,27 +18,70 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Shared fetch utilities: request init builder and redirect guard.
+// The only place in the CLI allowed to call the runtime `fetch`. An ESLint rule forbids
+// it anywhere else, so every outbound HTTP request goes through one of the two exported
+// wrappers and the resolved proxy/TLS configuration is always applied.
+//
+// Callers pick by whether the request carries a credential, not by how it behaves:
+// `fetchAuthenticated` for a request whose headers include a token, `fetchAnonymous`
+// otherwise. That is the only decision a call site has to make; the redirect handling
+// each one needs follows from it.
 
 import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
 import type { FetchNetworkOptions } from '@/core/host/connectivity/types.ts';
 
 /**
- * `networkOptions` is required so a new call site cannot silently skip the resolved
- * proxy/TLS configuration. Pass `buildFetchNetworkOptions(url)` for the URL being fetched.
+ * Builds a `RequestInit` for the wrappers below. It deliberately carries no
+ * proxy/TLS options: those are owned by the wrappers, not by call sites.
  * `body` stays positional but explicit: pass `undefined` for bodyless requests.
  */
-export function buildFetchInit(
+export function buildRequest(
   method: string,
   headers: Record<string, string>,
   timeoutMs: number,
   body: string | undefined,
-  networkOptions: FetchNetworkOptions,
 ): RequestInit {
-  return { method, headers, body, signal: AbortSignal.timeout(timeoutMs), ...networkOptions };
+  return { method, headers, body, signal: AbortSignal.timeout(timeoutMs) };
 }
 
-// Fetch wrapper that prevents bearer token leakage via cross-origin redirects.
+/**
+ * Applies the resolved proxy/TLS configuration for `url` and performs the request.
+ * Options are spread last, and any proxy/TLS keys on `init` are dropped, so a call
+ * site can neither skip nor override the configuration.
+ *
+ * Throws `NetworkConfigError` when the configuration itself is unusable, rather
+ * than silently falling back to a direct connection.
+ */
+async function sendRequest(url: string, init: RequestInit): Promise<Response> {
+  const { proxy: _proxy, tls: _tls, ...rest } = init as RequestInit & Partial<FetchNetworkOptions>;
+  return fetch(url, { ...rest, ...buildFetchNetworkOptions(url) });
+}
+
+const CREDENTIAL_HEADERS = new Set(['authorization', 'cookie', 'private-token', 'x-api-key']);
+
+/**
+ * Fetch for a request that carries no credential. Redirects are followed the way the
+ * runtime normally would, since there is no token to leak.
+ *
+ * The caller supplies the headers, so nothing here can tell a credentialed request
+ * apart on intent alone: a credential header is rejected outright rather than left to
+ * review. Use `fetchAuthenticated` for those.
+ */
+export async function fetchAnonymous(url: string, init: RequestInit = {}): Promise<Response> {
+  assertNoCredentialHeaders(init.headers);
+  return sendRequest(url, init);
+}
+
+function assertNoCredentialHeaders(headers: RequestInit['headers']): void {
+  const credential = (headers ? toPairs(headers) : []).find(([key]) =>
+    CREDENTIAL_HEADERS.has(key.toLowerCase()),
+  );
+  if (credential) {
+    throw new Error(
+      `fetchAnonymous does not accept the credential header "${credential[0]}" — use fetchAuthenticated, which blocks cross-origin redirects`,
+    );
+  }
+}
 
 const HTTP_301_MOVED_PERMANENTLY = 301;
 const HTTP_302_FOUND = 302;
@@ -56,7 +99,8 @@ const REDIRECT_STATUSES = new Set([
 const MAX_REDIRECTS = 5;
 
 /**
- * Fetch wrapper that prevents bearer token leakage via cross-origin redirects.
+ * Fetch for a request whose headers carry a credential. It does not add the credential
+ * itself; it makes carrying one safe by preventing token leakage through a redirect.
  *
  * Uses redirect: 'manual' to intercept every 3xx before the runtime follows it.
  * Actual redirect statuses (301, 302, 303, 307, 308) are handled explicitly:
@@ -64,13 +108,19 @@ const MAX_REDIRECTS = 5;
  * - Same-origin redirects are followed transparently
  * - Cross-origin redirects throw so the Authorization header is never forwarded
  * Non-redirect 3xx (e.g. 304 Not Modified) are returned as-is.
+ *
+ * Network options are resolved per hop, so a followed HTTP→HTTPS upgrade never
+ * reuses the proxy/TLS options computed for the original scheme.
  */
-export async function fetchGuarded(url: string, init: RequestInit): Promise<Response> {
+export async function fetchAuthenticated(url: string, init: RequestInit): Promise<Response> {
   let currentUrl = url;
   let currentInit = init;
 
   for (let redirectCount = 0; ; redirectCount++) {
-    const response = await fetch(currentUrl, { ...currentInit, redirect: 'manual' });
+    const response = await sendRequest(currentUrl, {
+      ...currentInit,
+      redirect: 'manual',
+    });
 
     if (!REDIRECT_STATUSES.has(response.status)) {
       return response;
@@ -94,7 +144,6 @@ export async function fetchGuarded(url: string, init: RequestInit): Promise<Resp
       response.status === HTTP_307_TEMPORARY_REDIRECT ||
       response.status === HTTP_308_PERMANENT_REDIRECT;
 
-    const schemeChanged = redirectUrl.protocol !== new URL(currentUrl).protocol;
     currentUrl = redirectUrl.toString();
     if (!preservesMethod) {
       currentInit = {
@@ -103,12 +152,6 @@ export async function fetchGuarded(url: string, init: RequestInit): Promise<Resp
         body: undefined,
         headers: withoutContentType(currentInit.headers),
       };
-    }
-    if (schemeChanged) {
-      // Scheme changed (HTTP→HTTPS): stale proxy/tls options from the original
-      // protocol are no longer correct. Strip them and recompute for the new URL.
-      const { proxy: _p, tls: _t, ...rest } = currentInit as RequestInit & FetchNetworkOptions;
-      currentInit = { ...rest, ...buildFetchNetworkOptions(currentUrl) };
     }
   }
 }

@@ -18,11 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { buildFetchNetworkOptions } from '@/core/host/connectivity/network-config.ts';
 import { isNewerVersion } from '@/core/version.ts';
 
 import { version as VERSION } from '../../../package.json';
 import { ApiCallError } from '../errors.ts';
+import { fetchAnonymous } from './fetch.ts';
 
 const FETCH_TIMEOUT_MS = 2000;
 
@@ -63,14 +63,13 @@ export function isAtLeast(serverVersion: string | undefined, minVersion: string)
 export async function fetchServerVersion(serverURL: string): Promise<string> {
   const cleanURL = serverURL.replace(/\/$/, '');
   const url = `${cleanURL}/api/system/status`;
-  const response = await fetch(url, {
+  const response = await fetchAnonymous(url, {
     method: 'GET',
     headers: {
       'User-Agent': `sonarqube-cli/${VERSION}`,
       Accept: 'application/json',
     },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    ...buildFetchNetworkOptions(url),
   });
   if (!response.ok) {
     throw new ApiCallError(`Server returned HTTP ${response.status} for ${url}`);
