@@ -47,6 +47,8 @@ export { InteractiveSession } from './interactive-session.js';
 export { hookScriptName, hookScriptPath, IS_WINDOWS, normalizePath } from './platform';
 export type { CliResult, RecordedRequest, RunInteractiveOptions } from './types.js';
 
+const RM_BUDGET_MS = 2_000;
+
 export class TestHarness {
   public readonly cwd: Dir;
   public readonly userHome: Dir;
@@ -351,7 +353,13 @@ export class TestHarness {
     );
     await Promise.all(this.updateScriptServers.map((s) => s.stop().catch(() => {})));
 
-    await rm(this.tempDir.path, {
+    await this.removeTempDir();
+  }
+
+  // Windows DeleteFile on a just-run CAG/secrets PE can block 6–8s, past Bun's 5s
+  // afterEach budget. Wait at most 2s and let rm finish in the background (OS temp).
+  private async removeTempDir(): Promise<void> {
+    const removal = rm(this.tempDir.path, {
       recursive: true,
       force: true,
       maxRetries: IS_WINDOWS ? 15 : 5,
@@ -359,5 +367,16 @@ export class TestHarness {
     }).catch(() => {
       /* best-effort: temp dirs are cleaned up by the OS */
     });
+
+    let budgetTimer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      removal,
+      new Promise<void>((resolve) => {
+        budgetTimer = setTimeout(resolve, RM_BUDGET_MS);
+      }),
+    ]);
+    if (budgetTimer !== undefined) {
+      clearTimeout(budgetTimer);
+    }
   }
 }
