@@ -38,58 +38,30 @@ import {
   CommandInvocationContext,
   type CommandInvocationContextStage,
 } from './command-invocation-context.ts';
+import {
+  ALPHA_ENV_VAR,
+  ALPHA_HELP_GROUP,
+  deprecationWarning,
+  isSameLifecycle,
+  isStageVisible,
+  resolveLifecycle,
+  STABLE_LIFECYCLE,
+  type StageDescriptor,
+  type StageName,
+  withLifecycleTag,
+} from './stage.ts';
 
-export const ALPHA_ENV_VAR = 'SONARQUBE_CLI_ALPHA';
-export const ALPHA_HELP_TAG = '[ALPHA]';
-export const BETA_HELP_TAG = '[BETA]';
-export const DEPRECATED_HELP_TAG = '[DEPRECATED]';
+export {
+  ALPHA_ENV_VAR,
+  ALPHA_HELP_TAG,
+  BETA_HELP_TAG,
+  DEPRECATED_HELP_TAG,
+  type DeprecatedStageOptions,
+  Stage,
+  type StageDescriptor,
+  type StageName,
+} from './stage.ts';
 
-export type StageName = 'stable' | 'alpha' | 'beta' | 'deprecated';
-
-/** Arguments for {@link Stage.Deprecated}. */
-export type DeprecatedStageOptions = {
-  readonly sinceVersion: string;
-  readonly replacementCommand: string | null;
-};
-
-/** Descriptor passed to {@link SonarCommand.stage}. */
-export type StageDescriptor =
-  | { readonly name: 'stable' }
-  | { readonly name: 'alpha' }
-  | { readonly name: 'beta'; readonly flagKey?: string }
-  | {
-      readonly name: 'deprecated';
-      readonly sinceVersion: string;
-      readonly replacementCommand: string | null;
-    };
-
-function betaStage(flagKey?: string): StageDescriptor {
-  return flagKey === undefined ? { name: 'beta' } : { name: 'beta', flagKey };
-}
-
-function deprecatedStage(options: DeprecatedStageOptions): StageDescriptor {
-  return {
-    name: 'deprecated',
-    sinceVersion: options.sinceVersion,
-    replacementCommand: options.replacementCommand,
-  };
-}
-
-/**
- * Command lifecycle stage.
- * Stable/Alpha are constants; Beta is a function so an optional LaunchDarkly
- * flag key can only be attached to Private Beta commands; Deprecated is a
- * function so `sinceVersion` and `replacementCommand` (`null` when there is
- * none) are required at the call site.
- */
-export const Stage = {
-  Stable: { name: 'stable' } as const satisfies StageDescriptor,
-  Alpha: { name: 'alpha' } as const satisfies StageDescriptor,
-  Beta: betaStage,
-  Deprecated: deprecatedStage,
-};
-
-const ALPHA_HELP_GROUP = '__SONARQUBE_CLI_ALPHA_COMMANDS__';
 const betaWarningsShownWithoutState = new Set<string>();
 
 export const COMMAND_CATEGORIES = ['core', 'data', 'integrate', 'cli-management'] as const;
@@ -119,58 +91,6 @@ export function createDefaultCliRuntime(): CliRuntime {
   };
 }
 
-/** Whether a command or option at this stage should be registered for this runtime. */
-function isStageVisible(
-  stage: StageName,
-  flagKey: string | undefined,
-  runtime: CliRuntime,
-): boolean {
-  if (stage === 'alpha') {
-    return runtime.isAlphaEnabled;
-  }
-  if (stage === 'beta' && flagKey !== undefined) {
-    return runtime.isPrivateBetaEnabled(flagKey);
-  }
-  return true;
-}
-
-function withLifecycleTag(description: string, stage: StageName): string {
-  if (stage === 'alpha') {
-    return `${description} ${ALPHA_HELP_TAG}`;
-  }
-  if (stage === 'beta') {
-    return `${description} ${BETA_HELP_TAG}`;
-  }
-  if (stage === 'deprecated') {
-    return `${description} ${DEPRECATED_HELP_TAG}`;
-  }
-  return description;
-}
-
-function deprecationWarning(
-  subject: string,
-  sinceVersion: string,
-  replacementCommand: string | null,
-): string {
-  const base = `'${subject}' is deprecated since ${sinceVersion}`;
-  return replacementCommand === null
-    ? `${base}. There is no replacement.`
-    : `${base}. Use '${replacementCommand}' instead.`;
-}
-
-function betaFlagKeyOf(stage: StageDescriptor): string | undefined {
-  return stage.name === 'beta' ? stage.flagKey : undefined;
-}
-
-function deprecationOf(stage: StageDescriptor): {
-  sinceVersion: string | undefined;
-  replacementCommand: string | null | undefined;
-} {
-  return stage.name === 'deprecated'
-    ? { sinceVersion: stage.sinceVersion, replacementCommand: stage.replacementCommand }
-    : { sinceVersion: undefined, replacementCommand: undefined };
-}
-
 /**
  * Commander Option subclass that can be marked Alpha, Beta, or Deprecated.
  *
@@ -184,10 +104,7 @@ function deprecationOf(stage: StageDescriptor): {
  * )
  */
 export class SonarOption extends Option {
-  private _stage: StageName = 'stable';
-  private _betaFlagKey: string | undefined;
-  private _deprecatedSinceVersion: string | undefined;
-  private _deprecatedReplacementCommand: string | null | undefined;
+  private _lifecycle = STABLE_LIFECYCLE;
 
   /**
    * Mark this option as Stable, Alpha, Beta (optionally Private Beta via a flag
@@ -200,24 +117,13 @@ export class SonarOption extends Option {
       throw new Error(`Cannot stage a required option as Alpha or Beta: '${this.flags}'`);
     }
 
-    const newStage = stage.name;
-    const newFlagKey = betaFlagKeyOf(stage);
-    const deprecation = deprecationOf(stage);
-    if (
-      this._stage === newStage &&
-      this._betaFlagKey === newFlagKey &&
-      this._deprecatedSinceVersion === deprecation.sinceVersion &&
-      this._deprecatedReplacementCommand === deprecation.replacementCommand
-    ) {
+    const next = resolveLifecycle(stage);
+    if (isSameLifecycle(this._lifecycle, next)) {
       return this;
     }
+    this._lifecycle = next;
 
-    this._stage = newStage;
-    this._betaFlagKey = newFlagKey;
-    this._deprecatedSinceVersion = deprecation.sinceVersion;
-    this._deprecatedReplacementCommand = deprecation.replacementCommand;
-
-    if (newStage === 'alpha') {
+    if (next.stage === 'alpha') {
       this.helpGroup(ALPHA_HELP_GROUP);
     } else {
       this.helpGroupHeading = undefined;
@@ -226,39 +132,39 @@ export class SonarOption extends Option {
   }
 
   get lifecycleStage(): StageName {
-    return this._stage;
+    return this._lifecycle.stage;
   }
 
   get isStable(): boolean {
-    return this._stage === 'stable';
+    return this._lifecycle.stage === 'stable';
   }
 
   get isAlpha(): boolean {
-    return this._stage === 'alpha';
+    return this._lifecycle.stage === 'alpha';
   }
 
   get isBeta(): boolean {
-    return this._stage === 'beta';
+    return this._lifecycle.stage === 'beta';
   }
 
   get isDeprecated(): boolean {
-    return this._stage === 'deprecated';
+    return this._lifecycle.stage === 'deprecated';
   }
 
   get isPrivateBeta(): boolean {
-    return this._stage === 'beta' && this._betaFlagKey !== undefined;
+    return this._lifecycle.stage === 'beta' && this._lifecycle.betaFlagKey !== undefined;
   }
 
   get betaFlagKey(): string | undefined {
-    return this._betaFlagKey;
+    return this._lifecycle.betaFlagKey;
   }
 
   get deprecatedSinceVersion(): string | undefined {
-    return this._deprecatedSinceVersion;
+    return this._lifecycle.deprecatedSinceVersion;
   }
 
   get deprecatedReplacementCommand(): string | null | undefined {
-    return this._deprecatedReplacementCommand;
+    return this._lifecycle.deprecatedReplacementCommand;
   }
 }
 
@@ -335,10 +241,7 @@ class SonarHelp extends Help {
 export class SonarCommand extends Command {
   // Valid because Commander declares `options` as readonly (covariant), so we can narrow Option to SonarOption.
   declare readonly options: readonly SonarOption[];
-  private _stage: StageName = 'stable';
-  private _betaFlagKey: string | undefined;
-  private _deprecatedSinceVersion: string | undefined;
-  private _deprecatedReplacementCommand: string | null | undefined;
+  private _lifecycle = STABLE_LIFECYCLE;
   private _requiresAuth = false;
   private _rootHelp: RootHelpMetadata = {};
   private readonly _updateNotifier: UpdateNotifier;
@@ -447,24 +350,13 @@ export class SonarCommand extends Command {
 
   /** Mark this command as Stable, Alpha, Beta (optionally Private Beta via a flag key), or Deprecated. */
   stage(stage: StageDescriptor): this {
-    const newStage = stage.name;
-    const newFlagKey = betaFlagKeyOf(stage);
-    const deprecation = deprecationOf(stage);
-    if (
-      this._stage === newStage &&
-      this._betaFlagKey === newFlagKey &&
-      this._deprecatedSinceVersion === deprecation.sinceVersion &&
-      this._deprecatedReplacementCommand === deprecation.replacementCommand
-    ) {
+    const next = resolveLifecycle(stage);
+    if (isSameLifecycle(this._lifecycle, next)) {
       return this;
     }
+    this._lifecycle = next;
 
-    this._stage = newStage;
-    this._betaFlagKey = newFlagKey;
-    this._deprecatedSinceVersion = deprecation.sinceVersion;
-    this._deprecatedReplacementCommand = deprecation.replacementCommand;
-
-    if (newStage === 'alpha') {
+    if (next.stage === 'alpha') {
       this.helpGroup(ALPHA_HELP_GROUP);
     } else if (this.helpGroup() === ALPHA_HELP_GROUP) {
       this.helpGroup('');
@@ -480,7 +372,7 @@ export class SonarCommand extends Command {
   }
 
   private isStageVisible(): boolean {
-    return isStageVisible(this._stage, this._betaFlagKey, this._runtime);
+    return isStageVisible(this._lifecycle.stage, this._lifecycle.betaFlagKey, this._runtime);
   }
 
   /** Re-attach after a stage change that makes this command visible again. */
@@ -515,7 +407,7 @@ export class SonarCommand extends Command {
           super.description(str, argsDescription);
     }
 
-    return withLifecycleTag(super.description(), this._stage);
+    return withLifecycleTag(super.description(), this._lifecycle.stage);
   }
 
   summary(str: string): this;
@@ -526,7 +418,7 @@ export class SonarCommand extends Command {
     }
 
     const summary = super.summary();
-    return summary ? withLifecycleTag(summary, this._stage) : summary;
+    return summary ? withLifecycleTag(summary, this._lifecycle.stage) : summary;
   }
 
   /**
@@ -655,42 +547,42 @@ export class SonarCommand extends Command {
 
   /** True when this command is Stable. */
   get isStable(): boolean {
-    return this._stage === 'stable';
+    return this._lifecycle.stage === 'stable';
   }
 
   /** True when this command is Alpha. */
   get isAlpha(): boolean {
-    return this._stage === 'alpha';
+    return this._lifecycle.stage === 'alpha';
   }
 
   /** True when this command is Beta (Open or Private). */
   get isBeta(): boolean {
-    return this._stage === 'beta';
+    return this._lifecycle.stage === 'beta';
   }
 
   /** True when this Beta command is gated by a LaunchDarkly flag key. */
   get isPrivateBeta(): boolean {
-    return this._stage === 'beta' && this._betaFlagKey !== undefined;
+    return this._lifecycle.stage === 'beta' && this._lifecycle.betaFlagKey !== undefined;
   }
 
   /** True when this command is Deprecated. */
   get isDeprecated(): boolean {
-    return this._stage === 'deprecated';
+    return this._lifecycle.stage === 'deprecated';
   }
 
   /** Version in which this command was deprecated; undefined when not Deprecated. */
   get deprecatedSinceVersion(): string | undefined {
-    return this._deprecatedSinceVersion;
+    return this._lifecycle.deprecatedSinceVersion;
   }
 
   /** Suggested replacement command; `null` when none, undefined when not Deprecated. */
   get deprecatedReplacementCommand(): string | null | undefined {
-    return this._deprecatedReplacementCommand;
+    return this._lifecycle.deprecatedReplacementCommand;
   }
 
   /** LaunchDarkly flag key for Private Beta; undefined for Open Beta / non-Beta. */
   get betaFlagKey(): string | undefined {
-    return this._betaFlagKey;
+    return this._lifecycle.betaFlagKey;
   }
 
   /** Metadata used by the custom root help menu. */
@@ -765,24 +657,24 @@ export class SonarCommand extends Command {
   private warnIfDeprecated(): void {
     if (
       !this.isDeprecated ||
-      this._deprecatedSinceVersion === undefined ||
-      this._deprecatedReplacementCommand === undefined
+      this._lifecycle.deprecatedSinceVersion === undefined ||
+      this._lifecycle.deprecatedReplacementCommand === undefined
     ) {
       return;
     }
 
     info(
       deprecationWarning(
-        this.commandPath(),
-        this._deprecatedSinceVersion,
-        this._deprecatedReplacementCommand,
+        `sonar ${this.commandPath()}`,
+        this._lifecycle.deprecatedSinceVersion,
+        this._lifecycle.deprecatedReplacementCommand,
       ),
       'stderr',
     );
   }
 
   private warnIfBeta(): void {
-    if (this._stage !== 'beta') {
+    if (this._lifecycle.stage !== 'beta') {
       return;
     }
 

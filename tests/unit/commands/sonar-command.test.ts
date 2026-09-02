@@ -666,10 +666,10 @@ describe('SonarCommand', () => {
       const warnings = getMockUiCalls().filter((call) => call.method === 'info');
       expect(warnings).toHaveLength(2);
       expect(warnings[0]?.args[0]).toBe(
-        "'legacy' is deprecated since 1.8. There is no replacement.",
+        "'sonar legacy' is deprecated since 1.8. There is no replacement.",
       );
       expect(warnings[1]?.args[0]).toBe(
-        "'legacy' is deprecated since 1.8. There is no replacement.",
+        "'sonar legacy' is deprecated since 1.8. There is no replacement.",
       );
     });
 
@@ -682,7 +682,7 @@ describe('SonarCommand', () => {
 
       const warning = getMockUiCalls().find((call) => call.method === 'info');
       expect(warning?.args[0]).toBe(
-        "'self-update' is deprecated since 1.2. Use 'sonar update' instead.",
+        "'sonar self-update' is deprecated since 1.2. Use 'sonar update' instead.",
       );
     });
 
