@@ -37,18 +37,18 @@ export function startDisposeTrace(tempDir: string): DisposeTrace {
 
 export class DisposeTrace {
   private readonly startedAt = Date.now();
-  private phase = 'start';
+  private currentPhase = 'start';
   private readonly watchdog: ReturnType<typeof setInterval>;
 
   constructor(private readonly tempDir: string) {
     this.watchdog = setInterval(() => {
-      this.log(`still in ${this.phase} after ${this.elapsed()}ms`);
+      this.log(`still in ${this.currentPhase} after ${this.elapsed()}ms`);
     }, WATCHDOG_MS);
     this.watchdog.unref();
   }
 
   async phase<T>(name: string, work: () => Promise<T>): Promise<T> {
-    this.phase = name;
+    this.currentPhase = name;
     const phaseStarted = Date.now();
     try {
       return await work();
@@ -131,46 +131,48 @@ async function listRemaining(root: string): Promise<string[]> {
 }
 
 async function windowsHolders(tempDir: string): Promise<string> {
-  const proc = Bun.spawn(
-    [
-      'powershell',
-      '-NoProfile',
-      '-Command',
-      [
-        'Get-CimInstance Win32_Process |',
-        'Where-Object {',
-        '  ($_.ExecutablePath -and $_.ExecutablePath.Contains($env:HARNESS_TEMP)) -or',
-        '  ($_.CommandLine -and $_.CommandLine.Contains($env:HARNESS_TEMP))',
-        '} |',
-        'ForEach-Object { "{0} {1} exe={2} cmd={3}" -f $_.ProcessId, $_.Name, $_.ExecutablePath, $_.CommandLine }',
-      ].join(' '),
-    ],
-    {
-      env: { ...process.env, HARNESS_TEMP: tempDir },
-      stdout: 'pipe',
-      stderr: 'pipe',
-    },
-  );
-
-  const timeout = setTimeout(() => proc.kill(), HOLDERS_TIMEOUT_MS);
   try {
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ]);
-    const body = stdout.trim();
-    if (body.length > 0) {
-      return body.replaceAll('\n', ' || ');
+    const proc = Bun.spawn(
+      [
+        'powershell',
+        '-NoProfile',
+        '-Command',
+        [
+          'Get-CimInstance Win32_Process |',
+          'Where-Object {',
+          '  ($_.ExecutablePath -and $_.ExecutablePath.Contains($env:HARNESS_TEMP)) -or',
+          '  ($_.CommandLine -and $_.CommandLine.Contains($env:HARNESS_TEMP))',
+          '} |',
+          'ForEach-Object { "{0} {1} exe={2} cmd={3}" -f $_.ProcessId, $_.Name, $_.ExecutablePath, $_.CommandLine }',
+        ].join(' '),
+      ],
+      {
+        env: { ...process.env, HARNESS_TEMP: tempDir },
+        stdout: 'pipe',
+        stderr: 'pipe',
+      },
+    );
+
+    const timeout = setTimeout(() => proc.kill(), HOLDERS_TIMEOUT_MS);
+    try {
+      const [stdout, stderr, exitCode] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+      const body = stdout.trim();
+      if (body.length > 0) {
+        return body.replaceAll('\n', ' || ');
+      }
+      if (exitCode !== 0) {
+        return `<empty exit=${exitCode} stderr=${stderr.trim() || 'none'}>`;
+      }
+      return '<none with ExecutablePath/CommandLine in temp dir>';
+    } finally {
+      clearTimeout(timeout);
     }
-    if (exitCode !== 0) {
-      return `<empty exit=${exitCode} stderr=${stderr.trim() || 'none'}>`;
-    }
-    return '<none with ExecutablePath/CommandLine in temp dir>';
   } catch (err) {
     return `<holders failed: ${err instanceof Error ? err.message : String(err)}>`;
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
