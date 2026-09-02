@@ -26,6 +26,18 @@ import { Command, Help, Option } from 'commander';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { CliError, CommandFailedError, remediationHintFor } from '@/core/command-error.ts';
+import {
+  ALPHA_ENV_VAR,
+  ALPHA_HELP_GROUP,
+  deprecationWarning,
+  isSameLifecycle,
+  isStageVisible,
+  resolveLifecycle,
+  STABLE_LIFECYCLE,
+  type StageDescriptor,
+  type StageName,
+  withLifecycleTag,
+} from '@/core/commands/stage.ts';
 import logger from '@/core/observability/logger.ts';
 import { loadState, saveState } from '@/core/state/state-manager.ts';
 import { blank, error, info, print } from '@/core/ui';
@@ -38,18 +50,6 @@ import {
   CommandInvocationContext,
   type CommandInvocationContextStage,
 } from './command-invocation-context.ts';
-import {
-  ALPHA_ENV_VAR,
-  ALPHA_HELP_GROUP,
-  deprecationWarning,
-  isSameLifecycle,
-  isStageVisible,
-  resolveLifecycle,
-  STABLE_LIFECYCLE,
-  type StageDescriptor,
-  type StageName,
-  withLifecycleTag,
-} from './stage.ts';
 
 export {
   ALPHA_ENV_VAR,
@@ -60,7 +60,7 @@ export {
   Stage,
   type StageDescriptor,
   type StageName,
-} from './stage.ts';
+} from '@/core/commands/stage.ts';
 
 const betaWarningsShownWithoutState = new Set<string>();
 
