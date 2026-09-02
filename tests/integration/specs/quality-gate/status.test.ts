@@ -764,17 +764,17 @@ describe('quality-gate status', () => {
 
       expect(result.exitCode).toBe(51);
       const parsed = JSON.parse(result.stdout);
-      expect(parsed.qualityGate.breakdown).toEqual([
-        {
-          metric: 'new_coverage',
-          totalCount: 2,
-          fetchedCount: 2,
-          entries: [
-            { path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' },
-            { path: 'src/cart.ts', value: '45.2', formattedValue: '45.2%' },
-          ],
-        },
-      ]);
+      const condition = parsed.qualityGate.conditions.find(
+        (c: { metric: string }) => c.metric === 'new_coverage',
+      );
+      expect(condition.breakdown).toEqual({
+        totalCount: 2,
+        fetchedCount: 2,
+        entries: [
+          { path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' },
+          { path: 'src/cart.ts', value: '45.2', formattedValue: '45.2%' },
+        ],
+      });
     },
     { timeout: 15000 },
   );
@@ -810,17 +810,17 @@ describe('quality-gate status', () => {
 
       expect(result.exitCode).toBe(51);
       const parsed = JSON.parse(result.stdout);
-      expect(parsed.qualityGate.breakdown).toEqual([
-        {
-          metric: 'coverage',
-          totalCount: 2,
-          fetchedCount: 2,
-          entries: [
-            { path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' },
-            { path: 'src/cart.ts', value: '45.2', formattedValue: '45.2%' },
-          ],
-        },
-      ]);
+      const condition = parsed.qualityGate.conditions.find(
+        (c: { metric: string }) => c.metric === 'coverage',
+      );
+      expect(condition.breakdown).toEqual({
+        totalCount: 2,
+        fetchedCount: 2,
+        entries: [
+          { path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' },
+          { path: 'src/cart.ts', value: '45.2', formattedValue: '45.2%' },
+        ],
+      });
     },
     { timeout: 15000 },
   );
@@ -858,18 +858,18 @@ describe('quality-gate status', () => {
       const result = await harness.run(`quality-gate status --project my-project --format json`);
 
       const parsed = JSON.parse(result.stdout);
-      expect(parsed.qualityGate.breakdown).toEqual([
-        {
-          metric: 'new_coverage',
-          totalCount: 5,
-          fetchedCount: 3,
-          entries: [
-            { path: 'src/a.ts', value: '10.0', formattedValue: '10.0%' },
-            { path: 'src/b.ts', value: '20.0', formattedValue: '20.0%' },
-            { path: 'src/c.ts', value: '30.0', formattedValue: '30.0%' },
-          ],
-        },
-      ]);
+      const condition = parsed.qualityGate.conditions.find(
+        (c: { metric: string }) => c.metric === 'new_coverage',
+      );
+      expect(condition.breakdown).toEqual({
+        totalCount: 5,
+        fetchedCount: 3,
+        entries: [
+          { path: 'src/a.ts', value: '10.0', formattedValue: '10.0%' },
+          { path: 'src/b.ts', value: '20.0', formattedValue: '20.0%' },
+          { path: 'src/c.ts', value: '30.0', formattedValue: '30.0%' },
+        ],
+      });
     },
     { timeout: 15000 },
   );
@@ -905,17 +905,17 @@ describe('quality-gate status', () => {
       const result = await harness.run(`quality-gate status --project my-project --format json`);
 
       const parsed = JSON.parse(result.stdout);
-      expect(parsed.qualityGate.breakdown).toEqual([
-        {
-          metric: 'new_coverage',
-          totalCount: 3,
-          fetchedCount: 3,
-          entries: [
-            { path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' },
-            { path: 'src/cart.ts', value: '45.2', formattedValue: '45.2%' },
-          ],
-        },
-      ]);
+      const condition = parsed.qualityGate.conditions.find(
+        (c: { metric: string }) => c.metric === 'new_coverage',
+      );
+      expect(condition.breakdown).toEqual({
+        totalCount: 3,
+        fetchedCount: 3,
+        entries: [
+          { path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' },
+          { path: 'src/cart.ts', value: '45.2', formattedValue: '45.2%' },
+        ],
+      });
 
       // The page already covered every matching file (fetchedCount === totalCount), so there's
       // no "N more" hint to show, even though entries.length (2) is less than totalCount (3).
@@ -959,20 +959,20 @@ describe('quality-gate status', () => {
       const result = await harness.run(`quality-gate status --project my-project --format json`);
 
       const parsed = JSON.parse(result.stdout);
-      expect(parsed.qualityGate.breakdown).toEqual([
-        {
-          metric: 'new_coverage',
-          totalCount: 1,
-          fetchedCount: 1,
-          entries: [
-            {
-              path: 'src/checkout.ts',
-              value: '38.84615384615385',
-              formattedValue: '38.8%',
-            },
-          ],
-        },
-      ]);
+      const condition = parsed.qualityGate.conditions.find(
+        (c: { metric: string }) => c.metric === 'new_coverage',
+      );
+      expect(condition.breakdown).toEqual({
+        totalCount: 1,
+        fetchedCount: 1,
+        entries: [
+          {
+            path: 'src/checkout.ts',
+            value: '38.84615384615385',
+            formattedValue: '38.8%',
+          },
+        ],
+      });
     },
     { timeout: 15000 },
   );
@@ -1008,20 +1008,20 @@ describe('quality-gate status', () => {
       const result = await harness.run(`quality-gate status --project my-project --format json`);
 
       const parsed = JSON.parse(result.stdout);
-      expect(parsed.qualityGate.breakdown).toEqual([
-        {
-          metric: 'new_coverage',
-          totalCount: 1,
-          fetchedCount: 1,
-          entries: [
-            {
-              path: 'src/checkout.ts',
-              value: '38.84615384615385',
-              formattedValue: '38.85%',
-            },
-          ],
-        },
-      ]);
+      const condition = parsed.qualityGate.conditions.find(
+        (c: { metric: string }) => c.metric === 'new_coverage',
+      );
+      expect(condition.breakdown).toEqual({
+        totalCount: 1,
+        fetchedCount: 1,
+        entries: [
+          {
+            path: 'src/checkout.ts',
+            value: '38.84615384615385',
+            formattedValue: '38.85%',
+          },
+        ],
+      });
     },
     { timeout: 15000 },
   );
@@ -1207,7 +1207,7 @@ describe('quality-gate status', () => {
       const result = await harness.run(`quality-gate status --project my-project --format json`);
 
       const parsed = JSON.parse(result.stdout);
-      expect(parsed.qualityGate.breakdown).toBeUndefined();
+      expect(parsed.qualityGate.conditions[0].breakdown).toBeUndefined();
       const componentTreeRequests = server
         .getRecordedRequests()
         .filter((r) => r.path === '/api/measures/component_tree');
@@ -1264,7 +1264,7 @@ describe('quality-gate status', () => {
       expect(result.exitCode).toBe(51);
       const parsed = JSON.parse(result.stdout);
       expect(parsed.qualityGate.status).toBe('ERROR');
-      expect(parsed.qualityGate.breakdown).toBeUndefined();
+      expect(parsed.qualityGate.conditions[0].breakdown).toBeUndefined();
     },
     { timeout: 15000 },
   );
@@ -1308,14 +1308,18 @@ describe('quality-gate status', () => {
 
       expect(result.exitCode).toBe(51);
       const parsed = JSON.parse(result.stdout);
-      expect(parsed.qualityGate.breakdown).toEqual([
-        {
-          metric: 'new_coverage',
-          totalCount: 1,
-          fetchedCount: 1,
-          entries: [{ path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' }],
-        },
-      ]);
+      const coverageCondition = parsed.qualityGate.conditions.find(
+        (c: { metric: string }) => c.metric === 'coverage',
+      );
+      const newCoverageCondition = parsed.qualityGate.conditions.find(
+        (c: { metric: string }) => c.metric === 'new_coverage',
+      );
+      expect(coverageCondition.breakdown).toBeUndefined();
+      expect(newCoverageCondition.breakdown).toEqual({
+        totalCount: 1,
+        fetchedCount: 1,
+        entries: [{ path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' }],
+      });
     },
     { timeout: 15000 },
   );
@@ -1367,25 +1371,31 @@ describe('quality-gate status', () => {
       const result = await harness.run(`quality-gate status --project my-project --format json`);
 
       const parsed = JSON.parse(result.stdout);
-      expect(parsed.qualityGate.breakdown).toEqual([
-        {
+      expect(parsed.qualityGate.conditions).toEqual([
+        expect.objectContaining({
           metric: 'coverage',
-          totalCount: 1,
-          fetchedCount: 1,
-          entries: [{ path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' }],
-        },
-        {
+          breakdown: {
+            totalCount: 1,
+            fetchedCount: 1,
+            entries: [{ path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' }],
+          },
+        }),
+        expect.objectContaining({
           metric: 'branch_coverage',
-          totalCount: 1,
-          fetchedCount: 1,
-          entries: [{ path: 'src/cart.ts', value: '40.0', formattedValue: '40.0%' }],
-        },
-        {
+          breakdown: {
+            totalCount: 1,
+            fetchedCount: 1,
+            entries: [{ path: 'src/cart.ts', value: '40.0', formattedValue: '40.0%' }],
+          },
+        }),
+        expect.objectContaining({
           metric: 'new_coverage',
-          totalCount: 1,
-          fetchedCount: 1,
-          entries: [{ path: 'src/pay.ts', value: '55.0', formattedValue: '55.0%' }],
-        },
+          breakdown: {
+            totalCount: 1,
+            fetchedCount: 1,
+            entries: [{ path: 'src/pay.ts', value: '55.0', formattedValue: '55.0%' }],
+          },
+        }),
       ]);
     },
     { timeout: 15000 },
@@ -1459,14 +1469,18 @@ describe('quality-gate status', () => {
       const result = await harness.run(`quality-gate status --project my-project --format json`);
 
       const parsed = JSON.parse(result.stdout);
-      expect(parsed.qualityGate.breakdown).toEqual([
-        {
-          metric: 'new_coverage',
-          totalCount: 1,
-          fetchedCount: 1,
-          entries: [{ path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' }],
-        },
-      ]);
+      const violationsCondition = parsed.qualityGate.conditions.find(
+        (c: { metric: string }) => c.metric === 'new_violations',
+      );
+      const coverageCondition = parsed.qualityGate.conditions.find(
+        (c: { metric: string }) => c.metric === 'new_coverage',
+      );
+      expect(violationsCondition.breakdown).toBeUndefined();
+      expect(coverageCondition.breakdown).toEqual({
+        totalCount: 1,
+        fetchedCount: 1,
+        entries: [{ path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' }],
+      });
       const componentTreeRequests = server
         .getRecordedRequests()
         .filter((r) => r.path === '/api/measures/component_tree');
@@ -1553,7 +1567,12 @@ describe('quality-gate status', () => {
       );
 
       const parsed = JSON.parse(result.stdout);
-      expect(parsed.qualityGate.breakdown).toBeUndefined();
+      expect(parsed.qualityGate.conditions).toHaveLength(2);
+      expect(
+        parsed.qualityGate.conditions.every(
+          (c: { breakdown?: unknown }) => c.breakdown === undefined,
+        ),
+      ).toBe(true);
       const componentTreeRequests = server
         .getRecordedRequests()
         .filter((r) => r.path === '/api/measures/component_tree');

@@ -29,7 +29,7 @@ import { QualityGatesClient } from '@/core/server/quality-gates.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { print } from '@/core/ui';
 
-import { buildBreakdown } from './breakdown.ts';
+import { attachBreakdowns } from './breakdown.ts';
 import { selectConditions } from './condition-summary.ts';
 import { formatQualityGateJson } from './format-json.ts';
 import { formatQualityGateTable } from './format-table.ts';
@@ -75,24 +75,23 @@ export async function qualityGateStatus(
   const metrics = hasConditionsToRender ? await metricsClient.searchMetrics() : [];
 
   const verdict = toVerdict(projectStatus?.status);
-  const conditions = selectConditions(rawConditions, metrics, options.all);
-  const breakdown = hasFailingConditions
-    ? await buildBreakdown({
+  const summaries = selectConditions(rawConditions, metrics, options.all);
+  const conditions = hasFailingConditions
+    ? await attachBreakdowns(summaries, {
         client,
         projectKey,
-        conditions: rawConditions,
         metrics,
         top: DEFAULT_TOP,
         branch: queryParams.branch,
         pullRequest: queryParams.pullRequest,
       })
-    : [];
+    : summaries;
 
   const format = options.format ?? 'table';
   const message =
     format === 'table'
-      ? formatQualityGateTable({ verdict, project: projectKey, scope, conditions, breakdown })
-      : formatQualityGateJson({ verdict, project: projectKey, scope, conditions, breakdown });
+      ? formatQualityGateTable({ verdict, project: projectKey, scope, conditions })
+      : formatQualityGateJson({ verdict, project: projectKey, scope, conditions });
   print(message);
 
   process.exitCode = exitCodeFor(verdict);

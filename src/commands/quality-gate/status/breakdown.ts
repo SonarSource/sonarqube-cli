@@ -23,8 +23,13 @@
 import logger from '@/core/observability/logger.ts';
 import type { SonarQubeClient } from '@/core/server/client.ts';
 import { isNewCodeMetric, MeasuresClient } from '@/core/server/measures.ts';
-import type { ComponentTreeComponent, Metric, QualityGateCondition } from '@/core/server/types.ts';
+import type { ComponentTreeComponent, Metric } from '@/core/server/types.ts';
 
+import type {
+  QualityGateBreakdownEntry,
+  QualityGateConditionSummary,
+  QualityGateMetricBreakdown,
+} from './condition-summary.ts';
 import { formatMetricValue } from './format-metric-value.ts';
 
 const METRIC_CATEGORIES: Record<string, string> = {
@@ -36,23 +41,9 @@ const METRIC_CATEGORIES: Record<string, string> = {
   new_line_coverage: 'coverage',
 };
 
-export interface QualityGateBreakdownEntry {
-  path: string;
-  value: string;
-  formattedValue: string;
-}
-
-export interface QualityGateMetricBreakdown {
-  metric: string;
-  totalCount: number;
-  fetchedCount: number;
-  entries: QualityGateBreakdownEntry[];
-}
-
-export interface BuildBreakdownParams {
+export interface AttachBreakdownsParams {
   client: SonarQubeClient;
   projectKey: string;
-  conditions: QualityGateCondition[];
   metrics: Metric[];
   top: number;
   branch?: string;
@@ -60,38 +51,43 @@ export interface BuildBreakdownParams {
 }
 
 /** A failing condition whose metric falls into an implemented category. */
-function isEnrichableCondition(condition: QualityGateCondition): boolean {
-  return condition.status !== 'OK' && !!METRIC_CATEGORIES[condition.metricKey];
+function isEnrichableCondition(condition: QualityGateConditionSummary): boolean {
+  return condition.status !== 'OK' && !!METRIC_CATEGORIES[condition.metric];
 }
 
 /**
- * One breakdown per matching condition. Worst-first sort direction comes from the condition's own
+ * Returns each condition with its own `breakdown` attached when applicable, preserving order and
+ * count 1:1 with the input. Worst-first sort direction comes from the condition's own
  * `comparator` (`LT` - lower is worse - sorts ascending, `GT` sorts descending).
  */
-export async function buildBreakdown(
-  params: BuildBreakdownParams,
-): Promise<QualityGateMetricBreakdown[]> {
+export async function attachBreakdowns(
+  conditions: QualityGateConditionSummary[],
+  params: AttachBreakdownsParams,
+): Promise<QualityGateConditionSummary[]> {
   const measuresClient = new MeasuresClient(params.client);
   const metricsByKey = new Map(params.metrics.map((metric) => [metric.key, metric]));
 
-  const results = await Promise.all(
-    params.conditions
-      .filter(isEnrichableCondition)
-      .map((condition) => fetchMetricBreakdown(measuresClient, params, condition, metricsByKey)),
+  return Promise.all(
+    conditions.map(async (condition) => {
+      if (!isEnrichableCondition(condition)) {
+        return condition;
+      }
+      const breakdown = await fetchMetricBreakdown(measuresClient, params, condition, metricsByKey);
+      return breakdown ? { ...condition, breakdown } : condition;
+    }),
   );
-  return results.filter((result): result is QualityGateMetricBreakdown => result !== undefined);
 }
 
 async function fetchMetricBreakdown(
   measuresClient: MeasuresClient,
-  params: BuildBreakdownParams,
-  condition: QualityGateCondition,
+  params: AttachBreakdownsParams,
+  condition: QualityGateConditionSummary,
   metricsByKey: Map<string, Metric>,
 ): Promise<QualityGateMetricBreakdown | undefined> {
   try {
     const { components, totalCount } = await measuresClient.getWorstComponentsByMetric({
       projectKey: params.projectKey,
-      metricKey: condition.metricKey,
+      metricKey: condition.metric,
       ascending: condition.comparator === 'LT',
       top: params.top,
       branch: params.branch,
@@ -99,13 +95,13 @@ async function fetchMetricBreakdown(
     });
 
     const entries = components.flatMap((component) =>
-      toBreakdownEntry(component, condition.metricKey, metricsByKey.get(condition.metricKey)),
+      toBreakdownEntry(component, condition.metric, metricsByKey.get(condition.metric)),
     );
     return entries.length > 0
-      ? { metric: condition.metricKey, totalCount, fetchedCount: components.length, entries }
+      ? { totalCount, fetchedCount: components.length, entries }
       : undefined;
   } catch (err) {
-    logger.debug(`Failed to build quality gate breakdown for '${condition.metricKey}'`, err);
+    logger.debug(`Failed to build quality gate breakdown for '${condition.metric}'`, err);
     return undefined;
   }
 }

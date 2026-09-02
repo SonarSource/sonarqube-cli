@@ -21,7 +21,6 @@
 import { cyan, green, red, yellow } from '@/core/ui/colors.ts';
 import { padColumns } from '@/core/ui/formatter/column-formatting.ts';
 
-import type { QualityGateMetricBreakdown } from './breakdown.ts';
 import type { QualityGateConditionSummary } from './condition-summary.ts';
 import type { QualityGateScope } from './scope.ts';
 import type { QualityGateVerdict } from './verdict.ts';
@@ -62,7 +61,6 @@ export interface QualityGateTableViewModel {
   project: string;
   scope: QualityGateScope;
   conditions: QualityGateConditionSummary[];
-  breakdown?: QualityGateMetricBreakdown[];
 }
 
 export function formatQualityGateTable(vm: QualityGateTableViewModel): string {
@@ -90,7 +88,7 @@ export function formatQualityGateTable(vm: QualityGateTableViewModel): string {
       'Conditions:',
       ...vm.conditions.flatMap((condition, i) => [
         formatConditionLine(condition, labels[i], values[i]),
-        ...formatBreakdownLines(vm.breakdown, condition.metric),
+        ...formatBreakdownLines(condition),
       ]),
     );
   }
@@ -130,11 +128,8 @@ function formatConditionLine(
   return `    ${marker}  ${paddedLabel}${paddedValue}${requirement}`;
 }
 
-function formatBreakdownLines(
-  breakdown: QualityGateMetricBreakdown[] | undefined,
-  metric: string,
-): string[] {
-  const metricBreakdown = breakdown?.find((candidate) => candidate.metric === metric);
+function formatBreakdownLines(condition: QualityGateConditionSummary): string[] {
+  const metricBreakdown = condition.breakdown;
   if (!metricBreakdown || metricBreakdown.entries.length === 0) {
     return [];
   }
