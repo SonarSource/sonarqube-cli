@@ -52,7 +52,7 @@ export interface FeatureMatch<T> {
 /**
  * Pure, git-free exact-match selection over an already-resolved, nearest-first lookup-path
  * list. Per path: exact `targetRoot` match wins over `repoRoot`-only; ties broken by order
- * (true duplicates are already deduped upstream — see `addMapping`).
+ * (true duplicates are already deduped upstream — see `upsertMapping`).
  */
 export function selectFeatureForLookupPaths<T>(
   candidates: RecordedFeatureCandidate<T>[],

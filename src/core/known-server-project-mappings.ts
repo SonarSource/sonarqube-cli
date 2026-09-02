@@ -41,8 +41,8 @@ function isMoreComplete(
   return incoming.serverUrl !== undefined && current.serverUrl === undefined;
 }
 
-/** Adds `mapping` into `mappings` in place; only collapses with an entry sharing both `targetRoot` and `projectKey` (a true duplicate) — a different `projectKey` at the same `targetRoot` is a conflict, kept as a separate candidate for `selectFeatureForLookupPaths` to resolve. */
-function addMapping(
+/** Upserts `mapping` into `mappings` in place; only collapses with an entry sharing both `targetRoot` and `projectKey` (a true duplicate) — a different `projectKey` at the same `targetRoot` is a conflict, kept as a separate candidate for `selectFeatureForLookupPaths` to resolve. */
+function upsertMapping(
   mappings: KnownServerProjectMapping[],
   mapping: KnownServerProjectMapping,
 ): void {
@@ -61,14 +61,14 @@ function addMapping(
   }
 }
 
-/** Merges `existing` into `discovered` (see `addMapping`); `discovered` stays first so it wins match-time ties on a shared `targetRoot`. */
+/** Merges `existing` into `discovered` (see `upsertMapping`); `discovered` stays first so it wins match-time ties on a shared `targetRoot`. */
 export function mergeKnownServerProjectMappings(
   existing: KnownServerProjectMapping[],
   discovered: KnownServerProjectMapping[],
 ): KnownServerProjectMapping[] {
   const mappings = [...discovered];
   for (const mapping of existing) {
-    addMapping(mappings, mapping);
+    upsertMapping(mappings, mapping);
   }
 
   return mappings;
@@ -118,7 +118,7 @@ export function buildKnownServerProjectMappings(state: CliState): KnownServerPro
     for (const feature of integration.features) {
       const mapping = deriveMappingForFeature(feature);
       if (mapping) {
-        addMapping(mappings, mapping);
+        upsertMapping(mappings, mapping);
       }
     }
   }
