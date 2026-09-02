@@ -36,13 +36,13 @@ import {
 } from '@/core/host/recorded-feature-resolver.ts';
 import {
   buildKnownServerProjectMappings,
-  type KnownServerProjectMapping,
+  mergeKnownServerProjectMappings,
 } from '@/core/known-server-project-mappings.ts';
 import {
   discoverProjectKeyByGitRemote,
   GIT_REMOTE_BINDING_SOURCE,
 } from '@/core/server/discover-project-by-remote.ts';
-import type { CliState } from '@/core/state/state.ts';
+import type { CliState, KnownServerProjectMapping } from '@/core/state/state.ts';
 import { getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState } from '@/core/state/state-repository.ts';
 import { print } from '@/core/ui';
@@ -317,7 +317,6 @@ function matchKnownServerProjectMapping(
       feature: mapping,
       targetRoot: mapping.targetRoot,
       repoRoot: mapping.repoRoot,
-      updatedAt: mapping.updatedAt,
     }),
   );
 
@@ -349,7 +348,11 @@ interface KnownMappingsResult {
 function loadKnownMappings(): KnownMappingsResult | undefined {
   try {
     const state = loadState();
-    return { state, mappings: buildKnownServerProjectMappings(state) };
+    const mappings = mergeKnownServerProjectMappings(
+      state.knownServerProjectMappings ?? [],
+      buildKnownServerProjectMappings(state),
+    );
+    return { state, mappings };
   } catch (error) {
     logger.debug(`Known project mapping lookup skipped: ${(error as Error).message}`);
     return undefined;
@@ -363,7 +366,7 @@ function collectKnownRoots(known: KnownMappingsResult | undefined): string[] {
   );
 }
 
-/** Matches against mappings derived live from installed features, caller-loaded once above. */
+/** Matches against the combined persisted + live-derived mapping table, caller-loaded once above. */
 function applyKnownServerProjectMapping(
   config: DiscoveredProject,
   lookupPaths: LookupPath[],

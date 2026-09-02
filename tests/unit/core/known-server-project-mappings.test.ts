@@ -22,13 +22,14 @@ import { describe, expect, it } from 'bun:test';
 
 import {
   buildKnownServerProjectMappings,
-  type KnownServerProjectMapping,
+  mergeKnownServerProjectMappings,
 } from '@/core/known-server-project-mappings.ts';
 import type {
   AuthConnection,
   CliState,
   InstalledIntegration,
   InstalledIntegrationFeature,
+  KnownServerProjectMapping,
 } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 
@@ -43,10 +44,66 @@ function makeMapping(
     targetRoot: '/repo',
     projectKey: 'my-project',
     serverUrl: 'https://sonarqube.example.com',
-    updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
   };
 }
+
+describe('mergeKnownServerProjectMappings', () => {
+  it('adds newly discovered targetRoots to an empty table', () => {
+    const merged = mergeKnownServerProjectMappings([], [makeMapping()]);
+
+    expect(merged).toEqual([makeMapping()]);
+  });
+
+  it('preserves an existing entry that a fresh discovery pass no longer reproduces', () => {
+    const existing = [makeMapping({ targetRoot: '/now-global-only' })];
+
+    const merged = mergeKnownServerProjectMappings(existing, []);
+
+    expect(merged).toEqual(existing);
+  });
+
+  it('lets a discovered entry with server info supersede a stale existing one lacking it, for the same targetRoot + projectKey', () => {
+    const existing = [makeMapping({ serverUrl: undefined, orgKey: undefined })];
+    const discovered = [makeMapping({ serverUrl: 'https://sonarqube.example.com' })];
+
+    const merged = mergeKnownServerProjectMappings(existing, discovered);
+
+    expect(merged).toEqual(discovered);
+  });
+
+  it('keeps the existing entry when the discovered one is not more complete', () => {
+    const existing = [makeMapping({ serverUrl: 'https://sonarqube.example.com' })];
+    const discovered = [makeMapping({ serverUrl: undefined, orgKey: undefined })];
+
+    const merged = mergeKnownServerProjectMappings(existing, discovered);
+
+    expect(merged).toEqual(existing);
+  });
+
+  it('keeps both entries when they share a targetRoot but resolve to different project keys, with discovered first', () => {
+    // A genuine conflict, not a duplicate — left for match-time resolution.
+    const existing = [makeMapping({ projectKey: 'old-project' })];
+    const discovered = [makeMapping({ projectKey: 'new-project' })];
+
+    const merged = mergeKnownServerProjectMappings(existing, discovered);
+
+    expect(merged).toEqual([...discovered, ...existing]);
+  });
+
+  it('keeps two mappings with different targetRoots even when they share the same repoRoot', () => {
+    // Two worktrees of the same repo, each with a different project key: the
+    // shared repoRoot must not collapse them into one entry.
+    const existing = [
+      makeMapping({ targetRoot: '/main', repoRoot: '/main', projectKey: 'main-project' }),
+      makeMapping({ targetRoot: '/worktree', repoRoot: '/main', projectKey: 'worktree-project' }),
+    ];
+
+    const merged = mergeKnownServerProjectMappings(existing, []);
+
+    expect(merged).toEqual(existing);
+  });
+});
 
 /** Sets an active connection on state, for tests exercising the attrs-missing fallback. */
 function withActiveConnection(state: CliState, overrides: Partial<AuthConnection> = {}): CliState {
@@ -245,23 +302,16 @@ describe('buildKnownServerProjectMappings', () => {
     expect(mappings.map((m) => m.projectKey).sort()).toEqual(['main-project', 'worktree-project']);
   });
 
-  it('keeps the most recently updated feature when two features resolve to the same targetRoot', () => {
+  it('keeps the feature with server info when two features resolve to the same targetRoot and projectKey', () => {
     const state = makeState();
     state.integrations.installed = [
+      makeIntegration([makeFeature({ attrs: { projectKey: 'my-project' } })], {
+        integrationId: 'git',
+      }),
       makeIntegration(
         [
           makeFeature({
-            attrs: { projectKey: 'old-project', serverUrl: 'https://sonarqube.example.com' },
-            updatedAt: '2026-01-01T00:00:00.000Z',
-          }),
-        ],
-        { integrationId: 'git' },
-      ),
-      makeIntegration(
-        [
-          makeFeature({
-            attrs: { projectKey: 'new-project', serverUrl: 'https://sonarqube.example.com' },
-            updatedAt: '2026-02-01T00:00:00.000Z',
+            attrs: { projectKey: 'my-project', serverUrl: 'https://sonarqube.example.com' },
           }),
         ],
         { integrationId: 'claude-code' },
@@ -270,8 +320,24 @@ describe('buildKnownServerProjectMappings', () => {
 
     const mappings = buildKnownServerProjectMappings(state);
 
-    expect(mappings).toEqual([
-      makeMapping({ projectKey: 'new-project', updatedAt: '2026-02-01T00:00:00.000Z' }),
-    ]);
+    expect(mappings).toEqual([makeMapping({ serverUrl: 'https://sonarqube.example.com' })]);
+  });
+
+  it('keeps both features when they resolve to the same targetRoot but different project keys', () => {
+    // Two agents integrated at the same folder, disagreeing on the project: a genuine
+    // conflict, not a duplicate — left for match-time resolution, not silently collapsed.
+    const state = makeState();
+    state.integrations.installed = [
+      makeIntegration([makeFeature({ attrs: { projectKey: 'old-project' } })], {
+        integrationId: 'git',
+      }),
+      makeIntegration([makeFeature({ attrs: { projectKey: 'new-project' } })], {
+        integrationId: 'claude-code',
+      }),
+    ];
+
+    const mappings = buildKnownServerProjectMappings(state);
+
+    expect(mappings.map((m) => m.projectKey).sort()).toEqual(['new-project', 'old-project']);
   });
 });

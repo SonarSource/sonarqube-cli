@@ -28,7 +28,6 @@ import * as gitDiscover from '@/core/host/git/discover.ts';
 import * as lookupPathResolver from '@/core/host/git/lookup-path-resolver.ts';
 import * as gitWorktree from '@/core/host/git/worktree.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
-import type { KnownServerProjectMapping } from '@/core/known-server-project-mappings.ts';
 import logger from '@/core/observability/logger.ts';
 import {
   discoverOrganization,
@@ -38,6 +37,7 @@ import {
 } from '@/core/project-info.ts';
 import * as discoverByRemote from '@/core/server/discover-project-by-remote.ts';
 import { GIT_REMOTE_BINDING_SOURCE } from '@/core/server/discover-project-by-remote.ts';
+import type { KnownServerProjectMapping } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
@@ -81,53 +81,18 @@ function makeKnownMapping(
     targetRoot: '',
     projectKey: 'known-project',
     serverUrl: 'https://known.example.com',
-    updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
   };
 }
 
-/**
- * Seeds `state.integrations.installed` with one project-scoped feature per mapping, so
- * `buildKnownServerProjectMappings` derives each `mapping` live (there is no persisted
- * `state.knownServerProjectMappings` table on this branch — see known-server-project-mappings.ts).
- * Returns the built state so callers can layer further mutations (e.g. an active connection)
- * onto the same object `loadStateSpy` is now returning.
- */
-function mockLiveMappings(
+function mockKnownMappings(
   loadStateSpy: Mock<typeof stateRepository.loadState>,
   mappings: KnownServerProjectMapping[],
-): ReturnType<typeof getDefaultState> {
-  const state = getDefaultState('1.0.0');
-  state.integrations.installed = mappings.map((mapping, index) => ({
-    id: `integration-${index}`,
-    integrationId: 'claude-code',
-    installedByCliVersion: '1.0.0',
-    installedAt: mapping.updatedAt,
-    updatedByCliVersion: '1.0.0',
-    updatedAt: mapping.updatedAt,
-    features: [
-      {
-        featureId: 'vortex',
-        scope: 'project' as const,
-        targetRoot: mapping.targetRoot,
-        installedByCliVersion: '1.0.0',
-        installedAt: mapping.updatedAt,
-        updatedByCliVersion: '1.0.0',
-        updatedAt: mapping.updatedAt,
-        dependencies: [],
-        resources: [],
-        operations: [],
-        attrs: {
-          projectKey: mapping.projectKey,
-          ...(mapping.serverUrl !== undefined ? { serverUrl: mapping.serverUrl } : {}),
-          ...(mapping.orgKey !== undefined ? { orgKey: mapping.orgKey } : {}),
-          ...(mapping.repoRoot !== undefined ? { repoRoot: mapping.repoRoot } : {}),
-        },
-      },
-    ],
-  }));
-  loadStateSpy.mockReturnValue(state);
-  return state;
+): void {
+  loadStateSpy.mockReturnValue({
+    ...getDefaultState('1.0.0'),
+    knownServerProjectMappings: mappings,
+  });
 }
 
 describe('discoverProject', () => {
@@ -418,7 +383,7 @@ describe('discoverProject', () => {
 
   describe('known server project mapping', () => {
     it('uses a known project mapping when no local config provides one', async () => {
-      mockLiveMappings(loadStateSpy, [
+      mockKnownMappings(loadStateSpy, [
         makeKnownMapping({ targetRoot: canonicalizePath(testDir), orgKey: 'known-org' }),
       ]);
 
@@ -435,7 +400,7 @@ describe('discoverProject', () => {
     it("sets integrationDir to the matched mapping's own targetRoot, which can differ from projectRoot", async () => {
       // Matched via the repoRoot signal: projectRoot anchors here, integrationDir stays elsewhere.
       const otherWorktreeInstallDir = join(testDir, '..', 'other-worktree-install-dir');
-      mockLiveMappings(loadStateSpy, [
+      mockKnownMappings(loadStateSpy, [
         makeKnownMapping({
           targetRoot: canonicalizePath(otherWorktreeInstallDir),
           repoRoot: canonicalizePath(testDir),
@@ -451,7 +416,9 @@ describe('discoverProject', () => {
 
     it('matches from a subdirectory of the mapped folder', async () => {
       const subDir = join(testDir, 'nested', 'sub');
-      mockLiveMappings(loadStateSpy, [makeKnownMapping({ targetRoot: canonicalizePath(testDir) })]);
+      mockKnownMappings(loadStateSpy, [
+        makeKnownMapping({ targetRoot: canonicalizePath(testDir) }),
+      ]);
       mockClimb(lookupPathsSpy, subDir, join(testDir, 'nested'), testDir);
 
       const result = await discoverProject(subDir);
@@ -462,7 +429,7 @@ describe('discoverProject', () => {
     it("passes every known mapping's targetRoot/repoRoot as the resolveLookupPaths bound, unfiltered", async () => {
       // Deduplication/nesting is resolveLookupPaths()'s job, not discoverProject()'s.
       const repoRoot = join(testDir, '..');
-      mockLiveMappings(loadStateSpy, [
+      mockKnownMappings(loadStateSpy, [
         makeKnownMapping({
           targetRoot: canonicalizePath(testDir),
           repoRoot: canonicalizePath(repoRoot),
@@ -483,7 +450,7 @@ describe('discoverProject', () => {
       // mapping recorded at a nested package folder still matches from inside it.
       const packageDir = join(testDir, 'packages', 'api');
       const invokeDir = join(packageDir, 'src');
-      mockLiveMappings(loadStateSpy, [
+      mockKnownMappings(loadStateSpy, [
         makeKnownMapping({
           targetRoot: canonicalizePath(packageDir),
           projectKey: 'package-project',
@@ -498,7 +465,7 @@ describe('discoverProject', () => {
     });
 
     it('does not match an unrelated folder', async () => {
-      mockLiveMappings(loadStateSpy, [
+      mockKnownMappings(loadStateSpy, [
         makeKnownMapping({
           targetRoot: join(tmpdir(), 'some-other-project'),
           projectKey: 'other-project',
@@ -515,7 +482,9 @@ describe('discoverProject', () => {
         join(testDir, 'sonar-project.properties'),
         'sonar.host.url=https://props-server.io\nsonar.projectKey=props_project\n',
       );
-      mockLiveMappings(loadStateSpy, [makeKnownMapping({ targetRoot: canonicalizePath(testDir) })]);
+      mockKnownMappings(loadStateSpy, [
+        makeKnownMapping({ targetRoot: canonicalizePath(testDir) }),
+      ]);
 
       const result = await discoverProject(testDir);
 
@@ -526,7 +495,9 @@ describe('discoverProject', () => {
 
     it('is checked before, and short-circuits, the git-remote binding network lookup', async () => {
       fakeFs.mkdir(join(testDir, '.git'));
-      mockLiveMappings(loadStateSpy, [makeKnownMapping({ targetRoot: canonicalizePath(testDir) })]);
+      mockKnownMappings(loadStateSpy, [
+        makeKnownMapping({ targetRoot: canonicalizePath(testDir) }),
+      ]);
       remoteSpy.mockResolvedValue({
         projectKey: 'from-remote',
         serverUrl: 'https://sonarcloud.io',
@@ -565,7 +536,7 @@ describe('discoverProject', () => {
       expect(result.projectKey).toBeUndefined();
     });
 
-    it('derives a mapping live from a project-scoped installed feature', async () => {
+    it('falls back to a live-derived mapping from installed features when the persisted table has no match', async () => {
       const state = getDefaultState('1.0.0');
       state.integrations.installed = [
         {
@@ -601,6 +572,93 @@ describe('discoverProject', () => {
       expect(result.configSources).toEqual([KNOWN_SERVER_PROJECT_MAPPING_SOURCE]);
     });
 
+    it('prefers the live fallback over a stale persisted-table entry for the same targetRoot', async () => {
+      // Re-integration must not be shadowed by a stale persisted entry awaiting migration.
+      const state = getDefaultState('1.0.0');
+      state.knownServerProjectMappings = [
+        makeKnownMapping({
+          targetRoot: canonicalizePath(testDir),
+          projectKey: 'persisted-project',
+        }),
+      ];
+      state.integrations.installed = [
+        {
+          id: 'integration-1',
+          integrationId: 'claude-code',
+          installedByCliVersion: '1.0.0',
+          installedAt: '2026-01-01T00:00:00.000Z',
+          updatedByCliVersion: '1.0.0',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          features: [
+            {
+              featureId: 'vortex',
+              scope: 'project',
+              targetRoot: canonicalizePath(testDir),
+              installedByCliVersion: '1.0.0',
+              installedAt: '2026-01-01T00:00:00.000Z',
+              updatedByCliVersion: '1.0.0',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+              dependencies: [],
+              resources: [],
+              operations: [],
+              attrs: { projectKey: 'live-project', serverUrl: 'https://live.example.com' },
+            },
+          ],
+        },
+      ];
+      loadStateSpy.mockReturnValue(state);
+
+      const result = await discoverProject(testDir);
+
+      expect(result.projectKey).toBe('live-project');
+    });
+
+    it('prefers a nearer live-derived mapping over a farther persisted-table one', async () => {
+      const subDir = join(testDir, 'packages', 'api');
+      fakeFs.mkdir(subDir);
+
+      const state = getDefaultState('1.0.0');
+      // Persisted table only knows about the repo root, from an earlier migration.
+      state.knownServerProjectMappings = [
+        makeKnownMapping({
+          targetRoot: canonicalizePath(testDir),
+          projectKey: 'root-persisted-project',
+        }),
+      ];
+      // A subpackage was integrated afterwards and hasn't been migrated into the
+      // persisted table yet — it's only visible via the live fallback.
+      state.integrations.installed = [
+        {
+          id: 'integration-1',
+          integrationId: 'claude-code',
+          installedByCliVersion: '1.0.0',
+          installedAt: '2026-01-01T00:00:00.000Z',
+          updatedByCliVersion: '1.0.0',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          features: [
+            {
+              featureId: 'vortex',
+              scope: 'project',
+              targetRoot: canonicalizePath(subDir),
+              installedByCliVersion: '1.0.0',
+              installedAt: '2026-01-01T00:00:00.000Z',
+              updatedByCliVersion: '1.0.0',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+              dependencies: [],
+              resources: [],
+              operations: [],
+              attrs: { projectKey: 'live-sub-project', serverUrl: 'https://live-sub.example.com' },
+            },
+          ],
+        },
+      ];
+      loadStateSpy.mockReturnValue(state);
+
+      const result = await discoverProject(subDir);
+
+      expect(result.projectKey).toBe('live-sub-project');
+    });
+
     describe('connection resolution for mappings that recorded no serverUrl', () => {
       function withActiveConnection(state: ReturnType<typeof getDefaultState>): void {
         state.auth.connections = [
@@ -616,14 +674,16 @@ describe('discoverProject', () => {
       }
 
       it('substitutes the currently active connection, resolved fresh, not baked in at derive time', async () => {
-        const state = mockLiveMappings(loadStateSpy, [
+        const state = getDefaultState('1.0.0');
+        state.knownServerProjectMappings = [
           makeKnownMapping({
             targetRoot: canonicalizePath(testDir),
             serverUrl: undefined,
             orgKey: undefined,
           }),
-        ]);
+        ];
         withActiveConnection(state);
+        loadStateSpy.mockReturnValue(state);
 
         const result = await discoverProject(testDir);
 
@@ -633,15 +693,17 @@ describe('discoverProject', () => {
       });
 
       it('falls through to the next discovery source when no connection can be resolved at all', async () => {
-        mockLiveMappings(loadStateSpy, [
+        const state = getDefaultState('1.0.0');
+        state.knownServerProjectMappings = [
           makeKnownMapping({
             targetRoot: canonicalizePath(testDir),
             serverUrl: undefined,
             orgKey: undefined,
           }),
-        ]);
+        ];
         // No active connection set: the mapping matches by path, but there is nothing to
         // resolve a serverUrl from, so it must not "succeed" with an undefined serverUrl.
+        loadStateSpy.mockReturnValue(state);
         fakeFs.writeFile(
           join(testDir, 'sonar-project.properties'),
           'sonar.host.url=https://props-server.io\nsonar.projectKey=props_project\n',
@@ -654,16 +716,18 @@ describe('discoverProject', () => {
       });
 
       it("prefers the caller's own resolved auth over the active connection in state", async () => {
-        // Active connection in state disagrees with the auth the caller actually resolved
-        // and passed in — e.g. env-var auth that hasn't been persisted yet.
-        const state = mockLiveMappings(loadStateSpy, [
+        const state = getDefaultState('1.0.0');
+        state.knownServerProjectMappings = [
           makeKnownMapping({
             targetRoot: canonicalizePath(testDir),
             serverUrl: undefined,
             orgKey: undefined,
           }),
-        ]);
+        ];
+        // Active connection in state disagrees with the auth the caller actually resolved
+        // and passed in — e.g. env-var auth that hasn't been persisted yet.
         withActiveConnection(state);
+        loadStateSpy.mockReturnValue(state);
 
         const result = await discoverProject(testDir, {
           auth: {
@@ -679,14 +743,16 @@ describe('discoverProject', () => {
       });
 
       it("never mixes a recorded serverUrl with the active connection's orgKey", async () => {
-        const state = mockLiveMappings(loadStateSpy, [
+        const state = getDefaultState('1.0.0');
+        state.knownServerProjectMappings = [
           makeKnownMapping({
             targetRoot: canonicalizePath(testDir),
             serverUrl: 'https://recorded.example.com',
             orgKey: undefined,
           }),
-        ]);
+        ];
         withActiveConnection(state);
+        loadStateSpy.mockReturnValue(state);
 
         const result = await discoverProject(testDir);
 
@@ -790,7 +856,7 @@ describe('discoverProject', () => {
         join(subDir, 'sonar-project.properties'),
         'sonar.host.url=https://sub.example.com\nsonar.projectKey=sub_project\n',
       );
-      mockLiveMappings(loadStateSpy, [
+      mockKnownMappings(loadStateSpy, [
         makeKnownMapping({ targetRoot: canonicalizePath(testDir), projectKey: 'mapped-project' }),
       ]);
       mockClimb(lookupPathsSpy, subDir, join(testDir, 'packages'), testDir);

@@ -35,26 +35,18 @@ const OUTSIDE = '/unrelated-project';
 
 function candidate(
   id: string,
-  opts: { targetRoot: string; repoRoot?: string; updatedAt?: string },
+  opts: { targetRoot: string; repoRoot?: string },
 ): RecordedFeatureCandidate<string> {
   return { feature: id, ...opts };
 }
 
 describe('selectFeatureForLookupPaths', () => {
-  it('prefers a targetRoot match over a more recent repoRoot-only match at the same path', () => {
+  it('prefers a targetRoot match over a repoRoot-only match at the same path', () => {
     const candidates = [
-      // Sibling worktree: matches only via repoRoot, updated later.
-      candidate('sibling', {
-        targetRoot: WORKTREE,
-        repoRoot: MAIN,
-        updatedAt: '2026-02-01T00:00:00.000Z',
-      }),
-      // Installed right here: exact targetRoot match, updated earlier.
-      candidate('here', {
-        targetRoot: MAIN,
-        repoRoot: MAIN,
-        updatedAt: '2026-01-01T00:00:00.000Z',
-      }),
+      // Sibling worktree: matches only via repoRoot.
+      candidate('sibling', { targetRoot: WORKTREE, repoRoot: MAIN }),
+      // Installed right here: exact targetRoot match.
+      candidate('here', { targetRoot: MAIN, repoRoot: MAIN }),
     ];
 
     expect(
@@ -124,15 +116,15 @@ describe('selectFeatureForLookupPaths', () => {
     });
   });
 
-  it('breaks ties on the same root by most recent update', () => {
+  it('breaks ties on the same root by keeping whichever candidate came first', () => {
     const candidates = [
-      candidate('old', { targetRoot: MAIN, updatedAt: '2026-01-01T00:00:00.000Z' }),
-      candidate('new', { targetRoot: MAIN, updatedAt: '2026-02-01T00:00:00.000Z' }),
+      candidate('first', { targetRoot: MAIN }),
+      candidate('second', { targetRoot: MAIN }),
     ];
 
     expect(
       selectFeatureForLookupPaths(candidates, [{ checkPath: MAIN, projectRoot: MAIN }])?.feature,
-    ).toBe('new');
+    ).toBe('first');
   });
 
   it('returns undefined when no candidate matches any lookup path', () => {

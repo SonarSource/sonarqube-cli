@@ -132,21 +132,23 @@ describe('runPostUpdateActions', () => {
   });
 
   it('saves the reloaded state, not the pre-runActions snapshot', async () => {
-    // The version check reads via tryLoadState, so loadState is called 6 times:
+    // The version check reads via tryLoadState, so loadState is called 7 times:
     //   1. inside migrateLegacyTelemetryEvents
-    //   2. inside migrateDeclarativeIntegrations
-    //   3. inside migrateClaudeCodeHooks
-    //   4. inside updateSecretsBinaryIfNeeded
-    //   5. inside updateScaScannerBinaryIfNeeded
-    //   6. the reload after runActions (the fix being tested)
+    //   2. inside migrateKnownServerProjectMappings
+    //   3. inside migrateDeclarativeIntegrations
+    //   4. inside migrateClaudeCodeHooks
+    //   5. inside updateSecretsBinaryIfNeeded
+    //   6. inside updateScaScannerBinaryIfNeeded
+    //   7. the reload after runActions (the fix being tested)
     const reloadedState = makeState();
     loadStateSpy
       .mockReturnValueOnce(makeState()) // call 1: migrateLegacyTelemetryEvents
-      .mockReturnValueOnce(makeState()) // call 2: migrateDeclarativeIntegrations
-      .mockReturnValueOnce(makeState()) // call 3: migrateClaudeCodeHooks
-      .mockReturnValueOnce(makeState()) // call 4: updateSecretsBinaryIfNeeded
-      .mockReturnValueOnce(makeState()) // call 5: updateScaScannerBinaryIfNeeded
-      .mockReturnValueOnce(reloadedState); // call 6: reload
+      .mockReturnValueOnce(makeState()) // call 2: migrateKnownServerProjectMappings
+      .mockReturnValueOnce(makeState()) // call 3: migrateDeclarativeIntegrations
+      .mockReturnValueOnce(makeState()) // call 4: migrateClaudeCodeHooks
+      .mockReturnValueOnce(makeState()) // call 5: updateSecretsBinaryIfNeeded
+      .mockReturnValueOnce(makeState()) // call 6: updateScaScannerBinaryIfNeeded
+      .mockReturnValueOnce(reloadedState); // call 7: reload
 
     await runPostUpdateActions(makeDeps());
 
@@ -163,8 +165,7 @@ describe('runPostUpdateActions', () => {
   });
 
   it('does not throw when post-update actions fail', async () => {
-    // Second loadState call (inside migrateClaudeCodeHooks) throws
-    loadStateSpy.mockReturnValueOnce(makeState()).mockImplementationOnce(() => {
+    loadStateSpy.mockImplementationOnce(() => {
       throw new Error('state load failed');
     });
 
@@ -174,13 +175,23 @@ describe('runPostUpdateActions', () => {
   });
 
   it('does not save state when post-update actions fail', async () => {
-    loadStateSpy.mockReturnValueOnce(makeState()).mockImplementationOnce(() => {
+    loadStateSpy.mockImplementationOnce(() => {
       throw new Error('state load failed');
     });
 
     await runPostUpdateActions(makeDeps());
 
     expect(saveStateSpy).not.toHaveBeenCalled();
+  });
+
+  it('still saves state when only migrateKnownServerProjectMappings fails', async () => {
+    loadStateSpy.mockReturnValueOnce(makeState()).mockImplementationOnce(() => {
+      throw new Error('state load failed');
+    });
+
+    await runPostUpdateActions(makeDeps());
+
+    expect(saveStateSpy).toHaveBeenCalledTimes(1);
   });
 
   it('removes sonar-a3s entries from state on upgrade', async () => {

@@ -112,6 +112,8 @@ export async function systemReset(options: SystemResetOptions): Promise<void> {
 
       applyCleanedState(state, mergeCleanedFields(results.map((r) => r.cleaned)));
       clearLegacyState(state);
+      // Not tied to any step above — would otherwise survive reset indefinitely.
+      state.knownServerProjectMappings = [];
       saveState(state);
     }
   }

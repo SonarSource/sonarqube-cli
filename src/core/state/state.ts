@@ -431,6 +431,33 @@ export interface IntegrationsState {
 }
 
 /**
+ * A folder known to be bound to a SonarQube project, derived from a project-scoped
+ * integration feature's attrs. Keeps `targetRoot`/`repoRoot` as two distinct signals
+ * (never collapsed into one) so worktree-aware matching can prefer the precise
+ * physical location over a worktree-wide fallback — see `resolveLookupPaths` /
+ * `selectFeatureForLookupPaths`.
+ */
+export interface KnownServerProjectMapping {
+  /** Physical location this was recorded from — the precise, most-specific signal. */
+  targetRoot: string;
+  /** Repository's main working tree root, when known — the worktree-wide fallback signal. */
+  repoRoot?: string;
+  /** SonarQube project key bound to this mapping. */
+  projectKey: string;
+  /**
+   * Server URL for this binding, when the feature actually recorded one (Vortex-entitled
+   * agent integrations). Left undefined when it didn't (e.g. `git` integrate never records a
+   * connection) — deliberately NOT backfilled here from whichever connection happened to be
+   * active at derive/migration time, since that is a point-in-time snapshot that can go stale
+   * (e.g. env-var auth switching server/org per invocation). Callers matching this mapping
+   * substitute the connection active *at match time* instead — see `discoverProject()`.
+   */
+  serverUrl?: string;
+  /** Organization key (SonarQube Cloud only), same recorded-only precedence as `serverUrl`. */
+  orgKey?: string;
+}
+
+/**
  * Product code sent on telemetry events: SonarQube Cloud or SonarQube Server.
  * Distinct from {@link ServerType} (`cloud` / `on-premise`), which the CLI uses for auth routing.
  */
@@ -504,6 +531,8 @@ export interface CliState {
   agentExtensions: AgentExtension[];
   /** Registry of all declarative integrations installed per project */
   integrations: IntegrationsState;
+  /** Folder -> SonarQube project key mappings derived from project-scoped integration attrs */
+  knownServerProjectMappings?: KnownServerProjectMapping[];
 }
 
 /**
@@ -546,5 +575,6 @@ export function getDefaultState(cliVersion: string): CliState {
     integrations: {
       installed: [],
     },
+    knownServerProjectMappings: [],
   };
 }
