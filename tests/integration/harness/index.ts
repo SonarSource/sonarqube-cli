@@ -356,8 +356,15 @@ export class TestHarness {
     await this.removeTempDir();
   }
 
+  // Windows DeleteFile on a just-run CAG/secrets PE can block 6–8s, past Bun's 5s
+  // afterEach budget. Wait at most 2s and let rm finish in the background (OS temp).
   private async removeTempDir(): Promise<void> {
-    const removal = rm(this.tempDir.path, { recursive: true, force: true }).catch(() => {
+    const removal = rm(this.tempDir.path, {
+      recursive: true,
+      force: true,
+      maxRetries: IS_WINDOWS ? 15 : 5,
+      retryDelay: IS_WINDOWS ? 200 : 100,
+    }).catch(() => {
       /* best-effort: temp dirs are cleaned up by the OS */
     });
 
