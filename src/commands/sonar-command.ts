@@ -26,6 +26,7 @@ import { Command, Help, Option } from 'commander';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { CliError, CommandFailedError, remediationHintFor } from '@/core/command-error.ts';
+import { qualifiedCommandPath } from '@/core/commands/command-path.ts';
 import {
   ALPHA_ENV_VAR,
   ALPHA_HELP_GROUP,
@@ -267,7 +268,10 @@ export class SonarCommand extends Command {
     this._runtime = options.runtime ?? createDefaultCliRuntime();
     this.hook('preAction', () => {
       if (this.isAlpha) {
-        info(`'${this.name()}' is in alpha; may change or be removed without notice.`, 'stderr');
+        info(
+          `'${qualifiedCommandPath(this)}' is in alpha; may change or be removed without notice.`,
+          'stderr',
+        );
       }
       this.warnIfDeprecated();
       this.warnIfStagedOptionsUsed();
@@ -610,16 +614,6 @@ export class SonarCommand extends Command {
     }
   }
 
-  private commandPath(): string {
-    const names = [this.name()];
-
-    for (let parent = this.parent; parent?.parent; parent = parent.parent) {
-      names.unshift(parent.name());
-    }
-
-    return names.join(' ');
-  }
-
   private warnIfStagedOptionsUsed(): void {
     for (const option of this.options) {
       if (option.isStable) {
@@ -634,7 +628,7 @@ export class SonarCommand extends Command {
         info(`'${flag}' is in alpha; may change or be removed without notice.`, 'stderr');
       } else if (option.isBeta) {
         this.warnIfBetaOnce(
-          `${this.commandPath()} ${flag}`,
+          `${qualifiedCommandPath(this)} ${flag}`,
           `'${flag}' is in beta and may change.`,
         );
       } else if (
@@ -665,7 +659,7 @@ export class SonarCommand extends Command {
 
     info(
       deprecationWarning(
-        `sonar ${this.commandPath()}`,
+        qualifiedCommandPath(this),
         this._lifecycle.deprecatedSinceVersion,
         this._lifecycle.deprecatedReplacementCommand,
       ),
@@ -678,7 +672,7 @@ export class SonarCommand extends Command {
       return;
     }
 
-    const commandPath = this.commandPath();
+    const commandPath = qualifiedCommandPath(this);
     this.warnIfBetaOnce(commandPath, `'${commandPath}' is in beta and may change.`);
   }
 

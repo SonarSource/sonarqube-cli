@@ -383,7 +383,7 @@ describe('SonarCommand', () => {
       expect(handler).toHaveBeenCalledTimes(1);
       const warning = getMockUiCalls().find((call) => call.method === 'info');
       expect(warning?.args[0]).toBe(
-        "'experimental' is in alpha; may change or be removed without notice.",
+        "'sonar experimental' is in alpha; may change or be removed without notice.",
       );
     });
   });
@@ -666,10 +666,10 @@ describe('SonarCommand', () => {
       const warnings = getMockUiCalls().filter((call) => call.method === 'info');
       expect(warnings).toHaveLength(2);
       expect(warnings[0]?.args[0]).toBe(
-        "'sonar legacy' is deprecated since 1.8. There is no replacement.",
+        "'legacy' is deprecated since 1.8. There is no replacement.",
       );
       expect(warnings[1]?.args[0]).toBe(
-        "'sonar legacy' is deprecated since 1.8. There is no replacement.",
+        "'legacy' is deprecated since 1.8. There is no replacement.",
       );
     });
 
@@ -682,7 +682,22 @@ describe('SonarCommand', () => {
 
       const warning = getMockUiCalls().find((call) => call.method === 'info');
       expect(warning?.args[0]).toBe(
-        "'sonar self-update' is deprecated since 1.2. Use 'sonar update' instead.",
+        "'self-update' is deprecated since 1.2. Use 'sonar update' instead.",
+      );
+    });
+
+    it('qualifies the deprecation warning with the program name', async () => {
+      const root = new SonarCommand('sonar');
+      root
+        .command('verify')
+        .stage(Stage.Deprecated({ sinceVersion: '0.14', replacementCommand: 'sonar analyze' }))
+        .anonymousAction((_ctx) => {});
+
+      await root.parseAsync(['verify'], { from: 'user' });
+
+      const warning = getMockUiCalls().find((call) => call.method === 'info');
+      expect(warning?.args[0]).toBe(
+        "'sonar verify' is deprecated since 0.14. Use 'sonar analyze' instead.",
       );
     });
 

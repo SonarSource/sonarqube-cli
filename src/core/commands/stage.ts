@@ -70,18 +70,18 @@ export const Stage = {
 };
 
 export type LifecycleState = {
-  stage: StageName;
-  betaFlagKey: string | undefined;
-  deprecatedSinceVersion: string | undefined;
-  deprecatedReplacementCommand: string | null | undefined;
+  readonly stage: StageName;
+  readonly betaFlagKey: string | undefined;
+  readonly deprecatedSinceVersion: string | undefined;
+  readonly deprecatedReplacementCommand: string | null | undefined;
 };
 
-export const STABLE_LIFECYCLE: LifecycleState = {
+export const STABLE_LIFECYCLE: LifecycleState = Object.freeze({
   stage: 'stable',
   betaFlagKey: undefined,
   deprecatedSinceVersion: undefined,
   deprecatedReplacementCommand: undefined,
-};
+});
 
 export function withLifecycleTag(description: string, stage: StageName): string {
   if (stage === 'alpha') {
