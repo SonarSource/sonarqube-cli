@@ -21,6 +21,7 @@
 // TestHarness — main entry point for integration tests
 
 import { chmodSync, copyFileSync, existsSync, mkdirSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -30,7 +31,6 @@ import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import { applyIsolatedSpawnEnv } from '../../_common/isolated-cli-env.js';
 import { getCliBinaryPath } from './cli-runner.js';
 import { Dir } from './dir';
-import { rmTempDirTraced, startDisposeTrace } from './dispose-trace.js';
 import { EnvironmentBuilder } from './environment-builder.js';
 import { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
 import { FakeGitLabServer, FakeGitLabServerBuilder } from './fake-gitlab-server.js';
@@ -46,6 +46,8 @@ export { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from './fake-sonarqub
 export { InteractiveSession } from './interactive-session.js';
 export { hookScriptName, hookScriptPath, IS_WINDOWS, normalizePath } from './platform';
 export type { CliResult, RecordedRequest, RunInteractiveOptions } from './types.js';
+
+const RM_BUDGET_MS = 2_000;
 
 export class TestHarness {
   public readonly cwd: Dir;
@@ -337,35 +339,37 @@ export class TestHarness {
    * Stops all fake servers and removes the temporary directory.
    */
   async dispose(): Promise<void> {
-    const trace = startDisposeTrace(this.tempDir.path);
-    try {
-      for (const session of this.sessions) {
-        session.kill();
-      }
-      await trace.phase('sessions', () =>
-        Promise.all(
-          this.sessions.map((session) =>
-            session.waitFinish().catch(trace.swallow('session.waitFinish')),
-          ),
-        ),
-      );
+    for (const session of this.sessions) {
+      session.kill();
+    }
+    await Promise.all(this.sessions.map((session) => session.waitFinish().catch(() => undefined)));
 
-      await trace.phase('servers', () =>
-        Promise.all(
-          [...this.servers, ...this.binariesServers, ...this.gitlabServers].map((s) =>
-            s.stop().catch(trace.swallow('server.stop')),
-          ),
-        ),
-      );
-      await trace.phase('update-servers', () =>
-        Promise.all(
-          this.updateScriptServers.map((s) => s.stop().catch(trace.swallow('update-server.stop'))),
-        ),
-      );
+    await Promise.all(
+      [...this.servers, ...this.binariesServers, ...this.gitlabServers].map((s) =>
+        s.stop().catch(() => {
+          /* ignore stop errors */
+        }),
+      ),
+    );
+    await Promise.all(this.updateScriptServers.map((s) => s.stop().catch(() => {})));
 
-      await trace.phase('rm', () => rmTempDirTraced(trace, this.tempDir.path));
-    } finally {
-      trace.stop();
+    await this.removeTempDir();
+  }
+
+  private async removeTempDir(): Promise<void> {
+    const removal = rm(this.tempDir.path, { recursive: true, force: true }).catch(() => {
+      /* best-effort: temp dirs are cleaned up by the OS */
+    });
+
+    let budgetTimer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      removal,
+      new Promise<void>((resolve) => {
+        budgetTimer = setTimeout(resolve, RM_BUDGET_MS);
+      }),
+    ]);
+    if (budgetTimer !== undefined) {
+      clearTimeout(budgetTimer);
     }
   }
 }

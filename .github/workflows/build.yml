@@ -410,10 +410,11 @@ jobs:
     runs-on: ${{ matrix.runner }}
     needs: [prepare, build-binaries]
     strategy:
-      # Linux omitted: a failing Linux matrix member fail-fast-cancels Windows.
-      fail-fast: false
       matrix:
         include:
+          - os: linux
+            runner: github-ubuntu-latest-m
+            binary_artifact: binary-linux-x86-64
           - os: windows
             runner: warp-custom-windows-2022-s
             binary_artifact: binary-windows-x86-64
@@ -465,13 +466,6 @@ jobs:
 
       - name: Setup integration resources
         run: bun build-scripts/setup-integration-resources.ts
-
-      - name: Fetch Sysinternals Handle (Windows dispose traces)
-        if: matrix.os == 'windows'
-        continue-on-error: true
-        shell: powershell
-        run: |
-          Invoke-WebRequest -Uri 'https://live.sysinternals.com/handle64.exe' -OutFile (Join-Path $env:RUNNER_TEMP 'handle64.exe')
 
       - name: Start D-Bus and unlock keyring (Linux)
         if: matrix.os == 'linux'
