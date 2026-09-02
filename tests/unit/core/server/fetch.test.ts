@@ -270,7 +270,9 @@ describe('fetchAuthenticated — redirect semantics', () => {
     } as unknown as Response);
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(fetchAuthenticated(`${SERVER_URL}/api`, {})).rejects.toThrow('cross-origin redirect');
+    await expect(fetchAuthenticated(`${SERVER_URL}/api`, {})).rejects.toThrow(
+      'cross-origin redirect',
+    );
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -401,6 +403,8 @@ describe('fetchAuthenticated — redirect semantics', () => {
     } as unknown as Response);
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(fetchAuthenticated(`${SERVER_URL}/loop`, {})).rejects.toThrow('too many redirects');
+    await expect(fetchAuthenticated(`${SERVER_URL}/loop`, {})).rejects.toThrow(
+      'too many redirects',
+    );
   });
 });
