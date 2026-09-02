@@ -140,6 +140,15 @@ describe('migrateKnownServerProjectMappings', () => {
     ]);
   });
 
+  it('swallows a failure instead of throwing', () => {
+    loadStateSpy.mockImplementation(() => {
+      throw new Error('disk read failed');
+    });
+
+    expect(() => migrateKnownServerKeyMappingsForProjectLevelFeatures()).not.toThrow();
+    expect(saveStateSpy).not.toHaveBeenCalled();
+  });
+
   it('keeps two worktrees of the same repo, sharing a repoRoot attr, as distinct mappings', () => {
     const state = makeState();
     state.integrations.installed = [

@@ -165,8 +165,7 @@ describe('runPostUpdateActions', () => {
   });
 
   it('does not throw when post-update actions fail', async () => {
-    // Second loadState call (inside migrateKnownServerProjectMappings) throws
-    loadStateSpy.mockReturnValueOnce(makeState()).mockImplementationOnce(() => {
+    loadStateSpy.mockImplementationOnce(() => {
       throw new Error('state load failed');
     });
 
@@ -176,13 +175,23 @@ describe('runPostUpdateActions', () => {
   });
 
   it('does not save state when post-update actions fail', async () => {
-    loadStateSpy.mockReturnValueOnce(makeState()).mockImplementationOnce(() => {
+    loadStateSpy.mockImplementationOnce(() => {
       throw new Error('state load failed');
     });
 
     await runPostUpdateActions(makeDeps());
 
     expect(saveStateSpy).not.toHaveBeenCalled();
+  });
+
+  it('still saves state when only migrateKnownServerProjectMappings fails', async () => {
+    loadStateSpy.mockReturnValueOnce(makeState()).mockImplementationOnce(() => {
+      throw new Error('state load failed');
+    });
+
+    await runPostUpdateActions(makeDeps());
+
+    expect(saveStateSpy).toHaveBeenCalledTimes(1);
   });
 
   it('removes sonar-a3s entries from state on upgrade', async () => {

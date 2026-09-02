@@ -32,16 +32,22 @@ import {
 } from '@/core/known-server-project-mappings.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
 
-export function migrateKnownServerKeyMappingsForProjectLevelFeatures(): void {
-  const state = loadState();
-  const discovered = buildKnownServerProjectMappings(state);
-  if (discovered.length === 0) {
-    return;
-  }
+import logger from '../observability/logger.ts';
 
-  state.knownServerProjectMappings = mergeKnownServerProjectMappings(
-    state.knownServerProjectMappings ?? [],
-    discovered,
-  );
-  saveState(state);
+export function migrateKnownServerKeyMappingsForProjectLevelFeatures(): void {
+  try {
+    const state = loadState();
+    const discovered = buildKnownServerProjectMappings(state);
+    if (discovered.length === 0) {
+      return;
+    }
+
+    state.knownServerProjectMappings = mergeKnownServerProjectMappings(
+      state.knownServerProjectMappings ?? [],
+      discovered,
+    );
+    saveState(state);
+  } catch (error) {
+    logger.warn(`Known-server-project-mappings migration failed: ${(error as Error).message}`);
+  }
 }
