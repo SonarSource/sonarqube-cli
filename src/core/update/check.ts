@@ -25,7 +25,7 @@
 
 import { CommandFailedError } from '@/core/command-error.ts';
 import { CLI_STABLE_VERSION_PATH, SONARSOURCE_BINARIES_URL } from '@/core/config-constants.ts';
-import { fetchWithNetworkConfig } from '@/core/server/fetch-guarded.ts';
+import { fetchAnonymous } from '@/core/server/fetch.ts';
 
 const UPDATE_CHECK_TIMEOUT_MS = 5000;
 /** Best-effort background fetch after eligible commands — fail fast to avoid blocking UX. */
@@ -37,7 +37,7 @@ export async function fetchText(
   description: string,
   timeoutMs = UPDATE_CHECK_TIMEOUT_MS,
 ): Promise<string> {
-  const response = await fetchWithNetworkConfig(url, {
+  const response = await fetchAnonymous(url, {
     signal: AbortSignal.timeout(timeoutMs),
   });
   if (!response.ok) {

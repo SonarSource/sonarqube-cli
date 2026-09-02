@@ -25,7 +25,7 @@ import {
   HTTP_STATUS_SERVICE_UNAVAILABLE,
   HTTP_STATUS_TOO_MANY_REQUESTS,
 } from '@/core/http-constants.ts';
-import { buildFetchInit, fetchGuarded } from '@/core/server/fetch-guarded.ts';
+import { buildRequest, fetchAuthenticated } from '@/core/server/fetch.ts';
 
 export interface GitLabRepo {
   id: number;
@@ -114,12 +114,12 @@ export class GitLabClient {
 
   private fetchGet(url: string): Promise<Response> {
     return callWithRetry(() =>
-      fetchGuarded(url, buildFetchInit('GET', this.headers(), GET_TIMEOUT_MS, undefined)),
+      fetchAuthenticated(url, buildRequest('GET', this.headers(), GET_TIMEOUT_MS, undefined)),
     );
   }
 
   private fetchWrite(url: string, method: string, body?: string): Promise<Response> {
-    return fetchGuarded(url, buildFetchInit(method, this.headers(), WRITE_TIMEOUT_MS, body));
+    return fetchAuthenticated(url, buildRequest(method, this.headers(), WRITE_TIMEOUT_MS, body));
   }
 
   private async fetchAllPages<T>(

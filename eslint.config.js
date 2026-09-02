@@ -5,8 +5,8 @@ import headersPlugin from 'eslint-plugin-headers';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
 
 const NO_DIRECT_FETCH_MESSAGE =
-  "Don't call fetch() directly — use fetchGuarded() (credentialed requests) or " +
-  'fetchWithNetworkConfig() (credential-free requests) from @/core/server/fetch-guarded.ts, ' +
+  "Don't call fetch() directly — use fetchAuthenticated() (credentialed requests) or " +
+  'fetchAnonymous() (credential-free requests) from @/core/server/fetch.ts, ' +
   'so proxy and TLS configuration are always applied.';
 
 export default tseslint.config(
@@ -118,7 +118,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['src/core/server/fetch-guarded.ts'],
+    files: ['src/core/server/fetch.ts'],
     rules: {
       'no-restricted-syntax': 'off',
     },

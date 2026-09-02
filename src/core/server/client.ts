@@ -42,7 +42,7 @@ import {
   ServiceUnavailableError,
   SqaaForbiddenError,
 } from './errors.ts';
-import { buildFetchInit, fetchGuarded } from './fetch-guarded.ts';
+import { buildRequest, fetchAuthenticated } from './fetch.ts';
 import { stripGitRemoteUrlUserinfo } from './git-remote-url.ts';
 import type { SettingsValue } from './settings-value.ts';
 import {
@@ -217,7 +217,10 @@ export class SonarQubeClient {
       print(`request body: ${requestBody}`, 'stderr');
     }
 
-    const response = await fetchGuarded(url, buildFetchInit(method, headers, timeout, requestBody));
+    const response = await fetchAuthenticated(
+      url,
+      buildRequest(method, headers, timeout, requestBody),
+    );
 
     if (debug) {
       print(`response status: ${response.status}`, 'stderr');
@@ -284,9 +287,9 @@ export class SonarQubeClient {
     }
 
     const urlString = url.toString();
-    const response = await fetchGuarded(
+    const response = await fetchAuthenticated(
       urlString,
-      buildFetchInit('GET', this.commonHeaders(), timeoutMs, undefined),
+      buildRequest('GET', this.commonHeaders(), timeoutMs, undefined),
     );
 
     const value = response.ok ? ((await response.json()) as TValue) : undefined;
@@ -306,9 +309,9 @@ export class SonarQubeClient {
     const url = `${baseUrl ?? this.serverURL}${endpoint}`;
     const headers = { ...this.commonHeaders('json'), ...extraHeaders };
 
-    const response = await fetchGuarded(
+    const response = await fetchAuthenticated(
       url,
-      buildFetchInit('POST', headers, POST_REQUEST_TIMEOUT_MS, JSON.stringify(body)),
+      buildRequest('POST', headers, POST_REQUEST_TIMEOUT_MS, JSON.stringify(body)),
     );
 
     await this.raiseForStatus(response, 'POST');
@@ -327,9 +330,9 @@ export class SonarQubeClient {
     timeoutMs: number = POST_REQUEST_TIMEOUT_MS,
   ): Promise<void> {
     const url = `${this.serverURL}${endpoint}`;
-    const response = await fetchGuarded(
+    const response = await fetchAuthenticated(
       url,
-      buildFetchInit(
+      buildRequest(
         'POST',
         this.commonHeaders('form'),
         timeoutMs,
@@ -347,9 +350,9 @@ export class SonarQubeClient {
    */
   private async postFormJson<T>(endpoint: string, params: Record<string, string>): Promise<T> {
     const url = `${this.serverURL}${endpoint}`;
-    const response = await fetchGuarded(
+    const response = await fetchAuthenticated(
       url,
-      buildFetchInit(
+      buildRequest(
         'POST',
         this.commonHeaders('form'),
         POST_REQUEST_TIMEOUT_MS,

@@ -25,7 +25,8 @@ import { join } from 'node:path';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { NetworkConfigError } from '@/core/errors.ts';
 import { detectCallerAgent } from '@/core/host/environment/agent-detector.ts';
-import { buildFetchInit, fetchGuarded } from '@/core/server/fetch-guarded.ts';
+import logger from '@/core/observability/logger.ts';
+import { buildRequest, fetchAuthenticated } from '@/core/server/fetch.ts';
 import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
 
 import { version as VERSION } from '../../../package.json';
@@ -166,27 +167,37 @@ function parseValidEvents(content: string, now: number): StoredTelemetryEvent[] 
   return events;
 }
 
+/** What happened to one event. What to do about it is the caller's decision. */
+type SendOutcome = 'success' | 'send_error' | 'config_error';
+
 /**
- * POSTs one event. `requeue` leaves it for the next flush attempt; `abort` means the
- * proxy/TLS configuration is unusable, so the rest of the batch is not worth attempting.
+ * POSTs one event. The failure is logged here because the caller only sees the outcome,
+ * and the detached flush worker discards stdout and stderr: the log file is the only
+ * place the cause survives.
  */
 async function sendTelemetryEvent(
   event: StoredTelemetryEvent,
   timeoutMs: number,
-): Promise<'sent' | 'requeue' | 'abort'> {
+): Promise<SendOutcome> {
   try {
-    await fetchGuarded(
+    await fetchAuthenticated(
       TELEMETRY_ENDPOINT,
-      buildFetchInit(
+      buildRequest(
         'POST',
         { 'Content-Type': 'application/json', 'x-api-key': TELEMETRY_API_KEY },
         timeoutMs,
         JSON.stringify(event, (_key, value) => (value === null ? undefined : value)),
       ),
     );
-    return 'sent';
+    return 'success';
   } catch (err) {
-    return err instanceof NetworkConfigError ? 'abort' : 'requeue';
+    const outcome: SendOutcome = err instanceof NetworkConfigError ? 'config_error' : 'send_error';
+    // The logger JSON-stringifies its extra args, and an Error serializes to {}.
+    logger.error(
+      `Telemetry event not sent (${outcome})`,
+      err instanceof Error ? (err.stack ?? `${err.name}: ${err.message}`) : String(err),
+    );
+    return outcome;
   }
 }
 
@@ -231,8 +242,9 @@ export async function flushTelemetryEvents(deadline: number): Promise<void> {
         events[i],
         Math.min(remainingTime, TELEMETRY_REQUEST_TIMEOUT_MS),
       );
-      if (outcome === 'abort') break;
-      if (outcome === 'sent') sentIndices.add(i);
+      // An unusable proxy/TLS configuration fails every remaining event too.
+      if (outcome === 'config_error') break;
+      if (outcome === 'success') sentIndices.add(i);
     }
 
     unsent.push(...events.filter((_, i) => !sentIndices.has(i)));

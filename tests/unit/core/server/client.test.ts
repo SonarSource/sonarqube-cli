@@ -32,7 +32,7 @@ import {
   RateLimitError,
   ServiceUnavailableError,
 } from '@/core/server/errors.ts';
-import { fetchGuarded } from '@/core/server/fetch-guarded.ts';
+import { fetchAuthenticated } from '@/core/server/fetch.ts';
 import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
@@ -137,7 +137,7 @@ describe('SonarQubeClient', () => {
   // -------------------------------------------------------------------------
   // Bearer token must not be forwarded to cross-origin redirect targets (F9)
   //
-  // fetchGuarded() intercepts every 3xx before the runtime follows it:
+  // fetchAuthenticated() intercepts every 3xx before the runtime follows it:
   // - same-origin redirects are followed transparently (e.g. HTTP→HTTPS)
   // - cross-origin redirects throw so the Authorization header is never
   //   forwarded to an attacker-controlled domain
@@ -190,7 +190,7 @@ describe('SonarQubeClient', () => {
     });
 
     it('rejects a cross-origin 302 redirect without forwarding the bearer token', async () => {
-      // Vulnerability: without fetchGuarded, Authorization would be sent to attacker.com
+      // Vulnerability: without fetchAuthenticated, Authorization would be sent to attacker.com
       fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue({
         ok: false,
         status: 302,
@@ -209,10 +209,10 @@ describe('SonarQubeClient', () => {
   });
 
   // -------------------------------------------------------------------------
-  // fetchGuarded — standalone redirect guard
+  // fetchAuthenticated — standalone redirect guard
   // -------------------------------------------------------------------------
 
-  describe('fetchGuarded', () => {
+  describe('fetchAuthenticated', () => {
     it('follows a same-origin redirect and returns the final response', async () => {
       fetchSpy = spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({
@@ -230,7 +230,7 @@ describe('SonarQubeClient', () => {
           text: () => Promise.resolve('{"data":"ok"}'),
         } as unknown as Response);
 
-      const res = await fetchGuarded(`${SERVER_URL}/old-path`, {});
+      const res = await fetchAuthenticated(`${SERVER_URL}/old-path`, {});
       expect(res.ok).toBe(true);
       expect(fetchSpy).toHaveBeenCalledTimes(2);
     });
@@ -245,7 +245,9 @@ describe('SonarQubeClient', () => {
       } as unknown as Response);
 
       // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(fetchGuarded(`${SERVER_URL}/api`, {})).rejects.toThrow('cross-origin redirect');
+      await expect(fetchAuthenticated(`${SERVER_URL}/api`, {})).rejects.toThrow(
+        'cross-origin redirect',
+      );
       expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
 
@@ -268,7 +270,7 @@ describe('SonarQubeClient', () => {
           text: () => Promise.resolve('{"ok":true}'),
         } as unknown as Response);
 
-      const res = await fetchGuarded(httpUrl, {});
+      const res = await fetchAuthenticated(httpUrl, {});
       expect(res.ok).toBe(true);
       expect(fetchSpy).toHaveBeenCalledTimes(2);
       expect(fetchSpy.mock.calls[1][0] as string).toBe(httpsUrl);
@@ -283,7 +285,7 @@ describe('SonarQubeClient', () => {
         json: () => Promise.resolve({}),
       } as unknown as Response);
 
-      const res = await fetchGuarded(`${SERVER_URL}/api`, {});
+      const res = await fetchAuthenticated(`${SERVER_URL}/api`, {});
       expect(res.status).toBe(304);
       expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
@@ -305,7 +307,7 @@ describe('SonarQubeClient', () => {
           text: () => Promise.resolve('{}'),
         } as unknown as Response);
 
-      await fetchGuarded(`${SERVER_URL}/api`, { method: 'POST', body: '{"key":"val"}' });
+      await fetchAuthenticated(`${SERVER_URL}/api`, { method: 'POST', body: '{"key":"val"}' });
 
       const secondInit = fetchSpy.mock.calls[1][1] as RequestInit;
       expect(secondInit.method).toBe('GET');
@@ -329,7 +331,7 @@ describe('SonarQubeClient', () => {
           text: () => Promise.resolve('{}'),
         } as unknown as Response);
 
-      await fetchGuarded(`${SERVER_URL}/api`, {
+      await fetchAuthenticated(`${SERVER_URL}/api`, {
         method: 'POST',
         body: '{"key":"val"}',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer tok' },
@@ -359,7 +361,7 @@ describe('SonarQubeClient', () => {
           text: () => Promise.resolve('{}'),
         } as unknown as Response);
 
-      await fetchGuarded(`${SERVER_URL}/api`, { method: 'POST', body: '{"key":"val"}' });
+      await fetchAuthenticated(`${SERVER_URL}/api`, { method: 'POST', body: '{"key":"val"}' });
 
       const secondInit = fetchSpy.mock.calls[1][1] as RequestInit;
       expect(secondInit.method).toBe('POST');
@@ -376,7 +378,9 @@ describe('SonarQubeClient', () => {
       } as unknown as Response);
 
       // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(fetchGuarded(`${SERVER_URL}/loop`, {})).rejects.toThrow('too many redirects');
+      await expect(fetchAuthenticated(`${SERVER_URL}/loop`, {})).rejects.toThrow(
+        'too many redirects',
+      );
     });
   });
 

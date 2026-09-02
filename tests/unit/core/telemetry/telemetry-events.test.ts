@@ -45,7 +45,7 @@ import * as networkConfig from '@/core/host/connectivity/network-config.ts';
 import { DISTRIBUTION } from '@/core/host/distribution.ts';
 import * as agentDetector from '@/core/host/environment/agent-detector.ts';
 import type { SpawnResult } from '@/core/process/process.ts';
-import * as fetchGuardedModule from '@/core/server/fetch-guarded.ts';
+import * as fetchModule from '@/core/server/fetch.ts';
 import type { TelemetryEventIdentityPayload } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
@@ -753,7 +753,7 @@ describe('flushTelemetryEvents()', () => {
     it('caps each request at 20s even when the flush deadline is far away', async () => {
       writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent());
 
-      const initSpy = spyOn(fetchGuardedModule, 'buildFetchInit');
+      const initSpy = spyOn(fetchModule, 'buildRequest');
       const fetchSpy = mockFetch();
       try {
         await flushTelemetryEvents(Date.now() + 60_000);
@@ -767,7 +767,7 @@ describe('flushTelemetryEvents()', () => {
     it('uses the remaining deadline when it is shorter than the cap', async () => {
       writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent());
 
-      const initSpy = spyOn(fetchGuardedModule, 'buildFetchInit');
+      const initSpy = spyOn(fetchModule, 'buildRequest');
       const fetchSpy = mockFetch();
       try {
         await flushTelemetryEvents(Date.now() + 2_000);
