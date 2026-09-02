@@ -432,9 +432,6 @@ jobs:
             development/kv/data/repox url | ARTIFACTORY_URL;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
-            development/kv/data/devex-claude-code API_KEY | CLAUDE_CODE_API_KEY;
-            development/team/sonarlint/kv/data/sonarcloud-it token | SONARCLOUD_IT_TOKEN;
-            development/team/sonarlint/kv/data/sonarcloud-it-US token | SONARCLOUD_IT_TOKEN_US;
 
       - uses: ./.github/actions/setup-bun
         with:
@@ -446,9 +443,6 @@ jobs:
           os: linux
           project-version: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           binary-artifact: binary-linux-x86-64
-          claude-code-api-key: ${{ fromJSON(steps.secrets.outputs.vault).CLAUDE_CODE_API_KEY }}
-          sonarcloud-it-token: ${{ fromJSON(steps.secrets.outputs.vault).SONARCLOUD_IT_TOKEN }}
-          sonarcloud-it-token-us: ${{ fromJSON(steps.secrets.outputs.vault).SONARCLOUD_IT_TOKEN_US }}
 
   integration-and-e2e-windows:
     name: Integration and E2E Tests - windows
@@ -465,9 +459,6 @@ jobs:
             development/kv/data/repox url | ARTIFACTORY_URL;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
-            development/kv/data/devex-claude-code API_KEY | CLAUDE_CODE_API_KEY;
-            development/team/sonarlint/kv/data/sonarcloud-it token | SONARCLOUD_IT_TOKEN;
-            development/team/sonarlint/kv/data/sonarcloud-it-US token | SONARCLOUD_IT_TOKEN_US;
 
       - uses: ./.github/actions/setup-bun
         with:
@@ -479,9 +470,6 @@ jobs:
           os: windows
           project-version: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           binary-artifact: binary-windows-x86-64
-          claude-code-api-key: ${{ fromJSON(steps.secrets.outputs.vault).CLAUDE_CODE_API_KEY }}
-          sonarcloud-it-token: ${{ fromJSON(steps.secrets.outputs.vault).SONARCLOUD_IT_TOKEN }}
-          sonarcloud-it-token-us: ${{ fromJSON(steps.secrets.outputs.vault).SONARCLOUD_IT_TOKEN_US }}
 
   scan:
     name: SonarQube Analysis
