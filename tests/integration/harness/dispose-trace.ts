@@ -18,13 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Dispose diagnostics for Windows afterEach hangs. Quiet when teardown is fast;
-// logs the current phase every second, swallowed session/server-stop errors, and
-// every fs.rm failure. When rm blocks, dump Sysinternals handle.exe holders for
-// .exe files in the temp dir — Win32_Process cannot see Defender's file lock.
+// Dispose diagnostics for Windows afterEach hangs. Quiet when teardown is fast.
+// Deletes the temp tree file-by-file so a blocked unlink names the path. When rm
+// blocks, dump Sysinternals handle.exe holders for .exe files in the temp dir.
 
 import { existsSync } from 'node:fs';
-import { readdir, rm } from 'node:fs/promises';
+import { readdir, rmdir, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -35,7 +34,7 @@ const HOLDERS_TIMEOUT_MS = 1_500;
 const HANDLE_DOWNLOAD_MS = 5_000;
 const HANDLE_RUN_MS = 4_000;
 const HANDLE_OUTPUT_CAP = 4_000;
-const REMAINING_FILE_CAP = 20;
+const SLOW_UNLINK_MS = 100;
 const EXE_LOG_CAP = 8;
 const HANDLE64_URL = 'https://live.sysinternals.com/handle64.exe';
 const HANDLE64_PATH = join(tmpdir(), 'sqcli-handle64.exe');
@@ -50,11 +49,15 @@ export class DisposeTrace {
   private readonly watchdog: ReturnType<typeof setInterval>;
   private exePaths: string[] = [];
   private lockDumpStarted = false;
+  private phaseChangedAt = Date.now();
 
   constructor(private readonly tempDir: string) {
     this.watchdog = setInterval(() => {
+      if (Date.now() - this.phaseChangedAt < WATCHDOG_MS) {
+        return;
+      }
       this.log(`still in ${this.currentPhase} after ${this.elapsed()}ms`);
-      if (IS_WINDOWS && this.currentPhase === 'rm') {
+      if (IS_WINDOWS && this.currentPhase.startsWith('rm')) {
         void this.ensureLockersDumped();
       }
     }, WATCHDOG_MS);
@@ -65,8 +68,14 @@ export class DisposeTrace {
     this.exePaths = paths;
   }
 
+  noteRmTarget(kind: string, entry: string): void {
+    this.currentPhase = `rm ${kind} ${entry}`;
+    this.phaseChangedAt = Date.now();
+  }
+
   async phase<T>(name: string, work: () => Promise<T>): Promise<T> {
     this.currentPhase = name;
+    this.phaseChangedAt = Date.now();
     const phaseStarted = Date.now();
     try {
       return await work();
@@ -117,36 +126,70 @@ export class DisposeTrace {
 }
 
 export async function rmTempDirTraced(trace: DisposeTrace, tempDir: string): Promise<void> {
-  const maxRetries = IS_WINDOWS ? 15 : 5;
-  const retryDelay = IS_WINDOWS ? 200 : 100;
-
   if (IS_WINDOWS) {
     trace.noteExePaths(await listExePaths(tempDir));
   }
 
-  for (let attempt = 0; ; attempt++) {
+  const { files, dirs } = await collectTree(tempDir);
+  for (const file of files) {
+    await removeTraced(trace, 'file', file);
+  }
+  for (const dir of dirs) {
+    await removeTraced(trace, 'dir', dir);
+  }
+}
+
+async function collectTree(root: string): Promise<{ files: string[]; dirs: string[] }> {
+  const files: string[] = [];
+  const dirs: string[] = [];
+
+  async function walk(dir: string): Promise<void> {
+    let entries;
     try {
-      await rm(tempDir, { recursive: true, force: true, maxRetries: 0 });
-      if (attempt > 0) {
-        trace.log(`rm ok on attempt ${attempt + 1}`);
-      }
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
       return;
-    } catch (err) {
-      trace.log(`rm fail attempt=${attempt + 1}/${maxRetries + 1} ${formatError(err)}`);
-      const remaining = await listRemaining(tempDir);
-      if (remaining.length > 0) {
-        trace.log(
-          `remaining (${remaining.length}): ${remaining.slice(0, REMAINING_FILE_CAP).join(' | ')}`,
-        );
-      }
-      if (IS_WINDOWS) {
-        await trace.ensureLockersDumped();
-      }
-      if (attempt >= maxRetries) {
-        return;
-      }
-      await delay(retryDelay * (attempt + 1));
     }
+    for (const entry of entries) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory() && !entry.isSymbolicLink()) {
+        dirs.push(full);
+        await walk(full);
+      } else {
+        files.push(full);
+      }
+    }
+  }
+
+  await walk(root);
+  dirs.push(root);
+  dirs.sort((left, right) => right.length - left.length);
+  return { files, dirs };
+}
+
+async function removeTraced(
+  trace: DisposeTrace,
+  kind: 'file' | 'dir',
+  entry: string,
+): Promise<void> {
+  trace.noteRmTarget(kind, entry);
+  const started = Date.now();
+  try {
+    if (kind === 'file') {
+      await unlink(entry);
+    } else {
+      await rmdir(entry);
+    }
+  } catch (err) {
+    trace.log(`unlink ${kind} fail ${Date.now() - started}ms ${formatError(err)} entry=${entry}`);
+    if (IS_WINDOWS) {
+      await trace.ensureLockersDumped();
+    }
+    return;
+  }
+  const ms = Date.now() - started;
+  if (ms >= SLOW_UNLINK_MS) {
+    trace.log(`unlink ${kind} slow ${ms}ms entry=${entry}`);
   }
 }
 
@@ -156,14 +199,6 @@ function formatError(err: unknown): string {
     return `code=${code ?? '?'} path=${path ?? '?'} ${message ?? ''}`;
   }
   return String(err);
-}
-
-async function listRemaining(root: string): Promise<string[]> {
-  try {
-    return await readdir(root, { recursive: true });
-  } catch (err) {
-    return [`<list failed: ${formatError(err)}>`];
-  }
 }
 
 async function listExePaths(root: string): Promise<string[]> {
@@ -304,8 +339,4 @@ function clip(text: string): string {
     return text;
   }
   return `${text.slice(0, HANDLE_OUTPUT_CAP)}…`;
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
