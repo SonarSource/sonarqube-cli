@@ -466,6 +466,13 @@ jobs:
       - name: Setup integration resources
         run: bun build-scripts/setup-integration-resources.ts
 
+      - name: Fetch Sysinternals Handle (Windows dispose traces)
+        if: matrix.os == 'windows'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          Invoke-WebRequest -Uri 'https://live.sysinternals.com/handle64.exe' -OutFile (Join-Path $env:RUNNER_TEMP 'handle64.exe')
+
       - name: Start D-Bus and unlock keyring (Linux)
         if: matrix.os == 'linux'
         run: |

@@ -20,16 +20,25 @@
 
 // Dispose diagnostics for Windows afterEach hangs. Quiet when teardown is fast;
 // logs the current phase every second, swallowed session/server-stop errors, and
-// every fs.rm failure (path, errno, leftover files, processes whose image/command
-// line still points at the temp dir).
+// every fs.rm failure. When rm blocks, dump Sysinternals handle.exe holders for
+// .exe files in the temp dir — Win32_Process cannot see Defender's file lock.
 
+import { existsSync } from 'node:fs';
 import { readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { IS_WINDOWS } from './platform';
 
 const WATCHDOG_MS = 1_000;
 const HOLDERS_TIMEOUT_MS = 1_500;
+const HANDLE_DOWNLOAD_MS = 5_000;
+const HANDLE_RUN_MS = 4_000;
+const HANDLE_OUTPUT_CAP = 4_000;
 const REMAINING_FILE_CAP = 20;
+const EXE_LOG_CAP = 8;
+const HANDLE64_URL = 'https://live.sysinternals.com/handle64.exe';
+const HANDLE64_PATH = join(tmpdir(), 'sqcli-handle64.exe');
 
 export function startDisposeTrace(tempDir: string): DisposeTrace {
   return new DisposeTrace(tempDir);
@@ -39,12 +48,21 @@ export class DisposeTrace {
   private readonly startedAt = Date.now();
   private currentPhase = 'start';
   private readonly watchdog: ReturnType<typeof setInterval>;
+  private exePaths: string[] = [];
+  private lockDumpStarted = false;
 
   constructor(private readonly tempDir: string) {
     this.watchdog = setInterval(() => {
       this.log(`still in ${this.currentPhase} after ${this.elapsed()}ms`);
+      if (IS_WINDOWS && this.currentPhase === 'rm') {
+        void this.ensureLockersDumped();
+      }
     }, WATCHDOG_MS);
     this.watchdog.unref();
+  }
+
+  noteExePaths(paths: string[]): void {
+    this.exePaths = paths;
   }
 
   async phase<T>(name: string, work: () => Promise<T>): Promise<T> {
@@ -77,6 +95,22 @@ export class DisposeTrace {
     };
   }
 
+  async ensureLockersDumped(): Promise<void> {
+    if (this.lockDumpStarted) {
+      return;
+    }
+    this.lockDumpStarted = true;
+    await this.dumpLockers();
+  }
+
+  private async dumpLockers(): Promise<void> {
+    const exes = this.exePaths.slice(0, EXE_LOG_CAP).join(' | ') || '<none>';
+    this.log(`exes: ${exes}`);
+    this.log(`handles: ${await windowsHandleDump(this.tempDir, this.exePaths)}`);
+    this.log(`holders: ${await windowsHolders(this.tempDir)}`);
+    this.log(`scanners: ${await windowsScannerProcesses()}`);
+  }
+
   private elapsed(): number {
     return Date.now() - this.startedAt;
   }
@@ -85,7 +119,10 @@ export class DisposeTrace {
 export async function rmTempDirTraced(trace: DisposeTrace, tempDir: string): Promise<void> {
   const maxRetries = IS_WINDOWS ? 15 : 5;
   const retryDelay = IS_WINDOWS ? 200 : 100;
-  let dumpedHolders = false;
+
+  if (IS_WINDOWS) {
+    trace.noteExePaths(await listExePaths(tempDir));
+  }
 
   for (let attempt = 0; ; attempt++) {
     try {
@@ -102,9 +139,8 @@ export async function rmTempDirTraced(trace: DisposeTrace, tempDir: string): Pro
           `remaining (${remaining.length}): ${remaining.slice(0, REMAINING_FILE_CAP).join(' | ')}`,
         );
       }
-      if (IS_WINDOWS && !dumpedHolders) {
-        dumpedHolders = true;
-        trace.log(`holders: ${await windowsHolders(tempDir)}`);
+      if (IS_WINDOWS) {
+        await trace.ensureLockersDumped();
       }
       if (attempt >= maxRetries) {
         return;
@@ -130,29 +166,116 @@ async function listRemaining(root: string): Promise<string[]> {
   }
 }
 
-async function windowsHolders(tempDir: string): Promise<string> {
+async function listExePaths(root: string): Promise<string[]> {
   try {
-    const proc = Bun.spawn(
-      [
-        'powershell',
-        '-NoProfile',
-        '-Command',
-        [
-          'Get-CimInstance Win32_Process |',
-          'Where-Object {',
-          '  ($_.ExecutablePath -and $_.ExecutablePath.Contains($env:HARNESS_TEMP)) -or',
-          '  ($_.CommandLine -and $_.CommandLine.Contains($env:HARNESS_TEMP))',
-          '} |',
-          'ForEach-Object { "{0} {1} exe={2} cmd={3}" -f $_.ProcessId, $_.Name, $_.ExecutablePath, $_.CommandLine }',
-        ].join(' '),
-      ],
-      {
-        env: { ...process.env, HARNESS_TEMP: tempDir },
-        stdout: 'pipe',
-        stderr: 'pipe',
-      },
-    );
+    const names = await readdir(root, { recursive: true });
+    return names
+      .filter((name) => name.toLowerCase().endsWith('.exe'))
+      .map((name) => join(root, name));
+  } catch {
+    return [];
+  }
+}
 
+async function windowsHandleDump(tempDir: string, exePaths: string[]): Promise<string> {
+  const handlePath = await ensureHandle64();
+  if (handlePath === null) {
+    return '<handle64 unavailable>';
+  }
+  const targets = exePaths.length > 0 && exePaths.length <= EXE_LOG_CAP ? exePaths : [tempDir];
+  const chunks: string[] = [];
+  for (const target of targets) {
+    chunks.push(await runHandle64(handlePath, target));
+  }
+  return clip(chunks.join(' || '));
+}
+
+async function ensureHandle64(): Promise<string | null> {
+  const runnerTemp = process.env.RUNNER_TEMP;
+  const candidates = [
+    runnerTemp === undefined ? undefined : join(runnerTemp, 'handle64.exe'),
+    HANDLE64_PATH,
+  ];
+  for (const candidate of candidates) {
+    if (candidate !== undefined && existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  try {
+    const response = await fetch(HANDLE64_URL, { signal: AbortSignal.timeout(HANDLE_DOWNLOAD_MS) });
+    if (!response.ok) {
+      return null;
+    }
+    await Bun.write(HANDLE64_PATH, await response.arrayBuffer());
+    return HANDLE64_PATH;
+  } catch {
+    return null;
+  }
+}
+
+async function runHandle64(handlePath: string, target: string): Promise<string> {
+  try {
+    const proc = Bun.spawn([handlePath, '-accepteula', '-nobanner', target], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const timeout = setTimeout(() => proc.kill(), HANDLE_RUN_MS);
+    try {
+      const [stdout, stderr, exitCode] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+      const body = stdout.trim() || stderr.trim();
+      if (body.length > 0) {
+        return `${target} => ${body.replaceAll('\n', ' | ')}`;
+      }
+      return `${target} => <empty exit=${exitCode}>`;
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch (err) {
+    return `<handle64 failed: ${err instanceof Error ? err.message : String(err)}>`;
+  }
+}
+
+async function windowsHolders(tempDir: string): Promise<string> {
+  return runPowerShell(
+    [
+      'Get-CimInstance Win32_Process |',
+      'Where-Object {',
+      '  ($_.ExecutablePath -and $_.ExecutablePath.Contains($env:HARNESS_TEMP)) -or',
+      '  ($_.CommandLine -and $_.CommandLine.Contains($env:HARNESS_TEMP))',
+      '} |',
+      'ForEach-Object { "{0} {1} exe={2} cmd={3}" -f $_.ProcessId, $_.Name, $_.ExecutablePath, $_.CommandLine }',
+    ].join(' '),
+    { HARNESS_TEMP: tempDir },
+    '<none with ExecutablePath/CommandLine in temp dir>',
+  );
+}
+
+async function windowsScannerProcesses(): Promise<string> {
+  return runPowerShell(
+    [
+      'Get-Process MsMpEng,WinDefend,SearchIndexer,MsSense,cag-stub,sonar-secrets,sonar-context-augmentation -ErrorAction SilentlyContinue |',
+      'ForEach-Object { "{0} pid={1}" -f $_.Name, $_.Id }',
+    ].join(' '),
+    {},
+    '<none of MsMpEng/WinDefend/SearchIndexer/MsSense/cag-stub/sonar-secrets>',
+  );
+}
+
+async function runPowerShell(
+  command: string,
+  extraEnv: Record<string, string>,
+  emptyMessage: string,
+): Promise<string> {
+  try {
+    const proc = Bun.spawn(['powershell', '-NoProfile', '-Command', command], {
+      env: { ...process.env, ...extraEnv },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
     const timeout = setTimeout(() => proc.kill(), HOLDERS_TIMEOUT_MS);
     try {
       const [stdout, stderr, exitCode] = await Promise.all([
@@ -162,18 +285,25 @@ async function windowsHolders(tempDir: string): Promise<string> {
       ]);
       const body = stdout.trim();
       if (body.length > 0) {
-        return body.replaceAll('\n', ' || ');
+        return clip(body.replaceAll('\n', ' || '));
       }
       if (exitCode !== 0) {
         return `<empty exit=${exitCode} stderr=${stderr.trim() || 'none'}>`;
       }
-      return '<none with ExecutablePath/CommandLine in temp dir>';
+      return emptyMessage;
     } finally {
       clearTimeout(timeout);
     }
   } catch (err) {
-    return `<holders failed: ${err instanceof Error ? err.message : String(err)}>`;
+    return `<powershell failed: ${err instanceof Error ? err.message : String(err)}>`;
   }
+}
+
+function clip(text: string): string {
+  if (text.length <= HANDLE_OUTPUT_CAP) {
+    return text;
+  }
+  return `${text.slice(0, HANDLE_OUTPUT_CAP)}…`;
 }
 
 function delay(ms: number): Promise<void> {
