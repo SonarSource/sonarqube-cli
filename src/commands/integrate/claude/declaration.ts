@@ -166,12 +166,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       defaultInstallSubfeatureIds: ['sqaa-posttooluse', 'cag-posttooluse'],
     }),
     createVortexFeature<ClaudeIntegrationOptions>([
-      createSqaaInstructionsSubfeature([
-        createSqaaInstructionsSnippet({
-          agentDisplayName: CLAUDE_DISPLAY_NAME,
-          targetPath: resolveClaudeMdPath,
-        }),
-      ]),
+      createSqaaInstructionsSubfeature([createSqaaInstructionsSnippet(resolveClaudeMdPath)]),
       createContextAugmentationSubfeature<ClaudeIntegrationOptions>({
         targetPath: resolveClaudeSkillPath,
       }),

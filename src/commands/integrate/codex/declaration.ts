@@ -116,12 +116,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
     }),
     createVortexFeature<CodexIntegrationOptions>([
       createSqaaHookSubfeature(),
-      createSqaaInstructionsSubfeature([
-        createSqaaInstructionsSnippet({
-          agentDisplayName: CODEX_DISPLAY_NAME,
-          targetPath: resolveCodexAgentsMdPath,
-        }),
-      ]),
+      createSqaaInstructionsSubfeature([createSqaaInstructionsSnippet(resolveCodexAgentsMdPath)]),
       createContextAugmentationSubfeature<CodexIntegrationOptions>({
         targetPath: resolveCodexSkillPath,
       }),

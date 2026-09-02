@@ -41,7 +41,6 @@ import {
 } from '@/core/framework/features';
 import { getMcpConfig } from '@/core/host/mcp/mcp-helper.ts';
 
-import { getRequiredStringAttr } from '../_common/attrs.ts';
 import {
   MCP_SERVER_FEATURE_BENEFIT,
   MCP_SERVER_FEATURE_PREVIEW,
@@ -52,12 +51,11 @@ import {
 } from '../_common/feature-constants.ts';
 import { createContextAugmentationSubfeature } from '../_common/features/context-augmentation-feature.ts';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
-import { createSqaaInstructionsSubfeature } from '../_common/features/sqaa-instructions-feature.ts';
 import {
-  buildSqaaSectionBody,
-  sonarBeginMarker,
-  sonarEndMarker,
-} from '../_common/instructions-templates.ts';
+  createSqaaInstructionsRule,
+  createSqaaInstructionsSubfeature,
+} from '../_common/features/sqaa-instructions-feature.ts';
+import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates.ts';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
@@ -86,7 +84,7 @@ export interface AntigravityIntegrationOptions extends IntegrateAgentOptions {
 
 export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrationOptions> = {
   id: ANTIGRAVITY_INTEGRATION_ID,
-  displayName: 'Antigravity',
+  displayName: ANTIGRAVITY_DISPLAY_NAME,
   features: [
     {
       id: 'sonar-secrets-hooks',
@@ -125,17 +123,7 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
     {
       ...createVortexFeature<AntigravityIntegrationOptions>([
         createSqaaInstructionsSubfeature<AntigravityIntegrationOptions>([
-          wholeFile({
-            id: 'sqaa-rule-file',
-            displayName: 'Vortex analysis rule for Antigravity',
-            targetPath: resolveSqaaRulePath,
-            content: (context) =>
-              buildAntigravityAlwaysOnRule(
-                buildSqaaSectionBody(
-                  getRequiredStringAttr(context, 'projectKey', ANTIGRAVITY_DISPLAY_NAME),
-                ),
-              ),
-          }),
+          createSqaaInstructionsRule(resolveSqaaRulePath, buildAntigravityAlwaysOnRule),
         ]),
         createContextAugmentationSubfeature<AntigravityIntegrationOptions>({
           targetPath: resolveAntigravitySkillPath,

@@ -32,7 +32,7 @@ import {
 } from '@/core/framework/features';
 import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 
-import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs.ts';
+import { getOptionalStringAttr } from '../_common/attrs.ts';
 import {
   MCP_SERVER_FEATURE_BENEFIT,
   MCP_SERVER_FEATURE_PREVIEW,
@@ -44,9 +44,11 @@ import {
   resolveAgentHooksConfigPath,
   secretsScanningExample,
 } from '../_common/features/sonar-secrets-hooks-feature.ts';
-import { createSqaaInstructionsSubfeature } from '../_common/features/sqaa-instructions-feature.ts';
+import {
+  createSqaaInstructionsRule,
+  createSqaaInstructionsSubfeature,
+} from '../_common/features/sqaa-instructions-feature.ts';
 import { resolveAgentHookScriptPath } from '../_common/hooks.ts';
-import { buildSqaaSectionBody } from '../_common/instructions-templates.ts';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
@@ -59,6 +61,7 @@ import {
   getSecretPromptTemplateWindows,
 } from './hook-templates.ts';
 import { buildCursorHookEntry, removeCursorHooks, upsertCursorHooks } from './hooks.ts';
+import { buildCursorAlwaysOnRule } from './rules.ts';
 
 const HOOKS_JSON = 'hooks.json';
 const PREREAD_SCRIPT_REL = 'sonar-secrets/build-scripts/before-read-file-secrets';
@@ -97,16 +100,6 @@ function getDesiredCursorMcpConfig(context: IntegrationContext) {
 
 function resolveCursorSqaaRulePath(context: IntegrationContext): string {
   return join(context.targetRoot, CURSOR_CONFIG_DIR, RULES_DIR, SQAA_RULE_FILE);
-}
-
-/**
- * Render the Vortex analysis rule as a Cursor `.mdc` file. The
- * `alwaysApply: true` front-matter makes Cursor inject the protocol into every
- * session without the user attaching it manually.
- */
-function buildCursorSqaaRule(context: IntegrationContext): string {
-  const projectKey = getRequiredStringAttr(context, 'projectKey', cursorIntegration.displayName);
-  return `---\nalwaysApply: true\n---\n\n${buildSqaaSectionBody(projectKey)}`;
 }
 
 // Context Augmentation is delivered as a native, on-demand skill (the same
@@ -209,12 +202,7 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
     },
     createVortexFeature<CursorIntegrationOptions>([
       createSqaaInstructionsSubfeature([
-        wholeFile({
-          id: 'sqaa-instructions-rule',
-          displayName: 'Cursor Vortex analysis rule',
-          targetPath: resolveCursorSqaaRulePath,
-          content: buildCursorSqaaRule,
-        }),
+        createSqaaInstructionsRule(resolveCursorSqaaRulePath, buildCursorAlwaysOnRule),
       ]),
       createContextAugmentationSubfeature<CursorIntegrationOptions>({
         targetPath: resolveCursorCagSkillPath,

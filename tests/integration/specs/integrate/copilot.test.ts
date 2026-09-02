@@ -662,7 +662,7 @@ describe('integrate copilot', () => {
         const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
         expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
         expect(body).toContain('# Vortex analysis protocol');
-        expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT}`);
+        expect(body).toContain('sonar analyze agentic --depth DEEP');
         expect(body).toContain('--file');
 
         const promptSecrets = findCopilotFeature(harness, 'prompt-secrets-instructions');

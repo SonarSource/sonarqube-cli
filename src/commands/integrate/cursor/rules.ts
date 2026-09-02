@@ -18,24 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Markers that delimit the regions integrations own inside instructions files
-// they share with the user (e.g. Copilot's sonarqube.instructions.md, Codex's
-// AGENTS.md), so a later CLI version can locate and replace just its own
-// region without clobbering anything the user appended around it.
-
 /**
- * Wrap a markdown body in stable HTML-comment markers. The `id` must remain
- * unique and stable across CLI versions — it is the only identifier we have
- * for finding and replacing the managed region later.
+ * Render a Cursor rule (`.cursor/rules/*.mdc`) with always-on activation. The
+ * `alwaysApply: true` front-matter makes Cursor inject the body into every
+ * session without the user attaching it manually.
  */
-export function withSonarMarkers(id: string, body: string): string {
-  return `${sonarBeginMarker(id)}\n${body.trimEnd()}\n${sonarEndMarker(id)}\n`;
-}
-
-export function sonarBeginMarker(id: string): string {
-  return `<!-- sonar:begin:${id} -->`;
-}
-
-export function sonarEndMarker(id: string): string {
-  return `<!-- sonar:end:${id} -->`;
+export function buildCursorAlwaysOnRule(body: string): string {
+  return `---\nalwaysApply: true\n---\n\n${body.trimEnd()}\n`;
 }

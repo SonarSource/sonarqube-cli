@@ -517,7 +517,7 @@ describe('integrate codex', () => {
         expect(body).toContain('<!-- sonar:begin:codex-secrets-on-read -->');
         expect(body).toContain('<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->');
         expect(body).toContain(SQAA_HEADING);
-        expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --depth DEEP`);
+        expect(body).toContain('sonar analyze agentic --depth DEEP');
         expect(
           findInstalledSubfeature(
             harness,
