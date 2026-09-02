@@ -11,6 +11,15 @@ inputs:
   binary-artifact:
     description: Artifact name uploaded by build-binaries
     required: true
+  claude-code-api-key:
+    description: Anthropic API key for Claude Code e2e tests
+    required: true
+  sonarcloud-it-token:
+    description: SonarQube Cloud EU staging token
+    required: true
+  sonarcloud-it-token-us:
+    description: SonarQube Cloud US staging token
+    required: true
 
 runs:
   using: composite
@@ -68,7 +77,7 @@ runs:
 
     - name: Run integration tests (Windows)
       if: ${{ inputs.os == 'windows' }}
-      shell: bash
+      shell: pwsh
       run: bun run test:integration
 
     - name: Run integration tests with coverage (Linux)
@@ -90,12 +99,20 @@ runs:
 
     - name: Run e2e tests (Windows)
       if: ${{ inputs.os == 'windows' }}
-      shell: bash
+      shell: pwsh
+      env:
+        CLAUDE_CODE_API_KEY: ${{ inputs.claude-code-api-key }}
+        SONARCLOUD_IT_TOKEN: ${{ inputs.sonarcloud-it-token }}
+        SONARCLOUD_IT_TOKEN_US: ${{ inputs.sonarcloud-it-token-us }}
       run: bun run test:e2e
 
     - name: Run e2e tests with coverage (Linux)
       if: ${{ inputs.os == 'linux' }}
       shell: bash
+      env:
+        CLAUDE_CODE_API_KEY: ${{ inputs.claude-code-api-key }}
+        SONARCLOUD_IT_TOKEN: ${{ inputs.sonarcloud-it-token }}
+        SONARCLOUD_IT_TOKEN_US: ${{ inputs.sonarcloud-it-token-us }}
       run: SONARQUBE_CLI_USE_COVERAGE=1 bun run test:e2e
 
     - name: Merge coverage reports (Linux)
