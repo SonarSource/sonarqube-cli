@@ -189,7 +189,11 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
         // own vortexDisposition (which can legitimately say "remove" for THIS project) must
         // not tear it down while another project on this machine still has Vortex installed.
         if (
-          isVortexInstalledForOtherProject(invocation.state, CLAUDE_INTEGRATION_ID, invocation.targetRoot)
+          isVortexInstalledForOtherProject(
+            invocation.state,
+            CLAUDE_INTEGRATION_ID,
+            invocation.targetRoot,
+          )
         ) {
           return skip(
             'Other projects on this machine still use Vortex — leaving the shared session-start hook installed.',
