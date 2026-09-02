@@ -112,7 +112,7 @@
     "smol-toml": "1.8.0"
   },
   "devDependencies": {
-    "@sentry/cli": "3.6.2",
+    "@sentry/cli": "3.7.0",
     "@sonar/scan": "5.0.0",
     "@types/bun": "1.4.0",
     "@types/istanbul-lib-coverage": "2.0.6",
