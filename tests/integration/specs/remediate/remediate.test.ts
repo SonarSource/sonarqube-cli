@@ -27,11 +27,27 @@ import {
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
 import { readCommandEvents } from '../../../_common/telemetry-helpers';
-import { type CliResult, TestHarness } from '../../harness';
+import { type CliResult, type InteractiveSession, TestHarness } from '../../harness';
 
 const VALID_TOKEN = 'integration-test-token';
 const TEST_ORG = 'my-org';
 const TEST_PROJECT = 'my-project';
+const ISSUE_PICKER = 'Which issues should the agent fix?';
+
+async function acceptIssuePicker(session: InteractiveSession) {
+  await session.accept(ISSUE_PICKER);
+}
+
+async function quitIssuePicker(session: InteractiveSession) {
+  await session.waitText(ISSUE_PICKER);
+  session.write('q');
+}
+
+async function selectFirstIssue(session: InteractiveSession) {
+  await session.waitText(ISSUE_PICKER);
+  session.keySpace();
+  session.keyEnter();
+}
 
 describe('sonar remediate', () => {
   let harness: TestHarness;
@@ -226,8 +242,7 @@ describe('sonar remediate', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
-      await session.waitText('Which issues should the agent fix?');
-      session.write('q');
+      await quitIssuePicker(session);
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -249,8 +264,7 @@ describe('sonar remediate', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
-      await session.waitText('Which issues should the agent fix?');
-      session.keyEnter();
+      await acceptIssuePicker(session);
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -283,8 +297,7 @@ describe('sonar remediate', () => {
       let result: CliResult;
       if (isInteractive) {
         const session = harness.runInteractive(command, { extraEnv });
-        await session.waitText('Which issues should the agent fix?');
-        session.keyEnter();
+        await acceptIssuePicker(session);
         result = await session.waitFinish();
       } else {
         result = await harness.run(command, { extraEnv });
@@ -316,9 +329,7 @@ describe('sonar remediate', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
-      await session.waitText('Which issues should the agent fix?');
-      session.keySpace();
-      session.keyEnter();
+      await selectFirstIssue(session);
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -348,9 +359,7 @@ describe('sonar remediate', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
-      await session.waitText('Which issues should the agent fix?');
-      session.keySpace();
-      session.keyEnter();
+      await selectFirstIssue(session);
       await session.waitFinish();
 
       const agentJobCalls = server
@@ -385,8 +394,7 @@ describe('sonar remediate', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
-      await session.waitText('Which issues should the agent fix?');
-      session.keyEnter();
+      await acceptIssuePicker(session);
       await session.waitFinish();
 
       const issuesSearchCalls = server
@@ -419,9 +427,7 @@ describe('sonar remediate', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
-      await session.waitText('Which issues should the agent fix?');
-      session.keySpace();
-      session.keyEnter();
+      await selectFirstIssue(session);
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(1);
@@ -450,9 +456,7 @@ describe('sonar remediate', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
-      await session.waitText('Which issues should the agent fix?');
-      session.keySpace();
-      session.keyEnter();
+      await selectFirstIssue(session);
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(1);
@@ -477,8 +481,7 @@ describe('sonar remediate', () => {
       harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
 
       const session = harness.runInteractive('remediate');
-      await session.waitText('Which issues should the agent fix?');
-      session.keyEnter();
+      await acceptIssuePicker(session);
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -525,7 +528,7 @@ describe('sonar remediate', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
-      await session.waitText('Which issues should the agent fix?');
+      await session.waitText(ISSUE_PICKER);
       session.keySpace();
       session.keyDown();
       session.keySpace();
@@ -574,8 +577,7 @@ describe('sonar remediate', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
-      await session.waitText('Which issues should the agent fix?');
-      session.write('q');
+      await quitIssuePicker(session);
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -619,9 +621,7 @@ describe('sonar remediate', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const session = harness.runInteractive(`remediate --project ${TEST_PROJECT}`);
-      await session.waitText('Which issues should the agent fix?');
-      session.keySpace();
-      session.keyEnter();
+      await selectFirstIssue(session);
       await session.waitFinish();
 
       const agentJobCalls = server

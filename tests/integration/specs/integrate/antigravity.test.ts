@@ -199,12 +199,9 @@ describe('integrate antigravity', () => {
               extraEnv,
             },
           );
-          await session.waitText('Install secret scanning hooks?');
-          session.keyEnter();
-          await session.waitText('Install MCP server?');
-          session.keyEnter();
-          await session.waitText('Install prompt-secrets workspace rules?');
-          session.keyEnter();
+          await session.accept('Install secret scanning hooks?');
+          await session.accept('Install MCP server?');
+          await session.accept('Install prompt-secrets workspace rules?');
           result = await session.waitFinish();
         } else {
           result = await harness.run(
@@ -334,14 +331,11 @@ describe('integrate antigravity', () => {
         const session = harness.runInteractive('integrate antigravity', {
           extraEnv: { __SQCLI_DEV_SKIP_CAG: '1' },
         });
-        await session.waitText('Where should SonarQube be integrated?');
-        session.keyEnter();
-        await session.waitText('Install MCP server?');
-        session.keyEnter();
-        await session.waitText(
+        await session.accept('Where should SonarQube be integrated?');
+        await session.accept('Install MCP server?');
+        await session.accept(
           'Global Antigravity rules already exist. Do you also want to create a project-local copy for this repo?',
         );
-        session.keyEnter();
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);

@@ -66,9 +66,10 @@ describe('sonar hook claude-post-tool-use', () => {
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
       const filePath = join(harness.cwd.path, 'src/main.ts');
 
-      const session = harness.runInteractive(`hook claude-post-tool-use --project ${TEST_PROJECT}`);
-      session.write(postToolUseStdin(filePath));
-      const result = await session.waitFinish();
+      const result = await harness.runWithStdin(
+        `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+        postToolUseStdin(filePath),
+      );
 
       expect(result.exitCode).toBe(0);
       const output = JSON.parse(result.stdout.trim());
@@ -92,9 +93,10 @@ describe('sonar hook claude-post-tool-use', () => {
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
       const filePath = join(harness.cwd.path, 'src/main.ts');
 
-      const session = harness.runInteractive(`hook claude-post-tool-use --project ${TEST_PROJECT}`);
-      session.write(postToolUseStdin(filePath));
-      const result = await session.waitFinish();
+      const result = await harness.runWithStdin(
+        `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+        postToolUseStdin(filePath),
+      );
 
       expect(result.exitCode).toBe(0);
       const output = JSON.parse(result.stdout.trim());
@@ -128,9 +130,10 @@ describe('sonar hook claude-post-tool-use', () => {
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
       const filePath = join(harness.cwd.path, 'src/main.ts');
 
-      const session = harness.runInteractive(`hook claude-post-tool-use --project ${TEST_PROJECT}`);
-      session.write(postToolUseStdin(filePath));
-      const result = await session.waitFinish();
+      const result = await harness.runWithStdin(
+        `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+        postToolUseStdin(filePath),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout.trim()).toBe('');
@@ -152,11 +155,10 @@ describe('sonar hook claude-post-tool-use', () => {
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
       const filePath = join(harness.cwd.path, 'src/main.ts');
       const runHook = async () => {
-        const session = harness.runInteractive(
+        return harness.runWithStdin(
           `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+          postToolUseStdin(filePath),
         );
-        session.write(postToolUseStdin(filePath));
-        return session.waitFinish();
       };
 
       const firstResult = await runHook();
@@ -183,9 +185,10 @@ describe('sonar hook claude-post-tool-use', () => {
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
       const filePath = join(harness.cwd.path, 'src/main.ts');
 
-      const session = harness.runInteractive(`hook claude-post-tool-use --project ${TEST_PROJECT}`);
-      session.write(postToolUseStdin(filePath));
-      const result = await session.waitFinish();
+      const result = await harness.runWithStdin(
+        `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+        postToolUseStdin(filePath),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout.trim()).toBe('');
@@ -208,12 +211,11 @@ describe('sonar hook claude-post-tool-use', () => {
       harness.cwd.writeFile('../outside.ts', 'const x = 1;');
       const outsidePath = join(harness.cwd.path, '..', 'outside.ts');
 
-      const session = harness.runInteractive(
+      const result = await harness.runWithStdin(
         `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+        postToolUseStdin(outsidePath),
         { extraEnv: { LOG_LEVEL: 'DEBUG' } },
       );
-      session.write(postToolUseStdin(outsidePath));
-      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout.trim()).toBe('');
@@ -244,9 +246,10 @@ describe('sonar hook claude-post-tool-use', () => {
       // The helper must rewrite them to POSIX before sending to SQAA.
       const filePath = join(harness.cwd.path, 'src', 'main.ts');
 
-      const session = harness.runInteractive(`hook claude-post-tool-use --project ${TEST_PROJECT}`);
-      session.write(postToolUseStdin(filePath));
-      const result = await session.waitFinish();
+      const result = await harness.runWithStdin(
+        `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+        postToolUseStdin(filePath),
+      );
 
       expect(result.exitCode).toBe(0);
       const sqaaCalls = server
@@ -279,9 +282,10 @@ describe('sonar hook claude-post-tool-use', () => {
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
       const filePath = join(harness.cwd.path, 'src/main.ts');
 
-      const session = harness.runInteractive(`hook claude-post-tool-use --project ${TEST_PROJECT}`);
-      session.write(postToolUseStdin(filePath));
-      const result = await session.waitFinish();
+      const result = await harness.runWithStdin(
+        `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+        postToolUseStdin(filePath),
+      );
 
       expect(result.exitCode).toBe(0);
       const [analysisEvent] = readAnalysisEvents(harness.sonarUserHome.path);

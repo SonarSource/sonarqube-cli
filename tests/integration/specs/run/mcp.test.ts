@@ -276,11 +276,9 @@ describe('run mcp', () => {
       harness.withAuth(server.baseUrl(), 'test-token');
       const fakeBinDir = setupFakeDocker();
 
-      const session = harness.runInteractive('run mcp', {
+      const result = await harness.runWithStdin('run mcp', 'hello mcp\n', {
         extraEnv: { PATH: `${fakeBinDir}${PATH_SEP}${process.env.PATH ?? ''}` },
       });
-      session.write('hello mcp\n');
-      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('hello mcp');
@@ -320,11 +318,9 @@ describe('run mcp', () => {
       );
       const fakeBinDir = setupFakeDocker();
 
-      const session = harness.runInteractive('run mcp', {
+      const result = await harness.runWithStdin('run mcp', 'hello mcp\n', {
         extraEnv: { PATH: `${fakeBinDir}${PATH_SEP}${process.env.PATH ?? ''}` },
       });
-      session.write('hello mcp\n');
-      const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('hello mcp');

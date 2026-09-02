@@ -856,8 +856,7 @@ uxDescribe('Interactive auth login', () => {
         extraEnv: cloudEnvFor(cloudUrl),
         browserToken: TOKEN,
       });
-      await session.waitText('Select an organization');
-      session.keyEnter();
+      await session.accept('Select an organization');
       return session.waitFinish();
     }),
   );
@@ -903,10 +902,8 @@ uxDescribe('Interactive auth login', () => {
         extraEnv: cloudEnvFor(cloudUrl),
         browserToken: TOKEN,
       });
-      await session.waitText('Where would you like to connect?');
-      session.keyEnter();
-      await session.waitText('Which SonarQube Cloud region?');
-      session.keyEnter();
+      await session.accept('Where would you like to connect?');
+      await session.accept('Which SonarQube Cloud region?');
       return session.waitFinish();
     }),
   );

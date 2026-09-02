@@ -69,9 +69,10 @@ describe('sonar hook cursor-prompt-submit', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, 'fake-token');
 
-      const session = harness.runInteractive('hook cursor-prompt-submit');
-      session.write(JSON.stringify({ prompt: `my token is ${GITHUB_TEST_TOKEN}` }));
-      const result = await session.waitFinish();
+      const result = await harness.runWithStdin(
+        'hook cursor-prompt-submit',
+        JSON.stringify({ prompt: `my token is ${GITHUB_TEST_TOKEN}` }),
+      );
 
       expect(result.exitCode).toBe(0);
       const blockLine = findContinueLine(result.stdout);
@@ -89,9 +90,10 @@ describe('sonar hook cursor-prompt-submit', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, 'fake-token');
 
-      const session = harness.runInteractive('hook cursor-prompt-submit');
-      session.write(JSON.stringify({ prompt: 'please help me refactor this function' }));
-      const result = await session.waitFinish();
+      const result = await harness.runWithStdin(
+        'hook cursor-prompt-submit',
+        JSON.stringify({ prompt: 'please help me refactor this function' }),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"continue"');
@@ -105,9 +107,7 @@ describe('sonar hook cursor-prompt-submit', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, 'fake-token');
 
-      const session = harness.runInteractive('hook cursor-prompt-submit');
-      session.write('not valid json {{');
-      const result = await session.waitFinish();
+      const result = await harness.runWithStdin('hook cursor-prompt-submit', 'not valid json {{');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"continue"');
@@ -121,9 +121,10 @@ describe('sonar hook cursor-prompt-submit', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, 'fake-token');
 
-      const session = harness.runInteractive('hook cursor-prompt-submit');
-      session.write(JSON.stringify({ hook_event_name: 'beforeSubmitPrompt' }));
-      const result = await session.waitFinish();
+      const result = await harness.runWithStdin(
+        'hook cursor-prompt-submit',
+        JSON.stringify({ hook_event_name: 'beforeSubmitPrompt' }),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"continue"');
@@ -137,9 +138,10 @@ describe('sonar hook cursor-prompt-submit', () => {
       harness.state().withSecretsBinaryInstalled();
       // no withAuth — no active connection
 
-      const session = harness.runInteractive('hook cursor-prompt-submit');
-      session.write(JSON.stringify({ prompt: `my token is ${GITHUB_TEST_TOKEN}` }));
-      const result = await session.waitFinish();
+      const result = await harness.runWithStdin(
+        'hook cursor-prompt-submit',
+        JSON.stringify({ prompt: `my token is ${GITHUB_TEST_TOKEN}` }),
+      );
 
       expect(result.exitCode).toBe(0);
       const blockLine = findContinueLine(result.stdout);
@@ -156,9 +158,10 @@ describe('sonar hook cursor-prompt-submit', () => {
     async () => {
       harness.withAuth(FAKE_SERVER, 'fake-token');
 
-      const session = harness.runInteractive('hook cursor-prompt-submit');
-      session.write(JSON.stringify({ prompt: `my token is ${GITHUB_TEST_TOKEN}` }));
-      const result = await session.waitFinish();
+      const result = await harness.runWithStdin(
+        'hook cursor-prompt-submit',
+        JSON.stringify({ prompt: `my token is ${GITHUB_TEST_TOKEN}` }),
+      );
 
       expect(result.exitCode).toBe(0);
       const blockLine = findContinueLine(result.stdout);
@@ -180,9 +183,10 @@ describe('sonar hook cursor-prompt-submit', () => {
       harness.cliHome.writeFile(`bin/${binaryName}`, 'not-a-binary');
       chmodSync(harness.cliHome.file('bin', binaryName).path, 0o644);
 
-      const session = harness.runInteractive('hook cursor-prompt-submit');
-      session.write(JSON.stringify({ prompt: 'please help me refactor' }));
-      const result = await session.waitFinish();
+      const result = await harness.runWithStdin(
+        'hook cursor-prompt-submit',
+        JSON.stringify({ prompt: 'please help me refactor' }),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"continue"');

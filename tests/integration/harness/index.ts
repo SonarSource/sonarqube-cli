@@ -235,8 +235,22 @@ export class TestHarness {
   }
 
   /**
+   * Dump stdin on a session and wait for exit. Use `waitText` + keystrokes for prompts.
+   */
+  async runWithStdin(
+    command: string,
+    stdin: string,
+    options?: RunInteractiveOptions,
+  ): Promise<CliResult> {
+    const session = this.runInteractive(command, options);
+    session.write(stdin);
+    return session.waitFinish();
+  }
+
+  /**
    * Spawns the CLI and returns a session the test drives prompt-by-prompt.
-   * Use `run()` when the command is non-interactive or only needs dump-all stdin.
+   * Use `run()` when the command is non-interactive. Drive stdin through the session
+   * (`runWithStdin` for dump-all, or `waitText` + keys for prompts).
    */
   runInteractive(command: string, options?: RunInteractiveOptions): InteractiveSession {
     const session = startInteractiveSession(command, this.env(options), {

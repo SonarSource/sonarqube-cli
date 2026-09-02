@@ -267,8 +267,7 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
         extraEnv,
         browserToken: TEST_TOKEN,
       });
-      await session.waitText('Connect to:');
-      session.keyEnter();
+      await session.accept('Connect to:');
       const login = await session.waitFinish();
       const integrate = await harness.run(
         `integrate claude --non-interactive${options?.global ? ' -g' : ''}`,

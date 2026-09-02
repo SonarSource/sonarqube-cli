@@ -574,12 +574,9 @@ describe('integrate cursor', () => {
         const session = harness.runInteractive(`integrate cursor --project ${TEST_PROJECT}`, {
           extraEnv: { ...extraEnv, __SQCLI_DEV_SKIP_CAG: '1' },
         });
-        await session.waitText('Install secret scanning hooks?');
-        session.keyEnter();
-        await session.waitText('Install Vortex?');
-        session.keyEnter();
-        await session.waitText('Install MCP server?');
-        session.keyEnter();
+        await session.accept('Install secret scanning hooks?');
+        await session.accept('Install Vortex?');
+        await session.accept('Install MCP server?');
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
@@ -612,12 +609,9 @@ describe('integrate cursor', () => {
           const session = harness.runInteractive(`integrate cursor --project ${TEST_PROJECT}`, {
             extraEnv: runEnv,
           });
-          await session.waitText('Install secret scanning hooks?');
-          session.keyEnter();
-          await session.waitText('Install Vortex?');
-          session.keyEnter();
-          await session.waitText('Install MCP server?');
-          session.keyEnter();
+          await session.accept('Install secret scanning hooks?');
+          await session.accept('Install Vortex?');
+          await session.accept('Install MCP server?');
           result = await session.waitFinish();
         } else {
           result = await harness.run(

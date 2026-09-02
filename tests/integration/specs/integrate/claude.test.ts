@@ -1994,12 +1994,9 @@ describe('integrate claude — interactive feature selection', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
-      await session.waitText('Where should SonarQube be integrated?');
-      session.keyEnter();
-      await session.waitText('Install secret scanning hooks?');
-      session.keyEnter();
-      await session.waitText('Install MCP server?');
-      session.keyEnter();
+      await session.accept('Where should SonarQube be integrated?');
+      await session.accept('Install secret scanning hooks?');
+      await session.accept('Install MCP server?');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -2048,12 +2045,9 @@ describe('integrate claude — interactive feature selection', () => {
       let result: CliResult;
       if (isInteractive) {
         const session = harness.runInteractive('integrate claude', { extraEnv });
-        await session.waitText('Where should SonarQube be integrated?');
-        session.keyEnter();
-        await session.waitText('Install secret scanning hooks?');
-        session.keyEnter();
-        await session.waitText('Install MCP server?');
-        session.keyEnter();
+        await session.accept('Where should SonarQube be integrated?');
+        await session.accept('Install secret scanning hooks?');
+        await session.accept('Install MCP server?');
         result = await session.waitFinish();
       } else {
         result = await harness.run('integrate claude --non-interactive', { extraEnv });
@@ -2085,12 +2079,9 @@ describe('integrate claude — interactive feature selection', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
-      await session.waitText('Where should SonarQube be integrated?');
-      session.keyEnter();
-      await session.waitText('Install secret scanning hooks?');
-      session.write('n');
-      await session.waitText('Install MCP server?');
-      session.keyEnter();
+      await session.accept('Where should SonarQube be integrated?');
+      await session.decline('Install secret scanning hooks?');
+      await session.accept('Install MCP server?');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -2124,12 +2115,9 @@ describe('integrate claude — interactive feature selection', () => {
           __SQCLI_DEV_SKIP_CAG: '1',
         },
       });
-      await session.waitText('Install secret scanning hooks?');
-      session.keyEnter();
-      await session.waitText('Install Vortex?');
-      session.keyEnter();
-      await session.waitText('Install MCP server?');
-      session.keyEnter();
+      await session.accept('Install secret scanning hooks?');
+      await session.accept('Install Vortex?');
+      await session.accept('Install MCP server?');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -2179,10 +2167,8 @@ describe('integrate claude — interactive feature selection', () => {
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
         },
       });
-      await session.waitText('Install secret scanning hooks?');
-      session.keyEnter();
-      await session.waitText('Install MCP server?');
-      session.keyEnter();
+      await session.accept('Install secret scanning hooks?');
+      await session.accept('Install MCP server?');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -2238,14 +2224,10 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
-      await session.waitText('Where should SonarQube be integrated?');
-      session.keyEnter();
-      await session.waitText('secret scanning hooks (currently installed)  Keep?');
-      session.keyEnter();
-      await session.waitText('MCP server (currently installed)  Keep?');
-      session.write('n');
-      await session.waitText('Proceed with removal?');
-      session.keyEnter();
+      await session.accept('Where should SonarQube be integrated?');
+      await session.accept('secret scanning hooks (currently installed)  Keep?');
+      await session.decline('MCP server (currently installed)  Keep?');
+      await session.accept('Proceed with removal?');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -2274,14 +2256,10 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
-      await session.waitText('Where should SonarQube be integrated?');
-      session.keyEnter();
-      await session.waitText('secret scanning hooks (currently installed)  Keep?');
-      session.keyEnter();
-      await session.waitText('MCP server (currently installed)  Keep?');
-      session.write('n');
-      await session.waitText('Proceed with removal?');
-      session.write('n');
+      await session.accept('Where should SonarQube be integrated?');
+      await session.accept('secret scanning hooks (currently installed)  Keep?');
+      await session.decline('MCP server (currently installed)  Keep?');
+      await session.decline('Proceed with removal?');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -2303,14 +2281,10 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
-      await session.waitText('Where should SonarQube be integrated?');
-      session.keyEnter();
-      await session.waitText('secret scanning hooks (currently installed)  Keep?');
-      session.write('n');
-      await session.waitText('Proceed with removal?');
-      session.keyEnter();
-      await session.waitText('MCP server (currently installed)  Keep?');
-      session.keyEnter();
+      await session.accept('Where should SonarQube be integrated?');
+      await session.decline('secret scanning hooks (currently installed)  Keep?');
+      await session.accept('Proceed with removal?');
+      await session.accept('MCP server (currently installed)  Keep?');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -2353,14 +2327,10 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
-      await session.waitText('Where should SonarQube be integrated?');
-      session.keyEnter();
-      await session.waitText('secret scanning hooks (currently installed)  Keep?');
-      session.write('n');
-      await session.waitText('Proceed with removal?');
-      session.keyEnter();
-      await session.waitText('MCP server (currently installed)  Keep?');
-      session.keyEnter();
+      await session.accept('Where should SonarQube be integrated?');
+      await session.decline('secret scanning hooks (currently installed)  Keep?');
+      await session.accept('Proceed with removal?');
+      await session.accept('MCP server (currently installed)  Keep?');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -2425,16 +2395,11 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
-      await session.waitText('Where should SonarQube be integrated?');
-      session.keyEnter();
-      await session.waitText('secret scanning hooks (currently installed)  Keep?');
-      session.write('n');
-      await session.waitText('Proceed with removal?');
-      session.keyEnter();
-      await session.waitText('MCP server (currently installed)  Keep?');
-      session.write('n');
-      await session.waitText('Proceed with removal?');
-      session.keyEnter();
+      await session.accept('Where should SonarQube be integrated?');
+      await session.decline('secret scanning hooks (currently installed)  Keep?');
+      await session.accept('Proceed with removal?');
+      await session.decline('MCP server (currently installed)  Keep?');
+      await session.accept('Proceed with removal?');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);

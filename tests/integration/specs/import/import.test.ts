@@ -392,8 +392,7 @@ describe('sonar import', () => {
         const session = harness.runInteractive('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
-        await session.waitText('How do you want to import repositories?');
-        session.keyEnter();
+        await session.accept('How do you want to import repositories?');
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
@@ -439,8 +438,7 @@ describe('sonar import', () => {
         });
         await chooseManual(session);
         session.write('q');
-        await session.waitText('How do you want to import repositories?');
-        session.keyEnter();
+        await session.accept('How do you want to import repositories?');
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
@@ -2156,8 +2154,7 @@ describe('sonar import', () => {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
         await chooseByPattern(session);
-        await session.waitText('Import repositories whose name matches');
-        session.keyEnter();
+        await session.accept('Import repositories whose name matches');
         await session.waitText('Please enter a valid, non-empty regular expression');
         session.write('(');
         session.keyEnter();
@@ -2195,8 +2192,7 @@ describe('sonar import', () => {
         await chooseByPattern(session);
         await session.waitText('Import repositories whose name matches');
         session.keyCtrlC();
-        await session.waitText('How do you want to import repositories?');
-        session.keyEnter();
+        await session.accept('How do you want to import repositories?');
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);

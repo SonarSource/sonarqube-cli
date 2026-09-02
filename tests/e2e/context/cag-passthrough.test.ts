@@ -114,11 +114,8 @@ describe('sonar-context-augmentation passthrough behaviors (offline, real binary
   });
 
   it('forwards a Claude Bash hook payload to the real CAG binary and applies Gradle compression', async () => {
-    const session = harness.runInteractive('context __hook Claude', {
-      timeoutMs: PASSTHROUGH_TIMEOUT_MS,
-      extraEnv: authEnv,
-    });
-    session.write(
+    const result = await harness.runWithStdin(
+      'context __hook Claude',
       JSON.stringify({
         hook_event_name: 'PostToolUse',
         tool_name: 'Bash',
@@ -131,8 +128,11 @@ describe('sonar-context-augmentation passthrough behaviors (offline, real binary
           noOutputExpected: false,
         },
       }),
+      {
+        timeoutMs: PASSTHROUGH_TIMEOUT_MS,
+        extraEnv: authEnv,
+      },
     );
-    const result = await session.waitFinish();
     expect(result.exitCode, result.stderr).toBe(0);
     expect(result.stderr).not.toContain('unrecognized subcommand');
     expect(result.stdout).toContain('hookSpecificOutput');

@@ -240,6 +240,16 @@ export class InteractiveSession {
     stdin.write(this.encoder.encode(keys));
   }
 
+  async accept(prompt: PromptText): Promise<void> {
+    await this.waitText(prompt);
+    this.keyEnter();
+  }
+
+  async decline(prompt: PromptText): Promise<void> {
+    await this.waitText(prompt);
+    this.write('n');
+  }
+
   keyEnter(): void {
     this.write(ENTER);
   }

@@ -88,14 +88,10 @@ describe('integrate (bare command)', () => {
 
       // Single-select: the cursor starts on Claude (index 0); Enter confirms it.
       const session = harness.runInteractive('integrate');
-      await session.waitText('Select the tool you want to integrate with');
-      session.keyEnter();
-      await session.waitText('Where should SonarQube be integrated?');
-      session.keyEnter();
-      await session.waitText('Install secret scanning hooks?');
-      session.keyEnter();
-      await session.waitText('Install MCP server?');
-      session.keyEnter();
+      await session.accept('Select the tool you want to integrate with');
+      await session.accept('Where should SonarQube be integrated?');
+      await session.accept('Install secret scanning hooks?');
+      await session.accept('Install MCP server?');
       const result = await session.waitFinish();
       const output = result.stdout + result.stderr;
 
@@ -127,12 +123,9 @@ describe('integrate (bare command)', () => {
       // --global is passed through to the integration: scope prompt is skipped and
       // the integration installs at global scope.
       const session = harness.runInteractive('integrate --global');
-      await session.waitText('Select the tool you want to integrate with');
-      session.keyEnter();
-      await session.waitText('Install secret scanning hooks?');
-      session.keyEnter();
-      await session.waitText('Install MCP server?');
-      session.keyEnter();
+      await session.accept('Select the tool you want to integrate with');
+      await session.accept('Install secret scanning hooks?');
+      await session.accept('Install MCP server?');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -166,12 +159,9 @@ describe('integrate (bare command)', () => {
       // -p is passed through to the integration: scope prompt is skipped (explicit
       // project key implies project scope) and the key is baked into the install.
       const session = harness.runInteractive('integrate --project my-project');
-      await session.waitText('Select the tool you want to integrate with');
-      session.keyEnter();
-      await session.waitText('Install secret scanning hooks?');
-      session.keyEnter();
-      await session.waitText('Install MCP server?');
-      session.keyEnter();
+      await session.accept('Select the tool you want to integrate with');
+      await session.accept('Install secret scanning hooks?');
+      await session.accept('Install MCP server?');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);

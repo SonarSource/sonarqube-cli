@@ -36,8 +36,7 @@ async function confirmTrust(
   options?: RunInteractiveOptions,
 ) {
   const session = harness.runInteractive(command, options);
-  await session.waitText('Connect to:');
-  session.keyEnter();
+  await session.accept('Connect to:');
   return session.waitFinish();
 }
 
@@ -47,8 +46,7 @@ async function declineTrust(
   options?: RunInteractiveOptions,
 ) {
   const session = harness.runInteractive(command, options);
-  await session.waitText('Connect to:');
-  session.write('n');
+  await session.decline('Connect to:');
   return session.waitFinish();
 }
 
@@ -388,8 +386,7 @@ describe('auth login — organization selection', () => {
       },
       browserToken: 'my-token',
     });
-    await session.waitText('Enter organization key');
-    session.keyEnter();
+    await session.accept('Enter organization key');
     const result = await session.waitFinish();
 
     expect(result.exitCode).not.toBe(0);
@@ -778,10 +775,8 @@ describe('auth login — server selection', () => {
         },
         browserToken: 'my-token',
       });
-      await session.waitText('Where would you like to connect?');
-      session.keyEnter();
-      await session.waitText('Which SonarQube Cloud region?');
-      session.keyEnter();
+      await session.accept('Where would you like to connect?');
+      await session.accept('Which SonarQube Cloud region?');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -810,8 +805,7 @@ describe('auth login — server selection', () => {
         },
         browserToken: 'my-token',
       });
-      await session.waitText('Where would you like to connect?');
-      session.keyEnter();
+      await session.accept('Where would you like to connect?');
       await session.waitText('Which SonarQube Cloud region?');
       session.keyDown();
       session.keyEnter();
@@ -846,10 +840,8 @@ describe('auth login — server selection', () => {
         },
         browserToken: 'my-token',
       });
-      await session.waitText('Where would you like to connect?');
-      session.keyEnter();
-      await session.waitText('Which SonarQube Cloud region?');
-      session.keyEnter();
+      await session.accept('Where would you like to connect?');
+      await session.accept('Which SonarQube Cloud region?');
       await session.waitText('Select an organization');
       session.keyDown();
       session.keyEnter();
@@ -877,8 +869,7 @@ describe('auth login — server selection', () => {
       await session.waitText('Enter server URL');
       session.write(`${server.baseUrl()}`);
       session.keyEnter();
-      await session.waitText('Connect to:');
-      session.keyEnter();
+      await session.accept('Connect to:');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -931,13 +922,11 @@ describe('auth login — server selection', () => {
       await session.waitText('Where would you like to connect?');
       session.keyDown();
       session.keyEnter();
-      await session.waitText('Enter server URL');
-      session.keyEnter();
+      await session.accept('Enter server URL');
       await session.waitText('Please enter a valid URL');
       session.write(`${server.baseUrl()}`);
       session.keyEnter();
-      await session.waitText('Connect to:');
-      session.keyEnter();
+      await session.accept('Connect to:');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -966,8 +955,7 @@ describe('auth login — server selection', () => {
       await session.waitText('Please enter a valid URL');
       session.write(`${server.baseUrl()}`);
       session.keyEnter();
-      await session.waitText('Connect to:');
-      session.keyEnter();
+      await session.accept('Connect to:');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -1002,8 +990,7 @@ describe('auth login — server selection', () => {
       await session.waitText('Please enter a valid URL');
       session.write(`${server.baseUrl()}`);
       session.keyEnter();
-      await session.waitText('Connect to:');
-      session.keyEnter();
+      await session.accept('Connect to:');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -1044,8 +1031,7 @@ describe('auth login — server selection', () => {
       await session.waitText('Enter server URL');
       session.write(`${server.baseUrl()}`);
       session.keyEnter();
-      await session.waitText('Connect to:');
-      session.keyEnter();
+      await session.accept('Connect to:');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -1067,8 +1053,7 @@ describe('auth login — server selection', () => {
       await session.waitText('Enter server URL');
       session.write(`${server.baseUrl()}`);
       session.keyEnter();
-      await session.waitText('Connect to:');
-      session.write('n');
+      await session.decline('Connect to:');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(1);
