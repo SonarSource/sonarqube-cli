@@ -186,9 +186,8 @@ class that knows about transport: headers, timeouts, request bodies, and how a n
 becomes a typed error (`get` / `getOrNotFound` / `getSafe` / `post` / `postForm` / `postFormJson`,
 plus `genericRequest` for `sonar api` only); every one of them issues its request through
 `fetchAuthenticated`, since they all carry the bearer token. It also exposes `apiHostFor(endpoint)`,
-which resolves
-the region-specific Cloud API host for an endpoint family — call sites pass its result as `baseUrl`
-instead of reaching for `resolveFromEndpoint` themselves.
+which resolves the region-specific Cloud API host for an endpoint family — call sites pass its
+result as `baseUrl` instead of reaching for `resolveFromEndpoint` themselves.
 
 Everything above transport is a small per-domain wrapper taking a `SonarHttpClient`, living next to
 whoever uses it. Shared domains stay in `src/core/server/`: `OrganizationsClient`
