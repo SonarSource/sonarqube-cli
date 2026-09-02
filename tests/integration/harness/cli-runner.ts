@@ -26,7 +26,7 @@ import { join } from 'node:path';
 import { applyIsolatedSpawnEnv } from '../../_common/isolated-cli-env.js';
 import { COVERAGE_BINARY, COVERAGE_RAW_DIR } from '../../coverage/paths.js';
 import { IS_WINDOWS } from './platform';
-import type { CliResult, InteractiveProcessHandle, SessionStdin } from './types.js';
+import type { InteractiveProcessHandle, SessionStdin } from './types.js';
 
 const PROJECT_ROOT = join(import.meta.dir, '../../..');
 const DEFAULT_BINARY = join(
@@ -46,7 +46,7 @@ function getBinaryPath(coverageMode: boolean, overridePath?: string): string {
   return binaryPath;
 }
 
-/** Same executable `runCli` uses (coverage binary when `SONARQUBE_CLI_USE_COVERAGE=1`). */
+/** Same executable the harness spawns (coverage binary when `SONARQUBE_CLI_USE_COVERAGE=1`). */
 export function getCliBinaryPath(): string {
   return getBinaryPath(process.env.SONARQUBE_CLI_USE_COVERAGE === '1');
 }
@@ -122,81 +122,6 @@ function requirePipedStream(
   throw new Error(`Expected piped ${name}`);
 }
 
-const STDIN_CHUNK_DELAY_MS = 300;
-
-export async function runCli(
-  command: string,
-  env: Record<string, string>,
-  options: {
-    stdin?: string;
-    stdinChunks?: string[];
-    stdinChunkDelayMs?: number;
-    timeoutMs?: number;
-    cwd: string;
-    browserToken?: string;
-    browserTokenName?: string;
-    binaryPath?: string;
-  },
-): Promise<CliResult> {
-  const hasStdin = options.stdin !== undefined || (options.stdinChunks?.length ?? 0) > 0;
-  const { proc, timeoutMs, startedAt } = spawnCliProcess(command, env, {
-    cwd: options.cwd,
-    timeoutMs: options.timeoutMs,
-    binaryPath: options.binaryPath,
-    stdin: hasStdin ? 'pipe' : 'ignore',
-  });
-
-  if (options.stdin !== undefined && proc.stdin) {
-    proc.stdin.write(new TextEncoder().encode(options.stdin));
-    proc.stdin.end();
-  }
-
-  if (options.stdinChunks !== undefined && proc.stdin) {
-    const encoder = new TextEncoder();
-    const chunkDelayMs = options.stdinChunkDelayMs ?? STDIN_CHUNK_DELAY_MS;
-    await (async () => {
-      for (const chunk of options.stdinChunks ?? []) {
-        await new Promise((r) => setTimeout(r, chunkDelayMs));
-        proc.stdin?.write(encoder.encode(chunk));
-      }
-      proc.stdin?.end();
-    })();
-  }
-
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    proc.kill();
-  }, timeoutMs);
-
-  let stdout: string;
-
-  if (options.browserToken) {
-    stdout = await streamStdoutAndDeliverToken(
-      proc.stdout,
-      options.browserToken,
-      options.browserTokenName,
-    );
-  } else {
-    stdout = await new Response(proc.stdout).text();
-  }
-
-  const [exitCode, stderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
-
-  clearTimeout(timer);
-
-  if (timedOut) {
-    throw new Error(`CLI process timed out after ${timeoutMs}ms`);
-  }
-
-  return {
-    exitCode,
-    stdout,
-    stderr,
-    durationMs: Date.now() - startedAt,
-  };
-}
-
 /**
  * Extracts the loopback port from accumulated stdout and POSTs the token to it.
  * Returns true if the token was delivered, false if the port was not found yet.
@@ -213,39 +138,6 @@ export function tryDeliverToken(accumulated: string, token: string, tokenName?: 
     /* loopback server may close before response completes */
   });
   return true;
-}
-
-/**
- * Reads stdout incrementally. When the loopback auth port appears in the output
- * (pattern: `port=NNNNN`), delivers the token via POST to the loopback server.
- * Returns the full accumulated stdout once the stream ends.
- */
-async function streamStdoutAndDeliverToken(
-  stream: ReadableStream<Uint8Array>,
-  token: string,
-  tokenName?: string,
-): Promise<string> {
-  const decoder = new TextDecoder();
-  const reader = stream.getReader();
-  let accumulated = '';
-  let tokenDelivered = false;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      accumulated += decoder.decode(value, { stream: true });
-
-      if (!tokenDelivered) {
-        tokenDelivered = tryDeliverToken(accumulated, token, tokenName);
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  return accumulated;
 }
 
 /**
