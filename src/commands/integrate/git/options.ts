@@ -25,9 +25,7 @@ export interface IntegrateGitOptions {
   force?: boolean;
   nonInteractive?: boolean;
   global?: boolean;
-  /** Enable the optional pre-commit dependency-risks scan. Requires `project`. */
-  dependencyRisks?: boolean;
-  /** Project key baked into the dependency-risks hook. Required when `dependencyRisks` is set. */
+  /** Project key baked into the dependency-risks hook for project-scope installs. Not supported with `--global`. */
   project?: string;
   /** Set by the bare `sonar integrate` router; forwarded to telemetry only. */
   isFromRouter?: boolean;

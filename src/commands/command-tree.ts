@@ -370,12 +370,8 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       'Install hook globally for all repositories (sets git config --global core.hooksPath)',
     )
     .option(
-      '--dependency-risks',
-      'Also install a pre-commit dependency-risks scan (requires -p, not supported with --global)',
-    )
-    .option(
       '-p, --project <project>',
-      'Project key baked into the dependency-risks hook (required with --dependency-risks)',
+      'Project key baked into the dependency-risks hook (not supported with --global)',
     )
     .authenticatedAction((ctx, options: IntegrateGitOptions) => integrateGit(options, ctx));
 
@@ -788,10 +784,13 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .description(
       'git pre-commit handler: scan staged files for secrets, optionally scan dependency manifests for risks',
     )
-    .option('-p, --project <project>', 'Project key (required when --dependency-risks is set)')
+    .option(
+      '-p, --project <project>',
+      'Project key for --dependency-risks; auto-detected when omitted',
+    )
     .option(
       '--dependency-risks',
-      'Also run a dependency-risks scan after the secrets scan (requires -p)',
+      'Also run a dependency-risks scan after the secrets scan (project key auto-detected when -p is omitted)',
     )
     .argument('[files...]', 'Changed files passed by pre-commit (pass_filenames: true)')
     .anonymousAction((ctx, files: string[] | undefined, options: GitPreCommitOptions) =>

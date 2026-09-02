@@ -105,7 +105,7 @@ function nativeChainBlock(hook: GitHookType, stdinFromCache: boolean): string {
   ].join('\n');
 }
 
-/** Returns the hook script. For pre-commit, bakes `--dependency-risks -p <key>` when `context` carries dep-risks attrs. */
+/** Returns the hook script; bakes `--dependency-risks [-p <key>]` when that subfeature is active. */
 export function getHookScript(hook: GitHookType, context: IntegrationContext): string {
   const depRisksArgs = hook === 'pre-commit' ? resolveDepRisksArgs(context) : '';
   const chains = context.scope === 'global';

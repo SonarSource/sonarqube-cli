@@ -19,12 +19,12 @@
  */
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/command-error.ts';
 import {
   scaScannerBinaryDependency,
   sonarSecretsBinaryDependency,
 } from '@/core/framework/dependencies';
-import { askUser, install, skip } from '@/core/framework/features/selection.ts';
+import { install, skip } from '@/core/framework/features/selection.ts';
 import type { FeaturePreview, SubfeatureDeclaration } from '@/core/framework/features/types.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { assertScaAvailable } from '@/core/server/sca-availability.ts';
@@ -71,22 +71,12 @@ export function createDepRisksSubfeature(): SubfeatureDeclaration<IntegrateGitOp
   return {
     id: PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID,
     displayName: 'pre-commit dependency-risks scan',
-    shouldInstall: async ({ options, scope, auth }) => {
-      if (scope === 'global') {
-        return skip('Dependency-risks scanning is not available for global hooks');
-      }
-      if (options.dependencyRisks && !options.project) {
-        // explicit command parameter dependency-risks requires project to be resolved
-        throw new InvalidOptionError('--dependency-risks requires -p <projectKey>.');
-      }
-      if (!options.project) {
-        return skip('Dependency-risks scanning is not available without a project key.');
-      }
+    // Installed by default when SCA is available. Project key is optional; unresolved
+    // falls back to discoverProject() at hook run time.
+    shouldInstall: async ({ auth }) => {
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const skipDecision = await scaSkipReason(auth!);
-      if (skipDecision) return skipDecision;
-      if (options.dependencyRisks) return install();
-      return askUser('Enable dependency-risks scanning on the pre-commit hook?');
+      return skipDecision ?? install();
     },
     dependencies: [sonarSecretsBinaryDependency, scaScannerBinaryDependency],
   };
