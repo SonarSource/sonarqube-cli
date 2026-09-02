@@ -21,7 +21,6 @@
 // TestHarness — main entry point for integration tests
 
 import { chmodSync, copyFileSync, existsSync, mkdirSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -31,6 +30,7 @@ import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import { applyIsolatedSpawnEnv } from '../../_common/isolated-cli-env.js';
 import { getCliBinaryPath } from './cli-runner.js';
 import { Dir } from './dir';
+import { rmTempDirTraced, startDisposeTrace } from './dispose-trace.js';
 import { EnvironmentBuilder } from './environment-builder.js';
 import { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
 import { FakeGitLabServer, FakeGitLabServerBuilder } from './fake-gitlab-server.js';
@@ -337,27 +337,35 @@ export class TestHarness {
    * Stops all fake servers and removes the temporary directory.
    */
   async dispose(): Promise<void> {
-    for (const session of this.sessions) {
-      session.kill();
+    const trace = startDisposeTrace(this.tempDir.path);
+    try {
+      for (const session of this.sessions) {
+        session.kill();
+      }
+      await trace.phase('sessions', () =>
+        Promise.all(
+          this.sessions.map((session) =>
+            session.waitFinish().catch(trace.swallow('session.waitFinish')),
+          ),
+        ),
+      );
+
+      await trace.phase('servers', () =>
+        Promise.all(
+          [...this.servers, ...this.binariesServers, ...this.gitlabServers].map((s) =>
+            s.stop().catch(trace.swallow('server.stop')),
+          ),
+        ),
+      );
+      await trace.phase('update-servers', () =>
+        Promise.all(
+          this.updateScriptServers.map((s) => s.stop().catch(trace.swallow('update-server.stop'))),
+        ),
+      );
+
+      await trace.phase('rm', () => rmTempDirTraced(trace, this.tempDir.path));
+    } finally {
+      trace.stop();
     }
-    await Promise.all(this.sessions.map((session) => session.waitFinish().catch(() => undefined)));
-
-    await Promise.all(
-      [...this.servers, ...this.binariesServers, ...this.gitlabServers].map((s) =>
-        s.stop().catch(() => {
-          /* ignore stop errors */
-        }),
-      ),
-    );
-    await Promise.all(this.updateScriptServers.map((s) => s.stop().catch(() => {})));
-
-    await rm(this.tempDir.path, {
-      recursive: true,
-      force: true,
-      maxRetries: IS_WINDOWS ? 15 : 5,
-      retryDelay: IS_WINDOWS ? 200 : 100,
-    }).catch(() => {
-      /* best-effort: temp dirs are cleaned up by the OS */
-    });
   }
 }
