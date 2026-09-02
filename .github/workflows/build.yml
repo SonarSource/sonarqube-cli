@@ -28,15 +28,15 @@ jobs:
       BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
       PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
           version: 2026.4.20
 
-      - uses: SonarSource/ci-github-actions/get-build-number@de29c54be07c772c6afc381db8ae4bfcbfe4df12 # 1.8.0
+      - uses: SonarSource/ci-github-actions/get-build-number@983645f538ff01044b1e567adb23e6f527d8b52a # 1.8.9
         id: get-build-number
 
       - name: Update package.json version with build number
@@ -52,7 +52,7 @@ jobs:
     runs-on: github-ubuntu-latest-m
     needs: prepare
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -120,7 +120,7 @@ jobs:
     needs: [prepare, build-binaries]
     if: github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-')
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Cloudflare WARP
         uses: SonarSource/gh-action_setup-cloudflare-warp@fe31a2b2f31595cffdef290985700732cb3469d6 # v2.1.0
@@ -223,7 +223,7 @@ jobs:
       - scan
     if: ${{ !cancelled() && !failure() && (github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-')) }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup JFrog CLI
         uses: jfrog/setup-jfrog-cli@deda456d982fc5e9a7a020b63eb0d2968aedd33e # v5.1.0
@@ -303,7 +303,7 @@ jobs:
     name: Lint
     runs-on: github-ubuntu-latest-s
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Vault Secrets
         id: secrets
@@ -339,7 +339,7 @@ jobs:
           - os: windows
             runner: warp-custom-windows-2022-s
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Vault Secrets
         id: secrets
@@ -386,7 +386,7 @@ jobs:
           - os: windows
             runner: warp-custom-windows-2022-s
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Vault Secrets
         id: secrets
@@ -503,7 +503,7 @@ jobs:
     runs-on: github-ubuntu-latest-s
     needs: [prepare, lint, unit-tests, integration-and-e2e]
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -557,7 +557,7 @@ jobs:
       - scan
     if: ${{ !cancelled() && !failure() && (github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-')) }}
     steps:
-      - uses: SonarSource/ci-github-actions/promote@de29c54be07c772c6afc381db8ae4bfcbfe4df12 # 1.8.0
+      - uses: SonarSource/ci-github-actions/promote@983645f538ff01044b1e567adb23e6f527d8b52a # 1.8.9
         env:
           PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
