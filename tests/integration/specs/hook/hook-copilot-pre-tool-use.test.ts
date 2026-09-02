@@ -70,9 +70,7 @@ describe('sonar hook copilot-pre-tool-use', () => {
   it(
     'exits 0 and allows when stdin is malformed JSON',
     async () => {
-      const result = await harness.run('hook copilot-pre-tool-use', {
-        stdin: 'not valid json',
-      });
+      const result = await harness.runWithStdin('hook copilot-pre-tool-use', 'not valid json');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"deny"');
@@ -88,12 +86,13 @@ describe('sonar hook copilot-pre-tool-use', () => {
       harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
       const filePath = join(harness.cwd.path, 'secret.js');
 
-      const result = await harness.run('hook copilot-pre-tool-use', {
-        stdin: JSON.stringify({
+      const result = await harness.runWithStdin(
+        'hook copilot-pre-tool-use',
+        JSON.stringify({
           toolName: 'edit',
           toolArgs: JSON.stringify({ path: filePath }),
         }),
-      });
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"deny"');
@@ -107,9 +106,10 @@ describe('sonar hook copilot-pre-tool-use', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, VALID_TOKEN);
 
-      const result = await harness.run('hook copilot-pre-tool-use', {
-        stdin: JSON.stringify({ toolName: 'view', toolArgs: 'not-json-string' }),
-      });
+      const result = await harness.runWithStdin(
+        'hook copilot-pre-tool-use',
+        JSON.stringify({ toolName: 'view', toolArgs: 'not-json-string' }),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"deny"');
@@ -123,12 +123,13 @@ describe('sonar hook copilot-pre-tool-use', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, VALID_TOKEN);
 
-      const result = await harness.run('hook copilot-pre-tool-use', {
-        stdin: JSON.stringify({
+      const result = await harness.runWithStdin(
+        'hook copilot-pre-tool-use',
+        JSON.stringify({
           toolName: 'view',
           toolArgs: JSON.stringify({ other: 'something' }),
         }),
-      });
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"deny"');
@@ -142,9 +143,10 @@ describe('sonar hook copilot-pre-tool-use', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, VALID_TOKEN);
 
-      const result = await harness.run('hook copilot-pre-tool-use', {
-        stdin: viewPayload('/nonexistent/path/file.js'),
-      });
+      const result = await harness.runWithStdin(
+        'hook copilot-pre-tool-use',
+        viewPayload('/nonexistent/path/file.js'),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"deny"');
@@ -159,9 +161,7 @@ describe('sonar hook copilot-pre-tool-use', () => {
       harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
       const filePath = join(harness.cwd.path, 'secret.js');
 
-      const result = await harness.run('hook copilot-pre-tool-use', {
-        stdin: viewPayload(filePath),
-      });
+      const result = await harness.runWithStdin('hook copilot-pre-tool-use', viewPayload(filePath));
 
       expect(result.exitCode).toBe(0);
       const output = JSON.parse(result.stdout.trim());
@@ -178,9 +178,7 @@ describe('sonar hook copilot-pre-tool-use', () => {
       harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
       const filePath = join(harness.cwd.path, 'secret.js');
 
-      const result = await harness.run('hook copilot-pre-tool-use', {
-        stdin: viewPayload(filePath),
-      });
+      const result = await harness.runWithStdin('hook copilot-pre-tool-use', viewPayload(filePath));
 
       expect(result.exitCode).toBe(0);
       const output = JSON.parse(result.stdout.trim());
@@ -198,9 +196,7 @@ describe('sonar hook copilot-pre-tool-use', () => {
       harness.cwd.writeFile('clean.js', CLEAN_CONTENT);
       const filePath = join(harness.cwd.path, 'clean.js');
 
-      const result = await harness.run('hook copilot-pre-tool-use', {
-        stdin: viewPayload(filePath),
-      });
+      const result = await harness.runWithStdin('hook copilot-pre-tool-use', viewPayload(filePath));
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"deny"');
@@ -216,9 +212,7 @@ describe('sonar hook copilot-pre-tool-use', () => {
       harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
       const filePath = join(harness.cwd.path, 'secret.js');
 
-      const result = await harness.run('hook copilot-pre-tool-use', {
-        stdin: viewPayload(filePath),
-      });
+      const result = await harness.runWithStdin('hook copilot-pre-tool-use', viewPayload(filePath));
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('"permissionDecision"');
@@ -245,9 +239,7 @@ describe('sonar hook copilot-pre-tool-use', () => {
       harness.cliHome.writeFile(`bin/${binaryName}`, 'not-a-binary');
       chmodSync(harness.cliHome.file('bin', binaryName).path, 0o644);
 
-      const result = await harness.run('hook copilot-pre-tool-use', {
-        stdin: viewPayload(filePath),
-      });
+      const result = await harness.runWithStdin('hook copilot-pre-tool-use', viewPayload(filePath));
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"deny"');

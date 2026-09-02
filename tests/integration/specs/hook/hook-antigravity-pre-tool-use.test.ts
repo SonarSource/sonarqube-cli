@@ -73,9 +73,7 @@ describe('sonar hook antigravity-pre-tool-use', () => {
   it(
     'exits 0 and allows when stdin is malformed JSON',
     async () => {
-      const result = await harness.run('hook antigravity-pre-tool-use', {
-        stdin: 'not valid json',
-      });
+      const result = await harness.runWithStdin('hook antigravity-pre-tool-use', 'not valid json');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"deny"');
@@ -91,14 +89,15 @@ describe('sonar hook antigravity-pre-tool-use', () => {
       harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
       const filePath = join(harness.cwd.path, 'secret.js');
 
-      const result = await harness.run('hook antigravity-pre-tool-use', {
-        stdin: JSON.stringify({
+      const result = await harness.runWithStdin(
+        'hook antigravity-pre-tool-use',
+        JSON.stringify({
           toolCall: {
             name: 'run_command',
             args: { CommandLine: `cat ${filePath}` },
           },
         }),
-      });
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"deny"');
@@ -112,11 +111,12 @@ describe('sonar hook antigravity-pre-tool-use', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, VALID_TOKEN);
 
-      const result = await harness.run('hook antigravity-pre-tool-use', {
-        stdin: JSON.stringify({
+      const result = await harness.runWithStdin(
+        'hook antigravity-pre-tool-use',
+        JSON.stringify({
           toolCall: { name: 'view_file', args: {} },
         }),
-      });
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"deny"');
@@ -130,9 +130,10 @@ describe('sonar hook antigravity-pre-tool-use', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, VALID_TOKEN);
 
-      const result = await harness.run('hook antigravity-pre-tool-use', {
-        stdin: viewFilePayload('/nonexistent/path/file.js'),
-      });
+      const result = await harness.runWithStdin(
+        'hook antigravity-pre-tool-use',
+        viewFilePayload('/nonexistent/path/file.js'),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"deny"');
@@ -147,9 +148,10 @@ describe('sonar hook antigravity-pre-tool-use', () => {
       harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
       const filePath = join(harness.cwd.path, 'secret.js');
 
-      const result = await harness.run('hook antigravity-pre-tool-use', {
-        stdin: viewFilePayload(filePath),
-      });
+      const result = await harness.runWithStdin(
+        'hook antigravity-pre-tool-use',
+        viewFilePayload(filePath),
+      );
 
       expect(result.exitCode).toBe(0);
       const output = JSON.parse(result.stdout.trim());
@@ -166,9 +168,10 @@ describe('sonar hook antigravity-pre-tool-use', () => {
       harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
       const filePath = join(harness.cwd.path, 'secret.js');
 
-      const result = await harness.run('hook antigravity-pre-tool-use', {
-        stdin: viewFilePayload(filePath),
-      });
+      const result = await harness.runWithStdin(
+        'hook antigravity-pre-tool-use',
+        viewFilePayload(filePath),
+      );
 
       expect(result.exitCode).toBe(0);
       const output = JSON.parse(result.stdout.trim());
@@ -186,9 +189,10 @@ describe('sonar hook antigravity-pre-tool-use', () => {
       harness.cwd.writeFile('clean.js', CLEAN_CONTENT);
       const filePath = join(harness.cwd.path, 'clean.js');
 
-      const result = await harness.run('hook antigravity-pre-tool-use', {
-        stdin: viewFilePayload(filePath),
-      });
+      const result = await harness.runWithStdin(
+        'hook antigravity-pre-tool-use',
+        viewFilePayload(filePath),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"deny"');
@@ -204,9 +208,10 @@ describe('sonar hook antigravity-pre-tool-use', () => {
       harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
       const filePath = join(harness.cwd.path, 'secret.js');
 
-      const result = await harness.run('hook antigravity-pre-tool-use', {
-        stdin: viewFilePayload(filePath),
-      });
+      const result = await harness.runWithStdin(
+        'hook antigravity-pre-tool-use',
+        viewFilePayload(filePath),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('"decision"');
@@ -228,9 +233,10 @@ describe('sonar hook antigravity-pre-tool-use', () => {
       harness.cliHome.writeFile(`bin/${binaryName}`, 'not-a-binary');
       chmodSync(harness.cliHome.file('bin', binaryName).path, 0o644);
 
-      const result = await harness.run('hook antigravity-pre-tool-use', {
-        stdin: viewFilePayload(filePath),
-      });
+      const result = await harness.runWithStdin(
+        'hook antigravity-pre-tool-use',
+        viewFilePayload(filePath),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('"deny"');

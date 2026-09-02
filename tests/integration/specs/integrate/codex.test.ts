@@ -42,6 +42,7 @@ import {
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
 import {
+  type CliResult,
   hookScriptName,
   hookScriptPath,
   IS_WINDOWS,
@@ -705,11 +706,13 @@ describe('integrate codex', () => {
       async () => {
         // Default beforeEach is on-premise with no entitlement stubs, so Vortex
         // is not_applicable. The three remaining features
-        // (secrets hook, secrets instructions, MCP) each ask. The leading '\r'
-        // selects project scope before the per-feature prompts.
-        const result = await harness.run('integrate codex', {
-          stdinChunks: ['\r', '\r', '\r', '\r'],
-        });
+        // (secrets hook, secrets instructions, MCP) each ask after the scope prompt.
+        const session = harness.runInteractive('integrate codex');
+        await session.accept('Where should SonarQube be integrated?');
+        await session.accept('Install secret scanning hooks?');
+        await session.accept('Install secrets-on-read instructions?');
+        await session.accept('Install MCP server?');
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         const output = `${result.stdout}\n${result.stderr}`;
@@ -746,13 +749,20 @@ describe('integrate codex', () => {
     ])(
       'prints a non-interactive hint with --non-interactive plus -p/-g examples only for a detected AI agent without --non-interactive (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
       async (isAgent, isInteractive, expectedShownPrompt) => {
-        const result = await harness.run(
-          `integrate codex${isInteractive ? '' : ' --non-interactive'}`,
-          {
-            ...(isInteractive ? { stdinChunks: ['\r', '\r', '\r', '\r'] } : {}),
-            extraEnv: isAgent ? { CODEX_SANDBOX_NETWORK_DISABLED: '1' } : {},
-          },
-        );
+        const extraEnv: Record<string, string> = isAgent
+          ? { CODEX_SANDBOX_NETWORK_DISABLED: '1' }
+          : {};
+        let result: CliResult;
+        if (isInteractive) {
+          const session = harness.runInteractive('integrate codex', { extraEnv });
+          await session.accept('Where should SonarQube be integrated?');
+          await session.accept('Install secret scanning hooks?');
+          await session.accept('Install secrets-on-read instructions?');
+          await session.accept('Install MCP server?');
+          result = await session.waitFinish();
+        } else {
+          result = await harness.run('integrate codex --non-interactive', { extraEnv });
+        }
 
         expect(result.exitCode).toBe(0);
         if (expectedShownPrompt) {
@@ -771,10 +781,12 @@ describe('integrate codex', () => {
     it(
       'skips a feature when the user declines its prompt',
       async () => {
-        // '\r' selects project scope; decline the hook ('n'), accept secrets instructions and MCP ('\r').
-        const result = await harness.run('integrate codex', {
-          stdinChunks: ['\r', 'n', '\r', '\r'],
-        });
+        const session = harness.runInteractive('integrate codex');
+        await session.accept('Where should SonarQube be integrated?');
+        await session.decline('Install secret scanning hooks?');
+        await session.accept('Install secrets-on-read instructions?');
+        await session.accept('Install MCP server?');
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         // Hook was declined: no hook artifacts and no state entry.
@@ -801,10 +813,15 @@ describe('integrate codex', () => {
 
         // Project install hits the state-probe branch: the secrets-instructions
         // feature asks a custom "project-local copy" question instead of the
-        // default one. The leading '\r' selects project scope first.
-        const result = await harness.run('integrate codex', {
-          stdinChunks: ['\r', '\r', '\r', '\r'],
-        });
+        // default one.
+        const session = harness.runInteractive('integrate codex');
+        await session.accept('Where should SonarQube be integrated?');
+        await session.accept('Install secret scanning hooks?');
+        await session.accept(
+          'Global Codex instructions already exist. Do you also want to create a project-local copy for this repo?',
+        );
+        await session.accept('Install MCP server?');
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         const output = `${result.stdout}\n${result.stderr}`;
@@ -833,14 +850,18 @@ describe('integrate codex', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'cloud-token', testOrg);
 
-        const result = await harness.run(`integrate codex --project ${testProject}`, {
-          stdinChunks: ['\r', '\r', '\r', '\r', '\r'],
+        const session = harness.runInteractive(`integrate codex --project ${testProject}`, {
           extraEnv: {
             SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
             SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
             __SQCLI_DEV_SKIP_CAG: '1',
           },
         });
+        await session.accept('Install secret scanning hooks?');
+        await session.accept('Install Vortex?');
+        await session.accept('Install secrets-on-read instructions?');
+        await session.accept('Install MCP server?');
+        const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         const output = `${result.stdout}\n${result.stderr}`;

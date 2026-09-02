@@ -187,6 +187,19 @@ describe('InteractiveSession', () => {
     expect(fake.ended).toBe(true);
   });
 
+  it('accept waits then sends enter, decline waits then sends n', async () => {
+    const fake = createFakeProcess();
+    const session = InteractiveSession.fromProcess(fake.handle, { timeoutMs: 2000 });
+
+    fake.pushStdout('Install MCP server?');
+    await session.accept('Install MCP server?');
+    fake.pushStdout('Install secret scanning hooks?');
+    await session.decline('Install secret scanning hooks?');
+    expect(fake.writes).toEqual(['\r', 'n']);
+
+    session.kill();
+  });
+
   it('keeps unread stdout for a later waitText', async () => {
     const fake = createFakeProcess();
     const session = InteractiveSession.fromProcess(fake.handle, { timeoutMs: 2000 });
