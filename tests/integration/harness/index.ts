@@ -229,10 +229,7 @@ export class TestHarness {
     try {
       return await session.waitFinish();
     } finally {
-      const index = this.sessions.indexOf(session);
-      if (index >= 0) {
-        this.sessions.splice(index, 1);
-      }
+      this.dropSession(session);
     }
   }
 
@@ -245,8 +242,12 @@ export class TestHarness {
     options?: RunInteractiveOptions,
   ): Promise<CliResult> {
     const session = this.runInteractive(command, options);
-    session.write(stdin);
-    return session.waitFinish();
+    try {
+      session.write(stdin);
+      return await session.waitFinish();
+    } finally {
+      this.dropSession(session);
+    }
   }
 
   /**
@@ -323,6 +324,13 @@ export class TestHarness {
       composed[ENV_DO_NOT_TRACK] = '0';
     }
     return applyIsolatedSpawnEnv(composed);
+  }
+
+  private dropSession(session: InteractiveSession): void {
+    const index = this.sessions.indexOf(session);
+    if (index >= 0) {
+      this.sessions.splice(index, 1);
+    }
   }
 
   /**
