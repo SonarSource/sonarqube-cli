@@ -158,7 +158,7 @@ describe('VortexEntitlementClient', () => {
     let cloudClient: VortexEntitlementClient;
 
     beforeEach(() => {
-      cloudClient = new VortexEntitlementClient(SONARCLOUD_URL, TOKEN);
+      cloudClient = new VortexEntitlementClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
     });
 
     it('returns not_entitled when organizationKey is not provided', async () => {
@@ -175,7 +175,7 @@ describe('VortexEntitlementClient', () => {
 
     it('queries SQAA and CAG on SonarQube Server, using the placeholder org id', async () => {
       expect(SERVER_ORGANIZATION_ID_PLACEHOLDER).toBe('00000000-0000-0000-0000-000000000000');
-      const serverClient = new VortexEntitlementClient(SERVER_URL, TOKEN);
+      const serverClient = new VortexEntitlementClient(new SonarHttpClient(SERVER_URL, TOKEN));
       fetchSpy = mockFetch({ allowed: true, hasEntitlement: true });
       expect((await serverClient.hasVortexEntitlement()).status).toBe('enabled');
       expect(fetchPathnames(fetchSpy)).toEqual([
@@ -185,7 +185,7 @@ describe('VortexEntitlementClient', () => {
     });
 
     it("returns 'not_applicable' when both Server hubs are absent", async () => {
-      const serverClient = new VortexEntitlementClient(SERVER_URL, TOKEN);
+      const serverClient = new VortexEntitlementClient(new SonarHttpClient(SERVER_URL, TOKEN));
       fetchSpy = mockFetch({}, { ok: false, status: 404 });
       expect((await serverClient.hasVortexEntitlement()).status).toBe('not_applicable');
     });
@@ -193,7 +193,7 @@ describe('VortexEntitlementClient', () => {
     it.each(['/a3s/', '/cag/'] as const)(
       "returns 'not_applicable' when the Server %s hub is absent even if the other is entitled",
       async (missingPath) => {
-        const serverClient = new VortexEntitlementClient(SERVER_URL, TOKEN);
+        const serverClient = new VortexEntitlementClient(new SonarHttpClient(SERVER_URL, TOKEN));
         fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(((url: string | URL) => {
           const pathname = new URL(url).pathname;
           const missing = pathname.includes(missingPath);
@@ -212,7 +212,7 @@ describe('VortexEntitlementClient', () => {
     );
 
     it("returns 'check_failed' when the Server Hub is unavailable", async () => {
-      const serverClient = new VortexEntitlementClient(SERVER_URL, TOKEN);
+      const serverClient = new VortexEntitlementClient(new SonarHttpClient(SERVER_URL, TOKEN));
       fetchSpy = mockFetch({}, { ok: false, status: 503 });
       expect((await serverClient.hasVortexEntitlement()).status).toBe('check_failed');
     });

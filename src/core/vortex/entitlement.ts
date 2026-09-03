@@ -118,8 +118,8 @@ async function resolveEntitlementOrganizationId(
 export class VortexEntitlementClient {
   private readonly client: SonarHttpClient;
 
-  constructor(serverUrl: string, token: string) {
-    this.client = new SonarHttpClient(serverUrl, token);
+  constructor(client: SonarHttpClient) {
+    this.client = client;
   }
 
   /**
@@ -178,7 +178,9 @@ function mergeVortexEntitlement(
 
 /** Shared low-level call: every entitlement lookup in this file goes through here. */
 async function queryVortexEntitlement(auth: ResolvedAuth): Promise<VortexEntitlementResult> {
-  return new VortexEntitlementClient(auth.serverUrl, auth.token).hasVortexEntitlement(auth.orgKey);
+  return new VortexEntitlementClient(
+    new SonarHttpClient(auth.serverUrl, auth.token),
+  ).hasVortexEntitlement(auth.orgKey);
 }
 
 /**
