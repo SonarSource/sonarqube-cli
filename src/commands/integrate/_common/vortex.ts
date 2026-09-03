@@ -22,13 +22,14 @@ import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.t
 import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
 import type {
   FeatureContainer,
+  FeatureDeclaration,
   InstallDecision,
   IntegrationInvocation,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
 import { askUser, install, skip, uninstall } from '@/core/framework/features';
 import { SonarQubeClient } from '@/core/server/client.ts';
-import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
+import type { CliState, InstalledIntegrationFeature } from '@/core/state/state.ts';
 import { info, warn } from '@/core/ui';
 import { resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
@@ -41,6 +42,64 @@ export const VORTEX_FEATURE_ID = 'vortex';
 /** Vortex is project-scoped, so only these records carry usable project metadata. */
 export function isProjectVortexFeature(feature: InstalledIntegrationFeature): boolean {
   return feature.featureId === VORTEX_FEATURE_ID && feature.scope === 'project';
+}
+
+/**
+ * True when some OTHER project (any recorded `targetRoot` except `excludeTargetRoot`)
+ * still has a project-scope Vortex install for `integrationId`. There is no per-project
+ * record for a globally-shared resource (e.g. the CAG session-start hook, always recorded
+ * once at `scope: 'global'`), so this project-scoped `vortex` record is the only reliable
+ * proxy for "some project on this machine still depends on the shared global Vortex
+ * assets" — used to avoid a single project's `sonar integrate` run tearing down a global
+ * resource other projects still rely on.
+ */
+export function isVortexInstalledForOtherProject(
+  state: CliState,
+  integrationId: string,
+  excludeTargetRoot: string,
+): boolean {
+  const installedIntegration = state.integrations.installed.find(
+    (entry) => entry.integrationId === integrationId,
+  );
+  return (
+    installedIntegration?.features.some(
+      (feature) => isProjectVortexFeature(feature) && feature.targetRoot !== excludeTargetRoot,
+    ) ?? false
+  );
+}
+
+/**
+ * `shouldInstall` for the CAG session-start hook feature, shared across every agent that
+ * declares one. Gated on real Vortex entitlement only (`vortexInstallDecision`) — deliberately
+ * not `shouldInstallCagHook`'s internal dogfooding allowlist, which exists for the PostToolUse
+ * tool-watching hook and has nothing to do with general-purpose session-start context delivery.
+ *
+ * The hook is a single global resource, not one record per project, so a project's own
+ * `uninstall` disposition (legitimate for THIS project) must not tear it down while another
+ * project on this machine still has Vortex installed. The guard only ever applies to a teardown
+ * — an `install`/`skip`/`ask` decision passes through untouched, otherwise a second project (or
+ * any `--global` run, where `targetRoot` is `homedir()` and so never matches a project's own
+ * record) could never install the shared hook at all.
+ */
+export function createSessionStartHookShouldInstall<TOptions extends IntegrateAgentOptions>(
+  integrationId: string,
+): NonNullable<FeatureDeclaration<TOptions>['shouldInstall']> {
+  return (invocation: IntegrationInvocation<TOptions>) => {
+    const decision = vortexInstallDecision(invocation.options.vortexDisposition);
+    if (
+      decision.action === 'uninstall' &&
+      isVortexInstalledForOtherProject(
+        invocation.state,
+        integrationId,
+        invocation.options.projectRoot ?? invocation.targetRoot,
+      )
+    ) {
+      return skip(
+        'Other projects on this machine still use Vortex — leaving the shared session-start hook installed.',
+      );
+    }
+    return decision;
+  };
 }
 
 /**

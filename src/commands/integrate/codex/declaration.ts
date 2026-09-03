@@ -45,6 +45,7 @@ import {
   SECRETS_PROMPT_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
 import { createContextAugmentationSubfeature } from '../_common/features/context-augmentation-feature.ts';
+import { createContextAugmentationSessionStartFeature } from '../_common/features/context-augmentation-session-start-feature.ts';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
   createSqaaInstructionsSnippet,
@@ -60,7 +61,11 @@ import {
 import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates.ts';
 import { removeCodexMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
-import { createVortexFeature, vortexInstallDecision } from '../_common/vortex.ts';
+import {
+  createSessionStartHookShouldInstall,
+  createVortexFeature,
+  vortexInstallDecision,
+} from '../_common/vortex.ts';
 import {
   getSecretPromptTemplateUnix,
   getSecretPromptTemplateWindows,
@@ -121,6 +126,16 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
         targetPath: resolveCodexSkillPath,
       }),
     ]),
+    createContextAugmentationSessionStartFeature<CodexIntegrationOptions>({
+      configDir: CODEX_CONFIG_DIR,
+      settingsPath: resolveCodexHooksPath,
+      sessionStartScriptPath: 'sonar-context-session-start/build-scripts/session-start',
+      subagentStartScriptPath: 'sonar-context-session-start/build-scripts/subagent-start',
+      sessionStartCommand: 'sonar hook codex-session-start',
+      subagentStartCommand: 'sonar hook codex-subagent-start',
+      shouldInstall:
+        createSessionStartHookShouldInstall<CodexIntegrationOptions>(CODEX_INTEGRATION_ID),
+    }),
     {
       id: 'secrets-instructions',
       displayName: 'secrets-on-read instructions',

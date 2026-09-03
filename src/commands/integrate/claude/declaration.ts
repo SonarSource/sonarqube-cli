@@ -32,7 +32,7 @@ import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.t
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs.ts';
-import { isCagHookOrgAllowed } from '../_common/context-augmentation.ts';
+import { isCagHookAllowedForAttrs } from '../_common/context-augmentation.ts';
 import { contextAugmentationBinaryDependency } from '../_common/context-augmentation-dependency.ts';
 import {
   MCP_SERVER_FEATURE_BENEFIT,
@@ -41,6 +41,7 @@ import {
   SECRETS_COMBINED_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
 import { createContextAugmentationSubfeature } from '../_common/features/context-augmentation-feature.ts';
+import { createContextAugmentationSessionStartFeature } from '../_common/features/context-augmentation-session-start-feature.ts';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
   createSqaaInstructionsSnippet,
@@ -55,7 +56,11 @@ import {
 } from '../_common/hooks.ts';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
-import { createVortexFeature, vortexInstallDecision } from '../_common/vortex.ts';
+import {
+  createSessionStartHookShouldInstall,
+  createVortexFeature,
+  vortexInstallDecision,
+} from '../_common/vortex.ts';
 import { createClaudeHookEventContainer } from './hook-container-feature.ts';
 import {
   getPostToolUseFailureTemplateUnix,
@@ -172,6 +177,16 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       }),
       createContextAugmentationFailureHookSubfeature(),
     ]),
+    createContextAugmentationSessionStartFeature<ClaudeIntegrationOptions>({
+      configDir: CLAUDE_CONFIG_DIR,
+      settingsPath: resolveClaudeSettingsPath,
+      sessionStartScriptPath: 'sonar-context-session-start/build-scripts/session-start',
+      subagentStartScriptPath: 'sonar-context-session-start/build-scripts/subagent-start',
+      sessionStartCommand: 'sonar hook claude-session-start',
+      subagentStartCommand: 'sonar hook claude-subagent-start',
+      shouldInstall:
+        createSessionStartHookShouldInstall<ClaudeIntegrationOptions>(CLAUDE_INTEGRATION_ID),
+    }),
     {
       id: 'mcp-server',
       displayName: 'MCP server',
@@ -191,13 +206,6 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
     },
   ],
 };
-
-function isCagHookAllowedForAttrs(
-  attrs: Record<string, IntegrationStateAttribute> | undefined,
-): boolean {
-  const orgKey = typeof attrs?.orgKey === 'string' ? attrs.orgKey : undefined;
-  return isCagHookOrgAllowed(orgKey);
-}
 
 function shouldInstallCagHook(
   options: ClaudeIntegrationOptions,
