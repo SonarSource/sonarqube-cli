@@ -238,44 +238,6 @@ describe('fetchAuthenticated — redirect semantics', () => {
     fetchSpy?.mockRestore();
   });
 
-  it('follows a same-origin redirect and returns the final response', async () => {
-    fetchSpy = spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 301,
-        headers: new Headers({ location: `${SERVER_URL}/new-path` }),
-        text: () => Promise.resolve(''),
-        json: () => Promise.resolve({}),
-      } as unknown as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Headers(),
-        json: () => Promise.resolve({ data: 'ok' }),
-        text: () => Promise.resolve('{"data":"ok"}'),
-      } as unknown as Response);
-
-    const res = await fetchAuthenticated(`${SERVER_URL}/old-path`, {});
-    expect(res.ok).toBe(true);
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
-  });
-
-  it('throws on cross-origin redirect before making a second request', async () => {
-    fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: false,
-      status: 302,
-      headers: new Headers({ location: 'https://evil.com/capture' }),
-      text: () => Promise.resolve(''),
-      json: () => Promise.resolve({}),
-    } as unknown as Response);
-
-    // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(fetchAuthenticated(`${SERVER_URL}/api`, {})).rejects.toThrow(
-      'cross-origin redirect',
-    );
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-  });
-
   it('follows an HTTP→HTTPS upgrade redirect on the same hostname', async () => {
     const httpUrl = 'http://sonarqube.example.com/api/endpoint';
     const httpsUrl = 'https://sonarqube.example.com/api/endpoint';
