@@ -72,7 +72,7 @@ export const Stage = {
 export type LifecycleState =
   | { readonly stage: 'stable' }
   | { readonly stage: 'alpha' }
-  | { readonly stage: 'beta'; readonly betaFlagKey: string | undefined }
+  | { readonly stage: 'beta'; readonly betaFlagKey?: string }
   | {
       readonly stage: 'deprecated';
       readonly sinceVersion: string;
@@ -114,7 +114,9 @@ export function resolveLifecycle(stage: StageDescriptor): LifecycleState {
     };
   }
   if (stage.name === 'beta') {
-    return { stage: 'beta', betaFlagKey: stage.flagKey };
+    return stage.flagKey === undefined
+      ? { stage: 'beta' }
+      : { stage: 'beta', betaFlagKey: stage.flagKey };
   }
   return { stage: stage.name };
 }

@@ -21,6 +21,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import { CommandInvocationContext, TelemetryFact } from '@/commands/command-invocation-context.ts';
+import type { LifecycleState } from '@/core/commands/stage.ts';
 
 describe('CommandInvocationContext stage accessors', () => {
   it('defaults to non-alpha / non-beta', () => {
@@ -30,7 +31,7 @@ describe('CommandInvocationContext stage accessors', () => {
   });
 
   it('isAlphaEligible requires both Alpha stage and alpha enabled', () => {
-    const stage = { isAlpha: true, isBeta: false, isPrivateBeta: false };
+    const stage: LifecycleState = { stage: 'alpha' };
     expect(
       new CommandInvocationContext(stage, {
         isAlphaEnabled: false,
@@ -47,19 +48,14 @@ describe('CommandInvocationContext stage accessors', () => {
 
   it('isBetaEligible is true for Open Beta without consulting entitlement', () => {
     const ctx = new CommandInvocationContext(
-      { isAlpha: false, isBeta: true, isPrivateBeta: false },
+      { stage: 'beta' },
       { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
     );
     expect(ctx.isBetaEligible()).toBe(true);
   });
 
   it('isBetaEligible for Private Beta requires entitlement', () => {
-    const stage = {
-      isAlpha: false,
-      isBeta: true,
-      isPrivateBeta: true,
-      betaFlagKey: 'cli.beta.demo',
-    };
+    const stage: LifecycleState = { stage: 'beta', betaFlagKey: 'cli.beta.demo' };
     expect(
       new CommandInvocationContext(stage, {
         isAlphaEnabled: false,

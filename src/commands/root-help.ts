@@ -105,11 +105,11 @@ function getRootCommandLabel(command: SonarCommand, helper: Help): string {
 
   const childLabels = visibleChildren.map((child) => {
     let tag = '';
-    if (child.isAlpha) {
+    if (child.lifecycle.stage === 'alpha') {
       tag = ALPHA_HELP_TAG;
-    } else if (child.isBeta) {
+    } else if (child.lifecycle.stage === 'beta') {
       tag = BETA_HELP_TAG;
-    } else if (child.isDeprecated) {
+    } else if (child.lifecycle.stage === 'deprecated') {
       tag = DEPRECATED_HELP_TAG;
     }
     return `${child.name()}${tag}`;
@@ -146,7 +146,7 @@ function getRootCommandEntries(rootCommand: SonarCommand, helper: Help): HelpMen
       },
       ...getRootCommandSubcommandEntries(command, helper),
     ];
-    if (command.isAlpha) {
+    if (command.lifecycle.stage === 'alpha') {
       alphaEntries.push(...commandEntries);
       continue;
     }

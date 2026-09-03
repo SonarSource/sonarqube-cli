@@ -31,7 +31,13 @@ import { fileURLToPath } from 'node:url';
 import type { Option } from 'commander';
 
 import { createCommandTree } from '@/commands/command-tree.ts';
-import { BETA_HELP_TAG, DEPRECATED_HELP_TAG, type SonarCommand } from '@/commands/sonar-command.ts';
+import {
+  BETA_HELP_TAG,
+  DEPRECATED_HELP_TAG,
+  type SonarCommand,
+  SonarOption,
+} from '@/commands/sonar-command.ts';
+import type { LifecycleState } from '@/core/commands/stage.ts';
 
 import { version } from '../../package.json';
 import { EXAMPLES } from './examples';
@@ -72,11 +78,11 @@ interface ClidocOption {
 
 type PublicStage = 'stable' | 'beta' | 'deprecated';
 
-function publicStage(item: { isBeta: boolean; isDeprecated: boolean }): PublicStage {
-  if (item.isDeprecated) {
+function publicStage(lifecycle: LifecycleState): PublicStage {
+  if (lifecycle.stage === 'deprecated') {
     return 'deprecated';
   }
-  if (item.isBeta) {
+  if (lifecycle.stage === 'beta') {
     return 'beta';
   }
   return 'stable';
@@ -117,13 +123,16 @@ const help = COMMAND_TREE.createHelp();
 
 function visibleDocumentedCommands(cmd: SonarCommand): SonarCommand[] {
   return (help.visibleCommands(cmd) as SonarCommand[]).filter(
-    (child) => child.name() !== 'help' && !child.isAlpha && !child.isPrivateBeta,
+    (child) =>
+      child.name() !== 'help' &&
+      child.lifecycle.stage !== 'alpha' &&
+      (child.lifecycle.stage !== 'beta' || child.lifecycle.betaFlagKey === undefined),
   );
 }
 
 function descriptionWithoutLifecycleTag(cmd: SonarCommand): string {
   const description = cmd.description() ?? '';
-  const suffix = lifecycleHelpTag(publicStage(cmd));
+  const suffix = lifecycleHelpTag(publicStage(cmd.lifecycle));
   return suffix && description.endsWith(suffix)
     ? description.slice(0, -suffix.length)
     : description;
@@ -131,13 +140,17 @@ function descriptionWithoutLifecycleTag(cmd: SonarCommand): string {
 
 function serializeOptions(cmd: SonarCommand): ClidocOption[] {
   return cmd.options
-    .filter((option) => {
-      if (option.hidden || option.long === '--help') {
+    .filter((option): option is SonarOption => {
+      if (!(option instanceof SonarOption) || option.hidden || option.long === '--help') {
+        return false;
+      }
+      const { lifecycle } = option;
+      if (lifecycle.stage === 'alpha') {
         return false;
       }
       // Alpha/Private Beta options are already detached from the default docs runtime;
       // skip them explicitly so generating with SONARQUBE_CLI_ALPHA set cannot leak them.
-      return !option.isAlpha && !option.isPrivateBeta;
+      return lifecycle.stage !== 'beta' || lifecycle.betaFlagKey === undefined;
     })
     .map((option) => {
       const serialized: ClidocOption = {
@@ -150,7 +163,7 @@ function serializeOptions(cmd: SonarCommand): ClidocOption[] {
         defaultValue: option.defaultValue,
         allowedValues: option.argChoices?.length ? option.argChoices : undefined,
       };
-      const stage = publicStage(option);
+      const stage = publicStage(option.lifecycle);
       if (stage !== 'stable') {
         serialized.stage = stage;
       }
@@ -176,7 +189,7 @@ function serializeCommand(
     description: descriptionWithoutLifecycleTag(cmd),
     isGroup: visibleChildren.length > 0,
     isRoot: depth === 0,
-    stage: publicStage(cmd),
+    stage: publicStage(cmd.lifecycle),
     requiresAuth: cmd.requiresAuth,
     depth,
     parentId,

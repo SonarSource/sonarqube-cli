@@ -197,16 +197,13 @@ describe('SonarCommand', () => {
     it('uses Stable as the default stage', () => {
       const command = new SonarCommand('stable');
 
-      expect(command.isStable).toBe(true);
-      expect(command.isAlpha).toBe(false);
-      expect(command.isBeta).toBe(false);
-      expect(command.isDeprecated).toBe(false);
+      expect(command.lifecycle).toEqual({ stage: 'stable' });
     });
 
     it('allows Stable to be declared explicitly', () => {
       const command = new SonarCommand('stable').description('Stable command').stage(Stage.Stable);
 
-      expect(command.isStable).toBe(true);
+      expect(command.lifecycle).toEqual({ stage: 'stable' });
       expect(command.helpInformation()).not.toContain('[ALPHA]');
       expect(command.helpInformation()).not.toContain('[BETA]');
       expect(command.helpInformation()).not.toContain('[DEPRECATED]');
@@ -215,8 +212,7 @@ describe('SonarCommand', () => {
     it('uses the last stage assigned after Stable was declared explicitly', () => {
       const command = new SonarCommand('stable').stage(Stage.Stable).stage(Stage.Beta());
 
-      expect(command.isStable).toBe(false);
-      expect(command.isBeta).toBe(true);
+      expect(command.lifecycle).toEqual({ stage: 'beta' });
     });
   });
 
@@ -226,15 +222,14 @@ describe('SonarCommand', () => {
     it('marks the command as alpha', () => {
       const cmd = new SonarCommand('experimental');
 
-      expect(cmd.isAlpha).toBe(false);
-      expect(cmd.stage(Stage.Alpha).isAlpha).toBe(true);
+      expect(cmd.lifecycle.stage).toBe('stable');
+      expect(cmd.stage(Stage.Alpha).lifecycle.stage).toBe('alpha');
     });
 
     it('uses Alpha when it is assigned after Beta', () => {
       const command = new SonarCommand('experimental').stage(Stage.Beta()).stage(Stage.Alpha);
 
-      expect(command.isAlpha).toBe(true);
-      expect(command.isBeta).toBe(false);
+      expect(command.lifecycle).toEqual({ stage: 'alpha' });
     });
 
     it('unregisters the command when SONARQUBE_CLI_ALPHA is not set', () => {
@@ -418,7 +413,7 @@ describe('SonarCommand', () => {
         .description('Run the preview')
         .stage(Stage.Beta());
 
-      expect(betaCommand.isBeta).toBe(true);
+      expect(betaCommand.lifecycle.stage).toBe('beta');
       expect(parent.createHelp().visibleCommands(parent)).toContain(betaCommand);
     });
 
@@ -431,15 +426,14 @@ describe('SonarCommand', () => {
 
       command.stage(Stage.Beta());
 
-      expect(command.isAlpha).toBe(false);
-      expect(command.isBeta).toBe(true);
+      expect(command.lifecycle).toEqual({ stage: 'beta' });
       expect(parent.commands).toContain(command);
       expect(parent.helpInformation()).toContain('Preview command [BETA]');
       expect(parent.helpInformation()).not.toContain('[ALPHA]');
     });
 
     it('leaves commands Stable by default', () => {
-      expect(new SonarCommand('stable').isStable).toBe(true);
+      expect(new SonarCommand('stable').lifecycle.stage).toBe('stable');
     });
 
     it('adds the Beta tag to command help', () => {
@@ -572,13 +566,8 @@ describe('SonarCommand', () => {
         },
       }).stage(Stage.Beta('cli.beta.preview'));
 
-      expect(open.isBeta).toBe(true);
-      expect(open.isPrivateBeta).toBe(false);
-      expect(open.betaFlagKey).toBeUndefined();
-
-      expect(gated.isBeta).toBe(true);
-      expect(gated.isPrivateBeta).toBe(true);
-      expect(gated.betaFlagKey).toBe('cli.beta.preview');
+      expect(open.lifecycle).toEqual({ stage: 'beta' });
+      expect(gated.lifecycle).toEqual({ stage: 'beta', betaFlagKey: 'cli.beta.preview' });
     });
 
     it('registers Private Beta only when the runtime gate allows it', () => {
@@ -614,10 +603,11 @@ describe('SonarCommand', () => {
         .description('Legacy command')
         .stage(Stage.Deprecated({ sinceVersion: '1.8', replacement: null }));
 
-      expect(command.isDeprecated).toBe(true);
-      expect(command.isStable).toBe(false);
-      expect(command.deprecatedSinceVersion).toBe('1.8');
-      expect(command.deprecatedReplacement).toBeNull();
+      expect(command.lifecycle).toEqual({
+        stage: 'deprecated',
+        sinceVersion: '1.8',
+        replacement: null,
+      });
       expect(parent.createHelp().visibleCommands(parent)).toContain(command);
     });
 
@@ -626,8 +616,11 @@ describe('SonarCommand', () => {
         Stage.Deprecated({ sinceVersion: '1.8', replacement: 'sonar update' }),
       );
 
-      expect(command.deprecatedSinceVersion).toBe('1.8');
-      expect(command.deprecatedReplacement).toBe('sonar update');
+      expect(command.lifecycle).toEqual({
+        stage: 'deprecated',
+        sinceVersion: '1.8',
+        replacement: 'sonar update',
+      });
     });
 
     it('adds the Deprecated tag to command help', () => {
@@ -706,9 +699,11 @@ describe('SonarCommand', () => {
         .stage(Stage.Beta())
         .stage(Stage.Deprecated({ sinceVersion: '1.8', replacement: null }));
 
-      expect(command.isDeprecated).toBe(true);
-      expect(command.isBeta).toBe(false);
-      expect(command.betaFlagKey).toBeUndefined();
+      expect(command.lifecycle).toEqual({
+        stage: 'deprecated',
+        sinceVersion: '1.8',
+        replacement: null,
+      });
     });
 
     it('re-attaches a command that was hidden as Alpha', () => {
@@ -984,7 +979,7 @@ describe('SonarCommand', () => {
     it('creates SonarOption instances from .option()', () => {
       const cmd = new SonarCommand('cmd').option('--plain', 'A plain option');
       expect(cmd.options[0]).toBeInstanceOf(SonarOption);
-      expect(cmd.options[0].isStable).toBe(true);
+      expect(cmd.options[0]?.lifecycle).toEqual({ stage: 'stable' });
     });
 
     it('throws when staging a mandatory option', () => {
@@ -1114,7 +1109,7 @@ describe('SonarCommand', () => {
         .makeOptionMandatory()
         .stage(Stage.Deprecated({ sinceVersion: '1.8', replacement: null }));
 
-      expect(option.isDeprecated).toBe(true);
+      expect(option.lifecycle.stage).toBe('deprecated');
       expect(new SonarCommand('cmd').addOption(option).helpInformation()).toContain('--need');
     });
 

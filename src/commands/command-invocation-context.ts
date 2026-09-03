@@ -19,14 +19,7 @@
  */
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-
-/** Command stage snapshot used to resolve invocation-scoped alpha/beta flags. */
-export type CommandInvocationContextStage = {
-  isAlpha: boolean;
-  isBeta: boolean;
-  isPrivateBeta: boolean;
-  betaFlagKey?: string;
-};
+import { type LifecycleState, STABLE_LIFECYCLE } from '@/core/commands/stage.ts';
 
 /**
  * Runtime gates consulted when answering whether this execution should be
@@ -73,12 +66,6 @@ export class TelemetryFact<TPayload = unknown> {
   }
 }
 
-const STABLE_STAGE: CommandInvocationContextStage = {
-  isAlpha: false,
-  isBeta: false,
-  isPrivateBeta: false,
-};
-
 const DISABLED_RUNTIME: CommandInvocationContextRuntime = {
   isAlphaEnabled: false,
   isPrivateBetaEnabled: () => false,
@@ -99,13 +86,13 @@ export class CommandInvocationContext {
   private readonly facts: TelemetryFact[] = [];
 
   constructor(
-    private readonly stage: CommandInvocationContextStage = STABLE_STAGE,
+    private readonly lifecycle: LifecycleState = STABLE_LIFECYCLE,
     private readonly runtime: CommandInvocationContextRuntime = DISABLED_RUNTIME,
   ) {}
 
   /** True when this command is Alpha and alpha is enabled for this run. */
   isAlphaEligible(): boolean {
-    return this.stage.isAlpha && this.runtime.isAlphaEnabled;
+    return this.lifecycle.stage === 'alpha' && this.runtime.isAlphaEnabled;
   }
 
   /**
@@ -113,14 +100,13 @@ export class CommandInvocationContext {
    * Beta with the user entitled for the command's LaunchDarkly flag.
    */
   isBetaEligible(): boolean {
-    if (!this.stage.isBeta) {
+    if (this.lifecycle.stage !== 'beta') {
       return false;
     }
-    if (!this.stage.isPrivateBeta) {
+    if (this.lifecycle.betaFlagKey === undefined) {
       return true;
     }
-    const flagKey = this.stage.betaFlagKey;
-    return flagKey !== undefined && this.runtime.isPrivateBetaEnabled(flagKey);
+    return this.runtime.isPrivateBetaEnabled(this.lifecycle.betaFlagKey);
   }
 
   /** Record telemetry facts for `postAction` drain. */
@@ -146,9 +132,9 @@ export class CommandInvocationContext {
 export class CommandAuthenticatedInvocationContext extends CommandInvocationContext {
   constructor(
     readonly auth: ResolvedAuth,
-    stage?: CommandInvocationContextStage,
+    lifecycle?: LifecycleState,
     runtime?: CommandInvocationContextRuntime,
   ) {
-    super(stage, runtime);
+    super(lifecycle, runtime);
   }
 }
