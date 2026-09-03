@@ -592,8 +592,10 @@ describe('integrate git (native hooks)', () => {
       initGitRepo(harness);
 
       // -p implies project scope (no scope prompt). Pre-commit is forced by --hook;
-      // pre-push is skipped. Dep-risks installs automatically since SCA is enabled.
-      const result = await harness.run('integrate git --hook pre-commit -p my-project');
+      // pre-push is skipped. --non-interactive auto-installs dep-risks since SCA is enabled.
+      const result = await harness.run(
+        'integrate git --hook pre-commit -p my-project --non-interactive',
+      );
 
       expect(result.exitCode).toBe(0);
       const hookContent = readFileSync(
@@ -713,11 +715,11 @@ describe('integrate git (native hooks)', () => {
       initGitRepo(harness);
       harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=auto-project\n');
 
-      // Project key discovered from sonar-project.properties. Dep-risks installs
-      // automatically alongside pre-commit since SCA is enabled.
+      // Project key discovered from sonar-project.properties; dep-risks prompt accepted.
       const session = harness.runInteractive('integrate git');
       await session.accept('Where should SonarQube be integrated?');
       await session.accept('Install pre-commit code scanning hook?');
+      await session.accept('Install pre-commit dependency-risks scan?');
       await session.decline('Install pre-push code scanning hook?');
       const result = await session.waitFinish();
 
