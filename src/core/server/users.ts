@@ -32,17 +32,6 @@ export class UsersClient {
     this.client = client;
   }
 
-  /**
-   * Get the current authenticated user
-   */
-  async getCurrentUser(): Promise<{ id: string } | null> {
-    try {
-      return await this.client.get<{ id: string }>('/api/users/current');
-    } catch {
-      return null;
-    }
-  }
-
   async hasProvisionProjectsPermission(): Promise<boolean> {
     const result = await this.client.get<{ permissions?: { global?: string[] } }>(
       '/api/users/current',

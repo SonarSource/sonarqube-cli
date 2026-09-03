@@ -29,13 +29,6 @@ export class SystemClient {
     this.client = client;
   }
 
-  /**
-   * Get server system status
-   */
-  async getSystemStatus(): Promise<{ status: string; version: string; id?: string }> {
-    return await this.client.get('/api/system/status');
-  }
-
   async getServerMode(): Promise<'mqr' | 'standard'> {
     if (this.client.isCloud) return 'mqr';
     const result = await this.client.getOrNotFound<{ mode: string }>(

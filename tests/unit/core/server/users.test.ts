@@ -87,19 +87,6 @@ describe('UsersClient', () => {
     });
   });
 
-  describe('getCurrentUser', () => {
-    it('returns the user object on success', async () => {
-      fetchSpy = mockFetch({ id: 'user-uuid-123' });
-      const user = await client.getCurrentUser();
-      expect(user).toEqual({ id: 'user-uuid-123' });
-    });
-
-    it('returns null on error', async () => {
-      fetchSpy = mockFetch({}, { ok: false, status: 401 });
-      expect(await client.getCurrentUser()).toBeNull();
-    });
-  });
-
   describe('hasProvisionProjectsPermission', () => {
     it('returns true when provisioning is in global permissions', async () => {
       fetchSpy = mockFetch({ permissions: { global: ['provisioning', 'scan'] } });

@@ -24,7 +24,7 @@ import { SONARCLOUD_URL } from '@/core/config-constants.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { SystemClient } from '@/core/server/system.ts';
 
-import { lastFetchUrl, mockFetch } from '../../helpers/mock-fetch.ts';
+import { mockFetch } from '../../helpers/mock-fetch.ts';
 
 const SERVER_URL = 'https://sonarqube.example.com';
 const TOKEN = 'squ_test_token';
@@ -39,21 +39,6 @@ describe('SystemClient', () => {
 
   afterEach(() => {
     fetchSpy?.mockRestore();
-  });
-
-  describe('getSystemStatus', () => {
-    it('returns status, version and id from the API', async () => {
-      const payload = { status: 'UP', version: '10.4.0', id: 'inst-uuid' };
-      fetchSpy = mockFetch(payload);
-      const result = await client.getSystemStatus();
-      expect(result).toEqual(payload);
-    });
-
-    it('calls the correct endpoint', async () => {
-      fetchSpy = mockFetch({ status: 'UP', version: '10.4.0' });
-      await client.getSystemStatus();
-      expect(lastFetchUrl(fetchSpy)).toBe(`${SERVER_URL}/api/system/status`);
-    });
   });
 
   describe('getServerMode', () => {

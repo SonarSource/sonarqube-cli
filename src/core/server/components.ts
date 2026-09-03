@@ -79,22 +79,6 @@ export class ComponentsClient {
   }
 
   /**
-   * Check if quality profiles are accessible for project
-   */
-  async checkQualityProfiles(projectKey: string, organizationKey?: string): Promise<boolean> {
-    try {
-      const params: Record<string, string> = { project: projectKey };
-      if (organizationKey) {
-        params.organization = organizationKey;
-      }
-      await this.client.get('/api/qualityprofiles/search', params);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
    * Fetch project-scoped settings via `/api/settings/values`. The `component`
    * query param scopes the values to a specific project; without it the API
    * returns global defaults. Callers project the raw entries into whatever

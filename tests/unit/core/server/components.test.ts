@@ -128,39 +128,6 @@ describe('ComponentsClient', () => {
     });
   });
 
-  describe('checkQualityProfiles', () => {
-    it('returns true when the request succeeds', async () => {
-      fetchSpy = mockFetch({ profiles: [] });
-      expect(await client.checkQualityProfiles('my-project')).toBe(true);
-    });
-
-    it('passes the project key as a query parameter', async () => {
-      fetchSpy = mockFetch({ profiles: [] });
-      await client.checkQualityProfiles('my-project');
-      const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.searchParams.get('project')).toBe('my-project');
-    });
-
-    it('passes the organization key when provided', async () => {
-      fetchSpy = mockFetch({ profiles: [] });
-      await client.checkQualityProfiles('my-project', 'my-org');
-      const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.searchParams.get('organization')).toBe('my-org');
-    });
-
-    it('omits the organization key when not provided', async () => {
-      fetchSpy = mockFetch({ profiles: [] });
-      await client.checkQualityProfiles('my-project');
-      const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.searchParams.get('organization')).toBeNull();
-    });
-
-    it('returns false on error', async () => {
-      fetchSpy = mockFetch({}, { ok: false, status: 403 });
-      expect(await client.checkQualityProfiles('my-project')).toBe(false);
-    });
-  });
-
   describe('getComponentId', () => {
     it('returns the component id when found', async () => {
       fetchSpy = mockFetch({ id: 'AYmy-projectlegacy', key: 'my-project' });
