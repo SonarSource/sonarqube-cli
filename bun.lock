@@ -11,6 +11,7 @@
         "commander": "15.0.0",
         "js-yaml": "5.4.0",
         "launchdarkly-node-client-sdk": "3.4.3",
+        "lodash": "4.17.4",
         "node-forge": "1.4.0",
         "openpgp": "6.3.1",
         "picocolors": "1.1.1",
@@ -455,6 +456,8 @@
     "listr2": ["listr2@9.0.5", "https://repox.jfrog.io/artifactory/api/npm/npm/listr2/-/listr2-9.0.5.tgz", { "dependencies": { "cli-truncate": "^5.0.0", "colorette": "^2.0.20", "eventemitter3": "^5.0.1", "log-update": "^6.1.0", "rfdc": "^1.4.1", "wrap-ansi": "^9.0.0" } }, "sha512-ME4Fb83LgEgwNw96RKNvKV4VTLuXfoKudAmm2lP8Kk87KaMK0/Xrx/aAkMWmT8mDb+3MlFDspfbCs7adjRxA2g=="],
 
     "locate-path": ["locate-path@6.0.0", "https://repox.jfrog.io/artifactory/api/npm/npm/locate-path/-/locate-path-6.0.0.tgz", { "dependencies": { "p-locate": "^5.0.0" } }, "sha512-iPZK6eYjbxRu3uB4/WZ3EsEIMJFMqAoopl3R+zuq0UjcAm/MO6KCweDgPfP3elTztoKP3KtnVHxTn2NHBSDVUw=="],
+
+    "lodash": ["lodash@4.17.4", "https://repox.jfrog.io/artifactory/api/npm/npm/lodash/-/lodash-4.17.4.tgz", {}, "sha512-6X37Sq9KCpLSXEh8uM12AKYlviHPNNk4RxiGBn4cmKGJinbXBneWIV7iE/nXkM928O7ytHcHb6+X6Svl0f4hXg=="],
 
     "log-update": ["log-update@6.1.0", "https://repox.jfrog.io/artifactory/api/npm/npm/log-update/-/log-update-6.1.0.tgz", { "dependencies": { "ansi-escapes": "^7.0.0", "cli-cursor": "^5.0.0", "slice-ansi": "^7.1.0", "strip-ansi": "^7.1.0", "wrap-ansi": "^9.0.0" } }, "sha512-9ie8ItPR6tjY5uYJh8K/Zrv/RMZ5VOlOWvtZdEHYSTFKZfIBPQa9tOAEeAWhd+AnIneLJ22w5fjOYtoutpWq5w=="],
 
