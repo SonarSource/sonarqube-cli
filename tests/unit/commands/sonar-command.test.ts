@@ -100,7 +100,7 @@ describe('SonarCommand', () => {
         () =>
           new SonarCommand({
             runtime: { auth: null, isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
-          } as SonarCommandOptions),
+          } as unknown as SonarCommandOptions),
       ).toThrow('SonarCommand requires a console');
     });
 
