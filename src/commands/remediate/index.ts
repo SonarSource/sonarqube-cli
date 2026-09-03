@@ -83,17 +83,17 @@ export async function remediate(
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   const orgKey = auth.orgKey!;
 
-  if (!(await confirmEntitlement(client, orgKey))) return;
+  if (!(await confirmEntitlement(client, orgKey, console))) return;
 
   const projectKey = await resolveProjectKey(options, auth, console);
   noteProject(auth, projectKey);
   const selectedKeys =
-    suppliedIssueKeys ?? (await selectIssuesInteractively(client, orgKey, projectKey));
+    suppliedIssueKeys ?? (await selectIssuesInteractively(client, orgKey, projectKey, console));
   if (selectedKeys === null) return;
 
   const projectId = await resolveProjectId(client, projectKey);
-  const taskId = await submitRemediationJob(client, projectId, selectedKeys, orgKey);
-  reportSubmissionSuccess(auth, projectKey, selectedKeys, taskId);
+  const taskId = await submitRemediationJob(client, projectId, selectedKeys, orgKey, console);
+  reportSubmissionSuccess(auth, projectKey, selectedKeys, taskId, console);
 }
 
 function assertCloudConnection(auth: ResolvedAuth): void {
