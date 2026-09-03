@@ -16,9 +16,10 @@ concurrency:
   cancel-in-progress: ${{ github.ref_name != github.event.repository.default_branch }}
 
 # Required permissions for Vault OIDC and repo operations
+# get-build-number 2.0.0 needs contents: write (contents: read is no longer sufficient)
 permissions:
   id-token: write
-  contents: read
+  contents: write
 
 jobs:
   prepare:
