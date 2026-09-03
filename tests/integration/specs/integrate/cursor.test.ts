@@ -306,6 +306,7 @@ describe('integrate cursor', () => {
         );
         expect(scriptFile.exists()).toBe(true);
         expect(scriptFile.isExecutable).toBe(true);
+        expect(scriptFile.asText()).toContain('sonar hook cursor-prompt-submit');
 
         const hooks: CursorHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
         expect(hooks.version).toBe(1);
@@ -335,6 +336,8 @@ describe('integrate cursor', () => {
         expect(preReadScript.isExecutable).toBe(true);
         expect(preToolScript.exists()).toBe(true);
         expect(preToolScript.isExecutable).toBe(true);
+        expect(preReadScript.asText()).toContain('sonar hook cursor-pre-file-read');
+        expect(preToolScript.asText()).toContain('sonar hook cursor-pre-tool-use');
 
         // A wrong matcher (e.g. "*") is invalid regex and silently disables the hook.
         // beforeReadFile uses Read|TabRead (TabRead covers Tab completion reads).

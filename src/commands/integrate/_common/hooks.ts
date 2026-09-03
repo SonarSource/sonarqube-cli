@@ -18,10 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Shared hook helpers used by both the Claude and Copilot integrations.
-// Keeps the hook script builders, the cross-platform script writer, and the
-// JSON config read-or-init helper in one place so the two integrations stay
-// behaviorally aligned.
+// Shared hook helpers used by the agent integrations. Keeps the hook script
+// builders, cross-platform script writer, and JSON config read-or-init helper
+// in one place so every integration stays behaviorally aligned.
 
 import { existsSync, mkdirSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';

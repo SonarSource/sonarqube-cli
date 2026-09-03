@@ -107,6 +107,7 @@ describe('integrate codex', () => {
         );
         expect(scriptFile.exists()).toBe(true);
         expect(scriptFile.isExecutable).toBe(true);
+        expect(scriptFile.asText()).toContain('sonar hook codex-prompt-submit');
 
         const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
         const entry = hooks.hooks?.UserPromptSubmit?.[0];
@@ -530,7 +531,7 @@ describe('integrate codex', () => {
         const sqaaScript = harness.cwd.file(...SQAA_SCRIPT_DIRS, hookScriptName('posttool-sqaa'));
         expect(sqaaScript.exists()).toBe(true);
         expect(sqaaScript.isExecutable).toBe(true);
-        expect(sqaaScript.asText()).toContain('codex-post-tool-use');
+        expect(sqaaScript.asText()).toContain('sonar hook codex-post-tool-use');
         // The handler resolves the project at run time, so the key is not baked in.
         expect(sqaaScript.asText()).not.toContain('--project');
 
