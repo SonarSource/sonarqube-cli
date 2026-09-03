@@ -23,7 +23,6 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { apiCommand } from '../../../../src/commands/api/api.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
@@ -38,14 +37,15 @@ const FAKE_AUTH: ResolvedAuth = {
   connectionType: 'on-premise',
 };
 
-const FAKE_CTX = new CommandAuthenticatedInvocationContext(FAKE_AUTH, new FakeConsole());
+let fake: FakeConsole;
+let FAKE_CTX: CommandAuthenticatedInvocationContext;
 
 let genericRequestSpy: ReturnType<typeof spyOn>;
 
 describe('apiCommand', () => {
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
+    fake = new FakeConsole();
+    FAKE_CTX = new CommandAuthenticatedInvocationContext(FAKE_AUTH, fake);
 
     genericRequestSpy = spyOn(SonarQubeClient.prototype, 'genericRequest').mockResolvedValue(
       '{"status":"UP"}',
@@ -53,7 +53,6 @@ describe('apiCommand', () => {
   });
 
   afterEach(() => {
-    setMockUi(false);
     genericRequestSpy.mockRestore();
   });
 
@@ -102,7 +101,7 @@ describe('apiCommand', () => {
     expect(data).toBeUndefined();
     expect(contentType).toBe('form');
 
-    const output = getMockUiCalls().filter((c) => c.method === 'print');
+    const output = fake.calls.filter((c) => c.method === 'print');
     expect(output.some((c) => String(c.args[0]).includes('UP'))).toBe(true);
   });
 

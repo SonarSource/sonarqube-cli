@@ -9,7 +9,6 @@ import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocatio
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import type { ProjectsSearchResponse } from '@/core/server/types.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { listProjects, ListProjectsOptions } from '../../../../src/commands/list/projects.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
@@ -25,7 +24,8 @@ const mockAuth: ResolvedAuth = {
   connectionType: 'on-premise',
 };
 
-const mockCtx = new CommandAuthenticatedInvocationContext(mockAuth, new FakeConsole());
+let fake: FakeConsole;
+let mockCtx: CommandAuthenticatedInvocationContext;
 
 function makeProjectsResponse(
   components: { key: string; name: string }[],
@@ -37,11 +37,8 @@ function makeProjectsResponse(
 }
 
 beforeEach(() => {
-  setMockUi(true);
-});
-
-afterEach(() => {
-  setMockUi(false);
+  fake = new FakeConsole();
+  mockCtx = new CommandAuthenticatedInvocationContext(mockAuth, fake);
 });
 
 describe('projectsSearchCommand', () => {
@@ -89,11 +86,9 @@ describe('projectsSearchCommand', () => {
 
   describe('successful execution', () => {
     it('prints JSON with empty projects array when no results', async () => {
-      clearMockUiCalls();
-
       await listProjects(DEFAULT_OPTIONS, mockCtx);
 
-      const prints = getMockUiCalls()
+      const prints = fake.calls
         .filter((c) => c.method === 'print')
         .map((c) => JSON.parse(String(c.args[0])) as Record<string, unknown>);
       expect(prints).toHaveLength(1);
@@ -107,7 +102,6 @@ describe('projectsSearchCommand', () => {
     });
 
     it('prints JSON with mapped projects (key and name only)', async () => {
-      clearMockUiCalls();
       getSpy.mockResolvedValue(
         makeProjectsResponse([
           { key: 'proj-1', name: 'Project One' },
@@ -117,7 +111,7 @@ describe('projectsSearchCommand', () => {
 
       await listProjects(DEFAULT_OPTIONS, mockCtx);
 
-      const prints = getMockUiCalls()
+      const prints = fake.calls
         .filter((c) => c.method === 'print')
         .map((c) => JSON.parse(String(c.args[0])) as Record<string, unknown>);
       expect((prints[0] as { projects: unknown }).projects).toEqual([
@@ -127,14 +121,13 @@ describe('projectsSearchCommand', () => {
     });
 
     it('includes correct paging metadata with hasNextPage=true when more pages exist', async () => {
-      clearMockUiCalls();
       getSpy.mockResolvedValue(
         makeProjectsResponse([{ key: 'proj-1', name: 'Project One' }], 1, 1, 5),
       );
 
       await listProjects({ pageSize: 1, page: 1 }, mockCtx);
 
-      const prints = getMockUiCalls()
+      const prints = fake.calls
         .filter((c) => c.method === 'print')
         .map((c) => JSON.parse(String(c.args[0])) as Record<string, unknown>);
       expect((prints[0] as { paging: unknown }).paging).toEqual({
@@ -146,14 +139,13 @@ describe('projectsSearchCommand', () => {
     });
 
     it('includes correct paging metadata with hasNextPage=false on the last page', async () => {
-      clearMockUiCalls();
       getSpy.mockResolvedValue(
         makeProjectsResponse([{ key: 'proj-1', name: 'Project One' }], 2, 1, 2),
       );
 
       await listProjects({ pageSize: 1, page: 2 }, mockCtx);
 
-      const prints = getMockUiCalls()
+      const prints = fake.calls
         .filter((c) => c.method === 'print')
         .map((c) => JSON.parse(String(c.args[0])) as Record<string, unknown>);
       expect((prints[0] as { paging: { hasNextPage: boolean } }).paging.hasNextPage).toBe(false);
