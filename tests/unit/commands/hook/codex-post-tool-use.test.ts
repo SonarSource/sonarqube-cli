@@ -69,11 +69,10 @@ describe('codexPostToolUse', () => {
       sqaaTelemetry,
       'recordSqaaAnalysisTelemetry',
     ).mockImplementation(() => {});
-    // Only exercised when a test omits `project` — an explicit project short-circuits it.
     discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
       repoRoot: process.cwd(),
       projectRoot: process.cwd(),
-      projectKey: undefined,
+      projectKey: 'my-project',
       configSources: [],
     });
   });
@@ -94,7 +93,7 @@ describe('codexPostToolUse', () => {
   it('skips stdin when attached to a TTY', async () => {
     Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: true });
 
-    await codexPostToolUse(ctx, { project: 'my-project' });
+    await codexPostToolUse(ctx);
 
     expect(readStdinJsonSpy).not.toHaveBeenCalled();
   });
@@ -103,14 +102,14 @@ describe('codexPostToolUse', () => {
     const payload = { session_id: 'codex-session-1' };
     readStdinJsonSpy.mockResolvedValue(payload);
 
-    const returned = await codexPostToolUse(ctx, { project: 'my-project' });
+    const returned = await codexPostToolUse(ctx);
 
     expect(readStdinJsonSpy).toHaveBeenCalledTimes(1);
     expect(returned).toEqual({ agentSessionId: 'codex-session-1' });
   });
 
   it('writes additionalContext when change-set analysis finds no issues', async () => {
-    await codexPostToolUse(ctx, { project: 'my-project' });
+    await codexPostToolUse(ctx);
 
     expect(buildSqaaJsonReportSpy).toHaveBeenCalledWith(
       { project: 'my-project', force: true, format: 'json', forcedDepth: 'STANDARD' },
@@ -143,7 +142,7 @@ describe('codexPostToolUse', () => {
       analysisDepth: 'STANDARD',
     });
 
-    await codexPostToolUse(ctx, { project: 'my-project' });
+    await codexPostToolUse(ctx);
 
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.hookSpecificOutput.additionalContext).not.toContain('no issues found');
@@ -172,7 +171,7 @@ describe('codexPostToolUse', () => {
       analysisDepth: 'STANDARD',
     });
 
-    await codexPostToolUse(ctx, { project: 'my-project' });
+    await codexPostToolUse(ctx);
 
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.hookSpecificOutput.additionalContext).toContain('Fix this');
@@ -181,7 +180,14 @@ describe('codexPostToolUse', () => {
   });
 
   it('skips output when project key is missing', async () => {
-    await codexPostToolUse(ctx, {});
+    discoverProjectSpy.mockResolvedValue({
+      repoRoot: process.cwd(),
+      projectRoot: process.cwd(),
+      projectKey: undefined,
+      configSources: [],
+    });
+
+    await codexPostToolUse(ctx);
 
     expect(buildSqaaJsonReportSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
@@ -194,7 +200,7 @@ describe('codexPostToolUse', () => {
       connectionType: 'on-premise',
     });
 
-    await codexPostToolUse(ctx, { project: 'my-project' });
+    await codexPostToolUse(ctx);
 
     expect(buildSqaaJsonReportSpy).toHaveBeenCalledWith(
       { project: 'my-project', force: true, format: 'json', forcedDepth: 'STANDARD' },
@@ -214,7 +220,7 @@ describe('codexPostToolUse', () => {
       orgKey: undefined,
     });
 
-    await codexPostToolUse(ctx, { project: 'my-project' });
+    await codexPostToolUse(ctx);
 
     expect(buildSqaaJsonReportSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
@@ -230,7 +236,7 @@ describe('codexPostToolUse', () => {
       analysisDepth: 'STANDARD',
     });
 
-    await codexPostToolUse(ctx, { project: 'my-project' });
+    await codexPostToolUse(ctx);
 
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
@@ -238,7 +244,7 @@ describe('codexPostToolUse', () => {
   it('does not throw when buildSqaaJsonReport fails', async () => {
     buildSqaaJsonReportSpy.mockRejectedValue(new Error('git failed'));
 
-    await codexPostToolUse(ctx, { project: 'my-project' });
+    await codexPostToolUse(ctx);
 
     expect(stdoutSpy).not.toHaveBeenCalled();
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
@@ -258,7 +264,7 @@ describe('codexPostToolUse', () => {
       },
     );
 
-    await codexPostToolUse(ctx, { project: 'my-project' });
+    await codexPostToolUse(ctx);
 
     expect(emitSqaaAnalysisTelemetrySpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
@@ -269,7 +275,7 @@ describe('codexPostToolUse', () => {
   it('skips output when buildSqaaJsonReport returns null', async () => {
     buildSqaaJsonReportSpy.mockResolvedValue(null);
 
-    await codexPostToolUse(ctx, { project: 'my-project' });
+    await codexPostToolUse(ctx);
 
     expect(stdoutSpy).not.toHaveBeenCalled();
   });

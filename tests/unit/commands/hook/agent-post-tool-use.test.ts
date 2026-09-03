@@ -84,11 +84,10 @@ describe('agentPostToolUse', () => {
     );
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
     readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue('const x = 1;');
-    // Only exercised when a test omits `project` — an explicit project short-circuits it.
     discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
       repoRoot: process.cwd(),
       projectRoot: process.cwd(),
-      projectKey: undefined,
+      projectKey: 'my-project',
       configSources: [],
     });
     createAnalysisSpy = spyOn(
@@ -116,7 +115,7 @@ describe('agentPostToolUse', () => {
   });
 
   it('emits SQAA analysis telemetry after a successful PostToolUse analysis', async () => {
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
       ctx,
@@ -141,7 +140,7 @@ describe('agentPostToolUse', () => {
       errors: null,
     });
 
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
       ctx,
@@ -154,7 +153,7 @@ describe('agentPostToolUse', () => {
   });
 
   it('writes additionalContext JSON when analysis returns no issues', async () => {
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
@@ -168,13 +167,13 @@ describe('agentPostToolUse', () => {
       parsed: { tool_name: 'Write', tool_input: { file_path: TEST_FILE } },
     });
 
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
   });
 
   it('calls createAnalysis with files[], auto-detected branchName, and no analysisDepth', async () => {
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     expect(createAnalysisSpy).toHaveBeenCalledWith({
       organizationKey: 'myorg',
@@ -196,7 +195,7 @@ describe('agentPostToolUse', () => {
       return Promise.resolve({ exitCode: 0, stdout: 'HEAD\n', stderr: '' });
     });
 
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     expect(createAnalysisSpy).toHaveBeenCalledWith({
       organizationKey: 'myorg',
@@ -218,7 +217,7 @@ describe('agentPostToolUse', () => {
       errors: null,
     });
 
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.hookSpecificOutput.additionalContext).toContain('Fix this');
@@ -231,7 +230,7 @@ describe('agentPostToolUse', () => {
       parsed: { tool_name: 'Read', tool_input: { file_path: TEST_FILE } },
     });
 
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     expect(createAnalysisSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
@@ -244,7 +243,7 @@ describe('agentPostToolUse', () => {
       connectionType: 'on-premise',
     });
 
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     expect(createAnalysisSpy).toHaveBeenCalledWith({
       projectKey: 'my-project',
@@ -253,8 +252,15 @@ describe('agentPostToolUse', () => {
     });
   });
 
-  it('returns without output when project key is not provided', async () => {
-    await agentPostToolUse(ctx, {});
+  it('returns without output when no project key can be discovered', async () => {
+    discoverProjectSpy.mockResolvedValue({
+      repoRoot: process.cwd(),
+      projectRoot: process.cwd(),
+      projectKey: undefined,
+      configSources: [],
+    });
+
+    await agentPostToolUse(ctx);
 
     expect(createAnalysisSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
@@ -263,7 +269,7 @@ describe('agentPostToolUse', () => {
   it('returns without output when auth is unavailable', async () => {
     resolveAuthSpy.mockResolvedValue(null);
 
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     expect(createAnalysisSpy).not.toHaveBeenCalled();
   });
@@ -271,7 +277,7 @@ describe('agentPostToolUse', () => {
   it('returns without output when auth rejects', async () => {
     resolveAuthSpy.mockRejectedValue(new Error('keychain error'));
 
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     expect(createAnalysisSpy).not.toHaveBeenCalled();
   });
@@ -279,7 +285,7 @@ describe('agentPostToolUse', () => {
   it('returns without output when file does not exist', async () => {
     existsSyncSpy.mockReturnValue(false);
 
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     expect(createAnalysisSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
@@ -288,7 +294,7 @@ describe('agentPostToolUse', () => {
   it('returns without output when stdin is unparseable', async () => {
     readStdinJsonSpy.mockRejectedValue(new Error('Failed to parse stdin as JSON'));
 
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     expect(createAnalysisSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
@@ -297,7 +303,7 @@ describe('agentPostToolUse', () => {
   it('returns without output when analysis throws', async () => {
     createAnalysisSpy.mockRejectedValue(new Error('Network error'));
 
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     expect(stdoutSpy).not.toHaveBeenCalled();
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
@@ -315,7 +321,7 @@ describe('agentPostToolUse', () => {
       throw new Error('EACCES');
     });
 
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     expect(createAnalysisSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
@@ -332,7 +338,7 @@ describe('agentPostToolUse', () => {
   it('emits failure telemetry when analysis API returns an error result', async () => {
     createAnalysisSpy.mockRejectedValue(new Error('API unavailable'));
 
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     expect(stdoutSpy).not.toHaveBeenCalled();
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
@@ -352,7 +358,7 @@ describe('agentPostToolUse', () => {
       },
     );
 
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledTimes(1);
     expect(stdoutSpy).not.toHaveBeenCalled();
@@ -367,7 +373,7 @@ describe('agentPostToolUse', () => {
       errors: [{ code: 'FILE_NOT_FOUND', message: 'File not indexed' }],
     });
 
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.hookSpecificOutput.additionalContext).toContain('FILE_NOT_FOUND');
@@ -380,7 +386,7 @@ describe('agentPostToolUse', () => {
       parsed: { tool_name: 'Edit', tool_input: {} },
     });
 
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     expect(createAnalysisSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
@@ -394,7 +400,7 @@ describe('agentPostToolUse', () => {
       orgKey: undefined,
     });
 
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     expect(createAnalysisSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
@@ -410,7 +416,7 @@ describe('agentPostToolUse', () => {
       errors: null,
     });
 
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.hookSpecificOutput.additionalContext).toContain('2 issues');
@@ -423,7 +429,7 @@ describe('agentPostToolUse', () => {
       errors: null,
     });
 
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.hookSpecificOutput.additionalContext).not.toContain('line');
@@ -432,7 +438,7 @@ describe('agentPostToolUse', () => {
   it('does not append errors section when errors array is empty', async () => {
     createAnalysisSpy.mockResolvedValue({ id: 'analysis-id', issues: [], errors: [] });
 
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.hookSpecificOutput.additionalContext).not.toContain('Agentic Analysis errors');
@@ -468,7 +474,7 @@ describe('agentPostToolUse', () => {
       return String(p);
     }) as typeof fs.realpathSync.native);
 
-    await agentPostToolUse(ctx, { project: 'my-project' });
+    await agentPostToolUse(ctx);
 
     // Without fix (double canonicalization): resolveCount reaches 2 so readFileSync
     // is called with attackerTarget — exfiltration succeeds.
