@@ -29,17 +29,13 @@ import logger from '@/core/observability/logger.ts';
 import { warn } from '@/core/ui';
 
 import {
+  buildUnixHookScript,
+  buildWindowsHookScript,
   readOrInitJson,
   resolveAgentHookCommand,
   SONAR_SECRETS_MARKER,
   writeHookScript,
 } from '../_common/hooks.ts';
-import {
-  getSecretPreToolTemplateUnix,
-  getSecretPreToolTemplateWindows,
-  getSecretPromptTemplateUnix,
-  getSecretPromptTemplateWindows,
-} from './hook-templates.ts';
 
 const HOOKS_DIR = 'hooks';
 const SETTINGS_FILE = 'settings.json';
@@ -255,8 +251,8 @@ export async function installHooks(
         eventType: 'PreToolUse',
         matcher: 'Read',
         scriptPath: 'sonar-secrets/build-scripts/pretool-secrets',
-        scriptContentUnix: getSecretPreToolTemplateUnix(),
-        scriptContentWindows: getSecretPreToolTemplateWindows(),
+        scriptContentUnix: buildUnixHookScript('claude-pre-tool-use'),
+        scriptContentWindows: buildWindowsHookScript('claude-pre-tool-use'),
       });
       await installHook({
         installDir: secretsDir,
@@ -265,8 +261,8 @@ export async function installHooks(
         eventType: 'UserPromptSubmit',
         matcher: '*',
         scriptPath: 'sonar-secrets/build-scripts/prompt-secrets',
-        scriptContentUnix: getSecretPromptTemplateUnix(),
-        scriptContentWindows: getSecretPromptTemplateWindows(),
+        scriptContentUnix: buildUnixHookScript('claude-prompt-submit'),
+        scriptContentWindows: buildWindowsHookScript('claude-prompt-submit'),
       });
     }
   } catch (error) {

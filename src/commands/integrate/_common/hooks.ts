@@ -18,10 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Shared hook helpers used by both the Claude and Copilot integrations.
-// Keeps script body templates, the cross-platform script writer, and the
-// JSON config read-or-init helper in one place so the two integrations stay
-// behaviorally aligned.
+// Shared hook helpers used by the agent integrations. Keeps the hook script
+// builders, cross-platform script writer, and JSON config read-or-init helper
+// in one place so every integration stays behaviorally aligned.
 
 import { existsSync, mkdirSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -41,12 +40,16 @@ export const WINDOWS_SONAR_COMMAND_GUARD = `if (-not (Get-Command sonar -ErrorAc
     exit 0
 }`;
 
-export function unixTemplate(command: string): string {
-  return `#!/bin/bash\n${UNIX_SONAR_COMMAND_GUARD}\n${command}\n`;
+export function buildUnixHookScript(subcommand: string): string {
+  return `#!/bin/bash\n${UNIX_SONAR_COMMAND_GUARD}\n${sonarHookCommand(subcommand)}\n`;
 }
 
-export function windowsTemplate(command: string): string {
-  return `${WINDOWS_SONAR_COMMAND_GUARD}\n$stdinData = [Console]::In.ReadToEnd()\n$stdinData | & ${command}\nexit $LASTEXITCODE\n`;
+export function buildWindowsHookScript(subcommand: string): string {
+  return `${WINDOWS_SONAR_COMMAND_GUARD}\n$stdinData = [Console]::In.ReadToEnd()\n$stdinData | & ${sonarHookCommand(subcommand)}\nexit $LASTEXITCODE\n`;
+}
+
+function sonarHookCommand(subcommand: string): string {
+  return `sonar hook ${subcommand}`;
 }
 
 /**

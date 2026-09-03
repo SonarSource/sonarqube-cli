@@ -55,11 +55,11 @@ import {
   createSqaaInstructionsRule,
   createSqaaInstructionsSubfeature,
 } from '../_common/features/sqaa-instructions-feature.ts';
+import { buildUnixHookScript, buildWindowsHookScript } from '../_common/hooks.ts';
 import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates.ts';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
-import { getSecretPreToolTemplateUnix, getSecretPreToolTemplateWindows } from './hook-templates.ts';
 import {
   removeAntigravitySecretsBlock,
   resolveAntigravityHooksJsonPath,
@@ -105,8 +105,8 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
           displayName: 'Antigravity PreToolUse hook script',
           targetPath: resolvePretoolSecretsScriptPath,
           content: {
-            unix: getSecretPreToolTemplateUnix(),
-            windows: getSecretPreToolTemplateWindows(),
+            unix: buildUnixHookScript('antigravity-pre-tool-use'),
+            windows: buildWindowsHookScript('antigravity-pre-tool-use'),
           },
           executable: true,
         }),

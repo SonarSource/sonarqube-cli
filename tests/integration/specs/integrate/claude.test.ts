@@ -578,6 +578,7 @@ describe('integrate claude', () => {
       );
       expect(preToolScriptFile.exists()).toBe(true);
       expect(preToolScriptFile.isExecutable).toBe(true);
+      expect(preToolScriptFile.asText()).toContain('sonar hook claude-pre-tool-use');
     },
     { timeout: 30000 },
   );
@@ -677,6 +678,11 @@ describe('integrate claude — Vortex entitlement guard', () => {
           hookScriptName('posttool-sqaa'),
         ),
       ).toBe(true);
+      expect(
+        harness.cwd
+          .file('.claude', 'hooks', 'sonar-sqaa', 'build-scripts', hookScriptName('posttool-sqaa'))
+          .asText(),
+      ).toContain('sonar hook claude-post-tool-use');
       const instructions = harness.cwd.file('CLAUDE.md').asText();
       expect(instructions).toContain('# Vortex analysis protocol');
       expect(instructions).not.toContain('--project');
@@ -734,6 +740,17 @@ describe('integrate claude — Vortex entitlement guard', () => {
           hookScriptName('posttoolusefailure'),
         ),
       ).toBe(true);
+      expect(
+        harness.cwd
+          .file(
+            '.claude',
+            'hooks',
+            'sonar-posttoolusefailure',
+            'build-scripts',
+            hookScriptName('posttoolusefailure'),
+          )
+          .asText(),
+      ).toContain('sonar hook claude-post-tool-use-failure');
     },
     { timeout: 30000 },
   );

@@ -48,18 +48,14 @@ import {
   createSqaaInstructionsRule,
   createSqaaInstructionsSubfeature,
 } from '../_common/features/sqaa-instructions-feature.ts';
-import { resolveAgentHookScriptPath } from '../_common/hooks.ts';
+import {
+  buildUnixHookScript,
+  buildWindowsHookScript,
+  resolveAgentHookScriptPath,
+} from '../_common/hooks.ts';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
-import {
-  getSecretPreFileReadTemplateUnix,
-  getSecretPreFileReadTemplateWindows,
-  getSecretPreToolUseTemplateUnix,
-  getSecretPreToolUseTemplateWindows,
-  getSecretPromptTemplateUnix,
-  getSecretPromptTemplateWindows,
-} from './hook-templates.ts';
 import { buildCursorHookEntry, removeCursorHooks, upsertCursorHooks } from './hooks.ts';
 import { buildCursorAlwaysOnRule } from './rules.ts';
 
@@ -148,8 +144,8 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
           targetPath: (context) =>
             resolveAgentHookScriptPath(context, CURSOR_CONFIG_DIR, PREREAD_SCRIPT_REL),
           content: {
-            unix: getSecretPreFileReadTemplateUnix(),
-            windows: getSecretPreFileReadTemplateWindows(),
+            unix: buildUnixHookScript('cursor-pre-file-read'),
+            windows: buildWindowsHookScript('cursor-pre-file-read'),
           },
           executable: true,
         }),
@@ -159,8 +155,8 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
           targetPath: (context) =>
             resolveAgentHookScriptPath(context, CURSOR_CONFIG_DIR, PRETOOL_SCRIPT_REL),
           content: {
-            unix: getSecretPreToolUseTemplateUnix(),
-            windows: getSecretPreToolUseTemplateWindows(),
+            unix: buildUnixHookScript('cursor-pre-tool-use'),
+            windows: buildWindowsHookScript('cursor-pre-tool-use'),
           },
           executable: true,
         }),
@@ -170,8 +166,8 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
           targetPath: (context) =>
             resolveAgentHookScriptPath(context, CURSOR_CONFIG_DIR, PROMPT_SCRIPT_REL),
           content: {
-            unix: getSecretPromptTemplateUnix(),
-            windows: getSecretPromptTemplateWindows(),
+            unix: buildUnixHookScript('cursor-prompt-submit'),
+            windows: buildWindowsHookScript('cursor-prompt-submit'),
           },
           executable: true,
         }),

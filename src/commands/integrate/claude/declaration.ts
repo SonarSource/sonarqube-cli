@@ -48,6 +48,8 @@ import {
   SQAA_HOOK_FEATURE_ID,
 } from '../_common/features/sqaa-instructions-feature.ts';
 import {
+  buildUnixHookScript,
+  buildWindowsHookScript,
   createAgentHookEntry,
   removeAgentHooks,
   resolveAgentHookScriptPath,
@@ -57,16 +59,6 @@ import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature, vortexInstallDecision } from '../_common/vortex.ts';
 import { createClaudeHookEventContainer } from './hook-container-feature.ts';
-import {
-  getPostToolUseFailureTemplateUnix,
-  getPostToolUseFailureTemplateWindows,
-  getSecretPreToolTemplateUnix,
-  getSecretPreToolTemplateWindows,
-  getSecretPromptTemplateUnix,
-  getSecretPromptTemplateWindows,
-  getSqaaPostToolTemplateUnix,
-  getSqaaPostToolTemplateWindows,
-} from './hook-templates.ts';
 import { CLAUDE_PROJECT_DIR_PLACEHOLDER } from './hooks.ts';
 
 const CLAUDE_CONFIG_DIR = '.claude';
@@ -103,8 +95,8 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           displayName: 'Claude PreToolUse hook script',
           scriptPath: PRETOOL_SCRIPT_REL,
           content: {
-            unix: getSecretPreToolTemplateUnix(),
-            windows: getSecretPreToolTemplateWindows(),
+            unix: buildUnixHookScript('claude-pre-tool-use'),
+            windows: buildWindowsHookScript('claude-pre-tool-use'),
           },
         },
         {
@@ -112,8 +104,8 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           displayName: 'Claude UserPromptSubmit hook script',
           scriptPath: PROMPT_SCRIPT_REL,
           content: {
-            unix: getSecretPromptTemplateUnix(),
-            windows: getSecretPromptTemplateWindows(),
+            unix: buildUnixHookScript('claude-prompt-submit'),
+            windows: buildWindowsHookScript('claude-prompt-submit'),
           },
         },
       ],
@@ -141,8 +133,8 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       scriptPath: 'sonar-sqaa/build-scripts/posttool-sqaa',
       scriptDisplayName: 'Claude PostToolUse hook script',
       scriptContent: {
-        unix: getSqaaPostToolTemplateUnix(),
-        windows: getSqaaPostToolTemplateWindows(),
+        unix: buildUnixHookScript('claude-post-tool-use'),
+        windows: buildWindowsHookScript('claude-post-tool-use'),
       },
       settingsPath: resolveClaudeSettingsPath,
       subfeatures: [
@@ -222,8 +214,8 @@ function createContextAugmentationFailureHookSubfeature(): SubfeatureDeclaration
         targetPath: (context) =>
           resolveAgentHookScriptPath(context, CLAUDE_CONFIG_DIR, POSTTOOLUSEFAILURE_SCRIPT_REL),
         content: {
-          unix: getPostToolUseFailureTemplateUnix(),
-          windows: getPostToolUseFailureTemplateWindows(),
+          unix: buildUnixHookScript('claude-post-tool-use-failure'),
+          windows: buildWindowsHookScript('claude-post-tool-use-failure'),
         },
         executable: true,
       }),
