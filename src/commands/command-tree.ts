@@ -41,7 +41,7 @@ import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { tryLoadState } from '@/core/state/state-repository.ts';
 import { flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
-import { getDefaultCliConsole } from '@/core/ui/default-console.ts';
+import { getDefaultConsole } from '@/core/ui/default-console.ts';
 import { isFormattedOutputMode } from '@/core/ui/messages.ts';
 import { parseInteger } from '@/core/ui/parsing.ts';
 
@@ -161,7 +161,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
   // resolves (env fallback) before telemetry flush.
   let capturedAgentSessionId: string | null = null;
   // index.ts may enable JSON buffering before the tree exists; copy that onto the process console.
-  const cliConsole = getDefaultCliConsole();
+  const cliConsole = getDefaultConsole();
   if (isFormattedOutputMode()) {
     cliConsole.setFormattedOutputMode(true);
   }

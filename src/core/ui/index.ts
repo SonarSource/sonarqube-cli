@@ -20,7 +20,6 @@
 
 // Public API for the UI module
 
-export type { CliConsole } from './cli-console.ts';
 export { bold, dim, stripAnsi, visibleLength } from './colors.ts';
 export { note } from './components/note.ts';
 export type { PhaseItem, StepStatus } from './components/phase.ts';
@@ -41,6 +40,7 @@ export {
 } from './components/prompts.ts';
 export { intro, outro } from './components/sections.ts';
 export { withSpinner } from './components/spinner.ts';
+export type { Console } from './console.ts';
 export {
   blank,
   discreetSuccess,

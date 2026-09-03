@@ -18,7 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { CliConsole } from './cli-console.ts';
 import { cyan, green, isTTY, red, yellow } from './colors.ts';
 import { note as writeNote } from './components/note.ts';
 import { phase as writePhase } from './components/phase.ts';
@@ -36,17 +35,18 @@ import {
 } from './components/prompts.ts';
 import { intro as writeIntro, outro as writeOutro } from './components/sections.ts';
 import { withSpinner as runWithSpinner } from './components/spinner.ts';
+import type { Console } from './console.ts';
 import { isMockActive, recordCall } from './mock.ts';
 import { channelStream, print as writePrint, write } from './streams.ts';
 import type { ColorFn, NoteOptions, OutputChannel, PhaseItem, PhaseOptions } from './types.ts';
 
 /**
- * Production {@link CliConsole}: writes to stdout/stderr.
+ * Production {@link Console}: writes to stdout/stderr.
  *
  * Still honors the process-global UI mock (`setMockUi`) so unmigrated unit
  * tests keep working while callers move onto `ctx.console`.
  */
-export class TerminalConsole implements CliConsole {
+export class TerminalConsole implements Console {
   private formattedOutputMode = false;
   private readonly collectedMessages: string[] = [];
 

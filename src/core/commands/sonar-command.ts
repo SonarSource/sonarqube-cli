@@ -41,7 +41,7 @@ import {
 } from '@/core/commands/stage.ts';
 import logger from '@/core/observability/logger.ts';
 import { loadState, saveState } from '@/core/state/state-manager.ts';
-import type { CliConsole } from '@/core/ui/cli-console.ts';
+import type { Console } from '@/core/ui/console.ts';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
 import { UpdateNotifier } from '@/core/update/notification.ts';
 
@@ -146,7 +146,7 @@ export interface RootHelpMetadata {
 export interface SonarCommandOptions {
   updateNotifier?: UpdateNotifier;
   runtime?: CliRuntime;
-  console: CliConsole;
+  console: Console;
 }
 
 type CommandArgs = unknown[];
@@ -215,7 +215,7 @@ export class SonarCommand extends Command {
   private _rootHelp: RootHelpMetadata = {};
   private readonly _updateNotifier: UpdateNotifier;
   private readonly _runtime: CliRuntime;
-  private readonly _console: CliConsole;
+  private readonly _console: Console;
   private _invocationContext: CommandInvocationContext | undefined;
 
   /**
@@ -249,8 +249,8 @@ export class SonarCommand extends Command {
   }
 
   /** Ensures subcommands created via .command() are also SonarCommand instances. */
-  createCommand(name?: string): SonarCommand {
-    return new SonarCommand(name ?? '', {
+  createCommand(name: string): SonarCommand {
+    return new SonarCommand(name, {
       updateNotifier: this._updateNotifier,
       runtime: this._runtime,
       console: this._console,
@@ -306,7 +306,7 @@ export class SonarCommand extends Command {
   }
 
   /** Human-facing terminal I/O shared by this command and its subtree. */
-  get console(): CliConsole {
+  get console(): Console {
     return this._console;
   }
 

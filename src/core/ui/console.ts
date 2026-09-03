@@ -33,7 +33,7 @@ import type { ColorFn, NoteOptions, OutputChannel, PhaseItem, PhaseOptions } fro
  *
  * Protocol JSON written by agent hooks (`process.stdout.write`) is out of scope.
  */
-export interface CliConsole {
+export interface Console {
   /**
    * Informational line with a cyan `ℹ` prefix.
    * Defaults to stdout. On stdout, participates in formatted-output buffering

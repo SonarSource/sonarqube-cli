@@ -25,15 +25,15 @@ import { CommandFailedError } from '@/core/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { getToken as getKeystoreToken } from '@/core/host/keychain.ts';
 import { loadState } from '@/core/state/state-repository.ts';
-import type { CliConsole } from '@/core/ui/cli-console.ts';
 import { NOTE_STYLES } from '@/core/ui/colors.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 function connectionLines(serverUrl: string, orgKey: string | undefined): string[] {
   return [`Server  ${serverUrl}`, ...(orgKey ? [`Org     ${orgKey}`] : [])];
 }
 
 function displayTokenMissing(
-  console: CliConsole,
+  console: Console,
   serverUrl: string,
   orgKey: string | undefined,
 ): void {
@@ -41,7 +41,7 @@ function displayTokenMissing(
 }
 
 function displayTokenStatus(
-  console: CliConsole,
+  console: Console,
   serverUrl: string,
   orgKey: string | undefined,
   result: TokenCheckResult,
@@ -118,7 +118,7 @@ export async function authStatus(ctx: CommandInvocationContext): Promise<void> {
 }
 
 function printConnected(
-  console: CliConsole,
+  console: Console,
   serverUrl: string,
   source: string,
   orgKey?: string,

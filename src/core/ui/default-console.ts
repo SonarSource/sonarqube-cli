@@ -18,13 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { CliConsole } from './cli-console.ts';
+import type { Console } from './console.ts';
 import { TerminalConsole } from './terminal-console.ts';
 
-let defaultConsole: CliConsole | undefined;
+let defaultConsole: Console | undefined;
 
 /** Process-wide production console. Called only from `buildCommandTree`. */
-export function getDefaultCliConsole(): CliConsole {
+export function getDefaultConsole(): Console {
   defaultConsole ??= new TerminalConsole();
   return defaultConsole;
 }

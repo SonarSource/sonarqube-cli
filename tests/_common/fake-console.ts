@@ -18,12 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { CliConsole } from '@/core/ui/cli-console.ts';
 import type {
   MultiSelectOption,
   MultiSelectPromptOptions,
   SelectOption,
 } from '@/core/ui/components/prompts.ts';
+import type { Console } from '@/core/ui/console.ts';
 import { findUiCall, type UiCall } from '@/core/ui/mock.ts';
 import type {
   ColorFn,
@@ -36,10 +36,10 @@ import type {
 export type { UiCall };
 
 /**
- * Test double for {@link CliConsole}. Records calls and returns queued prompt answers.
+ * Test double for {@link Console}. Records calls and returns queued prompt answers.
  * Never writes to stdout/stderr.
  */
-export class FakeConsole implements CliConsole {
+export class FakeConsole implements Console {
   readonly calls: UiCall[] = [];
   private readonly responses: unknown[] = [];
 
