@@ -33,6 +33,7 @@ import {
   deprecationWarning,
   isSameLifecycle,
   isStageVisible,
+  type LifecycleState,
   resolveLifecycle,
   STABLE_LIFECYCLE,
   type StageDescriptor,
@@ -132,6 +133,10 @@ export class SonarOption extends Option {
     return this;
   }
 
+  get lifecycle(): LifecycleState {
+    return this._lifecycle;
+  }
+
   get lifecycleStage(): StageName {
     return this._lifecycle.stage;
   }
@@ -157,15 +162,15 @@ export class SonarOption extends Option {
   }
 
   get betaFlagKey(): string | undefined {
-    return this._lifecycle.betaFlagKey;
+    return this._lifecycle.stage === 'beta' ? this._lifecycle.betaFlagKey : undefined;
   }
 
   get deprecatedSinceVersion(): string | undefined {
-    return this._lifecycle.deprecatedSinceVersion;
+    return this._lifecycle.stage === 'deprecated' ? this._lifecycle.sinceVersion : undefined;
   }
 
   get deprecatedReplacement(): string | null | undefined {
-    return this._lifecycle.deprecatedReplacement;
+    return this._lifecycle.stage === 'deprecated' ? this._lifecycle.replacement : undefined;
   }
 }
 
@@ -299,7 +304,7 @@ export class SonarCommand extends Command {
     if (option.mandatory && (option.isAlpha || option.isBeta)) {
       throw new Error(`Cannot stage a required option as Alpha or Beta: '${option.flags}'`);
     }
-    if (!isStageVisible(option.lifecycleStage, option.betaFlagKey, this._runtime)) {
+    if (!isStageVisible(option.lifecycle, this._runtime)) {
       return this;
     }
     return super.addOption(option);
@@ -376,7 +381,7 @@ export class SonarCommand extends Command {
   }
 
   private isStageVisible(): boolean {
-    return isStageVisible(this._lifecycle.stage, this._lifecycle.betaFlagKey, this._runtime);
+    return isStageVisible(this._lifecycle, this._runtime);
   }
 
   /** Re-attach after a stage change that makes this command visible again. */
@@ -576,17 +581,17 @@ export class SonarCommand extends Command {
 
   /** Version in which this command was deprecated; undefined when not Deprecated. */
   get deprecatedSinceVersion(): string | undefined {
-    return this._lifecycle.deprecatedSinceVersion;
+    return this._lifecycle.stage === 'deprecated' ? this._lifecycle.sinceVersion : undefined;
   }
 
   /** Suggested replacement; `null` when none, undefined when not Deprecated. */
   get deprecatedReplacement(): string | null | undefined {
-    return this._lifecycle.deprecatedReplacement;
+    return this._lifecycle.stage === 'deprecated' ? this._lifecycle.replacement : undefined;
   }
 
   /** LaunchDarkly flag key for Private Beta; undefined for Open Beta / non-Beta. */
   get betaFlagKey(): string | undefined {
-    return this._lifecycle.betaFlagKey;
+    return this._lifecycle.stage === 'beta' ? this._lifecycle.betaFlagKey : undefined;
   }
 
   /** Metadata used by the custom root help menu. */
@@ -624,40 +629,30 @@ export class SonarCommand extends Command {
       }
 
       const flag = option.long ?? option.flags;
-      if (option.isAlpha) {
+      const lifecycle = option.lifecycle;
+      if (lifecycle.stage === 'alpha') {
         info(`'${flag}' is in alpha; may change or be removed without notice.`, 'stderr');
-      } else if (option.isBeta) {
+      } else if (lifecycle.stage === 'beta') {
         this.warnIfBetaOnce(
           `${qualifiedCommandPath(this)} ${flag}`,
           `'${flag}' is in beta and may change.`,
         );
-      } else if (
-        option.isDeprecated &&
-        option.deprecatedSinceVersion !== undefined &&
-        option.deprecatedReplacement !== undefined
-      ) {
-        info(
-          deprecationWarning(flag, option.deprecatedSinceVersion, option.deprecatedReplacement),
-          'stderr',
-        );
+      } else if (lifecycle.stage === 'deprecated') {
+        info(deprecationWarning(flag, lifecycle.sinceVersion, lifecycle.replacement), 'stderr');
       }
     }
   }
 
   private warnIfDeprecated(): void {
-    if (
-      !this.isDeprecated ||
-      this._lifecycle.deprecatedSinceVersion === undefined ||
-      this._lifecycle.deprecatedReplacement === undefined
-    ) {
+    if (this._lifecycle.stage !== 'deprecated') {
       return;
     }
 
     info(
       deprecationWarning(
         qualifiedCommandPath(this),
-        this._lifecycle.deprecatedSinceVersion,
-        this._lifecycle.deprecatedReplacement,
+        this._lifecycle.sinceVersion,
+        this._lifecycle.replacement,
       ),
       'stderr',
     );

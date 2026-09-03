@@ -69,19 +69,17 @@ export const Stage = {
   Deprecated: deprecatedStage,
 };
 
-export type LifecycleState = {
-  readonly stage: StageName;
-  readonly betaFlagKey: string | undefined;
-  readonly deprecatedSinceVersion: string | undefined;
-  readonly deprecatedReplacement: string | null | undefined;
-};
+export type LifecycleState =
+  | { readonly stage: 'stable' }
+  | { readonly stage: 'alpha' }
+  | { readonly stage: 'beta'; readonly betaFlagKey: string | undefined }
+  | {
+      readonly stage: 'deprecated';
+      readonly sinceVersion: string;
+      readonly replacement: string | null;
+    };
 
-export const STABLE_LIFECYCLE: LifecycleState = Object.freeze({
-  stage: 'stable',
-  betaFlagKey: undefined,
-  deprecatedSinceVersion: undefined,
-  deprecatedReplacement: undefined,
-});
+export const STABLE_LIFECYCLE: LifecycleState = Object.freeze({ stage: 'stable' });
 
 export function withLifecycleTag(description: string, stage: StageName): string {
   if (stage === 'alpha') {
@@ -108,44 +106,45 @@ export function deprecationWarning(
 }
 
 export function resolveLifecycle(stage: StageDescriptor): LifecycleState {
-  return stage.name === 'deprecated'
-    ? {
-        stage: 'deprecated',
-        betaFlagKey: undefined,
-        deprecatedSinceVersion: stage.sinceVersion,
-        deprecatedReplacement: stage.replacement,
-      }
-    : {
-        stage: stage.name,
-        betaFlagKey: stage.name === 'beta' ? stage.flagKey : undefined,
-        deprecatedSinceVersion: undefined,
-        deprecatedReplacement: undefined,
-      };
+  if (stage.name === 'deprecated') {
+    return {
+      stage: 'deprecated',
+      sinceVersion: stage.sinceVersion,
+      replacement: stage.replacement,
+    };
+  }
+  if (stage.name === 'beta') {
+    return { stage: 'beta', betaFlagKey: stage.flagKey };
+  }
+  return { stage: stage.name };
 }
 
 export function isSameLifecycle(left: LifecycleState, right: LifecycleState): boolean {
-  return (
-    left.stage === right.stage &&
-    left.betaFlagKey === right.betaFlagKey &&
-    left.deprecatedSinceVersion === right.deprecatedSinceVersion &&
-    left.deprecatedReplacement === right.deprecatedReplacement
-  );
+  if (left.stage !== right.stage) {
+    return false;
+  }
+  if (left.stage === 'beta' && right.stage === 'beta') {
+    return left.betaFlagKey === right.betaFlagKey;
+  }
+  if (left.stage === 'deprecated' && right.stage === 'deprecated') {
+    return left.sinceVersion === right.sinceVersion && left.replacement === right.replacement;
+  }
+  return true;
 }
 
 /** Whether a command or option at this stage should be registered for this runtime. */
 export function isStageVisible(
-  stage: StageName,
-  flagKey: string | undefined,
+  lifecycle: LifecycleState,
   runtime: {
     isAlphaEnabled: boolean;
     isPrivateBetaEnabled: (flagKey: string) => boolean;
   },
 ): boolean {
-  if (stage === 'alpha') {
+  if (lifecycle.stage === 'alpha') {
     return runtime.isAlphaEnabled;
   }
-  if (stage === 'beta' && flagKey !== undefined) {
-    return runtime.isPrivateBetaEnabled(flagKey);
+  if (lifecycle.stage === 'beta' && lifecycle.betaFlagKey !== undefined) {
+    return runtime.isPrivateBetaEnabled(lifecycle.betaFlagKey);
   }
   return true;
 }
