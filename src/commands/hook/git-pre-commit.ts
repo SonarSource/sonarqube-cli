@@ -93,8 +93,7 @@ export async function gitPreCommit(
       logger.warn('Dependency-risks hook: no project key resolved, skipping.');
       warn(
         'Dependency-risks scan skipped: no SonarQube project resolved for this repo; ' +
-          "commit not blocked. Re-run 'sonar integrate git --dependency-risks -p <project>' " +
-          'to set one explicitly.',
+          "commit not blocked. Re-run 'sonar integrate git -p <project>' to set one explicitly.",
       );
     }
   }

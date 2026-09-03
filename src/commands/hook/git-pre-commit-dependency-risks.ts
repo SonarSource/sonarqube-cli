@@ -72,7 +72,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
   if (!binaryPath) {
     logger.warn('Dependency-risks hook: sca-scanner binary not installed, skipping.');
     warn(
-      "Dependency-risks scan skipped: sca-scanner binary not installed; commit not blocked. Re-run 'sonar integrate git --dependency-risks -p <project>' to restore it.",
+      "Dependency-risks scan skipped: sca-scanner binary not installed; commit not blocked. Re-run 'sonar integrate git -p <project>' to restore it.",
     );
     return;
   }

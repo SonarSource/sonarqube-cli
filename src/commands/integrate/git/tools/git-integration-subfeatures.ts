@@ -24,7 +24,7 @@ import {
   scaScannerBinaryDependency,
   sonarSecretsBinaryDependency,
 } from '@/core/framework/dependencies';
-import { install, skip } from '@/core/framework/features/selection.ts';
+import { askUser, install, skip } from '@/core/framework/features/selection.ts';
 import type { FeaturePreview, SubfeatureDeclaration } from '@/core/framework/features/types.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { assertScaAvailable } from '@/core/server/sca-availability.ts';
@@ -71,12 +71,11 @@ export function createDepRisksSubfeature(): SubfeatureDeclaration<IntegrateGitOp
   return {
     id: PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID,
     displayName: 'pre-commit dependency-risks scan',
-    // Installed by default when SCA is available. Project key is optional; unresolved
-    // falls back to discoverProject() at hook run time.
+    // Project key is optional; unresolved falls back to discoverProject() at hook run time.
     shouldInstall: async ({ auth }) => {
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const skipDecision = await scaSkipReason(auth!);
-      return skipDecision ?? install();
+      return skipDecision ?? askUser();
     },
     dependencies: [sonarSecretsBinaryDependency, scaScannerBinaryDependency],
   };

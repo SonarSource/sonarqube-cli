@@ -94,17 +94,33 @@ describe('createDepRisksSubfeature', () => {
       });
     });
 
-    it('installs when a project key is set', async () => {
+    it('asks when a project key is set', async () => {
       checkScaEnabledSpy.mockResolvedValue(true);
       const sub = createDepRisksSubfeature();
       expect(
         await sub.shouldInstall!(
           makeInvocation({ options: { project: 'my-project' }, auth: CLOUD_AUTH }),
         ),
-      ).toMatchObject({ action: 'install' });
+      ).toMatchObject({ action: 'ask' });
     });
 
-    it('installs in non-interactive mode', async () => {
+    it('asks for project scope without a project key (project-agnostic)', async () => {
+      checkScaEnabledSpy.mockResolvedValue(true);
+      const sub = createDepRisksSubfeature();
+      expect(await sub.shouldInstall!(makeInvocation({ auth: CLOUD_AUTH }))).toMatchObject({
+        action: 'ask',
+      });
+    });
+
+    it('asks for global scope without a project key (project-agnostic)', async () => {
+      checkScaEnabledSpy.mockResolvedValue(true);
+      const sub = createDepRisksSubfeature();
+      expect(
+        await sub.shouldInstall!(makeInvocation({ scope: 'global', auth: CLOUD_AUTH })),
+      ).toMatchObject({ action: 'ask' });
+    });
+
+    it('still asks when invoked non-interactively — resolveAskDecision() applies the auto-install default', async () => {
       checkScaEnabledSpy.mockResolvedValue(true);
       const sub = createDepRisksSubfeature();
       expect(
@@ -115,23 +131,7 @@ describe('createDepRisksSubfeature', () => {
             auth: CLOUD_AUTH,
           }),
         ),
-      ).toMatchObject({ action: 'install' });
-    });
-
-    it('installs for project scope without a project key (project-agnostic)', async () => {
-      checkScaEnabledSpy.mockResolvedValue(true);
-      const sub = createDepRisksSubfeature();
-      expect(await sub.shouldInstall!(makeInvocation({ auth: CLOUD_AUTH }))).toMatchObject({
-        action: 'install',
-      });
-    });
-
-    it('installs for global scope without a project key (project-agnostic)', async () => {
-      checkScaEnabledSpy.mockResolvedValue(true);
-      const sub = createDepRisksSubfeature();
-      expect(
-        await sub.shouldInstall!(makeInvocation({ scope: 'global', auth: CLOUD_AUTH })),
-      ).toMatchObject({ action: 'install' });
+      ).toMatchObject({ action: 'ask' });
     });
   });
 });
