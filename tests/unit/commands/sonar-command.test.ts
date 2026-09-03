@@ -104,9 +104,14 @@ describe('SonarCommand', () => {
       ).toThrow('SonarCommand requires a console');
     });
 
-    it('exposes the injected console', () => {
+    it('passes the injected console to action handlers', async () => {
       const cmd = sonarCommand();
-      expect(cmd.console).toBe(ui);
+      let seen: FakeConsole | undefined;
+      cmd.anonymousAction((ctx) => {
+        seen = ctx.console as FakeConsole;
+      });
+      await cmd.parseAsync([], { from: 'user' });
+      expect(seen).toBe(ui);
     });
   });
 

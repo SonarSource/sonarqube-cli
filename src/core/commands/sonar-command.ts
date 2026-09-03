@@ -305,11 +305,6 @@ export class SonarCommand extends Command {
     return this._runtime;
   }
 
-  /** Human-facing terminal I/O shared by this command and its subtree. */
-  get console(): Console {
-    return this._console;
-  }
-
   /**
    * Context for the action that just ran. Set when `anonymousAction` /
    * `authenticatedAction` invoke the handler; `postAction` reads recorded
