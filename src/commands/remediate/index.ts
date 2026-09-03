@@ -20,9 +20,9 @@
 
 // Remediate command - triggers AI agent remediation for eligible issues
 
-import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import {
   AGENT_ACTIVITY_PATH,
   AGENTIC_PACK_URL,

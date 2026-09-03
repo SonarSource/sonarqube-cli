@@ -34,9 +34,9 @@ import {
   tallyFromSqaaJsonReport,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display-json.ts';
-import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import { commitTelemetryFacts } from '@/commands/telemetry-facts.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import type { SqaaIssue } from '@/core/server/client.ts';
 import * as stateManager from '@/core/state/state-manager.ts';

@@ -27,6 +27,7 @@ import { parse as parseToml } from 'smol-toml';
 import { isSonarQubeCloud, resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
+import { getBanner } from '@/core/commands/root-help.ts';
 import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '@/core/config-constants.ts';
 import { recordedFeatureResources } from '@/core/framework/features';
 import { getNetworkConfig } from '@/core/host/connectivity/network-config.ts';
@@ -60,7 +61,6 @@ import { supportedIntegrations } from '../integrate';
 import { isProjectVortexFeature } from '../integrate/_common/vortex.ts';
 import { checkAntigravitySecretsHookFile } from '../integrate/antigravity/health.ts';
 import { resolveAntigravityHooksJsonPathForScope } from '../integrate/antigravity/hooks.ts';
-import { getBanner } from '../root-help.ts';
 import { checkForUpdate, type UpdateCheckResult } from '../update/update-check.ts';
 import {
   buildVortexJson,

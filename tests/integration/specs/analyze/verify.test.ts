@@ -18,20 +18,33 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// UserPromptSubmit callback handler for Codex.
-//
-// Codex's UserPromptSubmit stdin payload exposes the user prompt at the same
-// top-level `prompt` field as Claude, and Codex accepts the same
-// `{ decision: "block", reason: "..." }` block-output shape. The agnostic
-// `agentPromptSubmit` handler therefore works as-is. This file exists to give
-// Codex a named entry point that can diverge later if the wire format ever
-// changes.
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { TestHarness } from '../../harness';
 
-import { agentPromptSubmit } from './agent-prompt-submit.ts';
-import type { HookCommandResult } from './hook-command-result.ts';
+describe('verify command', () => {
+  let harness: TestHarness;
 
-export function codexPromptSubmit(ctx: CommandInvocationContext): Promise<HookCommandResult> {
-  return agentPromptSubmit(ctx);
-}
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it('tags sonar verify --help as deprecated', async () => {
+    const result = await harness.run('verify --help');
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('[DEPRECATED]');
+  });
+
+  it('warns that sonar verify is deprecated', async () => {
+    const result = await harness.run('verify');
+
+    expect(result.stderr).toContain(
+      "'sonar verify' is deprecated since 0.14 and will be removed in a future version. Use 'sonar analyze' instead.",
+    );
+  });
+});

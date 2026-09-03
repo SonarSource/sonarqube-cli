@@ -18,20 +18,27 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// UserPromptSubmit callback handler for Codex.
-//
-// Codex's UserPromptSubmit stdin payload exposes the user prompt at the same
-// top-level `prompt` field as Claude, and Codex accepts the same
-// `{ decision: "block", reason: "..." }` block-output shape. The agnostic
-// `agentPromptSubmit` handler therefore works as-is. This file exists to give
-// Codex a named entry point that can diverge later if the wire format ever
-// changes.
+import type { Command } from 'commander';
 
-import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+function commandPath(command: Command): string {
+  const names = [command.name()];
 
-import { agentPromptSubmit } from './agent-prompt-submit.ts';
-import type { HookCommandResult } from './hook-command-result.ts';
+  for (let parent = command.parent; parent?.parent; parent = parent.parent) {
+    names.unshift(parent.name());
+  }
 
-export function codexPromptSubmit(ctx: CommandInvocationContext): Promise<HookCommandResult> {
-  return agentPromptSubmit(ctx);
+  return names.join(' ');
+}
+
+/** Full invocation path including the program name, e.g. `sonar mcp start`. */
+export function qualifiedCommandPath(command: Command): string {
+  if (!command.parent) {
+    return command.name();
+  }
+
+  let root = command.parent;
+  while (root.parent) {
+    root = root.parent;
+  }
+  return `${root.name()} ${commandPath(command)}`;
 }

@@ -20,7 +20,7 @@
 
 // Integrate command — setup SonarQube integration for Cursor.
 
-import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { warn } from '@/core/ui';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 

@@ -202,7 +202,7 @@ function buildPillNode(cmd, flat) {
   pill.className = 'pill ' + pillClass
     + (isSelected ? ' selected' : '')
     + (!isSelected && isOnPath ? ' path-highlight' : '')
-    + (cmd.stage === 'beta' ? ' stage-beta' : '');
+    + (cmd.stage === 'beta' || cmd.stage === 'deprecated' ? ` stage-${cmd.stage}` : '');
   pill.textContent = nameWithAliases(cmd);
   row.appendChild(pill);
 
@@ -329,7 +329,7 @@ function buildColumnView(root) {
         pill.className = 'pill ' + pillClass
           + (isSelected ? ' selected' : '')
           + (isOnPath   ? ' path-highlight' : '')
-          + (entry.stage === 'beta' ? ' stage-beta' : '');
+          + (entry.stage === 'beta' || entry.stage === 'deprecated' ? ` stage-${entry.stage}` : '');
         pill.textContent = nameWithAliases(entry);
         pill.dataset.id = entry.id;
 
@@ -483,6 +483,16 @@ function navigateToCommand(id) {
   selectCommand(id);
 }
 
+function deprecationNotice(kind, deprecation) {
+  if (!deprecation) {
+    return `${kind} is deprecated and will be removed in a future version.`;
+  }
+  const base = `${kind} is deprecated since ${deprecation.sinceVersion} and will be removed in a future version`;
+  return deprecation.replacement == null
+    ? `${base}. There is no replacement.`
+    : `${base}. Use '${deprecation.replacement}' instead.`;
+}
+
 function renderDetail(cmd) {
   const parts = [];
 
@@ -492,7 +502,7 @@ function renderDetail(cmd) {
   for (const alias of cmd.aliases || []) {
     parts.push(`<code class="detail-alias">${escHtml(alias)}</code>`);
   }
-  if (cmd.stage === 'beta') {
+  if (cmd.stage === 'beta' || cmd.stage === 'deprecated') {
     parts.push(`<span class="stage-badge stage-${escHtml(cmd.stage)}">${escHtml(cmd.stage)}</span>`);
   }
   parts.push(`</div>`);
@@ -500,6 +510,9 @@ function renderDetail(cmd) {
   // Stage banner
   if (cmd.stage === 'beta') {
     parts.push(`<div class="stage-banner stage-banner-beta">This command is in beta. Its flags and behavior may change without notice.</div>`);
+  }
+  if (cmd.stage === 'deprecated') {
+    parts.push(`<div class="stage-banner stage-banner-deprecated">${escHtml(deprecationNotice('This command', cmd.deprecation))}</div>`);
   }
 
   // Description
@@ -527,10 +540,14 @@ function renderDetail(cmd) {
         ? `<div class="opt-allowed">${opt.allowedValues.map(v => `<code class="opt-allowed-val">${escHtml(v)}</code>`).join('')}</div>`
         : '';
       const stageBadge =
-        opt.stage === 'beta'
-          ? ` <span class="stage-badge stage-beta">beta</span>`
+        opt.stage === 'beta' || opt.stage === 'deprecated'
+          ? ` <span class="stage-badge stage-${escHtml(opt.stage)}">${escHtml(opt.stage)}</span>`
           : '';
-      parts.push(`<tr><td data-label="Option">${flags}</td><td data-label="Type">${typeBadge}</td><td data-label="Required">${req}</td><td data-label="Description">${escHtml(opt.description)}${stageBadge}${allowedHtml}</td><td data-label="Default">${def}</td></tr>`);
+      const deprecationHtml =
+        opt.stage === 'deprecated'
+          ? `<div class="opt-deprecation">${escHtml(deprecationNotice('This option', opt.deprecation))}</div>`
+          : '';
+      parts.push(`<tr><td data-label="Option">${flags}</td><td data-label="Type">${typeBadge}</td><td data-label="Required">${req}</td><td data-label="Description">${escHtml(opt.description)}${stageBadge}${deprecationHtml}${allowedHtml}</td><td data-label="Default">${def}</td></tr>`);
     }
     parts.push(`</tbody></table></div>`);
   }

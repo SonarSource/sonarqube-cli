@@ -23,9 +23,9 @@ import { join } from 'node:path';
 
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
-import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import type { SecretsInstaller } from '@/core/host/install/secrets.ts';
 import type { SpawnResult } from '@/core/process/process.ts';
 

@@ -20,12 +20,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
 
-import { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import * as vortex from '@/commands/integrate/_common/vortex.ts';
 import { integrateCopilot } from '@/commands/integrate/copilot';
 import * as hooks from '@/commands/integrate/copilot/hooks.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import * as token from '@/core/auth/token.ts';
+import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as registry from '@/core/framework/features';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import * as discovery from '@/core/project-info.ts';

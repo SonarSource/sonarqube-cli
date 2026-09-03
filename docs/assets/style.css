@@ -206,6 +206,7 @@ a:hover { text-decoration: underline; }
 .pill-leaf  { color: var(--text-muted); }
 .pill.selected { background: var(--accent-dim); border-color: var(--accent); border-width: 2px; }
 .pill.selected.stage-beta { background: var(--purple-strong); border-color: var(--purple-strong); color: #fff; }
+.pill.selected.stage-deprecated { background: var(--orange); border-color: var(--orange); color: #fff; }
 .pill.path-highlight { border-color: var(--accent); }
 .pill-root.path-highlight { background: var(--accent); }
 
@@ -1233,6 +1234,8 @@ body.commands-page { height: 100%; overflow: hidden; }
    and is picked up by the pill and the banner below. */
 .stage-badge.stage-beta,
 .stage-banner.stage-banner-beta        { --stage-c: var(--purple); }
+.stage-badge.stage-deprecated,
+.stage-banner.stage-banner-deprecated  { --stage-c: var(--orange); }
 
 /* Small outline pill used in the detail header. */
 .stage-badge {
@@ -1337,6 +1340,11 @@ body.commands-page { height: 100%; overflow: hidden; }
 .opt-req-yes { color: var(--orange); font-weight: 600; font-size: 12px; }
 .opt-req-no { color: var(--text-muted); font-size: 12px; }
 .opt-allowed { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.opt-deprecation {
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--orange);
+}
 .opt-allowed-val {
   font-size: 11px;
   padding: 1px 6px;

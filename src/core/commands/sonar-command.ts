@@ -26,47 +26,42 @@ import { Command, Help, Option } from 'commander';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { CliError, CommandFailedError, remediationHintFor } from '@/core/command-error.ts';
+import { qualifiedCommandPath } from '@/core/commands/path.ts';
+import {
+  ALPHA_ENV_VAR,
+  ALPHA_HELP_GROUP,
+  deprecationWarning,
+  isSameLifecycle,
+  isStageVisible,
+  type LifecycleState,
+  resolveLifecycle,
+  STABLE_LIFECYCLE,
+  type StageDescriptor,
+  withLifecycleTag,
+} from '@/core/commands/stage.ts';
 import logger from '@/core/observability/logger.ts';
 import { loadState, saveState } from '@/core/state/state-manager.ts';
-import { blank, error, info, print } from '@/core/ui';
+import { blank, error, info, print, warn } from '@/core/ui';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
 import { UpdateNotifier } from '@/core/update/notification.ts';
 
-import { version as VERSION } from '../../package.json';
+import { version as VERSION } from '../../../package.json';
 import {
   CommandAuthenticatedInvocationContext,
   CommandInvocationContext,
-  type CommandInvocationContextStage,
-} from './command-invocation-context.ts';
+} from './invocation-context.ts';
 
-export const ALPHA_ENV_VAR = 'SONARQUBE_CLI_ALPHA';
-export const ALPHA_HELP_TAG = '[ALPHA]';
-export const BETA_HELP_TAG = '[BETA]';
+export {
+  ALPHA_ENV_VAR,
+  type DeprecatedStageOptions,
+  deprecationDetails,
+  type LifecycleState,
+  Stage,
+  type StageDescriptor,
+  stageHelpTag,
+  type StageName,
+} from '@/core/commands/stage.ts';
 
-export type StageName = 'stable' | 'alpha' | 'beta';
-
-/** Descriptor passed to {@link SonarCommand.stage}. */
-export type StageDescriptor =
-  | { readonly name: 'stable' }
-  | { readonly name: 'alpha' }
-  | { readonly name: 'beta'; readonly flagKey?: string };
-
-function betaStage(flagKey?: string): StageDescriptor {
-  return flagKey === undefined ? { name: 'beta' } : { name: 'beta', flagKey };
-}
-
-/**
- * Command lifecycle stage.
- * Stable/Alpha are constants; Beta is a function so an optional LaunchDarkly
- * flag key can only be attached to Private Beta commands.
- */
-export const Stage = {
-  Stable: { name: 'stable' } as const satisfies StageDescriptor,
-  Alpha: { name: 'alpha' } as const satisfies StageDescriptor,
-  Beta: betaStage,
-};
-
-const ALPHA_HELP_GROUP = '__SONARQUBE_CLI_ALPHA_COMMANDS__';
 const betaWarningsShownWithoutState = new Set<string>();
 
 export const COMMAND_CATEGORIES = ['core', 'data', 'integrate', 'cli-management'] as const;
@@ -96,33 +91,8 @@ export function createDefaultCliRuntime(): CliRuntime {
   };
 }
 
-/** Whether a command or option at this stage should be registered for this runtime. */
-function isStageVisible(
-  stage: StageName,
-  flagKey: string | undefined,
-  runtime: CliRuntime,
-): boolean {
-  if (stage === 'alpha') {
-    return runtime.isAlphaEnabled;
-  }
-  if (stage === 'beta' && flagKey !== undefined) {
-    return runtime.isPrivateBetaEnabled(flagKey);
-  }
-  return true;
-}
-
-function withLifecycleTag(description: string, stage: StageName): string {
-  if (stage === 'alpha') {
-    return `${description} ${ALPHA_HELP_TAG}`;
-  }
-  if (stage === 'beta') {
-    return `${description} ${BETA_HELP_TAG}`;
-  }
-  return description;
-}
-
 /**
- * Commander Option subclass that can be marked Alpha or Beta.
+ * Commander Option subclass that can be marked Alpha, Beta, or Deprecated.
  *
  * `.option()` returns the command, so `.option().stage()` cannot type-check.
  * Stage options by passing a {@link SonarOption} to {@link SonarCommand.addOption}:
@@ -134,29 +104,26 @@ function withLifecycleTag(description: string, stage: StageName): string {
  * )
  */
 export class SonarOption extends Option {
-  private _stage: StageName = 'stable';
-  private _betaFlagKey: string | undefined;
+  private _lifecycle = STABLE_LIFECYCLE;
 
   /**
-   * Mark this option as Stable, Alpha, or Beta (optionally Private Beta via a flag key).
-   * Required options cannot be staged; when the caller is not entitled the option is
-   * omitted from help and treated as unknown.
+   * Mark this option as Stable, Alpha, Beta (optionally Private Beta via a flag
+   * key), or Deprecated. Required options cannot be staged as Alpha or Beta;
+   * when the caller is not entitled the option is omitted from help and treated
+   * as unknown. Deprecated options stay registered and warn on every use.
    */
   stage(stage: StageDescriptor): this {
-    if (this.mandatory) {
+    if (this.mandatory && (stage.name === 'alpha' || stage.name === 'beta')) {
       throw new Error(`Cannot stage a required option as Alpha or Beta: '${this.flags}'`);
     }
 
-    const newStage = stage.name;
-    const newFlagKey = stage.name === 'beta' ? stage.flagKey : undefined;
-    if (this._stage === newStage && this._betaFlagKey === newFlagKey) {
+    const next = resolveLifecycle(stage);
+    if (isSameLifecycle(this._lifecycle, next)) {
       return this;
     }
+    this._lifecycle = next;
 
-    this._stage = newStage;
-    this._betaFlagKey = newFlagKey;
-
-    if (newStage === 'alpha') {
+    if (next.stage === 'alpha') {
       this.helpGroup(ALPHA_HELP_GROUP);
     } else {
       this.helpGroupHeading = undefined;
@@ -164,28 +131,8 @@ export class SonarOption extends Option {
     return this;
   }
 
-  get lifecycleStage(): StageName {
-    return this._stage;
-  }
-
-  get isStable(): boolean {
-    return this._stage === 'stable';
-  }
-
-  get isAlpha(): boolean {
-    return this._stage === 'alpha';
-  }
-
-  get isBeta(): boolean {
-    return this._stage === 'beta';
-  }
-
-  get isPrivateBeta(): boolean {
-    return this._stage === 'beta' && this._betaFlagKey !== undefined;
-  }
-
-  get betaFlagKey(): string | undefined {
-    return this._betaFlagKey;
+  get lifecycle(): LifecycleState {
+    return this._lifecycle;
   }
 }
 
@@ -208,8 +155,8 @@ class SonarHelp extends Help {
   override visibleCommands(command: Command): Command[] {
     const visibleCommands = super.visibleCommands(command) as SonarCommand[];
     return [
-      ...visibleCommands.filter((child) => !child.isAlpha),
-      ...visibleCommands.filter((child) => child.isAlpha),
+      ...visibleCommands.filter((child) => child.lifecycle.stage !== 'alpha'),
+      ...visibleCommands.filter((child) => child.lifecycle.stage === 'alpha'),
     ];
   }
 
@@ -237,7 +184,7 @@ class SonarHelp extends Help {
   override optionDescription(option: Option): string {
     const description = super.optionDescription(option);
     return option instanceof SonarOption
-      ? withLifecycleTag(description, option.lifecycleStage)
+      ? withLifecycleTag(description, option.lifecycle.stage)
       : description;
   }
 }
@@ -253,8 +200,8 @@ class SonarHelp extends Help {
  *                          with runCommand(); auth is prepended to the handler args
  *  - requiresAuth          metadata flag, set to true by authenticatedAction();
  *                          useful for documentation generation
- *  - stage()               marks a command as Stable, Alpha, or Beta, controlling its
- *                          availability, help, documentation, and warnings
+ *  - stage()               marks a command as Stable, Alpha, Beta, or Deprecated,
+ *                          controlling its availability, help, documentation, and warnings
  *  - createOption()        returns {@link SonarOption}; stage via addOption(), not .option()
  *  - addOption()           accepts {@link SonarOption} only; omits Alpha/Private Beta options
  *                          the caller is not entitled to use
@@ -262,8 +209,7 @@ class SonarHelp extends Help {
 export class SonarCommand extends Command {
   // Valid because Commander declares `options` as readonly (covariant), so we can narrow Option to SonarOption.
   declare readonly options: readonly SonarOption[];
-  private _stage: StageName = 'stable';
-  private _betaFlagKey: string | undefined;
+  private _lifecycle = STABLE_LIFECYCLE;
   private _requiresAuth = false;
   private _rootHelp: RootHelpMetadata = {};
   private readonly _updateNotifier: UpdateNotifier;
@@ -288,9 +234,13 @@ export class SonarCommand extends Command {
     this._updateNotifier = options.updateNotifier ?? new UpdateNotifier();
     this._runtime = options.runtime ?? createDefaultCliRuntime();
     this.hook('preAction', () => {
-      if (this.isAlpha) {
-        info(`'${this.name()}' is in alpha; may change or be removed without notice.`, 'stderr');
+      if (this._lifecycle.stage === 'alpha') {
+        info(
+          `'${qualifiedCommandPath(this)}' is in alpha; may change or be removed without notice.`,
+          'stderr',
+        );
       }
+      this.warnIfDeprecated();
       this.warnIfStagedOptionsUsed();
     });
   }
@@ -313,10 +263,11 @@ export class SonarCommand extends Command {
    * is not entitled, so they do not appear in help and parse as unknown.
    */
   addOption(option: SonarOption): this {
-    if (!option.isStable && option.mandatory) {
+    const stage = option.lifecycle.stage;
+    if (option.mandatory && (stage === 'alpha' || stage === 'beta')) {
       throw new Error(`Cannot stage a required option as Alpha or Beta: '${option.flags}'`);
     }
-    if (!isStageVisible(option.lifecycleStage, option.betaFlagKey, this._runtime)) {
+    if (!isStageVisible(option.lifecycle, this._runtime)) {
       return this;
     }
     return super.addOption(option);
@@ -369,18 +320,15 @@ export class SonarCommand extends Command {
     return this;
   }
 
-  /** Mark this command as Stable, Alpha, or Beta (optionally Private Beta via a flag key). */
+  /** Mark this command as Stable, Alpha, Beta (optionally Private Beta via a flag key), or Deprecated. */
   stage(stage: StageDescriptor): this {
-    const newStage = stage.name;
-    const newFlagKey = stage.name === 'beta' ? stage.flagKey : undefined;
-    if (this._stage === newStage && this._betaFlagKey === newFlagKey) {
+    const next = resolveLifecycle(stage);
+    if (isSameLifecycle(this._lifecycle, next)) {
       return this;
     }
+    this._lifecycle = next;
 
-    this._stage = newStage;
-    this._betaFlagKey = newFlagKey;
-
-    if (newStage === 'alpha') {
+    if (next.stage === 'alpha') {
       this.helpGroup(ALPHA_HELP_GROUP);
     } else if (this.helpGroup() === ALPHA_HELP_GROUP) {
       this.helpGroup('');
@@ -396,7 +344,7 @@ export class SonarCommand extends Command {
   }
 
   private isStageVisible(): boolean {
-    return isStageVisible(this._stage, this._betaFlagKey, this._runtime);
+    return isStageVisible(this._lifecycle, this._runtime);
   }
 
   /** Re-attach after a stage change that makes this command visible again. */
@@ -431,7 +379,7 @@ export class SonarCommand extends Command {
           super.description(str, argsDescription);
     }
 
-    return withLifecycleTag(super.description(), this._stage);
+    return withLifecycleTag(super.description(), this._lifecycle.stage);
   }
 
   summary(str: string): this;
@@ -442,7 +390,7 @@ export class SonarCommand extends Command {
     }
 
     const summary = super.summary();
-    return summary ? withLifecycleTag(summary, this._stage) : summary;
+    return summary ? withLifecycleTag(summary, this._lifecycle.stage) : summary;
   }
 
   /**
@@ -512,7 +460,7 @@ export class SonarCommand extends Command {
   }
 
   private createCommandInvocationContext(): CommandInvocationContext {
-    const ctx = new CommandInvocationContext(this.commandInvocationContextStage(), this._runtime);
+    const ctx = new CommandInvocationContext(this._lifecycle, this._runtime);
     this._invocationContext = ctx;
     return ctx;
   }
@@ -520,22 +468,9 @@ export class SonarCommand extends Command {
   private createCommandAuthenticatedInvocationContext(
     auth: ResolvedAuth,
   ): CommandAuthenticatedInvocationContext {
-    const ctx = new CommandAuthenticatedInvocationContext(
-      auth,
-      this.commandInvocationContextStage(),
-      this._runtime,
-    );
+    const ctx = new CommandAuthenticatedInvocationContext(auth, this._lifecycle, this._runtime);
     this._invocationContext = ctx;
     return ctx;
-  }
-
-  private commandInvocationContextStage(): CommandInvocationContextStage {
-    return {
-      isAlpha: this.isAlpha,
-      isBeta: this.isBeta,
-      isPrivateBeta: this.isPrivateBeta,
-      betaFlagKey: this.betaFlagKey,
-    };
   }
 
   action(_: (...args: CommandArgs) => CommandResult): this {
@@ -569,29 +504,8 @@ export class SonarCommand extends Command {
     return this._requiresAuth;
   }
 
-  /** True when this command is Stable. */
-  get isStable(): boolean {
-    return this._stage === 'stable';
-  }
-
-  /** True when this command is Alpha. */
-  get isAlpha(): boolean {
-    return this._stage === 'alpha';
-  }
-
-  /** True when this command is Beta (Open or Private). */
-  get isBeta(): boolean {
-    return this._stage === 'beta';
-  }
-
-  /** True when this Beta command is gated by a LaunchDarkly flag key. */
-  get isPrivateBeta(): boolean {
-    return this._stage === 'beta' && this._betaFlagKey !== undefined;
-  }
-
-  /** LaunchDarkly flag key for Private Beta; undefined for Open Beta / non-Beta. */
-  get betaFlagKey(): string | undefined {
-    return this._betaFlagKey;
+  get lifecycle(): LifecycleState {
+    return this._lifecycle;
   }
 
   /** Metadata used by the custom root help menu. */
@@ -619,19 +533,9 @@ export class SonarCommand extends Command {
     }
   }
 
-  private commandPath(): string {
-    const names = [this.name()];
-
-    for (let parent = this.parent; parent?.parent; parent = parent.parent) {
-      names.unshift(parent.name());
-    }
-
-    return names.join(' ');
-  }
-
   private warnIfStagedOptionsUsed(): void {
     for (const option of this.options) {
-      if (option.isStable) {
+      if (option.lifecycle.stage === 'stable') {
         continue;
       }
       if (this.getOptionValueSource(option.attributeName()) !== 'cli') {
@@ -639,23 +543,40 @@ export class SonarCommand extends Command {
       }
 
       const flag = option.long ?? option.flags;
-      if (option.isAlpha) {
+      const lifecycle = option.lifecycle;
+      if (lifecycle.stage === 'alpha') {
         info(`'${flag}' is in alpha; may change or be removed without notice.`, 'stderr');
-      } else if (option.isBeta) {
+      } else if (lifecycle.stage === 'beta') {
         this.warnIfBetaOnce(
-          `${this.commandPath()} ${flag}`,
+          `${qualifiedCommandPath(this)} ${flag}`,
           `'${flag}' is in beta and may change.`,
         );
+      } else {
+        warn(deprecationWarning(flag, lifecycle.sinceVersion, lifecycle.replacement));
       }
     }
   }
 
-  private warnIfBeta(): void {
-    if (this._stage !== 'beta') {
+  private warnIfDeprecated(): void {
+    if (this._lifecycle.stage !== 'deprecated') {
       return;
     }
 
-    const commandPath = this.commandPath();
+    warn(
+      deprecationWarning(
+        qualifiedCommandPath(this),
+        this._lifecycle.sinceVersion,
+        this._lifecycle.replacement,
+      ),
+    );
+  }
+
+  private warnIfBeta(): void {
+    if (this._lifecycle.stage !== 'beta') {
+      return;
+    }
+
+    const commandPath = qualifiedCommandPath(this);
     this.warnIfBetaOnce(commandPath, `'${commandPath}' is in beta and may change.`);
   }
 
@@ -691,19 +612,20 @@ export class SonarCommand extends Command {
   }
 }
 
+function collectPrivateBetaFlagKey(keys: Set<string>, lifecycle: LifecycleState): void {
+  if (lifecycle.stage === 'beta' && lifecycle.betaFlagKey !== undefined) {
+    keys.add(lifecycle.betaFlagKey);
+  }
+}
+
 /** Collects unique LaunchDarkly flag keys from Private Beta commands and options in the tree. */
 export function collectPrivateBetaFlagKeys(root: SonarCommand): string[] {
   const keys = new Set<string>();
 
   const visit = (command: SonarCommand): void => {
-    const flagKey = command.betaFlagKey;
-    if (command.isPrivateBeta && flagKey !== undefined) {
-      keys.add(flagKey);
-    }
+    collectPrivateBetaFlagKey(keys, command.lifecycle);
     for (const option of command.options) {
-      if (option.isPrivateBeta && option.betaFlagKey !== undefined) {
-        keys.add(option.betaFlagKey);
-      }
+      collectPrivateBetaFlagKey(keys, option.lifecycle);
     }
     for (const child of command.commands as SonarCommand[]) {
       visit(child);

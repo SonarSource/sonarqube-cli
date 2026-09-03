@@ -20,8 +20,8 @@
 
 // quality-gate status command - fetch the quality gate verdict for a project
 
-import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { MetricsClient } from '@/core/server/metrics.ts';

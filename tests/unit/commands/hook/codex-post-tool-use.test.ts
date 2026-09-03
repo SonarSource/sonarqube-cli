@@ -25,8 +25,8 @@ import {
   SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
   SQAA_HOOK_TELEMETRY_EXIT_CODE,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
-import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
+import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as projectInfo from '@/core/project-info.ts';
 
 import * as sqaaModule from '../../../../src/commands/analyze/sqaa.ts';

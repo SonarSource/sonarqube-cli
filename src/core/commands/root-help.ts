@@ -22,13 +22,12 @@ import type { Help, Option } from 'commander';
 
 import { softBlue, underline } from '@/core/ui/colors.ts';
 
-import { version as VERSION } from '../../package.json';
+import { version as VERSION } from '../../../package.json';
 import {
-  ALPHA_HELP_TAG,
-  BETA_HELP_TAG,
   COMMAND_CATEGORIES,
   type CommandCategory,
   type SonarCommand,
+  stageHelpTag,
 } from './sonar-command.ts';
 
 const BANNER_ART = [
@@ -102,15 +101,9 @@ function getRootCommandLabel(command: SonarCommand, helper: Help): string {
     return nameWithAlias;
   }
 
-  const childLabels = visibleChildren.map((child) => {
-    let tag = '';
-    if (child.isAlpha) {
-      tag = ALPHA_HELP_TAG;
-    } else if (child.isBeta) {
-      tag = BETA_HELP_TAG;
-    }
-    return `${child.name()}${tag}`;
-  });
+  const childLabels = visibleChildren.map(
+    (child) => `${child.name()}${stageHelpTag(child.lifecycle.stage)}`,
+  );
   return `${nameWithAlias} <${childLabels.join('|')}>`;
 }
 
@@ -143,7 +136,7 @@ function getRootCommandEntries(rootCommand: SonarCommand, helper: Help): HelpMen
       },
       ...getRootCommandSubcommandEntries(command, helper),
     ];
-    if (command.isAlpha) {
+    if (command.lifecycle.stage === 'alpha') {
       alphaEntries.push(...commandEntries);
       continue;
     }

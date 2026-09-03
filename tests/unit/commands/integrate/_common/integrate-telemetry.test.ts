@@ -22,8 +22,8 @@ import { createHash } from 'node:crypto';
 
 import { describe, expect, it } from 'bun:test';
 
-import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
 

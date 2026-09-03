@@ -22,16 +22,16 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import * as authResolver from '@/core/auth/auth-resolver.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import {
   CommandAuthenticatedInvocationContext,
   CommandInvocationContext,
   TelemetryFact,
-} from '@/commands/command-invocation-context.ts';
-import { getCustomRootHelp } from '@/commands/root-help.ts';
-import { ALPHA_ENV_VAR, SonarCommand, SonarOption, Stage } from '@/commands/sonar-command.ts';
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import * as authResolver from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
+} from '@/core/commands/invocation-context.ts';
+import { getCustomRootHelp } from '@/core/commands/root-help.ts';
+import { ALPHA_ENV_VAR, SonarCommand, SonarOption, Stage } from '@/core/commands/sonar-command.ts';
 import { RateLimitError, ServiceUnavailableError } from '@/core/server/errors.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
@@ -197,24 +197,22 @@ describe('SonarCommand', () => {
     it('uses Stable as the default stage', () => {
       const command = new SonarCommand('stable');
 
-      expect(command.isStable).toBe(true);
-      expect(command.isAlpha).toBe(false);
-      expect(command.isBeta).toBe(false);
+      expect(command.lifecycle).toEqual({ stage: 'stable' });
     });
 
     it('allows Stable to be declared explicitly', () => {
       const command = new SonarCommand('stable').description('Stable command').stage(Stage.Stable);
 
-      expect(command.isStable).toBe(true);
+      expect(command.lifecycle).toEqual({ stage: 'stable' });
       expect(command.helpInformation()).not.toContain('[ALPHA]');
       expect(command.helpInformation()).not.toContain('[BETA]');
+      expect(command.helpInformation()).not.toContain('[DEPRECATED]');
     });
 
     it('uses the last stage assigned after Stable was declared explicitly', () => {
       const command = new SonarCommand('stable').stage(Stage.Stable).stage(Stage.Beta());
 
-      expect(command.isStable).toBe(false);
-      expect(command.isBeta).toBe(true);
+      expect(command.lifecycle).toEqual({ stage: 'beta' });
     });
   });
 
@@ -224,15 +222,14 @@ describe('SonarCommand', () => {
     it('marks the command as alpha', () => {
       const cmd = new SonarCommand('experimental');
 
-      expect(cmd.isAlpha).toBe(false);
-      expect(cmd.stage(Stage.Alpha).isAlpha).toBe(true);
+      expect(cmd.lifecycle.stage).toBe('stable');
+      expect(cmd.stage(Stage.Alpha).lifecycle.stage).toBe('alpha');
     });
 
     it('uses Alpha when it is assigned after Beta', () => {
       const command = new SonarCommand('experimental').stage(Stage.Beta()).stage(Stage.Alpha);
 
-      expect(command.isAlpha).toBe(true);
-      expect(command.isBeta).toBe(false);
+      expect(command.lifecycle).toEqual({ stage: 'alpha' });
     });
 
     it('unregisters the command when SONARQUBE_CLI_ALPHA is not set', () => {
@@ -381,7 +378,7 @@ describe('SonarCommand', () => {
       expect(handler).toHaveBeenCalledTimes(1);
       const warning = getMockUiCalls().find((call) => call.method === 'info');
       expect(warning?.args[0]).toBe(
-        "'experimental' is in alpha; may change or be removed without notice.",
+        "'sonar experimental' is in alpha; may change or be removed without notice.",
       );
     });
   });
@@ -416,7 +413,7 @@ describe('SonarCommand', () => {
         .description('Run the preview')
         .stage(Stage.Beta());
 
-      expect(betaCommand.isBeta).toBe(true);
+      expect(betaCommand.lifecycle.stage).toBe('beta');
       expect(parent.createHelp().visibleCommands(parent)).toContain(betaCommand);
     });
 
@@ -429,15 +426,14 @@ describe('SonarCommand', () => {
 
       command.stage(Stage.Beta());
 
-      expect(command.isAlpha).toBe(false);
-      expect(command.isBeta).toBe(true);
+      expect(command.lifecycle).toEqual({ stage: 'beta' });
       expect(parent.commands).toContain(command);
       expect(parent.helpInformation()).toContain('Preview command [BETA]');
       expect(parent.helpInformation()).not.toContain('[ALPHA]');
     });
 
     it('leaves commands Stable by default', () => {
-      expect(new SonarCommand('stable').isStable).toBe(true);
+      expect(new SonarCommand('stable').lifecycle.stage).toBe('stable');
     });
 
     it('adds the Beta tag to command help', () => {
@@ -570,13 +566,8 @@ describe('SonarCommand', () => {
         },
       }).stage(Stage.Beta('cli.beta.preview'));
 
-      expect(open.isBeta).toBe(true);
-      expect(open.isPrivateBeta).toBe(false);
-      expect(open.betaFlagKey).toBeUndefined();
-
-      expect(gated.isBeta).toBe(true);
-      expect(gated.isPrivateBeta).toBe(true);
-      expect(gated.betaFlagKey).toBe('cli.beta.preview');
+      expect(open.lifecycle).toEqual({ stage: 'beta' });
+      expect(gated.lifecycle).toEqual({ stage: 'beta', betaFlagKey: 'cli.beta.preview' });
     });
 
     it('registers Private Beta only when the runtime gate allows it', () => {
@@ -599,6 +590,133 @@ describe('SonarCommand', () => {
       });
       denied.command('gated').stage(Stage.Beta('cli.beta.preview'));
       expect(denied.commands.map((c) => c.name())).not.toContain('gated');
+    });
+  });
+
+  // ─── stage(Stage.Deprecated()) ────────────────────────────────────────────
+
+  describe('stage(Stage.Deprecated())', () => {
+    it('marks the command as Deprecated and keeps it visible', () => {
+      const parent = new SonarCommand('sonar');
+      const command = parent
+        .command('legacy')
+        .description('Legacy command')
+        .stage(Stage.Deprecated({ sinceVersion: '1.8', replacement: null }));
+
+      expect(command.lifecycle).toEqual({
+        stage: 'deprecated',
+        sinceVersion: '1.8',
+        replacement: null,
+      });
+      expect(parent.createHelp().visibleCommands(parent)).toContain(command);
+    });
+
+    it('stores a replacement', () => {
+      const command = new SonarCommand('legacy').stage(
+        Stage.Deprecated({ sinceVersion: '1.8', replacement: 'sonar update' }),
+      );
+
+      expect(command.lifecycle).toEqual({
+        stage: 'deprecated',
+        sinceVersion: '1.8',
+        replacement: 'sonar update',
+      });
+    });
+
+    it('adds the Deprecated tag to command help', () => {
+      const command = new SonarCommand('legacy')
+        .description('Legacy command')
+        .stage(Stage.Deprecated({ sinceVersion: '1.8', replacement: null }));
+
+      expect(command.helpInformation()).toContain('Legacy command [DEPRECATED]');
+    });
+
+    it('tags Deprecated subcommands in a root-help label', () => {
+      const root = new SonarCommand('sonar');
+      const system = root
+        .command('system')
+        .description('System commands')
+        .rootHelp({ category: 'cli-management' });
+      system.command('status').description('Stable status command');
+      system
+        .command('legacy')
+        .description('Legacy command')
+        .stage(Stage.Deprecated({ sinceVersion: '1.8', replacement: null }));
+
+      const help = getCustomRootHelp(root, root.createHelp());
+
+      expect(help).toContain('system <status|legacy[DEPRECATED]>');
+    });
+
+    it('warns on every invocation', async () => {
+      const command = new SonarCommand('legacy')
+        .stage(Stage.Deprecated({ sinceVersion: '1.8', replacement: null }))
+        .anonymousAction((_ctx) => {});
+
+      await command.parseAsync([], { from: 'user' });
+      await command.parseAsync([], { from: 'user' });
+
+      const warnings = getMockUiCalls().filter((call) => call.method === 'warn');
+      expect(warnings).toHaveLength(2);
+      expect(warnings[0]?.args[0]).toBe(
+        "'legacy' is deprecated since 1.8 and will be removed in a future version. There is no replacement.",
+      );
+      expect(warnings[1]?.args[0]).toBe(
+        "'legacy' is deprecated since 1.8 and will be removed in a future version. There is no replacement.",
+      );
+    });
+
+    it('includes the replacement in the warning when provided', async () => {
+      const command = new SonarCommand('self-update')
+        .stage(Stage.Deprecated({ sinceVersion: '1.2', replacement: 'sonar update' }))
+        .anonymousAction((_ctx) => {});
+
+      await command.parseAsync([], { from: 'user' });
+
+      const warning = getMockUiCalls().find((call) => call.method === 'warn');
+      expect(warning?.args[0]).toBe(
+        "'self-update' is deprecated since 1.2 and will be removed in a future version. Use 'sonar update' instead.",
+      );
+    });
+
+    it('qualifies the deprecation warning with the program name', async () => {
+      const root = new SonarCommand('sonar');
+      root
+        .command('verify')
+        .stage(Stage.Deprecated({ sinceVersion: '0.14', replacement: 'sonar analyze' }))
+        .anonymousAction((_ctx) => {});
+
+      await root.parseAsync(['verify'], { from: 'user' });
+
+      const warning = getMockUiCalls().find((call) => call.method === 'warn');
+      expect(warning?.args[0]).toBe(
+        "'sonar verify' is deprecated since 0.14 and will be removed in a future version. Use 'sonar analyze' instead.",
+      );
+    });
+
+    it('uses Deprecated when it is assigned after Beta', () => {
+      const command = new SonarCommand('legacy')
+        .stage(Stage.Beta())
+        .stage(Stage.Deprecated({ sinceVersion: '1.8', replacement: null }));
+
+      expect(command.lifecycle).toEqual({
+        stage: 'deprecated',
+        sinceVersion: '1.8',
+        replacement: null,
+      });
+    });
+
+    it('re-attaches a command that was hidden as Alpha', () => {
+      const parent = new SonarCommand('sonar');
+      const command = parent.command('legacy').description('Legacy command');
+      command.stage(Stage.Alpha);
+
+      expect(parent.commands).not.toContain(command);
+
+      command.stage(Stage.Deprecated({ sinceVersion: '1.8', replacement: null }));
+
+      expect(parent.commands).toContain(command);
+      expect(parent.helpInformation()).toContain('Legacy command [DEPRECATED]');
     });
   });
 
@@ -861,7 +979,7 @@ describe('SonarCommand', () => {
     it('creates SonarOption instances from .option()', () => {
       const cmd = new SonarCommand('cmd').option('--plain', 'A plain option');
       expect(cmd.options[0]).toBeInstanceOf(SonarOption);
-      expect(cmd.options[0].isStable).toBe(true);
+      expect(cmd.options[0]?.lifecycle).toEqual({ stage: 'stable' });
     });
 
     it('throws when staging a mandatory option', () => {
@@ -984,6 +1102,57 @@ describe('SonarCommand', () => {
       root.addOption(new SonarOption('--preview', 'Preview the plan').stage(Stage.Beta()));
 
       expect(getCustomRootHelp(root, root.createHelp())).toContain('Preview the plan [BETA]');
+    });
+
+    it('allows deprecating a required option', () => {
+      const option = new SonarOption('--need', 'Required')
+        .makeOptionMandatory()
+        .stage(Stage.Deprecated({ sinceVersion: '1.8', replacement: null }));
+
+      expect(option.lifecycle.stage).toBe('deprecated');
+      expect(new SonarCommand('cmd').addOption(option).helpInformation()).toContain('--need');
+    });
+
+    it('keeps Deprecated options visible with a [DEPRECATED] tag and warns on every use', async () => {
+      const cmd = commandWithStagedOption(
+        new SonarOption('--legacy', 'Legacy flag').stage(
+          Stage.Deprecated({ sinceVersion: '1.8', replacement: '--next' }),
+        ),
+      );
+
+      expect(cmd.helpInformation()).toContain('Legacy flag [DEPRECATED]');
+
+      await cmd.parseAsync(['--legacy'], { from: 'user' });
+      await cmd.parseAsync(['--legacy'], { from: 'user' });
+
+      const warnings = getMockUiCalls().filter((call) => call.method === 'warn');
+      expect(warnings).toHaveLength(2);
+      expect(warnings[0]?.args[0]).toBe(
+        "'--legacy' is deprecated since 1.8 and will be removed in a future version. Use '--next' instead.",
+      );
+    });
+
+    it('does not warn about a Deprecated option that was not passed', async () => {
+      const cmd = commandWithStagedOption(
+        new SonarOption('--legacy', 'Legacy flag').stage(
+          Stage.Deprecated({ sinceVersion: '1.8', replacement: null }),
+        ),
+      );
+
+      await cmd.parseAsync([], { from: 'user' });
+
+      expect(getMockUiCalls().filter((call) => call.method === 'warn')).toHaveLength(0);
+    });
+
+    it('tags Deprecated options in the custom root help menu', () => {
+      const root = new SonarCommand('sonar');
+      root.addOption(
+        new SonarOption('--legacy', 'Legacy flag').stage(
+          Stage.Deprecated({ sinceVersion: '1.8', replacement: null }),
+        ),
+      );
+
+      expect(getCustomRootHelp(root, root.createHelp())).toContain('Legacy flag [DEPRECATED]');
     });
   });
 });

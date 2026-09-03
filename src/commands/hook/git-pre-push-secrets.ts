@@ -19,9 +19,9 @@
  */
 
 import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
-import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
 
 import {

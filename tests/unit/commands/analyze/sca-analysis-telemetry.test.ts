@@ -38,9 +38,9 @@ import {
   type ScaCallerCommand,
   summarizeScaFindings,
 } from '@/commands/analyze/sca-analysis-telemetry.ts';
-import { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import { commitTelemetryFacts } from '@/commands/telemetry-facts.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';

@@ -20,9 +20,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-import { TelemetryFact } from '@/commands/command-invocation-context.ts';
 import { commitTelemetryFacts } from '@/commands/telemetry-facts.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { TelemetryFact } from '@/core/commands/invocation-context.ts';
 import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import * as telemetryEvents from '@/core/telemetry/telemetry-events.ts';
 

@@ -22,6 +22,17 @@ import { type Command, Help, InvalidArgumentError } from 'commander';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { getBanner, getCustomRootHelp } from '@/core/commands/root-help.ts';
+import {
+  type CliRuntime,
+  collectPrivateBetaFlagKeys,
+  createDefaultCliRuntime,
+  isAlphaEnabledFromEnv,
+  SonarCommand,
+  SonarOption,
+  Stage,
+} from '@/core/commands/sonar-command.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
 import { GENERIC_HTTP_METHODS } from '@/core/server/client.ts';
@@ -29,7 +40,7 @@ import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { tryLoadState } from '@/core/state/state-repository.ts';
 import { flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
-import { blank, error, warn } from '@/core/ui';
+import { blank, error } from '@/core/ui';
 import { parseInteger } from '@/core/ui/parsing.ts';
 
 import { version as VERSION } from '../../package.json';
@@ -62,7 +73,6 @@ import {
   buildCommandExecutedFact,
   setPassthroughSubcommand,
 } from './command-executed-telemetry.ts';
-import type { CommandInvocationContext } from './command-invocation-context.ts';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
 import { isTableFormatOption } from './formatting-options.ts';
@@ -105,16 +115,7 @@ import {
   VALID_FORMATS as QUALITY_GATE_VALID_FORMATS,
 } from './quality-gate/status';
 import { remediate, type RemediateOptions } from './remediate';
-import { getBanner, getCustomRootHelp } from './root-help.ts';
 import { runMcp } from './run/mcp.ts';
-import {
-  type CliRuntime,
-  collectPrivateBetaFlagKeys,
-  createDefaultCliRuntime,
-  isAlphaEnabledFromEnv,
-  SonarCommand,
-  SonarOption,
-} from './sonar-command.ts';
 import { systemReset, type SystemResetOptions } from './system/reset.ts';
 import { systemStatus, type SystemStatusOptions } from './system/status.ts';
 import { commitTelemetryFacts } from './telemetry-facts.ts';
@@ -588,18 +589,13 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     { telemetryCallerCommand: SQAA_ANALYZE_AGENTIC_CALLER_COMMAND },
   );
 
-  // `verify` is deprecated in favour of `sonar analyze`.
-  const verifyCmd = applySqaaOptions(
-    COMMAND_TREE.command('verify', { hidden: true }).description(
-      "Run server-side Vortex analysis (deprecated — use 'sonar analyze' instead)",
-    ),
+  // Hidden compatibility alias for `sonar analyze`.
+  applySqaaOptions(
+    COMMAND_TREE.command('verify', { hidden: true })
+      .description('Run server-side Vortex analysis')
+      .stage(Stage.Deprecated({ sinceVersion: '0.14', replacement: 'sonar analyze' })),
     { telemetryCallerCommand: SQAA_VERIFY_CALLER_COMMAND },
   );
-  verifyCmd.hook('preAction', () => {
-    warn(
-      "sonar verify is deprecated and will be removed in a future major version. Use 'sonar analyze' instead.",
-    );
-  });
 
   // Trigger AI remediation for eligible issues (SonarQube Cloud only)
   COMMAND_TREE.command('remediate')
@@ -667,19 +663,13 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       .option('--force', 'Install the latest version even if already up to date')
       .anonymousAction((_ctx, options: UpdateVersionOptions) => updateVersion(options));
 
-    // `self-update` is deprecated in favour of `sonar update`.
-    const selfUpdateCmd = COMMAND_TREE.command('self-update', { hidden: true })
-      .description(
-        "Update SonarQube CLI to the latest version (deprecated — use 'sonar update' instead)",
-      )
+    // Hidden compatibility alias for `sonar update`.
+    COMMAND_TREE.command('self-update', { hidden: true })
+      .description('Update SonarQube CLI to the latest version')
+      .stage(Stage.Deprecated({ sinceVersion: '1.4', replacement: 'sonar update' }))
       .option('--status', 'Check for a newer version without installing')
       .option('--force', 'Install the latest version even if already up to date')
       .anonymousAction((_ctx, options: UpdateVersionOptions) => updateVersion(options));
-    selfUpdateCmd.hook('preAction', () => {
-      warn(
-        "sonar self-update is deprecated and will be removed in one of the upcoming versions. Use 'sonar update' instead.",
-      );
-    });
   }
 
   const runCommand = COMMAND_TREE.command('run', { hidden: true }).description(
