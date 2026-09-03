@@ -159,7 +159,8 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
   // Hook handlers write an agent-native session id when present; postAction
   // resolves (env fallback) before telemetry flush.
   let capturedAgentSessionId: string | null = null;
-  const COMMAND_TREE = new SonarCommand({ runtime, console: new TerminalConsole() });
+  const console = new TerminalConsole();
+  const COMMAND_TREE = new SonarCommand({ runtime, console });
 
   const handleHookInvocation =
     <TArgs extends unknown[]>(
@@ -179,8 +180,8 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .enablePositionalOptions()
     .configureOutput({
       outputError: (str) => {
-        COMMAND_TREE.console.blank();
-        COMMAND_TREE.console.error(str.trim());
+        console.blank();
+        console.error(str.trim());
       },
     })
     .configureHelp({
