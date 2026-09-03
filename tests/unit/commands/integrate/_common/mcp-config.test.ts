@@ -39,6 +39,7 @@ import {
   removeSonarHooksFromPreCommitConfig,
   upsertSonarHook,
 } from '../../../../../src/commands/integrate/git/tools/pre-commit';
+import { FakeConsole } from '../../../../_common/fake-console.ts';
 
 function context(): ContainerIntegrationContext {
   return {
@@ -46,6 +47,7 @@ function context(): ContainerIntegrationContext {
     targetRoot: '/tmp',
     scope: 'global',
     executionMode: 'install',
+    console: new FakeConsole(),
     resolvedDependencies: new Map(),
     activeSubfeatures: [],
   };

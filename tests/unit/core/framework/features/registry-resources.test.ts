@@ -36,6 +36,8 @@ import {
   type InstalledIntegrationFeature,
 } from '@/core/state/state.ts';
 
+import { FakeConsole } from '../../../../_common/fake-console.ts';
+
 const binaryInstall = await import('@/core/host/install/binary.ts');
 await mock.module('@/core/host/install/binary.ts', () => ({
   ...binaryInstall,
@@ -267,7 +269,7 @@ describe('declarative integration framework - resources and state recording', ()
       state,
       integration,
       [{ feature, targetRoot: tempDir, scope: 'project' }],
-      { executionMode: 'update' },
+      { executionMode: 'update', console: new FakeConsole() },
     );
 
     expect(called).toBe(false);
@@ -434,7 +436,7 @@ describe('declarative integration framework - resources and state recording', ()
     const applied = await dependency.installOrUpdate(context);
 
     expect(installBinarySpy).toHaveBeenCalledWith(SECRETS_SPEC, {
-      console: expect.anything(),
+      console: context.console,
     });
     expect(applied).toEqual({
       id: 'binary',
@@ -577,6 +579,7 @@ function makeContext(
     targetRoot,
     scope: 'project',
     executionMode,
+    console: new FakeConsole(),
     force,
     attrs,
     resolvedDependencies: new Map(),
@@ -605,15 +608,20 @@ async function applyAndRecord<TOptions>(
   integration: IntegrationDeclaration<TOptions>,
   feature: FeatureDeclaration<TOptions>,
 ): Promise<InstalledIntegrationFeature> {
-  const installed = await installer.applyAndRecordFeatures(context.state, integration, [
-    {
-      feature,
-      targetRoot: context.targetRoot,
-      scope: context.scope,
-      force: context.force,
-      attrs: context.attrs,
-    },
-  ]);
+  const installed = await installer.applyAndRecordFeatures(
+    context.state,
+    integration,
+    [
+      {
+        feature,
+        targetRoot: context.targetRoot,
+        scope: context.scope,
+        force: context.force,
+        attrs: context.attrs,
+      },
+    ],
+    { console: context.console },
+  );
   if (installed.length === 0) {
     throw new Error('Feature was not recorded');
   }

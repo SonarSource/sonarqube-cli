@@ -35,7 +35,6 @@ import {
 } from '@/core/host/install/context-augmentation.ts';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { stopAllContextAugmentationTools } from './context-augmentation.ts';
 
@@ -59,7 +58,7 @@ export class ContextAugmentationBinaryDependency implements DependencyDeclaratio
       await stopAllContextAugmentationTools(previousBinaryPath);
     }
 
-    const binaryPath = await installContextAugmentationBinary(new TerminalConsole());
+    const binaryPath = await installContextAugmentationBinary(context.console);
     return {
       id: this.id,
       version: this.version,

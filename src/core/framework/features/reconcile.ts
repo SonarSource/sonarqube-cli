@@ -27,6 +27,7 @@ import type {
   InstalledIntegrationFeature,
   IntegrationStateAttribute,
 } from '@/core/state/state.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { findInstalledIntegration } from './installation-recorder.ts';
 import { integrationInstaller } from './installer.ts';
@@ -80,6 +81,7 @@ async function reconcileIntegration(
       {
         continueOnFeatureError: true,
         executionMode: 'update',
+        console: new TerminalConsole(),
         onFeatureError: (application, err) => {
           logger.debug(
             `Declarative reconciliation failed for ${integration.id}.${application.feature.id}: ${err.message}`,
