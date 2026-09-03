@@ -1,0 +1,128 @@
+name: Run integration and E2E tests
+description: Download the platform CLI binary, install fixtures, and run integration plus e2e tests
+
+inputs:
+  os:
+    description: linux or windows
+    required: true
+  project-version:
+    description: Versioned binary filename prefix from the prepare job
+    required: true
+  binary-artifact:
+    description: Artifact name uploaded by build-binaries
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Vault Secrets
+      id: secrets
+      uses: SonarSource/vault-action-wrapper@881045d830534a70ec3c7c275fa3714412c8ff6e # 3.6.1
+      with:
+        secrets: |
+          development/kv/data/devex-claude-code API_KEY | CLAUDE_CODE_API_KEY;
+          development/team/sonarlint/kv/data/sonarcloud-it token | SONARCLOUD_IT_TOKEN;
+          development/team/sonarlint/kv/data/sonarcloud-it-US token | SONARCLOUD_IT_TOKEN_US;
+
+    - name: Install keychain dependencies (Linux)
+      if: ${{ inputs.os == 'linux' }}
+      shell: bash
+      run: sudo apt-get update && sudo apt-get install -y libsecret-1-0 gnome-keyring dbus-x11
+
+    - name: Download platform binary
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      with:
+        name: ${{ inputs.binary-artifact }}
+        path: dist/
+
+    - name: Place platform binary
+      shell: bash
+      env:
+        PROJECT_VERSION: ${{ inputs.project-version }}
+        TEST_OS: ${{ inputs.os }}
+      run: |
+        set -euo pipefail
+
+        if [ "${TEST_OS}" = "linux" ]; then
+          artifact="sonarqube-cli-${PROJECT_VERSION}-linux-x86-64.bin"
+          cp "dist/${artifact}" dist/sonarqube-cli
+          chmod +x dist/sonarqube-cli
+        else
+          artifact="sonarqube-cli-${PROJECT_VERSION}-windows-x86-64.exe"
+          cp "dist/${artifact}" dist/sonarqube-cli.exe
+        fi
+
+    - name: Setup integration resources
+      shell: bash
+      run: bun build-scripts/setup-integration-resources.ts
+
+    - name: Start D-Bus and unlock keyring (Linux)
+      if: ${{ inputs.os == 'linux' }}
+      shell: bash
+      run: |
+        eval "$(dbus-launch --sh-syntax)"
+        echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
+        mkdir -p ~/.local/share/keyrings
+        eval "$(printf '\n' | gnome-keyring-daemon --unlock --components=secrets)"
+        if [ -n "$GNOME_KEYRING_CONTROL" ]; then
+          echo "GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL" >> "$GITHUB_ENV"
+        fi
+
+    - name: Build coverage binary (Linux)
+      if: ${{ inputs.os == 'linux' }}
+      shell: bash
+      run: |
+        bun build-scripts/build-coverage-binary.ts
+        bun build-scripts/clear-coverage-raw.ts
+
+    - name: Run integration tests (Windows)
+      if: ${{ inputs.os == 'windows' }}
+      shell: bash
+      run: bun run test:integration
+
+    - name: Run integration tests with coverage (Linux)
+      if: ${{ inputs.os == 'linux' }}
+      shell: bash
+      run: SONARQUBE_CLI_USE_COVERAGE=1 bun run test:integration
+
+    # Workaround for CAG-933: CAG deduces the fake SonarQube Cloud API endpoint
+    # as api.localhost. That resolution is platform-specific; Windows CI does not
+    # resolve it by default. Pin api.localhost to loopback so the e2e test
+    # "forwards a Claude Bash hook payload to the real CAG binary and applies
+    # Gradle compression" can reach the fake server until CAG fixes this.
+    - name: Resolve fake SonarQube Cloud API host (Windows)
+      if: ${{ inputs.os == 'windows' }}
+      shell: powershell
+      run: |
+        Add-Content -Path "$env:windir\System32\drivers\etc\hosts" -Value "`n127.0.0.1 api.localhost`n::1 api.localhost"
+        Resolve-DnsName api.localhost
+
+    - name: Run e2e tests (Windows)
+      if: ${{ inputs.os == 'windows' }}
+      shell: bash
+      env:
+        CLAUDE_CODE_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).CLAUDE_CODE_API_KEY }}
+        SONARCLOUD_IT_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).SONARCLOUD_IT_TOKEN }}
+        SONARCLOUD_IT_TOKEN_US: ${{ fromJSON(steps.secrets.outputs.vault).SONARCLOUD_IT_TOKEN_US }}
+      run: bun run test:e2e
+
+    - name: Run e2e tests with coverage (Linux)
+      if: ${{ inputs.os == 'linux' }}
+      shell: bash
+      env:
+        CLAUDE_CODE_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).CLAUDE_CODE_API_KEY }}
+        SONARCLOUD_IT_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).SONARCLOUD_IT_TOKEN }}
+        SONARCLOUD_IT_TOKEN_US: ${{ fromJSON(steps.secrets.outputs.vault).SONARCLOUD_IT_TOKEN_US }}
+      run: SONARQUBE_CLI_USE_COVERAGE=1 bun run test:e2e
+
+    - name: Merge coverage reports (Linux)
+      if: ${{ inputs.os == 'linux' }}
+      shell: bash
+      run: bun build-scripts/report-coverage.ts
+
+    - name: Upload integration coverage (Linux)
+      if: ${{ inputs.os == 'linux' }}
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: integration-coverage
+        path: tests/coverage/reports/integration/

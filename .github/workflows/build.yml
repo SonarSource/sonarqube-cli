@@ -251,6 +251,9 @@ jobs:
       - build-binaries
       - sign-macos
       - scan
+      - unit-tests-windows
+      - integration-and-e2e-linux
+      - integration-and-e2e-windows
     if: ${{ !cancelled() && !failure() && (github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-')) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -359,16 +362,41 @@ jobs:
       - name: Type check
         run: bun typecheck
 
-  unit-tests:
-    name: Unit Tests - ${{ matrix.os }}
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      matrix:
-        include:
-          - os: linux
-            runner: github-ubuntu-latest-m
-          - os: windows
-            runner: warp-custom-windows-2022-s
+  unit-tests-linux:
+    name: Unit Tests - linux
+    runs-on: github-ubuntu-latest-m
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Vault Secrets
+        id: secrets
+        uses: SonarSource/vault-action-wrapper@881045d830534a70ec3c7c275fa3714412c8ff6e # 3.6.1
+        with:
+          secrets: |
+            development/kv/data/repox url | ARTIFACTORY_URL;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
+
+      - uses: ./.github/actions/setup-bun
+        with:
+          artifactory-username: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
+          artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
+
+      - name: Run unit tests with coverage (Linux)
+        run: bun run test:coverage:unit
+
+      - name: Generate unit lcov from Istanbul data (Linux)
+        run: bun build-scripts/report-coverage.ts
+
+      - name: Upload unit coverage (Linux)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unit-coverage
+          path: tests/coverage/reports/unit/
+
+  unit-tests-windows:
+    name: Unit Tests - windows
+    runs-on: warp-custom-windows-2022-s
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -387,37 +415,12 @@ jobs:
           artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
 
       - name: Run unit tests (Windows)
-        if: matrix.os == 'windows'
         run: bun test:unit
 
-      - name: Run unit tests with coverage (Linux)
-        if: matrix.os == 'linux'
-        run: bun run test:coverage:unit
-
-      - name: Generate unit lcov from Istanbul data (Linux)
-        if: matrix.os == 'linux'
-        run: bun build-scripts/report-coverage.ts
-
-      - name: Upload unit coverage (Linux)
-        if: matrix.os == 'linux'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: unit-coverage
-          path: tests/coverage/reports/unit/
-
-  integration-and-e2e:
-    name: Integration and E2E Tests - ${{ matrix.os }}
-    runs-on: ${{ matrix.runner }}
+  integration-and-e2e-linux:
+    name: Integration and E2E Tests - linux
+    runs-on: github-ubuntu-latest-m
     needs: [prepare, build-binaries]
-    strategy:
-      matrix:
-        include:
-          - os: linux
-            runner: github-ubuntu-latest-m
-            binary_artifact: binary-linux-x86-64
-          - os: windows
-            runner: warp-custom-windows-2022-s
-            binary_artifact: binary-windows-x86-64
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -429,112 +432,50 @@ jobs:
             development/kv/data/repox url | ARTIFACTORY_URL;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
-            development/kv/data/devex-claude-code API_KEY | CLAUDE_CODE_API_KEY;
-            development/team/sonarlint/kv/data/sonarcloud-it token | SONARCLOUD_IT_TOKEN;
-            development/team/sonarlint/kv/data/sonarcloud-it-US token | SONARCLOUD_IT_TOKEN_US;
-
-      - name: Install keychain dependencies (Linux)
-        if: matrix.os == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y libsecret-1-0 gnome-keyring dbus-x11
 
       - uses: ./.github/actions/setup-bun
         with:
           artifactory-username: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
           artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
 
-      - name: Download platform binary
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: ./.github/actions/run-integration-and-e2e
         with:
-          name: ${{ matrix.binary_artifact }}
-          path: dist/
+          os: linux
+          project-version: ${{ needs.prepare.outputs.PROJECT_VERSION }}
+          binary-artifact: binary-linux-x86-64
 
-      - name: Place platform binary
-        shell: bash
-        env:
-          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
-        run: |
-          set -euo pipefail
+  integration-and-e2e-windows:
+    name: Integration and E2E Tests - windows
+    runs-on: warp-custom-windows-2022-s
+    needs: [prepare, build-binaries]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-          if [ "${{ matrix.os }}" = "linux" ]; then
-            artifact="sonarqube-cli-${PROJECT_VERSION}-linux-x86-64.bin"
-            cp "dist/${artifact}" dist/sonarqube-cli
-            chmod +x dist/sonarqube-cli
-          else
-            artifact="sonarqube-cli-${PROJECT_VERSION}-windows-x86-64.exe"
-            cp "dist/${artifact}" dist/sonarqube-cli.exe
-          fi
-
-      - name: Setup integration resources
-        run: bun build-scripts/setup-integration-resources.ts
-
-      - name: Start D-Bus and unlock keyring (Linux)
-        if: matrix.os == 'linux'
-        run: |
-          eval "$(dbus-launch --sh-syntax)"
-          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
-          mkdir -p ~/.local/share/keyrings
-          eval "$(printf '\n' | gnome-keyring-daemon --unlock --components=secrets)"
-          if [ -n "$GNOME_KEYRING_CONTROL" ]; then
-            echo "GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL" >> "$GITHUB_ENV"
-          fi
-
-      - name: Build coverage binary (Linux)
-        if: matrix.os == 'linux'
-        run: |
-          bun build-scripts/build-coverage-binary.ts
-          bun build-scripts/clear-coverage-raw.ts
-
-      - name: Run integration tests (Windows)
-        if: matrix.os == 'windows'
-        run: bun run test:integration
-
-      - name: Run integration tests with coverage (Linux)
-        if: matrix.os == 'linux'
-        run: SONARQUBE_CLI_USE_COVERAGE=1 bun run test:integration
-
-      # Workaround for CAG-933: CAG deduces the fake SonarQube Cloud API endpoint
-      # as api.localhost. That resolution is platform-specific; Windows CI does not
-      # resolve it by default. Pin api.localhost to loopback so the e2e test
-      # "forwards a Claude Bash hook payload to the real CAG binary and applies
-      # Gradle compression" can reach the fake server until CAG fixes this.
-      - name: Resolve fake SonarQube Cloud API host (Windows)
-        if: matrix.os == 'windows'
-        shell: powershell
-        run: |
-          Add-Content -Path "$env:windir\System32\drivers\etc\hosts" -Value "`n127.0.0.1 api.localhost`n::1 api.localhost"
-          Resolve-DnsName api.localhost
-
-      - name: Run e2e tests (Windows)
-        if: matrix.os == 'windows'
-        env:
-          CLAUDE_CODE_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).CLAUDE_CODE_API_KEY }}
-          SONARCLOUD_IT_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).SONARCLOUD_IT_TOKEN }}
-          SONARCLOUD_IT_TOKEN_US: ${{ fromJSON(steps.secrets.outputs.vault).SONARCLOUD_IT_TOKEN_US }}
-        run: bun run test:e2e
-
-      - name: Run e2e tests with coverage (Linux)
-        if: matrix.os == 'linux'
-        env:
-          CLAUDE_CODE_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).CLAUDE_CODE_API_KEY }}
-          SONARCLOUD_IT_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).SONARCLOUD_IT_TOKEN }}
-          SONARCLOUD_IT_TOKEN_US: ${{ fromJSON(steps.secrets.outputs.vault).SONARCLOUD_IT_TOKEN_US }}
-        run: SONARQUBE_CLI_USE_COVERAGE=1 bun run test:e2e
-
-      - name: Merge coverage reports (Linux)
-        if: matrix.os == 'linux'
-        run: bun build-scripts/report-coverage.ts
-
-      - name: Upload integration coverage (Linux)
-        if: matrix.os == 'linux'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - name: Vault Secrets
+        id: secrets
+        uses: SonarSource/vault-action-wrapper@881045d830534a70ec3c7c275fa3714412c8ff6e # 3.6.1
         with:
-          name: integration-coverage
-          path: tests/coverage/reports/integration/
+          secrets: |
+            development/kv/data/repox url | ARTIFACTORY_URL;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
+
+      - uses: ./.github/actions/setup-bun
+        with:
+          artifactory-username: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
+          artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
+
+      - uses: ./.github/actions/run-integration-and-e2e
+        with:
+          os: windows
+          project-version: ${{ needs.prepare.outputs.PROJECT_VERSION }}
+          binary-artifact: binary-windows-x86-64
 
   scan:
     name: SonarQube Analysis
     runs-on: github-ubuntu-latest-s
-    needs: [prepare, lint, unit-tests, integration-and-e2e]
+    # Coverage artifacts are Linux-only; Windows tests still gate publish and promote.
+    needs: [prepare, lint, unit-tests-linux, integration-and-e2e-linux]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -588,6 +529,7 @@ jobs:
       - sign-macos
       - publish-binaries
       - scan
+      - integration-and-e2e-windows
     if: ${{ !cancelled() && !failure() && (github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-')) }}
     steps:
       - uses: SonarSource/ci-github-actions/promote@983645f538ff01044b1e567adb23e6f527d8b52a # 1.8.9
