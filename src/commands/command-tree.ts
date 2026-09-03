@@ -41,9 +41,8 @@ import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { tryLoadState } from '@/core/state/state-repository.ts';
 import { flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
-import { getDefaultConsole } from '@/core/ui/default-console.ts';
-import { isFormattedOutputMode } from '@/core/ui/messages.ts';
 import { parseInteger } from '@/core/ui/parsing.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { version as VERSION } from '../../package.json';
 import {
@@ -160,12 +159,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
   // Hook handlers write an agent-native session id when present; postAction
   // resolves (env fallback) before telemetry flush.
   let capturedAgentSessionId: string | null = null;
-  // index.ts may enable JSON buffering before the tree exists; copy that onto the process console.
-  const cliConsole = getDefaultConsole();
-  if (isFormattedOutputMode()) {
-    cliConsole.setFormattedOutputMode(true);
-  }
-  const COMMAND_TREE = new SonarCommand({ runtime, console: cliConsole });
+  const COMMAND_TREE = new SonarCommand({ runtime, console: new TerminalConsole() });
 
   const handleHookInvocation =
     <TArgs extends unknown[]>(
@@ -185,8 +179,8 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .enablePositionalOptions()
     .configureOutput({
       outputError: (str) => {
-        cliConsole.blank();
-        cliConsole.error(str.trim());
+        COMMAND_TREE.console.blank();
+        COMMAND_TREE.console.error(str.trim());
       },
     })
     .configureHelp({
