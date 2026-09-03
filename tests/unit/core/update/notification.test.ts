@@ -27,7 +27,6 @@ import type { Command } from 'commander';
 
 import { createCommandTree } from '@/commands/command-tree.ts';
 import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
-import { setFormattedOutputMode } from '@/core/ui';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
 
@@ -89,7 +88,7 @@ describe('update notification suppression', () => {
     delete process.env[TELEMETRY_FLUSH_MODE_ENV];
     Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: true });
     Object.defineProperty(process.stderr, 'isTTY', { configurable: true, value: true });
-    setFormattedOutputMode(false);
+    COMMAND_TREE.console.setFormattedOutputMode(false);
   });
 
   afterEach(() => {
@@ -102,7 +101,7 @@ describe('update notification suppression', () => {
       configurable: true,
       value: originalStderrIsTTY,
     });
-    setFormattedOutputMode(false);
+    COMMAND_TREE.console.setFormattedOutputMode(false);
   });
 
   it('suppresses in CI and machine-readable modes', () => {
@@ -111,8 +110,9 @@ describe('update notification suppression', () => {
     expect(updateNotifier.shouldSuppress(command)).toBe(true);
 
     delete process.env.CI;
-    setFormattedOutputMode(true);
+    COMMAND_TREE.console.setFormattedOutputMode(true);
     expect(updateNotifier.shouldSuppress(command)).toBe(true);
+    COMMAND_TREE.console.setFormattedOutputMode(false);
   });
 
   it('suppresses list issues when format is json', () => {
@@ -151,7 +151,7 @@ describe('updateNotifier.maybeNotify', () => {
     delete process.env[TELEMETRY_FLUSH_MODE_ENV];
     Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: true });
     Object.defineProperty(process.stderr, 'isTTY', { configurable: true, value: true });
-    setFormattedOutputMode(false);
+    COMMAND_TREE.console.setFormattedOutputMode(false);
     process.exitCode = 0;
     fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(((url: string | URL | Request) => {
       const fetchUrl = fetchUrlString(url);
@@ -172,7 +172,7 @@ describe('updateNotifier.maybeNotify', () => {
     fetchSpy.mockRestore();
     stdoutSpy.mockRestore();
     stderrSpy.mockRestore();
-    setFormattedOutputMode(false);
+    COMMAND_TREE.console.setFormattedOutputMode(false);
   });
 
   function notificationOutput(): string {

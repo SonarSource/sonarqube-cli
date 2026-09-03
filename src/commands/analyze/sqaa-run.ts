@@ -228,8 +228,9 @@ export async function runSqaaAnalysis(
     telemetryCtx,
   } = options;
 
-  const resolution = await resolveSqaaAuthAndProject(auth, explicitProject);
-  const resolved = resolveSqaaContext(resolution, { requireProject });
+  const console = resolveRunConsole(options);
+  const resolution = await resolveSqaaAuthAndProject(auth, explicitProject, undefined, console);
+  const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
 
   const { sqaaAuth, projectKey } = resolved;
