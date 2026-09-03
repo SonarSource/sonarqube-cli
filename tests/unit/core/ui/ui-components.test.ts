@@ -31,9 +31,10 @@ import { mock } from 'bun:test';
 import { phase, phaseItem } from '@/core/ui';
 import { intro, outro } from '@/core/ui';
 import { withSpinner } from '@/core/ui';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { mockColorsNonTTY } from '../../../_common/colors-mock.ts';
+import { FakeConsole } from '../../../_common/fake-console.ts';
+import { installFakeConsole, restoreDefaultConsole } from '../../../_common/ui-test-console.ts';
 
 // ─── phaseItem helper ─────────────────────────────────────────────────────────
 
@@ -66,18 +67,20 @@ describe('phaseItem', () => {
 // ─── phase: mock mode ─────────────────────────────────────────────────────────
 
 describe('phase: mock mode', () => {
+  let fake: FakeConsole;
+
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
+    fake = installFakeConsole();
   });
+
   afterEach(() => {
-    setMockUi(false);
+    restoreDefaultConsole();
   });
 
   it('records call with title and items', () => {
     const items = [phaseItem('Step 1', 'done')];
     phase('Setup', items);
-    const calls = getMockUiCalls();
+    const calls = fake.calls;
     expect(calls.some((c) => c.method === 'phase' && c.args[0] === 'Setup')).toBe(true);
   });
 
@@ -159,19 +162,19 @@ describe('phase: non-TTY output', () => {
 // ─── intro: mock mode ─────────────────────────────────────────────────────────
 
 describe('intro: mock mode', () => {
+  let fake: FakeConsole;
+
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
+    fake = installFakeConsole();
   });
+
   afterEach(() => {
-    setMockUi(false);
+    restoreDefaultConsole();
   });
 
   it('records call with title', () => {
     intro('Welcome');
-    expect(getMockUiCalls().some((c) => c.method === 'intro' && c.args[0] === 'Welcome')).toBe(
-      true,
-    );
+    expect(fake.calls.some((c) => c.method === 'intro' && c.args[0] === 'Welcome')).toBe(true);
   });
 
   it('does not write to stdout in mock mode', () => {
@@ -222,17 +225,19 @@ describe('intro: non-TTY output', () => {
 // ─── outro: mock mode ─────────────────────────────────────────────────────────
 
 describe('outro: mock mode', () => {
+  let fake: FakeConsole;
+
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
+    fake = installFakeConsole();
   });
+
   afterEach(() => {
-    setMockUi(false);
+    restoreDefaultConsole();
   });
 
   it('records call with message and status', () => {
     outro('Done!', 'success');
-    expect(getMockUiCalls().some((c) => c.method === 'outro' && c.args[0] === 'Done!')).toBe(true);
+    expect(fake.calls.some((c) => c.method === 'outro' && c.args[0] === 'Done!')).toBe(true);
   });
 });
 
@@ -271,19 +276,19 @@ describe('outro: non-TTY output', () => {
 // ─── withSpinner: mock mode ───────────────────────────────────────────────────
 
 describe('withSpinner: mock mode', () => {
+  let fake: FakeConsole;
+
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
+    fake = installFakeConsole();
   });
+
   afterEach(() => {
-    setMockUi(false);
+    restoreDefaultConsole();
   });
 
   it('records call with message', async () => {
     await withSpinner('Loading', () => Promise.resolve(42));
-    expect(getMockUiCalls().some((c) => c.method === 'spinner' && c.args[0] === 'Loading')).toBe(
-      true,
-    );
+    expect(fake.calls.some((c) => c.method === 'spinner' && c.args[0] === 'Loading')).toBe(true);
   });
 
   it('returns task result in mock mode', async () => {

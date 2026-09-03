@@ -21,7 +21,7 @@
 // Phase component — process phase with status items
 
 import { bold, dim, isTTY, STATUS_COLORS, STATUS_ICONS } from '../colors.ts';
-import { isMockActive, recordCall } from '../mock.ts';
+import { getDefaultConsole } from '../default-console.ts';
 import type { ColorFn, PhaseItem, PhaseOptions, StepStatus } from '../types.ts';
 
 export type { PhaseItem, StepStatus } from '../types.ts';
@@ -46,12 +46,7 @@ function renderItem(item: PhaseItem, iconColors: Partial<Record<StepStatus, Colo
   return lines.join('\n');
 }
 
-export function phase(title: string, items: PhaseItem[], opts: PhaseOptions = {}): void {
-  if (isMockActive()) {
-    recordCall('phase', title, items);
-    return;
-  }
-
+export function renderPhase(title: string, items: PhaseItem[], opts: PhaseOptions = {}): void {
   const titleColor: ColorFn = opts.titleColor ?? bold;
   const iconColors = opts.iconColors ?? {};
 
@@ -73,4 +68,8 @@ export function phase(title: string, items: PhaseItem[], opts: PhaseOptions = {}
     }
     process.stdout.write('\n');
   }
+}
+
+export function phase(title: string, items: PhaseItem[], opts: PhaseOptions = {}): void {
+  getDefaultConsole().phase(title, items, opts);
 }

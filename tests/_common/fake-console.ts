@@ -24,7 +24,6 @@ import type {
   SelectOption,
 } from '@/core/ui/components/prompts.ts';
 import type { Console } from '@/core/ui/console.ts';
-import { findUiCall, type UiCall } from '@/core/ui/mock.ts';
 import type {
   ColorFn,
   NoteOptions,
@@ -33,12 +32,21 @@ import type {
   PhaseOptions,
 } from '@/core/ui/types.ts';
 
-export type { UiCall };
+export interface UiCall {
+  method: string;
+  args: unknown[];
+}
 
-/**
- * Test double for {@link Console}. Records calls and returns queued prompt answers.
- * Never writes to stdout/stderr.
- */
+function findUiCall(
+  recorded: readonly UiCall[],
+  method: string,
+  substring: string,
+): UiCall | undefined {
+  return recorded.find(
+    (c) => c.method === method && typeof c.args[0] === 'string' && c.args[0].includes(substring),
+  );
+}
+
 export class FakeConsole implements Console {
   readonly calls: UiCall[] = [];
   private readonly responses: unknown[] = [];

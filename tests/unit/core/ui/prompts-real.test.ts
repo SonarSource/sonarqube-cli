@@ -32,12 +32,18 @@ import {
   textPrompt,
 } from '@/core/ui';
 
+import { restoreDefaultConsole } from '../../../_common/ui-test-console.ts';
+
 // Mutable state for controlling what each prompt returns
 let mockTextResult: string | symbol = 'default';
 let mockConfirmResult: boolean | symbol = true;
 let mockSelectResult: unknown = 'default';
 let mockPasswordResult: string | symbol = 'default';
 let capturedPasswordRenders: string[] = [];
+
+beforeEach(() => {
+  restoreDefaultConsole();
+});
 
 void mock.module('@clack/core', () => {
   class TextPromptMock {

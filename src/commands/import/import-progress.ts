@@ -22,7 +22,6 @@
 
 import { bold, dim } from '@/core/ui/colors.ts';
 import { ConcurrentProgress } from '@/core/ui/components/concurrent-progress.ts';
-import { isMockActive, recordCall } from '@/core/ui/mock.ts';
 
 /**
  * Extends `ConcurrentProgress` with import-specific additions:
@@ -32,7 +31,7 @@ import { isMockActive, recordCall } from '@/core/ui/mock.ts';
  */
 export class ImportProgress extends ConcurrentProgress {
   constructor(opts: { isTTY?: boolean; maxVisible?: number; showResult?: boolean }) {
-    super({ ...opts, resultTitle: 'Import results', mockPrefix: 'importProgress' });
+    super({ ...opts, resultTitle: 'Import results' });
   }
 
   protected override formatLabel(slug: string): string {
@@ -43,10 +42,6 @@ export class ImportProgress extends ConcurrentProgress {
 
   addRepos(slugs: string[]): void {
     this.registerItems(slugs);
-    if (isMockActive()) {
-      recordCall('importProgress.addRepos', slugs);
-      return;
-    }
     if (this.isTTY) this.render();
   }
 
@@ -57,10 +52,6 @@ export class ImportProgress extends ConcurrentProgress {
   recordSkipped(count: number): void {
     if (count <= 0) return;
     this.skippedResolved += count;
-    if (isMockActive()) {
-      recordCall('importProgress.recordSkipped', count);
-      return;
-    }
     if (this.isTTY) this.render();
   }
 }

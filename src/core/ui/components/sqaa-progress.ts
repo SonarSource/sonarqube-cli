@@ -24,7 +24,6 @@ import * as readline from 'node:readline';
 
 import { cyan, yellow } from '../colors.ts';
 import { warn } from '../messages.ts';
-import { isMockActive, recordCall } from '../mock.ts';
 
 export type FileStatus = 'waiting' | 'analyzing' | 'done' | 'failed' | 'skipped' | 'ignored';
 
@@ -79,10 +78,6 @@ export class SqaaProgress {
 
   start(): void {
     if (this.silent) return;
-    if (isMockActive()) {
-      recordCall('sqaaProgress.start');
-      return;
-    }
     if (this.isTTY) {
       this.startDotAnimation();
       this.renderLiveLine();
@@ -94,10 +89,6 @@ export class SqaaProgress {
     if (this.payloadSplitWarned) return;
     this.payloadSplitWarned = true;
     if (this.silent) return;
-    if (isMockActive()) {
-      recordCall('sqaaProgress.warnPayloadSplit');
-      return;
-    }
     // Erase the live line first so the warning is not overwritten by the
     // next animation tick; the live line is re-rendered fresh below it.
     if (this.isTTY) {
@@ -114,10 +105,6 @@ export class SqaaProgress {
       this.retryLabel = undefined;
     }
     if (this.silent) return;
-    if (isMockActive()) {
-      recordCall('sqaaProgress.updateChunk', _chunkIndex, status);
-      return;
-    }
     if (this.isTTY) {
       this.renderLiveLine();
     }
@@ -126,10 +113,6 @@ export class SqaaProgress {
   update(globalIndex: number, status: FileStatus): void {
     this.statuses[globalIndex] = status;
     if (this.silent) return;
-    if (isMockActive()) {
-      recordCall('sqaaProgress.update', globalIndex, status);
-      return;
-    }
     if (this.isTTY) {
       this.renderLiveLine();
     }
@@ -145,10 +128,6 @@ export class SqaaProgress {
     if (this.silent) {
       await sleep(delayMs);
       this.runPhase = 'analyzing';
-      return;
-    }
-    if (isMockActive()) {
-      recordCall('sqaaProgress.retryingChunk', _chunkIndex, attempt, maxRetries, delayMs);
       return;
     }
 
@@ -178,10 +157,6 @@ export class SqaaProgress {
       }
     }
     if (this.silent) return;
-    if (isMockActive()) {
-      recordCall('sqaaProgress.skipRemaining', fromIndex);
-      return;
-    }
     if (this.isTTY) {
       this.renderLiveLine();
     }
@@ -194,10 +169,6 @@ export class SqaaProgress {
   finish(): void {
     this.stopDotAnimation();
     if (this.silent) return;
-    if (isMockActive()) {
-      recordCall('sqaaProgress.finish');
-      return;
-    }
     if (this.isTTY) {
       this.eraseLiveLine();
     }

@@ -35,56 +35,56 @@ import {
   text,
   warn,
 } from '@/core/ui';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
+import { FakeConsole } from '../../../_common/fake-console.ts';
+import { installFakeConsole, restoreDefaultConsole } from '../../../_common/ui-test-console.ts';
 
 // ─── Mock mode ────────────────────────────────────────────────────────────────
 
 describe('messages: mock mode', () => {
+  let fake: FakeConsole;
+
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
+    fake = installFakeConsole();
   });
+
   afterEach(() => {
-    setMockUi(false);
+    restoreDefaultConsole();
   });
 
   it('info records call', () => {
     info('hello');
-    expect(getMockUiCalls().some((c) => c.method === 'info' && c.args[0] === 'hello')).toBe(true);
+    expect(fake.calls.some((c) => c.method === 'info' && c.args[0] === 'hello')).toBe(true);
   });
 
   it('success records call', () => {
     success('done');
-    expect(getMockUiCalls().some((c) => c.method === 'success' && c.args[0] === 'done')).toBe(true);
+    expect(fake.calls.some((c) => c.method === 'success' && c.args[0] === 'done')).toBe(true);
   });
 
   it('warn records call', () => {
     warn('caution');
-    expect(getMockUiCalls().some((c) => c.method === 'warn' && c.args[0] === 'caution')).toBe(true);
+    expect(fake.calls.some((c) => c.method === 'warn' && c.args[0] === 'caution')).toBe(true);
   });
 
   it('error records call', () => {
     error('oops');
-    expect(getMockUiCalls().some((c) => c.method === 'error' && c.args[0] === 'oops')).toBe(true);
+    expect(fake.calls.some((c) => c.method === 'error' && c.args[0] === 'oops')).toBe(true);
   });
 
   it('text records call', () => {
     text('plain text');
-    expect(getMockUiCalls().some((c) => c.method === 'text' && c.args[0] === 'plain text')).toBe(
-      true,
-    );
+    expect(fake.calls.some((c) => c.method === 'text' && c.args[0] === 'plain text')).toBe(true);
   });
 
   it('print records call', () => {
     print('raw output');
-    expect(getMockUiCalls().some((c) => c.method === 'print' && c.args[0] === 'raw output')).toBe(
-      true,
-    );
+    expect(fake.calls.some((c) => c.method === 'print' && c.args[0] === 'raw output')).toBe(true);
   });
 
   it('blank records call', () => {
     blank();
-    expect(getMockUiCalls().some((c) => c.method === 'blank')).toBe(true);
+    expect(fake.calls.some((c) => c.method === 'blank')).toBe(true);
   });
 });
 

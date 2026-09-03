@@ -31,25 +31,29 @@ import { mockColorsTTY } from '../../../_common/colors-mock.ts';
 // Override colors to simulate TTY environment — must be before any imports
 void mock.module('@/core/ui/colors.js', mockColorsTTY);
 
-import { clearMockUiCalls, getMockUiCalls, note, setMockUi, stripAnsi } from '@/core/ui';
+import { note, stripAnsi } from '@/core/ui';
+
+import { FakeConsole } from '../../../_common/fake-console.ts';
+import { installFakeConsole, restoreDefaultConsole } from '../../../_common/ui-test-console.ts';
 
 // ─── Mock mode ────────────────────────────────────────────────────────────────
 
 describe('note(): mock mode', () => {
+  let fake: FakeConsole;
+
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
+    fake = installFakeConsole();
   });
 
   afterEach(() => {
-    setMockUi(false);
+    restoreDefaultConsole();
   });
 
   it('records call without writing to stdout', () => {
     const writeSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
     try {
       note('some content', 'My Title');
-      const calls = getMockUiCalls();
+      const calls = fake.calls;
       expect(calls.some((c) => c.method === 'note')).toBe(true);
       expect(writeSpy).not.toHaveBeenCalled();
     } finally {
@@ -59,7 +63,7 @@ describe('note(): mock mode', () => {
 
   it('records content and title arguments', () => {
     note(['line1', 'line2'], 'Section Title');
-    const calls = getMockUiCalls();
+    const calls = fake.calls;
     const noteCall = calls.find((c) => c.method === 'note');
     expect(noteCall).toBeDefined();
     expect(noteCall!.args[0]).toEqual(['line1', 'line2']);
@@ -68,7 +72,7 @@ describe('note(): mock mode', () => {
 
   it('records call without title when title is omitted', () => {
     note('plain content');
-    const calls = getMockUiCalls();
+    const calls = fake.calls;
     expect(calls.some((c) => c.method === 'note')).toBe(true);
   });
 });
