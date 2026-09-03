@@ -30,6 +30,7 @@ import {
 } from '@/core/config-constants.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { type IssuesClient } from '@/core/server/issues.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import type { SonarQubeIssue } from '@/core/server/types.ts';
@@ -75,7 +76,7 @@ export async function remediate(
   assertCloudConnection(auth);
   assertInteractiveOrIssuesSupplied(suppliedIssueKeys);
 
-  const client = new RemediateApiClient(auth.serverUrl, auth.token);
+  const client = new RemediateApiClient(new SonarHttpClient(auth.serverUrl, auth.token));
   // resolveAuth guarantees orgKey is set for cloud connections (see auth-resolver.ts);
   // narrow once and reuse throughout this function.
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -154,7 +155,7 @@ async function resolveProjectKey(options: RemediateOptions, auth: ResolvedAuth):
 
 // The AI agent API requires the project's legacy component ID, not its key.
 async function resolveProjectId(client: RemediateApiClient, projectKey: string): Promise<string> {
-  const resolvedId = await client.getComponentId(projectKey);
+  const resolvedId = await client.components.getComponentId(projectKey);
   logger.debug(`getComponentId(${projectKey}) => ${resolvedId ?? 'null (falling back to key)'}`);
   return resolvedId ?? projectKey;
 }

@@ -30,6 +30,7 @@ import {
   ServiceUnavailableError,
   SqaaForbiddenError,
 } from '@/core/server/errors.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 
 import { SqaaAnalysisClient } from './sqaa-analysis-client.ts';
 import type { SqaaAuth } from './sqaa-auth.ts';
@@ -129,7 +130,7 @@ async function postSqaaAnalysis(
     );
   }
 
-  const client = new SqaaAnalysisClient(auth.serverUrl, auth.token);
+  const client = new SqaaAnalysisClient(new SonarHttpClient(auth.serverUrl, auth.token));
   try {
     const response = await client.createAnalysis({
       ...(auth.orgKey ? { organizationKey: auth.orgKey } : {}),

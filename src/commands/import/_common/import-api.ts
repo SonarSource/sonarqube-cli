@@ -20,12 +20,13 @@
 
 // Every SonarQube API call `sonar import` makes, in one place next to the command.
 //
-// Repository listing and project provisioning are import-specific and live here; the
-// organization lookups are shared, so those delegate to `OrganizationsClient`.
+// Repository listing and project provisioning are import-specific and live here. The
+// organization lookups are shared, so `OrganizationsClient` is exposed as a field rather
+// than re-declared method by method.
 
 import logger from '@/core/observability/logger.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
-import { type Organization, OrganizationsClient } from '@/core/server/organizations.ts';
+import type { SonarHttpClient } from '@/core/server/http-client.ts';
+import { OrganizationsClient } from '@/core/server/organizations.ts';
 
 export interface DopRepository {
   id: string;
@@ -45,30 +46,17 @@ export class ImportApiClient {
   /** Server-enforced max `pageSize` for `/dop-translation/dop-repositories`. */
   static readonly DOP_REPOSITORIES_MAX_PAGE_SIZE = 50;
 
-  readonly isCloud: boolean;
+  /** One instance for the whole run, so its organization cache is shared across lookups. */
+  readonly organizations: OrganizationsClient;
   private readonly client: SonarHttpClient;
-  private readonly organizations: OrganizationsClient;
 
-  constructor(serverUrl: string, token: string) {
-    this.client = new SonarHttpClient(serverUrl, token);
-    this.organizations = new OrganizationsClient(this.client);
-    this.isCloud = this.client.isCloud;
+  constructor(client: SonarHttpClient) {
+    this.client = client;
+    this.organizations = new OrganizationsClient(client);
   }
 
-  fetchOrganizationByKey(organizationKey: string): Promise<Organization | undefined> {
-    return this.organizations.fetchOrganizationByKey(organizationKey);
-  }
-
-  getOrganizationLegacyId(organizationKey: string): Promise<string | null> {
-    return this.organizations.getOrganizationLegacyId(organizationKey);
-  }
-
-  getOrganizationAlmKey(organizationKey: string): Promise<string | undefined> {
-    return this.organizations.getOrganizationAlmKey(organizationKey);
-  }
-
-  hasPrivateProjectsEntitlement(organizationKey: string): Promise<boolean> {
-    return this.organizations.hasPrivateProjectsEntitlement(organizationKey);
+  get isCloud(): boolean {
+    return this.client.isCloud;
   }
 
   /**

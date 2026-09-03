@@ -38,6 +38,7 @@ import {
 } from '@/core/host/install/sca-scanner.ts';
 import { ResolveOnlySecretsInstaller } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { discreetSuccess, success, warn } from '@/core/ui';
 
 import { countSelectedRisks } from '../analyze/dependency-risk-helpers/count-selected-risks.ts';
@@ -92,7 +93,9 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
   let scan: ScaScanResult;
   let viewModel: DependencyRisksViewModel;
   try {
-    const client = createScaScanApi(options.auth.serverUrl, options.auth.token);
+    const client = createScaScanApi(
+      new SonarHttpClient(options.auth.serverUrl, options.auth.token),
+    );
     scan = await new ScaScanOrchestrator(
       client,
       new ScaScannerNoopInstaller(binaryPath),

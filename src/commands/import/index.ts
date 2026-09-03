@@ -21,6 +21,7 @@
 import { CommandFailedError } from '@/core/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { info, intro, outro } from '@/core/ui';
 
 import {
@@ -66,7 +67,7 @@ async function resolveOrgAndRepos(
 
   const [almKey, privateProjectsAvailable] = await Promise.all([
     resolveAlmKey(client, resolvedOrgKey, resolvedAlmKey),
-    client.hasPrivateProjectsEntitlement(resolvedOrgKey),
+    client.organizations.hasPrivateProjectsEntitlement(resolvedOrgKey),
   ]);
 
   // Before any repository is listed, so an unsupported org stops here rather than after a full
@@ -231,7 +232,7 @@ export async function importHandler(
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   const { auth } = ctx;
-  const client = new ImportApiClient(auth.serverUrl, auth.token);
+  const client = new ImportApiClient(new SonarHttpClient(auth.serverUrl, auth.token));
 
   intro('Import repositories', 'SonarQube');
 

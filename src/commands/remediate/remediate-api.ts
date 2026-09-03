@@ -22,7 +22,7 @@
 
 import logger from '@/core/observability/logger.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
+import { type SonarHttpClient } from '@/core/server/http-client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
 
 export interface AgentJobRequest {
@@ -38,19 +38,15 @@ export interface AgentJobResponse {
 export type AiRemediationEntitlement = 'not_eligible' | 'not_enabled' | 'ok' | 'unknown';
 
 export class RemediateApiClient {
-  /** Issue search is the one shared API this command drives directly. */
+  /** Shared APIs this command drives directly, exposed rather than re-declared. */
   readonly issues: IssuesClient;
+  readonly components: ComponentsClient;
   private readonly client: SonarHttpClient;
-  private readonly components: ComponentsClient;
 
-  constructor(serverUrl: string, token: string) {
-    this.client = new SonarHttpClient(serverUrl, token);
-    this.components = new ComponentsClient(this.client);
-    this.issues = new IssuesClient(this.client);
-  }
-
-  getComponentId(componentKey: string): Promise<string | null> {
-    return this.components.getComponentId(componentKey);
+  constructor(client: SonarHttpClient) {
+    this.client = client;
+    this.components = new ComponentsClient(client);
+    this.issues = new IssuesClient(client);
   }
 
   async checkAiRemediationEntitlement(

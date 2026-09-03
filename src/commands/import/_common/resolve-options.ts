@@ -128,7 +128,7 @@ export async function resolveOrg(
 async function resolveOrgByKey(client: ImportApiClient, orgKey: string): Promise<ResolvedOrg> {
   let org;
   try {
-    org = await client.fetchOrganizationByKey(orgKey);
+    org = await client.organizations.fetchOrganizationByKey(orgKey);
   } catch (err) {
     throw new CommandFailedError(
       `Failed to look up organization '${orgKey}': ${err instanceof Error ? err.message : String(err)}`,
@@ -194,7 +194,7 @@ export async function resolveAlmKey(
   }
 
   try {
-    return normalizeAlmKey(await client.getOrganizationAlmKey(orgKey));
+    return normalizeAlmKey(await client.organizations.getOrganizationAlmKey(orgKey));
   } catch (err) {
     throw new CommandFailedError(
       `Failed to look up the DevOps platform for organization '${orgKey}': ${err instanceof Error ? err.message : String(err)}`,
@@ -328,7 +328,7 @@ export async function resolveRepos(
     );
   }
 
-  const organizationId = await client.getOrganizationLegacyId(orgKey);
+  const organizationId = await client.organizations.getOrganizationLegacyId(orgKey);
   if (!organizationId) {
     throw new CommandFailedError(`Organization '${orgKey}' not found.`, {
       remediationHint: 'Check that the organization key is correct and that you have access to it.',

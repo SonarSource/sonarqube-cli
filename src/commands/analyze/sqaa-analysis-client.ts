@@ -21,7 +21,7 @@
 // The Vortex analysis endpoint, wrapped next to the command that drives it.
 
 import { ForbiddenApiError, SqaaForbiddenError } from '@/core/server/errors.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
+import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { INVOCATION_ID, SONAR_INVOCATION_ID_HEADER } from '@/core/telemetry/invocation-id.ts';
 
 import type { SqaaAnalysisRequest, SqaaAnalysisResponse } from './sqaa-wire-types.ts';
@@ -29,8 +29,8 @@ import type { SqaaAnalysisRequest, SqaaAnalysisResponse } from './sqaa-wire-type
 export class SqaaAnalysisClient {
   private readonly client: SonarHttpClient;
 
-  constructor(serverUrl: string, token: string) {
-    this.client = new SonarHttpClient(serverUrl, token);
+  constructor(client: SonarHttpClient) {
+    this.client = client;
   }
 
   /**

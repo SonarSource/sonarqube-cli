@@ -28,6 +28,7 @@ import {
   SONARCLOUD_US_URL,
 } from '@/core/config-constants.ts';
 import { ForbiddenApiError } from '@/core/server/errors.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 
 import { lastFetchInit, lastFetchUrl, mockFetch } from '../../helpers/mock-fetch.ts';
 
@@ -42,7 +43,7 @@ describe('RemediateApiClient', () => {
 
   describe('scheduleAgentJob', () => {
     it('sends POST to SONARCLOUD_API_URL for EU Cloud', async () => {
-      const cloudClient = new RemediateApiClient(SONARCLOUD_URL, TOKEN);
+      const cloudClient = new RemediateApiClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
       fetchSpy = mockFetch({ taskId: 'task-abc' });
       await cloudClient.scheduleAgentJob({
         projectId: 'proj-id',
@@ -55,7 +56,7 @@ describe('RemediateApiClient', () => {
     });
 
     it('sends POST to SONARCLOUD_US_API_URL for US Cloud', async () => {
-      const usClient = new RemediateApiClient(SONARCLOUD_US_URL, TOKEN);
+      const usClient = new RemediateApiClient(new SonarHttpClient(SONARCLOUD_US_URL, TOKEN));
       fetchSpy = mockFetch({ taskId: 'task-abc' });
       await usClient.scheduleAgentJob({
         projectId: 'proj-id',
@@ -68,7 +69,7 @@ describe('RemediateApiClient', () => {
     });
 
     it('sends projectId, issueKeys, and triggerSource in the JSON body', async () => {
-      const cloudClient = new RemediateApiClient(SONARCLOUD_URL, TOKEN);
+      const cloudClient = new RemediateApiClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
       fetchSpy = mockFetch({ taskId: 'task-abc' });
       await cloudClient.scheduleAgentJob({
         projectId: 'proj-id',
@@ -86,7 +87,7 @@ describe('RemediateApiClient', () => {
     });
 
     it('returns the parsed taskId from the response', async () => {
-      const cloudClient = new RemediateApiClient(SONARCLOUD_URL, TOKEN);
+      const cloudClient = new RemediateApiClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
       fetchSpy = mockFetch({ taskId: 'task-xyz-789' });
       const result = await cloudClient.scheduleAgentJob({
         projectId: 'proj-id',
@@ -97,7 +98,7 @@ describe('RemediateApiClient', () => {
     });
 
     it('throws ForbiddenApiError on 403 response', async () => {
-      const cloudClient = new RemediateApiClient(SONARCLOUD_URL, TOKEN);
+      const cloudClient = new RemediateApiClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
       fetchSpy = mockFetch({ message: 'Insufficient privileges' }, { ok: false, status: 403 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(

@@ -27,6 +27,7 @@ import {
   SONARCLOUD_US_API_URL,
   SONARCLOUD_US_URL,
 } from '@/core/config-constants.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
 
 import { lastFetchInit, lastFetchUrl, mockFetch } from '../../helpers/mock-fetch.ts';
@@ -39,7 +40,7 @@ describe('SqaaAnalysisClient', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    client = new SqaaAnalysisClient(SERVER_URL, TOKEN);
+    client = new SqaaAnalysisClient(new SonarHttpClient(SERVER_URL, TOKEN));
   });
 
   afterEach(() => {
@@ -54,7 +55,7 @@ describe('SqaaAnalysisClient', () => {
     };
 
     it('sends POST to SONARCLOUD_API_URL for EU Cloud', async () => {
-      const cloudClient = new SqaaAnalysisClient(SONARCLOUD_URL, TOKEN);
+      const cloudClient = new SqaaAnalysisClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
       fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
 
       await cloudClient.createAnalysis(singleFileRequest);
@@ -64,7 +65,7 @@ describe('SqaaAnalysisClient', () => {
     });
 
     it('sends POST to SONARCLOUD_US_API_URL for US Cloud', async () => {
-      const usClient = new SqaaAnalysisClient(SONARCLOUD_US_URL, TOKEN);
+      const usClient = new SqaaAnalysisClient(new SonarHttpClient(SONARCLOUD_US_URL, TOKEN));
       fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
 
       await usClient.createAnalysis(singleFileRequest);

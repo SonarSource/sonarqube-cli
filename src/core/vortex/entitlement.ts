@@ -51,18 +51,6 @@ interface HubEntitlementResponse {
   consumption?: { consumed: number; limit: number };
 }
 
-function sqaaEntitlementEndpoint(client: SonarHttpClient, organizationUuid: string): string {
-  return client.isCloud
-    ? `/a3s-analysis/org-entitlement/${organizationUuid}`
-    : `/api/v2/a3s/org-entitlement/${organizationUuid}`;
-}
-
-function cagEntitlementEndpoint(client: SonarHttpClient, organizationUuid: string): string {
-  return client.isCloud
-    ? `/cag/cag-entitlement/${organizationUuid}`
-    : `/api/v2/cag/cag-entitlement/${organizationUuid}`;
-}
-
 /**
  * Shared entitlement GET. Both hubs return `{ allowed, hasEntitlement }`; CAG may also
  * send `consumption`. Only the path differs. A Server 404 means that hub is not
@@ -96,30 +84,13 @@ export async function checkHubEntitlement(
   }
 }
 
-/**
- * The organization id both entitlement endpoints are keyed by, or the terminal result
- * when it cannot be resolved. Server has no organizations; the path still requires
- * `{id}`, so we send {@link SERVER_ORGANIZATION_ID_PLACEHOLDER}.
- */
-async function resolveEntitlementOrganizationId(
-  client: SonarHttpClient,
-  organizationKey?: string,
-): Promise<string | VortexEntitlementResult> {
-  if (!client.isCloud) {
-    return SERVER_ORGANIZATION_ID_PLACEHOLDER;
-  }
-  if (!organizationKey) {
-    return { status: 'not_entitled' };
-  }
-  const uuid = await new OrganizationsClient(client).getOrganizationId(organizationKey);
-  return uuid ?? { status: 'check_failed' };
-}
-
 export class VortexEntitlementClient {
   private readonly client: SonarHttpClient;
+  private readonly organizations: OrganizationsClient;
 
   constructor(client: SonarHttpClient) {
     this.client = client;
+    this.organizations = new OrganizationsClient(client);
   }
 
   /**
@@ -131,20 +102,49 @@ export class VortexEntitlementClient {
    * means Vortex is not available.
    */
   async hasVortexEntitlement(organizationKey?: string): Promise<VortexEntitlementResult> {
-    const client = this.client;
     try {
-      const uuid = await resolveEntitlementOrganizationId(client, organizationKey);
+      const uuid = await this.resolveOrganizationId(organizationKey);
       if (typeof uuid !== 'string') {
         return uuid;
       }
       const [sqaa, cag] = await Promise.all([
-        checkHubEntitlement(client, sqaaEntitlementEndpoint(client, uuid)),
-        checkHubEntitlement(client, cagEntitlementEndpoint(client, uuid)),
+        checkHubEntitlement(this.client, this.sqaaEndpoint(uuid)),
+        checkHubEntitlement(this.client, this.cagEndpoint(uuid)),
       ]);
       return mergeVortexEntitlement(sqaa, cag);
     } catch {
       return { status: 'check_failed' };
     }
+  }
+
+  /**
+   * The organization id both entitlement endpoints are keyed by, or the terminal result
+   * when it cannot be resolved. Server has no organizations; the path still requires
+   * `{id}`, so we send {@link SERVER_ORGANIZATION_ID_PLACEHOLDER}.
+   */
+  private async resolveOrganizationId(
+    organizationKey?: string,
+  ): Promise<string | VortexEntitlementResult> {
+    if (!this.client.isCloud) {
+      return SERVER_ORGANIZATION_ID_PLACEHOLDER;
+    }
+    if (!organizationKey) {
+      return { status: 'not_entitled' };
+    }
+    const uuid = await this.organizations.getOrganizationId(organizationKey);
+    return uuid ?? { status: 'check_failed' };
+  }
+
+  private sqaaEndpoint(organizationUuid: string): string {
+    return this.client.isCloud
+      ? `/a3s-analysis/org-entitlement/${organizationUuid}`
+      : `/api/v2/a3s/org-entitlement/${organizationUuid}`;
+  }
+
+  private cagEndpoint(organizationUuid: string): string {
+    return this.client.isCloud
+      ? `/cag/cag-entitlement/${organizationUuid}`
+      : `/api/v2/cag/cag-entitlement/${organizationUuid}`;
   }
 }
 
