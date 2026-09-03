@@ -83,33 +83,33 @@ describe('Secret Scanning Hook Templates', () => {
 });
 
 describe('SQAA PostToolUse Hook Templates', () => {
-  it('PostTool Unix hook: bash shebang, delegates to sonar hook with project key', () => {
-    const template = getSqaaPostToolTemplateUnix('my-project');
+  it('PostTool Unix hook: bash shebang, delegates to sonar hook', () => {
+    const template = getSqaaPostToolTemplateUnix();
 
     expect(template.startsWith('#!/bin/bash')).toBe(true);
     expect(template.includes('sonar hook claude-post-tool-use')).toBe(true);
-    expect(template.includes("--project 'my-project'")).toBe(true);
     expect(template.includes(UNIX_SONAR_COMMAND_GUARD)).toBe(true);
+    expect(template.includes('--project')).toBe(false);
   });
 
   it('PostTool Unix hook: no embedded business logic', () => {
-    const template = getSqaaPostToolTemplateUnix('my-project');
+    const template = getSqaaPostToolTemplateUnix();
 
     expect(template.includes('sonar analyze agentic')).toBe(false);
     expect(template.includes('permissionDecision')).toBe(false);
     expect(template.includes('sed -n')).toBe(false);
   });
 
-  it('PostTool Windows hook: delegates to sonar hook with project key', () => {
-    const template = getSqaaPostToolTemplateWindows('my-project');
+  it('PostTool Windows hook: delegates to sonar hook', () => {
+    const template = getSqaaPostToolTemplateWindows();
 
     expect(template.includes('sonar hook claude-post-tool-use')).toBe(true);
-    expect(template.includes("--project 'my-project'")).toBe(true);
     expect(template.includes(WINDOWS_SONAR_COMMAND_GUARD)).toBe(true);
+    expect(template.includes('--project')).toBe(false);
   });
 
   it('PostTool Windows hook: no embedded business logic', () => {
-    const template = getSqaaPostToolTemplateWindows('my-project');
+    const template = getSqaaPostToolTemplateWindows();
 
     expect(template.includes('sonar analyze agentic')).toBe(false);
     expect(template.includes('permissionDecision')).toBe(false);
@@ -123,8 +123,8 @@ describe('Template Integrity', () => {
       getSecretPreToolTemplateWindows(),
       getSecretPromptTemplateUnix(),
       getSecretPromptTemplateWindows(),
-      getSqaaPostToolTemplateUnix('proj'),
-      getSqaaPostToolTemplateWindows('proj'),
+      getSqaaPostToolTemplateUnix(),
+      getSqaaPostToolTemplateWindows(),
     ];
 
     const uniqueContents = new Set(templates);
@@ -144,8 +144,8 @@ describe('Template Integrity', () => {
       getSecretPreToolTemplateWindows(),
       getSecretPromptTemplateUnix(),
       getSecretPromptTemplateWindows(),
-      getSqaaPostToolTemplateUnix('proj'),
-      getSqaaPostToolTemplateWindows('proj'),
+      getSqaaPostToolTemplateUnix(),
+      getSqaaPostToolTemplateWindows(),
     ];
 
     templates.forEach((template) => {
@@ -154,8 +154,8 @@ describe('Template Integrity', () => {
   });
 
   it('SQAA template routes to claude-post-tool-use, secrets templates route to other events', () => {
-    expect(getSqaaPostToolTemplateUnix('proj').includes('claude-post-tool-use')).toBe(true);
-    expect(getSqaaPostToolTemplateWindows('proj').includes('claude-post-tool-use')).toBe(true);
+    expect(getSqaaPostToolTemplateUnix().includes('claude-post-tool-use')).toBe(true);
+    expect(getSqaaPostToolTemplateWindows().includes('claude-post-tool-use')).toBe(true);
 
     expect(getSecretPreToolTemplateUnix().includes('claude-post-tool-use')).toBe(false);
     expect(getSecretPromptTemplateUnix().includes('claude-post-tool-use')).toBe(false);

@@ -49,6 +49,9 @@ describe('sonar hook codex-post-tool-use', () => {
     harness = await TestHarness.create();
     initGitRepo(harness.cwd.path);
     commitFile(harness.cwd.path, 'README.md', 'baseline');
+    // The hook takes no project option — it always resolves the key through discovery.
+    // Committed so it never shows up in the analyzed git change set.
+    commitFile(harness.cwd.path, 'sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
   });
 
   afterEach(async () => {
@@ -66,7 +69,7 @@ describe('sonar hook codex-post-tool-use', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
 
-      const result = await harness.run(`hook codex-post-tool-use --project ${TEST_PROJECT}`);
+      const result = await harness.run('hook codex-post-tool-use');
 
       expect(result.exitCode).toBe(0);
       const output = JSON.parse(result.stdout.trim());
@@ -83,6 +86,29 @@ describe('sonar hook codex-post-tool-use', () => {
   );
 
   it(
+    'auto-detects the project key from sonar-project.properties',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      harness.cwd.writeFile('src/main.ts', 'const x = 1;');
+
+      const result = await harness.run('hook codex-post-tool-use');
+
+      expect(result.exitCode).toBe(0);
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+      expect(parseSqaaRequestBody(sqaaCalls[0].body).projectKey).toBe(TEST_PROJECT);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'sends one multi-file STANDARD request when multiple files changed',
     async () => {
       const server = await harness
@@ -94,7 +120,7 @@ describe('sonar hook codex-post-tool-use', () => {
       harness.cwd.writeFile('a.ts', 'const a = 1;');
       harness.cwd.writeFile('b.ts', 'const b = 2;');
 
-      const result = await harness.run(`hook codex-post-tool-use --project ${TEST_PROJECT}`);
+      const result = await harness.run('hook codex-post-tool-use');
 
       expect(result.exitCode).toBe(0);
       const sqaaCalls = server
@@ -121,7 +147,7 @@ describe('sonar hook codex-post-tool-use', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
 
-      const result = await harness.run(`hook codex-post-tool-use --project ${TEST_PROJECT}`);
+      const result = await harness.run('hook codex-post-tool-use');
 
       expect(result.exitCode).toBe(0);
       const output = JSON.parse(result.stdout.trim());
@@ -153,7 +179,7 @@ describe('sonar hook codex-post-tool-use', () => {
         .withVortexEntitlementLossWarnedAt(oneHourAgoIso());
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
 
-      const result = await harness.run(`hook codex-post-tool-use --project ${TEST_PROJECT}`);
+      const result = await harness.run('hook codex-post-tool-use');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout.trim()).toBe('');
@@ -173,7 +199,7 @@ describe('sonar hook codex-post-tool-use', () => {
         .start();
       harness.state().withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
-      const runHook = () => harness.run(`hook codex-post-tool-use --project ${TEST_PROJECT}`);
+      const runHook = () => harness.run('hook codex-post-tool-use');
 
       const firstResult = await runHook();
       const secondResult = await runHook();
@@ -198,7 +224,7 @@ describe('sonar hook codex-post-tool-use', () => {
     async () => {
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
 
-      const result = await harness.run(`hook codex-post-tool-use --project ${TEST_PROJECT}`);
+      const result = await harness.run('hook codex-post-tool-use');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout.trim()).toBe('');
@@ -216,7 +242,7 @@ describe('sonar hook codex-post-tool-use', () => {
         .start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-      const result = await harness.run(`hook codex-post-tool-use --project ${TEST_PROJECT}`);
+      const result = await harness.run('hook codex-post-tool-use');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout.trim()).toBe('');
@@ -244,7 +270,7 @@ describe('sonar hook codex-post-tool-use', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
 
-      const result = await harness.run(`hook codex-post-tool-use --project ${TEST_PROJECT}`);
+      const result = await harness.run('hook codex-post-tool-use');
 
       expect(result.exitCode).toBe(0);
       const [analysisEvent] = readAnalysisEvents(harness.sonarUserHome.path);

@@ -38,7 +38,6 @@ import type { IntegrationContext } from '@/core/framework/features';
 import {
   assertSafeSonarProjectKeyForHookScript,
   createAgentHookEntry,
-  formatSqaaPostToolHookCommandUnix,
   quoteWindowsHookScriptPath,
   readOrInitJson,
   resolveAgentHookCommand,
@@ -124,17 +123,6 @@ describe('assertSafeSonarProjectKeyForHookScript', () => {
   it('rejects keys with shell metacharacters', () => {
     expect(() => assertSafeSonarProjectKeyForHookScript('$(id)')).toThrow();
     expect(() => assertSafeSonarProjectKeyForHookScript('my project')).toThrow();
-  });
-});
-
-describe('formatSqaaPostToolHookCommandUnix', () => {
-  it('single-quotes the project key so Bash does not expand metacharacters', () => {
-    const command = formatSqaaPostToolHookCommandUnix('codex-post-tool-use', 'my-org_my-project');
-    expect(command).toBe("sonar hook codex-post-tool-use --project 'my-org_my-project'");
-  });
-
-  it('escapes embedded single quotes in the project key', () => {
-    expect(() => formatSqaaPostToolHookCommandUnix('codex-post-tool-use', "bad'key")).toThrow();
   });
 });
 

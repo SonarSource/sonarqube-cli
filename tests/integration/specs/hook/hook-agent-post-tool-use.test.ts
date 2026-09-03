@@ -48,6 +48,8 @@ describe('sonar hook claude-post-tool-use', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
+    // The hook takes no project option — it always resolves the key through discovery.
+    harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
   });
 
   afterEach(async () => {
@@ -67,7 +69,7 @@ describe('sonar hook claude-post-tool-use', () => {
       const filePath = join(harness.cwd.path, 'src/main.ts');
 
       const result = await harness.runWithStdin(
-        `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+        'hook claude-post-tool-use',
         postToolUseStdin(filePath),
       );
 
@@ -75,6 +77,33 @@ describe('sonar hook claude-post-tool-use', () => {
       const output = JSON.parse(result.stdout.trim());
       expect(output.hookSpecificOutput.hookEventName).toBe('PostToolUse');
       expect(output.hookSpecificOutput.additionalContext).toContain('No issues found');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'auto-detects the project key from sonar-project.properties',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      harness.cwd.writeFile('src/main.ts', 'const x = 1;');
+      const filePath = join(harness.cwd.path, 'src/main.ts');
+
+      const result = await harness.runWithStdin(
+        'hook claude-post-tool-use',
+        postToolUseStdin(filePath),
+      );
+
+      expect(result.exitCode).toBe(0);
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+      expect(parseSqaaRequestBody(sqaaCalls[0].body).projectKey).toBe(TEST_PROJECT);
     },
     { timeout: 15000 },
   );
@@ -94,7 +123,7 @@ describe('sonar hook claude-post-tool-use', () => {
       const filePath = join(harness.cwd.path, 'src/main.ts');
 
       const result = await harness.runWithStdin(
-        `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+        'hook claude-post-tool-use',
         postToolUseStdin(filePath),
       );
 
@@ -131,7 +160,7 @@ describe('sonar hook claude-post-tool-use', () => {
       const filePath = join(harness.cwd.path, 'src/main.ts');
 
       const result = await harness.runWithStdin(
-        `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+        'hook claude-post-tool-use',
         postToolUseStdin(filePath),
       );
 
@@ -155,10 +184,7 @@ describe('sonar hook claude-post-tool-use', () => {
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
       const filePath = join(harness.cwd.path, 'src/main.ts');
       const runHook = async () => {
-        return harness.runWithStdin(
-          `hook claude-post-tool-use --project ${TEST_PROJECT}`,
-          postToolUseStdin(filePath),
-        );
+        return harness.runWithStdin('hook claude-post-tool-use', postToolUseStdin(filePath));
       };
 
       const firstResult = await runHook();
@@ -186,7 +212,7 @@ describe('sonar hook claude-post-tool-use', () => {
       const filePath = join(harness.cwd.path, 'src/main.ts');
 
       const result = await harness.runWithStdin(
-        `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+        'hook claude-post-tool-use',
         postToolUseStdin(filePath),
       );
 
@@ -212,7 +238,7 @@ describe('sonar hook claude-post-tool-use', () => {
       const outsidePath = join(harness.cwd.path, '..', 'outside.ts');
 
       const result = await harness.runWithStdin(
-        `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+        'hook claude-post-tool-use',
         postToolUseStdin(outsidePath),
         { extraEnv: { LOG_LEVEL: 'DEBUG' } },
       );
@@ -247,7 +273,7 @@ describe('sonar hook claude-post-tool-use', () => {
       const filePath = join(harness.cwd.path, 'src', 'main.ts');
 
       const result = await harness.runWithStdin(
-        `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+        'hook claude-post-tool-use',
         postToolUseStdin(filePath),
       );
 
@@ -283,7 +309,7 @@ describe('sonar hook claude-post-tool-use', () => {
       const filePath = join(harness.cwd.path, 'src/main.ts');
 
       const result = await harness.runWithStdin(
-        `hook claude-post-tool-use --project ${TEST_PROJECT}`,
+        'hook claude-post-tool-use',
         postToolUseStdin(filePath),
       );
 

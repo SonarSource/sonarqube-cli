@@ -41,18 +41,11 @@ import type { HookCommandResult } from './hook-command-result.ts';
 import { readStdinJson } from './stdin.ts';
 import { emitVortexUnavailableHookNotice } from './vortex-unavailable-hook-notice.ts';
 
-export interface CodexPostToolUseOptions {
-  project?: string;
-}
-
 interface CodexPostToolUsePayload {
   session_id?: string;
 }
 
-export async function codexPostToolUse(
-  ctx: CommandInvocationContext,
-  options: CodexPostToolUseOptions,
-): Promise<HookCommandResult> {
+export async function codexPostToolUse(ctx: CommandInvocationContext): Promise<HookCommandResult> {
   // Best-effort: when Codex pipes PostToolUse JSON, capture session_id. Skip when
   // stdin is a TTY — otherwise readStdinJson waits up to 5s for data that never
   // arrives. Env-based CODEX_* ids still resolve for mid-command SQAA without this.
@@ -72,8 +65,7 @@ export async function codexPostToolUse(
     return { agentSessionId: fromHook };
   }
 
-  const projectKey =
-    options.project ?? (await discoverProject(process.cwd(), { auth, silent: true })).projectKey;
+  const { projectKey } = await discoverProject(process.cwd(), { auth, silent: true });
   if (!projectKey) return { agentSessionId: fromHook };
 
   noteProject(auth, projectKey);

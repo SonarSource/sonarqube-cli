@@ -39,8 +39,6 @@ import {
   getSecretPreToolTemplateWindows,
   getSecretPromptTemplateUnix,
   getSecretPromptTemplateWindows,
-  getSqaaPostToolTemplateUnix,
-  getSqaaPostToolTemplateWindows,
 } from './hook-templates.ts';
 
 const HOOKS_DIR = 'hooks';
@@ -230,21 +228,18 @@ export interface InstallHooksOptions {
   /**
    * When true, skip the project-level sonar-secrets hook writes.
    * Used when a global sonar-secrets hook is already configured to avoid duplicate execution.
-   * SQAA remains installed project-locally because it is always project-scoped.
    */
   skipSecretsHooks?: boolean;
 }
 
 /**
- * Install all hooks (cross-platform).
- * Secrets hooks install to globalDir (if provided), SQAA hook installs to projectRoot.
- * SQAA hook is only installed when installSqaa is true (requires cloud connection + entitlement).
+ * Reinstall the secrets hooks (cross-platform) into globalDir when provided,
+ * otherwise projectRoot. The Vortex analysis hook is deliberately not installed
+ * here: it needs an entitlement check, which the post-update caller cannot do.
  */
 export async function installHooks(
   projectRoot: string,
   globalDir?: string,
-  installSqaa = false,
-  projectKey?: string,
   options: InstallHooksOptions = {},
 ): Promise<void> {
   const secretsDir = globalDir ?? projectRoot;
@@ -272,18 +267,6 @@ export async function installHooks(
         scriptPath: 'sonar-secrets/build-scripts/prompt-secrets',
         scriptContentUnix: getSecretPromptTemplateUnix(),
         scriptContentWindows: getSecretPromptTemplateWindows(),
-      });
-    }
-    if (installSqaa && projectKey) {
-      await installHook({
-        installDir: projectRoot,
-        scope: 'project',
-        agent: 'claude',
-        eventType: 'PostToolUse',
-        matcher: 'Edit|Write',
-        scriptPath: 'sonar-sqaa/build-scripts/posttool-sqaa',
-        scriptContentUnix: getSqaaPostToolTemplateUnix(projectKey),
-        scriptContentWindows: getSqaaPostToolTemplateWindows(projectKey),
       });
     }
   } catch (error) {

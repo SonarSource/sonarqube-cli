@@ -117,9 +117,6 @@ export function assertSafeSonarProjectKeyForHookScript(projectKey: string): void
 /** Bash idiom to embed `'` inside a single-quoted string: close `'`, add `'`, reopen `'`. */
 const BASH_EMBEDDED_SINGLE_QUOTE = String.raw`'\''`;
 
-/** PowerShell escapes `'` inside a single-quoted string by doubling it. */
-const POWERSHELL_EMBEDDED_SINGLE_QUOTE = "''";
-
 /** Single-quoted Bash literal: no expansion of $, `, or command substitution. */
 export function shellQuoteBash(value: string): string {
   return "'" + value.replaceAll("'", BASH_EMBEDDED_SINGLE_QUOTE) + "'";
@@ -137,11 +134,6 @@ export function shellDoubleQuoteBash(value: string): string {
   return `"${escaped}"`;
 }
 
-/** Single-quoted PowerShell literal (double single-quotes escape embedded quotes). */
-export function shellQuotePowerShell(value: string): string {
-  return "'" + value.replaceAll("'", POWERSHELL_EMBEDDED_SINGLE_QUOTE) + "'";
-}
-
 /**
  * Quote a path for PowerShell's `-File` argument on Windows so it stays a single
  * argument when it contains **spaces**. Double quotes are used because Windows
@@ -156,38 +148,6 @@ export function shellQuotePowerShell(value: string): string {
  */
 export function quoteWindowsHookScriptPath(path: string): string {
   return `"${path}"`;
-}
-
-export type SqaaHookSubcommand = 'claude-post-tool-use' | 'codex-post-tool-use';
-
-export function formatSqaaHookCliArgsUnix(
-  hookSubcommand: SqaaHookSubcommand,
-  projectKey: string,
-): string {
-  assertSafeSonarProjectKeyForHookScript(projectKey);
-  return `hook ${hookSubcommand} --project ${shellQuoteBash(projectKey)}`;
-}
-
-export function formatSqaaHookCliArgsWindows(
-  hookSubcommand: SqaaHookSubcommand,
-  projectKey: string,
-): string {
-  assertSafeSonarProjectKeyForHookScript(projectKey);
-  return `hook ${hookSubcommand} --project ${shellQuotePowerShell(projectKey)}`;
-}
-
-export function formatSqaaPostToolHookCommandUnix(
-  hookSubcommand: SqaaHookSubcommand,
-  projectKey: string,
-): string {
-  return `sonar ${formatSqaaHookCliArgsUnix(hookSubcommand, projectKey)}`;
-}
-
-export function formatSqaaPostToolHookCommandWindows(
-  hookSubcommand: SqaaHookSubcommand,
-  projectKey: string,
-): string {
-  return `sonar ${formatSqaaHookCliArgsWindows(hookSubcommand, projectKey)}`;
 }
 
 /** Absolute path to the platform-specific hook script under `<targetRoot>/<configDir>/hooks/`. */

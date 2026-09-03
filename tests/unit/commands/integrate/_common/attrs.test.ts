@@ -20,14 +20,9 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { CommandFailedError } from '@/core/command-error.ts';
-import { SUPPORT_URL } from '@/core/config-constants.ts';
 import type { IntegrationContext } from '@/core/framework/features/types.ts';
 
-import {
-  getOptionalStringAttr,
-  getRequiredStringAttr,
-} from '../../../../../src/commands/integrate/_common/attrs.ts';
+import { getOptionalStringAttr } from '../../../../../src/commands/integrate/_common/attrs.ts';
 
 function makeContext(attrs?: IntegrationContext['attrs']): IntegrationContext {
   return { attrs } as IntegrationContext;
@@ -44,33 +39,5 @@ describe('integrate attrs helpers', () => {
     expect(getOptionalStringAttr(makeContext({ projectKey: 42 }), 'projectKey')).toBeUndefined();
     expect(getOptionalStringAttr(makeContext({ projectKey: true }), 'projectKey')).toBeUndefined();
     expect(getOptionalStringAttr(makeContext({ projectKey: null }), 'projectKey')).toBeUndefined();
-  });
-
-  it('getRequiredStringAttr returns the value for a non-empty string attribute', () => {
-    expect(
-      getRequiredStringAttr(makeContext({ projectKey: 'my-project' }), 'projectKey', 'Codex'),
-    ).toBe('my-project');
-  });
-
-  it('getRequiredStringAttr throws a CommandFailedError naming the integration for missing or invalid attributes', () => {
-    const invalidAttrs: IntegrationContext['attrs'][] = [{}, { projectKey: '' }, { projectKey: 7 }];
-    for (const attrs of invalidAttrs) {
-      expect(() => getRequiredStringAttr(makeContext(attrs), 'projectKey', 'Codex')).toThrow(
-        CommandFailedError,
-      );
-    }
-
-    try {
-      getRequiredStringAttr(makeContext({}), 'projectKey', 'Codex');
-      throw new Error('expected getRequiredStringAttr to throw');
-    } catch (error) {
-      expect(error).toBeInstanceOf(CommandFailedError);
-      const cliError = error as CommandFailedError;
-      expect(cliError.message).toBe(
-        "Could not complete the Codex integration: missing required data 'projectKey'.",
-      );
-      expect(cliError.remediationHint).toContain(SUPPORT_URL);
-      expect(cliError.exitCode).toBe(1);
-    }
   });
 });

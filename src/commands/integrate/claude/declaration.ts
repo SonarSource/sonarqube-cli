@@ -31,7 +31,7 @@ import { jsonPatch, skip, wholeFile } from '@/core/framework/features';
 import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 
-import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs.ts';
+import { getOptionalStringAttr } from '../_common/attrs.ts';
 import { isCagHookOrgAllowed } from '../_common/context-augmentation.ts';
 import { contextAugmentationBinaryDependency } from '../_common/context-augmentation-dependency.ts';
 import {
@@ -140,11 +140,9 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       marker: 'sonar-sqaa',
       scriptPath: 'sonar-sqaa/build-scripts/posttool-sqaa',
       scriptDisplayName: 'Claude PostToolUse hook script',
-      scriptContent: (context) => {
-        const projectKey = getRequiredStringAttr(context, 'projectKey', CLAUDE_DISPLAY_NAME);
-        return process.platform === 'win32'
-          ? getSqaaPostToolTemplateWindows(projectKey)
-          : getSqaaPostToolTemplateUnix(projectKey);
+      scriptContent: {
+        unix: getSqaaPostToolTemplateUnix(),
+        windows: getSqaaPostToolTemplateWindows(),
       },
       settingsPath: resolveClaudeSettingsPath,
       subfeatures: [

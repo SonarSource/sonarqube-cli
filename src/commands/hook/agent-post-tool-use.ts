@@ -51,13 +51,8 @@ import type { HookCommandResult } from './hook-command-result.ts';
 import { readStdinJsonWithRaw } from './stdin.ts';
 import { emitVortexUnavailableHookNotice } from './vortex-unavailable-hook-notice.ts';
 
-export interface AgentPostToolUseOptions {
-  project?: string;
-}
-
 async function handleSqaaPostToolUse(
   payload: ClaudePostToolUsePayload,
-  explicitProjectKey: string | undefined,
   ctx: CommandInvocationContext,
 ): Promise<ClaudePostToolUseResult> {
   const filePath = payload.tool_input?.file_path;
@@ -75,8 +70,7 @@ async function handleSqaaPostToolUse(
     return { decision: 'none' };
   }
 
-  const projectKey =
-    explicitProjectKey ?? (await discoverProject(process.cwd(), { auth, silent: true })).projectKey;
+  const { projectKey } = await discoverProject(process.cwd(), { auth, silent: true });
   if (!projectKey) {
     return { decision: 'none' };
   }
@@ -157,20 +151,16 @@ async function handleSqaaPostToolUse(
 }
 
 function createSqaaPostToolUseSubscriber(
-  projectKey: string | undefined,
   ctx: CommandInvocationContext,
 ): ClaudePostToolUseSubscriber {
   return {
     id: 'sqaa',
     matches: (toolName) => toolName === 'Edit' || toolName === 'Write',
-    handle: (payload) => handleSqaaPostToolUse(payload, projectKey, ctx),
+    handle: (payload) => handleSqaaPostToolUse(payload, ctx),
   };
 }
 
-export async function agentPostToolUse(
-  ctx: CommandInvocationContext,
-  options: AgentPostToolUseOptions,
-): Promise<HookCommandResult> {
+export async function agentPostToolUse(ctx: CommandInvocationContext): Promise<HookCommandResult> {
   let raw: string;
   let payload: ClaudePostToolUsePayload;
   try {
@@ -182,7 +172,7 @@ export async function agentPostToolUse(
   const fromHook = payload.session_id ?? null;
 
   await runClaudePostToolUseDispatch(payload, raw, [
-    createSqaaPostToolUseSubscriber(options.project, ctx),
+    createSqaaPostToolUseSubscriber(ctx),
     contextAugmentationPostToolUseSubscriber,
   ]);
 
