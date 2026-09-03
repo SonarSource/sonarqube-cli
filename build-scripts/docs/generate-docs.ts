@@ -34,10 +34,10 @@ import { createCommandTree } from '@/commands/command-tree.ts';
 import {
   BETA_HELP_TAG,
   DEPRECATED_HELP_TAG,
+  type LifecycleState,
   type SonarCommand,
   SonarOption,
 } from '@/commands/sonar-command.ts';
-import type { LifecycleState } from '@/core/commands/stage.ts';
 
 import { version } from '../../package.json';
 import { EXAMPLES } from './examples';

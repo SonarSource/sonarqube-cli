@@ -21,7 +21,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import { CommandInvocationContext, TelemetryFact } from '@/commands/command-invocation-context.ts';
-import type { LifecycleState } from '@/core/commands/stage.ts';
+import type { LifecycleState } from '@/commands/sonar-command.ts';
 
 describe('CommandInvocationContext stage accessors', () => {
   it('defaults to non-alpha / non-beta', () => {

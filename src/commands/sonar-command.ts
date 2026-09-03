@@ -57,9 +57,9 @@ export {
   BETA_HELP_TAG,
   DEPRECATED_HELP_TAG,
   type DeprecatedStageOptions,
+  type LifecycleState,
   Stage,
   type StageDescriptor,
-  type StageName,
 } from '@/core/commands/stage.ts';
 
 const betaWarningsShownWithoutState = new Set<string>();
