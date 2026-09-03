@@ -20,10 +20,13 @@
 
 import { describe, expect, it } from 'bun:test';
 
+import type { VortexDisposition } from '@/commands/integrate/_common/types.ts';
 import {
+  createSessionStartHookShouldInstall,
   isVortexInstalledForOtherProject,
   VORTEX_FEATURE_ID,
 } from '@/commands/integrate/_common/vortex.ts';
+import type { IntegrationInvocation } from '@/core/framework/features';
 import type { CliState, InstalledIntegrationFeature } from '@/core/state/state.ts';
 
 const INTEGRATION_ID = 'claude-code';
@@ -106,5 +109,82 @@ describe('isVortexInstalledForOtherProject', () => {
     const state = { integrations: { installed: [] } } as unknown as CliState;
 
     expect(isVortexInstalledForOtherProject(state, INTEGRATION_ID, '/repo-a')).toBe(false);
+  });
+});
+
+interface FakeOptions {
+  vortexDisposition?: VortexDisposition;
+  projectRoot?: string;
+}
+
+function fakeSessionStartInvocation(
+  overrides: Partial<IntegrationInvocation<FakeOptions>>,
+): IntegrationInvocation<FakeOptions> {
+  return {
+    options: { vortexDisposition: 'install' },
+    targetRoot: '/repo-a',
+    scope: 'project',
+    state: { integrations: { installed: [] } } as unknown as CliState,
+    ...overrides,
+  } as unknown as IntegrationInvocation<FakeOptions>;
+}
+
+describe('createSessionStartHookShouldInstall', () => {
+  const shouldInstall = createSessionStartHookShouldInstall<FakeOptions>(INTEGRATION_ID);
+
+  it('passes an install decision through untouched', async () => {
+    const decision = await shouldInstall(
+      fakeSessionStartInvocation({ options: { vortexDisposition: 'install' } }),
+    );
+
+    expect(decision).toMatchObject({ action: 'install' });
+  });
+
+  it('passes a skip decision through untouched', async () => {
+    const decision = await shouldInstall(
+      fakeSessionStartInvocation({ options: { vortexDisposition: undefined } }),
+    );
+
+    expect(decision).toMatchObject({ action: 'skip' });
+  });
+
+  it('uninstalls when no other project still has Vortex', async () => {
+    const decision = await shouldInstall(
+      fakeSessionStartInvocation({
+        options: { vortexDisposition: 'remove' },
+        targetRoot: '/repo-a',
+        state: fakeState([fakeFeature({ targetRoot: '/repo-a' })]),
+      }),
+    );
+
+    expect(decision).toMatchObject({ action: 'uninstall' });
+  });
+
+  it('skips (leaves installed) when another project still has Vortex', async () => {
+    const decision = await shouldInstall(
+      fakeSessionStartInvocation({
+        options: { vortexDisposition: 'remove' },
+        targetRoot: '/repo-a',
+        state: fakeState([fakeFeature({ targetRoot: '/repo-b' })]),
+      }),
+    );
+
+    expect(decision).toMatchObject({ action: 'skip' });
+  });
+
+  it('still installs on a --global run even though a project already has Vortex', async () => {
+    // A --global invocation's targetRoot is homedir(), which never equals any project-scope
+    // Vortex record's targetRoot — the guard must not mistake every existing project for
+    // "another project" and block the very install this feature exists for.
+    const decision = await shouldInstall(
+      fakeSessionStartInvocation({
+        options: { vortexDisposition: 'install' },
+        scope: 'global',
+        targetRoot: '/home/user',
+        state: fakeState([fakeFeature({ targetRoot: '/repo-a' })]),
+      }),
+    );
+
+    expect(decision).toMatchObject({ action: 'install' });
   });
 });

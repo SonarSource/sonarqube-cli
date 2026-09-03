@@ -75,6 +75,8 @@ import { claudeSessionStart } from './hook/claude-session-start.ts';
 import { claudeSubagentStart } from './hook/claude-subagent-start.ts';
 import { codexPostToolUse } from './hook/codex-post-tool-use.ts';
 import { codexPromptSubmit } from './hook/codex-prompt-submit.ts';
+import { codexSessionStart } from './hook/codex-session-start.ts';
+import { codexSubagentStart } from './hook/codex-subagent-start.ts';
 import { copilotPreToolUse } from './hook/copilot-pre-tool-use.ts';
 import { cursorPreFileRead } from './hook/cursor-pre-file-read.ts';
 import { cursorPreToolUse } from './hook/cursor-pre-tool-use.ts';
@@ -794,6 +796,16 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     )
     .requiredOption('--project <key>', 'SonarQube project key')
     .anonymousAction(handleHookInvocation(codexPostToolUse));
+
+  hookCommand
+    .command('codex-session-start')
+    .description('SessionStart handler for Codex: inject Vortex context at session start')
+    .anonymousAction(handleHookInvocation(codexSessionStart));
+
+  hookCommand
+    .command('codex-subagent-start')
+    .description('SubagentStart handler for Codex: inject Vortex context when a subagent starts')
+    .anonymousAction(handleHookInvocation(codexSubagentStart));
 
   hookCommand
     .command('git-pre-commit')

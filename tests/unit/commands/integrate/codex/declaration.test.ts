@@ -22,15 +22,12 @@ import { describe, expect, it } from 'bun:test';
 
 import { CONTEXT_AUGMENTATION_SESSION_START_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-session-start-feature.ts';
 import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
-import {
-  CLAUDE_INTEGRATION_ID,
-  claudeIntegration,
-} from '@/commands/integrate/claude/declaration.ts';
+import { CODEX_INTEGRATION_ID, codexIntegration } from '@/commands/integrate/codex/declaration.ts';
 import type { FeatureDeclaration, IntegrationInvocation } from '@/core/framework/features';
 import type { CliState, InstalledIntegrationFeature } from '@/core/state/state.ts';
 
 function sessionStartFeature(): FeatureDeclaration {
-  const feature = claudeIntegration.features.find(
+  const feature = codexIntegration.features.find(
     (f) => f.id === CONTEXT_AUGMENTATION_SESSION_START_FEATURE_ID,
   );
   if (!feature?.shouldInstall) {
@@ -60,7 +57,7 @@ function fakeState(features: InstalledIntegrationFeature[]): CliState {
       installed: [
         {
           id: 'x',
-          integrationId: CLAUDE_INTEGRATION_ID,
+          integrationId: CODEX_INTEGRATION_ID,
           installedByCliVersion: '1.0.0',
           installedAt: '2026-01-01T00:00:00.000Z',
           updatedByCliVersion: '1.0.0',
@@ -82,8 +79,8 @@ function fakeInvocation(overrides: Partial<IntegrationInvocation>): IntegrationI
   } as unknown as IntegrationInvocation;
 }
 
-describe('claude declaration — context-augmentation-session-start-hook shouldInstall', () => {
-  it('is wired to the Claude integration id: skips (leaves installed) when another project still has vortex', async () => {
+describe('codex declaration — context-augmentation-session-start-hook shouldInstall', () => {
+  it('is wired to the Codex integration id: skips (leaves installed) when another project still has vortex', async () => {
     const feature = sessionStartFeature();
     const invocation = fakeInvocation({
       options: { vortexDisposition: 'remove' },
@@ -97,8 +94,6 @@ describe('claude declaration — context-augmentation-session-start-hook shouldI
   });
 
   it('still installs for a second project even though another project already has vortex', async () => {
-    // The guard must only ever block a TEARDOWN, never an install — otherwise integrating a
-    // second project could never install the shared hook (regression caught by review).
     const feature = sessionStartFeature();
     const invocation = fakeInvocation({
       options: { vortexDisposition: 'install' },
@@ -112,9 +107,6 @@ describe('claude declaration — context-augmentation-session-start-hook shouldI
   });
 
   it('still installs on a --global run even though a project already has vortex', async () => {
-    // A --global invocation's targetRoot is homedir(), which never equals any project-scope
-    // vortex record's targetRoot — so the naive guard would treat every existing project as
-    // "other" and permanently block the very global install this feature exists for.
     const feature = sessionStartFeature();
     const invocation = fakeInvocation({
       options: { vortexDisposition: 'install' },

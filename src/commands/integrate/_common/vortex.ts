@@ -22,6 +22,7 @@ import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.t
 import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
 import type {
   FeatureContainer,
+  FeatureDeclaration,
   InstallDecision,
   IntegrationInvocation,
   SubfeatureDeclaration,
@@ -65,6 +66,40 @@ export function isVortexInstalledForOtherProject(
       (feature) => isProjectVortexFeature(feature) && feature.targetRoot !== excludeTargetRoot,
     ) ?? false
   );
+}
+
+/**
+ * `shouldInstall` for the CAG session-start hook feature, shared across every agent that
+ * declares one. Gated on real Vortex entitlement only (`vortexInstallDecision`) — deliberately
+ * not `shouldInstallCagHook`'s internal dogfooding allowlist, which exists for the PostToolUse
+ * tool-watching hook and has nothing to do with general-purpose session-start context delivery.
+ *
+ * The hook is a single global resource, not one record per project, so a project's own
+ * `uninstall` disposition (legitimate for THIS project) must not tear it down while another
+ * project on this machine still has Vortex installed. The guard only ever applies to a teardown
+ * — an `install`/`skip`/`ask` decision passes through untouched, otherwise a second project (or
+ * any `--global` run, where `targetRoot` is `homedir()` and so never matches a project's own
+ * record) could never install the shared hook at all.
+ */
+export function createSessionStartHookShouldInstall<TOptions extends IntegrateAgentOptions>(
+  integrationId: string,
+): NonNullable<FeatureDeclaration<TOptions>['shouldInstall']> {
+  return (invocation: IntegrationInvocation<TOptions>) => {
+    const decision = vortexInstallDecision(invocation.options.vortexDisposition);
+    if (
+      decision.action === 'uninstall' &&
+      isVortexInstalledForOtherProject(
+        invocation.state,
+        integrationId,
+        invocation.options.projectRoot ?? invocation.targetRoot,
+      )
+    ) {
+      return skip(
+        'Other projects on this machine still use Vortex — leaving the shared session-start hook installed.',
+      );
+    }
+    return decision;
+  };
 }
 
 /**
