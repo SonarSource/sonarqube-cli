@@ -20,11 +20,11 @@
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 
 import type { SqaaTelemetryCallerCommand } from './sqaa-analysis-telemetry.ts';
 import type { SqaaAuth } from './sqaa-auth.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
+import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
 export const VALID_FORMATS = ['text', 'json'] as const;
 export type OutputFormat = (typeof VALID_FORMATS)[number];

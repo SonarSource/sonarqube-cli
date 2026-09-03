@@ -25,14 +25,14 @@ import { readFileSync } from 'node:fs';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { getSqaaRetry503BaseDelayMs } from '@/core/config-constants.ts';
 import { toRelativePosixPath as toRelativePosixPathOrNull } from '@/core/io/fs-utils.ts';
-import type { SqaaAnalysisFile, SqaaIssue } from '@/core/server/client.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
 import {
   RequestPayloadTooLargeError,
   ServiceUnavailableError,
   SqaaForbiddenError,
 } from '@/core/server/errors.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 
+import { SqaaAnalysisClient } from './sqaa-analysis-client.ts';
 import type { SqaaAuth } from './sqaa-auth.ts';
 import { type PackChunksLimits, packFilesIntoChunks, type SqaaChunkFile } from './sqaa-chunking.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
@@ -44,6 +44,7 @@ import {
   toSqaaCommandError,
 } from './sqaa-errors.ts';
 import { partitionSqaaAnalysisFiles, type SqaaFileValidationRejection } from './sqaa-validation.ts';
+import type { SqaaAnalysisFile, SqaaIssue } from './sqaa-wire-types.ts';
 
 /** Maximum number of retries on 503 responses. */
 export const MAX_503_RETRIES = 3;
@@ -129,7 +130,7 @@ async function postSqaaAnalysis(
     );
   }
 
-  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  const client = new SqaaAnalysisClient(new SonarHttpClient(auth.serverUrl, auth.token));
   try {
     const response = await client.createAnalysis({
       ...(auth.orgKey ? { organizationKey: auth.orgKey } : {}),

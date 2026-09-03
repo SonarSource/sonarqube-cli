@@ -30,14 +30,16 @@ import {
 } from '@/core/config-constants.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
-import { IssuesClient } from '@/core/server/issues.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
+import { type IssuesClient } from '@/core/server/issues.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import type { SonarQubeIssue } from '@/core/server/types.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { blank, info, multiSelectPrompt, print, success, withSpinner } from '@/core/ui';
 import { cyan, dim, red, yellow } from '@/core/ui/colors.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
+
+import { RemediateApiClient } from './remediate-api.ts';
 
 export interface RemediateOptions {
   project?: string;
@@ -74,7 +76,7 @@ export async function remediate(
   assertCloudConnection(auth);
   assertInteractiveOrIssuesSupplied(suppliedIssueKeys);
 
-  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  const client = new RemediateApiClient(new SonarHttpClient(auth.serverUrl, auth.token));
   // resolveAuth guarantees orgKey is set for cloud connections (see auth-resolver.ts);
   // narrow once and reuse throughout this function.
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -115,7 +117,7 @@ function assertInteractiveOrIssuesSupplied(suppliedIssueKeys: string[] | undefin
  * Prints the applicable message and returns false when remediation is not
  * available for this organisation. Throws when entitlement could not be verified.
  */
-async function confirmEntitlement(client: SonarQubeClient, orgKey: string): Promise<boolean> {
+async function confirmEntitlement(client: RemediateApiClient, orgKey: string): Promise<boolean> {
   const { status: entitlement } = await client.checkAiRemediationEntitlement(orgKey);
   if (entitlement === 'not_eligible') {
     blank();
@@ -152,14 +154,14 @@ async function resolveProjectKey(options: RemediateOptions, auth: ResolvedAuth):
 }
 
 // The AI agent API requires the project's legacy component ID, not its key.
-async function resolveProjectId(client: SonarQubeClient, projectKey: string): Promise<string> {
-  const resolvedId = await client.getComponentId(projectKey);
+async function resolveProjectId(client: RemediateApiClient, projectKey: string): Promise<string> {
+  const resolvedId = await client.components.getComponentId(projectKey);
   logger.debug(`getComponentId(${projectKey}) => ${resolvedId ?? 'null (falling back to key)'}`);
   return resolvedId ?? projectKey;
 }
 
 async function submitRemediationJob(
-  client: SonarQubeClient,
+  client: RemediateApiClient,
   projectId: string,
   issueKeys: string[],
   orgKey: string,
@@ -235,11 +237,11 @@ function parseIssueKeys(raw: string): string[] {
 // Returns null when no eligible issues exist or the user dismisses the prompt;
 // the user-facing message is already printed in those branches.
 async function selectIssuesInteractively(
-  client: SonarQubeClient,
+  client: RemediateApiClient,
   orgKey: string,
   projectKey: string,
 ): Promise<string[] | null> {
-  const issuesClient = new IssuesClient(client);
+  const issuesClient = client.issues;
 
   const issues = await withSpinner(`Fetching eligible issues for ${projectKey}`, () =>
     fetchEligibleIssues(issuesClient, orgKey, projectKey),

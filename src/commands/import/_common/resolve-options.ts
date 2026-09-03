@@ -19,7 +19,6 @@
  */
 
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
-import { type DopRepository, type SonarQubeClient } from '@/core/server/client.ts';
 import {
   type MultiSelectOption,
   multiSelectPrompt,
@@ -29,6 +28,7 @@ import {
   withSpinner,
 } from '@/core/ui';
 
+import type { DopRepository, ImportApiClient } from './import-api.ts';
 import {
   type FetchPage,
   isAlreadyImported,
@@ -107,7 +107,7 @@ function formatRepoLabel(
  * that the caller is an admin of it before proceeding.
  */
 export async function resolveOrg(
-  client: SonarQubeClient,
+  client: ImportApiClient,
   orgKey: string | undefined,
 ): Promise<ResolvedOrg> {
   if (!client.isCloud) {
@@ -125,10 +125,10 @@ export async function resolveOrg(
   return resolveOrgByKey(client, orgKey);
 }
 
-async function resolveOrgByKey(client: SonarQubeClient, orgKey: string): Promise<ResolvedOrg> {
+async function resolveOrgByKey(client: ImportApiClient, orgKey: string): Promise<ResolvedOrg> {
   let org;
   try {
-    org = await client.fetchOrganizationByKey(orgKey);
+    org = await client.organizations.fetchOrganizationByKey(orgKey);
   } catch (err) {
     throw new CommandFailedError(
       `Failed to look up organization '${orgKey}': ${err instanceof Error ? err.message : String(err)}`,
@@ -185,7 +185,7 @@ export function assertSupportedAlm(orgKey: string, almKey: string | undefined): 
 
 /** The key from the org record when it carries one, otherwise the organization-bindings lookup. */
 export async function resolveAlmKey(
-  client: SonarQubeClient,
+  client: ImportApiClient,
   orgKey: string,
   orgRecordAlmKey: string | undefined,
 ): Promise<string | undefined> {
@@ -194,7 +194,7 @@ export async function resolveAlmKey(
   }
 
   try {
-    return normalizeAlmKey(await client.getOrganizationAlmKey(orgKey));
+    return normalizeAlmKey(await client.organizations.getOrganizationAlmKey(orgKey));
   } catch (err) {
     throw new CommandFailedError(
       `Failed to look up the DevOps platform for organization '${orgKey}': ${err instanceof Error ? err.message : String(err)}`,
@@ -313,7 +313,7 @@ async function promptForRegex(): Promise<RegExp | typeof BACK> {
 }
 
 export async function resolveRepos(
-  client: SonarQubeClient,
+  client: ImportApiClient,
   orgKey: string,
   almKey: string | undefined,
   onlyPrivateProjects: OnlyPrivateProjects,
@@ -328,7 +328,7 @@ export async function resolveRepos(
     );
   }
 
-  const organizationId = await client.getOrganizationLegacyId(orgKey);
+  const organizationId = await client.organizations.getOrganizationLegacyId(orgKey);
   if (!organizationId) {
     throw new CommandFailedError(`Organization '${orgKey}' not found.`, {
       remediationHint: 'Check that the organization key is correct and that you have access to it.',
@@ -363,7 +363,7 @@ export async function resolveRepos(
  * a fetch failure or an org with no repositories at all.
  */
 async function createRepositoryCollectionOrThrow(
-  client: SonarQubeClient,
+  client: ImportApiClient,
   organizationId: string,
   onlyPrivateProjects: OnlyPrivateProjects,
 ): Promise<RepositoryCollection> {
@@ -417,7 +417,7 @@ function handleNoEligibleRepos(collection: RepositoryCollection): never {
  * from this same collection rather than starting over from page one.
  */
 async function resolveOnboardingMode(
-  client: SonarQubeClient,
+  client: ImportApiClient,
   organizationId: string,
   almKey: string | undefined,
   onlyPrivateProjects: OnlyPrivateProjects,
@@ -474,7 +474,7 @@ async function resolveOnboardingMode(
 }
 
 async function resolveReposBySlug(
-  client: SonarQubeClient,
+  client: ImportApiClient,
   organizationId: string,
   almKey: string | undefined,
   onlyPrivateProjects: OnlyPrivateProjects,
@@ -560,7 +560,7 @@ function isRepoSelectable(
  * instead of waiting for the whole org to be scanned first.
  */
 async function resolveStreamingImport(
-  client: SonarQubeClient,
+  client: ImportApiClient,
   organizationId: string,
   onlyPrivateProjects: OnlyPrivateProjects,
   regex: RegExp | undefined,

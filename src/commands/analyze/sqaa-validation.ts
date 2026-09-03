@@ -21,9 +21,9 @@
 // Pre-flight validation for SQAA analysis requests (before POST).
 
 import type { CommandFailedError } from '@/core/command-error.ts';
-import type { SqaaAnalysisDepth, SqaaAnalysisFile, SqaaFileScope } from '@/core/server/client.ts';
 
 import { sqaaCommandFailedError } from './sqaa-errors.ts';
+import type { SqaaAnalysisDepth, SqaaAnalysisFile, SqaaFileScope } from './sqaa-wire-types.ts';
 
 const VALID_SCOPES = new Set<SqaaFileScope>(['MAIN', 'TEST']);
 const VALID_DEPTHS = new Set<SqaaAnalysisDepth>(['STANDARD', 'DEEP']);
