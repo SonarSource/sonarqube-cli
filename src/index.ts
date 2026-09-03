@@ -29,19 +29,22 @@ import { installHooks } from '@/commands/integrate/claude/hooks.ts';
 import { loadPrivateBetaContext } from '@/core/launch-darkly/startup.ts';
 import { flushSentry } from '@/core/observability/sentry.ts';
 import { setFormattedOutputMode } from '@/core/ui';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 import * as postUpdate from '@/core/update/post-update.ts';
 
-// Activate formatted output mode early so startup messages are collected
-// rather than printed to stdout when the command will produce JSON output.
-// Handles both `--format json` (space-separated) and `--format=json` (equals form).
-if (
-  process.argv.some(
+function argvRequestsFormattedOutput(): boolean {
+  return process.argv.some(
     (a, i) =>
       (a === '--format' && (process.argv[i + 1] === 'json' || process.argv[i + 1] === 'toon')) ||
       a === '--format=json' ||
       a === '--format=toon',
-  )
-) {
+  );
+}
+
+// Activate formatted output mode early so startup messages are collected
+// rather than printed to stdout when the command will produce JSON output.
+// Handles both `--format json` (space-separated) and `--format=json` (equals form).
+if (argvRequestsFormattedOutput()) {
   setFormattedOutputMode(true);
 }
 
@@ -51,8 +54,14 @@ await postUpdate.runPostUpdateActions({
   installHooks,
 });
 
+const cliConsole = new TerminalConsole();
+if (argvRequestsFormattedOutput()) {
+  cliConsole.setFormattedOutputMode(true);
+}
+
 const tree = await createCommandTree({
   loadPrivateBetaContext,
+  console: cliConsole,
 });
 
 await tree.parseAsync(process.argv);
