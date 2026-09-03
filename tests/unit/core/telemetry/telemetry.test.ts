@@ -31,9 +31,9 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { setPassthroughSubcommand, storeEvent } from '@/commands/command-executed-telemetry.ts';
-import { SonarCommand } from '@/commands/sonar-command.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
 import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/auth/auth-resolver.ts';
+import { SonarCommand } from '@/core/commands/sonar-command.ts';
 import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import { DISTRIBUTION } from '@/core/host/distribution.ts';
 import * as agentDetector from '@/core/host/environment/agent-detector.ts';

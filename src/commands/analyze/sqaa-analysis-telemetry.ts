@@ -20,11 +20,11 @@
 
 import { randomUUID } from 'node:crypto';
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import {
   type CommandInvocationContext,
   TelemetryFact,
-} from '@/commands/command-invocation-context.ts';
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+} from '@/core/commands/invocation-context.ts';
 import type { SqaaIssue } from '@/core/server/client.ts';
 
 import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';

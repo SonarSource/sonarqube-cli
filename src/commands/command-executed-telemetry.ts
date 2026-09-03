@@ -20,8 +20,8 @@
 
 import { type Command } from 'commander';
 
-import { TelemetryFact } from '@/commands/command-invocation-context.ts';
 import { commitTelemetryFacts } from '@/commands/telemetry-facts.ts';
+import { TelemetryFact } from '@/core/commands/invocation-context.ts';
 import { DISTRIBUTION, type Distribution } from '@/core/host/distribution.ts';
 import { currentProjectUuid } from '@/core/telemetry/project-uuid.ts';
 

@@ -25,8 +25,8 @@ import {
   recordScaAnalysisTelemetry,
   type ScaCallerCommand,
 } from '@/commands/analyze/sca-analysis-telemetry.ts';
-import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SCA_SCANNER_CACHE_DIR } from '@/core/config-constants.ts';
 import type { ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import type { SecretsInstaller } from '@/core/host/install/secrets.ts';

@@ -18,12 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { InvalidOptionError } from '@/core/command-error.ts';
 import type {
   CommandAuthenticatedInvocationContext,
   CommandInvocationContext,
-} from '@/commands/command-invocation-context.ts';
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { InvalidOptionError } from '@/core/command-error.ts';
+} from '@/core/commands/invocation-context.ts';
 import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 import { text } from '@/core/ui';
 

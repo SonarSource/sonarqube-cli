@@ -26,7 +26,7 @@ import { Command, Help, Option } from 'commander';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { CliError, CommandFailedError, remediationHintFor } from '@/core/command-error.ts';
-import { qualifiedCommandPath } from '@/core/commands/command-path.ts';
+import { qualifiedCommandPath } from '@/core/commands/path.ts';
 import {
   ALPHA_ENV_VAR,
   ALPHA_HELP_GROUP,
@@ -45,11 +45,11 @@ import { blank, error, info, print } from '@/core/ui';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
 import { UpdateNotifier } from '@/core/update/notification.ts';
 
-import { version as VERSION } from '../../package.json';
+import { version as VERSION } from '../../../package.json';
 import {
   CommandAuthenticatedInvocationContext,
   CommandInvocationContext,
-} from './command-invocation-context.ts';
+} from './invocation-context.ts';
 
 export {
   ALPHA_ENV_VAR,

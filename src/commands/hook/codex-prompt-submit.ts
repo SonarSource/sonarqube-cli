@@ -27,7 +27,7 @@
 // Codex a named entry point that can diverge later if the wire format ever
 // changes.
 
-import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 
 import { agentPromptSubmit } from './agent-prompt-submit.ts';
 import type { HookCommandResult } from './hook-command-result.ts';

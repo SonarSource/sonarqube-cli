@@ -18,8 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { selectPrompt } from '@/core/ui';
 
 import { assertIntegrateScopeOptions } from './_common/agent-integrate-prelude.ts';

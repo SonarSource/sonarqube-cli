@@ -20,11 +20,11 @@
 
 import { createHash } from 'node:crypto';
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import {
   type CommandInvocationContext,
   TelemetryFact,
-} from '@/commands/command-invocation-context.ts';
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+} from '@/core/commands/invocation-context.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import type { InstalledIntegrationFeature, IntegrationScope } from '@/core/state/state.ts';
 

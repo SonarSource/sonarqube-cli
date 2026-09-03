@@ -22,9 +22,9 @@
 // when --dependency-risks is set, runs a dependency-risks scan as a follow-up stage.
 // Replaces the shell logic that was previously embedded in the git hook script.
 
-import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import { resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { InvalidOptionError } from '@/core/command-error.ts';
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';

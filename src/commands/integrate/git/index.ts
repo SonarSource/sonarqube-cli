@@ -23,9 +23,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { GLOBAL_HOOKS_DIR } from '@/core/config-constants.ts';
 import { installIntegration } from '@/core/framework/features';
 import { findGitRoot } from '@/core/host/git/discover.ts';

@@ -20,8 +20,8 @@
 
 import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import { SQAA_ANALYZE_CALLER_COMMAND } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
-import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
 import {
   blank,

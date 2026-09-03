@@ -18,8 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 
 import type { SqaaTelemetryCallerCommand } from './sqaa-analysis-telemetry.ts';

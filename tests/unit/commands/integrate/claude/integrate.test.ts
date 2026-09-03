@@ -22,13 +22,13 @@ import { homedir } from 'node:os';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
-import { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { VortexDisposition } from '@/commands/integrate/_common/types.ts';
 import { integrateClaude } from '@/commands/integrate/claude';
 import * as hooks from '@/commands/integrate/claude/hooks.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import * as token from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as registry from '@/core/framework/features';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import * as discovery from '@/core/project-info.ts';

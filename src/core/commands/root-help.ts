@@ -22,7 +22,7 @@ import type { Help, Option } from 'commander';
 
 import { softBlue, underline } from '@/core/ui/colors.ts';
 
-import { version as VERSION } from '../../package.json';
+import { version as VERSION } from '../../../package.json';
 import {
   ALPHA_HELP_TAG,
   BETA_HELP_TAG,

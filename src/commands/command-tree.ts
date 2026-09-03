@@ -22,6 +22,17 @@ import { type Command, Help, InvalidArgumentError } from 'commander';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { getBanner, getCustomRootHelp } from '@/core/commands/root-help.ts';
+import {
+  type CliRuntime,
+  collectPrivateBetaFlagKeys,
+  createDefaultCliRuntime,
+  isAlphaEnabledFromEnv,
+  SonarCommand,
+  SonarOption,
+  Stage,
+} from '@/core/commands/sonar-command.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
 import { GENERIC_HTTP_METHODS } from '@/core/server/client.ts';
@@ -62,7 +73,6 @@ import {
   buildCommandExecutedFact,
   setPassthroughSubcommand,
 } from './command-executed-telemetry.ts';
-import type { CommandInvocationContext } from './command-invocation-context.ts';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
 import { isTableFormatOption } from './formatting-options.ts';
@@ -105,17 +115,7 @@ import {
   VALID_FORMATS as QUALITY_GATE_VALID_FORMATS,
 } from './quality-gate/status';
 import { remediate, type RemediateOptions } from './remediate';
-import { getBanner, getCustomRootHelp } from './root-help.ts';
 import { runMcp } from './run/mcp.ts';
-import {
-  type CliRuntime,
-  collectPrivateBetaFlagKeys,
-  createDefaultCliRuntime,
-  isAlphaEnabledFromEnv,
-  SonarCommand,
-  SonarOption,
-  Stage,
-} from './sonar-command.ts';
 import { systemReset, type SystemResetOptions } from './system/reset.ts';
 import { systemStatus, type SystemStatusOptions } from './system/status.ts';
 import { commitTelemetryFacts } from './telemetry-facts.ts';

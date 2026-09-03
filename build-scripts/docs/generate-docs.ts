@@ -37,7 +37,7 @@ import {
   type LifecycleState,
   type SonarCommand,
   SonarOption,
-} from '@/commands/sonar-command.ts';
+} from '@/core/commands/sonar-command.ts';
 
 import { version } from '../../package.json';
 import { EXAMPLES } from './examples';

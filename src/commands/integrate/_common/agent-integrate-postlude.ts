@@ -23,8 +23,8 @@
 // agent-specific feature flags, resolve Vortex, assemble the integration
 // options and recorded attrs, and run the install.
 
-import type { CommandInvocationContext } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { installIntegration } from '@/core/framework/features';
 
 import { supportedIntegrations } from '../index.ts';

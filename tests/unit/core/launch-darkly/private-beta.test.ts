@@ -25,15 +25,15 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import { createCommandTree } from '@/commands/command-tree.ts';
-import * as sonarCommandModule from '@/commands/sonar-command.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import * as sonarCommandModule from '@/core/commands/sonar-command.ts';
 import {
   type CliRuntime,
   collectPrivateBetaFlagKeys,
   SonarCommand,
   SonarOption,
   Stage,
-} from '@/commands/sonar-command.ts';
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+} from '@/core/commands/sonar-command.ts';
 import {
   FEATURE_FLAG_CACHE_TTL_MS,
   type FeatureFlagFetcher,

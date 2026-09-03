@@ -22,16 +22,16 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import * as authResolver from '@/core/auth/auth-resolver.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import {
   CommandAuthenticatedInvocationContext,
   CommandInvocationContext,
   TelemetryFact,
-} from '@/commands/command-invocation-context.ts';
-import { getCustomRootHelp } from '@/commands/root-help.ts';
-import { ALPHA_ENV_VAR, SonarCommand, SonarOption, Stage } from '@/commands/sonar-command.ts';
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import * as authResolver from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
+} from '@/core/commands/invocation-context.ts';
+import { getCustomRootHelp } from '@/core/commands/root-help.ts';
+import { ALPHA_ENV_VAR, SonarCommand, SonarOption, Stage } from '@/core/commands/sonar-command.ts';
 import { RateLimitError, ServiceUnavailableError } from '@/core/server/errors.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';

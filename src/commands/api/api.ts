@@ -18,8 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import { InvalidOptionError } from '@/core/command-error.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { CLOUD_API_DOCS_URL, SERVER_API_DOCS_URL } from '@/core/config-constants.ts';
 import {
   GENERIC_HTTP_METHODS,

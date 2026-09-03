@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { TelemetryFact } from '@/commands/command-invocation-context.ts';
+import type { TelemetryFact } from '@/core/commands/invocation-context.ts';
 import { scheduleTelemetryFlush, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry/index.ts';
 import { emitTelemetryEvent, type IdentityEmitOptions } from '@/core/telemetry/telemetry-events.ts';
 

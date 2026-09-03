@@ -23,7 +23,6 @@ import { isAbsolute, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { CommandAuthenticatedInvocationContext } from '@/commands/command-invocation-context.ts';
 import * as preflightSummary from '@/commands/integrate/_common/preflight-summary.ts';
 import {
   detectSonarHookInstallation as detectHookInstallation,
@@ -40,6 +39,7 @@ import {
 import { PRE_COMMIT_CONFIG_FILE } from '@/commands/integrate/git/tools/pre-commit';
 import { LEGACY_HOOK_MARKER } from '@/commands/integrate/git/tools/shared.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
+import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { GLOBAL_HOOKS_DIR } from '@/core/config-constants.ts';
 import * as gitDiscovery from '@/core/host/git/discover.ts';
 import * as binaryInstall from '@/core/host/install/binary.ts';
