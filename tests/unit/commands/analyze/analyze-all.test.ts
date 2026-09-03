@@ -28,7 +28,6 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 import * as processLib from '@/core/process/process.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { analyzeAll } from '../../../../src/commands/analyze/analyze-all.ts';
 import * as sqaaModule from '../../../../src/commands/analyze/sqaa.ts';
@@ -42,10 +41,8 @@ const FAKE_AUTH: ResolvedAuth = {
   connectionType: 'cloud',
 };
 
-const FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(
-  FAKE_AUTH,
-  new FakeConsole(),
-);
+let fake: FakeConsole;
+let FAKE_AUTHENTICATED_CONTEXT: CommandAuthenticatedInvocationContext;
 
 describe('analyzeAll --format json: SecretsReport.warnings', () => {
   let spawnSpy: ReturnType<typeof spyOn>;
@@ -55,9 +52,9 @@ describe('analyzeAll --format json: SecretsReport.warnings', () => {
   let savedExitCode: typeof process.exitCode;
 
   beforeEach(() => {
+    fake = new FakeConsole();
+    FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(FAKE_AUTH, fake);
     savedExitCode = process.exitCode;
-    setMockUi(true);
-    clearMockUiCalls();
     resolveSecretsBinaryPathSpy = spyOn(installSecrets, 'resolveSecretsBinaryPath').mockReturnValue(
       '/fake/sonar-secrets',
     );
@@ -76,7 +73,6 @@ describe('analyzeAll --format json: SecretsReport.warnings', () => {
 
   afterEach(() => {
     process.exitCode = savedExitCode ?? 0;
-    setMockUi(false);
     spawnSpy.mockRestore();
     resolveSecretsBinaryPathSpy.mockRestore();
     resolveSqaaFileArgsSpy.mockRestore();
@@ -95,9 +91,7 @@ describe('analyzeAll --format json: SecretsReport.warnings', () => {
 
     await analyzeAll({ file: ['test.ts'], format: 'json' }, FAKE_AUTHENTICATED_CONTEXT);
 
-    const prints = getMockUiCalls()
-      .filter((c) => c.method === 'print')
-      .map((c) => String(c.args[0]));
+    const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
     expect(prints.length).toBeGreaterThan(0);
     const parsed = JSON.parse(prints[0]) as { secrets: { warnings?: string[]; error?: string } };
     expect(parsed.secrets.warnings).toEqual(['auth failed — partial scan only']);
@@ -114,9 +108,7 @@ describe('analyzeAll --format json: SecretsReport.warnings', () => {
 
     await analyzeAll({ file: ['test.ts'], format: 'json' }, FAKE_AUTHENTICATED_CONTEXT);
 
-    const prints = getMockUiCalls()
-      .filter((c) => c.method === 'print')
-      .map((c) => String(c.args[0]));
+    const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
     expect(prints.length).toBeGreaterThan(0);
     const parsed = JSON.parse(prints[0]) as { secrets: { warnings?: string[] } };
     expect(parsed.secrets.warnings).toBeUndefined();
@@ -141,9 +133,7 @@ describe('analyzeAll --format json: SecretsReport.warnings', () => {
 
     await analyzeAll({ file: ['test.ts'], format: 'json' }, FAKE_AUTHENTICATED_CONTEXT);
 
-    const prints = getMockUiCalls()
-      .filter((c) => c.method === 'print')
-      .map((c) => String(c.args[0]));
+    const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
     expect(prints.length).toBeGreaterThan(0);
     const parsed = JSON.parse(prints[0]) as {
       secrets: { warnings?: string[]; issues: unknown[] };
