@@ -42,8 +42,8 @@ import { tryLoadState } from '@/core/state/state-repository.ts';
 import { flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
 import type { Console } from '@/core/ui/console.ts';
+import { getDefaultConsole } from '@/core/ui/default-console.ts';
 import { parseInteger } from '@/core/ui/parsing.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { version as VERSION } from '../../package.json';
 import {
@@ -153,7 +153,7 @@ export type LoadPrivateBetaContext = (flagKeys: readonly string[]) => Promise<{
 export interface CreateCommandTreeOptions {
   isAlphaEnabled?: boolean;
   loadPrivateBetaContext?: LoadPrivateBetaContext;
-  /** Shared tree console; production omits this and gets a fresh {@link TerminalConsole}. */
+  /** Shared tree console; production omits this and uses the process default. */
   console?: Console;
 }
 
@@ -888,7 +888,7 @@ export async function createCommandTree(
   options: CreateCommandTreeOptions = {},
 ): Promise<SonarCommand> {
   const isAlphaEnabled = options.isAlphaEnabled ?? isAlphaEnabledFromEnv();
-  const console = options.console ?? new TerminalConsole();
+  const console = options.console ?? getDefaultConsole();
 
   const probe = buildCommandTree(
     {
