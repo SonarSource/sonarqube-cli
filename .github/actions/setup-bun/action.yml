@@ -1,5 +1,5 @@
 name: Setup Bun Environment
-description: Setup mise, cache Bun dependencies, and install
+description: Setup mise and install Bun dependencies
 
 inputs:
   artifactory-username:
@@ -15,14 +15,6 @@ runs:
     - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       with:
         version: 2026.8.14
-
-    - name: Cache Bun dependencies
-      uses: SonarSource/gh-action_cache@4e40632e780e11a8bbe9b721985ab22b42847cc4 # v1.7.2
-      with:
-        path: |
-          ~/.bun
-        key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
-        restore-keys: bun-${{ runner.os }}
 
     - name: Install dependencies
       shell: bash
