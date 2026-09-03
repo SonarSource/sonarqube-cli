@@ -24,8 +24,6 @@
 import { getDefaultCliConsole } from './default-console.ts';
 import type { ColorFn, OutputChannel } from './types.ts';
 
-export { channelStream } from './streams.ts';
-
 export function setFormattedOutputMode(active: boolean): void {
   getDefaultCliConsole().setFormattedOutputMode(active);
 }
