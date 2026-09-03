@@ -47,6 +47,11 @@ describe('resolveIntegrateScope', () => {
     expect(getMockUiCalls().some((c) => c.method === 'selectPrompt')).toBe(false);
   });
 
+  it('returns global even when a project key is also provided', async () => {
+    expect(await resolveIntegrateScope({ global: true, projectKey: 'my-project' })).toBe('global');
+    expect(getMockUiCalls().some((c) => c.method === 'selectPrompt')).toBe(false);
+  });
+
   it('defaults to project with an info line in non-interactive mode', async () => {
     expect(await resolveIntegrateScope({ nonInteractive: true })).toBe('project');
     expect(findMockUiCall('info', 'defaulting to this project')).toBeDefined();

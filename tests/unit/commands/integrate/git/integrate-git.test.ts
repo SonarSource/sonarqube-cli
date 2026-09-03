@@ -426,25 +426,13 @@ describe('integrateGit', () => {
     ).rejects.toThrow('--hook must be pre-commit or pre-push');
   });
 
-  it('throws InvalidOptionError when --global is combined with --dependency-risks', async () => {
-    await expect(
-      integrateGit(
-        { global: true, nonInteractive: true, dependencyRisks: true, project: 'k' },
-        MOCK_AUTH_CTX,
-      ),
-    ).rejects.toBeInstanceOf(InvalidOptionError);
-    await expect(
-      integrateGit(
-        { global: true, nonInteractive: true, dependencyRisks: true, project: 'k' },
-        MOCK_AUTH_CTX,
-      ),
-    ).rejects.toThrow('--dependency-risks and -p are not supported with --global');
-  });
-
-  it('throws InvalidOptionError when --global is combined with -p alone', async () => {
+  it('throws InvalidOptionError when --global is combined with -p', async () => {
     await expect(
       integrateGit({ global: true, nonInteractive: true, project: 'k' }, MOCK_AUTH_CTX),
     ).rejects.toBeInstanceOf(InvalidOptionError);
+    await expect(
+      integrateGit({ global: true, nonInteractive: true, project: 'k' }, MOCK_AUTH_CTX),
+    ).rejects.toThrow('-p is not supported with --global');
   });
   /* eslint-enable @typescript-eslint/await-thenable */
 
