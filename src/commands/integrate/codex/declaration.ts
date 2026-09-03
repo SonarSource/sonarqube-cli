@@ -52,6 +52,8 @@ import {
   SQAA_HOOK_FEATURE_ID,
 } from '../_common/features/sqaa-instructions-feature.ts';
 import {
+  buildUnixHookScript,
+  buildWindowsHookScript,
   createAgentHookEntry,
   removeAgentHooks,
   resolveAgentHookScriptPath,
@@ -61,12 +63,6 @@ import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templa
 import { removeCodexMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature, vortexInstallDecision } from '../_common/vortex.ts';
-import {
-  getSecretPromptTemplateUnix,
-  getSecretPromptTemplateWindows,
-  getSqaaPostToolTemplateUnix,
-  getSqaaPostToolTemplateWindows,
-} from './hook-templates.ts';
 import { SECRETS_ON_READ_BODY } from './instructions-templates.ts';
 
 const CODEX_CONFIG_DIR = '.codex';
@@ -100,8 +96,8 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
           displayName: 'Codex UserPromptSubmit hook script',
           scriptPath: PROMPT_SCRIPT_REL,
           content: {
-            unix: getSecretPromptTemplateUnix(),
-            windows: getSecretPromptTemplateWindows(),
+            unix: buildUnixHookScript('codex-prompt-submit'),
+            windows: buildWindowsHookScript('codex-prompt-submit'),
           },
         },
       ],
@@ -179,8 +175,8 @@ function createSqaaHookSubfeature(): SubfeatureDeclaration<CodexIntegrationOptio
         targetPath: (context) =>
           resolveAgentHookScriptPath(context, CODEX_CONFIG_DIR, POSTTOOL_SQAA_SCRIPT_REL),
         content: {
-          unix: getSqaaPostToolTemplateUnix(),
-          windows: getSqaaPostToolTemplateWindows(),
+          unix: buildUnixHookScript('codex-post-tool-use'),
+          windows: buildWindowsHookScript('codex-post-tool-use'),
         },
         executable: true,
       }),

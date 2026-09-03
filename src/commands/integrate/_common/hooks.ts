@@ -19,7 +19,7 @@
  */
 
 // Shared hook helpers used by both the Claude and Copilot integrations.
-// Keeps script body templates, the cross-platform script writer, and the
+// Keeps the hook script builders, the cross-platform script writer, and the
 // JSON config read-or-init helper in one place so the two integrations stay
 // behaviorally aligned.
 
@@ -41,12 +41,16 @@ export const WINDOWS_SONAR_COMMAND_GUARD = `if (-not (Get-Command sonar -ErrorAc
     exit 0
 }`;
 
-export function unixTemplate(command: string): string {
-  return `#!/bin/bash\n${UNIX_SONAR_COMMAND_GUARD}\n${command}\n`;
+export function buildUnixHookScript(subcommand: string): string {
+  return `#!/bin/bash\n${UNIX_SONAR_COMMAND_GUARD}\n${sonarHookCommand(subcommand)}\n`;
 }
 
-export function windowsTemplate(command: string): string {
-  return `${WINDOWS_SONAR_COMMAND_GUARD}\n$stdinData = [Console]::In.ReadToEnd()\n$stdinData | & ${command}\nexit $LASTEXITCODE\n`;
+export function buildWindowsHookScript(subcommand: string): string {
+  return `${WINDOWS_SONAR_COMMAND_GUARD}\n$stdinData = [Console]::In.ReadToEnd()\n$stdinData | & ${sonarHookCommand(subcommand)}\nexit $LASTEXITCODE\n`;
+}
+
+function sonarHookCommand(subcommand: string): string {
+  return `sonar hook ${subcommand}`;
 }
 
 /**

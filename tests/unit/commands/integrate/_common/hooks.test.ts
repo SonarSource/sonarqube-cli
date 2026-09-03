@@ -37,6 +37,8 @@ import type { IntegrationContext } from '@/core/framework/features';
 
 import {
   assertSafeSonarProjectKeyForHookScript,
+  buildUnixHookScript,
+  buildWindowsHookScript,
   createAgentHookEntry,
   quoteWindowsHookScriptPath,
   readOrInitJson,
@@ -44,31 +46,47 @@ import {
   shellDoubleQuoteBash,
   shellQuoteBash,
   UNIX_SONAR_COMMAND_GUARD,
-  unixTemplate,
   upsertAgentHooks,
   WINDOWS_SONAR_COMMAND_GUARD,
-  windowsTemplate,
   writeHookScript,
 } from '../../../../../src/commands/integrate/_common/hooks.ts';
 
 const IS_WINDOWS = process.platform === 'win32';
 
-describe('unixTemplate', () => {
-  it('starts with a bash shebang, includes the command guard, and embeds the command verbatim', () => {
-    const body = unixTemplate('sonar hook claude-pre-tool-use');
+describe('buildUnixHookScript', () => {
+  it('starts with a bash shebang, includes the command guard, and delegates to the sonar hook subcommand', () => {
+    const body = buildUnixHookScript('claude-pre-tool-use');
     expect(body.startsWith('#!/bin/bash\n')).toBe(true);
     expect(body).toContain(UNIX_SONAR_COMMAND_GUARD);
     expect(body).toContain('sonar hook claude-pre-tool-use');
   });
+
+  it('is a thin launcher: carries no analysis logic of its own', () => {
+    const body = buildUnixHookScript('claude-post-tool-use');
+    expect(body).not.toContain('sonar analyze');
+    expect(body).not.toContain('sonar secret check');
+    expect(body).not.toContain('--project');
+    expect(body).not.toContain('permissionDecision');
+    expect(body).not.toContain('sed -n');
+    expect(body).not.toContain('mktemp');
+  });
 });
 
-describe('windowsTemplate', () => {
-  it('includes the command guard, reads stdin, pipes it to the command, and propagates exit code', () => {
-    const body = windowsTemplate('sonar hook claude-pre-tool-use');
+describe('buildWindowsHookScript', () => {
+  it('includes the command guard, reads stdin, pipes it to the subcommand, and propagates exit code', () => {
+    const body = buildWindowsHookScript('claude-pre-tool-use');
     expect(body).toContain(WINDOWS_SONAR_COMMAND_GUARD);
     expect(body).toContain('$stdinData = [Console]::In.ReadToEnd()');
     expect(body).toContain('$stdinData | & sonar hook claude-pre-tool-use');
     expect(body).toContain('exit $LASTEXITCODE');
+  });
+
+  it('is a thin launcher: carries no analysis logic of its own', () => {
+    const body = buildWindowsHookScript('claude-post-tool-use');
+    expect(body).not.toContain('sonar analyze');
+    expect(body).not.toContain('sonar secret check');
+    expect(body).not.toContain('--project');
+    expect(body).not.toContain('permissionDecision');
   });
 });
 
