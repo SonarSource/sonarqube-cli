@@ -11,7 +11,7 @@
         "commander": "15.0.0",
         "js-yaml": "5.4.0",
         "launchdarkly-node-client-sdk": "3.4.3",
-        "lodash": "4.17.4",
+        "minimist": "0.0.8",
         "node-forge": "1.4.0",
         "openpgp": "6.3.1",
         "picocolors": "1.1.1",
@@ -457,8 +457,6 @@
 
     "locate-path": ["locate-path@6.0.0", "https://repox.jfrog.io/artifactory/api/npm/npm/locate-path/-/locate-path-6.0.0.tgz", { "dependencies": { "p-locate": "^5.0.0" } }, "sha512-iPZK6eYjbxRu3uB4/WZ3EsEIMJFMqAoopl3R+zuq0UjcAm/MO6KCweDgPfP3elTztoKP3KtnVHxTn2NHBSDVUw=="],
 
-    "lodash": ["lodash@4.17.4", "https://repox.jfrog.io/artifactory/api/npm/npm/lodash/-/lodash-4.17.4.tgz", {}, "sha512-6X37Sq9KCpLSXEh8uM12AKYlviHPNNk4RxiGBn4cmKGJinbXBneWIV7iE/nXkM928O7ytHcHb6+X6Svl0f4hXg=="],
-
     "log-update": ["log-update@6.1.0", "https://repox.jfrog.io/artifactory/api/npm/npm/log-update/-/log-update-6.1.0.tgz", { "dependencies": { "ansi-escapes": "^7.0.0", "cli-cursor": "^5.0.0", "slice-ansi": "^7.1.0", "strip-ansi": "^7.1.0", "wrap-ansi": "^9.0.0" } }, "sha512-9ie8ItPR6tjY5uYJh8K/Zrv/RMZ5VOlOWvtZdEHYSTFKZfIBPQa9tOAEeAWhd+AnIneLJ22w5fjOYtoutpWq5w=="],
 
     "lru-cache": ["lru-cache@5.1.1", "https://repox.jfrog.io/artifactory/api/npm/npm/lru-cache/-/lru-cache-5.1.1.tgz", { "dependencies": { "yallist": "^3.0.2" } }, "sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w=="],
@@ -478,6 +476,8 @@
     "mimic-function": ["mimic-function@5.0.1", "https://repox.jfrog.io/artifactory/api/npm/npm/mimic-function/-/mimic-function-5.0.1.tgz", {}, "sha512-VP79XUPxV2CigYP3jWwAUFSku2aKqBH7uTAapFWCBqutsbmDo96KY5o8uh6U+/YSIn5OxJnXp73beVkpqMIGhA=="],
 
     "minimatch": ["minimatch@10.2.6", "https://repox.jfrog.io/artifactory/api/npm/npm/minimatch/-/minimatch-10.2.6.tgz", { "dependencies": { "brace-expansion": "^5.0.8" } }, "sha512-vpLQEs+VLCr1nU0BXS07maYoFwlDAH0gngQuuttxIwutDFEMHq2blX+8vpgxDdK3J1PwjCJiep77OitTZ4Ll1A=="],
+
+    "minimist": ["minimist@0.0.8", "https://repox.jfrog.io/artifactory/api/npm/npm/minimist/-/minimist-0.0.8.tgz", {}, "sha512-miQKw5Hv4NS1Psg2517mV4e4dYNaO3++hjAvLOAzKqZ61rH8NS1SK+vbfBWZ5PY/Me/bEWhUwqMghEW5Fb9T7Q=="],
 
     "module-details-from-path": ["module-details-from-path@1.0.4", "https://repox.jfrog.io/artifactory/api/npm/npm/module-details-from-path/-/module-details-from-path-1.0.4.tgz", {}, "sha512-EGWKgxALGMgzvxYF1UyGTy0HXX/2vHLkw6+NvDKW2jypWbHpjQuj4UMcqQWXHERJhVGKikolT06G3bcKe4fi7w=="],
 
