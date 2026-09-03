@@ -30,7 +30,7 @@
   },
   "externalBinaries": {
     "sonar-secrets": {
-      "version": "2.45.0.11557",
+      "version": "2.49.0.12346",
       "binaryPath": "CommercialDistribution/sonar-secrets",
       "platforms": [
         {
