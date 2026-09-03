@@ -42,7 +42,6 @@ import {
 import logger from '@/core/observability/logger.ts';
 import { loadState, saveState } from '@/core/state/state-manager.ts';
 import type { CliConsole } from '@/core/ui/cli-console.ts';
-import { getDefaultCliConsole } from '@/core/ui/default-console.ts';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
 import { UpdateNotifier } from '@/core/update/notification.ts';
 
@@ -143,11 +142,11 @@ export interface RootHelpMetadata {
   label?: string;
 }
 
-/** Optional shared state for a SonarCommand and its subtree. */
+/** Shared state for a SonarCommand and its subtree. `console` is required; production passes the process console from `buildCommandTree`. */
 export interface SonarCommandOptions {
   updateNotifier?: UpdateNotifier;
   runtime?: CliRuntime;
-  console?: CliConsole;
+  console: CliConsole;
 }
 
 type CommandArgs = unknown[];
@@ -222,19 +221,19 @@ export class SonarCommand extends Command {
   /**
    * `updateNotifier` / `runtime` default so the root command owns the
    * instances the whole tree shares; every subcommand inherits them via
-   * createCommand().
+   * createCommand(). `console` is required and is passed through the same way.
    */
-  constructor(options?: SonarCommandOptions);
-  constructor(name?: string, options?: SonarCommandOptions);
-  constructor(
-    nameOrOptions?: string | SonarCommandOptions,
-    maybeOptions: SonarCommandOptions = {},
-  ) {
+  constructor(options: SonarCommandOptions);
+  constructor(name: string, options: SonarCommandOptions);
+  constructor(nameOrOptions: string | SonarCommandOptions, maybeOptions?: SonarCommandOptions) {
     const hasName = typeof nameOrOptions === 'string';
     const name = hasName ? nameOrOptions : undefined;
-    const options = (hasName ? maybeOptions : nameOrOptions) ?? {};
+    const options = (hasName ? maybeOptions : nameOrOptions) ?? maybeOptions;
+    if (options?.console === undefined) {
+      throw new TypeError('SonarCommand requires a console');
+    }
     super(name);
-    this._console = options.console ?? getDefaultCliConsole();
+    this._console = options.console;
     this._updateNotifier = options.updateNotifier ?? new UpdateNotifier();
     this._runtime = options.runtime ?? createDefaultCliRuntime();
     this.hook('preAction', () => {
@@ -251,7 +250,7 @@ export class SonarCommand extends Command {
 
   /** Ensures subcommands created via .command() are also SonarCommand instances. */
   createCommand(name?: string): SonarCommand {
-    return new SonarCommand(name, {
+    return new SonarCommand(name ?? '', {
       updateNotifier: this._updateNotifier,
       runtime: this._runtime,
       console: this._console,
@@ -457,7 +456,7 @@ export class SonarCommand extends Command {
     super.action((...args: TArgs) =>
       this.runCommand(async () => {
         // Prefer auth resolved once at startup; fall back for isolated unit tests.
-        const auth = this._runtime.auth ?? (await resolveAuth({ console: this._console }));
+        const auth = this._runtime.auth ?? (await resolveAuth());
         if (!auth) {
           throw new CommandFailedError('Not authenticated.', {
             remediationHint: "Run 'sonar auth login' to authenticate.",
@@ -470,7 +469,7 @@ export class SonarCommand extends Command {
   }
 
   private createCommandInvocationContext(): CommandInvocationContext {
-    const ctx = new CommandInvocationContext(this._lifecycle, this._runtime, this._console);
+    const ctx = new CommandInvocationContext(this._console, this._lifecycle, this._runtime);
     this._invocationContext = ctx;
     return ctx;
   }
@@ -480,9 +479,9 @@ export class SonarCommand extends Command {
   ): CommandAuthenticatedInvocationContext {
     const ctx = new CommandAuthenticatedInvocationContext(
       auth,
+      this._console,
       this._lifecycle,
       this._runtime,
-      this._console,
     );
     this._invocationContext = ctx;
     return ctx;

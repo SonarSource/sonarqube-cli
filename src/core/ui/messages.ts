@@ -18,54 +18,133 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Inline terminal output — non-interactive, static messages.
-// I/O is owned by TerminalConsole; these functions delegate to the process default.
+// Inline terminal output — non-interactive, static messages
 
-import { getDefaultCliConsole } from './default-console.ts';
+import { cyan, green, isTTY, red, yellow } from './colors.ts';
+import { isMockActive, recordCall } from './mock.ts';
 import type { ColorFn, OutputChannel } from './types.ts';
 
+let _formattedOutputMode = false;
+const _collectedMessages: string[] = [];
+
+/**
+ * Enable/disable formatted output mode (e.g. JSON output).
+ * When active, stdout messages are collected into a buffer instead of printed.
+ * Disabling clears the buffer.
+ * stderr output (warn, error) is never affected.
+ */
 export function setFormattedOutputMode(active: boolean): void {
-  getDefaultCliConsole().setFormattedOutputMode(active);
+  _formattedOutputMode = active;
+  if (!active) {
+    _collectedMessages.length = 0;
+  }
 }
 
+/** True when stdout messages are buffered for machine-readable command output. */
 export function isFormattedOutputMode(): boolean {
-  return getDefaultCliConsole().isFormattedOutputMode();
+  return _formattedOutputMode;
 }
 
+/** Returns messages collected since the last setFormattedOutputMode(true) call. */
 export function getMessagesForFormattedOutput(): string[] {
-  return getDefaultCliConsole().getMessagesForFormattedOutput();
+  return [..._collectedMessages];
+}
+
+function write(stream: NodeJS.WriteStream, line: string): void {
+  stream.write(line + '\n');
+}
+
+export function channelStream(channel: OutputChannel): NodeJS.WriteStream {
+  return channel === 'stderr' ? process.stderr : process.stdout;
 }
 
 export function info(message: string, channel: OutputChannel = 'stdout'): void {
-  getDefaultCliConsole().info(message, channel);
+  if (isMockActive()) {
+    recordCall('info', message);
+    return;
+  }
+  if (channel === 'stdout' && _formattedOutputMode) {
+    _collectedMessages.push(`  ℹ  ${message}`);
+    return;
+  }
+  write(channelStream(channel), `  ${cyan('ℹ')}  ${message}`);
 }
 
 export function success(message: string): void {
-  getDefaultCliConsole().success(message);
+  if (isMockActive()) {
+    recordCall('success', message);
+    return;
+  }
+  if (_formattedOutputMode) {
+    _collectedMessages.push(`✅ ${message}`);
+    return;
+  }
+  write(process.stdout, `✅ ${green(message)}`);
 }
 
 export function discreetSuccess(message: string, channel: OutputChannel = 'stdout'): void {
-  getDefaultCliConsole().discreetSuccess(message, channel);
+  if (isMockActive()) {
+    recordCall('discreetSuccess', message);
+    return;
+  }
+  // Only stdout participates in formatted-output buffering; an explicit stderr
+  // channel writes through immediately since stderr does not carry the payload.
+  if (channel === 'stdout' && _formattedOutputMode) {
+    _collectedMessages.push(`  ✓  ${message}`);
+    return;
+  }
+  write(channelStream(channel), `  ${green('✓')}  ${message}`);
 }
 
 export function warn(message: string): void {
-  getDefaultCliConsole().warn(message);
+  if (isMockActive()) {
+    recordCall('warn', message);
+    return;
+  }
+  write(process.stderr, `⚠️ ${yellow(message)}`);
 }
 
 export function error(message: string): void {
-  getDefaultCliConsole().error(message);
+  if (isMockActive()) {
+    recordCall('error', message);
+    return;
+  }
+  write(process.stderr, `❌ ${red(message)}`);
 }
 
+// Plain terminal output — human-readable, no semantic icon, optional color
 export function text(message: string, color?: ColorFn, channel: OutputChannel = 'stdout'): void {
-  getDefaultCliConsole().text(message, color, channel);
+  if (isMockActive()) {
+    recordCall('text', message);
+    return;
+  }
+  // Only stdout participates in formatted-output buffering; an explicit stderr
+  // channel writes through immediately since stderr does not carry the payload.
+  if (channel === 'stdout' && _formattedOutputMode) {
+    _collectedMessages.push(message);
+    return;
+  }
+  const formatted = color ? color(message) : message;
+  write(channelStream(channel), formatted);
 }
 
+// Raw stream output — no color, no prefix — safe for piping: sonar issues search | jq
 export function print(message: string, channel: OutputChannel = 'stdout'): void {
-  getDefaultCliConsole().print(message, channel);
+  if (isMockActive()) {
+    recordCall('print', message);
+    return;
+  }
+  channelStream(channel).write(message + (message.endsWith('\n') ? '' : '\n'));
 }
 
+// Newline separator
 export function blank(): void {
-  getDefaultCliConsole().blank();
+  if (isMockActive()) {
+    recordCall('blank');
+    return;
+  }
+  if (_formattedOutputMode) return;
+  if (isTTY) process.stdout.write('\n');
 }
 
 /**

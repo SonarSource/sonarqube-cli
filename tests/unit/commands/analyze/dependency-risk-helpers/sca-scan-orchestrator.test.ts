@@ -30,6 +30,7 @@ import type { SonarQubeClient } from '@/core/server/client.ts';
 import type { SettingsValue } from '@/core/server/settings-value.ts';
 
 import { ScaScanOrchestrator } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
+import { FakeConsole } from '../../../../_common/fake-console.ts';
 import { okScaInstaller as okInstaller } from './_helpers.ts';
 
 const CLOUD_AUTH: ResolvedAuth = {
@@ -68,7 +69,7 @@ function mockSpawner(payload: unknown) {
 const noopSecretsInstaller: SecretsInstaller = { install: () => Promise.resolve(null) };
 
 function makeCtx() {
-  return new CommandInvocationContext();
+  return new CommandInvocationContext(new FakeConsole());
 }
 
 describe('ScaScanOrchestrator', () => {

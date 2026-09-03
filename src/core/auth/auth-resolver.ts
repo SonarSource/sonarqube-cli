@@ -22,8 +22,7 @@
 
 import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
 import { getToken } from '@/core/host/keychain.ts';
-import type { CliConsole } from '@/core/ui/cli-console.ts';
-import { getDefaultCliConsole } from '@/core/ui/default-console.ts';
+import { warn } from '@/core/ui';
 
 import { SONARCLOUD_URL } from '../config-constants.ts';
 import logger from '../observability/logger.ts';
@@ -62,8 +61,6 @@ export interface ResolvedAuth {
 export interface ResolveAuthOptions {
   /** Suppress the "partial env vars" warning. */
   silent?: boolean;
-  /** Human-facing output. Defaults at this entry boundary when no command ctx exists yet. */
-  console?: CliConsole;
 }
 
 // Env vars are fixed for the process lifetime, so this only needs to run once per process.
@@ -102,7 +99,6 @@ export function resolveFromEnv(options: ResolveAuthOptions = {}): ResolvedAuth |
   const envToken = process.env[ENV_TOKEN];
   const envServer = process.env[ENV_SERVER];
   const envOrg = process.env[ENV_ORG];
-  const console = options.console ?? getDefaultCliConsole();
 
   // 1. Both SONARQUBE_CLI_TOKEN + SONARQUBE_CLI_ORG present → assume SQC, but get serverUrl from env in case of SQC US
   if (envToken && envOrg) {
@@ -128,12 +124,12 @@ export function resolveFromEnv(options: ResolveAuthOptions = {}): ResolvedAuth |
   // 3. Partial env vars → warn (unless silenced) and ignore both
   if (!options.silent) {
     if (envToken) {
-      console.warn(
+      warn(
         `${ENV_TOKEN} is set, but either ${ENV_SERVER} or ${ENV_ORG} are required for environment variable authentication. Falling back to saved credentials.`,
       );
     } else if (envServer || envOrg) {
       const setEnv = envServer ? ENV_SERVER : ENV_ORG;
-      console.warn(
+      warn(
         `${setEnv} is set, but ${ENV_TOKEN} is required for environment variable authentication. Falling back to saved credentials.`,
       );
     }

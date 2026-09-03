@@ -26,6 +26,7 @@ import { SonarQubeClient } from '@/core/server/client.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { apiCommand } from '../../../../src/commands/api/api.ts';
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
 const TEST_SERVER = 'https://sonar.example.com';
 const TEST_ORG = 'test-org';
@@ -37,7 +38,7 @@ const FAKE_AUTH: ResolvedAuth = {
   connectionType: 'on-premise',
 };
 
-const FAKE_CTX = new CommandAuthenticatedInvocationContext(FAKE_AUTH);
+const FAKE_CTX = new CommandAuthenticatedInvocationContext(FAKE_AUTH, new FakeConsole());
 
 let genericRequestSpy: ReturnType<typeof spyOn>;
 

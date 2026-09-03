@@ -37,7 +37,7 @@ import type {
 import { setMockUi } from '@/core/ui';
 
 import { listIssues } from '../../../../src/commands/list/issues.ts';
-
+import { FakeConsole } from '../../../_common/fake-console.ts';
 // Test constants
 const DEFAULT_PAGE_SIZE = 500;
 const CUSTOM_PAGE_SIZE = 100;
@@ -399,7 +399,7 @@ describe('issuesSearchCommand', () => {
     connectionType: 'cloud',
   };
 
-  const mockCtx = new CommandAuthenticatedInvocationContext(mockAuth);
+  const mockCtx = new CommandAuthenticatedInvocationContext(mockAuth, new FakeConsole());
 
   const emptyApiResponse = {
     issues: [],

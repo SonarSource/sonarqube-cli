@@ -23,7 +23,7 @@ import { TerminalConsole } from './terminal-console.ts';
 
 let defaultConsole: CliConsole | undefined;
 
-/** Process-wide production console. Command contexts share this instance unless overridden. */
+/** Process-wide production console. Called only from `buildCommandTree`. */
 export function getDefaultCliConsole(): CliConsole {
   defaultConsole ??= new TerminalConsole();
   return defaultConsole;

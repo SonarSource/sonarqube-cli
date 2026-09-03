@@ -30,8 +30,8 @@ import {
 } from '@clack/core';
 
 import { cyan, dim, green, red } from '../colors.ts';
+import { print } from '../messages.ts';
 import { dequeueMockResponse, isMockActive, recordCall } from '../mock.ts';
-import { print } from '../streams.ts';
 
 const CTRL_C = 0x03;
 const ENTER_CR = 0x0d;
@@ -433,11 +433,7 @@ export async function promptUntilValid(
     if (isValid(value)) {
       return value;
     }
-    if (isMockActive()) {
-      recordCall('print', errorMessage);
-    } else {
-      print(errorMessage);
-    }
+    print(errorMessage);
   }
 }
 

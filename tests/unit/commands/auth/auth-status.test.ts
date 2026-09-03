@@ -43,7 +43,7 @@ describe('authStatus with FakeConsole', () => {
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
 
     const fake = new FakeConsole();
-    const ctx = new CommandInvocationContext(undefined, undefined, fake);
+    const ctx = new CommandInvocationContext(fake);
 
     try {
       await authStatus(ctx);

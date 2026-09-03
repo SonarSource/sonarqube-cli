@@ -41,7 +41,6 @@ export {
 } from './components/prompts.ts';
 export { intro, outro } from './components/sections.ts';
 export { withSpinner } from './components/spinner.ts';
-export { getDefaultCliConsole } from './default-console.ts';
 export {
   blank,
   discreetSuccess,

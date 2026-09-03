@@ -62,7 +62,7 @@ function displayTokenStatus(
 
 export async function authStatus(ctx: CommandInvocationContext): Promise<void> {
   const { console } = ctx;
-  const envAuth = resolveFromEnv({ console });
+  const envAuth = resolveFromEnv();
   if (envAuth) {
     let source: string;
     if (envAuth.connectionType === 'cloud') {

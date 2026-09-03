@@ -31,6 +31,7 @@ import {
   CLI_INTEGRATION_CONFIGURED,
   recordIntegrationConfigured,
 } from '../../../../../src/commands/integrate/_common/integrate-telemetry.ts';
+import { FakeConsole } from '../../../../_common/fake-console.ts';
 
 function makeInstalledFeature(
   featureId: string,
@@ -59,7 +60,7 @@ const AUTH: ResolvedAuth = {
 };
 
 function record(params: Omit<Parameters<typeof recordIntegrationConfigured>[1], 'auth'>) {
-  const ctx = new CommandInvocationContext();
+  const ctx = new CommandInvocationContext(new FakeConsole());
   recordIntegrationConfigured(ctx, { auth: AUTH, ...params });
   const fact = ctx.telemetryFacts()[0];
   expect(fact.name).toBe(CLI_INTEGRATION_CONFIGURED);

@@ -31,19 +31,38 @@ import {
   TelemetryFact,
 } from '@/core/commands/invocation-context.ts';
 import { getCustomRootHelp } from '@/core/commands/root-help.ts';
-import { ALPHA_ENV_VAR, SonarCommand, SonarOption, Stage } from '@/core/commands/sonar-command.ts';
+import {
+  ALPHA_ENV_VAR,
+  SonarCommand,
+  type SonarCommandOptions,
+  SonarOption,
+  Stage,
+} from '@/core/commands/sonar-command.ts';
 import { RateLimitError, ServiceUnavailableError } from '@/core/server/errors.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { version as VERSION } from '../../../package.json';
+import { FakeConsole } from '../../_common/fake-console.ts';
 
 const FAKE_AUTH: ResolvedAuth = {
   token: 'fake-token',
   serverUrl: 'https://sonar.example.com',
   connectionType: 'on-premise',
 };
+
+let ui = new FakeConsole();
+
+function sonarCommand(
+  nameOrOptions?: string | Omit<SonarCommandOptions, 'console'>,
+  maybeOptions: Omit<SonarCommandOptions, 'console'> = {},
+): SonarCommand {
+  const hasName = typeof nameOrOptions === 'string';
+  const name = hasName ? nameOrOptions : undefined;
+  const options = (hasName ? maybeOptions : nameOrOptions) ?? {};
+  const withConsole: SonarCommandOptions = { ...options, console: ui };
+  return name === undefined ? new SonarCommand(withConsole) : new SonarCommand(name, withConsole);
+}
 
 describe('SonarCommand', () => {
   let resolveAuthSpy: ReturnType<typeof spyOn>;
@@ -53,7 +72,7 @@ describe('SonarCommand', () => {
   let originalExitCode: number | string | null | undefined;
 
   beforeEach(() => {
-    setMockUi(true);
+    ui = new FakeConsole();
     originalAlphaEnv = process.env[ALPHA_ENV_VAR];
     delete process.env[ALPHA_ENV_VAR];
     originalExitCode = process.exitCode;
@@ -61,8 +80,6 @@ describe('SonarCommand', () => {
   });
 
   afterEach(() => {
-    clearMockUiCalls();
-    setMockUi(false);
     process.exitCode = originalExitCode ?? 0;
     resolveAuthSpy?.mockRestore();
     loadStateSpy?.mockRestore();
@@ -78,7 +95,7 @@ describe('SonarCommand', () => {
 
   describe('action()', () => {
     it('throws to enforce use of anonymousAction() or authenticatedAction()', () => {
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       expect(() => cmd.action(() => {})).toThrow(
         'action() should not be called direclty, use anonymousAction() or authenticatedAction() instead',
       );
@@ -89,8 +106,8 @@ describe('SonarCommand', () => {
 
   describe('addCommand()', () => {
     it('throws to enforce use of .command() instead', () => {
-      const cmd = new SonarCommand();
-      const sub = new SonarCommand('sub');
+      const cmd = sonarCommand();
+      const sub = sonarCommand('sub');
       expect(() => cmd.addCommand(sub)).toThrow(
         'addCommand() is disallowed; use .command() instead',
       );
@@ -101,7 +118,7 @@ describe('SonarCommand', () => {
 
   describe('runCommand()', () => {
     it('executes the given function', async () => {
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       let called = false;
       await cmd.runCommand(() => {
         called = true;
@@ -111,7 +128,7 @@ describe('SonarCommand', () => {
     });
 
     it('sets process.exitCode to 1 on generic error', async () => {
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       await cmd.runCommand(() => {
         throw new Error('boom');
       });
@@ -119,7 +136,7 @@ describe('SonarCommand', () => {
     });
 
     it('sets process.exitCode to 2 on InvalidOptionError', async () => {
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       await cmd.runCommand(() => {
         throw new InvalidOptionError('bad flag');
       });
@@ -127,7 +144,7 @@ describe('SonarCommand', () => {
     });
 
     it('uses the exit code from CommandFailedError', async () => {
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       await cmd.runCommand(() => {
         throw new CommandFailedError('fail', { exitCode: 42 });
       });
@@ -135,50 +152,50 @@ describe('SonarCommand', () => {
     });
 
     it('outputs the error message to the UI', async () => {
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       await cmd.runCommand(() => {
         throw new Error('something went wrong');
       });
-      const errCall = getMockUiCalls().find((c) => c.method === 'error');
+      const errCall = ui.calls.find((c) => c.method === 'error');
       expect(errCall?.args[0]).toBe('something went wrong');
     });
 
     it('outputs the remediation hint when the CLI error provides one', async () => {
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       await cmd.runCommand(() => {
         throw new CommandFailedError('Authentication check failed', {
           remediationHint: "Run 'sonar auth login' to reauthenticate.",
         });
       });
 
-      const hintCall = getMockUiCalls().find((c) => c.method === 'print');
+      const hintCall = ui.calls.find((c) => c.method === 'print');
       expect(hintCall?.args[0]).toBe("  → Run 'sonar auth login' to reauthenticate.");
     });
 
     it('derives remediation hint from RateLimitError cause when no explicit hint is given', async () => {
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       await cmd.runCommand(() => {
         throw new CommandFailedError('API call failed', { cause: new RateLimitError() });
       });
 
-      const hintCall = getMockUiCalls().find((c) => c.method === 'print');
+      const hintCall = ui.calls.find((c) => c.method === 'print');
       expect(hintCall?.args[0]).toBe('  → Wait a moment and try again.');
     });
 
     it('derives remediation hint from ServiceUnavailableError cause when no explicit hint is given', async () => {
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       await cmd.runCommand(() => {
         throw new CommandFailedError('API call failed', {
           cause: new ServiceUnavailableError(),
         });
       });
 
-      const hintCall = getMockUiCalls().find((c) => c.method === 'print');
+      const hintCall = ui.calls.find((c) => c.method === 'print');
       expect(hintCall?.args[0]).toBe('  → Check your network connection and try again later.');
     });
 
     it('cause-derived hint takes precedence over generic remediationHint', async () => {
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       await cmd.runCommand(() => {
         throw new CommandFailedError('API call failed', {
           cause: new RateLimitError(),
@@ -186,7 +203,7 @@ describe('SonarCommand', () => {
         });
       });
 
-      const hintCall = getMockUiCalls().find((c) => c.method === 'print');
+      const hintCall = ui.calls.find((c) => c.method === 'print');
       expect(hintCall?.args[0]).toBe('  → Wait a moment and try again.');
     });
   });
@@ -195,13 +212,13 @@ describe('SonarCommand', () => {
 
   describe('stage(Stage.Stable)', () => {
     it('uses Stable as the default stage', () => {
-      const command = new SonarCommand('stable');
+      const command = sonarCommand('stable');
 
       expect(command.lifecycle).toEqual({ stage: 'stable' });
     });
 
     it('allows Stable to be declared explicitly', () => {
-      const command = new SonarCommand('stable').description('Stable command').stage(Stage.Stable);
+      const command = sonarCommand('stable').description('Stable command').stage(Stage.Stable);
 
       expect(command.lifecycle).toEqual({ stage: 'stable' });
       expect(command.helpInformation()).not.toContain('[ALPHA]');
@@ -210,7 +227,7 @@ describe('SonarCommand', () => {
     });
 
     it('uses the last stage assigned after Stable was declared explicitly', () => {
-      const command = new SonarCommand('stable').stage(Stage.Stable).stage(Stage.Beta());
+      const command = sonarCommand('stable').stage(Stage.Stable).stage(Stage.Beta());
 
       expect(command.lifecycle).toEqual({ stage: 'beta' });
     });
@@ -220,20 +237,20 @@ describe('SonarCommand', () => {
 
   describe('stage(Stage.Alpha)', () => {
     it('marks the command as alpha', () => {
-      const cmd = new SonarCommand('experimental');
+      const cmd = sonarCommand('experimental');
 
       expect(cmd.lifecycle.stage).toBe('stable');
       expect(cmd.stage(Stage.Alpha).lifecycle.stage).toBe('alpha');
     });
 
     it('uses Alpha when it is assigned after Beta', () => {
-      const command = new SonarCommand('experimental').stage(Stage.Beta()).stage(Stage.Alpha);
+      const command = sonarCommand('experimental').stage(Stage.Beta()).stage(Stage.Alpha);
 
       expect(command.lifecycle).toEqual({ stage: 'alpha' });
     });
 
     it('unregisters the command when SONARQUBE_CLI_ALPHA is not set', () => {
-      const root = new SonarCommand('sonar');
+      const root = sonarCommand('sonar');
       root.command('experimental').description('Experimental command').stage(Stage.Alpha);
 
       expect(root.commands.map((command) => command.name())).not.toContain('experimental');
@@ -244,7 +261,7 @@ describe('SonarCommand', () => {
       'unregisters the command when SONARQUBE_CLI_ALPHA is set to %s',
       (value) => {
         process.env[ALPHA_ENV_VAR] = value;
-        const root = new SonarCommand('sonar');
+        const root = sonarCommand('sonar');
         root.command('experimental').description('Experimental command').stage(Stage.Alpha);
 
         expect(root.commands.map((command) => command.name())).not.toContain('experimental');
@@ -255,7 +272,7 @@ describe('SonarCommand', () => {
     it('does not execute an unregistered alpha command', async () => {
       const rootHandler = mock((_ctx: CommandInvocationContext, _command?: string) => {});
       const alphaHandler = mock((_ctx: CommandInvocationContext) => {});
-      const root = new SonarCommand('sonar').argument('[command]').anonymousAction(rootHandler);
+      const root = sonarCommand('sonar').argument('[command]').anonymousAction(rootHandler);
       root.command('experimental').stage(Stage.Alpha).anonymousAction(alphaHandler);
 
       await root.parseAsync(['experimental'], { from: 'user' });
@@ -268,7 +285,7 @@ describe('SonarCommand', () => {
       'registers the command and tags help when SONARQUBE_CLI_ALPHA is set to %s',
       (value) => {
         process.env[ALPHA_ENV_VAR] = value;
-        const root = new SonarCommand('sonar');
+        const root = sonarCommand('sonar');
         const alphaCommand = root
           .command('experimental')
           .description('Experimental command')
@@ -282,7 +299,7 @@ describe('SonarCommand', () => {
 
     it('tags an explicit command summary', () => {
       process.env[ALPHA_ENV_VAR] = '1';
-      const root = new SonarCommand('sonar');
+      const root = sonarCommand('sonar');
       root
         .command('experimental')
         .description('Long experimental description')
@@ -294,7 +311,7 @@ describe('SonarCommand', () => {
 
     it('groups alpha commands together after all stable root-help categories', () => {
       process.env[ALPHA_ENV_VAR] = '1';
-      const root = new SonarCommand('sonar');
+      const root = sonarCommand('sonar');
       root.command('stable-core').description('Stable core command').rootHelp({ category: 'core' });
       root
         .command('alpha-core')
@@ -326,7 +343,7 @@ describe('SonarCommand', () => {
 
     it('tags alpha subcommands in an expanded root-help label', () => {
       process.env[ALPHA_ENV_VAR] = '1';
-      const root = new SonarCommand('sonar');
+      const root = sonarCommand('sonar');
       const system = root
         .command('system')
         .description('System commands')
@@ -342,7 +359,7 @@ describe('SonarCommand', () => {
 
     it('lists alpha subcommands in a separate group at the bottom of their parent help', () => {
       process.env[ALPHA_ENV_VAR] = '1';
-      const parent = new SonarCommand('parent');
+      const parent = sonarCommand('parent');
       parent.command('alpha-one').description('First alpha command').stage(Stage.Alpha);
       parent.command('stable-one').description('First stable command');
       parent.command('alpha-two').description('Second alpha command').stage(Stage.Alpha);
@@ -370,13 +387,13 @@ describe('SonarCommand', () => {
     it('warns on stderr before invoking the command handler', async () => {
       process.env[ALPHA_ENV_VAR] = '1';
       const handler = mock(() => {});
-      const root = new SonarCommand('sonar');
+      const root = sonarCommand('sonar');
       root.command('experimental').stage(Stage.Alpha).anonymousAction(handler);
 
       await root.parseAsync(['experimental'], { from: 'user' });
 
       expect(handler).toHaveBeenCalledTimes(1);
-      const warning = getMockUiCalls().find((call) => call.method === 'info');
+      const warning = ui.calls.find((call) => call.method === 'info');
       expect(warning?.args[0]).toBe(
         "'sonar experimental' is in alpha; may change or be removed without notice.",
       );
@@ -387,17 +404,17 @@ describe('SonarCommand', () => {
 
   describe('requiresAuth', () => {
     it('is false by default', () => {
-      expect(new SonarCommand().requiresAuth).toBe(false);
+      expect(sonarCommand().requiresAuth).toBe(false);
     });
 
     it('is false after anonymousAction()', () => {
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       cmd.anonymousAction((_ctx) => {});
       expect(cmd.requiresAuth).toBe(false);
     });
 
     it('is true after authenticatedAction()', () => {
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       cmd.authenticatedAction(() => Promise.resolve());
       expect(cmd.requiresAuth).toBe(true);
     });
@@ -407,7 +424,7 @@ describe('SonarCommand', () => {
 
   describe('stage(Stage.Beta())', () => {
     it('marks the command as Beta and keeps it visible', () => {
-      const parent = new SonarCommand('sonar');
+      const parent = sonarCommand('sonar');
       const betaCommand = parent
         .command('preview')
         .description('Run the preview')
@@ -418,7 +435,7 @@ describe('SonarCommand', () => {
     });
 
     it('uses Beta when it is assigned after a disabled Alpha stage', () => {
-      const parent = new SonarCommand('sonar');
+      const parent = sonarCommand('sonar');
       const command = parent.command('preview').description('Preview command');
       command.stage(Stage.Alpha);
 
@@ -433,26 +450,24 @@ describe('SonarCommand', () => {
     });
 
     it('leaves commands Stable by default', () => {
-      expect(new SonarCommand('stable').lifecycle.stage).toBe('stable');
+      expect(sonarCommand('stable').lifecycle.stage).toBe('stable');
     });
 
     it('adds the Beta tag to command help', () => {
-      const command = new SonarCommand('preview')
-        .description('Run the preview')
-        .stage(Stage.Beta());
+      const command = sonarCommand('preview').description('Run the preview').stage(Stage.Beta());
 
       expect(command.helpInformation()).toContain('Run the preview [BETA]');
     });
 
     it('adds the Beta tag to a parent command subcommand list', () => {
-      const parent = new SonarCommand('sonar');
+      const parent = sonarCommand('sonar');
       parent.command('preview').description('Run the preview').stage(Stage.Beta());
 
       expect(parent.helpInformation()).toContain('Run the preview [BETA]');
     });
 
     it('adds the Beta tag to an explicit command summary', () => {
-      const parent = new SonarCommand('sonar');
+      const parent = sonarCommand('sonar');
       parent
         .command('preview')
         .description('Long preview description')
@@ -463,7 +478,7 @@ describe('SonarCommand', () => {
     });
 
     it('tags Beta subcommands in a root-help label', () => {
-      const root = new SonarCommand('sonar');
+      const root = sonarCommand('sonar');
       const system = root
         .command('system')
         .description('System commands')
@@ -477,7 +492,7 @@ describe('SonarCommand', () => {
     });
 
     it('keeps Beta commands in category declaration order', () => {
-      const root = new SonarCommand('sonar');
+      const root = sonarCommand('sonar');
       root.command('first').description('First command').rootHelp({ category: 'data' });
       root
         .command('preview')
@@ -496,12 +511,14 @@ describe('SonarCommand', () => {
       const state = getDefaultState(VERSION);
       loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
       saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
-      const command = new SonarCommand('preview').stage(Stage.Beta()).anonymousAction((_ctx) => {});
+      const command = sonarCommand('preview')
+        .stage(Stage.Beta())
+        .anonymousAction((_ctx) => {});
 
       await command.parseAsync([], { from: 'user' });
       await command.parseAsync([], { from: 'user' });
 
-      const warnings = getMockUiCalls().filter((call) => call.method === 'info');
+      const warnings = ui.calls.filter((call) => call.method === 'info');
       expect(warnings).toHaveLength(1);
       expect(warnings[0]?.args[0]).toBe("'preview' is in beta and may change.");
       expect(state.config.betaCommandWarnings).toEqual({ preview: VERSION });
@@ -512,17 +529,19 @@ describe('SonarCommand', () => {
       const state = getDefaultState(VERSION);
       loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
       saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
-      const first = new SonarCommand('first').stage(Stage.Beta()).anonymousAction((_ctx) => {});
-      const second = new SonarCommand('second').stage(Stage.Beta()).anonymousAction((_ctx) => {});
+      const first = sonarCommand('first')
+        .stage(Stage.Beta())
+        .anonymousAction((_ctx) => {});
+      const second = sonarCommand('second')
+        .stage(Stage.Beta())
+        .anonymousAction((_ctx) => {});
 
       await first.parseAsync([], { from: 'user' });
       await second.parseAsync([], { from: 'user' });
 
-      expect(
-        getMockUiCalls()
-          .filter((call) => call.method === 'info')
-          .map((call) => call.args[0]),
-      ).toEqual(["'first' is in beta and may change.", "'second' is in beta and may change."]);
+      expect(ui.calls.filter((call) => call.method === 'info').map((call) => call.args[0])).toEqual(
+        ["'first' is in beta and may change.", "'second' is in beta and may change."],
+      );
     });
 
     it('warns again after the CLI version changes', async () => {
@@ -530,11 +549,13 @@ describe('SonarCommand', () => {
       state.config.betaCommandWarnings = { preview: '0.0.1' };
       loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
       saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
-      const command = new SonarCommand('preview').stage(Stage.Beta()).anonymousAction((_ctx) => {});
+      const command = sonarCommand('preview')
+        .stage(Stage.Beta())
+        .anonymousAction((_ctx) => {});
 
       await command.parseAsync([], { from: 'user' });
 
-      expect(getMockUiCalls().filter((call) => call.method === 'info')).toHaveLength(1);
+      expect(ui.calls.filter((call) => call.method === 'info')).toHaveLength(1);
       expect(state.config.betaCommandWarnings).toEqual({ preview: VERSION });
     });
 
@@ -542,14 +563,14 @@ describe('SonarCommand', () => {
       loadStateSpy = spyOn(stateManager, 'loadState').mockImplementation(() => {
         throw new Error('State is unreadable');
       });
-      const command = new SonarCommand('preview-with-unreadable-state')
+      const command = sonarCommand('preview-with-unreadable-state')
         .stage(Stage.Beta())
         .anonymousAction((_ctx) => {});
 
       await command.parseAsync([], { from: 'user' });
       await command.parseAsync([], { from: 'user' });
 
-      const warnings = getMockUiCalls().filter((call) => call.method === 'info');
+      const warnings = ui.calls.filter((call) => call.method === 'info');
       expect(warnings).toHaveLength(1);
       expect(warnings[0]?.args[0]).toBe(
         "'preview-with-unreadable-state' is in beta and may change.",
@@ -557,8 +578,8 @@ describe('SonarCommand', () => {
     });
 
     it('stores an optional LaunchDarkly flag key for Private Beta', () => {
-      const open = new SonarCommand('open').stage(Stage.Beta());
-      const gated = new SonarCommand('gated', {
+      const open = sonarCommand('open').stage(Stage.Beta());
+      const gated = sonarCommand('gated', {
         runtime: {
           auth: null,
           isAlphaEnabled: false,
@@ -571,7 +592,7 @@ describe('SonarCommand', () => {
     });
 
     it('registers Private Beta only when the runtime gate allows it', () => {
-      const enabled = new SonarCommand('root', {
+      const enabled = sonarCommand('root', {
         runtime: {
           auth: null,
           isAlphaEnabled: false,
@@ -581,7 +602,7 @@ describe('SonarCommand', () => {
       enabled.command('gated').stage(Stage.Beta('cli.beta.preview'));
       expect(enabled.commands.map((c) => c.name())).toContain('gated');
 
-      const denied = new SonarCommand('root', {
+      const denied = sonarCommand('root', {
         runtime: {
           auth: null,
           isAlphaEnabled: false,
@@ -597,7 +618,7 @@ describe('SonarCommand', () => {
 
   describe('stage(Stage.Deprecated())', () => {
     it('marks the command as Deprecated and keeps it visible', () => {
-      const parent = new SonarCommand('sonar');
+      const parent = sonarCommand('sonar');
       const command = parent
         .command('legacy')
         .description('Legacy command')
@@ -612,7 +633,7 @@ describe('SonarCommand', () => {
     });
 
     it('stores a replacement', () => {
-      const command = new SonarCommand('legacy').stage(
+      const command = sonarCommand('legacy').stage(
         Stage.Deprecated({ sinceVersion: '1.8', replacement: 'sonar update' }),
       );
 
@@ -624,7 +645,7 @@ describe('SonarCommand', () => {
     });
 
     it('adds the Deprecated tag to command help', () => {
-      const command = new SonarCommand('legacy')
+      const command = sonarCommand('legacy')
         .description('Legacy command')
         .stage(Stage.Deprecated({ sinceVersion: '1.8', replacement: null }));
 
@@ -632,7 +653,7 @@ describe('SonarCommand', () => {
     });
 
     it('tags Deprecated subcommands in a root-help label', () => {
-      const root = new SonarCommand('sonar');
+      const root = sonarCommand('sonar');
       const system = root
         .command('system')
         .description('System commands')
@@ -649,14 +670,14 @@ describe('SonarCommand', () => {
     });
 
     it('warns on every invocation', async () => {
-      const command = new SonarCommand('legacy')
+      const command = sonarCommand('legacy')
         .stage(Stage.Deprecated({ sinceVersion: '1.8', replacement: null }))
         .anonymousAction((_ctx) => {});
 
       await command.parseAsync([], { from: 'user' });
       await command.parseAsync([], { from: 'user' });
 
-      const warnings = getMockUiCalls().filter((call) => call.method === 'warn');
+      const warnings = ui.calls.filter((call) => call.method === 'warn');
       expect(warnings).toHaveLength(2);
       expect(warnings[0]?.args[0]).toBe(
         "'legacy' is deprecated since 1.8 and will be removed in a future version. There is no replacement.",
@@ -667,20 +688,20 @@ describe('SonarCommand', () => {
     });
 
     it('includes the replacement in the warning when provided', async () => {
-      const command = new SonarCommand('self-update')
+      const command = sonarCommand('self-update')
         .stage(Stage.Deprecated({ sinceVersion: '1.2', replacement: 'sonar update' }))
         .anonymousAction((_ctx) => {});
 
       await command.parseAsync([], { from: 'user' });
 
-      const warning = getMockUiCalls().find((call) => call.method === 'warn');
+      const warning = ui.calls.find((call) => call.method === 'warn');
       expect(warning?.args[0]).toBe(
         "'self-update' is deprecated since 1.2 and will be removed in a future version. Use 'sonar update' instead.",
       );
     });
 
     it('qualifies the deprecation warning with the program name', async () => {
-      const root = new SonarCommand('sonar');
+      const root = sonarCommand('sonar');
       root
         .command('verify')
         .stage(Stage.Deprecated({ sinceVersion: '0.14', replacement: 'sonar analyze' }))
@@ -688,14 +709,14 @@ describe('SonarCommand', () => {
 
       await root.parseAsync(['verify'], { from: 'user' });
 
-      const warning = getMockUiCalls().find((call) => call.method === 'warn');
+      const warning = ui.calls.find((call) => call.method === 'warn');
       expect(warning?.args[0]).toBe(
         "'sonar verify' is deprecated since 0.14 and will be removed in a future version. Use 'sonar analyze' instead.",
       );
     });
 
     it('uses Deprecated when it is assigned after Beta', () => {
-      const command = new SonarCommand('legacy')
+      const command = sonarCommand('legacy')
         .stage(Stage.Beta())
         .stage(Stage.Deprecated({ sinceVersion: '1.8', replacement: null }));
 
@@ -707,7 +728,7 @@ describe('SonarCommand', () => {
     });
 
     it('re-attaches a command that was hidden as Alpha', () => {
-      const parent = new SonarCommand('sonar');
+      const parent = sonarCommand('sonar');
       const command = parent.command('legacy').description('Legacy command');
       command.stage(Stage.Alpha);
 
@@ -724,7 +745,7 @@ describe('SonarCommand', () => {
 
   describe('createCommand()', () => {
     it('returns a SonarCommand instance', () => {
-      expect(new SonarCommand().createCommand('sub')).toBeInstanceOf(SonarCommand);
+      expect(sonarCommand().createCommand('sub')).toBeInstanceOf(SonarCommand);
     });
   });
 
@@ -738,7 +759,7 @@ describe('SonarCommand', () => {
     beforeEach(() => {
       parentAction = mock(() => {});
       subAction = mock(() => {});
-      parent = new SonarCommand('parent');
+      parent = sonarCommand('parent');
       parent.exitOverride().configureOutput({ writeErr: () => {} });
       parent.rejectUnknownSubcommands().anonymousAction(parentAction);
       parent.command('build').anonymousAction(subAction);
@@ -772,7 +793,7 @@ describe('SonarCommand', () => {
   describe('anonymousAction()', () => {
     it('calls the handler with CommandInvocationContext as first argument', async () => {
       const handler = mock((_ctx: CommandInvocationContext) => {});
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       cmd.anonymousAction(handler);
       await cmd.parseAsync([], { from: 'user' });
       expect(handler).toHaveBeenCalledTimes(1);
@@ -785,7 +806,7 @@ describe('SonarCommand', () => {
     it('sets isAlphaEligible() when command has Stage.Alpha and alpha is enabled', async () => {
       process.env[ALPHA_ENV_VAR] = 'true';
       const handler = mock((_ctx: CommandInvocationContext) => {});
-      const cmd = new SonarCommand({
+      const cmd = sonarCommand({
         runtime: { auth: null, isAlphaEnabled: true, isPrivateBetaEnabled: () => false },
       });
       cmd.stage(Stage.Alpha).anonymousAction(handler);
@@ -797,7 +818,7 @@ describe('SonarCommand', () => {
 
     it('sets isBetaEligible() for Open Beta', async () => {
       const handler = mock((_ctx: CommandInvocationContext) => {});
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       cmd.stage(Stage.Beta()).anonymousAction(handler);
       await cmd.parseAsync([], { from: 'user' });
       const receivedContext = handler.mock.calls[0][0];
@@ -807,7 +828,7 @@ describe('SonarCommand', () => {
 
     it('sets isBetaEligible() for Private Beta when the user is entitled', async () => {
       const handler = mock((_ctx: CommandInvocationContext) => {});
-      const cmd = new SonarCommand({
+      const cmd = sonarCommand({
         runtime: {
           auth: null,
           isAlphaEnabled: false,
@@ -821,7 +842,7 @@ describe('SonarCommand', () => {
     });
 
     it('catches handler errors and sets process.exitCode to 1', async () => {
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       cmd.anonymousAction((_ctx) => {
         throw new Error('handler error');
       });
@@ -830,17 +851,17 @@ describe('SonarCommand', () => {
     });
 
     it('catches handler errors and outputs the error message', async () => {
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       cmd.anonymousAction((_ctx) => {
         throw new Error('handler error');
       });
       await cmd.parseAsync([], { from: 'user' });
-      const errCall = getMockUiCalls().find((c) => c.method === 'error');
+      const errCall = ui.calls.find((c) => c.method === 'error');
       expect(errCall?.args[0]).toBe('handler error');
     });
 
     it('ctx.recordTelemetry queues items before a thrown CommandFailedError', async () => {
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       cmd.anonymousAction((ctx) => {
         ctx.recordTelemetry(
           new TelemetryFact('CliAnalysisCompleted', {
@@ -869,7 +890,7 @@ describe('SonarCommand', () => {
     it('calls handler with CommandAuthenticatedInvocationContext as first argument', async () => {
       resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
       const handler = mock((_ctx: CommandAuthenticatedInvocationContext) => Promise.resolve());
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       cmd.authenticatedAction(handler);
       await cmd.parseAsync([], { from: 'user' });
       expect(handler).toHaveBeenCalledTimes(1);
@@ -882,7 +903,7 @@ describe('SonarCommand', () => {
     it('does not call handler when not authenticated', async () => {
       resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(null);
       const handler = mock(() => Promise.resolve());
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       cmd.authenticatedAction(handler);
       await cmd.parseAsync([], { from: 'user' });
       expect(handler).not.toHaveBeenCalled();
@@ -890,7 +911,7 @@ describe('SonarCommand', () => {
 
     it('sets process.exitCode to 1 when not authenticated', async () => {
       resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(null);
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       cmd.authenticatedAction(() => Promise.resolve());
       await cmd.parseAsync([], { from: 'user' });
       expect(process.exitCode).toBe(1);
@@ -898,18 +919,18 @@ describe('SonarCommand', () => {
 
     it('outputs a descriptive error message when not authenticated', async () => {
       resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(null);
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       cmd.authenticatedAction(() => Promise.resolve());
       await cmd.parseAsync([], { from: 'user' });
-      const errCall = getMockUiCalls().find((c) => c.method === 'error');
+      const errCall = ui.calls.find((c) => c.method === 'error');
       expect(errCall?.args[0]).toContain('Not authenticated');
-      const hintCall = getMockUiCalls().find((c) => c.method === 'print');
+      const hintCall = ui.calls.find((c) => c.method === 'print');
       expect(hintCall?.args[0]).toBe("  → Run 'sonar auth login' to authenticate.");
     });
 
     it('catches handler errors and sets process.exitCode', async () => {
       resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       cmd.authenticatedAction(() => {
         throw new CommandFailedError('handler failed', { exitCode: 5 });
       });
@@ -921,7 +942,7 @@ describe('SonarCommand', () => {
       process.env[ALPHA_ENV_VAR] = 'true';
       resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
       const handler = mock((_ctx: CommandAuthenticatedInvocationContext) => Promise.resolve());
-      const cmd = new SonarCommand({
+      const cmd = sonarCommand({
         runtime: { auth: null, isAlphaEnabled: true, isPrivateBetaEnabled: () => false },
       });
       cmd.stage(Stage.Alpha).authenticatedAction(handler);
@@ -935,7 +956,7 @@ describe('SonarCommand', () => {
     it('sets isBetaEligible() for Open Beta', async () => {
       resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
       const handler = mock((_ctx: CommandAuthenticatedInvocationContext) => Promise.resolve());
-      const cmd = new SonarCommand();
+      const cmd = sonarCommand();
       cmd.stage(Stage.Beta()).authenticatedAction(handler);
       await cmd.parseAsync([], { from: 'user' });
       expect(handler).toHaveBeenCalledTimes(1);
@@ -952,7 +973,7 @@ describe('SonarCommand', () => {
       option: SonarOption,
       runtime?: { isAlphaEnabled?: boolean; isPrivateBetaEnabled?: (flagKey: string) => boolean },
     ): SonarCommand {
-      const cmd = new SonarCommand('cmd', {
+      const cmd = sonarCommand('cmd', {
         runtime: {
           auth: null,
           isAlphaEnabled: runtime?.isAlphaEnabled ?? false,
@@ -977,7 +998,7 @@ describe('SonarCommand', () => {
     }
 
     it('creates SonarOption instances from .option()', () => {
-      const cmd = new SonarCommand('cmd').option('--plain', 'A plain option');
+      const cmd = sonarCommand('cmd').option('--plain', 'A plain option');
       expect(cmd.options[0]).toBeInstanceOf(SonarOption);
       expect(cmd.options[0]?.lifecycle).toEqual({ stage: 'stable' });
     });
@@ -991,7 +1012,7 @@ describe('SonarCommand', () => {
     it('throws when adding a staged option that was later made mandatory', () => {
       const option = new SonarOption('--need', 'Required').stage(Stage.Alpha).makeOptionMandatory();
       expect(() =>
-        new SonarCommand('cmd', {
+        sonarCommand('cmd', {
           runtime: { auth: null, isAlphaEnabled: true, isPrivateBetaEnabled: () => false },
         }).addOption(option),
       ).toThrow("Cannot stage a required option as Alpha or Beta: '--need'");
@@ -1019,7 +1040,7 @@ describe('SonarCommand', () => {
 
     it('registers an Alpha option with an [ALPHA] tag when alpha is enabled', async () => {
       const handler = mock(() => {});
-      const cmd = new SonarCommand('cmd', {
+      const cmd = sonarCommand('cmd', {
         runtime: { auth: null, isAlphaEnabled: true, isPrivateBetaEnabled: () => false },
       });
       cmd
@@ -1032,14 +1053,14 @@ describe('SonarCommand', () => {
 
       await cmd.parseAsync(['--preview'], { from: 'user' });
       expect(handler).toHaveBeenCalledTimes(1);
-      const warning = getMockUiCalls().find((call) => call.method === 'info');
+      const warning = ui.calls.find((call) => call.method === 'info');
       expect(warning?.args[0]).toBe(
         "'--preview' is in alpha; may change or be removed without notice.",
       );
     });
 
     it('lists Alpha options in a separate group at the bottom of help', () => {
-      const cmd = new SonarCommand('cmd', {
+      const cmd = sonarCommand('cmd', {
         runtime: { auth: null, isAlphaEnabled: true, isPrivateBetaEnabled: () => false },
       });
       cmd.option('--stable', 'A stable option');
@@ -1072,7 +1093,7 @@ describe('SonarCommand', () => {
       await cmd.parseAsync(['--preview'], { from: 'user' });
       await cmd.parseAsync(['--preview'], { from: 'user' });
 
-      const warnings = getMockUiCalls().filter((call) => call.method === 'info');
+      const warnings = ui.calls.filter((call) => call.method === 'info');
       expect(warnings).toHaveLength(1);
       expect(warnings[0]?.args[0]).toBe("'--preview' is in beta and may change.");
       expect(state.config.betaCommandWarnings).toEqual({ 'cmd --preview': VERSION });
@@ -1098,7 +1119,7 @@ describe('SonarCommand', () => {
     });
 
     it('tags staged options in the custom root help menu', () => {
-      const root = new SonarCommand('sonar');
+      const root = sonarCommand('sonar');
       root.addOption(new SonarOption('--preview', 'Preview the plan').stage(Stage.Beta()));
 
       expect(getCustomRootHelp(root, root.createHelp())).toContain('Preview the plan [BETA]');
@@ -1110,7 +1131,7 @@ describe('SonarCommand', () => {
         .stage(Stage.Deprecated({ sinceVersion: '1.8', replacement: null }));
 
       expect(option.lifecycle.stage).toBe('deprecated');
-      expect(new SonarCommand('cmd').addOption(option).helpInformation()).toContain('--need');
+      expect(sonarCommand('cmd').addOption(option).helpInformation()).toContain('--need');
     });
 
     it('keeps Deprecated options visible with a [DEPRECATED] tag and warns on every use', async () => {
@@ -1125,7 +1146,7 @@ describe('SonarCommand', () => {
       await cmd.parseAsync(['--legacy'], { from: 'user' });
       await cmd.parseAsync(['--legacy'], { from: 'user' });
 
-      const warnings = getMockUiCalls().filter((call) => call.method === 'warn');
+      const warnings = ui.calls.filter((call) => call.method === 'warn');
       expect(warnings).toHaveLength(2);
       expect(warnings[0]?.args[0]).toBe(
         "'--legacy' is deprecated since 1.8 and will be removed in a future version. Use '--next' instead.",
@@ -1141,11 +1162,11 @@ describe('SonarCommand', () => {
 
       await cmd.parseAsync([], { from: 'user' });
 
-      expect(getMockUiCalls().filter((call) => call.method === 'warn')).toHaveLength(0);
+      expect(ui.calls.filter((call) => call.method === 'warn')).toHaveLength(0);
     });
 
     it('tags Deprecated options in the custom root help menu', () => {
-      const root = new SonarCommand('sonar');
+      const root = sonarCommand('sonar');
       root.addOption(
         new SonarOption('--legacy', 'Legacy flag').stage(
           Stage.Deprecated({ sinceVersion: '1.8', replacement: null }),

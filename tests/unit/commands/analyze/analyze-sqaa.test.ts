@@ -36,6 +36,7 @@ import { clearMockUiCalls, getMockUiCalls, setMockTty, setMockUi } from '@/core/
 
 import { analyzeSqaa, buildSqaaJsonReport } from '../../../../src/commands/analyze/sqaa.ts';
 import * as changesetModule from '../../../../src/commands/analyze/sqaa-changeset.ts';
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const TEST_ORG = 'test-org';
@@ -51,7 +52,10 @@ const FAKE_AUTH: import('@/core/auth/auth-resolver.ts').ResolvedAuth = {
   connectionType: 'cloud',
 };
 
-const FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(FAKE_AUTH);
+const FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(
+  FAKE_AUTH,
+  new FakeConsole(),
+);
 
 let loadStateSpy: ReturnType<typeof spyOn>;
 let saveStateSpy: ReturnType<typeof spyOn>;
@@ -299,7 +303,10 @@ describe('analyzeSqaa: explicit --project option', () => {
       connectionType: 'on-premise' as const,
     };
 
-    const onPremiseContext = new CommandAuthenticatedInvocationContext(onPremiseAuth);
+    const onPremiseContext = new CommandAuthenticatedInvocationContext(
+      onPremiseAuth,
+      new FakeConsole(),
+    );
 
     await analyzeSqaa({ file: ['src/index.ts'], project: 'my-project' }, onPremiseContext);
 

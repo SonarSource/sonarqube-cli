@@ -46,6 +46,7 @@ import { resolveTelemetryIdentity } from '@/core/telemetry/identity-fetch.ts';
 import * as userModule from '@/core/telemetry/user.ts';
 import * as ui from '@/core/ui';
 
+import { FakeConsole } from '../../../_common/fake-console.ts';
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
 import type { StoredAnalysisCompletedEvent } from '../../../_common/telemetry-helpers.ts';
 import {
@@ -62,7 +63,7 @@ import { mockIdentityGetSafe } from './identity-api-mock.ts';
  * e.g. makeCommand('auth login') produces leaf `login` under `auth` under root.
  */
 function makeCommand(path: string): SonarCommand {
-  const root = new SonarCommand('sonar');
+  const root = new SonarCommand('sonar', { console: new FakeConsole() });
   let current: SonarCommand = root;
   for (const name of path.split(' ')) {
     current = current.command(name);
