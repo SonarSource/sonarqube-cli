@@ -53,13 +53,13 @@ import {
 
 export {
   ALPHA_ENV_VAR,
-  ALPHA_HELP_TAG,
-  BETA_HELP_TAG,
-  DEPRECATED_HELP_TAG,
   type DeprecatedStageOptions,
+  deprecationDetails,
   type LifecycleState,
   Stage,
   type StageDescriptor,
+  stageHelpTag,
+  type StageName,
 } from '@/core/commands/stage.ts';
 
 const betaWarningsShownWithoutState = new Set<string>();

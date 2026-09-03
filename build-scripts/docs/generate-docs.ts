@@ -32,11 +32,13 @@ import type { Option } from 'commander';
 
 import { createCommandTree } from '@/commands/command-tree.ts';
 import {
+  deprecationDetails,
   type LifecycleState,
   type SonarCommand,
   SonarOption,
+  stageHelpTag,
+  type StageName,
 } from '@/core/commands/sonar-command.ts';
-import { stageHelpTag, type StageName } from '@/core/commands/stage.ts';
 
 import { version } from '../../package.json';
 import { EXAMPLES } from './examples';
@@ -104,10 +106,7 @@ function clidocDeprecation(lifecycle: LifecycleState): ClidocDeprecation | undef
 }
 
 function formatClidocDeprecation(subject: string, deprecation: ClidocDeprecation): string {
-  const base = `${subject} is deprecated since ${deprecation.sinceVersion} and will be removed in a future version`;
-  return deprecation.replacement === null
-    ? `${base}. There is no replacement.`
-    : `${base}. Use '${deprecation.replacement}' instead.`;
+  return `${subject} ${deprecationDetails(deprecation.sinceVersion, deprecation.replacement)}`;
 }
 
 interface ClidocCommand {

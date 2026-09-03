@@ -99,15 +99,19 @@ export function withLifecycleTag(description: string, stage: StageName): string 
   return tag === '' ? description : `${description} ${tag}`;
 }
 
+export function deprecationDetails(sinceVersion: string, replacement: string | null): string {
+  const base = `is deprecated since ${sinceVersion} and will be removed in a future version`;
+  return replacement === null
+    ? `${base}. There is no replacement.`
+    : `${base}. Use '${replacement}' instead.`;
+}
+
 export function deprecationWarning(
   subject: string,
   sinceVersion: string,
   replacement: string | null,
 ): string {
-  const base = `'${subject}' is deprecated since ${sinceVersion} and will be removed in a future version`;
-  return replacement === null
-    ? `${base}. There is no replacement.`
-    : `${base}. Use '${replacement}' instead.`;
+  return `'${subject}' ${deprecationDetails(sinceVersion, replacement)}`;
 }
 
 export function resolveLifecycle(stage: StageDescriptor): LifecycleState {
