@@ -32,12 +32,11 @@ import type { Option } from 'commander';
 
 import { createCommandTree } from '@/commands/command-tree.ts';
 import {
-  BETA_HELP_TAG,
-  DEPRECATED_HELP_TAG,
   type LifecycleState,
   type SonarCommand,
   SonarOption,
 } from '@/core/commands/sonar-command.ts';
+import { stageHelpTag, type StageName } from '@/core/commands/stage.ts';
 
 import { version } from '../../package.json';
 import { EXAMPLES } from './examples';
@@ -64,6 +63,13 @@ interface ClidocArgument {
   variadic: boolean;
 }
 
+interface ClidocDeprecation {
+  sinceVersion: string;
+  replacement: string | null;
+}
+
+type PublicStage = Exclude<StageName, 'alpha'>;
+
 interface ClidocOption {
   flags: string;
   long: string;
@@ -73,29 +79,35 @@ interface ClidocOption {
   required: boolean;
   defaultValue: unknown;
   allowedValues?: string[];
-  stage?: 'stable' | 'beta' | 'deprecated';
+  stage?: PublicStage;
+  deprecation?: ClidocDeprecation;
 }
 
-type PublicStage = 'stable' | 'beta' | 'deprecated';
-
+/** Alpha is omitted from public docs, so it is serialized as stable. */
 function publicStage(lifecycle: LifecycleState): PublicStage {
-  if (lifecycle.stage === 'deprecated') {
-    return 'deprecated';
-  }
-  if (lifecycle.stage === 'beta') {
-    return 'beta';
-  }
-  return 'stable';
+  return lifecycle.stage === 'alpha' ? 'stable' : lifecycle.stage;
 }
 
 function lifecycleHelpTag(stage: PublicStage): string {
-  if (stage === 'beta') {
-    return ` ${BETA_HELP_TAG}`;
+  const tag = stageHelpTag(stage);
+  return tag === '' ? '' : ` ${tag}`;
+}
+
+function clidocDeprecation(lifecycle: LifecycleState): ClidocDeprecation | undefined {
+  if (lifecycle.stage !== 'deprecated') {
+    return undefined;
   }
-  if (stage === 'deprecated') {
-    return ` ${DEPRECATED_HELP_TAG}`;
-  }
-  return '';
+  return {
+    sinceVersion: lifecycle.sinceVersion,
+    replacement: lifecycle.replacement,
+  };
+}
+
+function formatClidocDeprecation(subject: string, deprecation: ClidocDeprecation): string {
+  const base = `${subject} is deprecated since ${deprecation.sinceVersion} and will be removed in a future version`;
+  return deprecation.replacement === null
+    ? `${base}. There is no replacement.`
+    : `${base}. Use '${deprecation.replacement}' instead.`;
 }
 
 interface ClidocCommand {
@@ -107,6 +119,7 @@ interface ClidocCommand {
   isGroup: boolean;
   isRoot: boolean;
   stage: PublicStage;
+  deprecation?: ClidocDeprecation;
   requiresAuth: boolean;
   depth: number;
   parentId: string | null;
@@ -167,6 +180,10 @@ function serializeOptions(cmd: SonarCommand): ClidocOption[] {
       if (stage !== 'stable') {
         serialized.stage = stage;
       }
+      const deprecation = clidocDeprecation(option.lifecycle);
+      if (deprecation) {
+        serialized.deprecation = deprecation;
+      }
       return serialized;
     });
 }
@@ -181,6 +198,7 @@ function serializeCommand(
   const id = fullName.replaceAll(/\s+/g, '-');
   const visibleChildren = visibleDocumentedCommands(cmd);
 
+  const deprecation = clidocDeprecation(cmd.lifecycle);
   const entry: ClidocCommand = {
     id,
     name: cmd.name(),
@@ -190,6 +208,7 @@ function serializeCommand(
     isGroup: visibleChildren.length > 0,
     isRoot: depth === 0,
     stage: publicStage(cmd.lifecycle),
+    ...(deprecation === undefined ? {} : { deprecation }),
     requiresAuth: cmd.requiresAuth,
     depth,
     parentId,
@@ -253,54 +272,68 @@ function aliasSuffix(cmd: ClidocCommand): string {
   return cmd.aliases.length > 0 ? `|${cmd.aliases.join('|')}` : '';
 }
 
+function optionUsageToken(option: ClidocOption): string {
+  const flag = option.short ? option.short : option.long;
+  return option.type === 'boolean' ? `[${option.long}]` : `[${flag} <value>]`;
+}
+
+function optionLlmsLine(option: ClidocOption): string {
+  const flagPart = option.short ? `${option.long}, ${option.short}` : option.long;
+  const typePart = option.type === 'boolean' ? '' : `  <${option.type}>`;
+  const lifecycleTag = lifecycleHelpTag(option.stage ?? 'stable');
+  const deprecationNote = option.deprecation
+    ? ` ${formatClidocDeprecation('This option', option.deprecation)}`
+    : '';
+  return `  ${flagPart}${typePart}   ${option.description}${lifecycleTag}${deprecationNote}`;
+}
+
+function appendLlmsUsage(commandLines: string[], cmd: ClidocCommand): void {
+  const args = cmd.arguments.map((a) => (a.required ? `<${a.name}>` : `[${a.name}]`)).join(' ');
+  const optsSummary = cmd.options.map(optionUsageToken).join(' ');
+  const usageParts = [cmd.fullName, optsSummary, args].filter(Boolean).join(' ');
+  commandLines.push(`Usage: ${usageParts}`);
+}
+
+function appendLlmsOptions(commandLines: string[], cmd: ClidocCommand): void {
+  if (cmd.options.length === 0) {
+    return;
+  }
+  commandLines.push('', 'Options:', ...cmd.options.map(optionLlmsLine));
+}
+
+function appendLlmsExamples(commandLines: string[], cmd: ClidocCommand): void {
+  if (cmd.examples.length === 0) {
+    return;
+  }
+  commandLines.push('', 'Examples:', ...cmd.examples.map((ex) => `  ${ex.command}`));
+}
+
+function appendLlmsCommand(commandLines: string[], cmd: ClidocCommand): void {
+  const authMarker = cmd.requiresAuth ? ' *' : '';
+  commandLines.push(`### ${cmd.fullName}${aliasSuffix(cmd)}${authMarker}`);
+  if (cmd.description) {
+    commandLines.push(`${cmd.description}${lifecycleHelpTag(cmd.stage)}`);
+  }
+  if (cmd.deprecation) {
+    commandLines.push(formatClidocDeprecation('This command', cmd.deprecation));
+  }
+  if (!cmd.isGroup) {
+    appendLlmsUsage(commandLines, cmd);
+    appendLlmsOptions(commandLines, cmd);
+  }
+  appendLlmsExamples(commandLines, cmd);
+  commandLines.push('');
+}
+
 function buildLlmsTxt(): string {
   const template = readFileSync(join(__dirname, 'llms.txt.template'), 'utf-8');
   const commandLines: string[] = [];
 
-  // Emit every non-root command
   for (const cmd of allCommands) {
-    if (cmd.isRoot) continue;
-
-    const authMarker = cmd.requiresAuth ? ' *' : '';
-    commandLines.push(`### ${cmd.fullName}${aliasSuffix(cmd)}${authMarker}`);
-    if (cmd.description) {
-      const lifecycleTag = lifecycleHelpTag(cmd.stage);
-      commandLines.push(`${cmd.description}${lifecycleTag}`);
+    if (cmd.isRoot) {
+      continue;
     }
-
-    if (!cmd.isGroup) {
-      // Usage line
-      const args = cmd.arguments.map((a) => (a.required ? `<${a.name}>` : `[${a.name}]`)).join(' ');
-      const optsSummary = cmd.options
-        .map((o) => {
-          const flag = o.short ? `${o.short}` : o.long;
-          return o.type === 'boolean' ? `[${o.long}]` : `[${flag} <value>]`;
-        })
-        .join(' ');
-      const usageParts = [cmd.fullName, optsSummary, args].filter(Boolean).join(' ');
-      commandLines.push(`Usage: ${usageParts}`);
-
-      if (cmd.options.length > 0) {
-        commandLines.push('');
-        commandLines.push('Options:');
-        for (const opt of cmd.options) {
-          const flagPart = opt.short ? `${opt.long}, ${opt.short}` : opt.long;
-          const typePart = opt.type === 'boolean' ? '' : `  <${opt.type}>`;
-          const lifecycleTag = lifecycleHelpTag(opt.stage ?? 'stable');
-          commandLines.push(`  ${flagPart}${typePart}   ${opt.description}${lifecycleTag}`);
-        }
-      }
-    }
-
-    if (cmd.examples.length > 0) {
-      commandLines.push('');
-      commandLines.push('Examples:');
-      for (const ex of cmd.examples) {
-        commandLines.push(`  ${ex.command}`);
-      }
-    }
-
-    commandLines.push('');
+    appendLlmsCommand(commandLines, cmd);
   }
 
   return template.replace('{{VERSION}}', version).replace('{{COMMANDS}}', commandLines.join('\n'));

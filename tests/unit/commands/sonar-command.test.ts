@@ -656,13 +656,13 @@ describe('SonarCommand', () => {
       await command.parseAsync([], { from: 'user' });
       await command.parseAsync([], { from: 'user' });
 
-      const warnings = getMockUiCalls().filter((call) => call.method === 'info');
+      const warnings = getMockUiCalls().filter((call) => call.method === 'warn');
       expect(warnings).toHaveLength(2);
       expect(warnings[0]?.args[0]).toBe(
-        "'legacy' is deprecated since 1.8. There is no replacement.",
+        "'legacy' is deprecated since 1.8 and will be removed in a future version. There is no replacement.",
       );
       expect(warnings[1]?.args[0]).toBe(
-        "'legacy' is deprecated since 1.8. There is no replacement.",
+        "'legacy' is deprecated since 1.8 and will be removed in a future version. There is no replacement.",
       );
     });
 
@@ -673,9 +673,9 @@ describe('SonarCommand', () => {
 
       await command.parseAsync([], { from: 'user' });
 
-      const warning = getMockUiCalls().find((call) => call.method === 'info');
+      const warning = getMockUiCalls().find((call) => call.method === 'warn');
       expect(warning?.args[0]).toBe(
-        "'self-update' is deprecated since 1.2. Use 'sonar update' instead.",
+        "'self-update' is deprecated since 1.2 and will be removed in a future version. Use 'sonar update' instead.",
       );
     });
 
@@ -688,9 +688,9 @@ describe('SonarCommand', () => {
 
       await root.parseAsync(['verify'], { from: 'user' });
 
-      const warning = getMockUiCalls().find((call) => call.method === 'info');
+      const warning = getMockUiCalls().find((call) => call.method === 'warn');
       expect(warning?.args[0]).toBe(
-        "'sonar verify' is deprecated since 0.14. Use 'sonar analyze' instead.",
+        "'sonar verify' is deprecated since 0.14 and will be removed in a future version. Use 'sonar analyze' instead.",
       );
     });
 
@@ -1125,10 +1125,10 @@ describe('SonarCommand', () => {
       await cmd.parseAsync(['--legacy'], { from: 'user' });
       await cmd.parseAsync(['--legacy'], { from: 'user' });
 
-      const warnings = getMockUiCalls().filter((call) => call.method === 'info');
+      const warnings = getMockUiCalls().filter((call) => call.method === 'warn');
       expect(warnings).toHaveLength(2);
       expect(warnings[0]?.args[0]).toBe(
-        "'--legacy' is deprecated since 1.8. Use '--next' instead.",
+        "'--legacy' is deprecated since 1.8 and will be removed in a future version. Use '--next' instead.",
       );
     });
 
@@ -1141,7 +1141,7 @@ describe('SonarCommand', () => {
 
       await cmd.parseAsync([], { from: 'user' });
 
-      expect(getMockUiCalls().filter((call) => call.method === 'info')).toHaveLength(0);
+      expect(getMockUiCalls().filter((call) => call.method === 'warn')).toHaveLength(0);
     });
 
     it('tags Deprecated options in the custom root help menu', () => {

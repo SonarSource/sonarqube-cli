@@ -1340,6 +1340,11 @@ body.commands-page { height: 100%; overflow: hidden; }
 .opt-req-yes { color: var(--orange); font-weight: 600; font-size: 12px; }
 .opt-req-no { color: var(--text-muted); font-size: 12px; }
 .opt-allowed { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.opt-deprecation {
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--orange);
+}
 .opt-allowed-val {
   font-size: 11px;
   padding: 1px 6px;

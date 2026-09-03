@@ -81,17 +81,22 @@ export type LifecycleState =
 
 export const STABLE_LIFECYCLE: LifecycleState = Object.freeze({ stage: 'stable' });
 
+const STAGE_HELP_TAGS = {
+  stable: '',
+  alpha: ALPHA_HELP_TAG,
+  beta: BETA_HELP_TAG,
+  deprecated: DEPRECATED_HELP_TAG,
+} as const satisfies Record<StageName, string>;
+
+export type StageHelpTag = (typeof STAGE_HELP_TAGS)[StageName];
+
+export function stageHelpTag(stage: StageName): StageHelpTag {
+  return STAGE_HELP_TAGS[stage];
+}
+
 export function withLifecycleTag(description: string, stage: StageName): string {
-  if (stage === 'alpha') {
-    return `${description} ${ALPHA_HELP_TAG}`;
-  }
-  if (stage === 'beta') {
-    return `${description} ${BETA_HELP_TAG}`;
-  }
-  if (stage === 'deprecated') {
-    return `${description} ${DEPRECATED_HELP_TAG}`;
-  }
-  return description;
+  const tag = stageHelpTag(stage);
+  return tag === '' ? description : `${description} ${tag}`;
 }
 
 export function deprecationWarning(
@@ -99,7 +104,7 @@ export function deprecationWarning(
   sinceVersion: string,
   replacement: string | null,
 ): string {
-  const base = `'${subject}' is deprecated since ${sinceVersion}`;
+  const base = `'${subject}' is deprecated since ${sinceVersion} and will be removed in a future version`;
   return replacement === null
     ? `${base}. There is no replacement.`
     : `${base}. Use '${replacement}' instead.`;

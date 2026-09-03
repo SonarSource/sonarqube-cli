@@ -483,6 +483,16 @@ function navigateToCommand(id) {
   selectCommand(id);
 }
 
+function deprecationNotice(kind, deprecation) {
+  if (!deprecation) {
+    return `${kind} is deprecated and will be removed in a future version.`;
+  }
+  const base = `${kind} is deprecated since ${deprecation.sinceVersion} and will be removed in a future version`;
+  return deprecation.replacement == null
+    ? `${base}. There is no replacement.`
+    : `${base}. Use '${deprecation.replacement}' instead.`;
+}
+
 function renderDetail(cmd) {
   const parts = [];
 
@@ -502,7 +512,7 @@ function renderDetail(cmd) {
     parts.push(`<div class="stage-banner stage-banner-beta">This command is in beta. Its flags and behavior may change without notice.</div>`);
   }
   if (cmd.stage === 'deprecated') {
-    parts.push(`<div class="stage-banner stage-banner-deprecated">This command is deprecated and will be removed in a future version.</div>`);
+    parts.push(`<div class="stage-banner stage-banner-deprecated">${escHtml(deprecationNotice('This command', cmd.deprecation))}</div>`);
   }
 
   // Description
@@ -533,7 +543,11 @@ function renderDetail(cmd) {
         opt.stage === 'beta' || opt.stage === 'deprecated'
           ? ` <span class="stage-badge stage-${escHtml(opt.stage)}">${escHtml(opt.stage)}</span>`
           : '';
-      parts.push(`<tr><td data-label="Option">${flags}</td><td data-label="Type">${typeBadge}</td><td data-label="Required">${req}</td><td data-label="Description">${escHtml(opt.description)}${stageBadge}${allowedHtml}</td><td data-label="Default">${def}</td></tr>`);
+      const deprecationHtml =
+        opt.stage === 'deprecated'
+          ? `<div class="opt-deprecation">${escHtml(deprecationNotice('This option', opt.deprecation))}</div>`
+          : '';
+      parts.push(`<tr><td data-label="Option">${flags}</td><td data-label="Type">${typeBadge}</td><td data-label="Required">${req}</td><td data-label="Description">${escHtml(opt.description)}${stageBadge}${deprecationHtml}${allowedHtml}</td><td data-label="Default">${def}</td></tr>`);
     }
     parts.push(`</tbody></table></div>`);
   }

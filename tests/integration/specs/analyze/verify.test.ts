@@ -44,7 +44,7 @@ describe('verify command', () => {
     const result = await harness.run('verify');
 
     expect(result.stderr).toContain(
-      "'sonar verify' is deprecated since 0.14. Use 'sonar analyze' instead.",
+      "'sonar verify' is deprecated since 0.14 and will be removed in a future version. Use 'sonar analyze' instead.",
     );
   });
 });

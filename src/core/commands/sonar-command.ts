@@ -41,7 +41,7 @@ import {
 } from '@/core/commands/stage.ts';
 import logger from '@/core/observability/logger.ts';
 import { loadState, saveState } from '@/core/state/state-manager.ts';
-import { blank, error, info, print } from '@/core/ui';
+import { blank, error, info, print, warn } from '@/core/ui';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
 import { UpdateNotifier } from '@/core/update/notification.ts';
 
@@ -552,7 +552,7 @@ export class SonarCommand extends Command {
           `'${flag}' is in beta and may change.`,
         );
       } else {
-        info(deprecationWarning(flag, lifecycle.sinceVersion, lifecycle.replacement), 'stderr');
+        warn(deprecationWarning(flag, lifecycle.sinceVersion, lifecycle.replacement));
       }
     }
   }
@@ -562,13 +562,12 @@ export class SonarCommand extends Command {
       return;
     }
 
-    info(
+    warn(
       deprecationWarning(
         qualifiedCommandPath(this),
         this._lifecycle.sinceVersion,
         this._lifecycle.replacement,
       ),
-      'stderr',
     );
   }
 

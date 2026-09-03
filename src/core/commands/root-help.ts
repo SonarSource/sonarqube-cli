@@ -23,14 +23,8 @@ import type { Help, Option } from 'commander';
 import { softBlue, underline } from '@/core/ui/colors.ts';
 
 import { version as VERSION } from '../../../package.json';
-import {
-  ALPHA_HELP_TAG,
-  BETA_HELP_TAG,
-  COMMAND_CATEGORIES,
-  type CommandCategory,
-  DEPRECATED_HELP_TAG,
-  type SonarCommand,
-} from './sonar-command.ts';
+import { COMMAND_CATEGORIES, type CommandCategory, type SonarCommand } from './sonar-command.ts';
+import { stageHelpTag } from './stage.ts';
 
 const BANNER_ART = [
   '  █▀ █▀█ █▄ █ ▄▀█ █▀█ █▀█ █ █ █▄▄ █▀▀   ▄█▀ █   █',
@@ -103,17 +97,9 @@ function getRootCommandLabel(command: SonarCommand, helper: Help): string {
     return nameWithAlias;
   }
 
-  const childLabels = visibleChildren.map((child) => {
-    let tag = '';
-    if (child.lifecycle.stage === 'alpha') {
-      tag = ALPHA_HELP_TAG;
-    } else if (child.lifecycle.stage === 'beta') {
-      tag = BETA_HELP_TAG;
-    } else if (child.lifecycle.stage === 'deprecated') {
-      tag = DEPRECATED_HELP_TAG;
-    }
-    return `${child.name()}${tag}`;
-  });
+  const childLabels = visibleChildren.map(
+    (child) => `${child.name()}${stageHelpTag(child.lifecycle.stage)}`,
+  );
   return `${nameWithAlias} <${childLabels.join('|')}>`;
 }
 
