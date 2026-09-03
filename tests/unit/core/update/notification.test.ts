@@ -27,6 +27,7 @@ import type { Command } from 'commander';
 
 import { createCommandTree } from '@/commands/command-tree.ts';
 import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
 
@@ -36,9 +37,9 @@ process.env.SONAR_USER_HOME = tempHome;
 
 // Building the tree registers every .showUpdateNotification() into the root's
 // UpdateNotifier — reuse that same instance here rather than constructing a fresh one.
-const COMMAND_TREE = await createCommandTree();
+const console = new TerminalConsole();
+const COMMAND_TREE = await createCommandTree({ console });
 const updateNotifier = COMMAND_TREE.updateNotifier;
-const console = COMMAND_TREE.console;
 
 function resolveCommand(path: string[]): Command {
   let current: Command = COMMAND_TREE;
