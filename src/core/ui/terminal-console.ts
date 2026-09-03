@@ -19,42 +19,39 @@
  */
 
 import { cyan, green, isTTY, red, yellow } from './colors.ts';
-import { note as writeNote } from './components/note.ts';
-import { phase as writePhase } from './components/phase.ts';
+import { renderNote } from './components/note.ts';
+import { renderPhase } from './components/phase.ts';
 import {
-  confirmPrompt as runConfirmPrompt,
   type MultiSelectOption,
-  multiSelectPrompt as runMultiSelectPrompt,
   type MultiSelectPromptOptions,
-  passwordPrompt as runPasswordPrompt,
-  pressEnterKeyPrompt as runPressEnterKeyPrompt,
-  promptUntilValid as runPromptUntilValid,
+  renderConfirmPrompt,
+  renderMultiSelectPrompt,
+  renderPasswordPrompt,
+  renderPressEnterKeyPrompt,
+  renderPromptUntilValid,
+  renderSelectPrompt,
+  renderTextPrompt,
   type SelectOption,
-  selectPrompt as runSelectPrompt,
-  textPrompt as runTextPrompt,
 } from './components/prompts.ts';
-import { intro as writeIntro, outro as writeOutro } from './components/sections.ts';
-import { withSpinner as runWithSpinner } from './components/spinner.ts';
+import { renderIntro, renderOutro } from './components/sections.ts';
+import { renderWithSpinner } from './components/spinner.ts';
 import type { Console } from './console.ts';
-import { isMockActive, recordCall } from './mock.ts';
-import { channelStream, print as writePrint, write } from './streams.ts';
 import type { ColorFn, NoteOptions, OutputChannel, PhaseItem, PhaseOptions } from './types.ts';
 
-/**
- * Production {@link Console}: writes to stdout/stderr.
- *
- * Still honors the process-global UI mock (`setMockUi`) so unmigrated unit
- * tests keep working while callers move onto `ctx.console`.
- */
+function write(stream: NodeJS.WriteStream, line: string): void {
+  stream.write(line + '\n');
+}
+
+function channelStream(channel: OutputChannel): NodeJS.WriteStream {
+  return channel === 'stderr' ? process.stderr : process.stdout;
+}
+
+/** Production {@link Console}: writes to stdout/stderr. */
 export class TerminalConsole implements Console {
   private formattedOutputMode = false;
   private readonly collectedMessages: string[] = [];
 
   info(message: string, channel: OutputChannel = 'stdout'): void {
-    if (isMockActive()) {
-      recordCall('info', message);
-      return;
-    }
     if (channel === 'stdout' && this.formattedOutputMode) {
       this.collectedMessages.push(`  ℹ  ${message}`);
       return;
@@ -63,10 +60,6 @@ export class TerminalConsole implements Console {
   }
 
   success(message: string): void {
-    if (isMockActive()) {
-      recordCall('success', message);
-      return;
-    }
     if (this.formattedOutputMode) {
       this.collectedMessages.push(`✅ ${message}`);
       return;
@@ -75,10 +68,6 @@ export class TerminalConsole implements Console {
   }
 
   discreetSuccess(message: string, channel: OutputChannel = 'stdout'): void {
-    if (isMockActive()) {
-      recordCall('discreetSuccess', message);
-      return;
-    }
     if (channel === 'stdout' && this.formattedOutputMode) {
       this.collectedMessages.push(`  ✓  ${message}`);
       return;
@@ -87,26 +76,14 @@ export class TerminalConsole implements Console {
   }
 
   warn(message: string): void {
-    if (isMockActive()) {
-      recordCall('warn', message);
-      return;
-    }
     write(process.stderr, `⚠️ ${yellow(message)}`);
   }
 
   error(message: string): void {
-    if (isMockActive()) {
-      recordCall('error', message);
-      return;
-    }
     write(process.stderr, `❌ ${red(message)}`);
   }
 
   text(message: string, color?: ColorFn, channel: OutputChannel = 'stdout'): void {
-    if (isMockActive()) {
-      recordCall('text', message);
-      return;
-    }
     if (channel === 'stdout' && this.formattedOutputMode) {
       this.collectedMessages.push(message);
       return;
@@ -116,18 +93,10 @@ export class TerminalConsole implements Console {
   }
 
   print(message: string, channel: OutputChannel = 'stdout'): void {
-    if (isMockActive()) {
-      recordCall('print', message);
-      return;
-    }
-    writePrint(message, channel);
+    channelStream(channel).write(message + (message.endsWith('\n') ? '' : '\n'));
   }
 
   blank(): void {
-    if (isMockActive()) {
-      recordCall('blank');
-      return;
-    }
     if (this.formattedOutputMode) {
       return;
     }
@@ -137,19 +106,19 @@ export class TerminalConsole implements Console {
   }
 
   note(content: string | string[], title?: string, opts: NoteOptions = {}): void {
-    writeNote(content, title, opts);
+    renderNote(content, title, opts);
   }
 
   phase(title: string, items: PhaseItem[], opts: PhaseOptions = {}): void {
-    writePhase(title, items, opts);
+    renderPhase(title, items, opts);
   }
 
   intro(title: string, subtitle?: string): void {
-    writeIntro(title, subtitle);
+    renderIntro(title, subtitle);
   }
 
   outro(message: string, status: 'success' | 'error' = 'success', detail?: string): void {
-    writeOutro(message, status, detail);
+    renderOutro(message, status, detail);
   }
 
   withSpinner<T>(
@@ -157,23 +126,23 @@ export class TerminalConsole implements Console {
     task: () => Promise<T>,
     channel: OutputChannel = 'stdout',
   ): Promise<T> {
-    return runWithSpinner(message, task, channel);
+    return renderWithSpinner(message, task, channel);
   }
 
   textPrompt(message: string): Promise<string | null> {
-    return runTextPrompt(message);
+    return renderTextPrompt(message);
   }
 
   passwordPrompt(message: string): Promise<string | null> {
-    return runPasswordPrompt(message);
+    return renderPasswordPrompt(message);
   }
 
   confirmPrompt(message: string, defaultValue: boolean): Promise<boolean | null> {
-    return runConfirmPrompt(message, defaultValue);
+    return renderConfirmPrompt(message, defaultValue);
   }
 
   selectPrompt<T>(message: string, options: SelectOption<T>[]): Promise<T | null> {
-    return runSelectPrompt(message, options);
+    return renderSelectPrompt(message, options);
   }
 
   multiSelectPrompt<T>(
@@ -181,7 +150,7 @@ export class TerminalConsole implements Console {
     options: MultiSelectOption<T>[],
     loadMoreOpts?: MultiSelectPromptOptions<T>,
   ): Promise<T[] | null> {
-    return runMultiSelectPrompt(message, options, loadMoreOpts);
+    return renderMultiSelectPrompt(message, options, loadMoreOpts);
   }
 
   promptUntilValid(
@@ -189,11 +158,11 @@ export class TerminalConsole implements Console {
     isValid: (value: string) => boolean,
     errorMessage: string,
   ): Promise<string | null> {
-    return runPromptUntilValid(message, isValid, errorMessage);
+    return renderPromptUntilValid(message, isValid, errorMessage);
   }
 
   pressEnterKeyPrompt(message: string): Promise<void> {
-    return runPressEnterKeyPrompt(message);
+    return renderPressEnterKeyPrompt(message);
   }
 
   setFormattedOutputMode(active: boolean): void {

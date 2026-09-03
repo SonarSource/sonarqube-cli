@@ -30,7 +30,6 @@ import * as registry from '@/core/framework/features';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import * as discovery from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
-import { clearMockUiCalls, setMockUi } from '@/core/ui';
 
 import { FakeConsole } from '../../../../_common/fake-console.ts';
 
@@ -40,7 +39,7 @@ const SERVER_AUTH: ResolvedAuth = {
   connectionType: 'on-premise',
 };
 
-const SERVER_CTX = new CommandAuthenticatedInvocationContext(SERVER_AUTH, new FakeConsole());
+let SERVER_CTX: CommandAuthenticatedInvocationContext;
 
 const BASE_PROJECT: DiscoveredProject = {
   repoRoot: '/project/root',
@@ -48,6 +47,13 @@ const BASE_PROJECT: DiscoveredProject = {
   configSources: [],
   projectKey: 'my-project',
 };
+
+let fake: FakeConsole;
+
+beforeEach(() => {
+  fake = new FakeConsole();
+  SERVER_CTX = new CommandAuthenticatedInvocationContext(SERVER_AUTH, fake);
+});
 
 describe('integrateCopilot', () => {
   let checkTokenStatusSpy: Mock<
@@ -76,7 +82,6 @@ describe('integrateCopilot', () => {
   >;
 
   beforeEach(() => {
-    setMockUi(true);
     checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
     discoverProjectSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(BASE_PROJECT);
     installIntegrationSpy = spyOn(registry, 'installIntegration').mockResolvedValue([]);
@@ -94,8 +99,6 @@ describe('integrateCopilot', () => {
   });
 
   afterEach(() => {
-    clearMockUiCalls();
-    setMockUi(false);
     checkTokenStatusSpy.mockRestore();
     discoverProjectSpy.mockRestore();
     installIntegrationSpy.mockRestore();

@@ -18,10 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Spinner — animated indicator for long-running async operations
-
 import { cyan, green, red } from '../colors.ts';
-import { isMockActive, recordCall } from '../mock.ts';
+import { getDefaultConsole } from '../default-console.ts';
 import { channelStream } from '../streams.ts';
 import type { OutputChannel } from '../types.ts';
 
@@ -30,18 +28,13 @@ const INTERVAL_MS = 80;
 
 /**
  * Run task with animated spinner. Shows ✓ on success, ✗ on failure.
- * Falls back to plain print in non-TTY or mock mode.
+ * Falls back to plain print in non-TTY environments.
  */
-export async function withSpinner<T>(
+export async function renderWithSpinner<T>(
   message: string,
   task: () => Promise<T>,
   channel: OutputChannel = 'stdout',
 ): Promise<T> {
-  if (isMockActive()) {
-    recordCall('spinner', message);
-    return await task();
-  }
-
   const stream = channelStream(channel);
 
   if (!stream.isTTY) {
@@ -65,4 +58,12 @@ export async function withSpinner<T>(
     stream.write(`\r  ${red('✗')}  ${message}\n`);
     throw err;
   }
+}
+
+export async function withSpinner<T>(
+  message: string,
+  task: () => Promise<T>,
+  channel: OutputChannel = 'stdout',
+): Promise<T> {
+  return getDefaultConsole().withSpinner(message, task, channel);
 }

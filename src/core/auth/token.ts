@@ -29,7 +29,6 @@ import { startLoopbackServer } from '@/core/host/loopback-server.ts';
 import logger from '@/core/observability/logger.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { fetchServerVersion, isAtLeast } from '@/core/server/server-info.ts';
-import { isMockActive } from '@/core/ui';
 import { blue } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -265,7 +264,7 @@ export async function generateTokenViaBrowser(
 
   let authResult: BrowserAuthResult | undefined;
   try {
-    if (isMockActive() || process.env.CI === 'true') {
+    if (process.env.CI === 'true') {
       // Non-interactive: wait for server token
       authResult = await tokenPromise;
     } else {

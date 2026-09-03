@@ -30,8 +30,8 @@ import {
 } from '@clack/core';
 
 import { cyan, dim, green, red } from '../colors.ts';
-import { dequeueMockResponse, isMockActive, recordCall } from '../mock.ts';
-import { print } from '../streams.ts';
+import { getDefaultConsole } from '../default-console.ts';
+import { print } from '../messages.ts';
 
 const CTRL_C = 0x03;
 const ENTER_CR = 0x0d;
@@ -41,13 +41,7 @@ const EXIT_CODE_SIGINT = 130;
 /**
  * Text input prompt. Returns null if cancelled (Ctrl+C).
  */
-export async function textPrompt(message: string): Promise<string | null> {
-  if (isMockActive()) {
-    const value = dequeueMockResponse<string>('');
-    recordCall('textPrompt', message, value);
-    return value;
-  }
-
+export async function renderTextPrompt(message: string): Promise<string | null> {
   const prompt = new TextPrompt({
     render() {
       if (this.state === 'submit') return `  ${green('✓')}  ${message} ${dim(this.value ?? '')}`;
@@ -64,13 +58,7 @@ export async function textPrompt(message: string): Promise<string | null> {
 /**
  * Password input prompt — masks input with bullet characters. Returns null if cancelled (Ctrl+C).
  */
-export async function passwordPrompt(message: string): Promise<string | null> {
-  if (isMockActive()) {
-    const value = dequeueMockResponse<string>('');
-    recordCall('passwordPrompt', message, value);
-    return value;
-  }
-
+export async function renderPasswordPrompt(message: string): Promise<string | null> {
   const prompt = new PasswordPrompt({
     render() {
       if (this.state === 'submit') return `  ${green('✓')}  ${message}`;
@@ -87,16 +75,10 @@ export async function passwordPrompt(message: string): Promise<string | null> {
 /**
  * Yes/No confirmation prompt. Returns null if cancelled (Ctrl+C).
  */
-export async function confirmPrompt(
+export async function renderConfirmPrompt(
   message: string,
   defaultValue: boolean,
 ): Promise<boolean | null> {
-  if (isMockActive()) {
-    const value = dequeueMockResponse<boolean>(defaultValue);
-    recordCall('confirmPrompt', message, value);
-    return value;
-  }
-
   const prompt = new ConfirmPrompt({
     active: 'Yes',
     inactive: 'No',
@@ -124,16 +106,10 @@ export interface SelectOption<T> {
 /**
  * Selection prompt. Returns null if cancelled (Ctrl+C).
  */
-export async function selectPrompt<T>(
+export async function renderSelectPrompt<T>(
   message: string,
   options: SelectOption<T>[],
 ): Promise<T | null> {
-  if (isMockActive()) {
-    const value = dequeueMockResponse<T | null>(options.length ? options[0].value : null);
-    recordCall('selectPrompt', message, value);
-    return value;
-  }
-
   const prompt = new SelectPrompt({
     options,
     render() {
@@ -259,17 +235,11 @@ function renderOptionRow(
  * were already present before the reload. When `onLoadMore` returns a `Promise`, the row shows
  * a loading indicator until it resolves; Enter is ignored on every other row while it's pending.
  */
-export async function multiSelectPrompt<T>(
+export async function renderMultiSelectPrompt<T>(
   message: string,
   initialOptions: MultiSelectOption<T>[],
   loadMoreOpts?: MultiSelectPromptOptions<T>,
 ): Promise<T[] | null> {
-  if (isMockActive()) {
-    const value = dequeueMockResponse<T[] | null>([]);
-    recordCall('multiSelectPrompt', message, value);
-    return value;
-  }
-
   let options = initialOptions;
   const selected: T[] = [];
   let cursor = 0;
@@ -420,7 +390,7 @@ export function checkboxComponent(isSelected: boolean, unavailable: boolean): st
  * Calls textPrompt in a loop until isValid returns true, printing errorMessage on each invalid
  * attempt. Returns null if the user cancels (Ctrl+C).
  */
-export async function promptUntilValid(
+export async function renderPromptUntilValid(
   message: string,
   isValid: (value: string) => boolean,
   errorMessage: string,
@@ -433,11 +403,7 @@ export async function promptUntilValid(
     if (isValid(value)) {
       return value;
     }
-    if (isMockActive()) {
-      recordCall('print', errorMessage);
-    } else {
-      print(errorMessage);
-    }
+    print(errorMessage);
   }
 }
 
@@ -446,9 +412,8 @@ export async function promptUntilValid(
  * Only Enter advances the prompt; all other keys are silently consumed.
  * Skipped automatically in mock mode, CI=true, or non-TTY environments.
  */
-export async function pressEnterKeyPrompt(message: string): Promise<void> {
-  if (isMockActive() || process.env.CI === 'true') {
-    if (isMockActive()) recordCall('pressAnyKeyPrompt', message);
+export async function renderPressEnterKeyPrompt(message: string): Promise<void> {
+  if (process.env.CI === 'true') {
     return;
   }
 
@@ -485,4 +450,46 @@ export async function pressEnterKeyPrompt(message: string): Promise<void> {
 
     process.stdin.on('data', onData);
   });
+}
+
+export async function textPrompt(message: string): Promise<string | null> {
+  return getDefaultConsole().textPrompt(message);
+}
+
+export async function passwordPrompt(message: string): Promise<string | null> {
+  return getDefaultConsole().passwordPrompt(message);
+}
+
+export async function confirmPrompt(
+  message: string,
+  defaultValue: boolean,
+): Promise<boolean | null> {
+  return getDefaultConsole().confirmPrompt(message, defaultValue);
+}
+
+export async function selectPrompt<T>(
+  message: string,
+  options: SelectOption<T>[],
+): Promise<T | null> {
+  return getDefaultConsole().selectPrompt(message, options);
+}
+
+export async function multiSelectPrompt<T>(
+  message: string,
+  options: MultiSelectOption<T>[],
+  loadMoreOpts?: MultiSelectPromptOptions<T>,
+): Promise<T[] | null> {
+  return getDefaultConsole().multiSelectPrompt(message, options, loadMoreOpts);
+}
+
+export async function promptUntilValid(
+  message: string,
+  isValid: (value: string) => boolean,
+  errorMessage: string,
+): Promise<string | null> {
+  return getDefaultConsole().promptUntilValid(message, isValid, errorMessage);
+}
+
+export async function pressEnterKeyPrompt(message: string): Promise<void> {
+  return getDefaultConsole().pressEnterKeyPrompt(message);
 }

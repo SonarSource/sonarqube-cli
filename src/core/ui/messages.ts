@@ -18,126 +18,54 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Inline terminal output — non-interactive, static messages
+// Inline terminal output — non-interactive, static messages.
+// I/O is owned by TerminalConsole; these functions delegate to the process default.
 
-import { cyan, green, isTTY, red, yellow } from './colors.ts';
-import { isMockActive, recordCall } from './mock.ts';
-import { channelStream, print as streamPrint, write } from './streams.ts';
+import { getDefaultConsole } from './default-console.ts';
 import type { ColorFn, OutputChannel } from './types.ts';
 
-let _formattedOutputMode = false;
-const _collectedMessages: string[] = [];
-
-/**
- * Enable/disable formatted output mode (e.g. JSON output).
- * When active, stdout messages are collected into a buffer instead of printed.
- * Disabling clears the buffer.
- * stderr output (warn, error) is never affected.
- */
 export function setFormattedOutputMode(active: boolean): void {
-  _formattedOutputMode = active;
-  if (!active) {
-    _collectedMessages.length = 0;
-  }
+  getDefaultConsole().setFormattedOutputMode(active);
 }
 
-/** True when stdout messages are buffered for machine-readable command output. */
 export function isFormattedOutputMode(): boolean {
-  return _formattedOutputMode;
+  return getDefaultConsole().isFormattedOutputMode();
 }
 
-/** Returns messages collected since the last setFormattedOutputMode(true) call. */
 export function getMessagesForFormattedOutput(): string[] {
-  return [..._collectedMessages];
+  return getDefaultConsole().getMessagesForFormattedOutput();
 }
 
 export function info(message: string, channel: OutputChannel = 'stdout'): void {
-  if (isMockActive()) {
-    recordCall('info', message);
-    return;
-  }
-  if (channel === 'stdout' && _formattedOutputMode) {
-    _collectedMessages.push(`  ℹ  ${message}`);
-    return;
-  }
-  write(channelStream(channel), `  ${cyan('ℹ')}  ${message}`);
+  getDefaultConsole().info(message, channel);
 }
 
 export function success(message: string): void {
-  if (isMockActive()) {
-    recordCall('success', message);
-    return;
-  }
-  if (_formattedOutputMode) {
-    _collectedMessages.push(`✅ ${message}`);
-    return;
-  }
-  write(process.stdout, `✅ ${green(message)}`);
+  getDefaultConsole().success(message);
 }
 
 export function discreetSuccess(message: string, channel: OutputChannel = 'stdout'): void {
-  if (isMockActive()) {
-    recordCall('discreetSuccess', message);
-    return;
-  }
-  // Only stdout participates in formatted-output buffering; an explicit stderr
-  // channel writes through immediately since stderr does not carry the payload.
-  if (channel === 'stdout' && _formattedOutputMode) {
-    _collectedMessages.push(`  ✓  ${message}`);
-    return;
-  }
-  write(channelStream(channel), `  ${green('✓')}  ${message}`);
+  getDefaultConsole().discreetSuccess(message, channel);
 }
 
 export function warn(message: string): void {
-  if (isMockActive()) {
-    recordCall('warn', message);
-    return;
-  }
-  write(process.stderr, `⚠️ ${yellow(message)}`);
+  getDefaultConsole().warn(message);
 }
 
 export function error(message: string): void {
-  if (isMockActive()) {
-    recordCall('error', message);
-    return;
-  }
-  write(process.stderr, `❌ ${red(message)}`);
+  getDefaultConsole().error(message);
 }
 
-// Plain terminal output — human-readable, no semantic icon, optional color
 export function text(message: string, color?: ColorFn, channel: OutputChannel = 'stdout'): void {
-  if (isMockActive()) {
-    recordCall('text', message);
-    return;
-  }
-  // Only stdout participates in formatted-output buffering; an explicit stderr
-  // channel writes through immediately since stderr does not carry the payload.
-  if (channel === 'stdout' && _formattedOutputMode) {
-    _collectedMessages.push(message);
-    return;
-  }
-  const formatted = color ? color(message) : message;
-  write(channelStream(channel), formatted);
+  getDefaultConsole().text(message, color, channel);
 }
 
-// Raw stream output — no color, no prefix — safe for piping: sonar issues search | jq
 export function print(message: string, channel: OutputChannel = 'stdout'): void {
-  if (isMockActive()) {
-    recordCall('print', message);
-    return;
-  }
-  streamPrint(message, channel);
+  getDefaultConsole().print(message, channel);
 }
 
-// Newline separator
 export function blank(): void {
-  if (isMockActive()) {
-    recordCall('blank');
-    return;
-  }
-  if (_formattedOutputMode) return;
-  if (isTTY) process.stdout.write('\n');
+  getDefaultConsole().blank();
 }
 
 /**

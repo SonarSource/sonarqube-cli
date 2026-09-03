@@ -18,14 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 
 import { ImportProgress } from '@/commands/import/import-progress.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 import { ConcurrentProgress } from '@/core/ui/components/concurrent-progress.ts';
 
 const ITEMS = ['alpha', 'beta', 'gamma'];
-const REPOS = ['my-org/api-gateway', 'my-org/auth-service', 'my-org/billing'];
 
 function captureStdout(fn: () => void): string {
   const chunks: string[] = [];
@@ -160,33 +158,13 @@ describe('ConcurrentProgress — TTY', () => {
   });
 });
 
-describe('ConcurrentProgress — mock mode options', () => {
-  beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-  });
-  afterEach(() => setMockUi(false));
-
-  it('uses default concurrentProgress mock prefix', () => {
-    const progress = new ConcurrentProgress({});
-    progress.setTotal(1);
-    progress.addItems(['item']);
-    progress.start();
-    progress.update('item', 'done');
-    progress.finish();
-    const methods = getMockUiCalls().map((c) => c.method);
-    expect(methods).toContain('concurrentProgress.start');
-    expect(methods).toContain('concurrentProgress.update');
-    expect(methods).toContain('concurrentProgress.finish');
-  });
-
+describe('ConcurrentProgress — options', () => {
   it('showResult: false still emits the item list in non-TTY', () => {
     const progress = new ConcurrentProgress({ isTTY: false, showResult: false });
     progress.setTotal(1);
     progress.addItems(['item']);
     progress.start();
     progress.update('item', 'done', 'some detail');
-    setMockUi(false);
     const output = captureStdout(() => progress.finish());
     expect(output).toContain('item');
     expect(output).toContain('some detail');
@@ -198,7 +176,6 @@ describe('ConcurrentProgress — mock mode options', () => {
     progress.addItems(['item']);
     progress.start();
     progress.update('item', 'done');
-    setMockUi(false);
     const output = captureStdout(() => progress.finish());
     expect(output).not.toContain('Succeeded');
     expect(output).not.toContain('Failed');
@@ -210,7 +187,6 @@ describe('ConcurrentProgress — mock mode options', () => {
     progress.addItems(['item']);
     progress.start();
     progress.update('item', 'done');
-    setMockUi(false);
     const output = captureStdout(() => progress.finish());
     expect(output).toContain('My Results');
   });
@@ -295,35 +271,5 @@ describe('ImportProgress — formatLabel', () => {
     const progress = newImportProgress(['standalone'], { isTTY: true });
     const output = captureStdout(() => progress.start());
     expect(output).toContain('standalone');
-  });
-});
-
-describe('ImportProgress — mock mode', () => {
-  beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-  });
-  afterEach(() => setMockUi(false));
-
-  it('records method calls with importProgress prefix, writes nothing, and tracks counts', () => {
-    const progress = newImportProgress(REPOS);
-
-    const output = captureStdout(() => {
-      progress.start();
-      progress.update(REPOS[0], 'done', 'Project created', 'key-1');
-      progress.update(REPOS[1], 'failed', 'CI failed');
-      progress.recordSkipped(1);
-    });
-    const { succeeded, failed } = progress.finish();
-
-    expect(output).toBe('');
-    expect(succeeded).toBe(1);
-    expect(failed).toBe(1);
-    const methods = getMockUiCalls().map((c) => c.method);
-    expect(methods).toContain('importProgress.addRepos');
-    expect(methods).toContain('importProgress.start');
-    expect(methods).toContain('importProgress.update');
-    expect(methods).toContain('importProgress.recordSkipped');
-    expect(methods).toContain('importProgress.finish');
   });
 });

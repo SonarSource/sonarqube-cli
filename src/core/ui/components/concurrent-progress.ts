@@ -23,8 +23,7 @@
 import * as readline from 'node:readline';
 
 import { bold, dim, green, red, STATUS_COLORS, STATUS_ICONS, visibleLength } from '../colors.ts';
-import { isMockActive, recordCall } from '../mock.ts';
-import { phase, phaseItem } from './phase.ts';
+import { phaseItem, renderPhase } from './phase.ts';
 
 export type ConcurrentItemStatus = 'pending' | 'running' | 'done' | 'failed';
 
@@ -62,7 +61,6 @@ export class ConcurrentProgress {
   private readonly maxVisible: number;
   private readonly showResult: boolean;
   private readonly resultTitle: string;
-  protected readonly mockPrefix: string;
   private total = 0;
   protected skippedResolved = 0;
   private linesRendered = 0;
@@ -72,13 +70,11 @@ export class ConcurrentProgress {
     maxVisible?: number;
     showResult?: boolean;
     resultTitle?: string;
-    mockPrefix?: string;
   }) {
     this.isTTY = opts.isTTY ?? process.stdout.isTTY;
     this.maxVisible = opts.maxVisible ?? DEFAULT_MAX_VISIBLE;
     this.showResult = opts.showResult ?? true;
     this.resultTitle = opts.resultTitle ?? 'Results';
-    this.mockPrefix = opts.mockPrefix ?? 'concurrentProgress';
   }
 
   setTotal(total: number): void {
@@ -95,28 +91,16 @@ export class ConcurrentProgress {
 
   addItems(slugs: string[]): void {
     this.registerItems(slugs);
-    if (isMockActive()) {
-      recordCall(`${this.mockPrefix}.addItems`, slugs);
-      return;
-    }
     if (this.isTTY) this.render();
   }
 
   start(): void {
-    if (isMockActive()) {
-      recordCall(`${this.mockPrefix}.start`);
-      return;
-    }
     if (this.isTTY) this.render();
   }
 
   update(slug: string, status: ConcurrentItemStatus, detail?: string, ref?: string): void {
     this.items.set(slug, { status, detail, ref });
     if (status === 'done' || status === 'failed') this.promoteNext(slug);
-    if (isMockActive()) {
-      recordCall(`${this.mockPrefix}.update`, slug, status, detail, ref);
-      return;
-    }
     if (this.isTTY) this.render();
   }
 
@@ -124,11 +108,6 @@ export class ConcurrentProgress {
     const states = [...this.items.values()];
     const succeeded = states.filter((s) => s.status === 'done').length;
     const failed = states.filter((s) => s.status === 'failed').length;
-
-    if (isMockActive()) {
-      recordCall(`${this.mockPrefix}.finish`);
-      return { succeeded, failed };
-    }
 
     if (this.isTTY) {
       this.render();
@@ -138,7 +117,7 @@ export class ConcurrentProgress {
         const state = this.items.get(slug);
         return phaseItem(slug, toPhaseStatus(state?.status), state?.detail);
       });
-      phase(this.resultTitle, phaseItems);
+      renderPhase(this.resultTitle, phaseItems);
     }
 
     return { succeeded, failed };
