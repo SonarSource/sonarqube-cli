@@ -18,8 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CommandFailedError } from '@/core/command-error.ts';
-import { SUPPORT_URL } from '@/core/config-constants.ts';
 import type { IntegrationContext } from '@/core/framework/features/types.ts';
 
 export function getOptionalStringAttr(
@@ -28,21 +26,4 @@ export function getOptionalStringAttr(
 ): string | undefined {
   const value = context.attrs?.[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-export function getRequiredStringAttr(
-  context: IntegrationContext,
-  key: string,
-  integrationDisplayName: string,
-): string {
-  const value = getOptionalStringAttr(context, key);
-  if (value === undefined) {
-    throw new CommandFailedError(
-      `Could not complete the ${integrationDisplayName} integration: missing required data '${key}'.`,
-      {
-        remediationHint: `Report this issue: ${SUPPORT_URL}`,
-      },
-    );
-  }
-  return value;
 }
