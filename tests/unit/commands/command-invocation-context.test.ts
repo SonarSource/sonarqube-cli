@@ -83,9 +83,19 @@ describe('CommandInvocationContext stage accessors', () => {
     ).toBe(true);
   });
 
+  it('isBetaEligible for Private Beta is false when runtime is omitted', () => {
+    expect(ctx({ stage: 'beta', betaFlagKey: 'cli.beta.demo' }).isBetaEligible()).toBe(false);
+  });
+
   it('exposes the injected console', () => {
     const fake = new FakeConsole();
     expect(ctx(undefined, undefined, fake).console).toBe(fake);
+  });
+
+  it('recordTelemetry no-ops on empty input', () => {
+    const context = ctx();
+    context.recordTelemetry();
+    expect(context.telemetryFacts()).toEqual([]);
   });
 
   it('recordTelemetry appends facts onto the context', () => {

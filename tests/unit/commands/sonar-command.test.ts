@@ -33,6 +33,7 @@ import {
 import { getCustomRootHelp } from '@/core/commands/root-help.ts';
 import {
   ALPHA_ENV_VAR,
+  createDefaultCliRuntime,
   SonarCommand,
   type SonarCommandOptions,
   SonarOption,
@@ -89,6 +90,31 @@ describe('SonarCommand', () => {
     } else {
       process.env[ALPHA_ENV_VAR] = originalAlphaEnv;
     }
+  });
+
+  // ─── constructor ─────────────────────────────────────────────────────────
+
+  describe('constructor', () => {
+    it('requires a console', () => {
+      expect(
+        () =>
+          new SonarCommand({
+            runtime: { auth: null, isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
+          } as SonarCommandOptions),
+      ).toThrow('SonarCommand requires a console');
+    });
+
+    it('exposes the injected console', () => {
+      const cmd = sonarCommand();
+      expect(cmd.console).toBe(ui);
+    });
+  });
+
+  describe('createDefaultCliRuntime()', () => {
+    it('returns a runtime with private beta disabled', () => {
+      const runtime = createDefaultCliRuntime();
+      expect(runtime.isPrivateBetaEnabled('cli.beta.demo')).toBe(false);
+    });
   });
 
   // ─── action() ────────────────────────────────────────────────────────────
