@@ -228,7 +228,7 @@ export class SonarCommand extends Command {
   constructor(nameOrOptions: string | SonarCommandOptions, maybeOptions?: SonarCommandOptions) {
     const hasName = typeof nameOrOptions === 'string';
     const name = hasName ? nameOrOptions : undefined;
-    const options = (hasName ? maybeOptions : nameOrOptions) ?? maybeOptions;
+    const options = typeof nameOrOptions === 'object' ? nameOrOptions : maybeOptions;
     if (options?.console === undefined) {
       throw new TypeError('SonarCommand requires a console');
     }
