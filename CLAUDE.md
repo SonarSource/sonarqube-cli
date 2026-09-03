@@ -203,7 +203,7 @@ owning `DopRepository` / `ProvisionedProject`), `RemediateApiClient`
 `VortexEntitlementClient` (`src/core/vortex/entitlement.ts`, owning `VortexEntitlementResult` /
 `VortexEntitlementStatus` and `SERVER_ORGANIZATION_ID_PLACEHOLDER`).
 
-Two rules hold across all fifteen of them, with no exception — keep it that way when adding one.
+Three rules hold across all fifteen of them, with no exception — keep it that way when adding one.
 
 **Every API client is constructed from a `SonarHttpClient`**, never from a `(serverUrl, token)` pair
 it turns into one itself. The command handler builds the transport client once and passes it in, so
@@ -218,10 +218,11 @@ drift. Callers write `client.organizations.getOrganizationAlmKey(key)`. For the 
 classes derive rather than copy what the transport already knows — `ImportApiClient.isCloud` is a
 getter over `client.isCloud`, not a field set in the constructor.
 
-Free functions taking a client as their first parameter are the shape to avoid: if the logic belongs
-to one client, it is a private method on it (see `VortexEntitlementClient.sqaaEndpoint`). Functions
-that take no client are fine as functions — `mergeVortexEntitlement` is a pure function of two
-results, and `checkHubEntitlement` is a shared response mapper used for both hubs.
+**A free function taking a client as its first parameter is the shape to avoid**: when the logic
+belongs to one client, it is a private method on it (see `VortexEntitlementClient.sqaaEndpoint`).
+Two shapes stay functions. `mergeVortexEntitlement` takes no client at all — it is a pure function
+of two results. `checkHubEntitlement` does take one, and stays a function anyway because it belongs
+to no single client: it is the response mapper the SQAA and CAG hubs share.
 
 New API calls belong in the domain wrapper for their area, never back in the transport class.
 
