@@ -84,11 +84,11 @@ export async function gitPreCommit(
   if (options.dependencyRisks) {
     if (projectKey) {
       await runDepRisksStage({
-      project: projectKey,
-      changedFiles: stagedFiles,
-      auth,
-      ctx,
-    });
+        project: projectKey,
+        changedFiles: stagedFiles,
+        auth,
+        ctx,
+      });
     } else {
       logger.warn('Dependency-risks hook: no project key resolved, skipping.');
       warn(
