@@ -515,7 +515,7 @@ describe('integrate antigravity', () => {
         const sqaaRule = harness.cwd.file(...PROJECT_SQAA_RULE_PATH).asText();
         expectAntigravityAlwaysOnRule(sqaaRule);
         expect(sqaaRule).toContain('# Vortex analysis protocol');
-        expect(sqaaRule).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --depth DEEP`);
+        expect(sqaaRule).toContain('sonar analyze agentic --depth DEEP');
         const vortexFeature = findAntigravityFeature(harness, VORTEX_FEATURE_ID);
         expect(vortexFeature?.scope).toBe('project');
         const subfeatureIds = vortexFeature?.subfeatures?.map((subfeature) => subfeature.featureId);

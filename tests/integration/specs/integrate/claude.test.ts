@@ -677,7 +677,9 @@ describe('integrate claude — Vortex entitlement guard', () => {
           hookScriptName('posttool-sqaa'),
         ),
       ).toBe(true);
-      expect(harness.cwd.file('CLAUDE.md').asText()).toContain('# Vortex analysis protocol');
+      const instructions = harness.cwd.file('CLAUDE.md').asText();
+      expect(instructions).toContain('# Vortex analysis protocol');
+      expect(instructions).not.toContain('--project');
       expect(findClaudeFeature(harness, VORTEX_FEATURE_ID)?.scope).toBe('project');
     },
     { timeout: 30000 },

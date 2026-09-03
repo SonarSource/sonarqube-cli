@@ -137,12 +137,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
       ],
     },
     createVortexFeature<CopilotIntegrationOptions>([
-      createSqaaInstructionsSubfeature([
-        createSqaaInstructionsSnippet({
-          agentDisplayName: COPILOT_DISPLAY_NAME,
-          targetPath: resolveInstructionsPath,
-        }),
-      ]),
+      createSqaaInstructionsSubfeature([createSqaaInstructionsSnippet(resolveInstructionsPath)]),
       createContextAugmentationSubfeature<CopilotIntegrationOptions>({
         targetPath: resolveCopilotSkillPath,
       }),

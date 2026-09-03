@@ -558,7 +558,7 @@ describe('integrate cursor', () => {
         // Cursor auto-loads the rule in every session via the front-matter.
         expect(body).toContain('alwaysApply: true');
         expect(body).toContain('# Vortex analysis protocol');
-        expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT}`);
+        expect(body).toContain('sonar analyze agentic --depth DEEP');
         expect(body).toContain('--file');
 
         expect(findInstalledFeature(harness, 'cursor', 'vortex', 'project')).toBeDefined();

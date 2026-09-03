@@ -21,7 +21,6 @@
 import { describe, expect, it } from 'bun:test';
 
 import {
-  buildSqaaSectionBody,
   sonarBeginMarker,
   sonarEndMarker,
   withSonarMarkers,
@@ -33,22 +32,5 @@ describe('instructions-templates', () => {
 
     expect(result).toBe(`${sonarBeginMarker('my-id')}\nbody line\n${sonarEndMarker('my-id')}\n`);
     expect(result.endsWith('\n')).toBe(true);
-  });
-
-  it('buildSqaaSectionBody renders the SQAA protocol body with the analyze command for the project', () => {
-    const result = buildSqaaSectionBody('my-project');
-
-    expect(result).toContain('# Vortex analysis protocol');
-    expect(result).toContain('sonar analyze agentic --project my-project');
-    expect(result).toContain('--depth DEEP');
-    expect(result).toContain('**Preferred:**');
-    expect(result).toContain('--file');
-    expect(result).toContain('relative to the project root');
-    expect(result).toContain('even when you changed only one file');
-    expect(result).toContain('**Fallback:**');
-    expect(result).toContain('Per-edit hooks run faster STANDARD analysis');
-    expect(result).toContain('End-of-turn analysis must always use `--depth DEEP`');
-    // Explicit file list appears before change-set fallback in the template
-    expect(result.indexOf('--file <path/to/file1>')).toBeLessThan(result.indexOf('**Fallback:**'));
   });
 });
