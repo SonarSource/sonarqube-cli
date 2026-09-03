@@ -158,7 +158,7 @@ export class TerminalConsole implements Console {
     isValid: (value: string) => boolean,
     errorMessage: string,
   ): Promise<string | null> {
-    return renderPromptUntilValid(message, isValid, errorMessage);
+    return renderPromptUntilValid(message, isValid, errorMessage, this);
   }
 
   pressEnterKeyPrompt(message: string): Promise<void> {

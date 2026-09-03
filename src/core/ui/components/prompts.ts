@@ -30,8 +30,8 @@ import {
 } from '@clack/core';
 
 import { cyan, dim, green, red } from '../colors.ts';
+import type { Console } from '../console.ts';
 import { getDefaultConsole } from '../default-console.ts';
-import { print } from '../messages.ts';
 
 const CTRL_C = 0x03;
 const ENTER_CR = 0x0d;
@@ -394,16 +394,17 @@ export async function renderPromptUntilValid(
   message: string,
   isValid: (value: string) => boolean,
   errorMessage: string,
+  console: Console = getDefaultConsole(),
 ): Promise<string | null> {
   for (;;) {
-    const value = await textPrompt(message);
+    const value = await console.textPrompt(message);
     if (value === null) {
       return null;
     }
     if (isValid(value)) {
       return value;
     }
-    print(errorMessage);
+    console.print(errorMessage);
   }
 }
 
