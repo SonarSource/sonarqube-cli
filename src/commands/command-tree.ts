@@ -755,7 +755,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
   hookCommand
     .command('claude-post-tool-use')
     .description('PostToolUse handler: run Vortex analysis after agent edits or writes a file')
-    .requiredOption('--project <key>', 'SonarQube project key')
+    .option('--project <key>', 'SonarQube project key')
     .anonymousAction(handleHookInvocation(agentPostToolUse));
 
   hookCommand
@@ -770,7 +770,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .description(
       'PostToolUse handler for Codex: run Vortex analysis on the git change set after apply_patch',
     )
-    .requiredOption('--project <key>', 'SonarQube project key')
+    .option('--project <key>', 'SonarQube project key')
     .anonymousAction(handleHookInvocation(codexPostToolUse));
 
   hookCommand

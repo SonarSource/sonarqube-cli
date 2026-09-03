@@ -531,7 +531,8 @@ describe('integrate codex', () => {
         expect(sqaaScript.exists()).toBe(true);
         expect(sqaaScript.isExecutable).toBe(true);
         expect(sqaaScript.asText()).toContain('codex-post-tool-use');
-        expect(sqaaScript.asText()).toContain(`--project '${TEST_PROJECT}'`);
+        // The handler resolves the project at run time, so the key is not baked in.
+        expect(sqaaScript.asText()).not.toContain('--project');
 
         const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
         const postTool = hooks.hooks?.PostToolUse?.find((e) =>

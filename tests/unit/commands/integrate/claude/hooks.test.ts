@@ -33,7 +33,6 @@ import {
 
 const PROJECT_ROOT = '/fake/project';
 const GLOBAL_DIR = '/fake/global';
-const PROJECT_KEY = 'my-project';
 
 /** Normalize path separators to forward slashes for cross-platform assertions. */
 const normPath = (s: string) => s.replaceAll('\\', '/');
@@ -248,22 +247,10 @@ describe('installHooks', () => {
     expect(getScriptPathFor('prompt-secrets')).toBeDefined();
   });
 
-  it('does not write the posttool-sqaa script when installSqaa is false', async () => {
-    await installHooks(PROJECT_ROOT, undefined, false);
+  it('never writes the posttool-sqaa script', async () => {
+    await installHooks(PROJECT_ROOT);
 
     expect(getScriptPathFor('posttool-sqaa')).toBeUndefined();
-  });
-
-  it('does not write the posttool-sqaa script when projectKey is not provided', async () => {
-    await installHooks(PROJECT_ROOT, undefined, true);
-
-    expect(getScriptPathFor('posttool-sqaa')).toBeUndefined();
-  });
-
-  it('writes the posttool-sqaa script when installSqaa is true and projectKey is provided', async () => {
-    await installHooks(PROJECT_ROOT, undefined, true, PROJECT_KEY);
-
-    expect(getScriptPathFor('posttool-sqaa')).toBeDefined();
   });
 
   it('installs secrets scripts to globalDir when globalDir is provided', async () => {
@@ -278,14 +265,6 @@ describe('installHooks', () => {
     expect(normPath(getScriptPathFor('pretool-secrets') ?? '')).toContain(PROJECT_ROOT);
   });
 
-  it('installs SQAA script to projectRoot even when globalDir is set', async () => {
-    await installHooks(PROJECT_ROOT, GLOBAL_DIR, true, PROJECT_KEY);
-
-    const sqaaPath = normPath(getScriptPathFor('posttool-sqaa') ?? '');
-    expect(sqaaPath).toContain(PROJECT_ROOT);
-    expect(sqaaPath).not.toContain(GLOBAL_DIR);
-  });
-
   it('writes a PreToolUse hook entry with Read matcher', async () => {
     await installHooks(PROJECT_ROOT);
 
@@ -298,13 +277,6 @@ describe('installHooks', () => {
 
     const settings = getSettingsWriteFor('UserPromptSubmit');
     expect(settings?.hooks?.UserPromptSubmit?.[0]?.matcher).toBe('*');
-  });
-
-  it('writes a PostToolUse hook entry with Edit|Write matcher when SQAA is enabled', async () => {
-    await installHooks(PROJECT_ROOT, undefined, true, PROJECT_KEY);
-
-    const settings = getSettingsWriteFor('PostToolUse');
-    expect(settings?.hooks?.PostToolUse?.[0]?.matcher).toBe('Edit|Write');
   });
 
   it('uses a relative command path for project scope (no globalDir)', async () => {
@@ -356,14 +328,6 @@ describe('installHooks', () => {
     },
   );
 
-  it('uses a relative command path for the SQAA hook regardless of globalDir', async () => {
-    await installHooks(PROJECT_ROOT, GLOBAL_DIR, true, PROJECT_KEY);
-
-    const settings = getSettingsWriteFor('PostToolUse');
-    const command = settings?.hooks?.PostToolUse?.[0]?.hooks?.[0]?.command;
-    expect(isProjectScopedCommand(String(command))).toBe(true);
-  });
-
   it('preserves existing unrelated settings when settings.json already exists', async () => {
     existsSyncSpy.mockReturnValue(true);
     readFileSpy.mockResolvedValue(JSON.stringify({ theme: 'dark', hooks: {} }));
@@ -398,34 +362,10 @@ describe('installHooks', () => {
     expect(settings?.hooks?.PreToolUse).toHaveLength(1);
   });
 
-  it('preserves existing non-sonar PostToolUse entries when adding SQAA hook', async () => {
-    existsSyncSpy.mockReturnValue(true);
-    const existing = {
-      hooks: {
-        PostToolUse: [
-          { matcher: 'Bash', hooks: [{ type: 'command', command: 'echo ran', timeout: 60 }] },
-        ],
-      },
-    };
-    readFileSpy.mockResolvedValue(JSON.stringify(existing));
-
-    await installHooks(PROJECT_ROOT, undefined, true, PROJECT_KEY);
-
-    const settings = getSettingsWriteFor('PostToolUse');
-    const bashEntry = settings?.hooks?.PostToolUse?.find((e) => e.matcher === 'Bash');
-    expect(bashEntry).toBeDefined();
-  });
-
   it('pretool-secrets script delegates to sonar hook claude-pre-tool-use', async () => {
     await installHooks(PROJECT_ROOT);
 
     expect(getScriptWriteFor('pretool-secrets')).toContain('sonar hook claude-pre-tool-use');
-  });
-
-  it('posttool-sqaa script contains the projectKey', async () => {
-    await installHooks(PROJECT_ROOT, undefined, true, PROJECT_KEY);
-
-    expect(getScriptWriteFor('posttool-sqaa')).toContain(PROJECT_KEY);
   });
 
   it('writes a script with the platform-appropriate extension', async () => {
@@ -445,39 +385,26 @@ describe('installHooks', () => {
 
   describe('skipSecretsHooks option', () => {
     it('does not write the pretool-secrets script when skipSecretsHooks is true', async () => {
-      await installHooks(PROJECT_ROOT, undefined, false, undefined, { skipSecretsHooks: true });
+      await installHooks(PROJECT_ROOT, undefined, { skipSecretsHooks: true });
 
       expect(getScriptPathFor('pretool-secrets')).toBeUndefined();
     });
 
     it('does not write the prompt-secrets script when skipSecretsHooks is true', async () => {
-      await installHooks(PROJECT_ROOT, undefined, false, undefined, { skipSecretsHooks: true });
+      await installHooks(PROJECT_ROOT, undefined, { skipSecretsHooks: true });
 
       expect(getScriptPathFor('prompt-secrets')).toBeUndefined();
     });
 
     it('does not write any sonar-secrets entries to settings.json when skipSecretsHooks is true', async () => {
-      await installHooks(PROJECT_ROOT, undefined, false, undefined, { skipSecretsHooks: true });
+      await installHooks(PROJECT_ROOT, undefined, { skipSecretsHooks: true });
 
       expect(getSettingsWriteFor('PreToolUse')).toBeUndefined();
       expect(getSettingsWriteFor('UserPromptSubmit')).toBeUndefined();
     });
 
-    it('still writes the posttool-sqaa script when skipSecretsHooks is true and SQAA is enabled', async () => {
-      await installHooks(PROJECT_ROOT, undefined, true, PROJECT_KEY, { skipSecretsHooks: true });
-
-      expect(getScriptPathFor('posttool-sqaa')).toBeDefined();
-    });
-
-    it('still writes the PostToolUse SQAA settings entry when skipSecretsHooks is true and SQAA is enabled', async () => {
-      await installHooks(PROJECT_ROOT, undefined, true, PROJECT_KEY, { skipSecretsHooks: true });
-
-      const settings = getSettingsWriteFor('PostToolUse');
-      expect(settings?.hooks?.PostToolUse?.[0]?.matcher).toBe('Edit|Write');
-    });
-
     it('writes secrets scripts when skipSecretsHooks is false (default behaviour unchanged)', async () => {
-      await installHooks(PROJECT_ROOT, undefined, false, undefined, { skipSecretsHooks: false });
+      await installHooks(PROJECT_ROOT, undefined, { skipSecretsHooks: false });
 
       expect(getScriptPathFor('pretool-secrets')).toBeDefined();
       expect(getScriptPathFor('prompt-secrets')).toBeDefined();

@@ -39,11 +39,7 @@ import { loadState } from '../state/state-repository.ts';
  * injected by the CLI composition root so this module (which lives in
  * `core/` and must not depend on `commands/`) doesn't need to import it.
  */
-export type InstallHooksFn = (
-  projectRoot: string,
-  globalDir: string | undefined,
-  installSqaa: boolean,
-) => Promise<void>;
+export type InstallHooksFn = (projectRoot: string, globalDir: string | undefined) => Promise<void>;
 
 /**
  * Migrate Claude Code hook scripts and reinstall secrets hooks for all known locations.
@@ -55,9 +51,9 @@ export type InstallHooksFn = (
  *    Project-level hooks without registry entries cannot be discovered — user must
  *    re-run `sonar integrate claude` once to populate the registry.
  *
- * installSqaa is always false here: SQAA entitlement check requires a token which
- * is not available during post-update. User re-runs `sonar integrate claude` to
- * get the SQAA hook installed.
+ * Only the secrets hooks are reinstalled: the Vortex analysis hook needs an
+ * entitlement check, and that requires a token this post-update path does not
+ * have. The user re-runs `sonar integrate claude` to get it installed.
  *
  * @param homedirFn - Injectable for tests; defaults to os.homedir()
  */
@@ -78,7 +74,7 @@ export async function migrateClaudeCodeHooks(
   for (const { projectRoot, globalDir } of locations) {
     try {
       migrateHookScripts(projectRoot, globalDir);
-      await installHooksFn(projectRoot, globalDir, false);
+      await installHooksFn(projectRoot, globalDir);
       await removeObsoleteHookArtifacts(projectRoot);
       logger.debug(`Migrated Claude Code hooks for: ${globalDir ?? projectRoot}`);
     } catch (err) {

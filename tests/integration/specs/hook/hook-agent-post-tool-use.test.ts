@@ -80,6 +80,34 @@ describe('sonar hook claude-post-tool-use', () => {
   );
 
   it(
+    'auto-detects the project key when --project is omitted',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
+      harness.cwd.writeFile('src/main.ts', 'const x = 1;');
+      const filePath = join(harness.cwd.path, 'src/main.ts');
+
+      const result = await harness.runWithStdin(
+        'hook claude-post-tool-use',
+        postToolUseStdin(filePath),
+      );
+
+      expect(result.exitCode).toBe(0);
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+      expect(parseSqaaRequestBody(sqaaCalls[0].body).projectKey).toBe(TEST_PROJECT);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits 0 and warns about entitlement loss when SQAA 403 re-checks to not_entitled',
     async () => {
       const server = await harness

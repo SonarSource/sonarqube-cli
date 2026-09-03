@@ -83,6 +83,30 @@ describe('sonar hook codex-post-tool-use', () => {
   );
 
   it(
+    'auto-detects the project key when --project is omitted',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
+      harness.cwd.writeFile('src/main.ts', 'const x = 1;');
+
+      const result = await harness.run('hook codex-post-tool-use');
+
+      expect(result.exitCode).toBe(0);
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+      expect(parseSqaaRequestBody(sqaaCalls[0].body).projectKey).toBe(TEST_PROJECT);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'sends one multi-file STANDARD request when multiple files changed',
     async () => {
       const server = await harness

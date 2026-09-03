@@ -30,22 +30,22 @@ import {
 } from '../../../../../src/commands/integrate/codex/hook-templates.ts';
 
 describe('Codex SQAA PostToolUse Hook Templates', () => {
-  it('PostTool Unix hook: delegates to codex-post-tool-use with project key', () => {
-    const template = getSqaaPostToolTemplateUnix('my-project');
+  it('PostTool Unix hook: delegates to codex-post-tool-use', () => {
+    const template = getSqaaPostToolTemplateUnix();
 
     expect(template.startsWith('#!/bin/bash')).toBe(true);
     expect(template.includes('sonar hook codex-post-tool-use')).toBe(true);
-    expect(template.includes("--project 'my-project'")).toBe(true);
     expect(template.includes(UNIX_SONAR_COMMAND_GUARD)).toBe(true);
     expect(template.includes('sonar analyze agentic')).toBe(false);
+    expect(template.includes('--project')).toBe(false);
   });
 
-  it('PostTool Windows hook: delegates to codex-post-tool-use with project key', () => {
-    const template = getSqaaPostToolTemplateWindows('my-project');
+  it('PostTool Windows hook: delegates to codex-post-tool-use', () => {
+    const template = getSqaaPostToolTemplateWindows();
 
     expect(template.includes('sonar hook codex-post-tool-use')).toBe(true);
-    expect(template.includes("--project 'my-project'")).toBe(true);
     expect(template.includes(WINDOWS_SONAR_COMMAND_GUARD)).toBe(true);
     expect(template.includes('sonar analyze agentic')).toBe(false);
+    expect(template.includes('--project')).toBe(false);
   });
 });

@@ -35,7 +35,7 @@ import {
 } from '@/core/framework/features';
 import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 
-import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs.ts';
+import { getOptionalStringAttr } from '../_common/attrs.ts';
 import {
   MCP_SERVER_FEATURE_BENEFIT,
   MCP_SERVER_FEATURE_PREVIEW,
@@ -178,11 +178,9 @@ function createSqaaHookSubfeature(): SubfeatureDeclaration<CodexIntegrationOptio
         displayName: 'Codex PostToolUse hook script',
         targetPath: (context) =>
           resolveAgentHookScriptPath(context, CODEX_CONFIG_DIR, POSTTOOL_SQAA_SCRIPT_REL),
-        content: (context) => {
-          const projectKey = getRequiredStringAttr(context, 'projectKey', CODEX_DISPLAY_NAME);
-          return process.platform === 'win32'
-            ? getSqaaPostToolTemplateWindows(projectKey)
-            : getSqaaPostToolTemplateUnix(projectKey);
+        content: {
+          unix: getSqaaPostToolTemplateUnix(),
+          windows: getSqaaPostToolTemplateWindows(),
         },
         executable: true,
       }),

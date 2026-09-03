@@ -213,7 +213,7 @@ describe('migrateClaudeCodeHooks', () => {
 
     await migrateClaudeCodeHooks(hooks.installHooks, CLAUDE_INTEGRATION_ID, homedirFn);
 
-    expect(installHooksSpy).toHaveBeenCalledWith('/proj/root', undefined, false);
+    expect(installHooksSpy).toHaveBeenCalledWith('/proj/root', undefined);
   });
 
   it('passes projectRoot and homedirFn() as globalDir for global extensions', async () => {
@@ -222,7 +222,7 @@ describe('migrateClaudeCodeHooks', () => {
 
     await migrateClaudeCodeHooks(hooks.installHooks, CLAUDE_INTEGRATION_ID, homedirFn);
 
-    expect(installHooksSpy).toHaveBeenCalledWith('/proj/root', FAKE_HOME, false);
+    expect(installHooksSpy).toHaveBeenCalledWith('/proj/root', FAKE_HOME);
   });
 
   it('migrates hook scripts for each location before installing hooks', async () => {
@@ -276,7 +276,7 @@ describe('migrateClaudeCodeHooks', () => {
 
     await migrateClaudeCodeHooks(hooks.installHooks, CLAUDE_INTEGRATION_ID, homedirFn);
 
-    expect(installHooksSpy).toHaveBeenCalledWith(FAKE_HOME, FAKE_HOME, false);
+    expect(installHooksSpy).toHaveBeenCalledWith(FAKE_HOME, FAKE_HOME);
   });
 
   it('does not fall back when agent is not configured', async () => {
@@ -303,7 +303,7 @@ describe('migrateClaudeCodeHooks', () => {
 
     // First location failed, but second location still ran
     expect(installHooksSpy).toHaveBeenCalledTimes(1);
-    expect(installHooksSpy).toHaveBeenCalledWith('/proj/beta', undefined, false);
+    expect(installHooksSpy).toHaveBeenCalledWith('/proj/beta', undefined);
   });
 
   it('does not throw when a location migration fails', async () => {
