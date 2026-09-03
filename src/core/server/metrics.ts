@@ -20,16 +20,16 @@
 
 // SonarQube Metrics API wrapper
 
-import { type SonarQubeClient } from './client.ts';
+import { type SonarHttpClient } from './http-client.ts';
 import type { Metric, MetricsSearchResponse } from './types.ts';
 
 /** `api/metrics/search` has no key/name filter, so a full-catalog fetch is the only option. */
 const METRICS_PAGE_SIZE = 500;
 
 export class MetricsClient {
-  private readonly client: SonarQubeClient;
+  private readonly client: SonarHttpClient;
 
-  constructor(client: SonarQubeClient) {
+  constructor(client: SonarHttpClient) {
     this.client = client;
   }
 

@@ -27,7 +27,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 
 import { getTelemetryDir } from '../config-constants.ts';
 import { tryLoadState } from '../state/state-manager.ts';
@@ -114,11 +114,11 @@ function writeDiskCache(cache: ProjectUuidCacheFile): void {
  * Distinguishes a resolved-but-empty response (cache `null`, stop retrying) from a
  * transient/network failure (do not cache, retry next call) via the `ok` return flag.
  *
- * Deliberately does not reuse `SonarQubeClient.getComponentId()`: that helper collapses both
+ * Deliberately does not reuse `ComponentsClient.getComponentId()`: that helper collapses both
  * outcomes to `null`, which would defeat the cache's retry semantics.
  */
 async function fetchProjectUuid(
-  client: SonarQubeClient,
+  client: SonarHttpClient,
   projectKey: string,
 ): Promise<{ value: string | null; ok: boolean }> {
   try {
@@ -159,7 +159,7 @@ export async function resolveProjectUuid(
       return cached.value;
     }
 
-    const client = new SonarQubeClient(auth.serverUrl, auth.token);
+    const client = new SonarHttpClient(auth.serverUrl, auth.token);
     const { value, ok } = await fetchProjectUuid(client, projectKey);
     if (ok) {
       diskCache.entries[entryKey] = value;

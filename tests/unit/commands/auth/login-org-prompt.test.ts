@@ -40,7 +40,8 @@ import { authLogin } from '@/commands/auth/login.ts';
 import * as tokenModule from '@/core/auth/token.ts';
 import { SONARCLOUD_URL } from '@/core/config-constants.ts';
 import * as projectInfo from '@/core/project-info.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { OrganizationsClient } from '@/core/server/organizations.ts';
+import { UsersClient } from '@/core/server/users.ts';
 import {
   clearMockResponses,
   clearMockUiCalls,
@@ -77,15 +78,15 @@ describe('authLogin organization prompt', () => {
     userHome = mkdtempSync(join(tmpdir(), 'sonar-login-org-'));
     process.env.SONAR_USER_HOME = userHome;
     Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
-    resolveAccessSpy = spyOn(SonarQubeClient.prototype, 'resolveOrganizationAccess');
-    listOrgsSpy = spyOn(SonarQubeClient.prototype, 'listUserOrganizations').mockResolvedValue({
+    resolveAccessSpy = spyOn(OrganizationsClient.prototype, 'resolveOrganizationAccess');
+    listOrgsSpy = spyOn(OrganizationsClient.prototype, 'listUserOrganizations').mockResolvedValue({
       organizations: [],
       total: 0,
     });
     // This repository has its own sonar-project.properties; without these the discovered key
     // would short-circuit the prompt under test.
     discoverOrgSpy = spyOn(projectInfo, 'discoverOrganization').mockResolvedValue(null);
-    revokeSpy = spyOn(SonarQubeClient.prototype, 'revokeUserToken').mockResolvedValue(undefined);
+    revokeSpy = spyOn(UsersClient.prototype, 'revokeUserToken').mockResolvedValue(undefined);
     spies = [
       spyOn(process.stdin, 'pause').mockReturnValue(process.stdin),
       revokeSpy,

@@ -20,7 +20,7 @@
 
 import { spyOn } from 'bun:test';
 
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 
 interface ApiStep {
   ok: boolean;
@@ -40,11 +40,11 @@ function shiftStep(queue: ApiStep[] | undefined, fallback: ApiStep): ApiStep {
   return queue?.shift() ?? fallback;
 }
 
-/** Mock SonarQubeClient.getSafe for telemetry identity resolver tests. */
+/** Mock SonarHttpClient.getSafe for telemetry identity resolver tests. */
 export function mockIdentityGetSafe(
   options: IdentityApiMockOptions = {},
 ): ReturnType<typeof spyOn> {
-  const prototype = SonarQubeClient.prototype as {
+  const prototype = SonarHttpClient.prototype as {
     getSafe?: ReturnType<typeof spyOn>;
   };
   prototype.getSafe?.mockRestore?.();
@@ -54,7 +54,7 @@ export function mockIdentityGetSafe(
   const enterpriseSteps = options.enterprise ? [...options.enterprise] : undefined;
   const statusSteps = options.status ? [...options.status] : undefined;
 
-  return spyOn(SonarQubeClient.prototype, 'getSafe').mockImplementation(
+  return spyOn(SonarHttpClient.prototype, 'getSafe').mockImplementation(
     <TValue>(
       endpoint: string,
       _params?: Record<string, string | number | boolean>,

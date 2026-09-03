@@ -19,7 +19,7 @@
  */
 
 import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
-import type { VortexEntitlementStatus } from '@/core/server/client.ts';
+import type { VortexEntitlementStatus } from '@/core/vortex/entitlement.ts';
 
 /**
  * Usage-limit copy is identical for hooks and commands and must never suggest
