@@ -57,6 +57,7 @@ import type {
   KnownServerProjectMapping,
 } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
 import { version as CURRENT_CLI_VERSION } from '../../../package.json';
@@ -480,7 +481,14 @@ export class EnvironmentBuilder {
       }
       recordInstalledFeature(
         state,
-        { targetRoot, scope, executionMode: 'install', resolvedDependencies: new Map(), attrs: {} },
+        {
+          targetRoot,
+          scope,
+          executionMode: 'install',
+          console: new TerminalConsole(),
+          resolvedDependencies: new Map(),
+          attrs: {},
+        },
         integration,
         feature,
         { dependencies: [], resources: [], operations: [] },

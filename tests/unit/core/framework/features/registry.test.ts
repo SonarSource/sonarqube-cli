@@ -39,6 +39,8 @@ import { isContainerIntegrationContext } from '@/core/framework/features/types.t
 import { getDefaultState, type InstalledIntegrationFeature } from '@/core/state/state.ts';
 import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
+import { FakeConsole } from '../../../../_common/fake-console.ts';
+
 const binaryInstall = await import('@/core/host/install/binary.ts');
 void mock.module('@/core/host/install/binary.ts', () => ({
   ...binaryInstall,
@@ -66,6 +68,8 @@ const {
 const { SECRETS_SPEC } = await import('@/core/host/install/secrets.ts');
 
 type Installer = InstanceType<typeof IntegrationInstaller>;
+
+const testConsole = new FakeConsole();
 
 /** Build applications for the invocation, then run interactive selection (mirrors install-integration). */
 async function selectForInvocation<TOptions>(
@@ -505,9 +509,12 @@ describe('declarative integration framework', () => {
     const state = getDefaultState('test');
 
     const filteredContainer = { ...container, subfeatures: [container.subfeatures[0]] };
-    await installer.applyAndRecordFeatures(state, integration, [
-      { feature: filteredContainer, targetRoot: tempDir, scope: 'project' },
-    ]);
+    await installer.applyAndRecordFeatures(
+      state,
+      integration,
+      [{ feature: filteredContainer, targetRoot: tempDir, scope: 'project' }],
+      { console: testConsole },
+    );
 
     expect(integrationContext).toBeDefined();
     expect(isContainerIntegrationContext(integrationContext!)).toBeTrue();
@@ -597,9 +604,12 @@ describe('declarative integration framework', () => {
     const integration = makeIntegration({ features: [{ id: 'feature', displayName: 'Feature' }] });
     const state = getDefaultState('test');
     // Seed the feature as already installed so the keep/remove flow kicks in.
-    await installer.applyAndRecordFeatures(state, integration, [
-      { feature: integration.features[0], targetRoot: tempDir, scope: 'project' },
-    ]);
+    await installer.applyAndRecordFeatures(
+      state,
+      integration,
+      [{ feature: integration.features[0], targetRoot: tempDir, scope: 'project' }],
+      { console: testConsole },
+    );
     queueMockResponse(null); // Ctrl+C at "Keep?"
 
     let caughtError: unknown;
@@ -622,9 +632,12 @@ describe('declarative integration framework', () => {
     setMockUi(true);
     const integration = makeIntegration({ features: [{ id: 'feature', displayName: 'Feature' }] });
     const state = getDefaultState('test');
-    await installer.applyAndRecordFeatures(state, integration, [
-      { feature: integration.features[0], targetRoot: tempDir, scope: 'project' },
-    ]);
+    await installer.applyAndRecordFeatures(
+      state,
+      integration,
+      [{ feature: integration.features[0], targetRoot: tempDir, scope: 'project' }],
+      { console: testConsole },
+    );
     queueMockResponse(false); // decline "Keep?"
     queueMockResponse(null); // Ctrl+C at "Proceed with removal?"
 
@@ -648,9 +661,12 @@ describe('declarative integration framework', () => {
     setMockUi(true);
     const integration = makeIntegration({ features: [{ id: 'feature', displayName: 'Feature' }] });
     const state = getDefaultState('test');
-    await installer.applyAndRecordFeatures(state, integration, [
-      { feature: integration.features[0], targetRoot: tempDir, scope: 'project' },
-    ]);
+    await installer.applyAndRecordFeatures(
+      state,
+      integration,
+      [{ feature: integration.features[0], targetRoot: tempDir, scope: 'project' }],
+      { console: testConsole },
+    );
     queueMockResponse(false); // decline "Keep?"
     queueMockResponse(true); // confirm "Proceed with removal?"
 
@@ -681,9 +697,12 @@ describe('declarative integration framework', () => {
         ],
       });
       const state = getDefaultState('test');
-      await installer.applyAndRecordFeatures(state, integration, [
-        { feature: integration.features[0], targetRoot: tempDir, scope: 'project' },
-      ]);
+      await installer.applyAndRecordFeatures(
+        state,
+        integration,
+        [{ feature: integration.features[0], targetRoot: tempDir, scope: 'project' }],
+        { console: testConsole },
+      );
 
       const selected = await selectForInvocation(integration, {
         options: {},
@@ -729,9 +748,12 @@ describe('declarative integration framework', () => {
       features: [{ id: 'feature', displayName: 'Feature', shouldInstall: () => skip() }],
     });
     const state = getDefaultState('test');
-    await installer.applyAndRecordFeatures(state, integration, [
-      { feature: integration.features[0], targetRoot: tempDir, scope: 'project' },
-    ]);
+    await installer.applyAndRecordFeatures(
+      state,
+      integration,
+      [{ feature: integration.features[0], targetRoot: tempDir, scope: 'project' }],
+      { console: testConsole },
+    );
 
     const selected = await selectForInvocation(integration, {
       options: {},
@@ -760,9 +782,12 @@ describe('declarative integration framework', () => {
     const context = makeContext(state, tempDir);
 
     const filteredContainer = { ...container, subfeatures: [container.subfeatures[0]] };
-    await installer.applyAndRecordFeatures(state, integration, [
-      { feature: filteredContainer, targetRoot: tempDir, scope: 'project' },
-    ]);
+    await installer.applyAndRecordFeatures(
+      state,
+      integration,
+      [{ feature: filteredContainer, targetRoot: tempDir, scope: 'project' }],
+      { console: testConsole },
+    );
 
     const recorded = state.integrations.installed[0]?.features[0];
     expect(recorded?.featureId).toBe('container');
@@ -789,17 +814,23 @@ describe('declarative integration framework', () => {
     const state = getDefaultState('test');
 
     // First install: subfeature declares dep-old
-    await installer.applyAndRecordFeatures(state, integration, [
-      { feature: makeContainer(depOld), targetRoot: tempDir, scope: 'project' },
-    ]);
+    await installer.applyAndRecordFeatures(
+      state,
+      integration,
+      [{ feature: makeContainer(depOld), targetRoot: tempDir, scope: 'project' }],
+      { console: testConsole },
+    );
     expect(state.integrations.installed[0]?.features[0]?.subfeatures?.[0]?.dependencies).toEqual([
       { id: 'dep-old' },
     ]);
 
     // Re-install: subfeature now declares dep-new instead
-    await installer.applyAndRecordFeatures(state, integration, [
-      { feature: makeContainer(depNew), targetRoot: tempDir, scope: 'project' },
-    ]);
+    await installer.applyAndRecordFeatures(
+      state,
+      integration,
+      [{ feature: makeContainer(depNew), targetRoot: tempDir, scope: 'project' }],
+      { console: testConsole },
+    );
     const subfeature = state.integrations.installed[0]?.features[0]?.subfeatures?.[0];
     expect(subfeature?.dependencies).toEqual([{ id: 'dep-new' }]);
   });
@@ -1393,6 +1424,7 @@ function makeContext(
     targetRoot,
     scope: 'project',
     executionMode,
+    console: new FakeConsole(),
     force,
     attrs,
     resolvedDependencies: new Map(),
@@ -1405,15 +1437,20 @@ async function applyAndRecord<TOptions>(
   integration: IntegrationDeclaration<TOptions>,
   feature: FeatureDeclaration<TOptions>,
 ): Promise<InstalledIntegrationFeature> {
-  const installed = await installer.applyAndRecordFeatures(context.state, integration, [
-    {
-      feature,
-      targetRoot: context.targetRoot,
-      scope: context.scope,
-      force: context.force,
-      attrs: context.attrs,
-    },
-  ]);
+  const installed = await installer.applyAndRecordFeatures(
+    context.state,
+    integration,
+    [
+      {
+        feature,
+        targetRoot: context.targetRoot,
+        scope: context.scope,
+        force: context.force,
+        attrs: context.attrs,
+      },
+    ],
+    { console: context.console },
+  );
 
   if (installed.length === 0) {
     throw new Error('Feature was not recorded');

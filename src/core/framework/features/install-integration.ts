@@ -132,6 +132,7 @@ export async function installIntegration<TOptions>({
           },
         },
         executionMode: 'install',
+        console,
       },
     );
 
@@ -145,6 +146,7 @@ export async function installIntegration<TOptions>({
             console.text(`     Removing ${feature.displayName}...`);
           },
         },
+        console,
       },
     );
 
@@ -181,12 +183,14 @@ export function makeContext(
   auth: ResolvedAuth | undefined,
   force: boolean | undefined,
   attrs: Record<string, IntegrationStateAttribute> | undefined,
+  console: Console,
 ): IntegrationContext {
   return {
     state,
     targetRoot,
     scope,
     executionMode,
+    console,
     auth,
     force,
     attrs,

@@ -31,6 +31,7 @@ import type {
 } from '@/core/state/state.ts';
 import type { PhaseItem } from '@/core/ui';
 import { phaseItem } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
 export interface IntegrationResetResult {
   item: PhaseItem;
@@ -50,8 +51,9 @@ interface DeclarativeIntegrationReset {
 export async function removeAllIntegrations(
   state: CliState,
   supportedIntegrations: IntegrationRegistry,
+  console: Console,
 ): Promise<IntegrationResetResult> {
-  const declarative = await removeDeclarativeIntegrations(state, supportedIntegrations);
+  const declarative = await removeDeclarativeIntegrations(state, supportedIntegrations, console);
 
   return {
     item: buildIntegrationPhaseItem(declarative.removedFeatures, declarative.failed),
@@ -62,6 +64,7 @@ export async function removeAllIntegrations(
 async function removeDeclarativeIntegrations(
   state: CliState,
   supportedIntegrations: IntegrationRegistry,
+  console: Console,
 ): Promise<DeclarativeIntegrationReset> {
   const integrationFeatures: Array<{ integrationStateId: string; featureId: string }> = [];
   const failed: string[] = [];
@@ -80,6 +83,7 @@ async function removeDeclarativeIntegrations(
         installed,
         installedFeature,
         declaration,
+        console,
       );
       if (outcome.status === 'removed') {
         integrationFeatures.push({
@@ -101,6 +105,7 @@ async function tryRemoveInstalledFeature(
   installed: InstalledIntegration,
   installedFeature: InstalledIntegrationFeature,
   declaration: IntegrationDeclaration,
+  console: Console,
 ): Promise<FeatureRemoveOutcome> {
   const featureDeclaration = declaration.features.find(
     (feature) => feature.id === installedFeature.featureId,
@@ -124,6 +129,7 @@ async function tryRemoveInstalledFeature(
     undefined,
     true,
     installedFeature.attrs,
+    console,
   );
 
   try {

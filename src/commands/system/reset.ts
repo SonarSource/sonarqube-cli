@@ -99,7 +99,7 @@ export async function systemReset(
       cleaned: emptyCleanedFields({ dependencyIds: binaryResult.dependencyIds }),
     });
 
-    const integrationResult = await removeAllIntegrations(state, supportedIntegrations);
+    const integrationResult = await removeAllIntegrations(state, supportedIntegrations, console);
     results.push({
       item: integrationResult.item,
       cleaned: emptyCleanedFields({
