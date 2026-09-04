@@ -24,28 +24,23 @@ permissions:
 jobs:
   prepare:
     name: Prepare Build
-    # sonar-xs: GitHub-hosted runners 403 when 2.0.0 creates refs/build-number/* even with contents: write.
-    runs-on: sonar-xs
-    permissions:
-      id-token: write
-      contents: write
+    runs-on: github-ubuntu-latest-s
     outputs:
       BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
       PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
     steps:
-      # Claim before checkout/mise so persisted git credentials and mise-exported
-      # tokens cannot shadow github.token (ci-github-actions 2.0.0 git refs).
-      - uses: SonarSource/ci-github-actions/get-build-number@d41706a4180f70b6c0d0479795309a6c99726022 # 2.0.0
-        id: get-build-number
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          persist-credentials: false
 
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
           version: 2026.8.14
+
+      # 2.0.0 claims via refs/build-number/* and 403s on this repo even with
+      # contents: write (GitHub-hosted and sonar-xs). 1.8.9 uses the vault token.
+      - uses: SonarSource/ci-github-actions/get-build-number@983645f538ff01044b1e567adb23e6f527d8b52a # 1.8.9
+        id: get-build-number
 
       - name: Update package.json version with build number
         id: project_version
