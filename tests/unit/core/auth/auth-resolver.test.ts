@@ -148,7 +148,7 @@ describe('resolveAuth', () => {
       await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
 
       try {
-        const result = await resolveAuth();
+        const result = await resolveAuth({ console: fake });
         expect(result).toMatchObject({
           token: FAKE_TOKEN,
           serverUrl: SONARCLOUD_URL,
@@ -179,7 +179,7 @@ describe('resolveAuth', () => {
       await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
 
       try {
-        const result = await resolveAuth();
+        const result = await resolveAuth({ console: fake });
         expect(result).toMatchObject({
           token: FAKE_TOKEN,
           serverUrl: SONARCLOUD_URL,

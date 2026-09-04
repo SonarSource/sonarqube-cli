@@ -95,9 +95,10 @@ describe('apiCommand', () => {
     await apiCommand(FAKE_CTX, 'get', '/api/system/status', {});
 
     expect(genericRequestSpy).toHaveBeenCalledTimes(1);
-    const [method, endpoint, data, contentType] = genericRequestSpy.mock.calls[0];
+    const [method, endpoint, passedConsole, data, contentType] = genericRequestSpy.mock.calls[0];
     expect(method).toBe('GET');
     expect(endpoint).toBe('/api/system/status');
+    expect(passedConsole).toBe(fake);
     expect(data).toBeUndefined();
     expect(contentType).toBe('form');
 
@@ -116,21 +117,21 @@ describe('apiCommand', () => {
     const body = '{"key":"value"}';
     await apiCommand(FAKE_CTX, 'post', '/api/issues/search', { data: body });
 
-    const [, , data] = genericRequestSpy.mock.calls[0];
+    const [, , , data] = genericRequestSpy.mock.calls[0];
     expect(data).toBe(body);
   });
 
   it('uses json content type for /api/v2/ endpoints', async () => {
     await apiCommand(FAKE_CTX, 'get', '/api/v2/issues/search', {});
 
-    const [, , , contentType] = genericRequestSpy.mock.calls[0];
+    const [, , , , contentType] = genericRequestSpy.mock.calls[0];
     expect(contentType).toBe('json');
   });
 
   it('uses form content type for /api/ endpoints', async () => {
     await apiCommand(FAKE_CTX, 'get', '/api/issues/search', {});
 
-    const [, , , contentType] = genericRequestSpy.mock.calls[0];
+    const [, , , , contentType] = genericRequestSpy.mock.calls[0];
     expect(contentType).toBe('form');
   });
 
@@ -138,7 +139,7 @@ describe('apiCommand', () => {
     await apiCommand(FAKE_CTX, 'delete', '/api/authentication/validate', {});
 
     expect(genericRequestSpy).toHaveBeenCalledTimes(1);
-    const [method, , data] = genericRequestSpy.mock.calls[0];
+    const [method, , , data] = genericRequestSpy.mock.calls[0];
     expect(method).toBe('DELETE');
     expect(data).toBeUndefined();
   });
@@ -154,7 +155,7 @@ describe('apiCommand', () => {
     const body = '{"key":"val"}';
     await apiCommand(FAKE_CTX, 'put', '/api/v2/settings/set', { data: body });
 
-    const [method, , data, contentType] = genericRequestSpy.mock.calls[0];
+    const [method, , , data, contentType] = genericRequestSpy.mock.calls[0];
     expect(method).toBe('PUT');
     expect(data).toBe(body);
     expect(contentType).toBe('json');
