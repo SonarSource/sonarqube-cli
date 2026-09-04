@@ -85,6 +85,9 @@ export interface MultiSelectPromptOptions<T> {
    * plus newly revealed ones). May return a `Promise` when revealing more requires a network
    * call (e.g. `RepositoryCollection.loadMore`) — the "Load more" row shows a loading indicator
    * while it's in flight.
+   *
+   * Selections are tracked by value identity (`===`), so values that were already present
+   * before the reload must be `===`-stable or prior selections are lost.
    */
   onLoadMore?: () => MultiSelectOption<T>[] | Promise<MultiSelectOption<T>[]>;
   /** Max number of selections. Defaults to 20; pass `Infinity` for no cap. */

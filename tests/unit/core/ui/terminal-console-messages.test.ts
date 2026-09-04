@@ -29,7 +29,7 @@ import { FakeConsole } from '../../../_common/fake-console.ts';
 
 // ─── FakeConsole ────────────────────────────────────────────────────────────────
 
-describe('messages: FakeConsole', () => {
+describe('TerminalConsole lines: FakeConsole', () => {
   let fake: FakeConsole;
 
   beforeEach(() => {
@@ -74,7 +74,7 @@ describe('messages: FakeConsole', () => {
 
 // ─── Real output paths
 
-describe('messages: real output (non-mock)', () => {
+describe('TerminalConsole lines: real output', () => {
   let terminal: TerminalConsole;
 
   beforeEach(() => {
