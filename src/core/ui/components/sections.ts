@@ -21,10 +21,9 @@
 // Structural markers — intro, outro
 
 import { bold, cyan, green, isTTY, red } from '../colors.ts';
-import { getDefaultConsole } from '../default-console.ts';
 
 const DIVIDER_BASE_WIDTH = 40;
-const DIVIDER_WIDTH = DIVIDER_BASE_WIDTH + 2;
+const DIVIDER_WIDTH = DIVIDER_BASE_WIDTH + 2; // + 2 for indent alignment
 const DIVIDER = '━'.repeat(DIVIDER_WIDTH);
 
 export function renderIntro(title: string, subtitle?: string): void {
@@ -50,6 +49,7 @@ export function renderOutro(
   if (isTTY) {
     process.stdout.write(`\n  ${DIVIDER}\n`);
     process.stdout.write(`  ${icon}  ${bold(colorFn(message))}\n`);
+    // Aligns under the message text: 2 leading + 2-col emoji icon + 2 gap.
     if (detail) process.stdout.write(`      ${bold(cyan(detail))}\n`);
     process.stdout.write(`  ${DIVIDER}\n\n`);
   } else {
@@ -57,16 +57,4 @@ export function renderOutro(
     if (detail) process.stdout.write(`${detail}\n`);
     process.stdout.write('\n');
   }
-}
-
-export function intro(title: string, subtitle?: string): void {
-  getDefaultConsole().intro(title, subtitle);
-}
-
-export function outro(
-  message: string,
-  status: 'success' | 'error' = 'success',
-  detail?: string,
-): void {
-  getDefaultConsole().outro(message, status, detail);
 }

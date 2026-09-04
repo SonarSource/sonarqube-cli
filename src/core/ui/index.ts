@@ -21,40 +21,17 @@
 // Public API for the UI module
 
 export { bold, dim, stripAnsi, visibleLength } from './colors.ts';
-export { note } from './components/note.ts';
+export { renderNote } from './components/note.ts';
 export type { PhaseItem, StepStatus } from './components/phase.ts';
-export { phase, phaseItem } from './components/phase.ts';
+export { phaseItem, renderPhase } from './components/phase.ts';
 export type {
   MultiSelectOption,
   MultiSelectPromptOptions,
   SelectOption,
 } from './components/prompts.ts';
-export {
-  confirmPrompt,
-  multiSelectPrompt,
-  passwordPrompt,
-  pressEnterKeyPrompt,
-  promptUntilValid,
-  selectPrompt,
-  textPrompt,
-} from './components/prompts.ts';
-export { intro, outro } from './components/sections.ts';
-export { withSpinner } from './components/spinner.ts';
+export { renderIntro, renderOutro } from './components/sections.ts';
+export { renderWithSpinner } from './components/spinner.ts';
 export type { Console } from './console.ts';
-export { getDefaultConsole, setDefaultConsoleForTests } from './default-console.ts';
-export {
-  blank,
-  discreetSuccess,
-  error,
-  getMessagesForFormattedOutput,
-  info,
-  isFormattedOutputMode,
-  print,
-  setFormattedOutputMode,
-  success,
-  text,
-  warn,
-  wrapText,
-} from './messages.ts';
+export { wrapText } from './messages.ts';
 export { TerminalConsole } from './terminal-console.ts';
 export type { ColorFn, LogOptions, NoteOptions, OutputChannel, PhaseOptions } from './types.ts';

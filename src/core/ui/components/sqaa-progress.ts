@@ -23,7 +23,7 @@
 import * as readline from 'node:readline';
 
 import { cyan, yellow } from '../colors.ts';
-import { warn } from '../messages.ts';
+import type { Console } from '../console.ts';
 
 export type FileStatus = 'waiting' | 'analyzing' | 'done' | 'failed' | 'skipped' | 'ignored';
 
@@ -51,6 +51,7 @@ export class SqaaProgress {
   private readonly statuses: FileStatus[];
   private readonly isTTY: boolean;
   private readonly silent: boolean;
+  private readonly console: Console;
   private readonly processableTotal: number;
   private liveLineRendered = false;
 
@@ -65,6 +66,7 @@ export class SqaaProgress {
     ignoredFiles?: string[];
     isTTY?: boolean;
     silent?: boolean;
+    console: Console;
   }) {
     const ignored = opts.ignoredFiles ?? [];
     this.allFiles = [...opts.files, ...ignored];
@@ -73,6 +75,7 @@ export class SqaaProgress {
     this.statuses = [...opts.files.map(() => waiting), ...ignored.map(() => ignoredStatus)];
     this.isTTY = opts.isTTY ?? process.stdout.isTTY;
     this.silent = opts.silent ?? false;
+    this.console = opts.console;
     this.processableTotal = opts.files.length;
   }
 
@@ -94,7 +97,7 @@ export class SqaaProgress {
     if (this.isTTY) {
       this.eraseLiveLine();
     }
-    warn(PAYLOAD_SPLIT_WARNING);
+    this.console.warn(PAYLOAD_SPLIT_WARNING);
   }
 
   updateChunk(_chunkIndex: number, status: Exclude<FileStatus, 'ignored'>): void {

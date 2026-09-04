@@ -18,8 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+// Spinner — animated indicator for long-running async operations
+
 import { cyan, green, red } from '../colors.ts';
-import { getDefaultConsole } from '../default-console.ts';
 import { channelStream } from '../streams.ts';
 import type { OutputChannel } from '../types.ts';
 
@@ -58,12 +59,4 @@ export async function renderWithSpinner<T>(
     stream.write(`\r  ${red('✗')}  ${message}\n`);
     throw err;
   }
-}
-
-export async function withSpinner<T>(
-  message: string,
-  task: () => Promise<T>,
-  channel: OutputChannel = 'stdout',
-): Promise<T> {
-  return getDefaultConsole().withSpinner(message, task, channel);
 }

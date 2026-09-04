@@ -19,22 +19,19 @@
  */
 
 // Unit tests for phase, sections, and spinner UI components
-// Tests mock mode and non-TTY plain output paths
+// Tests FakeConsole recording and non-TTY plain output paths
 // mock.module forces isTTY: false so non-TTY branches execute regardless of terminal
 
-import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 void mock.module('@/core/ui/colors.js', mockColorsNonTTY);
 
 import { mock } from 'bun:test';
 
-import { phase, phaseItem } from '@/core/ui';
-import { intro, outro } from '@/core/ui';
-import { withSpinner } from '@/core/ui';
+import { phaseItem, TerminalConsole } from '@/core/ui';
 
 import { mockColorsNonTTY } from '../../../_common/colors-mock.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
-import { installFakeConsole, restoreDefaultConsole } from '../../../_common/ui-test-console.ts';
 
 // ─── phaseItem helper ─────────────────────────────────────────────────────────
 
@@ -64,30 +61,26 @@ describe('phaseItem', () => {
   });
 });
 
-// ─── phase: mock mode ─────────────────────────────────────────────────────────
+// ─── phase: FakeConsole ─────────────────────────────────────────────────────────
 
-describe('phase: mock mode', () => {
+describe('phase: FakeConsole', () => {
   let fake: FakeConsole;
 
   beforeEach(() => {
-    fake = installFakeConsole();
-  });
-
-  afterEach(() => {
-    restoreDefaultConsole();
+    fake = new FakeConsole();
   });
 
   it('records call with title and items', () => {
     const items = [phaseItem('Step 1', 'done')];
-    phase('Setup', items);
+    fake.phase('Setup', items);
     const calls = fake.calls;
     expect(calls.some((c) => c.method === 'phase' && c.args[0] === 'Setup')).toBe(true);
   });
 
-  it('does not write to stdout in mock mode', () => {
+  it('does not write to stdout when FakeConsole is installed', () => {
     const writeSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
     try {
-      phase('Title', [phaseItem('item', 'done')]);
+      fake.phase('Title', [phaseItem('item', 'done')]);
       expect(writeSpy).not.toHaveBeenCalled();
     } finally {
       writeSpy.mockRestore();
@@ -105,7 +98,7 @@ describe('phase: non-TTY output', () => {
       return true;
     });
     try {
-      phase('Verification', [phaseItem('Token valid', 'done')]);
+      new TerminalConsole().phase('Verification', [phaseItem('Token valid', 'done')]);
       expect(output.join('')).toContain('Verification');
     } finally {
       writeSpy.mockRestore();
@@ -119,7 +112,10 @@ describe('phase: non-TTY output', () => {
       return true;
     });
     try {
-      phase('Phase', [phaseItem('Step one', 'done'), phaseItem('Step two', 'failed')]);
+      new TerminalConsole().phase('Phase', [
+        phaseItem('Step one', 'done'),
+        phaseItem('Step two', 'failed'),
+      ]);
       const combined = output.join('');
       expect(combined).toContain('Step one');
       expect(combined).toContain('Step two');
@@ -135,7 +131,7 @@ describe('phase: non-TTY output', () => {
       return true;
     });
     try {
-      phase('Phase', [phaseItem('Config', 'warn', 'missing field')]);
+      new TerminalConsole().phase('Phase', [phaseItem('Config', 'warn', 'missing field')]);
       expect(output.join('')).toContain('missing field');
     } finally {
       writeSpy.mockRestore();
@@ -149,7 +145,9 @@ describe('phase: non-TTY output', () => {
       return true;
     });
     try {
-      phase('Installed', [phaseItem('Feature', 'done', undefined, ['~/.config/a', '~/.config/b'])]);
+      new TerminalConsole().phase('Installed', [
+        phaseItem('Feature', 'done', undefined, ['~/.config/a', '~/.config/b']),
+      ]);
       const combined = output.join('');
       expect(combined).toContain('       ~/.config/a');
       expect(combined).toContain('       ~/.config/b');
@@ -159,28 +157,24 @@ describe('phase: non-TTY output', () => {
   });
 });
 
-// ─── intro: mock mode ─────────────────────────────────────────────────────────
+// ─── intro: FakeConsole ─────────────────────────────────────────────────────────
 
-describe('intro: mock mode', () => {
+describe('intro: FakeConsole', () => {
   let fake: FakeConsole;
 
   beforeEach(() => {
-    fake = installFakeConsole();
-  });
-
-  afterEach(() => {
-    restoreDefaultConsole();
+    fake = new FakeConsole();
   });
 
   it('records call with title', () => {
-    intro('Welcome');
+    fake.intro('Welcome');
     expect(fake.calls.some((c) => c.method === 'intro' && c.args[0] === 'Welcome')).toBe(true);
   });
 
-  it('does not write to stdout in mock mode', () => {
+  it('does not write to stdout when FakeConsole is installed', () => {
     const writeSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
     try {
-      intro('Title');
+      fake.intro('Title');
       expect(writeSpy).not.toHaveBeenCalled();
     } finally {
       writeSpy.mockRestore();
@@ -198,7 +192,7 @@ describe('intro: non-TTY output', () => {
       return true;
     });
     try {
-      intro('Setup Wizard');
+      new TerminalConsole().intro('Setup Wizard');
       expect(output.join('')).toContain('Setup Wizard');
     } finally {
       writeSpy.mockRestore();
@@ -212,7 +206,7 @@ describe('intro: non-TTY output', () => {
       return true;
     });
     try {
-      intro('Setup', 'v1.0.0');
+      new TerminalConsole().intro('Setup', 'v1.0.0');
       const combined = output.join('');
       expect(combined).toContain('Setup');
       expect(combined).toContain('v1.0.0');
@@ -222,21 +216,17 @@ describe('intro: non-TTY output', () => {
   });
 });
 
-// ─── outro: mock mode ─────────────────────────────────────────────────────────
+// ─── outro: FakeConsole ─────────────────────────────────────────────────────────
 
-describe('outro: mock mode', () => {
+describe('outro: FakeConsole', () => {
   let fake: FakeConsole;
 
   beforeEach(() => {
-    fake = installFakeConsole();
-  });
-
-  afterEach(() => {
-    restoreDefaultConsole();
+    fake = new FakeConsole();
   });
 
   it('records call with message and status', () => {
-    outro('Done!', 'success');
+    fake.outro('Done!', 'success');
     expect(fake.calls.some((c) => c.method === 'outro' && c.args[0] === 'Done!')).toBe(true);
   });
 });
@@ -251,7 +241,7 @@ describe('outro: non-TTY output', () => {
       return true;
     });
     try {
-      outro('All done', 'success');
+      new TerminalConsole().outro('All done', 'success');
       expect(output.join('')).toContain('All done');
     } finally {
       writeSpy.mockRestore();
@@ -265,7 +255,7 @@ describe('outro: non-TTY output', () => {
       return true;
     });
     try {
-      outro('Failed', 'error');
+      new TerminalConsole().outro('Failed', 'error');
       expect(output.join('')).toContain('Failed');
     } finally {
       writeSpy.mockRestore();
@@ -273,33 +263,29 @@ describe('outro: non-TTY output', () => {
   });
 });
 
-// ─── withSpinner: mock mode ───────────────────────────────────────────────────
+// ─── withSpinner: FakeConsole ───────────────────────────────────────────────────
 
-describe('withSpinner: mock mode', () => {
+describe('withSpinner: FakeConsole', () => {
   let fake: FakeConsole;
 
   beforeEach(() => {
-    fake = installFakeConsole();
-  });
-
-  afterEach(() => {
-    restoreDefaultConsole();
+    fake = new FakeConsole();
   });
 
   it('records call with message', async () => {
-    await withSpinner('Loading', () => Promise.resolve(42));
+    await fake.withSpinner('Loading', () => Promise.resolve(42));
     expect(fake.calls.some((c) => c.method === 'spinner' && c.args[0] === 'Loading')).toBe(true);
   });
 
-  it('returns task result in mock mode', async () => {
-    const result = await withSpinner('Fetching', () => Promise.resolve('data'));
+  it('returns the task result through FakeConsole', async () => {
+    const result = await fake.withSpinner('Fetching', () => Promise.resolve('data'));
     expect(result).toBe('data');
   });
 
-  it('propagates error thrown by task in mock mode', async () => {
+  it('propagates an error thrown by the task', async () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      withSpinner('Failing', () => {
+      fake.withSpinner('Failing', () => {
         throw new Error('task error');
       }),
     ).rejects.toThrow('task error');
@@ -316,7 +302,7 @@ describe('withSpinner: non-TTY output', () => {
       return true;
     });
     try {
-      await withSpinner('Processing', () => Promise.resolve('done'));
+      await new TerminalConsole().withSpinner('Processing', () => Promise.resolve('done'));
       expect(output.some((s) => s.includes('Processing'))).toBe(true);
     } finally {
       writeSpy.mockRestore();
@@ -326,7 +312,9 @@ describe('withSpinner: non-TTY output', () => {
   it('returns task result in non-TTY mode', async () => {
     const writeSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
     try {
-      const result = await withSpinner('Computing', () => Promise.resolve(99));
+      const result = await new TerminalConsole().withSpinner('Computing', () =>
+        Promise.resolve(99),
+      );
       expect(result).toBe(99);
     } finally {
       writeSpy.mockRestore();
@@ -338,7 +326,7 @@ describe('withSpinner: non-TTY output', () => {
     try {
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(
-        withSpinner('Failing', () => {
+        new TerminalConsole().withSpinner('Failing', () => {
           throw new Error('non-tty error');
         }),
       ).rejects.toThrow('non-tty error');
@@ -359,7 +347,7 @@ describe('withSpinner: non-TTY output', () => {
       return true;
     });
     try {
-      await withSpinner('On stderr', () => Promise.resolve('done'), 'stderr');
+      await new TerminalConsole().withSpinner('On stderr', () => Promise.resolve('done'), 'stderr');
       expect(stderr.some((s) => s.includes('On stderr'))).toBe(true);
       expect(stdout.join('')).not.toContain('On stderr');
     } finally {

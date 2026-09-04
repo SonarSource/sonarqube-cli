@@ -23,7 +23,6 @@
 import { getColumns } from '@clack/core';
 
 import { bold, dim, isTTY, stripAnsi, visibleLength } from '../colors.ts';
-import { getDefaultConsole } from '../default-console.ts';
 import type { ColorFn, NoteOptions } from '../types.ts';
 
 const MIN_WIDTH = 40;
@@ -41,7 +40,7 @@ function renderTTY(lines: string[], title: string | undefined, opts: NoteOptions
   const contentColor: ColorFn = opts.contentColor ?? ((s) => s);
 
   const width = getWidth();
-  const innerWidth = width - 2;
+  const innerWidth = width - 2; // subtract border chars
 
   const top = title
     ? borderColor(TITLE_BORDER_PREFIX) +
@@ -53,6 +52,8 @@ function renderTTY(lines: string[], title: string | undefined, opts: NoteOptions
   const bottom = borderColor('└' + '─'.repeat(width) + '┘');
 
   const contentLines = lines.map((line) => {
+    // Truncate on visible text so a cut never leaves a dangling "style on"
+    // escape that bleeds into the border. Styling is dropped on cut lines.
     const truncated =
       visibleLength(line) > width - 1 ? stripAnsi(line).slice(0, width - 4) + '...' : line;
     const padded = truncated + ' '.repeat(Math.max(0, width - 1 - visibleLength(truncated)));
@@ -75,8 +76,4 @@ export function renderNote(
   const lines = Array.isArray(content) ? content : content.split('\n');
   const output = isTTY ? renderTTY(lines, title, opts) : renderPlain(lines, title);
   process.stdout.write(output + '\n');
-}
-
-export function note(content: string | string[], title?: string, opts: NoteOptions = {}): void {
-  getDefaultConsole().note(content, title, opts);
 }

@@ -31,7 +31,6 @@ import {
 
 import { cyan, dim, green, red } from '../colors.ts';
 import type { Console } from '../console.ts';
-import { getDefaultConsole } from '../default-console.ts';
 
 const CTRL_C = 0x03;
 const ENTER_CR = 0x0d;
@@ -394,7 +393,7 @@ export async function renderPromptUntilValid(
   message: string,
   isValid: (value: string) => boolean,
   errorMessage: string,
-  console: Console = getDefaultConsole(),
+  console: Console,
 ): Promise<string | null> {
   for (;;) {
     const value = await console.textPrompt(message);
@@ -411,7 +410,7 @@ export async function renderPromptUntilValid(
 /**
  * Press-Enter-to-continue prompt using raw stdin.
  * Only Enter advances the prompt; all other keys are silently consumed.
- * Skipped automatically in mock mode, CI=true, or non-TTY environments.
+ * Skipped automatically in CI=true or non-TTY environments.
  */
 export async function renderPressEnterKeyPrompt(message: string): Promise<void> {
   if (process.env.CI === 'true') {
@@ -451,46 +450,4 @@ export async function renderPressEnterKeyPrompt(message: string): Promise<void> 
 
     process.stdin.on('data', onData);
   });
-}
-
-export async function textPrompt(message: string): Promise<string | null> {
-  return getDefaultConsole().textPrompt(message);
-}
-
-export async function passwordPrompt(message: string): Promise<string | null> {
-  return getDefaultConsole().passwordPrompt(message);
-}
-
-export async function confirmPrompt(
-  message: string,
-  defaultValue: boolean,
-): Promise<boolean | null> {
-  return getDefaultConsole().confirmPrompt(message, defaultValue);
-}
-
-export async function selectPrompt<T>(
-  message: string,
-  options: SelectOption<T>[],
-): Promise<T | null> {
-  return getDefaultConsole().selectPrompt(message, options);
-}
-
-export async function multiSelectPrompt<T>(
-  message: string,
-  options: MultiSelectOption<T>[],
-  loadMoreOpts?: MultiSelectPromptOptions<T>,
-): Promise<T[] | null> {
-  return getDefaultConsole().multiSelectPrompt(message, options, loadMoreOpts);
-}
-
-export async function promptUntilValid(
-  message: string,
-  isValid: (value: string) => boolean,
-  errorMessage: string,
-): Promise<string | null> {
-  return getDefaultConsole().promptUntilValid(message, isValid, errorMessage);
-}
-
-export async function pressEnterKeyPrompt(message: string): Promise<void> {
-  return getDefaultConsole().pressEnterKeyPrompt(message);
 }
