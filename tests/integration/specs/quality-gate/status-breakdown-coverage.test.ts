@@ -70,6 +70,7 @@ describe('quality-gate status — coverage breakdown', () => {
         (c: { metric: string }) => c.metric === 'new_coverage',
       );
       expect(condition.breakdown).toEqual({
+        category: 'coverage',
         totalCount: 2,
         fetchedCount: 2,
         entries: [
@@ -115,6 +116,7 @@ describe('quality-gate status — coverage breakdown', () => {
         (c: { metric: string }) => c.metric === 'coverage',
       );
       expect(condition.breakdown).toEqual({
+        category: 'coverage',
         totalCount: 2,
         fetchedCount: 2,
         entries: [
@@ -160,6 +162,7 @@ describe('quality-gate status — coverage breakdown', () => {
         (c: { metric: string }) => c.metric === 'new_coverage',
       );
       expect(condition.breakdown).toEqual({
+        category: 'coverage',
         totalCount: 1,
         fetchedCount: 1,
         entries: [
@@ -208,6 +211,7 @@ describe('quality-gate status — coverage breakdown', () => {
         (c: { metric: string }) => c.metric === 'new_coverage',
       );
       expect(condition.breakdown).toEqual({
+        category: 'coverage',
         totalCount: 1,
         fetchedCount: 1,
         entries: [
@@ -217,6 +221,48 @@ describe('quality-gate status — coverage breakdown', () => {
             formattedValue: '38.85%',
           },
         ],
+      });
+    },
+    { timeout: 15000 },
+  );
+  it(
+    'excludes a file at 100% coverage - it has nothing left to cover',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '62.4',
+              },
+            ])
+            .withComponentTreeFiles('new_coverage', [
+              { path: 'src/checkout.ts', value: '31.0' },
+              { path: 'src/perfect.ts', value: '100.0' },
+            ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --format json`);
+
+      const parsed = JSON.parse(result.stdout);
+      const condition = parsed.qualityGate.conditions.find(
+        (c: { metric: string }) => c.metric === 'new_coverage',
+      );
+      expect(condition.breakdown).toEqual({
+        category: 'coverage',
+        totalCount: 1,
+        fetchedCount: 1,
+        entries: [{ path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' }],
       });
     },
     { timeout: 15000 },
@@ -338,6 +384,7 @@ describe('quality-gate status — coverage breakdown', () => {
         (c: { metric: string }) => c.metric === 'new_coverage',
       );
       expect(condition.breakdown).toEqual({
+        category: 'coverage',
         totalCount: 1,
         fetchedCount: 1,
         entries: [{ path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' }],

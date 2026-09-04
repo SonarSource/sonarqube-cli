@@ -23,6 +23,8 @@ import { cyan, green, red, yellow } from '@/core/ui/colors.ts';
 import { padColumns } from '@/core/ui/formatter/column-formatting.ts';
 
 import type {
+  DuplicationsBreakdownEntry,
+  QualityGateBreakdownEntry,
   QualityGateConditionSummary,
   QualityGateMetricBreakdown,
 } from './condition-summary.ts';
@@ -143,8 +145,8 @@ function formatBreakdownLines(condition: QualityGateConditionSummary): string[] 
     [],
     BREAKDOWN_VALUE_GAP,
   );
-  const lines = metricBreakdown.entries.map(
-    (entry, i) => `${BREAKDOWN_INDENT}${values[i]}${entry.path}`,
+  const lines = metricBreakdown.entries.map((_entry, i) =>
+    formatEntryLine(metricBreakdown, i, values[i]),
   );
 
   const remaining = metricBreakdown.totalCount - metricBreakdown.fetchedCount;
@@ -153,6 +155,35 @@ function formatBreakdownLines(condition: QualityGateConditionSummary): string[] 
   }
 
   return lines;
+}
+
+function formatEntryLine(
+  metricBreakdown: QualityGateMetricBreakdown,
+  index: number,
+  paddedValue: string,
+): string {
+  switch (metricBreakdown.category) {
+    case 'coverage':
+      return formatCoverageEntryLine(metricBreakdown.entries[index], paddedValue);
+    case 'duplications':
+      return formatDuplicationsEntryLine(metricBreakdown.entries[index], paddedValue);
+  }
+}
+
+function formatCoverageEntryLine(entry: QualityGateBreakdownEntry, paddedValue: string): string {
+  return `${BREAKDOWN_INDENT}${paddedValue}${entry.path}`;
+}
+
+function formatDuplicationsEntryLine(
+  entry: DuplicationsBreakdownEntry,
+  paddedValue: string,
+): string {
+  if (entry.blockCount === undefined) {
+    return `${BREAKDOWN_INDENT}${paddedValue}${entry.path}`;
+  }
+  const blocks = `${entry.blockCount} block${entry.blockCount === 1 ? '' : 's'}`;
+  const peers = entry.duplicatesWith?.length ? `, dup: ${entry.duplicatesWith.join(', ')}` : '';
+  return `${BREAKDOWN_INDENT}${paddedValue}${entry.path} (${blocks}${peers})`;
 }
 
 function formatMoreEntriesLine(
