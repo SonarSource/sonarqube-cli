@@ -23,7 +23,10 @@ import { spawn } from 'node:child_process';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
-import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
+import {
+  buildContextAugmentationEnv,
+  type ContextAugmentationEnvContext,
+} from '@/core/host/context-augmentation-env.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
 import logger from '@/core/observability/logger.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
@@ -184,6 +187,23 @@ export async function printContextAugmentationSkill({
     });
   }
   return result.stdout;
+}
+
+export interface PrintSessionStartContextParams {
+  binaryPath: string;
+  scaEnabled: boolean;
+  context: ContextAugmentationEnvContext; // `workspaceDir` is required here
+}
+
+/** Renders the condensed Vortex skill injected as `additionalContext` at agent session start. */
+export async function printSessionStartContext(
+  p: PrintSessionStartContextParams,
+): Promise<CagSubprocessResult> {
+  return runCagSubprocess(
+    p.binaryPath,
+    ['tool', 'print-session-start-context', `--sca-enabled=${p.scaEnabled ? 'true' : 'false'}`],
+    { projectRoot: p.context.workspaceDir!, env: buildContextAugmentationEnv(p.context) },
+  );
 }
 
 /**
