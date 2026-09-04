@@ -20,15 +20,20 @@
 
 // quality-gate status command - fetch the quality gate verdict for a project
 
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { MAX_PAGE_SIZE, SonarQubeClient } from '@/core/server/client.ts';
 import { MetricsClient } from '@/core/server/metrics.ts';
 import { QualityGatesClient } from '@/core/server/quality-gates.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
-import { print } from '@/core/ui';
+import { print, warn } from '@/core/ui';
 
+import {
+  attachBreakdowns,
+  hasFailingConditionInCategory,
+  IMPLEMENTED_CATEGORIES,
+} from './breakdown.ts';
 import { selectConditions } from './condition-summary.ts';
 import { formatQualityGateJson } from './format-json.ts';
 import { formatQualityGateTable } from './format-table.ts';
@@ -37,12 +42,18 @@ import { exitCodeFor, toVerdict } from './verdict.ts';
 
 export const VALID_FORMATS = ['json', 'table'];
 
+export const VALID_CATEGORIES = IMPLEMENTED_CATEGORIES;
+
+export const DEFAULT_TOP = MAX_PAGE_SIZE;
+
 export interface QualityGateStatusOptions {
   project?: string;
   format?: string;
   branch?: string;
   pullRequest?: string;
   all?: boolean;
+  category?: string;
+  top?: number;
 }
 
 export async function qualityGateStatus(
@@ -50,6 +61,18 @@ export async function qualityGateStatus(
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   const { auth } = ctx;
+  const top = options.top ?? DEFAULT_TOP;
+  if (top < 1 || top > MAX_PAGE_SIZE) {
+    throw new InvalidOptionError(
+      `Invalid --top option: '${top}'. Must be an integer between 1 and ${MAX_PAGE_SIZE}`,
+    );
+  }
+  if (options.category && !VALID_CATEGORIES.includes(options.category)) {
+    throw new InvalidOptionError(
+      `Invalid --category option: '${options.category}'. Must be one of: ${VALID_CATEGORIES.join(', ')}`,
+    );
+  }
+
   const projectKey = await resolveProjectKey(options.project, auth, true);
   noteProject(auth, projectKey);
 
@@ -65,15 +88,33 @@ export async function qualityGateStatus(
   ]);
 
   const rawConditions = projectStatus?.conditions ?? [];
-  const hasConditionsToRender = options.all
-    ? rawConditions.length > 0
-    : rawConditions.some((condition) => condition.status !== 'OK');
+  const hasFailingConditions = rawConditions.some((condition) => condition.status !== 'OK');
+  const hasConditionsToRender = options.all ? rawConditions.length > 0 : hasFailingConditions;
 
   const metricsClient = new MetricsClient(client);
   const metrics = hasConditionsToRender ? await metricsClient.searchMetrics() : [];
 
   const verdict = toVerdict(projectStatus?.status);
-  const conditions = selectConditions(rawConditions, metrics, options.all);
+  const summaries = selectConditions(rawConditions, metrics, options.all);
+  const conditions = hasFailingConditions
+    ? await attachBreakdowns(summaries, {
+        client,
+        projectKey,
+        metrics,
+        category: options.category,
+        top,
+        branch: queryParams.branch,
+        pullRequest: queryParams.pullRequest,
+      })
+    : summaries;
+
+  if (
+    options.category &&
+    hasFailingConditions &&
+    !hasFailingConditionInCategory(rawConditions, options.category)
+  ) {
+    warn(`No failing conditions match category '${options.category}'.`);
+  }
 
   const format = options.format ?? 'table';
   const message =

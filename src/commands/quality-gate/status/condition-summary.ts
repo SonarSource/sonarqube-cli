@@ -26,6 +26,18 @@ import type { Metric, QualityGateCondition } from '@/core/server/types.ts';
 
 import { formatMetricValue } from './format-metric-value.ts';
 
+export interface QualityGateBreakdownEntry {
+  path: string;
+  value: string;
+  formattedValue: string;
+}
+
+export interface QualityGateMetricBreakdown {
+  totalCount: number;
+  fetchedCount: number;
+  entries: QualityGateBreakdownEntry[];
+}
+
 export interface QualityGateConditionSummary {
   metric: string;
   metricName: string;
@@ -36,6 +48,7 @@ export interface QualityGateConditionSummary {
   formattedThreshold?: string;
   actualValue?: string;
   formattedActualValue?: string;
+  breakdown?: QualityGateMetricBreakdown;
 }
 
 function isFailing(condition: QualityGateConditionSummary): boolean {
@@ -54,7 +67,7 @@ function formatOptionalValue(
   if (rawValue === undefined || metric === undefined) {
     return rawValue;
   }
-  return formatMetricValue(metric.type, rawValue);
+  return formatMetricValue(metric.type, rawValue, metric.decimalScale);
 }
 
 function toSummary(

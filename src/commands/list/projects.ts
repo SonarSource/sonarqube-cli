@@ -22,8 +22,8 @@
 
 import { InvalidOptionError } from '@/core/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
-import { MAX_PAGE_SIZE, ProjectsClient } from '@/core/server/projects.ts';
+import { MAX_PAGE_SIZE, SonarQubeClient } from '@/core/server/client.ts';
+import { ProjectsClient } from '@/core/server/projects.ts';
 import { print } from '@/core/ui';
 
 export interface ListProjectsOptions {
