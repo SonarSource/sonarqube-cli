@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import type { Result } from '@/core/result.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import type { ProjectsSearchResponse } from '@/core/server/types.ts';
@@ -31,8 +32,8 @@ function makeProjectsResponse(
   pageIndex = 1,
   pageSize = 500,
   total = components.length,
-): ProjectsSearchResponse {
-  return { paging: { pageIndex, pageSize, total }, components };
+): Result<ProjectsSearchResponse> {
+  return { ok: true, value: { paging: { pageIndex, pageSize, total }, components } };
 }
 
 beforeEach(() => {

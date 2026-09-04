@@ -21,6 +21,7 @@
 import { InvalidOptionError } from '@/core/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { CLOUD_API_DOCS_URL, SERVER_API_DOCS_URL } from '@/core/config-constants.ts';
+import { unwrap } from '@/core/result.ts';
 import {
   GENERIC_HTTP_METHODS,
   type HttpMethod,
@@ -117,12 +118,8 @@ export async function apiCommand(
 
   const client = new SonarHttpClient(auth.serverUrl, auth.token);
 
-  const response = await client.genericRequest(
-    upperMethod,
-    endpoint,
-    options.data,
-    contentType,
-    options.verbose,
+  const response = unwrap(
+    await client.genericRequest(upperMethod, endpoint, options.data, contentType, options.verbose),
   );
   print(response);
 }

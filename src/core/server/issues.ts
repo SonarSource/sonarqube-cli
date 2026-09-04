@@ -20,6 +20,7 @@
 
 // SonarQube Issues API wrapper
 
+import { unwrap } from '../result.ts';
 import { type SonarHttpClient } from './http-client.ts';
 import type { IssuesSearchParams, IssuesSearchResponse } from './types.ts';
 
@@ -47,6 +48,6 @@ export class IssuesClient {
       }
     });
 
-    return await this.client.get<IssuesSearchResponse>('/api/issues/search', queryParams);
+    return unwrap(await this.client.get<IssuesSearchResponse>('/api/issues/search', queryParams));
   }
 }

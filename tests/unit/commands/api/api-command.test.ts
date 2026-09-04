@@ -46,9 +46,10 @@ describe('apiCommand', () => {
     setMockUi(true);
     clearMockUiCalls();
 
-    genericRequestSpy = spyOn(SonarHttpClient.prototype, 'genericRequest').mockResolvedValue(
-      '{"status":"UP"}',
-    );
+    genericRequestSpy = spyOn(SonarHttpClient.prototype, 'genericRequest').mockResolvedValue({
+      ok: true,
+      value: '{"status":"UP"}',
+    });
   });
 
   afterEach(() => {

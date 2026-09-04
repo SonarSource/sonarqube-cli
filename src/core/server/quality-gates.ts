@@ -20,6 +20,7 @@
 
 // SonarQube Quality Gates API wrapper
 
+import { unwrap } from '../result.ts';
 import { type SonarHttpClient } from './http-client.ts';
 import type { ProjectStatus, ProjectStatusParams, ProjectStatusResponse } from './types.ts';
 
@@ -44,9 +45,11 @@ export class QualityGatesClient {
     if (params.pullRequest) {
       queryParams.pullRequest = params.pullRequest;
     }
-    const result = await this.client.getOrNotFound<ProjectStatusResponse>(
-      '/api/qualitygates/project_status',
-      queryParams,
+    const result = unwrap(
+      await this.client.getOrNotFound<ProjectStatusResponse>(
+        '/api/qualitygates/project_status',
+        queryParams,
+      ),
     );
     return result?.projectStatus ?? null;
   }

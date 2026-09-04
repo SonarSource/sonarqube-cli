@@ -32,6 +32,7 @@ import {
   HTTP_STATUS_SERVICE_UNAVAILABLE,
   HTTP_STATUS_TOO_MANY_REQUESTS,
 } from '@/core/http-constants.ts';
+import { Err, Ok, type Result } from '@/core/result.ts';
 import { print } from '@/core/ui';
 
 import { version as VERSION } from '../../../package.json';
@@ -101,39 +102,43 @@ export class SonarHttpClient {
     return headers;
   }
 
-  private async raiseForStatus(response: Response, method: HttpMethod) {
-    if (response.ok) return;
+  /** Returns the typed error for a non-2xx response, or `undefined` when `response.ok`. */
+  private async buildStatusError(
+    response: Response,
+    method: HttpMethod,
+  ): Promise<Error | undefined> {
+    if (response.ok) return undefined;
 
     // Status-specific typed errors apply regardless of HTTP method.
     if (response.status === HTTP_STATUS_TOO_MANY_REQUESTS) {
-      throw new RateLimitError();
+      return new RateLimitError();
     }
     if (response.status === HTTP_STATUS_SERVICE_UNAVAILABLE) {
-      throw new ServiceUnavailableError();
+      return new ServiceUnavailableError();
     }
     if (method === 'POST' && response.status === HTTP_STATUS_BAD_REQUEST) {
-      throw await parseBadRequestError(response);
+      return await parseBadRequestError(response);
     }
     if (method === 'POST' && response.status === HTTP_STATUS_PAYLOAD_TOO_LARGE) {
-      throw await parseRequestPayloadTooLargeError(response);
+      return await parseRequestPayloadTooLargeError(response);
     }
     if (method === 'POST' && response.status === HTTP_STATUS_FORBIDDEN) {
-      throw new ForbiddenApiError(await response.text());
+      return new ForbiddenApiError(await response.text());
     }
 
     if (method === 'GET') {
       if (response.status === HTTP_STATUS_FORBIDDEN || response.status === HTTP_STATUS_NOT_FOUND) {
-        throw new Error(
+        return new Error(
           `Access denied (HTTP ${response.status}). Check that the supplied token and organization are valid.`,
         );
       }
       const errorText = await response.text();
       logger.debug(`SonarQube GET ${response.url} failed: ${response.status} ${errorText}`);
-      throw new Error(`SonarQube API error: ${response.status} ${response.statusText}`);
+      return new Error(`SonarQube API error: ${response.status} ${response.statusText}`);
     }
 
     const errorText = await response.text();
-    throw new Error(
+    return new Error(
       `SonarQube API error: ${response.status} ${response.statusText} - ${errorText}`,
     );
   }
@@ -148,7 +153,7 @@ export class SonarHttpClient {
     data?: string,
     contentType: 'json' | 'form' = 'json',
     debug?: boolean,
-  ) {
+  ): Promise<Result<string>> {
     const headers = this.commonHeaders(contentType);
     let requestBody: string | undefined;
 
@@ -188,44 +193,50 @@ export class SonarHttpClient {
       print(`response headers: ${JSON.stringify(response.headers)}`, 'stderr');
     }
 
-    await this.raiseForStatus(response, method);
+    const error = await this.buildStatusError(response, method);
+    if (error) {
+      return Err(error);
+    }
 
-    return await response.text();
+    return Ok(await response.text());
   }
 
   /**
    * Make GET request to SonarQube API
    */
-  async get<T>(endpoint: string, params?: QueryParams, baseUrl?: string): Promise<T> {
+  async get<T>(endpoint: string, params?: QueryParams, baseUrl?: string): Promise<Result<T>> {
     const result = await this.getSafe<T>(endpoint, params, baseUrl);
-    return this.unwrapGetResult(result);
+    return this.toGetResult(result);
   }
 
   /**
-   * Like `get`, but returns `null` instead of throwing when the server responds 404.
-   * Every other non-2xx status still raises its normal typed error.
+   * Like `get`, but resolves to `Ok(null)` instead of an error when the server responds
+   * 404. Every other non-2xx status still yields its normal typed error.
    */
   async getOrNotFound<T>(
     endpoint: string,
     params?: QueryParams,
     baseUrl?: string,
-  ): Promise<T | null> {
+  ): Promise<Result<T | null>> {
     const result = await this.getSafe<T>(endpoint, params, baseUrl);
 
     if (result.response.status === HTTP_STATUS_NOT_FOUND) {
-      return null;
+      return Ok(null);
     }
 
-    return this.unwrapGetResult(result);
+    return this.toGetResult(result);
   }
 
-  private async unwrapGetResult<T>(result: SafeGetResult<T>): Promise<T> {
-    await this.raiseForStatus(result.response, 'GET');
+  private async toGetResult<T>(result: SafeGetResult<T>): Promise<Result<T>> {
+    const error = await this.buildStatusError(result.response, 'GET');
+    if (error) {
+      return Err(error);
+    }
 
     if (result.value === undefined) {
-      throw new Error('SonarQube API error: empty response body');
+      return Err(new Error('SonarQube API error: empty response body'));
     }
-    return result.value;
+    return Ok(result.value);
   }
 
   async getSafe<TValue>(
@@ -261,7 +272,7 @@ export class SonarHttpClient {
     body: unknown,
     baseUrl?: string,
     extraHeaders?: Record<string, string>,
-  ): Promise<T> {
+  ): Promise<Result<T>> {
     const url = `${baseUrl ?? this.serverURL}${endpoint}`;
     const headers = { ...this.commonHeaders('json'), ...extraHeaders };
 
@@ -270,9 +281,12 @@ export class SonarHttpClient {
       buildRequest('POST', headers, POST_REQUEST_TIMEOUT_MS, JSON.stringify(body)),
     );
 
-    await this.raiseForStatus(response, 'POST');
+    const error = await this.buildStatusError(response, 'POST');
+    if (error) {
+      return Err(error);
+    }
 
-    return (await response.json()) as T;
+    return Ok((await response.json()) as T);
   }
 
   /**
@@ -284,7 +298,7 @@ export class SonarHttpClient {
     endpoint: string,
     params: Record<string, string>,
     timeoutMs: number = POST_REQUEST_TIMEOUT_MS,
-  ): Promise<void> {
+  ): Promise<Result<void>> {
     const url = `${this.serverURL}${endpoint}`;
     const response = await fetchAuthenticated(
       url,
@@ -296,7 +310,11 @@ export class SonarHttpClient {
       ),
     );
 
-    await this.raiseForStatus(response, 'POST');
+    const error = await this.buildStatusError(response, 'POST');
+    if (error) {
+      return Err(error);
+    }
+    return Ok(undefined);
   }
 
   /**
@@ -304,7 +322,7 @@ export class SonarHttpClient {
    * discarding it. Used for legacy endpoints that are
    * form-encoded on the request side but return a JSON body.
    */
-  async postFormJson<T>(endpoint: string, params: Record<string, string>): Promise<T> {
+  async postFormJson<T>(endpoint: string, params: Record<string, string>): Promise<Result<T>> {
     const url = `${this.serverURL}${endpoint}`;
     const response = await fetchAuthenticated(
       url,
@@ -316,9 +334,12 @@ export class SonarHttpClient {
       ),
     );
 
-    await this.raiseForStatus(response, 'POST');
+    const error = await this.buildStatusError(response, 'POST');
+    if (error) {
+      return Err(error);
+    }
 
-    return (await response.json()) as T;
+    return Ok((await response.json()) as T);
   }
 }
 

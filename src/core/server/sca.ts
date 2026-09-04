@@ -43,19 +43,18 @@ export class ScaClient {
     connectionType: 'cloud' | 'on-premise',
     orgKey?: string,
   ): Promise<ScaEnablement> {
-    try {
-      const isCloud = connectionType === 'cloud';
-      const endpoint = isCloud ? '/sca/feature-enabled' : '/api/v2/sca/feature-enabled';
-      const params = isCloud && orgKey ? { organization: orgKey } : undefined;
-      const result = await this.client.get<{ enabled: boolean }>(
-        endpoint,
-        params,
-        this.client.apiHostFor(endpoint),
-      );
-      return result.enabled ? 'enabled' : 'not_enabled';
-    } catch {
+    const isCloud = connectionType === 'cloud';
+    const endpoint = isCloud ? '/sca/feature-enabled' : '/api/v2/sca/feature-enabled';
+    const params = isCloud && orgKey ? { organization: orgKey } : undefined;
+    const result = await this.client.get<{ enabled: boolean }>(
+      endpoint,
+      params,
+      this.client.apiHostFor(endpoint),
+    );
+    if (!result.ok) {
       return 'check_failed';
     }
+    return result.value.enabled ? 'enabled' : 'not_enabled';
   }
 
   /**
