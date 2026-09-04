@@ -32,6 +32,14 @@ import { clearNetworkConfigCache } from '@/core/host/connectivity/network-config
 import { ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import type { SpawnResult } from '@/core/process/process.ts';
 
+import { FakeConsole } from '../../../_common/fake-console.ts';
+
+let fake: FakeConsole;
+
+beforeEach(() => {
+  fake = new FakeConsole();
+});
+
 const okInstaller: ScaScannerInstaller = { install: () => Promise.resolve('/bin/sca') };
 const noopSpawner: ScaScannerSpawner = {
   spawn: () => Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }),
@@ -97,7 +105,7 @@ describe('ScaScannerRunner.run', () => {
     };
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      new ScaScannerRunner(failingInstaller, noopSpawner).run(makeInvocation()),
+      new ScaScannerRunner(failingInstaller, noopSpawner).run(makeInvocation(), fake),
     ).rejects.toThrow(/not installed/);
   });
 
@@ -126,7 +134,7 @@ describe('ScaScannerRunner.run', () => {
       okInstaller,
       spawnerReturning({ exitCode: 0, stdout, stderr: '' }),
     );
-    const result = await runner.run(makeInvocation());
+    const result = await runner.run(makeInvocation(), fake);
     expect(result.releases).toHaveLength(1);
     expect(result.releases[0].packageUrl).toBe('pkg:npm/lodash@4.17.21');
     expect(result.releases[0].packageName).toBe('lodash');
@@ -144,7 +152,7 @@ describe('ScaScannerRunner.run', () => {
       spawnerReturning({ exitCode: 0, stdout: 'not json', stderr: '' }),
     );
     await expectCommandFailedError(
-      runner.run(makeInvocation()),
+      runner.run(makeInvocation(), fake),
       /failed to parse output/,
       `Inspect ${LOG_FILE} for the raw sca-scanner output, then retry.`,
     );
@@ -156,7 +164,7 @@ describe('ScaScannerRunner.run', () => {
       spawnerReturning({ exitCode: 2, stdout: '', stderr: 'boom' }),
     );
     await expectCommandFailedError(
-      runner.run(makeInvocation()),
+      runner.run(makeInvocation(), fake),
       /sca-scanner exited with code 2\./,
       `Inspect ${LOG_FILE} for the underlying sca-scanner error, fix the reported issue, then retry.`,
     );
@@ -165,7 +173,7 @@ describe('ScaScannerRunner.run', () => {
   it('wraps a spawner rejection into CommandFailedError with a remediation hint', async () => {
     const runner = new ScaScannerRunner(okInstaller, spawnerThrowing(new Error('spawn EACCES')));
     await expectCommandFailedError(
-      runner.run(makeInvocation()),
+      runner.run(makeInvocation(), fake),
       /Dependency risk analysis error: spawn EACCES/,
       'Verify that the SCA scanner is installed and can run on this machine, then retry.',
     );
@@ -181,7 +189,7 @@ describe('ScaScannerRunner.run', () => {
       Promise.resolve({ exitCode: 0, stdout: JSON.stringify(payload), stderr: '' }),
     );
 
-    const result = await new ScaScannerRunner(okInstaller, { spawn }).run(makeInvocation());
+    const result = await new ScaScannerRunner(okInstaller, { spawn }).run(makeInvocation(), fake);
 
     expect(result).toEqual(payload);
   });
@@ -201,7 +209,7 @@ describe('ScaScannerRunner.run', () => {
     });
     const runner = new ScaScannerRunner(installer, { spawn });
 
-    await runner.run(invocation);
+    await runner.run(invocation, fake);
 
     expect(spawn).toHaveBeenCalledTimes(1);
     expect(spawn).toHaveBeenCalledWith(
@@ -217,7 +225,7 @@ describe('ScaScannerRunner.run', () => {
     );
     const invocation = makeInvocation({ sonarToken: 'super-secret' });
 
-    await new ScaScannerRunner(okInstaller, { spawn }).run(invocation);
+    await new ScaScannerRunner(okInstaller, { spawn }).run(invocation, fake);
 
     const [, args, env] = spawn.mock.calls[0];
     expect(args.some((arg) => arg.includes('super-secret') || arg.includes('--sonar-token'))).toBe(
@@ -295,7 +303,7 @@ describe('ScaScannerRunner — network env propagation', () => {
       Promise.resolve({ exitCode: 0, stdout: '{}', stderr: '' }),
     );
     const runner = new ScaScannerRunner({ install: () => Promise.resolve('/bin/sca') }, { spawn });
-    await runner.run(makeInvocation());
+    await runner.run(makeInvocation(), fake);
 
     const [, , env] = spawn.mock.calls[0];
     expect(env).toMatchObject({
@@ -309,7 +317,7 @@ describe('ScaScannerRunner — network env propagation', () => {
     );
     const invocation = makeInvocation({ sonarToken: 'my-token' });
     const runner = new ScaScannerRunner({ install: () => Promise.resolve('/bin/sca') }, { spawn });
-    await runner.run(invocation);
+    await runner.run(invocation, fake);
 
     const [, , env] = spawn.mock.calls[0];
     expect(env).toMatchObject({ SONAR_TOKEN: 'my-token' });

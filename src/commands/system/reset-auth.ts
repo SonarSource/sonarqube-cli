@@ -23,7 +23,6 @@ import type { AuthConnection, CliState } from '@/core/state/state.ts';
 import type { PhaseItem } from '@/core/ui';
 import { phaseItem } from '@/core/ui';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import {
   reportRevokeServerTokenOutcome,
@@ -110,10 +109,7 @@ function buildAuthResetPhaseItem(
   );
 }
 
-export async function purgeAuth(
-  state: CliState,
-  console: Console = new TerminalConsole(),
-): Promise<AuthResetResult> {
+export async function purgeAuth(state: CliState, console: Console): Promise<AuthResetResult> {
   // Delete tokens sequentially: the file-backed keychain (CI/tests) does an
   // unsynchronized read-modify-write of a single JSON store, so concurrent
   // deletions race and can clobber each other. Server-side revocation still

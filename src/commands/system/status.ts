@@ -27,7 +27,7 @@ import { parse as parseToml } from 'smol-toml';
 import { isSonarQubeCloud, resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
-import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { getBanner } from '@/core/commands/root-help.ts';
 import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '@/core/config-constants.ts';
 import { recordedFeatureResources } from '@/core/framework/features';
@@ -54,7 +54,6 @@ import type { VortexEntitlementResult } from '@/core/server/client.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { loadState } from '@/core/state/state-repository.ts';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 import { isNewerVersion, stripBuildNumber } from '@/core/version.ts';
 import { isVortexEntitlementLoss, resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
@@ -403,7 +402,7 @@ async function resolveAuthenticatedChecks(auth: ResolvedAuth | null): Promise<Au
 
 export async function systemStatus(
   options: SystemStatusOptions,
-  ctx: CommandInvocationContext = new CommandInvocationContext(new TerminalConsole()),
+  ctx: CommandInvocationContext,
 ): Promise<void> {
   const { console } = ctx;
   const state = loadState();

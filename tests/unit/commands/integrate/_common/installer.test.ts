@@ -37,8 +37,15 @@ import {
 } from '@/core/framework/features';
 import { type CliState, getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
+
+import { FakeConsole } from '../../../../_common/fake-console.ts';
+
+let fake: FakeConsole;
+
+beforeEach(() => {
+  fake = new FakeConsole();
+});
+
 describe('generic integration installer', () => {
   let tempDir: string;
   let registry: IntegrationRegistry;
@@ -48,14 +55,11 @@ describe('generic integration installer', () => {
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'sonar-cli-installer-'));
     registry = new IntegrationRegistry();
-    setMockUi(true);
-    clearMockUiCalls();
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
   });
 
   afterEach(() => {
-    setMockUi(false);
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     rmSync(tempDir, { recursive: true, force: true });
@@ -95,7 +99,7 @@ describe('generic integration installer', () => {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
-      console: new TerminalConsole(),
+      console: fake,
       attrs: { projectKey: 'project' },
     });
 
@@ -161,7 +165,7 @@ describe('generic integration installer', () => {
       },
       targetRoot: mainRoot,
       scope: 'global',
-      console: new TerminalConsole(),
+      console: fake,
     });
 
     expect(installed).toMatchObject([
@@ -207,7 +211,7 @@ describe('generic integration installer', () => {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
-      console: new TerminalConsole(),
+      console: fake,
     });
 
     expect(await readFile(join(tempDir, 'dependency.txt'), 'utf-8')).toBe(
@@ -245,17 +249,15 @@ describe('generic integration installer', () => {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
-      console: new TerminalConsole(),
+      console: fake,
     });
-    clearMockUiCalls();
-
     const installed = await installIntegration({
       registry,
       integrationId: integration.id,
       options: {},
       targetRoot: tempDir,
       scope: 'project',
-      console: new TerminalConsole(),
+      console: fake,
     });
 
     expect(installed[0].resources.some((resource) => resource.id === 'file')).toBe(true);
@@ -284,17 +286,15 @@ describe('generic integration installer', () => {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
-      console: new TerminalConsole(),
+      console: fake,
     });
-    clearMockUiCalls();
-
     await installIntegration({
       registry,
       integrationId: integration.id,
       options: {},
       targetRoot: tempDir,
       scope: 'project',
-      console: new TerminalConsole(),
+      console: fake,
     });
 
     expect(hasUiCall('text', '     unnamed-file already installed')).toBe(true);
@@ -328,17 +328,15 @@ describe('generic integration installer', () => {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
-      console: new TerminalConsole(),
+      console: fake,
     });
-    clearMockUiCalls();
-
     await installIntegration({
       registry,
       integrationId: integration.id,
       options: {},
       targetRoot: tempDir,
       scope: 'project',
-      console: new TerminalConsole(),
+      console: fake,
     });
 
     expect(hasUiCall('text', '     unnamed-binary already installed')).toBe(true);
@@ -369,14 +367,12 @@ describe('generic integration installer', () => {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
-      console: new TerminalConsole(),
+      console: fake,
     });
 
     expect(called).toBe(false);
     expect(installed[0].operations).toEqual([]);
-    expect(getMockUiCalls().some((call) => call.args[0] === 'Applied Skipped operation')).toBe(
-      false,
-    );
+    expect(fake.calls.some((call) => call.args[0] === 'Applied Skipped operation')).toBe(false);
   });
 
   it('passes install execution mode through installIntegration', async () => {
@@ -407,7 +403,7 @@ describe('generic integration installer', () => {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
-      console: new TerminalConsole(),
+      console: fake,
       auth: {
         token: 'test-token',
         serverUrl: 'https://sonarcloud.io',
@@ -428,7 +424,7 @@ describe('generic integration installer', () => {
         options: {},
         targetRoot: tempDir,
         scope: 'project',
-        console: new TerminalConsole(),
+        console: fake,
       }),
     );
 
@@ -455,7 +451,7 @@ describe('generic integration installer', () => {
         options: {},
         targetRoot: tempDir,
         scope: 'project',
-        console: new TerminalConsole(),
+        console: fake,
       }),
     );
 
@@ -492,7 +488,7 @@ describe('generic integration installer', () => {
         options: {},
         targetRoot: tempDir,
         scope: 'project',
-        console: new TerminalConsole(),
+        console: fake,
       });
     } catch (error) {
       forceError = error;
@@ -510,7 +506,7 @@ describe('generic integration installer', () => {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
-      console: new TerminalConsole(),
+      console: fake,
       force: true,
     });
 
@@ -556,7 +552,7 @@ describe('generic integration installer', () => {
         options: {},
         targetRoot: tempDir,
         scope: 'project',
-        console: new TerminalConsole(),
+        console: fake,
       });
     } catch (error) {
       thrown = error;
@@ -595,7 +591,7 @@ describe('generic integration installer', () => {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
-      console: new TerminalConsole(),
+      console: fake,
     });
 
     expect(saveStateSpy).toHaveBeenCalledWith(snapshot);
@@ -630,7 +626,7 @@ describe('generic integration installer', () => {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
-      console: new TerminalConsole(),
+      console: fake,
     });
 
     expect(hasUiCall('text', '     Installing Container Feature...')).toBe(true);
@@ -672,7 +668,7 @@ describe('generic integration installer', () => {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
-      console: new TerminalConsole(),
+      console: fake,
     });
 
     expect(hasUiCall('text', '     Installing Container Feature...')).toBe(true);
@@ -699,7 +695,7 @@ describe('generic integration installer', () => {
         options: {},
         targetRoot: tempDir,
         scope: 'project',
-        console: new TerminalConsole(),
+        console: fake,
       }),
     );
 
@@ -727,7 +723,7 @@ describe('generic integration installer', () => {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
-      console: new TerminalConsole(),
+      console: fake,
     });
 
     expect(installed).toEqual([]);
@@ -749,7 +745,7 @@ function recordDependencyLikeInstaller(
 }
 
 function hasUiCall(method: string, message: string): boolean {
-  return getMockUiCalls().some((call) => call.method === method && call.args[0] === message);
+  return fake.calls.some((call) => call.method === method && call.args[0] === message);
 }
 
 async function catchError(fn: () => Promise<unknown>): Promise<Error | undefined> {

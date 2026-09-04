@@ -22,7 +22,7 @@ import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.t
 import { isSonarQubeCloud } from '@/core/auth/auth-resolver.ts';
 import { type BrowserAuthResult, generateTokenViaBrowser } from '@/core/auth/token.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
-import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 import {
   deleteStaleTokens,
@@ -39,7 +39,6 @@ import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import {
   reportRevokeServerTokenOutcome,
@@ -51,7 +50,7 @@ import {
  */
 export async function authLogin(
   options: AuthLoginOptions,
-  ctx: CommandInvocationContext = new CommandInvocationContext(new TerminalConsole()),
+  ctx: CommandInvocationContext,
 ): Promise<void> {
   const { console } = ctx;
   validateLoginOptions(options);
@@ -361,10 +360,7 @@ async function validateOrSelectOrganization(
   return await getUserSelectedOrganization(client, console);
 }
 
-export async function confirmServerTrust(
-  server: string,
-  console: Console = new TerminalConsole(),
-): Promise<void> {
+export async function confirmServerTrust(server: string, console: Console): Promise<void> {
   if (isSonarQubeCloud(server)) {
     return;
   }

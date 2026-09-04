@@ -27,7 +27,7 @@ import { discoverProject } from '@/core/project-info.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
+
 const LARGE_CHANGESET_HINT =
   'For faster feedback, try targeting your changes:\n' +
   '  --staged          analyze only staged files\n' +
@@ -71,8 +71,8 @@ export type SqaaAuthResolution =
 export async function resolveSqaaAuthAndProject(
   auth: ResolvedAuth,
   explicitProject: string | undefined,
-  projectRoot?: string,
-  console: Console = new TerminalConsole(),
+  projectRoot: string | undefined,
+  console: Console,
 ): Promise<SqaaAuthResolution> {
   const sqaaAuth = resolveSqaaAuth(auth, explicitProject, console);
   if (!sqaaAuth) return { kind: 'no-org' };
@@ -94,7 +94,7 @@ export async function resolveSqaaAuthAndProject(
 export function resolveSqaaAuth(
   auth: ResolvedAuth,
   explicitProject: string | undefined,
-  console: Console = new TerminalConsole(),
+  console: Console,
 ): SqaaAuth | null {
   if (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey) {
     if (explicitProject) {
@@ -124,8 +124,8 @@ export function resolveSqaaAuth(
  */
 export async function resolveSqaaProjectKey(
   auth: ResolvedAuth,
-  projectRoot?: string,
-  console: Console = new TerminalConsole(),
+  projectRoot: string | undefined,
+  console: Console,
 ): Promise<string | null> {
   const discovered = await discoverProject(projectRoot ?? process.cwd(), {
     auth,
@@ -143,10 +143,7 @@ export async function resolveSqaaProjectKey(
  * In non-interactive contexts (no stdin TTY — e.g. CI/agent runs), prints a
  * warning and auto-proceeds. Returns false only when the user explicitly declines in an interactive terminal.
  */
-export async function confirmLargeChangeset(
-  fileCount: number,
-  console: Console = new TerminalConsole(),
-): Promise<boolean> {
+export async function confirmLargeChangeset(fileCount: number, console: Console): Promise<boolean> {
   console.blank();
   console.warn(
     `You are about to analyze a large number of files (${fileCount}). This may take longer to process.\n${LARGE_CHANGESET_HINT}`,

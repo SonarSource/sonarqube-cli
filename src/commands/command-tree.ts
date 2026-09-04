@@ -43,7 +43,6 @@ import { flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
 import type { Console } from '@/core/ui/console.ts';
 import { parseInteger } from '@/core/ui/parsing.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { version as VERSION } from '../../package.json';
 import {
@@ -153,8 +152,8 @@ export type LoadPrivateBetaContext = (flagKeys: readonly string[]) => Promise<{
 export interface CreateCommandTreeOptions {
   isAlphaEnabled?: boolean;
   loadPrivateBetaContext?: LoadPrivateBetaContext;
-  /** Shared tree console; production omits this and gets a fresh {@link TerminalConsole}. */
-  console?: Console;
+  /** Shared tree console. Construct once at the process entry and pass it in. */
+  console: Console;
 }
 
 /** Registers the full command tree for the given runtime (sync). */
@@ -439,7 +438,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       args: string[],
     ) {
       setPassthroughSubcommand(this, derivePassthroughSubcommand(action, args));
-      return runContextPassthrough(action, args);
+      return runContextPassthrough(action, args, { console: _ctx.console });
     });
 
   integrateCommand
@@ -773,7 +772,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description(
       'PostToolUseFailure handler: forward the failed tool call to Vortex context augmentation',
     )
-    .anonymousAction((_ctx) => claudePostToolUseFailure());
+    .anonymousAction((ctx) => claudePostToolUseFailure(ctx));
 
   hookCommand
     .command('codex-post-tool-use')
@@ -884,11 +883,9 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
  * call `loadPrivateBetaContext` (auth + LaunchDarkly). Otherwise the probe tree
  * is returned and LaunchDarkly is never contacted.
  */
-export async function createCommandTree(
-  options: CreateCommandTreeOptions = {},
-): Promise<SonarCommand> {
+export async function createCommandTree(options: CreateCommandTreeOptions): Promise<SonarCommand> {
   const isAlphaEnabled = options.isAlphaEnabled ?? isAlphaEnabledFromEnv();
-  const console = options.console ?? new TerminalConsole();
+  const { console } = options;
 
   const probe = buildCommandTree(
     {

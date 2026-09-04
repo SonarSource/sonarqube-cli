@@ -28,7 +28,6 @@ import { SonarQubeClient } from '@/core/server/client.ts';
 import type { PhaseItem, StepStatus } from '@/core/ui';
 import { phaseItem } from '@/core/ui';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 export interface AgentPreflightSummaryOptions {
   serverUrl: string;
   organization?: string;
@@ -41,7 +40,7 @@ export interface AgentPreflightSummaryOptions {
 
 export async function printAgentPreflightSummary(
   options: AgentPreflightSummaryOptions,
-  console: Console = new TerminalConsole(),
+  console: Console,
 ): Promise<void> {
   const tokenResult: TokenCheckResult = await checkTokenStatus(options.serverUrl, options.token);
   const tokenStatus: TokenStatus = tokenResult.status;
@@ -62,7 +61,7 @@ export async function printAgentPreflightSummary(
   }
 }
 
-function reportUnreachableServerFailure(console: Console = new TerminalConsole()): void {
+function reportUnreachableServerFailure(console: Console): void {
   console.outro('Setup failed', 'error');
   console.info('Server could not be reached.');
   console.text('   Ensure the URL is correct and check your network connection or SONAR_HOST_URL.');
@@ -194,10 +193,7 @@ function tokenDisplayForStatus(tokenStatus: TokenStatus): {
   }
 }
 
-export async function printGitPreflightSummary(
-  gitRoot: string,
-  console: Console = new TerminalConsole(),
-): Promise<void> {
+export async function printGitPreflightSummary(gitRoot: string, console: Console): Promise<void> {
   const gitRepo = new GitRepo(gitRoot);
   const hooksDir = await gitRepo.getHooksDir();
   const framework = await resolveGitFrameworkLabel(gitRepo);

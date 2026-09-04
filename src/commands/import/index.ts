@@ -27,7 +27,6 @@ import {
   SonarQubeClient,
 } from '@/core/server/client.ts';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import type {
   OnlyPrivateProjects,
@@ -187,10 +186,7 @@ async function runBulkImportJob(
   return { succeeded, failed, skipped: [...collection.skippedRepos, ...skippedByRegex] };
 }
 
-function reportSkipped(
-  skipped: readonly SkippedRepo[],
-  console: Console = new TerminalConsole(),
-): void {
+function reportSkipped(skipped: readonly SkippedRepo[], console: Console): void {
   if (skipped.length === 0) return;
   console.info(`Repositories skipped: ${skipped.length}`);
   const countsByReason = new Map<string, number>();
@@ -212,7 +208,7 @@ function reportOutcome(
   failed: number,
   skippedCount: number,
   dashboardUrl: string,
-  console: Console = new TerminalConsole(),
+  console: Console,
 ): void {
   const skippedSuffix = skippedCount > 0 ? ` (${skippedCount} skipped)` : '';
 

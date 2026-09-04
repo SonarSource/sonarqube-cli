@@ -30,7 +30,6 @@ import type {
 } from '@/core/server/client.ts';
 import { bold, dim, green, red, softBlue, yellow } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 import { vortexUnavailableCommandMessage } from '@/core/vortex/availability-messages.ts';
 
 import type { FileResult, FileSuccess, RunTally } from './sqaa-analysis.ts';
@@ -461,10 +460,7 @@ function renderChangeSetReportLines(
 }
 
 /** Unified change-set text report (file rows, inline issues, summary footer). */
-export function printSqaaTextReport(
-  options: PrintSqaaTextReportOptions,
-  console: Console = new TerminalConsole(),
-): void {
+export function printSqaaTextReport(options: PrintSqaaTextReportOptions, console: Console): void {
   const { tally, allPaths, ignoredPaths = [], analysisDepth } = options;
   const stats = computeRunSummaryStats(tally, allPaths, analysisDepth);
 
@@ -481,8 +477,8 @@ export function printSqaaTextReport(
 export function printSingleFileTextFailure(
   filePath: string,
   error: Error,
-  analysisDepth: SqaaAnalysisDepth = 'STANDARD',
-  console: Console = new TerminalConsole(),
+  analysisDepth: SqaaAnalysisDepth,
+  console: Console,
 ): void {
   const tally: RunTally = {
     allResults: [{ file: filePath, filePath, failure: error }],
@@ -493,10 +489,7 @@ export function printSingleFileTextFailure(
   printSqaaTextReport({ tally, allPaths: [filePath], analysisDepth }, console);
 }
 
-export function printVortexUnavailable(
-  status: VortexEntitlementStatus,
-  console: Console = new TerminalConsole(),
-): void {
+export function printVortexUnavailable(status: VortexEntitlementStatus, console: Console): void {
   console.text(vortexUnavailableCommandMessage(status));
 }
 
@@ -525,8 +518,8 @@ export function displaySqaaResults(
   issues: SqaaIssue[],
   errors: Array<{ code: string; message: string }> | null | undefined,
   filePath: string,
-  analysisDepth: SqaaAnalysisDepth = 'STANDARD',
-  console: Console = new TerminalConsole(),
+  analysisDepth: SqaaAnalysisDepth,
+  console: Console,
 ): number {
   const result: FileSuccess = {
     file: filePath,

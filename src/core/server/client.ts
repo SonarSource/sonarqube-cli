@@ -30,7 +30,6 @@ import {
 } from '@/core/http-constants.ts';
 import { INVOCATION_ID, SONAR_INVOCATION_ID_HEADER } from '@/core/telemetry/invocation-id.ts';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { version as VERSION } from '../../../package.json';
 import logger from '../observability/logger.ts';
@@ -185,10 +184,10 @@ export class SonarQubeClient {
   async genericRequest(
     method: HttpMethod,
     endpoint: string,
+    console: Console,
     data?: string,
     contentType: 'json' | 'form' = 'json',
-    debug?: boolean,
-    console: Console = new TerminalConsole(),
+    debug = false,
   ) {
     const headers = this.commonHeaders(contentType);
     let requestBody: string | undefined;

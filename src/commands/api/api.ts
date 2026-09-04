@@ -119,10 +119,10 @@ export async function apiCommand(
   const response = await client.genericRequest(
     upperMethod,
     endpoint,
+    console,
     options.data,
     contentType,
     options.verbose,
-    console,
   );
   console.print(response);
 }

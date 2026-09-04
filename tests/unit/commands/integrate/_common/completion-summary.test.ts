@@ -26,8 +26,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { type IntegrationDeclaration, renderCompletionSummary } from '@/core/framework/features';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
 import type { PhaseItem } from '@/core/ui';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
+
+import { FakeConsole } from '../../../../_common/fake-console.ts';
+
 function installedFeature(
   featureId: string,
   overrides: Partial<InstalledIntegrationFeature> = {},
@@ -48,7 +49,7 @@ function installedFeature(
 }
 
 function renderWithResourcePath(path: string): string[] {
-  clearMockUiCalls();
+  fake.calls.length = 0;
   const integration: IntegrationDeclaration = {
     id: 'test',
     displayName: 'Test',
@@ -71,23 +72,23 @@ function renderWithResourcePath(path: string): string[] {
       }),
     ],
     [],
-    new TerminalConsole(),
+    fake,
   );
-
-  const phaseCall = getMockUiCalls().find((c) => c.method === 'phase' && c.args[0] === 'Installed');
+  const phaseCall = fake.calls.find((c) => c.method === 'phase' && c.args[0] === 'Installed');
   const items = (phaseCall?.args[1] ?? []) as PhaseItem[];
   return items[0]?.subItems ?? [];
 }
 
-describe('renderCompletionSummary', () => {
-  beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-  });
+let fake: FakeConsole;
 
-  afterEach(() => {
-    setMockUi(false);
-  });
+beforeEach(() => {
+  fake = new FakeConsole();
+});
+
+describe('renderCompletionSummary', () => {
+  beforeEach(() => {});
+
+  afterEach(() => {});
 
   it('renders nothing when no features were installed', () => {
     const integration: IntegrationDeclaration = {
@@ -96,9 +97,9 @@ describe('renderCompletionSummary', () => {
       features: [{ id: 'a', displayName: 'Feature A' }],
     };
 
-    renderCompletionSummary(integration, [], [], new TerminalConsole());
+    renderCompletionSummary(integration, [], [], fake);
 
-    expect(getMockUiCalls()).toHaveLength(0);
+    expect(fake.calls).toHaveLength(0);
   });
 
   it('renders the Installed list (display names + resource path sub-lists) and the outro', () => {
@@ -128,18 +129,16 @@ describe('renderCompletionSummary', () => {
         installedFeature('b'),
       ],
       [],
-      new TerminalConsole(),
+      fake,
     );
 
-    const phaseCall = getMockUiCalls().find(
-      (c) => c.method === 'phase' && c.args[0] === 'Installed',
-    );
+    const phaseCall = fake.calls.find((c) => c.method === 'phase' && c.args[0] === 'Installed');
     const items = (phaseCall?.args[1] ?? []) as PhaseItem[];
     expect(items.map((item) => item.text)).toEqual(['Feature A', 'Feature B']);
     expect(items[0]?.subItems).toEqual(['/tmp/project/.sonar/hook.sh']);
     expect(items[1]?.subItems).toEqual([]);
 
-    const outroCall = getMockUiCalls().find((c) => c.method === 'outro');
+    const outroCall = fake.calls.find((c) => c.method === 'outro');
     expect(outroCall?.args[0]).toBe('Setup complete!');
     expect(outroCall?.args[1]).toBe('success');
   });
@@ -183,12 +182,10 @@ describe('renderCompletionSummary', () => {
         }),
       ],
       [],
-      new TerminalConsole(),
+      fake,
     );
 
-    const phaseCall = getMockUiCalls().find(
-      (c) => c.method === 'phase' && c.args[0] === 'Installed',
-    );
+    const phaseCall = fake.calls.find((c) => c.method === 'phase' && c.args[0] === 'Installed');
     const items = (phaseCall?.args[1] ?? []) as PhaseItem[];
     expect(items[0]?.subItems).toEqual([
       '/tmp/project/.sonar/hook.sh',
@@ -206,19 +203,12 @@ describe('renderCompletionSummary', () => {
       ],
     };
 
-    renderCompletionSummary(
-      integration,
-      [installedFeature('a')],
-      [integration.features[1]],
-      new TerminalConsole(),
-    );
+    renderCompletionSummary(integration, [installedFeature('a')], [integration.features[1]], fake);
 
-    const removedPhase = getMockUiCalls().find(
-      (c) => c.method === 'phase' && c.args[0] === 'Removed',
-    );
+    const removedPhase = fake.calls.find((c) => c.method === 'phase' && c.args[0] === 'Removed');
     const items = (removedPhase?.args[1] ?? []) as PhaseItem[];
     expect(items.map((item) => item.text)).toEqual(['Feature B']);
-    expect(getMockUiCalls().find((c) => c.method === 'outro')?.args[0]).toBe('Setup complete!');
+    expect(fake.calls.find((c) => c.method === 'outro')?.args[0]).toBe('Setup complete!');
   });
 
   it('abbreviates the home directory with ~ only on a path boundary', () => {
@@ -244,7 +234,7 @@ describe('renderCompletionSummary', () => {
     };
 
     expect(() =>
-      renderCompletionSummary(integration, [installedFeature('orphan')], [], new TerminalConsole()),
+      renderCompletionSummary(integration, [installedFeature('orphan')], [], fake),
     ).toThrow('No declaration found for installed feature test.orphan');
   });
 
@@ -266,9 +256,9 @@ describe('renderCompletionSummary', () => {
       ],
     };
 
-    renderCompletionSummary(integration, [installedFeature('a')], [], new TerminalConsole());
+    renderCompletionSummary(integration, [installedFeature('a')], [], fake);
 
-    const calls = getMockUiCalls();
+    const calls = fake.calls;
     expect(
       calls.some((c) => c.method === 'info' && c.args[0] === 'Paste this into Test Agent:'),
     ).toBe(true);
@@ -291,14 +281,9 @@ describe('renderCompletionSummary', () => {
           : undefined,
     };
 
-    renderCompletionSummary(
-      integration,
-      [installedFeature('a'), installedFeature('b')],
-      [],
-      new TerminalConsole(),
-    );
+    renderCompletionSummary(integration, [installedFeature('a'), installedFeature('b')], [], fake);
 
-    const notes = getMockUiCalls().filter((c) => c.method === 'note');
+    const notes = fake.calls.filter((c) => c.method === 'note');
     expect(notes).toHaveLength(1);
     expect(notes[0]?.args[1]).toBe('Combined');
     expect(String(notes[0]?.args[0])).toContain('combined example');
@@ -315,16 +300,9 @@ describe('renderCompletionSummary', () => {
       combinedPostInstallExample: () => undefined,
     };
 
-    renderCompletionSummary(
-      integration,
-      [installedFeature('a'), installedFeature('b')],
-      [],
-      new TerminalConsole(),
-    );
+    renderCompletionSummary(integration, [installedFeature('a'), installedFeature('b')], [], fake);
 
-    const noteBodies = getMockUiCalls()
-      .filter((c) => c.method === 'note')
-      .map((c) => String(c.args[0]));
+    const noteBodies = fake.calls.filter((c) => c.method === 'note').map((c) => String(c.args[0]));
     expect(noteBodies).toEqual(['example a', 'example b']);
   });
 });

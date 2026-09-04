@@ -24,7 +24,6 @@ import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
 import { SqaaProgress } from '@/core/ui/components/sqaa-progress.ts';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 import { vortexUnavailableCommandMessage } from '@/core/vortex/availability-messages.ts';
 import { recheckVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
@@ -136,14 +135,14 @@ async function printVortexUnavailableForForbidden(
   printVortexUnavailable(await recheckVortexEntitlement(auth), console);
 }
 
-function resolveRunConsole(options: { telemetryCtx?: { console: Console } }): Console {
-  return options.telemetryCtx?.console ?? new TerminalConsole();
+function resolveRunConsole(options: { console: Console }): Console {
+  return options.console;
 }
 
 async function printSqaaJsonReport(
   report: SqaaJsonReport,
   auth: ResolvedAuth,
-  console: Console = new TerminalConsole(),
+  console: Console,
 ): Promise<void> {
   if (report.globalError?.kind === 'forbidden') {
     await enrichForbiddenGlobalError(report, auth);
@@ -215,7 +214,7 @@ export async function fetchSingleFileReport(
 export async function runSqaaAnalysis(
   file: string,
   auth: ResolvedAuth,
-  options: SingleFileRunOptions = {},
+  options: SingleFileRunOptions,
 ): Promise<void> {
   const {
     branch,

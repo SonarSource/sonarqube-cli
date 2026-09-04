@@ -24,7 +24,7 @@
 import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import { installScaScannerBinary } from '@/core/host/install/sca-scanner.ts';
 import { installSecretsBinary } from '@/core/host/install/secrets.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import logger from '../observability/logger.ts';
 import type { CliState } from '../state/state.ts';
@@ -34,7 +34,7 @@ import { loadState } from '../state/state-repository.ts';
  * Update the sonar-secrets binary if it is already installed but targets a different version
  * than the one bundled with this CLI release.
  */
-export async function updateSecretsBinaryIfNeeded(): Promise<void> {
+export async function updateSecretsBinaryIfNeeded(console: Console): Promise<void> {
   const state = loadState();
 
   if (!hasBinaryInState(state, SECRETS_BINARY_NAME)) {
@@ -42,14 +42,14 @@ export async function updateSecretsBinaryIfNeeded(): Promise<void> {
     return;
   }
 
-  await installSecretsBinary(new TerminalConsole());
+  await installSecretsBinary(console);
 }
 
 /**
  * Update the sca-scanner-cli binary if it is already installed but targets a different version
  * than the one bundled with this CLI release.
  */
-export async function updateScaScannerBinaryIfNeeded(): Promise<void> {
+export async function updateScaScannerBinaryIfNeeded(console: Console): Promise<void> {
   const state = loadState();
 
   if (!hasBinaryInState(state, SCA_SCANNER_BINARY_NAME)) {
@@ -57,7 +57,7 @@ export async function updateScaScannerBinaryIfNeeded(): Promise<void> {
     return;
   }
 
-  await installScaScannerBinary(new TerminalConsole());
+  await installScaScannerBinary(console);
 }
 
 function hasBinaryInState(state: CliState, binaryName: string): boolean {

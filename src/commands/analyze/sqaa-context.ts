@@ -21,7 +21,6 @@
 import { CommandFailedError } from '@/core/command-error.ts';
 import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import type { SqaaAuthResolution } from './sqaa-auth.ts';
 import { confirmLargeChangeset } from './sqaa-auth.ts';
@@ -55,7 +54,7 @@ interface SqaaDepthResolution {
 export function resolveSqaaContext(
   resolution: SqaaAuthResolution,
   policy: { requireProject: boolean },
-  console: Console = new TerminalConsole(),
+  console: Console,
 ): SqaaResolvedContext | null {
   switch (resolution.kind) {
     case 'resolved':
@@ -91,9 +90,9 @@ export function resolveDepthForMode(
 
 export async function confirmLargeRunIfNeeded(
   fileCount: number,
-  force?: boolean,
-  format: OutputFormat = 'text',
-  console: Console = new TerminalConsole(),
+  force: boolean | undefined,
+  format: OutputFormat,
+  console: Console,
 ): Promise<boolean> {
   if (!force && format !== 'json' && fileCount > SQAA_LARGE_CHANGESET_THRESHOLD) {
     return await confirmLargeChangeset(fileCount, console);

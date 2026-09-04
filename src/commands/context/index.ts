@@ -27,7 +27,8 @@ import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-en
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
 import { getToken } from '@/core/host/keychain.ts';
 import { discoverProject } from '@/core/project-info.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
+import type { Console } from '@/core/ui/console.ts';
+
 // Commander may assign --help/-h to the optional [action] positional on some platforms.
 function buildForwardedArgs(
   action: string | undefined,
@@ -88,11 +89,12 @@ interface RecordedContextAugmentationConfig {
 async function resolveRecordedContextAugmentationConfig(
   cwd: string,
   auth: ResolvedAuth,
+  console: Console,
 ): Promise<RecordedContextAugmentationConfig> {
   const discovered = await discoverProject(cwd, {
     auth,
     silent: true,
-    console: new TerminalConsole(),
+    console,
   });
   if (!discovered.projectKey) {
     return {};
@@ -131,12 +133,13 @@ async function resolveContextToken(
 
 export interface RunContextPassthroughOptions {
   stdinPayload?: string;
+  console: Console;
 }
 
 export async function runContextPassthrough(
   action: string | undefined,
   args: string[],
-  options: RunContextPassthroughOptions = {},
+  options: RunContextPassthroughOptions,
 ): Promise<void> {
   const binaryPath = resolveContextAugmentationBinaryPath() ?? 'sonar-context-augmentation';
   const { forwarded, isHelp } = buildForwardedArgs(action, args);
@@ -151,7 +154,11 @@ export async function runContextPassthrough(
         remediationHint: 'Run: sonar auth login',
       });
     }
-    const recordedConfig = await resolveRecordedContextAugmentationConfig(process.cwd(), auth);
+    const recordedConfig = await resolveRecordedContextAugmentationConfig(
+      process.cwd(),
+      auth,
+      options.console,
+    );
     const serverUrl = recordedConfig.serverUrl ?? auth.serverUrl;
     const organization = recordedConfig.organization ?? auth.orgKey;
     env = buildContextAugmentationEnv({

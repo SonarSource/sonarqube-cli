@@ -22,6 +22,7 @@ import {
   type IntegrationRegistry,
   reconcileInstalledIntegrations,
 } from '@/core/framework/features';
+import type { Console } from '@/core/ui/console.ts';
 
 import { version as CURRENT_VERSION } from '../../../package.json';
 import logger from '../observability/logger.ts';
@@ -54,6 +55,8 @@ export interface PostUpdateDependencies {
   claudeIntegrationId: string;
   /** Installs/refreshes Claude Code hook scripts (`@/commands/integrate/claude/hooks.ts`). */
   installHooks: InstallHooksFn;
+  /** Process console created at CLI startup. */
+  console: Console;
 }
 
 /**
@@ -101,10 +104,10 @@ async function runActions(deps: PostUpdateDependencies): Promise<void> {
   migrateLegacyTelemetryEvents();
   // Must run before migrateDeclarativeIntegrations
   migrateKnownServerKeyMappingsForProjectLevelFeatures();
-  await migrateDeclarativeIntegrations(deps.supportedIntegrations);
+  await migrateDeclarativeIntegrations(deps.supportedIntegrations, deps.console);
   await migrateClaudeCodeHooks(deps.installHooks, deps.claudeIntegrationId);
-  await updateSecretsBinaryIfNeeded();
-  await updateScaScannerBinaryIfNeeded();
+  await updateSecretsBinaryIfNeeded(deps.console);
+  await updateScaScannerBinaryIfNeeded(deps.console);
 }
 
 /**
@@ -112,9 +115,12 @@ async function runActions(deps: PostUpdateDependencies): Promise<void> {
  * currently recorded in state (see reconcileInstalledIntegrations), then
  * persists the result if anything changed.
  */
-export async function migrateDeclarativeIntegrations(registry: IntegrationRegistry): Promise<void> {
+export async function migrateDeclarativeIntegrations(
+  registry: IntegrationRegistry,
+  console: Console,
+): Promise<void> {
   const state = loadState();
-  if (await reconcileInstalledIntegrations(state, registry)) {
+  if (await reconcileInstalledIntegrations(state, registry, console)) {
     saveStateKeepingInstalledDependencies(state);
   }
 }

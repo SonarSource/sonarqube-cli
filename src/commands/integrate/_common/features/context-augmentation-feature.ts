@@ -82,6 +82,7 @@ export function createContextAugmentationSubfeature<TOptions extends IntegrateAg
             projectRoot: context.targetRoot,
             projectKey: getOptionalStringAttr(context, 'projectKey'),
             scaEnabled: context.attrs?.scaEnabled === true,
+            console: context.console,
           }),
       },
     ],

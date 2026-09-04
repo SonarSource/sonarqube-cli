@@ -34,7 +34,6 @@ import type { SpawnResult, StdioMode } from '@/core/process/process.ts';
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
 import { green, yellow } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
 import {
@@ -296,7 +295,7 @@ async function handleCheckCommand(
       () => runSecretsBinary(binaryPath, ['--input'], auth, 'inherit'),
       ctx,
     );
-    reportScanResult(result, parsed, scanStartTime, { paths: [] });
+    reportScanResult(result, parsed, scanStartTime, { paths: [] }, ctx.console);
   } else {
     await performPathsScan(
       binaryPath,
@@ -344,7 +343,7 @@ async function performPathsScan(
     () => runSecretsBinary(binaryPath, paths, auth),
     ctx,
   );
-  reportScanResult(result, parsed, scanStartTime, { paths });
+  reportScanResult(result, parsed, scanStartTime, { paths }, ctx.console);
 }
 
 function reportScanResult(
@@ -352,13 +351,14 @@ function reportScanResult(
   parsed: SecretsJsonOutput,
   scanStartTime: number,
   context: ScanDisplayContext,
+  console: Console,
 ): void {
   const scanDurationMs = Date.now() - scanStartTime;
   const exitCode = result.exitCode ?? 1;
   if (exitCode === 0) {
-    handleScanSuccess(parsed, scanDurationMs, context);
+    handleScanSuccess(parsed, scanDurationMs, context, console);
   } else {
-    handleScanFailure(result, parsed, scanDurationMs, exitCode);
+    handleScanFailure(result, parsed, scanDurationMs, exitCode, console);
   }
 }
 
@@ -366,7 +366,7 @@ function handleScanSuccess(
   parsed: SecretsJsonOutput,
   scanDurationMs: number,
   context: ScanDisplayContext,
-  console: Console = new TerminalConsole(),
+  console: Console,
 ): void {
   console.blank();
   const { errors } = parsed;
@@ -379,10 +379,7 @@ function handleScanSuccess(
   console.success(`No issues found · ${scanDurationMs}ms`);
 }
 
-function displaySecretsFindings(
-  issues: SecretsJsonIssue[],
-  console: Console = new TerminalConsole(),
-): void {
+function displaySecretsFindings(issues: SecretsJsonIssue[], console: Console): void {
   const groups = new Map<string, SecretsJsonIssue[]>();
   for (const issue of issues) {
     const key = issue.file ?? '(stdin)';
@@ -417,7 +414,7 @@ function formatSecretsIssueLine(issue: SecretsJsonIssue, index: number): string 
   return `     ${parts.join('  ')}`;
 }
 
-export function warnScanErrors(errors?: string[], console: Console = new TerminalConsole()): void {
+export function warnScanErrors(errors: string[] | undefined, console: Console): void {
   if (!errors?.length) return;
   for (const msg of errors) {
     console.warn(`  Scan warning: ${msg}`);
@@ -429,14 +426,14 @@ function handleScanFailure(
   parsed: SecretsJsonOutput,
   scanDurationMs: number,
   exitCode: number,
-  console: Console = new TerminalConsole(),
+  console: Console,
 ): void {
   console.blank();
 
   if (exitCode === EXIT_CODE_SECRETS_FOUND) {
     const { issues, errors } = parsed;
     if (issues.length > 0) {
-      displaySecretsFindings(issues);
+      displaySecretsFindings(issues, console);
       console.blank();
     } else if (result.stderr) {
       console.print(result.stderr);

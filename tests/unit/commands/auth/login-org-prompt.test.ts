@@ -38,26 +38,20 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { authLogin } from '@/commands/auth/login.ts';
 import * as tokenModule from '@/core/auth/token.ts';
+import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SONARCLOUD_URL } from '@/core/config-constants.ts';
 import * as projectInfo from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
-import {
-  clearMockResponses,
-  clearMockUiCalls,
-  findMockUiCall,
-  getMockUiCalls,
-  queueMockResponse,
-  setMockUi,
-} from '@/core/ui';
 
+import { FakeConsole } from '../../../_common/fake-console.ts';
 import { createKeychainTestHandle } from '../../core/host/keychain-test-handle.ts';
 
 /** Every prompt the login made, in order. */
 function textPrompts(): unknown[][] {
-  return getMockUiCalls()
-    .filter((call) => call.method === 'textPrompt')
-    .map((call) => call.args);
+  return fake.calls.filter((call) => call.method === 'textPrompt').map((call) => call.args);
 }
+
+let fake: FakeConsole;
 
 describe('authLogin organization prompt', () => {
   let spies: ReturnType<typeof spyOn>[] = [];
@@ -71,6 +65,7 @@ describe('authLogin organization prompt', () => {
   const keychain = createKeychainTestHandle();
 
   beforeEach(() => {
+    fake = new FakeConsole();
     keychain.setup();
     // A login that succeeds persists a connection; without this it would land in the real
     // ~/.sonar, whose queued events a later genuine `sonar` command would pick up and send.
@@ -98,7 +93,6 @@ describe('authLogin organization prompt', () => {
       listOrgsSpy,
       resolveAccessSpy,
     ];
-    setMockUi(true);
   });
 
   afterEach(() => {
@@ -110,42 +104,39 @@ describe('authLogin organization prompt', () => {
     }
     rmSync(userHome, { force: true, recursive: true });
     Object.defineProperty(process.stdin, 'isTTY', { value: originalIsTTY, configurable: true });
-    setMockUi(false);
-    clearMockUiCalls();
-    clearMockResponses();
     for (const spy of spies) {
       spy.mockRestore();
     }
   });
 
   it('asks again when the typed organization does not exist', async () => {
-    queueMockResponse('typo-org');
-    queueMockResponse('unreachable-org');
+    fake.queueResponse('typo-org');
+    fake.queueResponse('unreachable-org');
     resolveAccessSpy
       .mockResolvedValueOnce({ status: 'not_found' })
       .mockResolvedValueOnce({ status: 'check_failed', reason: 'connection refused' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-    await expect(authLogin({ server: SONARCLOUD_URL })).rejects.toThrow(
-      "Could not verify organization 'unreachable-org'",
-    );
+    await expect(
+      authLogin({ server: SONARCLOUD_URL }, new CommandInvocationContext(fake)),
+    ).rejects.toThrow("Could not verify organization 'unreachable-org'");
 
     expect(textPrompts()).toHaveLength(2);
   });
 
   it('completes the login on the second key and keeps the minted token', async () => {
-    queueMockResponse('typo-org');
-    queueMockResponse('my-org');
+    fake.queueResponse('typo-org');
+    fake.queueResponse('my-org');
     resolveAccessSpy
       .mockResolvedValueOnce({ status: 'not_found' })
       .mockResolvedValueOnce({ status: 'accessible' });
 
-    await authLogin({ server: SONARCLOUD_URL });
+    await authLogin({ server: SONARCLOUD_URL }, new CommandInvocationContext(fake));
 
     expect(textPrompts()).toHaveLength(2);
     // The whole point of asking again: the browser flow the user just went through is not wasted.
     expect(revokeSpy).not.toHaveBeenCalled();
-    expect(findMockUiCall('success', 'Authentication successful')).toBeDefined();
+    expect(fake.findCall('success', 'Authentication successful')).toBeDefined();
   });
 
   it('gives up after a bounded number of unusable answers', async () => {
@@ -154,40 +145,40 @@ describe('authLogin organization prompt', () => {
     resolveAccessSpy.mockResolvedValue({ status: 'not_found' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-    await expect(authLogin({ server: SONARCLOUD_URL })).rejects.toThrow(
-      'Organization key is required.',
-    );
+    await expect(
+      authLogin({ server: SONARCLOUD_URL }, new CommandInvocationContext(fake)),
+    ).rejects.toThrow('Organization key is required.');
 
     expect(textPrompts()).toHaveLength(5);
   });
 
   it('asks again when the answer is empty', async () => {
-    queueMockResponse('');
-    queueMockResponse('unreachable-org');
+    fake.queueResponse('');
+    fake.queueResponse('unreachable-org');
     resolveAccessSpy.mockResolvedValue({ status: 'check_failed', reason: 'connection refused' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-    await expect(authLogin({ server: SONARCLOUD_URL })).rejects.toThrow(
-      "Could not verify organization 'unreachable-org'",
-    );
+    await expect(
+      authLogin({ server: SONARCLOUD_URL }, new CommandInvocationContext(fake)),
+    ).rejects.toThrow("Could not verify organization 'unreachable-org'");
 
     expect(textPrompts()).toHaveLength(2);
-    expect(findMockUiCall('warn', 'Organization key is required.')).toBeDefined();
+    expect(fake.findCall('warn', 'Organization key is required.')).toBeDefined();
   });
 
   it('falls back to the organization list when the project config key does not exist', async () => {
     discoverOrgSpy.mockResolvedValue('stale-org');
-    queueMockResponse('unreachable-org');
+    fake.queueResponse('unreachable-org');
     resolveAccessSpy
       .mockResolvedValueOnce({ status: 'not_found' })
       .mockResolvedValueOnce({ status: 'check_failed', reason: 'connection refused' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-    await expect(authLogin({ server: SONARCLOUD_URL })).rejects.toThrow(
-      "Could not verify organization 'unreachable-org'",
-    );
+    await expect(
+      authLogin({ server: SONARCLOUD_URL }, new CommandInvocationContext(fake)),
+    ).rejects.toThrow("Could not verify organization 'unreachable-org'");
 
-    expect(findMockUiCall('warn', "'stale-org' from project config")).toBeDefined();
+    expect(fake.findCall('warn', "'stale-org' from project config")).toBeDefined();
     expect(listOrgsSpy).toHaveBeenCalled();
     expect(textPrompts()).toHaveLength(1);
   });
@@ -197,9 +188,9 @@ describe('authLogin organization prompt', () => {
     resolveAccessSpy.mockResolvedValue({ status: 'check_failed', reason: 'connection refused' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-    await expect(authLogin({ server: SONARCLOUD_URL })).rejects.toThrow(
-      "Could not verify organization 'stale-org'",
-    );
+    await expect(
+      authLogin({ server: SONARCLOUD_URL }, new CommandInvocationContext(fake)),
+    ).rejects.toThrow("Could not verify organization 'stale-org'");
 
     expect(listOrgsSpy).not.toHaveBeenCalled();
     expect(textPrompts()).toHaveLength(0);
@@ -207,13 +198,13 @@ describe('authLogin organization prompt', () => {
 
   it('aborts on the first rejection when stdin is not a terminal', async () => {
     Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
-    queueMockResponse('typo-org');
+    fake.queueResponse('typo-org');
     resolveAccessSpy.mockResolvedValue({ status: 'not_found' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-    await expect(authLogin({ server: SONARCLOUD_URL })).rejects.toThrow(
-      "Organization 'typo-org' not found or not accessible.",
-    );
+    await expect(
+      authLogin({ server: SONARCLOUD_URL }, new CommandInvocationContext(fake)),
+    ).rejects.toThrow("Organization 'typo-org' not found or not accessible.");
 
     expect(textPrompts()).toHaveLength(1);
   });

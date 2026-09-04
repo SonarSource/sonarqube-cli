@@ -30,7 +30,8 @@ import * as processLib from '@/core/process/process.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import type { PhaseItem } from '@/core/ui';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
+import { FakeConsole } from '../../../../_common/fake-console.ts';
 
 const BASE_PROJECT: DiscoveredProject = {
   repoRoot: '/workspace/app',
@@ -38,13 +39,18 @@ const BASE_PROJECT: DiscoveredProject = {
   configSources: [],
 };
 
+let fake: FakeConsole;
+
+beforeEach(() => {
+  fake = new FakeConsole();
+});
+
 describe('printAgentPreflightSummary', () => {
   let checkTokenStatusSpy: ReturnType<typeof spyOn>;
   let checkComponentSpy: ReturnType<typeof spyOn>;
   let isOrganizationAccessibleSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    setMockUi(true);
     checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
     checkComponentSpy = spyOn(SonarQubeClient.prototype, 'checkComponent').mockResolvedValue(true);
     isOrganizationAccessibleSpy = spyOn(
@@ -54,24 +60,25 @@ describe('printAgentPreflightSummary', () => {
   });
 
   afterEach(() => {
-    clearMockUiCalls();
-    setMockUi(false);
     checkTokenStatusSpy.mockRestore();
     checkComponentSpy.mockRestore();
     isOrganizationAccessibleSpy.mockRestore();
   });
 
   it('renders Connection and Project sections with config source from files', async () => {
-    await printAgentPreflightSummary({
-      serverUrl: 'https://sonarcloud.io',
-      organization: 'my-org',
-      token: 'token',
-      project: {
-        ...BASE_PROJECT,
-        configSources: ['sonar-project.properties', '.sonarlint/connectedMode.json'],
+    await printAgentPreflightSummary(
+      {
+        serverUrl: 'https://sonarcloud.io',
+        organization: 'my-org',
+        token: 'token',
+        project: {
+          ...BASE_PROJECT,
+          configSources: ['sonar-project.properties', '.sonarlint/connectedMode.json'],
+        },
+        projectKey: 'my-org_app',
       },
-      projectKey: 'my-org_app',
-    });
+      fake,
+    );
 
     expect(getPhaseItems('Connection').find((i) => i.text === 'Token')?.detail).toBe('valid');
     expect(getPhaseItems('Project').find((i) => i.text === 'Config source')?.detail).toBe(
@@ -83,11 +90,14 @@ describe('printAgentPreflightSummary', () => {
     checkTokenStatusSpy.mockResolvedValue({ status: 'unreachable' });
 
     const error = await captureRejection(
-      printAgentPreflightSummary({
-        serverUrl: 'https://sonar.example.com',
-        token: 'token',
-        project: BASE_PROJECT,
-      }),
+      printAgentPreflightSummary(
+        {
+          serverUrl: 'https://sonar.example.com',
+          token: 'token',
+          project: BASE_PROJECT,
+        },
+        fake,
+      ),
     );
 
     expect(error).toBeInstanceOf(CommandFailedError);
@@ -95,17 +105,15 @@ describe('printAgentPreflightSummary', () => {
 
     expect(getPhaseItems('Connection').find((i) => i.text === 'Token')?.detail).toBe('unreachable');
     expect(
-      getMockUiCalls().find((c) => c.method === 'outro' && c.args[0] === 'Setup failed'),
+      fake.calls.find((c) => c.method === 'outro' && c.args[0] === 'Setup failed'),
     ).toBeDefined();
     expect(
-      getMockUiCalls().find(
+      fake.calls.find(
         (c) => c.method === 'info' && String(c.args[0]).includes('Server could not be reached'),
       ),
     ).toBeDefined();
     expect(
-      getMockUiCalls().find(
-        (c) => c.method === 'text' && String(c.args[0]).includes('SONAR_HOST_URL'),
-      ),
+      fake.calls.find((c) => c.method === 'text' && String(c.args[0]).includes('SONAR_HOST_URL')),
     ).toBeDefined();
   });
 });
@@ -114,7 +122,6 @@ describe('printGitPreflightSummary', () => {
   let spawnSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    setMockUi(true);
     spawnSpy = spyOn(processLib, 'spawnProcess').mockImplementation((_cmd, args) => {
       if (args[0] === 'config') {
         return Promise.resolve({ exitCode: 1, stdout: '', stderr: '' });
@@ -124,13 +131,11 @@ describe('printGitPreflightSummary', () => {
   });
 
   afterEach(() => {
-    clearMockUiCalls();
-    setMockUi(false);
     spawnSpy.mockRestore();
   });
 
   it('renders Repository section with hooks directory and framework', async () => {
-    await printGitPreflightSummary('/repo/root');
+    await printGitPreflightSummary('/repo/root', fake);
 
     const items = getPhaseItems('Repository');
     expect(items.find((i) => i.text === 'Root')?.detail).toBe('/repo/root');
@@ -140,7 +145,7 @@ describe('printGitPreflightSummary', () => {
 });
 
 function getPhaseItems(title: string): PhaseItem[] {
-  const call = getMockUiCalls().find((c) => c.method === 'phase' && c.args[0] === title);
+  const call = fake.calls.find((c) => c.method === 'phase' && c.args[0] === title);
   return (call?.args[1] ?? []) as PhaseItem[];
 }
 
