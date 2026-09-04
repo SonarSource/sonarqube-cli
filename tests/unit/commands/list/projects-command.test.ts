@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { MAX_PAGE_SIZE, SonarQubeClient } from '@/core/server/client.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
+import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import type { ProjectsSearchResponse } from '@/core/server/types.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
@@ -46,7 +47,7 @@ describe('projectsSearchCommand', () => {
   let getSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    getSpy = spyOn(SonarQubeClient.prototype, 'get').mockResolvedValue(makeProjectsResponse([]));
+    getSpy = spyOn(SonarHttpClient.prototype, 'get').mockResolvedValue(makeProjectsResponse([]));
   });
 
   afterEach(() => {

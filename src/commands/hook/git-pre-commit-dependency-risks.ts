@@ -24,6 +24,7 @@
 // missing, scanner failure), and blocks the commit only when risks matching the
 // configured filter are found.
 
+import { createScaScanApi } from '@/commands/analyze/dependency-risk-helpers/sca-api.ts';
 import {
   recordScaAnalysisTelemetry,
   SCA_CALLER_COMMANDS,
@@ -37,7 +38,7 @@ import {
 } from '@/core/host/install/sca-scanner.ts';
 import { ResolveOnlySecretsInstaller } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { discreetSuccess, success, warn } from '@/core/ui';
 
 import { countSelectedRisks } from '../analyze/dependency-risk-helpers/count-selected-risks.ts';
@@ -92,7 +93,9 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
   let scan: ScaScanResult;
   let viewModel: DependencyRisksViewModel;
   try {
-    const client = new SonarQubeClient(options.auth.serverUrl, options.auth.token);
+    const client = createScaScanApi(
+      new SonarHttpClient(options.auth.serverUrl, options.auth.token),
+    );
     scan = await new ScaScanOrchestrator(
       client,
       new ScaScannerNoopInstaller(binaryPath),

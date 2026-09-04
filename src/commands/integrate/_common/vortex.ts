@@ -27,7 +27,8 @@ import type {
   SubfeatureDeclaration,
 } from '@/core/framework/features';
 import { askUser, install, skip, uninstall } from '@/core/framework/features';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
+import { ScaClient } from '@/core/server/sca.ts';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
 import { info, warn } from '@/core/ui';
 import { resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
@@ -133,7 +134,7 @@ export function vortexInstallDecision(disposition: VortexDisposition | undefined
 }
 
 async function resolveScaEnabled(auth: ResolvedAuth, isServer: boolean): Promise<boolean> {
-  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  const client = new ScaClient(new SonarHttpClient(auth.serverUrl, auth.token));
   const scaStatus = await client.getScaEnablement(isServer ? 'on-premise' : 'cloud', auth.orgKey);
   if (scaStatus === 'check_failed') {
     warn(VORTEX_SCA_CHECK_FAILED_MESSAGE);

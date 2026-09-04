@@ -30,8 +30,9 @@ import {
 } from '@/core/config-constants.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
-import { MAX_PAGE_SIZE, SonarQubeClient } from '@/core/server/client.ts';
+import { SonarQubeClient } from '@/core/server/client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
+import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import type { SonarQubeIssue } from '@/core/server/types.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { blank, info, multiSelectPrompt, print, success, withSpinner } from '@/core/ui';

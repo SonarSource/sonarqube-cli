@@ -27,7 +27,7 @@ import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invo
 import { DefaultScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import { DefaultSecretsInstaller } from '@/core/host/install/secrets.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { error, print, warn } from '@/core/ui';
 
@@ -37,6 +37,7 @@ import { formatDependencyRisksJson } from './dependency-risk-helpers/format-depe
 import { formatDependencyRisksToon } from './dependency-risk-helpers/format-dependency-risks-toon.ts';
 import { pluralize } from './dependency-risk-helpers/pluralize.ts';
 import { buildRiskFilter } from './dependency-risk-helpers/risk-filter.ts';
+import { createScaScanApi } from './dependency-risk-helpers/sca-api.ts';
 import { ScaScanOrchestrator } from './dependency-risk-helpers/sca-scan-orchestrator.ts';
 import type { Severity } from './dependency-risk-helpers/sca-scanner.ts';
 import { formatDependencyRisksTable } from './dependency-risk-helpers/table';
@@ -73,7 +74,7 @@ export async function analyzeDependencyRisks(
   const projectKey = await resolveProjectKey(options.project, auth);
   noteProject(auth, projectKey);
 
-  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  const client = createScaScanApi(new SonarHttpClient(auth.serverUrl, auth.token));
   const orchestrator = new ScaScanOrchestrator(
     client,
     new DefaultScaScannerInstaller(),

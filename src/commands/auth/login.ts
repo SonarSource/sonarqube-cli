@@ -29,11 +29,12 @@ import {
   saveToken,
 } from '@/core/host/keychain.ts';
 import { discoverOrganization, discoverServer } from '@/core/project-info.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import {
   type Organization,
   type OrganizationAccess,
-  SonarQubeClient,
-} from '@/core/server/client.ts';
+  OrganizationsClient,
+} from '@/core/server/organizations.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
@@ -132,7 +133,10 @@ async function resolveOrganization(
   }
 
   try {
-    return await validateOrSelectOrganization(new SonarQubeClient(server, auth.token), orgOption);
+    return await validateOrSelectOrganization(
+      new OrganizationsClient(new SonarHttpClient(server, auth.token)),
+      orgOption,
+    );
   } catch (error) {
     if (!auth.reusedExistingToken) {
       await discardGeneratedToken(server, auth.token, auth.tokenName);
@@ -202,7 +206,10 @@ function organizationAccessError(
 }
 
 /** Fail unless the server can resolve the key. */
-async function assertOrganizationAccessible(client: SonarQubeClient, org: string): Promise<void> {
+async function assertOrganizationAccessible(
+  client: OrganizationsClient,
+  org: string,
+): Promise<void> {
   const access = await client.resolveOrganizationAccess(org);
   if (access.status !== 'accessible') {
     throw organizationAccessError(org, access);
@@ -230,7 +237,7 @@ const MAX_ORGANIZATION_ATTEMPTS = 5;
  * Enter — is reported and asked again rather than ending the login. Asking again cannot fix an
  * outage, and piped input has nobody to ask, so those still abort on the first rejection.
  */
-async function promptForOrganizationKey(client: SonarQubeClient): Promise<string> {
+async function promptForOrganizationKey(client: OrganizationsClient): Promise<string> {
   let lastError = organizationRequiredError();
 
   for (let attempt = 0; attempt < MAX_ORGANIZATION_ATTEMPTS; attempt++) {
@@ -263,7 +270,7 @@ async function promptForOrganizationKey(client: SonarQubeClient): Promise<string
 }
 
 async function listMemberOrganizations(
-  client: SonarQubeClient,
+  client: OrganizationsClient,
 ): Promise<{ organizations: Organization[]; total: number }> {
   try {
     return await client.listUserOrganizations();
@@ -275,7 +282,7 @@ async function listMemberOrganizations(
   }
 }
 
-async function getUserSelectedOrganization(client: SonarQubeClient): Promise<string> {
+async function getUserSelectedOrganization(client: OrganizationsClient): Promise<string> {
   // Deduce organization from API: if user is member of exactly one org, use it
   const { organizations: memberOrgs, total: orgTotal } = await listMemberOrganizations(client);
   if (memberOrgs.length === 1 && orgTotal === 1) {
@@ -320,7 +327,7 @@ async function getUserSelectedOrganization(client: SonarQubeClient): Promise<str
  * Validate organization or get from list
  */
 async function validateOrSelectOrganization(
-  client: SonarQubeClient,
+  client: OrganizationsClient,
   org: string | undefined,
 ): Promise<string> {
   if (org) {

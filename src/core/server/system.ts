@@ -18,22 +18,22 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// SonarQube Project Branches API wrapper
+// SonarQube System API wrapper — instance status and clean-code policy mode.
 
-import { type SonarHttpClient } from './http-client.ts';
-import type { ProjectBranch, ProjectBranchesResponse } from './types.ts';
+import type { SonarHttpClient } from './http-client.ts';
 
-export class BranchesClient {
+export class SystemClient {
   private readonly client: SonarHttpClient;
 
   constructor(client: SonarHttpClient) {
     this.client = client;
   }
 
-  async listBranches(projectKey: string): Promise<ProjectBranch[]> {
-    const result = await this.client.get<ProjectBranchesResponse>('/api/project_branches/list', {
-      project: projectKey,
-    });
-    return result.branches;
+  async getServerMode(): Promise<'mqr' | 'standard'> {
+    if (this.client.isCloud) return 'mqr';
+    const result = await this.client.getOrNotFound<{ mode: string }>(
+      '/api/v2/clean-code-policy/mode',
+    );
+    return result?.mode === 'MQR' ? 'mqr' : 'standard';
   }
 }

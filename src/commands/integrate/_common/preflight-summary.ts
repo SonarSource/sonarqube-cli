@@ -24,7 +24,9 @@ import { checkTokenStatus, type TokenCheckResult, type TokenStatus } from '@/cor
 import { CommandFailedError } from '@/core/command-error.ts';
 import { GitRepo } from '@/core/host/git/hooks.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { ComponentsClient } from '@/core/server/components.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
+import { OrganizationsClient } from '@/core/server/organizations.ts';
 import type { PhaseItem, StepStatus } from '@/core/ui';
 import { info, outro, phase, phaseItem, text } from '@/core/ui';
 
@@ -108,7 +110,7 @@ async function organizationAccessStatus(
   organization: string,
 ): Promise<[StepStatus, string | undefined]> {
   try {
-    const client = new SonarQubeClient(serverUrl, token);
+    const client = new OrganizationsClient(new SonarHttpClient(serverUrl, token));
     const accessible = await client.isOrganizationAccessible(organization);
     return accessible ? ['done', organization] : ['failed', `${organization} (not accessible)`];
   } catch {
@@ -170,7 +172,7 @@ async function projectKeyAccessStatus(
   projectKey: string,
 ): Promise<[StepStatus, string | undefined]> {
   try {
-    const client = new SonarQubeClient(serverUrl, token);
+    const client = new ComponentsClient(new SonarHttpClient(serverUrl, token));
     const accessible = await client.checkComponent(projectKey);
     return accessible ? ['done', projectKey] : ['failed', `${projectKey} (not accessible)`];
   } catch {

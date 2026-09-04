@@ -18,22 +18,24 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// SonarQube Project Branches API wrapper
+import { ComponentsClient } from '@/core/server/components.ts';
+import type { SonarHttpClient } from '@/core/server/http-client.ts';
+import { ProjectBindingsClient } from '@/core/server/project-bindings.ts';
+import { UsersClient } from '@/core/server/users.ts';
 
-import { type SonarHttpClient } from './http-client.ts';
-import type { ProjectBranch, ProjectBranchesResponse } from './types.ts';
-
-export class BranchesClient {
-  private readonly client: SonarHttpClient;
+/**
+ * The SonarQube Server APIs this command drives, built from one transport client so
+ * they share it for the whole run. Exposed as fields rather than re-declared as
+ * forwarding methods.
+ */
+export class OnboardCiSqsClient {
+  readonly bindings: ProjectBindingsClient;
+  readonly components: ComponentsClient;
+  readonly users: UsersClient;
 
   constructor(client: SonarHttpClient) {
-    this.client = client;
-  }
-
-  async listBranches(projectKey: string): Promise<ProjectBranch[]> {
-    const result = await this.client.get<ProjectBranchesResponse>('/api/project_branches/list', {
-      project: projectKey,
-    });
-    return result.branches;
+    this.bindings = new ProjectBindingsClient(client);
+    this.components = new ComponentsClient(client);
+    this.users = new UsersClient(client);
   }
 }

@@ -25,8 +25,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
-import { resolveFromEndpoint } from '@/core/server/sonarcloud-region.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 
 import { getTelemetryDir } from '../config-constants.ts';
 import type { AuthConnection, ServerType } from '../state/state.ts';
@@ -222,7 +221,7 @@ interface OrganizationLookupResult {
   resolved: boolean;
 }
 
-async function fetchUserUuid(client: SonarQubeClient): Promise<FieldFetchResult> {
+async function fetchUserUuid(client: SonarHttpClient): Promise<FieldFetchResult> {
   try {
     const { response, value } = await client.getSafe<{ id: string }>('/api/users/current');
     if (!response.ok) {
@@ -235,15 +234,14 @@ async function fetchUserUuid(client: SonarQubeClient): Promise<FieldFetchResult>
 }
 
 async function fetchOrganizationRecord(
-  client: SonarQubeClient,
-  serverUrl: string,
+  client: SonarHttpClient,
   orgKey: string,
 ): Promise<OrganizationLookupResult> {
   try {
     const { response, value } = await client.getSafe<OrganizationRecord[]>(
       ORGANIZATIONS_ENDPOINT,
       { organizationKey: orgKey, excludeEligibility: 'true' },
-      resolveFromEndpoint(serverUrl, ORGANIZATIONS_ENDPOINT),
+      client.apiHostFor(ORGANIZATIONS_ENDPOINT),
     );
     if (!response.ok) {
       return { uuidV4: null, id: null, resolved: false };
@@ -256,15 +254,14 @@ async function fetchOrganizationRecord(
 }
 
 async function fetchEnterpriseUuid(
-  client: SonarQubeClient,
-  serverUrl: string,
+  client: SonarHttpClient,
   organizationId: string,
 ): Promise<FieldFetchResult> {
   try {
     const { response, value } = await client.getSafe<Array<{ enterpriseId?: string }>>(
       ENTERPRISE_ORGANIZATIONS_ENDPOINT,
       { organizationId },
-      resolveFromEndpoint(serverUrl, ENTERPRISE_ORGANIZATIONS_ENDPOINT),
+      client.apiHostFor(ENTERPRISE_ORGANIZATIONS_ENDPOINT),
     );
     if (!response.ok) {
       return { value: null, resolved: false };
@@ -277,8 +274,7 @@ async function fetchEnterpriseUuid(
 
 /** Unresolved stays `undefined` so the next command retries; `null` is confirmed-absent. */
 async function resolveEnterpriseUuid(
-  client: SonarQubeClient,
-  serverUrl: string,
+  client: SonarHttpClient,
   org: OrganizationLookupResult,
 ): Promise<{ value: string | null | undefined; resolved: boolean }> {
   if (!org.resolved) {
@@ -287,14 +283,14 @@ async function resolveEnterpriseUuid(
   if (!org.id) {
     return { value: null, resolved: true };
   }
-  const enterprise = await fetchEnterpriseUuid(client, serverUrl, org.id);
+  const enterprise = await fetchEnterpriseUuid(client, org.id);
   return {
     value: enterprise.resolved ? enterprise.value : undefined,
     resolved: enterprise.resolved,
   };
 }
 
-async function fetchSqsInstallationId(client: SonarQubeClient): Promise<FieldFetchResult> {
+async function fetchSqsInstallationId(client: SonarHttpClient): Promise<FieldFetchResult> {
   try {
     const { response, value } = await client.getSafe<{ id?: string }>('/api/system/status');
     if (!response.ok) {
@@ -316,7 +312,7 @@ async function fetchMissingFromApi(
   identity: TelemetryIdentity,
   fetchPlan: IdentityFetchPlan,
 ): Promise<IdentityFetchResult> {
-  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  const client = new SonarHttpClient(auth.serverUrl, auth.token);
   let { user_uuid, organization_uuid_v4, enterprise_uuid, sqs_installation_id } = identity;
   const resolved: IdentityFetchPlan = { user: false, org: false, enterprise: false, sqs: false };
 
@@ -326,13 +322,13 @@ async function fetchMissingFromApi(
     resolved.user = user.resolved;
   }
   if ((fetchPlan.org || fetchPlan.enterprise) && auth.orgKey) {
-    const org = await fetchOrganizationRecord(client, auth.serverUrl, auth.orgKey);
+    const org = await fetchOrganizationRecord(client, auth.orgKey);
     if (fetchPlan.org) {
       organization_uuid_v4 = org.uuidV4;
       resolved.org = org.resolved;
     }
     if (fetchPlan.enterprise) {
-      const enterprise = await resolveEnterpriseUuid(client, auth.serverUrl, org);
+      const enterprise = await resolveEnterpriseUuid(client, org);
       enterprise_uuid = enterprise.value;
       resolved.enterprise = enterprise.resolved;
     }

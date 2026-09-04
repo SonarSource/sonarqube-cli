@@ -20,7 +20,7 @@
 
 // SonarQube Measures API wrapper
 
-import { type QueryParams, type SonarQubeClient } from './client.ts';
+import { type QueryParams, type SonarHttpClient } from './http-client.ts';
 import type { ComponentTreeComponent, ComponentTreeResponse } from './types.ts';
 
 export interface WorstComponentsByMetricParams {
@@ -74,9 +74,9 @@ function buildComponentTreeQueryParams(params: WorstComponentsByMetricParams): Q
 }
 
 export class MeasuresClient {
-  private readonly client: SonarQubeClient;
+  private readonly client: SonarHttpClient;
 
-  constructor(client: SonarQubeClient) {
+  constructor(client: SonarHttpClient) {
     this.client = client;
   }
 

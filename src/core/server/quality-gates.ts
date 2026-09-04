@@ -20,13 +20,13 @@
 
 // SonarQube Quality Gates API wrapper
 
-import { type SonarQubeClient } from './client.ts';
+import { type SonarHttpClient } from './http-client.ts';
 import type { ProjectStatus, ProjectStatusParams, ProjectStatusResponse } from './types.ts';
 
 export class QualityGatesClient {
-  private readonly client: SonarQubeClient;
+  private readonly client: SonarHttpClient;
 
-  constructor(client: SonarQubeClient) {
+  constructor(client: SonarHttpClient) {
     this.client = client;
   }
 

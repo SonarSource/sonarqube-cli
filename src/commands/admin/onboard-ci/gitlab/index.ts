@@ -25,7 +25,7 @@ import { CommandFailedError } from '@/core/command-error.ts';
 import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
 import type { GitLabRepo } from '@/core/gitlab/client.ts';
 import { GitLabClient } from '@/core/gitlab/client.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { info, intro, outro, warn, withSpinner } from '@/core/ui';
 import { ConcurrentProgress } from '@/core/ui/components/concurrent-progress.ts';
 
@@ -34,6 +34,7 @@ import { computeDryRunResults } from './dry-run.ts';
 import type { ProcessRepoContext, RepoClassification, RepoWithBranch } from './processor.ts';
 import { classifyRepo, executeRepo } from './processor.ts';
 import { writeReportFile } from './report.ts';
+import { OnboardCiSqsClient } from './sqs-api.ts';
 import type { DryRunResults, OnboardCiGitlabOptions, OnboardCiResults } from './types.ts';
 import { TriggerOn } from './types.ts';
 
@@ -112,10 +113,10 @@ export function validateOnboardCiGitlabOptions(options: OnboardCiGitlabOptions):
 }
 
 async function resolveDopSetting(
-  sqs: SonarQubeClient,
+  sqs: OnboardCiSqsClient,
   bindingName?: string,
 ): Promise<{ dopSettingId: string; dopSettingKey: string; gitlabUrl: string }> {
-  const settings = await sqs.listGitlabDopSettings();
+  const settings = await sqs.bindings.listGitlabDopSettings();
 
   if (settings.length === 0) {
     throw new CommandFailedError(
@@ -197,7 +198,7 @@ async function preflight(
   gitlabToken: string,
   options: OnboardCiGitlabOptions,
 ): Promise<{
-  sqsClient: SonarQubeClient;
+  sqsClient: OnboardCiSqsClient;
   gitlabClient: GitLabClient;
   dopSettingId: string;
   dopSettingKey: string;
@@ -212,8 +213,8 @@ async function preflight(
     );
   }
 
-  const sqsClient = new SonarQubeClient(auth.serverUrl, auth.token);
-  if (!(await sqsClient.hasProvisionProjectsPermission())) {
+  const sqsClient = new OnboardCiSqsClient(new SonarHttpClient(auth.serverUrl, auth.token));
+  if (!(await sqsClient.users.hasProvisionProjectsPermission())) {
     throw new CommandFailedError(
       'This command requires the "Provision Projects" global permission in SonarQube.',
     );
@@ -229,13 +230,13 @@ async function preflight(
 }
 
 async function fetchGroupData(
-  sqsClient: SonarQubeClient,
+  sqsClient: OnboardCiSqsClient,
   gitlabClient: GitLabClient,
   dopSettingId: string,
   options: OnboardCiGitlabOptions,
 ): Promise<{ repos: RepoWithBranch[]; bindingMap: Map<string, string> }> {
   const bindingMap = await withSpinner('Fetching SonarQube project bindings...', () =>
-    sqsClient.getAllProjectBindings(dopSettingId),
+    sqsClient.bindings.getAllProjectBindings(dopSettingId),
   );
   const allRepos = await withSpinner('Fetching GitLab repositories...', () =>
     gitlabClient.listGroupRepos(options.group),

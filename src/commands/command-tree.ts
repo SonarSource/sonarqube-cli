@@ -36,7 +36,8 @@ import {
 import { resolveGitlabToken } from '@/core/gitlab/token.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
-import { GENERIC_HTTP_METHODS, MAX_PAGE_SIZE } from '@/core/server/client.ts';
+import { GENERIC_HTTP_METHODS } from '@/core/server/client.ts';
+import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { tryLoadState } from '@/core/state/state-repository.ts';
 import { flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';

@@ -31,13 +31,13 @@ import { SCA_SCANNER_CACHE_DIR } from '@/core/config-constants.ts';
 import type { ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import type { SecretsInstaller } from '@/core/host/install/secrets.ts';
 import logger, { getLogLevelConfig } from '@/core/observability/logger.ts';
-import { type SonarQubeClient } from '@/core/server/client.ts';
 import { assertScaAvailable } from '@/core/server/sca-availability.ts';
 import type { SettingsValue } from '@/core/server/settings-value.ts';
 import { withSpinner } from '@/core/ui';
 
 import { parseAnalysisProperties } from './analysis-properties.ts';
 import { preScanManifestsForSecrets } from './manifest-secrets-guard.ts';
+import type { ScaScanApi } from './sca-api.ts';
 import { type AnalyzeProjectResponse, ScaScannerRunner } from './sca-scanner.ts';
 import type { ScaScannerInvocation } from './sca-scanner-runner-base.ts';
 import type { ScaScannerSpawner } from './sca-scanner-spawner.ts';
@@ -51,7 +51,7 @@ export interface ScaScanResult {
 
 export class ScaScanOrchestrator {
   constructor(
-    private readonly client: SonarQubeClient,
+    private readonly client: ScaScanApi,
     private readonly installer: ScaScannerInstaller,
     private readonly spawner: ScaScannerSpawner,
     private readonly secretsInstaller: SecretsInstaller,

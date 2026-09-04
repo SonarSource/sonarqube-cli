@@ -20,7 +20,8 @@
 
 import type { ResolvedAuth } from '../auth/auth-resolver.ts';
 import logger from '../observability/logger.ts';
-import { SonarQubeClient } from './client.ts';
+import { SonarHttpClient } from './http-client.ts';
+import { ProjectBindingsClient } from './project-bindings.ts';
 
 export const GIT_REMOTE_BINDING_SOURCE = 'git remote (origin)';
 
@@ -38,7 +39,7 @@ export async function discoverProjectKeyByGitRemote(
   gitRemote: string,
 ): Promise<GitRemoteBindingDiscovery | null> {
   try {
-    const client = new SonarQubeClient(auth.serverUrl, auth.token);
+    const client = new ProjectBindingsClient(new SonarHttpClient(auth.serverUrl, auth.token));
     const projectKey = await client.getProjectKeyByGitRemote(gitRemote, auth.orgKey);
     if (!projectKey) {
       return null;

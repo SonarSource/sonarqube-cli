@@ -17,13 +17,22 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-import { type SonarQubeClient } from './client.ts';
+import { type SonarHttpClient } from './http-client.ts';
 import type { ProjectsSearchParams, ProjectsSearchResponse } from './types.ts';
 
-export class ProjectsClient {
-  private readonly client: SonarQubeClient;
+/**
+ * The `ps` (page size) ceiling on nearly every paginated SonarQube list endpoint - not specific
+ * to any one resource. Confirmed identical across `components/search_projects`,
+ * `measures/component_tree`, `issues/search`, and `metrics/search`'s own param docs ("must be
+ * greater than 0 and less or equal than 500"). The unrelated, narrower
+ * `DOP_REPOSITORIES_MAX_PAGE_SIZE` is a real exception specific to that one API.
+ */
+export const MAX_PAGE_SIZE = 500;
 
-  constructor(client: SonarQubeClient) {
+export class ProjectsClient {
+  private readonly client: SonarHttpClient;
+
+  constructor(client: SonarHttpClient) {
     this.client = client;
   }
 
