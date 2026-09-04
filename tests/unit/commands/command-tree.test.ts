@@ -41,8 +41,8 @@ describe('createCommandTree', () => {
   it('still accepts the deprecated --project on post-tool-use hooks', () => {
     for (const cmd of ['claude-post-tool-use', 'codex-post-tool-use']) {
       const hook = resolveCommand(['hook', cmd]);
+      // Metadata only: parse() would run the real hook handler (stdin, Sentry, telemetry).
       expect(hook.options.some((option) => option.long === '--project')).toBe(true);
-      hook.parse(['--project', 'legacy-key'], { from: 'user' });
     }
   });
 });
