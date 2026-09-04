@@ -20,6 +20,8 @@
 
 // SonarQube Measures API wrapper
 
+import { unwrap } from '@/core/result.ts';
+
 import { type QueryParams, type SonarHttpClient } from './http-client.ts';
 import type { ComponentTreeComponent, ComponentTreeResponse } from './types.ts';
 
@@ -84,9 +86,11 @@ export class MeasuresClient {
   async getWorstComponentsByMetric(
     params: WorstComponentsByMetricParams,
   ): Promise<WorstComponentsByMetricResult> {
-    const response = await this.client.get<ComponentTreeResponse>(
-      '/api/measures/component_tree',
-      buildComponentTreeQueryParams(params),
+    const response = unwrap(
+      await this.client.get<ComponentTreeResponse>(
+        '/api/measures/component_tree',
+        buildComponentTreeQueryParams(params),
+      ),
     );
     return { components: response.components, totalCount: response.paging.total };
   }
