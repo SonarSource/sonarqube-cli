@@ -24,7 +24,8 @@ permissions:
 jobs:
   prepare:
     name: Prepare Build
-    runs-on: github-ubuntu-latest-s
+    # sonar-xs: GitHub-hosted runners 403 when 2.0.0 creates refs/build-number/* even with contents: write.
+    runs-on: sonar-xs
     permissions:
       id-token: write
       contents: write
