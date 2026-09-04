@@ -18,55 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Inline terminal output — non-interactive, static messages.
-// I/O is owned by TerminalConsole; these functions delegate to the process default.
-
-import { getDefaultConsole } from './default-console.ts';
-import type { ColorFn, OutputChannel } from './types.ts';
-
-export function setFormattedOutputMode(active: boolean): void {
-  getDefaultConsole().setFormattedOutputMode(active);
-}
-
-export function isFormattedOutputMode(): boolean {
-  return getDefaultConsole().isFormattedOutputMode();
-}
-
-export function getMessagesForFormattedOutput(): string[] {
-  return getDefaultConsole().getMessagesForFormattedOutput();
-}
-
-export function info(message: string, channel: OutputChannel = 'stdout'): void {
-  getDefaultConsole().info(message, channel);
-}
-
-export function success(message: string): void {
-  getDefaultConsole().success(message);
-}
-
-export function discreetSuccess(message: string, channel: OutputChannel = 'stdout'): void {
-  getDefaultConsole().discreetSuccess(message, channel);
-}
-
-export function warn(message: string): void {
-  getDefaultConsole().warn(message);
-}
-
-export function error(message: string): void {
-  getDefaultConsole().error(message);
-}
-
-export function text(message: string, color?: ColorFn, channel: OutputChannel = 'stdout'): void {
-  getDefaultConsole().text(message, color, channel);
-}
-
-export function print(message: string, channel: OutputChannel = 'stdout'): void {
-  getDefaultConsole().print(message, channel);
-}
-
-export function blank(): void {
-  getDefaultConsole().blank();
-}
+// Inline terminal output helpers (pure; I/O lives on Console).
 
 /**
  * Greedy word wrap: packs whitespace-separated words into lines no longer than

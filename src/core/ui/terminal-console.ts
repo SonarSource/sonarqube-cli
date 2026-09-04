@@ -36,15 +36,8 @@ import {
 import { renderIntro, renderOutro } from './components/sections.ts';
 import { renderWithSpinner } from './components/spinner.ts';
 import type { Console } from './console.ts';
+import { channelStream, write } from './streams.ts';
 import type { ColorFn, NoteOptions, OutputChannel, PhaseItem, PhaseOptions } from './types.ts';
-
-function write(stream: NodeJS.WriteStream, line: string): void {
-  stream.write(line + '\n');
-}
-
-function channelStream(channel: OutputChannel): NodeJS.WriteStream {
-  return channel === 'stderr' ? process.stderr : process.stdout;
-}
 
 /** Production {@link Console}: writes to stdout/stderr. */
 export class TerminalConsole implements Console {
