@@ -16,7 +16,7 @@ on:
 jobs:
   check-draft-exists:
     name: Check draft release exists
-    runs-on: github-ubuntu-latest-s
+    runs-on: sonar-xs
     # contents: write is required — draft releases are only visible to tokens with write access.
     permissions:
       contents: write
@@ -66,7 +66,7 @@ jobs:
 
   bump-version:
     name: Create a PR to bump version
-    runs-on: github-ubuntu-latest-s
+    runs-on: sonar-xs
     needs:
       - release
     permissions:
@@ -126,7 +126,7 @@ jobs:
 
   publish-release-notes:
     name: Copy reviewed notes to published release
-    runs-on: github-ubuntu-latest-s
+    runs-on: sonar-xs
     needs: [check-draft-exists, release]
     permissions:
       contents: write
