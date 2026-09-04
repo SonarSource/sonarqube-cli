@@ -132,8 +132,12 @@ async function runBulkImportJob(
   almKey: string | undefined,
   collection: RepositoryCollection,
   regex: RegExp | undefined,
+  console: Console,
 ): Promise<{ succeeded: number; failed: number; skipped: readonly SkippedRepo[] }> {
-  const progress = new ImportProgress({ maxVisible: IMPORT_PROVISION_CONCURRENCY_LIMIT });
+  const progress = new ImportProgress({
+    console,
+    maxVisible: IMPORT_PROVISION_CONCURRENCY_LIMIT,
+  });
   progress.setTotal(collection.total);
   progress.start();
 
@@ -250,6 +254,7 @@ export async function importHandler(
       resolution.almKey,
       resolution.collection,
       resolution.regex,
+      console,
     );
     reportSkipped(skipped, console);
     reportOutcome(
@@ -267,7 +272,10 @@ export async function importHandler(
   console.info(`Repositories to import: ${repos.length}`);
   reportSkipped(skipped, console);
 
-  const progress = new ImportProgress({ maxVisible: IMPORT_PROVISION_CONCURRENCY_LIMIT });
+  const progress = new ImportProgress({
+    console,
+    maxVisible: IMPORT_PROVISION_CONCURRENCY_LIMIT,
+  });
   progress.setTotal(repos.length);
   progress.addRepos(repos.map((repo) => repo.slug));
   progress.start();

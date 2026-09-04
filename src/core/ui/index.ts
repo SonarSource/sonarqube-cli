@@ -21,17 +21,19 @@
 // Public API for the UI module
 
 export { bold, dim, stripAnsi, visibleLength } from './colors.ts';
-export { renderNote } from './components/note.ts';
-export type { PhaseItem, StepStatus } from './components/phase.ts';
-export { phaseItem, renderPhase } from './components/phase.ts';
-export type {
-  MultiSelectOption,
-  MultiSelectPromptOptions,
-  SelectOption,
-} from './components/prompts.ts';
-export { renderIntro, renderOutro } from './components/sections.ts';
-export { renderWithSpinner } from './components/spinner.ts';
 export type { Console } from './console.ts';
 export { wrapText } from './messages.ts';
 export { TerminalConsole } from './terminal-console.ts';
-export type { ColorFn, LogOptions, NoteOptions, OutputChannel, PhaseOptions } from './types.ts';
+export type {
+  ColorFn,
+  LogOptions,
+  MultiSelectOption,
+  MultiSelectPromptOptions,
+  NoteOptions,
+  OutputChannel,
+  PhaseItem,
+  PhaseOptions,
+  SelectOption,
+  StepStatus,
+} from './types.ts';
+export { phaseItem } from './types.ts';

@@ -22,6 +22,7 @@
 
 import { bold, dim } from '@/core/ui/colors.ts';
 import { ConcurrentProgress } from '@/core/ui/components/concurrent-progress.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 /**
  * Extends `ConcurrentProgress` with import-specific additions:
@@ -30,7 +31,12 @@ import { ConcurrentProgress } from '@/core/ui/components/concurrent-progress.ts'
  * - `formatLabel()` dims the `org/` prefix so the repo name stands out
  */
 export class ImportProgress extends ConcurrentProgress {
-  constructor(opts: { isTTY?: boolean; maxVisible?: number; showResult?: boolean }) {
+  constructor(opts: {
+    console: Console;
+    isTTY?: boolean;
+    maxVisible?: number;
+    showResult?: boolean;
+  }) {
     super({ ...opts, resultTitle: 'Import results' });
   }
 
