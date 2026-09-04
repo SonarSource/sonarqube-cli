@@ -20,6 +20,7 @@
 
 // SonarQube Components API wrapper — project existence, identity and project-scoped settings.
 
+import { unwrap } from '../result.ts';
 import type { SonarHttpClient } from './http-client.ts';
 import type { SettingsValue } from './settings-value.ts';
 
@@ -34,12 +35,8 @@ export class ComponentsClient {
    * Check if component (project) exists
    */
   async checkComponent(projectKey: string): Promise<boolean> {
-    try {
-      await this.client.get('/api/components/show', { component: projectKey });
-      return true;
-    } catch {
-      return false;
-    }
+    const result = await this.client.get('/api/components/show', { component: projectKey });
+    return result.ok;
   }
 
   /**
@@ -48,9 +45,9 @@ export class ComponentsClient {
    * normal typed error instead of being reported as a missing component.
    */
   async componentExists(projectKey: string): Promise<boolean> {
-    const component = await this.client.getOrNotFound('/api/components/show', {
-      component: projectKey,
-    });
+    const component = unwrap(
+      await this.client.getOrNotFound('/api/components/show', { component: projectKey }),
+    );
     return component !== null;
   }
 
@@ -60,20 +57,18 @@ export class ComponentsClient {
    * Uses /api/navigation/component - same endpoint the web UI uses; `id` is always present there.
    */
   async getComponentId(componentKey: string): Promise<string | null> {
-    try {
-      const result = await this.client.get<{ id: string }>('/api/navigation/component', {
-        component: componentKey,
-      });
-      return result.id;
-    } catch {
-      return null;
-    }
+    const result = await this.client.get<{ id: string }>('/api/navigation/component', {
+      component: componentKey,
+    });
+    return result.ok ? result.value.id : null;
   }
 
   async hasProjectBeenAnalyzed(projectKey: string): Promise<boolean> {
-    const result = await this.client.getOrNotFound<{ analyses?: unknown[] }>(
-      '/api/project_analyses/search',
-      { project: projectKey, ps: 1 },
+    const result = unwrap(
+      await this.client.getOrNotFound<{ analyses?: unknown[] }>('/api/project_analyses/search', {
+        project: projectKey,
+        ps: 1,
+      }),
     );
     return (result?.analyses?.length ?? 0) > 0;
   }
@@ -85,9 +80,10 @@ export class ComponentsClient {
    * shape they need (e.g. `parseAnalysisProperties` for SCA).
    */
   async getProjectSettings(projectKey: string): Promise<SettingsValue[]> {
-    const result = await this.client.getOrNotFound<{ settings?: SettingsValue[] }>(
-      '/api/settings/values',
-      { component: projectKey },
+    const result = unwrap(
+      await this.client.getOrNotFound<{ settings?: SettingsValue[] }>('/api/settings/values', {
+        component: projectKey,
+      }),
     );
 
     if (result === null) {

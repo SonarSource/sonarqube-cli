@@ -20,6 +20,7 @@
 
 // SonarQube Users & tokens API wrapper.
 
+import { unwrap } from '../result.ts';
 import type { SonarHttpClient } from './http-client.ts';
 
 /** Best-effort token revocation should fail fast when the server is unreachable. */
@@ -33,15 +34,17 @@ export class UsersClient {
   }
 
   async hasProvisionProjectsPermission(): Promise<boolean> {
-    const result = await this.client.get<{ permissions?: { global?: string[] } }>(
-      '/api/users/current',
+    const result = unwrap(
+      await this.client.get<{ permissions?: { global?: string[] } }>('/api/users/current'),
     );
 
     return result.permissions?.global?.includes('provisioning') ?? false;
   }
 
   async checkTokenValidity(): Promise<'valid' | 'invalid'> {
-    const result = await this.client.get<{ valid: boolean }>('/api/authentication/validate');
+    const result = unwrap(
+      await this.client.get<{ valid: boolean }>('/api/authentication/validate'),
+    );
     return result.valid ? 'valid' : 'invalid';
   }
 
@@ -54,10 +57,12 @@ export class UsersClient {
    * org name, etc.). The translation happens here at the wire boundary.
    */
   async revokeUserToken(tokenName: string): Promise<void> {
-    await this.client.postForm(
-      '/api/user_tokens/revoke',
-      { name: tokenName },
-      REVOKE_USER_TOKEN_TIMEOUT_MS,
+    unwrap(
+      await this.client.postForm(
+        '/api/user_tokens/revoke',
+        { name: tokenName },
+        REVOKE_USER_TOKEN_TIMEOUT_MS,
+      ),
     );
   }
 }

@@ -17,6 +17,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
+import { unwrap } from '../result.ts';
 import { type SonarHttpClient } from './http-client.ts';
 import type { ProjectsSearchParams, ProjectsSearchResponse } from './types.ts';
 
@@ -60,6 +61,8 @@ export class ProjectsClient {
       queryParams.p = params.p;
     }
 
-    return await this.client.get<ProjectsSearchResponse>('/api/components/search', queryParams);
+    return unwrap(
+      await this.client.get<ProjectsSearchResponse>('/api/components/search', queryParams),
+    );
   }
 }

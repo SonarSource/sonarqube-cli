@@ -21,6 +21,7 @@
 // SonarQube Organizations API wrapper (SonarQube Cloud — Server has no organizations).
 
 import logger from '../observability/logger.ts';
+import { unwrap } from '../result.ts';
 import type { SonarHttpClient } from './http-client.ts';
 
 export interface Organization {
@@ -81,17 +82,16 @@ export class OrganizationsClient {
   private async fetchOrganizationInfo(
     organizationKey: string,
   ): Promise<{ id: string; uuidV4: string } | null> {
-    try {
-      const endpoint = '/organizations/organizations';
-      const result = await this.client.get<Array<{ id: string; uuidV4: string }>>(
-        endpoint,
-        { organizationKey, excludeEligibility: 'true' },
-        this.client.apiHostFor(endpoint),
-      );
-      return result[0] ?? null;
-    } catch {
+    const endpoint = '/organizations/organizations';
+    const result = await this.client.get<Array<{ id: string; uuidV4: string }>>(
+      endpoint,
+      { organizationKey, excludeEligibility: 'true' },
+      this.client.apiHostFor(endpoint),
+    );
+    if (!result.ok) {
       return null;
     }
+    return result.value[0] ?? null;
   }
 
   /**
@@ -104,10 +104,12 @@ export class OrganizationsClient {
     page = 1,
     ps = 10,
   ): Promise<{ organizations: Organization[]; total: number }> {
-    const result = await this.client.get<{
-      organizations: Organization[];
-      paging: { total: number };
-    }>('/api/organizations/search', { member: true, ps, p: page });
+    const result = unwrap(
+      await this.client.get<{
+        organizations: Organization[];
+        paging: { total: number };
+      }>('/api/organizations/search', { member: true, ps, p: page }),
+    );
     return { organizations: result.organizations, total: result.paging.total };
   }
 
@@ -151,9 +153,10 @@ export class OrganizationsClient {
    * surfacing the problem. A `undefined` return only ever means "no org with this key".
    */
   async fetchOrganizationByKey(organizationKey: string): Promise<Organization | undefined> {
-    const result = await this.client.get<{ organizations: Organization[] }>(
-      '/api/organizations/search',
-      { organizations: organizationKey },
+    const result = unwrap(
+      await this.client.get<{ organizations: Organization[] }>('/api/organizations/search', {
+        organizations: organizationKey,
+      }),
     );
     return result.organizations.find((org) => org.key === organizationKey);
   }
@@ -170,9 +173,11 @@ export class OrganizationsClient {
     if (!organizationId) return undefined;
 
     const endpoint = '/dop-translation/organization-bindings';
-    const result = await this.client.get<{
-      organizationBindings: Array<{ devOpsPlatform: string }>;
-    }>(endpoint, { organizationId }, this.client.apiHostFor(endpoint));
+    const result = unwrap(
+      await this.client.get<{
+        organizationBindings: Array<{ devOpsPlatform: string }>;
+      }>(endpoint, { organizationId }, this.client.apiHostFor(endpoint)),
+    );
     return result.organizationBindings[0]?.devOpsPlatform;
   }
 
@@ -181,18 +186,17 @@ export class OrganizationsClient {
    * `GET /billing/entitlements` (SonarQube Cloud only, region-specific API host).
    */
   async checkBillingEntitlement(organizationUuid: string, entitlement: string): Promise<boolean> {
-    try {
-      const endpoint = '/billing/entitlements';
-      const result = await this.client.get<{ entitlements: Array<{ allowedFeatures: string[] }> }>(
-        endpoint,
-        { resourceId: organizationUuid, resourceType: 'organization' },
-        this.client.apiHostFor(endpoint),
-      );
-      return result.entitlements.some((e) => e.allowedFeatures.includes(entitlement));
-    } catch (err) {
-      logger.debug(`Failed to check '${entitlement}' billing entitlement`, err);
+    const endpoint = '/billing/entitlements';
+    const result = await this.client.get<{ entitlements: Array<{ allowedFeatures: string[] }> }>(
+      endpoint,
+      { resourceId: organizationUuid, resourceType: 'organization' },
+      this.client.apiHostFor(endpoint),
+    );
+    if (!result.ok) {
+      logger.debug(`Failed to check '${entitlement}' billing entitlement`, result.error);
       return false;
     }
+    return result.value.entitlements.some((e) => e.allowedFeatures.includes(entitlement));
   }
 
   async hasPrivateProjectsEntitlement(organizationKey: string): Promise<boolean> {
