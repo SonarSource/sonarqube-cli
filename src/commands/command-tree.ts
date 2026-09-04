@@ -107,6 +107,7 @@ import { integrateCopilot } from './integrate/copilot';
 import { integrateCursor } from './integrate/cursor';
 import { integrateGit, type IntegrateGitOptions } from './integrate/git';
 import { integrateBare, type IntegrateBareOptions } from './integrate/integrate-bare.ts';
+import { link, type LinkOptions } from './link';
 import {
   listIssues,
   type ListIssuesOptions,
@@ -339,6 +340,20 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option('--non-interactive', 'Skip all prompts; require explicit flags')
     .authenticatedAction((ctx, options: ImportOptions) => importHandler(options, ctx));
+
+  // Append a project binding to .sonar-config.json (barebones; UX will change)
+  COMMAND_TREE.command('link')
+    .description(
+      'Link a project to the active connection in .sonar-config.json. Supports one project per repository; monorepo support is coming soon.',
+    )
+    .rootHelp({
+      category: 'core',
+    })
+    .argument('<project>', 'SonarQube project key')
+    .requiredOption('--path <path>', 'Path to the project root, relative to the repository root')
+    .authenticatedAction((ctx, project: string, options: LinkOptions) =>
+      link(project, options, ctx),
+    );
 
   COMMAND_TREE.command('api')
     .rootHelp({
