@@ -68,6 +68,16 @@ export function clearMockUiCalls(): void {
   calls.length = 0;
 }
 
+export function findUiCall(
+  recorded: readonly UiCall[],
+  method: string,
+  substring: string,
+): UiCall | undefined {
+  return recorded.find(
+    (c) => c.method === method && typeof c.args[0] === 'string' && c.args[0].includes(substring),
+  );
+}
+
 /**
  * Find the first recorded UI call of `method` whose first argument (the
  * message text) contains `substring`. Returns `undefined` when no match is
@@ -75,9 +85,7 @@ export function clearMockUiCalls(): void {
  * `expect(...).toBeUndefined()` assertions in tests.
  */
 export function findMockUiCall(method: UiMethod, substring: string): UiCall | undefined {
-  return calls.find(
-    (c) => c.method === method && typeof c.args[0] === 'string' && c.args[0].includes(substring),
-  );
+  return findUiCall(calls, method, substring);
 }
 
 /**

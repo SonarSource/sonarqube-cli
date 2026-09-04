@@ -12,6 +12,7 @@ import type { ProjectsSearchResponse } from '@/core/server/types.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { listProjects, ListProjectsOptions } from '../../../../src/commands/list/projects.ts';
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
 const DEFAULT_OPTIONS: ListProjectsOptions = {
   page: 1,
@@ -24,7 +25,7 @@ const mockAuth: ResolvedAuth = {
   connectionType: 'on-premise',
 };
 
-const mockCtx = new CommandAuthenticatedInvocationContext(mockAuth);
+const mockCtx = new CommandAuthenticatedInvocationContext(mockAuth, new FakeConsole());
 
 function makeProjectsResponse(
   components: { key: string; name: string }[],
@@ -208,7 +209,10 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await listProjects(DEFAULT_OPTIONS, new CommandAuthenticatedInvocationContext(cloudAuth));
+      await listProjects(
+        DEFAULT_OPTIONS,
+        new CommandAuthenticatedInvocationContext(cloudAuth, new FakeConsole()),
+      );
 
       expect(capturedParams?.organization).toBe('my-org');
     });
@@ -226,7 +230,10 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await listProjects(DEFAULT_OPTIONS, new CommandAuthenticatedInvocationContext(onPremAuth));
+      await listProjects(
+        DEFAULT_OPTIONS,
+        new CommandAuthenticatedInvocationContext(onPremAuth, new FakeConsole()),
+      );
 
       expect(capturedParams?.organization).toBeUndefined();
     });

@@ -20,26 +20,39 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { CommandInvocationContext, TelemetryFact } from '@/core/commands/invocation-context.ts';
+import {
+  CommandInvocationContext,
+  type CommandInvocationContextRuntime,
+  TelemetryFact,
+} from '@/core/commands/invocation-context.ts';
 import type { LifecycleState } from '@/core/commands/sonar-command.ts';
+
+import { FakeConsole } from '../../_common/fake-console.ts';
+
+function ctx(
+  lifecycle?: LifecycleState,
+  runtime?: CommandInvocationContextRuntime,
+  console: FakeConsole = new FakeConsole(),
+): CommandInvocationContext {
+  return new CommandInvocationContext(console, lifecycle, runtime);
+}
 
 describe('CommandInvocationContext stage accessors', () => {
   it('defaults to non-alpha / non-beta', () => {
-    const ctx = new CommandInvocationContext();
-    expect(ctx.isAlphaEligible()).toBe(false);
-    expect(ctx.isBetaEligible()).toBe(false);
+    expect(ctx().isAlphaEligible()).toBe(false);
+    expect(ctx().isBetaEligible()).toBe(false);
   });
 
   it('isAlphaEligible requires both Alpha stage and alpha enabled', () => {
     const stage: LifecycleState = { stage: 'alpha' };
     expect(
-      new CommandInvocationContext(stage, {
+      ctx(stage, {
         isAlphaEnabled: false,
         isPrivateBetaEnabled: () => false,
       }).isAlphaEligible(),
     ).toBe(false);
     expect(
-      new CommandInvocationContext(stage, {
+      ctx(stage, {
         isAlphaEnabled: true,
         isPrivateBetaEnabled: () => false,
       }).isAlphaEligible(),
@@ -47,27 +60,42 @@ describe('CommandInvocationContext stage accessors', () => {
   });
 
   it('isBetaEligible is true for Open Beta without consulting entitlement', () => {
-    const ctx = new CommandInvocationContext(
+    const context = ctx(
       { stage: 'beta' },
       { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
     );
-    expect(ctx.isBetaEligible()).toBe(true);
+    expect(context.isBetaEligible()).toBe(true);
   });
 
   it('isBetaEligible for Private Beta requires entitlement', () => {
     const stage: LifecycleState = { stage: 'beta', betaFlagKey: 'cli.beta.demo' };
     expect(
-      new CommandInvocationContext(stage, {
+      ctx(stage, {
         isAlphaEnabled: false,
         isPrivateBetaEnabled: () => false,
       }).isBetaEligible(),
     ).toBe(false);
     expect(
-      new CommandInvocationContext(stage, {
+      ctx(stage, {
         isAlphaEnabled: false,
         isPrivateBetaEnabled: (key) => key === 'cli.beta.demo',
       }).isBetaEligible(),
     ).toBe(true);
+  });
+
+  it('isBetaEligible for Private Beta is false when runtime is omitted', () => {
+    expect(ctx({ stage: 'beta', betaFlagKey: 'cli.beta.demo' }).isBetaEligible()).toBe(false);
+  });
+
+  it('exposes the injected console', () => {
+    const fake = new FakeConsole();
+    expect(ctx(undefined, undefined, fake).console).toBe(fake);
+  });
+
+  it('recordTelemetry no-ops on empty input', () => {
+    const context = ctx();
+    context.recordTelemetry();
+    expect(context.telemetryFacts()).toEqual([]);
   });
 
   it('recordTelemetry appends facts onto the context', () => {
@@ -83,10 +111,10 @@ describe('CommandInvocationContext stage accessors', () => {
       details: '',
     });
 
-    const ctx = new CommandInvocationContext();
-    ctx.recordTelemetry(fact);
-    expect(ctx.telemetryFacts()).toEqual([fact]);
-    expect(ctx.telemetryFacts()).not.toBe(ctx.telemetryFacts());
+    const context = ctx();
+    context.recordTelemetry(fact);
+    expect(context.telemetryFacts()).toEqual([fact]);
+    expect(context.telemetryFacts()).not.toBe(context.telemetryFacts());
   });
 });
 

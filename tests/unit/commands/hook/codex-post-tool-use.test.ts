@@ -33,6 +33,7 @@ import * as sqaaModule from '../../../../src/commands/analyze/sqaa.ts';
 import { codexPostToolUse } from '../../../../src/commands/hook/codex-post-tool-use.ts';
 import * as hookOutput from '../../../../src/commands/hook/format-sqaa-hook-context.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
 describe('codexPostToolUse', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;
@@ -45,7 +46,7 @@ describe('codexPostToolUse', () => {
   const originalStdinIsTTY = process.stdin.isTTY;
 
   beforeEach(() => {
-    ctx = new CommandInvocationContext();
+    ctx = new CommandInvocationContext(new FakeConsole());
     Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: false });
     stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
     readStdinJsonSpy = spyOn(stdinModule, 'readStdinJson').mockRejectedValue(

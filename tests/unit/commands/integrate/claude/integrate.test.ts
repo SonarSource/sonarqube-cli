@@ -38,6 +38,8 @@ import * as stateRepository from '@/core/state/state-repository.ts';
 import type { PhaseItem } from '@/core/ui';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
+import { FakeConsole } from '../../../../_common/fake-console.ts';
+
 const SERVER_AUTH: ResolvedAuth = {
   token: 'test-token',
   serverUrl: 'https://sonar.example.com',
@@ -51,8 +53,8 @@ const CLOUD_AUTH: ResolvedAuth = {
   connectionType: 'cloud',
 };
 
-const SERVER_CTX = new CommandAuthenticatedInvocationContext(SERVER_AUTH);
-const CLOUD_CTX = new CommandAuthenticatedInvocationContext(CLOUD_AUTH);
+const SERVER_CTX = new CommandAuthenticatedInvocationContext(SERVER_AUTH, new FakeConsole());
+const CLOUD_CTX = new CommandAuthenticatedInvocationContext(CLOUD_AUTH, new FakeConsole());
 
 function getPhaseItems(title: string): PhaseItem[] {
   const call = getMockUiCalls().find((c) => c.method === 'phase' && c.args[0] === title);
@@ -198,7 +200,10 @@ describe('integrateCommand', () => {
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      integrateClaude({}, new CommandAuthenticatedInvocationContext(cloudAuthNoOrg)),
+      integrateClaude(
+        {},
+        new CommandAuthenticatedInvocationContext(cloudAuthNoOrg, new FakeConsole()),
+      ),
     ).rejects.toThrow(CommandFailedError);
   });
 

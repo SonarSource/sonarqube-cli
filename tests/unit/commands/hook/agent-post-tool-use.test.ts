@@ -38,7 +38,7 @@ import { agentPostToolUse } from '../../../../src/commands/hook/agent-post-tool-
 import { contextAugmentationPostToolUseSubscriber } from '../../../../src/commands/hook/context-augmentation-hook-subscriber.ts';
 import * as hookOutput from '../../../../src/commands/hook/format-sqaa-hook-context.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
-
+import { FakeConsole } from '../../../_common/fake-console.ts';
 // Real path inside cwd so realpathSync resolves consistently for file and cwd.
 const TEST_FILE = join(process.cwd(), 'src/index.ts');
 
@@ -98,7 +98,7 @@ describe('agentPostToolUse', () => {
       sqaaTelemetry,
       'recordSqaaAnalysisTelemetry',
     ).mockImplementation(() => {});
-    ctx = new CommandInvocationContext();
+    ctx = new CommandInvocationContext(new FakeConsole());
   });
 
   afterEach(() => {

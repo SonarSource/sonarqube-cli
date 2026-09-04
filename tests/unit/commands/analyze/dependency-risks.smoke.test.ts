@@ -27,6 +27,7 @@ import { clearMockUiCalls, getMockUiCalls, setMockTty, setMockUi } from '@/core/
 import { ScaScanOrchestrator } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
 import type { AnalyzeProjectResponse } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import { analyzeDependencyRisks } from '../../../../src/commands/analyze/dependency-risks.ts';
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
 const FAKE_AUTH: ResolvedAuth = {
   token: 'test-token',
@@ -35,7 +36,10 @@ const FAKE_AUTH: ResolvedAuth = {
   connectionType: 'cloud',
 };
 
-const FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(FAKE_AUTH);
+const FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(
+  FAKE_AUTH,
+  new FakeConsole(),
+);
 
 const SCAN_RESULT_STUB: AnalyzeProjectResponse = {
   releases: [

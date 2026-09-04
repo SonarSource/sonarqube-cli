@@ -41,8 +41,9 @@ import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { tryLoadState } from '@/core/state/state-repository.ts';
 import { flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
-import { blank, error } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 import { parseInteger } from '@/core/ui/parsing.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { version as VERSION } from '../../package.json';
 import {
@@ -152,14 +153,16 @@ export type LoadPrivateBetaContext = (flagKeys: readonly string[]) => Promise<{
 export interface CreateCommandTreeOptions {
   isAlphaEnabled?: boolean;
   loadPrivateBetaContext?: LoadPrivateBetaContext;
+  /** Shared tree console; production omits this and gets a fresh {@link TerminalConsole}. */
+  console?: Console;
 }
 
 /** Registers the full command tree for the given runtime (sync). */
-function buildCommandTree(runtime: CliRuntime): SonarCommand {
+function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   // Hook handlers write an agent-native session id when present; postAction
   // resolves (env fallback) before telemetry flush.
   let capturedAgentSessionId: string | null = null;
-  const COMMAND_TREE = new SonarCommand({ runtime });
+  const COMMAND_TREE = new SonarCommand({ runtime, console });
 
   const handleHookInvocation =
     <TArgs extends unknown[]>(
@@ -179,8 +182,8 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .enablePositionalOptions()
     .configureOutput({
       outputError: (str) => {
-        blank();
-        error(str.trim());
+        console.blank();
+        console.error(str.trim());
       },
     })
     .configureHelp({
@@ -230,7 +233,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
   auth
     .command('status')
     .description('Show active authentication connection with token verification')
-    .anonymousAction((_ctx) => authStatus());
+    .anonymousAction((ctx) => authStatus(ctx));
 
   // List Sonar resources
   const list = COMMAND_TREE.command('list')
@@ -885,13 +888,17 @@ export async function createCommandTree(
   options: CreateCommandTreeOptions = {},
 ): Promise<SonarCommand> {
   const isAlphaEnabled = options.isAlphaEnabled ?? isAlphaEnabledFromEnv();
+  const console = options.console ?? new TerminalConsole();
 
-  const probe = buildCommandTree({
-    auth: null,
-    isAlphaEnabled,
-    // Allow all Private Beta commands so Stage.Beta('…') keys are discoverable.
-    isPrivateBetaEnabled: () => true,
-  });
+  const probe = buildCommandTree(
+    {
+      auth: null,
+      isAlphaEnabled,
+      // Allow all Private Beta commands so Stage.Beta('…') keys are discoverable.
+      isPrivateBetaEnabled: () => true,
+    },
+    console,
+  );
 
   const flagKeys = collectPrivateBetaFlagKeys(probe);
   if (flagKeys.length === 0) {
@@ -900,17 +907,23 @@ export async function createCommandTree(
 
   if (options.loadPrivateBetaContext) {
     const { auth, flags } = await options.loadPrivateBetaContext(flagKeys);
-    return buildCommandTree({
-      auth,
-      isAlphaEnabled,
-      isPrivateBetaEnabled: (flagKey) => flags[flagKey] ?? false,
-    });
+    return buildCommandTree(
+      {
+        auth,
+        isAlphaEnabled,
+        isPrivateBetaEnabled: (flagKey) => flags[flagKey] ?? false,
+      },
+      console,
+    );
   }
 
   // Keys exist but no loader (e.g. docs generation): omit Private Beta commands.
-  return buildCommandTree({
-    ...createDefaultCliRuntime(),
-    isAlphaEnabled,
-    isPrivateBetaEnabled: () => false,
-  });
+  return buildCommandTree(
+    {
+      ...createDefaultCliRuntime(),
+      isAlphaEnabled,
+      isPrivateBetaEnabled: () => false,
+    },
+    console,
+  );
 }

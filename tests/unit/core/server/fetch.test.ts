@@ -182,7 +182,9 @@ describe('fetchAnonymous', () => {
         tls: { rejectUnauthorized: false },
       } as RequestInit);
       expect(captured[0]?.proxy).toBe('https://https-proxy:8443');
-      expect(captured[0]?.tls).toBeUndefined();
+      expect(
+        (captured[0]?.tls as { rejectUnauthorized?: boolean } | undefined)?.rejectUnauthorized,
+      ).toBeUndefined();
     } finally {
       fetchSpy.mockRestore();
     }

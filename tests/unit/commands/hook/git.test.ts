@@ -37,6 +37,7 @@ import {
   SECRETS_INACTIVE_UNAUTHENTICATED,
 } from '../../../../src/commands/hook/hook-dependencies.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
 const { EXIT_CODE_SECRETS_FOUND } = analyzeSecrets;
 
@@ -51,7 +52,7 @@ const OK_RESULT = { exitCode: 0, stdout: '', stderr: '' };
 const SECRETS_RESULT = { exitCode: EXIT_CODE_SECRETS_FOUND, stdout: '', stderr: '' };
 
 function makeCtx() {
-  return new CommandInvocationContext();
+  return new CommandInvocationContext(new FakeConsole());
 }
 
 const SECRETS_RESULT_WITH_ISSUES = {

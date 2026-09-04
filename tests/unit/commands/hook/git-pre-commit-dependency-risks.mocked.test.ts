@@ -33,9 +33,10 @@ import type {
 } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import { ScaWatchPatternsRunner } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-watch-patterns.ts';
 import { runDepRisksStage } from '../../../../src/commands/hook/git-pre-commit-dependency-risks.ts';
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
 function makeCtx() {
-  return new CommandInvocationContext();
+  return new CommandInvocationContext(new FakeConsole());
 }
 
 const FAKE_AUTH: ResolvedAuth = {

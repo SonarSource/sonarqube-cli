@@ -22,6 +22,7 @@
 
 import { cyan, green, isTTY, red, yellow } from './colors.ts';
 import { isMockActive, recordCall } from './mock.ts';
+import { channelStream, print as streamPrint, write } from './streams.ts';
 import type { ColorFn, OutputChannel } from './types.ts';
 
 let _formattedOutputMode = false;
@@ -48,14 +49,6 @@ export function isFormattedOutputMode(): boolean {
 /** Returns messages collected since the last setFormattedOutputMode(true) call. */
 export function getMessagesForFormattedOutput(): string[] {
   return [..._collectedMessages];
-}
-
-function write(stream: NodeJS.WriteStream, line: string): void {
-  stream.write(line + '\n');
-}
-
-export function channelStream(channel: OutputChannel): NodeJS.WriteStream {
-  return channel === 'stderr' ? process.stderr : process.stdout;
 }
 
 export function info(message: string, channel: OutputChannel = 'stdout'): void {
@@ -134,7 +127,7 @@ export function print(message: string, channel: OutputChannel = 'stdout'): void 
     recordCall('print', message);
     return;
   }
-  channelStream(channel).write(message + (message.endsWith('\n') ? '' : '\n'));
+  streamPrint(message, channel);
 }
 
 // Newline separator

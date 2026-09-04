@@ -41,7 +41,7 @@ import {
 } from '@/core/commands/stage.ts';
 import logger from '@/core/observability/logger.ts';
 import { loadState, saveState } from '@/core/state/state-manager.ts';
-import { blank, error, info, print, warn } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
 import { UpdateNotifier } from '@/core/update/notification.ts';
 
@@ -142,10 +142,11 @@ export interface RootHelpMetadata {
   label?: string;
 }
 
-/** Optional shared state for a SonarCommand and its subtree. */
+/** Shared state for a SonarCommand and its subtree. `console` is required; production passes the process console from `buildCommandTree`. */
 export interface SonarCommandOptions {
   updateNotifier?: UpdateNotifier;
   runtime?: CliRuntime;
+  console: Console;
 }
 
 type CommandArgs = unknown[];
@@ -214,28 +215,30 @@ export class SonarCommand extends Command {
   private _rootHelp: RootHelpMetadata = {};
   private readonly _updateNotifier: UpdateNotifier;
   private readonly _runtime: CliRuntime;
+  private readonly _console: Console;
   private _invocationContext: CommandInvocationContext | undefined;
 
   /**
    * `updateNotifier` / `runtime` default so the root command owns the
    * instances the whole tree shares; every subcommand inherits them via
-   * createCommand().
+   * createCommand(). `console` is required and is passed through the same way.
    */
-  constructor(options?: SonarCommandOptions);
-  constructor(name?: string, options?: SonarCommandOptions);
-  constructor(
-    nameOrOptions?: string | SonarCommandOptions,
-    maybeOptions: SonarCommandOptions = {},
-  ) {
+  constructor(options: SonarCommandOptions);
+  constructor(name: string, options: SonarCommandOptions);
+  constructor(nameOrOptions: string | SonarCommandOptions, maybeOptions?: SonarCommandOptions) {
     const hasName = typeof nameOrOptions === 'string';
     const name = hasName ? nameOrOptions : undefined;
-    const options = (hasName ? maybeOptions : nameOrOptions) ?? {};
+    const options = typeof nameOrOptions === 'object' ? nameOrOptions : maybeOptions;
+    if (options?.console === undefined) {
+      throw new TypeError('SonarCommand requires a console');
+    }
     super(name);
+    this._console = options.console;
     this._updateNotifier = options.updateNotifier ?? new UpdateNotifier();
     this._runtime = options.runtime ?? createDefaultCliRuntime();
     this.hook('preAction', () => {
       if (this._lifecycle.stage === 'alpha') {
-        info(
+        this._console.info(
           `'${qualifiedCommandPath(this)}' is in alpha; may change or be removed without notice.`,
           'stderr',
         );
@@ -246,10 +249,11 @@ export class SonarCommand extends Command {
   }
 
   /** Ensures subcommands created via .command() are also SonarCommand instances. */
-  createCommand(name?: string): SonarCommand {
+  createCommand(name: string): SonarCommand {
     return new SonarCommand(name, {
       updateNotifier: this._updateNotifier,
       runtime: this._runtime,
+      console: this._console,
     });
   }
 
@@ -460,7 +464,7 @@ export class SonarCommand extends Command {
   }
 
   private createCommandInvocationContext(): CommandInvocationContext {
-    const ctx = new CommandInvocationContext(this._lifecycle, this._runtime);
+    const ctx = new CommandInvocationContext(this._console, this._lifecycle, this._runtime);
     this._invocationContext = ctx;
     return ctx;
   }
@@ -468,7 +472,12 @@ export class SonarCommand extends Command {
   private createCommandAuthenticatedInvocationContext(
     auth: ResolvedAuth,
   ): CommandAuthenticatedInvocationContext {
-    const ctx = new CommandAuthenticatedInvocationContext(auth, this._lifecycle, this._runtime);
+    const ctx = new CommandAuthenticatedInvocationContext(
+      auth,
+      this._console,
+      this._lifecycle,
+      this._runtime,
+    );
     this._invocationContext = ctx;
     return ctx;
   }
@@ -522,11 +531,11 @@ export class SonarCommand extends Command {
       const thrownError = err instanceof Error ? err : new Error(String(err));
       const cliError = err instanceof CliError ? err : undefined;
 
-      blank();
-      error(thrownError.message);
+      this._console.blank();
+      this._console.error(thrownError.message);
       const hint = remediationHintFor(err);
       if (hint) {
-        print(`  → ${hint}`, 'stderr');
+        this._console.print(`  → ${hint}`, 'stderr');
       }
       logger.error(thrownError.message);
       process.exitCode = cliError?.exitCode ?? 1;
@@ -545,14 +554,17 @@ export class SonarCommand extends Command {
       const flag = option.long ?? option.flags;
       const lifecycle = option.lifecycle;
       if (lifecycle.stage === 'alpha') {
-        info(`'${flag}' is in alpha; may change or be removed without notice.`, 'stderr');
+        this._console.info(
+          `'${flag}' is in alpha; may change or be removed without notice.`,
+          'stderr',
+        );
       } else if (lifecycle.stage === 'beta') {
         this.warnIfBetaOnce(
           `${qualifiedCommandPath(this)} ${flag}`,
           `'${flag}' is in beta and may change.`,
         );
       } else {
-        warn(deprecationWarning(flag, lifecycle.sinceVersion, lifecycle.replacement));
+        this._console.warn(deprecationWarning(flag, lifecycle.sinceVersion, lifecycle.replacement));
       }
     }
   }
@@ -562,7 +574,7 @@ export class SonarCommand extends Command {
       return;
     }
 
-    warn(
+    this._console.warn(
       deprecationWarning(
         qualifiedCommandPath(this),
         this._lifecycle.sinceVersion,
@@ -590,7 +602,7 @@ export class SonarCommand extends Command {
         return;
       }
       betaWarningsShownWithoutState.add(warningKey);
-      info(message, 'stderr');
+      this._console.info(message, 'stderr');
       return;
     }
 
@@ -598,7 +610,7 @@ export class SonarCommand extends Command {
       return;
     }
 
-    info(message, 'stderr');
+    this._console.info(message, 'stderr');
     state.config.betaCommandWarnings = {
       ...state.config.betaCommandWarnings,
       [warningKey]: VERSION,

@@ -52,6 +52,7 @@ import * as stateRepository from '@/core/state/state-repository.ts';
 import { emitTelemetryEvent, flushTelemetryEvents } from '@/core/telemetry/telemetry-events.ts';
 import * as userModule from '@/core/telemetry/user.ts';
 
+import { FakeConsole } from '../../../_common/fake-console.ts';
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
 import {
   makeTelemetryState,
@@ -846,7 +847,7 @@ function resolvedRun(exitCode: number | null, stdout: string): () => Promise<Spa
 }
 
 function makeCtx() {
-  return new CommandInvocationContext();
+  return new CommandInvocationContext(new FakeConsole());
 }
 
 describe('scanAndEmitSecrets() — emitted event fields', () => {

@@ -20,6 +20,7 @@
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { type LifecycleState, STABLE_LIFECYCLE } from '@/core/commands/stage.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 /**
  * Runtime gates consulted when answering whether this execution should be
@@ -81,11 +82,14 @@ const DISABLED_RUNTIME: CommandInvocationContextRuntime = {
  * Facts are recorded with {@link recordTelemetry} and read via
  * {@link telemetryFacts} from `postAction` on the action command's context.
  * Payload shapes inside {@link TelemetryFact.payload} are owned by producers.
+ * Human-facing output goes through {@link console} (`Console`), which callers
+ * must provide. Production passes the process console from `SonarCommand`.
  */
 export class CommandInvocationContext {
   private readonly facts: TelemetryFact[] = [];
 
   constructor(
+    readonly console: Console,
     private readonly lifecycle: LifecycleState = STABLE_LIFECYCLE,
     private readonly runtime: CommandInvocationContextRuntime = DISABLED_RUNTIME,
   ) {}
@@ -132,9 +136,10 @@ export class CommandInvocationContext {
 export class CommandAuthenticatedInvocationContext extends CommandInvocationContext {
   constructor(
     readonly auth: ResolvedAuth,
+    console: Console,
     lifecycle?: LifecycleState,
     runtime?: CommandInvocationContextRuntime,
   ) {
-    super(lifecycle, runtime);
+    super(console, lifecycle, runtime);
   }
 }
