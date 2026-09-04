@@ -416,7 +416,9 @@ describe('analyzeSqaa: change-set mode', () => {
       repoRoot: process.cwd(),
     });
 
-    const report = await buildSqaaJsonReport({ staged: true }, FAKE_AUTH);
+    const report = await buildSqaaJsonReport({ staged: true }, FAKE_AUTH, {
+      telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,
+    });
 
     expect(report?.files).toHaveLength(0);
     expect(report?.ignored).toHaveLength(1);
