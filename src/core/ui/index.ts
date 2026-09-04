@@ -22,7 +22,6 @@
 
 export { bold, dim, stripAnsi, visibleLength } from './colors.ts';
 export type { Console } from './console.ts';
-export { wrapText } from './messages.ts';
 export { TerminalConsole } from './terminal-console.ts';
 export type {
   ColorFn,
