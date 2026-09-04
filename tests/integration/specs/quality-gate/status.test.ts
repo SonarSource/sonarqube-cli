@@ -678,7 +678,7 @@ describe('quality-gate status', () => {
   );
 
   it(
-    'auto-detects an open pull request for the current git branch when no flags are given',
+    'auto-detects a pull request for the current git branch when no flags are given',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -767,6 +767,27 @@ describe('quality-gate status', () => {
 
       const result = await harness.run(`quality-gate status --project my-project --format table`);
 
+      expect(result.stdout).toContain('Branch:       main (default)');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'falls back to the default branch instead of failing when the pull request lookup errors out',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK').withPullRequestsError(500))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'a.txt', 'a');
+      git(['checkout', '-b', 'feature-x'], harness.cwd.path);
+
+      const result = await harness.run(`quality-gate status --project my-project --format table`);
+
+      expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Branch:       main (default)');
     },
     { timeout: 15000 },
