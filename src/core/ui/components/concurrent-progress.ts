@@ -23,7 +23,8 @@
 import * as readline from 'node:readline';
 
 import { bold, dim, green, red, STATUS_COLORS, STATUS_ICONS, visibleLength } from '../colors.ts';
-import { phaseItem, renderPhase } from './phase.ts';
+import type { Console } from '../console.ts';
+import { phaseItem } from '../types.ts';
 
 export type ConcurrentItemStatus = 'pending' | 'running' | 'done' | 'failed';
 
@@ -61,16 +62,19 @@ export class ConcurrentProgress {
   private readonly maxVisible: number;
   private readonly showResult: boolean;
   private readonly resultTitle: string;
+  private readonly console: Console;
   private total = 0;
   protected skippedResolved = 0;
   private linesRendered = 0;
 
   constructor(opts: {
+    console: Console;
     isTTY?: boolean;
     maxVisible?: number;
     showResult?: boolean;
     resultTitle?: string;
   }) {
+    this.console = opts.console;
     this.isTTY = opts.isTTY ?? process.stdout.isTTY;
     this.maxVisible = opts.maxVisible ?? DEFAULT_MAX_VISIBLE;
     this.showResult = opts.showResult ?? true;
@@ -117,7 +121,7 @@ export class ConcurrentProgress {
         const state = this.items.get(slug);
         return phaseItem(slug, toPhaseStatus(state?.status), state?.detail);
       });
-      renderPhase(this.resultTitle, phaseItems);
+      this.console.phase(this.resultTitle, phaseItems);
     }
 
     return { succeeded, failed };

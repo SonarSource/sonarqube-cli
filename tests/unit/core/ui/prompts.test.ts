@@ -30,7 +30,7 @@ import {
   calculateViewport,
   checkboxComponent,
   toggleSelected,
-} from '@/core/ui/components/prompts.ts';
+} from '@/core/ui/terminal-console.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 

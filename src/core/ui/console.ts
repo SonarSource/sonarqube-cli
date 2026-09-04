@@ -19,11 +19,15 @@
  */
 
 import type {
+  ColorFn,
   MultiSelectOption,
   MultiSelectPromptOptions,
+  NoteOptions,
+  OutputChannel,
+  PhaseItem,
+  PhaseOptions,
   SelectOption,
-} from './components/prompts.ts';
-import type { ColorFn, NoteOptions, OutputChannel, PhaseItem, PhaseOptions } from './types.ts';
+} from './types.ts';
 
 /**
  * Human-facing terminal I/O for the CLI (messages, notes, prompts, spinners).
@@ -169,8 +173,4 @@ export interface Console {
   getMessagesForFormattedOutput(): string[];
 }
 
-export type {
-  MultiSelectOption,
-  MultiSelectPromptOptions,
-  SelectOption,
-} from './components/prompts.ts';
+export type { MultiSelectOption, MultiSelectPromptOptions, SelectOption } from './types.ts';
