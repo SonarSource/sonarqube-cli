@@ -22,10 +22,6 @@
 
 import type { SessionStartAgent, SessionStartAgentAdapter } from './types.ts';
 
-function writeJson(value: unknown): void {
-  process.stdout.write(JSON.stringify(value) + '\n');
-}
-
 interface ClaudeCodexSessionStartPayload {
   session_id: string;
   cwd: string;
@@ -37,11 +33,9 @@ const claudeCodexAdapter: SessionStartAgentAdapter = {
     const p = payload as ClaudeCodexSessionStartPayload;
     return { sessionId: p.session_id, startDir: p.cwd, eventName: p.hook_event_name };
   },
-  emit: ({ additionalContext }, input) => {
-    writeJson({
-      hookSpecificOutput: { hookEventName: input.eventName, additionalContext },
-    });
-  },
+  emit: ({ additionalContext }, input) => ({
+    hookSpecificOutput: { hookEventName: input.eventName, additionalContext },
+  }),
 };
 
 interface CopilotSessionStartPayload {
@@ -54,9 +48,7 @@ const copilotAdapter: SessionStartAgentAdapter = {
     const p = payload as CopilotSessionStartPayload;
     return { sessionId: p.sessionId, startDir: p.cwd, eventName: undefined };
   },
-  emit: ({ additionalContext }) => {
-    writeJson({ additionalContext });
-  },
+  emit: ({ additionalContext }) => ({ additionalContext }),
 };
 
 interface CursorSessionStartPayload {
@@ -70,9 +62,7 @@ const cursorAdapter: SessionStartAgentAdapter = {
     const p = payload as CursorSessionStartPayload;
     return { sessionId: p.conversation_id, startDir: p.workspace_roots[0], eventName: undefined };
   },
-  emit: ({ additionalContext }) => {
-    writeJson({ additional_context: additionalContext });
-  },
+  emit: ({ additionalContext }) => ({ additional_context: additionalContext }),
 };
 
 const SESSION_START_ADAPTERS: Record<SessionStartAgent, SessionStartAgentAdapter> = {

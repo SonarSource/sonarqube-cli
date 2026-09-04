@@ -65,7 +65,7 @@ export async function agentSessionStart(agent: string): Promise<HookCommandResul
 
     const output = await resolveSessionStartContext(input);
     if (output !== null) {
-      adapter.emit(output, input);
+      process.stdout.write(JSON.stringify(adapter.emit(output, input)) + '\n');
     }
   } catch (err) {
     logSkip((err as Error).message);
