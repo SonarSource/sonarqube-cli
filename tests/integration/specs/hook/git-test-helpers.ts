@@ -29,19 +29,41 @@ import { join } from 'node:path';
 export const GIT_BIN = Bun.which('git') ?? '/usr/bin/git';
 
 /**
+ * Cap each git spawn so a hung `git add` on Windows (index.lock held by the
+ * virus scanner) cannot eat Bun's ~5s beforeEach timeout. Five 800ms attempts
+ * plus backoff stay under that budget; non-Windows keeps a longer cap so a
+ * genuine hang still fails the helper instead of the test runner.
+ */
+const GIT_COMMAND_TIMEOUT_MS = process.platform === 'win32' ? 800 : 15_000;
+
+/**
  * Windows CI intermittently fails git commands against a freshly-created repo
- * with ERROR_ACCESS_DENIED (exit status 5) or a busy/locked file (EBUSY/EPERM/
- * EACCES) when the virus scanner or search indexer briefly holds a handle on a
- * file under the new `.git` directory. These are transient and clear on a short
- * retry; anything else (real git errors, non-Windows failures) is rethrown
- * immediately so genuine problems still surface.
+ * with ERROR_ACCESS_DENIED (exit status 5), a busy/locked file (EBUSY/EPERM/
+ * EACCES), or a spawn timeout (ETIMEDOUT / SIGTERM) when the virus scanner or
+ * search indexer briefly holds a handle on a file under the new `.git`
+ * directory. These are transient and clear on a short retry; anything else
+ * (real git errors, non-Windows failures) is rethrown immediately so genuine
+ * problems still surface.
  */
 function isTransientWindowsGitError(error: unknown): boolean {
   if (process.platform !== 'win32') {
     return false;
   }
-  const { status, code } = error as { status?: number; code?: string };
-  return status === 5 || code === 'EBUSY' || code === 'EPERM' || code === 'EACCES';
+  const { status, code, signal, killed } = error as {
+    status?: number | null;
+    code?: string;
+    signal?: string | null;
+    killed?: boolean;
+  };
+  return (
+    status === 5 ||
+    code === 'EBUSY' ||
+    code === 'EPERM' ||
+    code === 'EACCES' ||
+    code === 'ETIMEDOUT' ||
+    signal === 'SIGTERM' ||
+    killed === true
+  );
 }
 
 export function git(args: string[], cwd: string): string {
@@ -53,6 +75,7 @@ export function git(args: string[], cwd: string): string {
         cwd,
         encoding: 'utf-8',
         stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: GIT_COMMAND_TIMEOUT_MS,
       }).trim();
     } catch (error) {
       if (attempt >= maxAttempts || !isTransientWindowsGitError(error)) {
