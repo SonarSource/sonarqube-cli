@@ -183,30 +183,38 @@ export class SonarHttpClient {
       print(`request body: ${requestBody}`, 'stderr');
     }
 
-    const response = await fetchAuthenticated(
-      url,
-      buildRequest(method, headers, timeout, requestBody),
-    );
+    try {
+      const response = await fetchAuthenticated(
+        url,
+        buildRequest(method, headers, timeout, requestBody),
+      );
 
-    if (debug) {
-      print(`response status: ${response.status}`, 'stderr');
-      print(`response headers: ${JSON.stringify(response.headers)}`, 'stderr');
+      if (debug) {
+        print(`response status: ${response.status}`, 'stderr');
+        print(`response headers: ${JSON.stringify(response.headers)}`, 'stderr');
+      }
+
+      const error = await this.buildStatusError(response, method);
+      if (error) {
+        return Err(error);
+      }
+
+      return Ok(await response.text());
+    } catch (err) {
+      return Err(toError(err));
     }
-
-    const error = await this.buildStatusError(response, method);
-    if (error) {
-      return Err(error);
-    }
-
-    return Ok(await response.text());
   }
 
   /**
    * Make GET request to SonarQube API
    */
   async get<T>(endpoint: string, params?: QueryParams, baseUrl?: string): Promise<Result<T>> {
-    const result = await this.getSafe<T>(endpoint, params, baseUrl);
-    return this.toGetResult(result);
+    try {
+      const result = await this.getSafe<T>(endpoint, params, baseUrl);
+      return await this.toGetResult(result);
+    } catch (err) {
+      return Err(toError(err));
+    }
   }
 
   /**
@@ -218,13 +226,17 @@ export class SonarHttpClient {
     params?: QueryParams,
     baseUrl?: string,
   ): Promise<Result<T | null>> {
-    const result = await this.getSafe<T>(endpoint, params, baseUrl);
+    try {
+      const result = await this.getSafe<T>(endpoint, params, baseUrl);
 
-    if (result.response.status === HTTP_STATUS_NOT_FOUND) {
-      return Ok(null);
+      if (result.response.status === HTTP_STATUS_NOT_FOUND) {
+        return Ok(null);
+      }
+
+      return await this.toGetResult(result);
+    } catch (err) {
+      return Err(toError(err));
     }
-
-    return this.toGetResult(result);
   }
 
   private async toGetResult<T>(result: SafeGetResult<T>): Promise<Result<T>> {
@@ -276,23 +288,28 @@ export class SonarHttpClient {
     const url = `${baseUrl ?? this.serverURL}${endpoint}`;
     const headers = { ...this.commonHeaders('json'), ...extraHeaders };
 
-    const response = await fetchAuthenticated(
-      url,
-      buildRequest('POST', headers, POST_REQUEST_TIMEOUT_MS, JSON.stringify(body)),
-    );
+    try {
+      const response = await fetchAuthenticated(
+        url,
+        buildRequest('POST', headers, POST_REQUEST_TIMEOUT_MS, JSON.stringify(body)),
+      );
 
-    const error = await this.buildStatusError(response, 'POST');
-    if (error) {
-      return Err(error);
+      const error = await this.buildStatusError(response, 'POST');
+      if (error) {
+        return Err(error);
+      }
+
+      return Ok((await response.json()) as T);
+    } catch (err) {
+      return Err(toError(err));
     }
-
-    return Ok((await response.json()) as T);
   }
 
   /**
    * Generic helper to POST a form-encoded body to a SonarQube endpoint using
-   * the configured Bearer token. Throws on non-2xx responses so callers can
-   * handle failures (e.g. best-effort logout).
+   * the configured Bearer token. Resolves to `Err` (never throws) on a non-2xx
+   * response, a transport failure, or a malformed body, so callers can handle
+   * failures (e.g. best-effort logout).
    */
   async postForm(
     endpoint: string,
@@ -300,21 +317,25 @@ export class SonarHttpClient {
     timeoutMs: number = POST_REQUEST_TIMEOUT_MS,
   ): Promise<Result<void>> {
     const url = `${this.serverURL}${endpoint}`;
-    const response = await fetchAuthenticated(
-      url,
-      buildRequest(
-        'POST',
-        this.commonHeaders('form'),
-        timeoutMs,
-        new URLSearchParams(params).toString(),
-      ),
-    );
+    try {
+      const response = await fetchAuthenticated(
+        url,
+        buildRequest(
+          'POST',
+          this.commonHeaders('form'),
+          timeoutMs,
+          new URLSearchParams(params).toString(),
+        ),
+      );
 
-    const error = await this.buildStatusError(response, 'POST');
-    if (error) {
-      return Err(error);
+      const error = await this.buildStatusError(response, 'POST');
+      if (error) {
+        return Err(error);
+      }
+      return Ok(undefined);
+    } catch (err) {
+      return Err(toError(err));
     }
-    return Ok(undefined);
   }
 
   /**
@@ -324,23 +345,31 @@ export class SonarHttpClient {
    */
   async postFormJson<T>(endpoint: string, params: Record<string, string>): Promise<Result<T>> {
     const url = `${this.serverURL}${endpoint}`;
-    const response = await fetchAuthenticated(
-      url,
-      buildRequest(
-        'POST',
-        this.commonHeaders('form'),
-        POST_REQUEST_TIMEOUT_MS,
-        new URLSearchParams(params).toString(),
-      ),
-    );
+    try {
+      const response = await fetchAuthenticated(
+        url,
+        buildRequest(
+          'POST',
+          this.commonHeaders('form'),
+          POST_REQUEST_TIMEOUT_MS,
+          new URLSearchParams(params).toString(),
+        ),
+      );
 
-    const error = await this.buildStatusError(response, 'POST');
-    if (error) {
-      return Err(error);
+      const error = await this.buildStatusError(response, 'POST');
+      if (error) {
+        return Err(error);
+      }
+
+      return Ok((await response.json()) as T);
+    } catch (err) {
+      return Err(toError(err));
     }
-
-    return Ok((await response.json()) as T);
   }
+}
+
+function toError(err: unknown): Error {
+  return err instanceof Error ? err : new Error(String(err));
 }
 
 function redactSensitiveHeaders(headers: Record<string, string>): Record<string, string> {

@@ -102,6 +102,13 @@ describe('SonarHttpClient', () => {
         'SonarQube API error: 401 Internal Server Error',
       );
     });
+
+    it('returns an error result instead of throwing on a transport failure', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
+      const result = await client.get('/api/authentication/validate');
+      expect(result.ok).toBe(false);
+      expect((result as { ok: false; error: Error }).error.message).toBe('ECONNREFUSED');
+    });
   });
 
   describe('bearer token not forwarded on redirect', () => {
@@ -158,12 +165,24 @@ describe('SonarHttpClient', () => {
         json: () => Promise.resolve({}),
       } as unknown as Response);
 
-      // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(client.get('/api/endpoint')).rejects.toThrow('cross-origin redirect');
+      const result = await client.get('/api/endpoint');
+      expect(result.ok).toBe(false);
+      expect((result as { ok: false; error: Error }).error.message).toContain(
+        'cross-origin redirect',
+      );
 
       // fetch was called exactly once — the token was never sent to attacker.com
       expect(fetchSpy).toHaveBeenCalledTimes(1);
       expect(fetchSpy.mock.calls[0][0] as string).toContain(SERVER_URL);
+    });
+  });
+
+  describe('getOrNotFound', () => {
+    it('returns an error result instead of throwing on a transport failure', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
+      const result = await client.getOrNotFound('/api/some/endpoint');
+      expect(result.ok).toBe(false);
+      expect((result as { ok: false; error: Error }).error.message).toBe('ECONNREFUSED');
     });
   });
 
@@ -220,6 +239,13 @@ describe('SonarHttpClient', () => {
       expect(result.ok).toBe(false);
       expect((result as { ok: false; error: Error }).error.message).toContain('404');
     });
+
+    it('returns an error result instead of throwing on a transport failure', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
+      const result = await client.post('/api/some/endpoint', {});
+      expect(result.ok).toBe(false);
+      expect((result as { ok: false; error: Error }).error.message).toBe('ECONNREFUSED');
+    });
   });
 
   describe('postForm', () => {
@@ -253,6 +279,22 @@ describe('SonarHttpClient', () => {
       expect((result as { ok: false; error: Error }).error.message).toBe(
         'SonarQube API error: 500 Internal Server Error - {"message":"boom"}',
       );
+    });
+
+    it('returns an error result instead of throwing on a transport failure', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
+      const result = await client.postForm('/api/some/form', { name: 'test' });
+      expect(result.ok).toBe(false);
+      expect((result as { ok: false; error: Error }).error.message).toBe('ECONNREFUSED');
+    });
+  });
+
+  describe('postFormJson', () => {
+    it('returns an error result instead of throwing on a transport failure', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
+      const result = await client.postFormJson('/api/some/form', { name: 'test' });
+      expect(result.ok).toBe(false);
+      expect((result as { ok: false; error: Error }).error.message).toBe('ECONNREFUSED');
     });
   });
 
@@ -385,6 +427,13 @@ describe('SonarHttpClient', () => {
       const result = await client.genericRequest('GET', '/api/system/status');
       expect(result.ok).toBe(false);
       expect((result as { ok: false; error: Error }).error.message).toContain('Access denied');
+    });
+
+    it('returns an error result instead of throwing on a transport failure', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
+      const result = await client.genericRequest('GET', '/api/system/status');
+      expect(result.ok).toBe(false);
+      expect((result as { ok: false; error: Error }).error.message).toBe('ECONNREFUSED');
     });
 
     it('resolves a plain SonarCloud /api endpoint correctly', async () => {
