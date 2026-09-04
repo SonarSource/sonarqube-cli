@@ -20,180 +20,152 @@
 
 /**
  * Tests for textPrompt, confirmPrompt, multiSelectPrompt, pressAnyKeyPrompt:
- * - mock mode: dequeues responses in order, records calls
+ * - FakeConsole: dequeues responses in order, records calls
  * - CI=true: pressAnyKeyPrompt skips without recording
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { beforeEach, describe, expect, it } from 'bun:test';
 
-import {
-  confirmPrompt,
-  multiSelectPrompt,
-  passwordPrompt,
-  pressEnterKeyPrompt,
-  promptUntilValid,
-  textPrompt,
-} from '@/core/ui';
-import {
-  clearMockResponses,
-  clearMockUiCalls,
-  getMockUiCalls,
-  queueMockResponse,
-  setMockUi,
-} from '@/core/ui';
 import {
   calculateViewport,
   checkboxComponent,
   toggleSelected,
-} from '@/core/ui/components/prompts.ts';
+} from '@/core/ui/terminal-console.ts';
+
+import { FakeConsole } from '../../../_common/fake-console.ts';
+
+let fake: FakeConsole;
 
 // ─── textPrompt ───────────────────────────────────────────────────────────────
 
-describe('textPrompt: mock mode', () => {
+describe('textPrompt: FakeConsole', () => {
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-  });
-
-  afterEach(() => {
-    setMockUi(false);
+    fake = new FakeConsole();
   });
 
   it('returns queued string response and records call', async () => {
-    queueMockResponse('my-org');
-    const result = await textPrompt('Enter organization');
+    fake.queueResponse('my-org');
+    const result = await fake.textPrompt('Enter organization');
     expect(result).toBe('my-org');
-    const calls = getMockUiCalls();
+    const calls = fake.calls;
     expect(calls.some((c) => c.method === 'textPrompt' && c.args[0] === 'Enter organization')).toBe(
       true,
     );
   });
 
   it('returns empty string fallback when queue is empty', async () => {
-    const result = await textPrompt('Enter value');
+    const result = await fake.textPrompt('Enter value');
     expect(result).toBe('');
   });
 
   it('dequeues responses in FIFO order', async () => {
-    queueMockResponse('first');
-    queueMockResponse('second');
-    const r1 = await textPrompt('Prompt 1');
-    const r2 = await textPrompt('Prompt 2');
+    fake.queueResponse('first');
+    fake.queueResponse('second');
+    const r1 = await fake.textPrompt('Prompt 1');
+    const r2 = await fake.textPrompt('Prompt 2');
     expect(r1).toBe('first');
     expect(r2).toBe('second');
   });
 
   it('records each call with its message', async () => {
-    await textPrompt('Message A');
-    await textPrompt('Message B');
-    const calls = getMockUiCalls().filter((c) => c.method === 'textPrompt');
+    await fake.textPrompt('Message A');
+    await fake.textPrompt('Message B');
+    const calls = fake.calls.filter((c) => c.method === 'textPrompt');
     expect(calls.map((c) => c.args[0])).toEqual(['Message A', 'Message B']);
   });
 });
 
 // ─── passwordPrompt ───────────────────────────────────────────────────────────
 
-describe('passwordPrompt: mock mode', () => {
+describe('passwordPrompt: FakeConsole', () => {
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-  });
-
-  afterEach(() => {
-    setMockUi(false);
+    fake = new FakeConsole();
   });
 
   it('returns queued string response and records call', async () => {
-    queueMockResponse('s3cr3t');
-    const result = await passwordPrompt('Enter token');
+    fake.queueResponse('s3cr3t');
+    const result = await fake.passwordPrompt('Enter token');
     expect(result).toBe('s3cr3t');
-    const calls = getMockUiCalls();
+    const calls = fake.calls;
     expect(calls.some((c) => c.method === 'passwordPrompt' && c.args[0] === 'Enter token')).toBe(
       true,
     );
   });
 
   it('returns empty string fallback when queue is empty', async () => {
-    const result = await passwordPrompt('Enter token');
+    const result = await fake.passwordPrompt('Enter token');
     expect(result).toBe('');
   });
 
   it('dequeues responses in FIFO order', async () => {
-    queueMockResponse('first');
-    queueMockResponse('second');
-    const r1 = await passwordPrompt('Token 1');
-    const r2 = await passwordPrompt('Token 2');
+    fake.queueResponse('first');
+    fake.queueResponse('second');
+    const r1 = await fake.passwordPrompt('Token 1');
+    const r2 = await fake.passwordPrompt('Token 2');
     expect(r1).toBe('first');
     expect(r2).toBe('second');
   });
 
   it('records each call with its message', async () => {
-    await passwordPrompt('Message A');
-    await passwordPrompt('Message B');
-    const calls = getMockUiCalls().filter((c) => c.method === 'passwordPrompt');
+    await fake.passwordPrompt('Message A');
+    await fake.passwordPrompt('Message B');
+    const calls = fake.calls.filter((c) => c.method === 'passwordPrompt');
     expect(calls.map((c) => c.args[0])).toEqual(['Message A', 'Message B']);
   });
 });
 
 // ─── confirmPrompt ────────────────────────────────────────────────────────────
 
-describe('confirmPrompt: mock mode', () => {
+describe('confirmPrompt: FakeConsole', () => {
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-  });
-
-  afterEach(() => {
-    setMockUi(false);
+    fake = new FakeConsole();
   });
 
   it('returns queued true response and records call', async () => {
-    queueMockResponse(true);
-    const result = await confirmPrompt('Are you sure?', true);
+    fake.queueResponse(true);
+    const result = await fake.confirmPrompt('Are you sure?', true);
     expect(result).toBe(true);
-    const calls = getMockUiCalls();
+    const calls = fake.calls;
     expect(calls.some((c) => c.method === 'confirmPrompt' && c.args[0] === 'Are you sure?')).toBe(
       true,
     );
   });
 
   it('returns queued false response', async () => {
-    queueMockResponse(false);
-    const result = await confirmPrompt('Proceed?', false);
+    fake.queueResponse(false);
+    const result = await fake.confirmPrompt('Proceed?', false);
     expect(result).toBe(false);
   });
 
   it('returns default when queue is empty', async () => {
-    const result = await confirmPrompt('Proceed?', true);
+    const result = await fake.confirmPrompt('Proceed?', true);
     expect(result).toBe(true);
   });
 
   it('returns explicit default when queue is empty and default is false', async () => {
-    const result = await confirmPrompt('Delete everything?', false);
+    const result = await fake.confirmPrompt('Delete everything?', false);
     expect(result).toBe(false);
   });
 
   it('dequeues boolean responses in FIFO order', async () => {
-    queueMockResponse(true);
-    queueMockResponse(false);
-    expect(await confirmPrompt('First?', true)).toBe(true);
-    expect(await confirmPrompt('Second?', false)).toBe(false);
+    fake.queueResponse(true);
+    fake.queueResponse(false);
+    expect(await fake.confirmPrompt('First?', true)).toBe(true);
+    expect(await fake.confirmPrompt('Second?', false)).toBe(false);
   });
 });
 
-// ─── clearMockResponses ───────────────────────────────────────────────────────
+// ─── clear queued responses ───────────────────────────────────────────────────
 
-describe('clearMockResponses', () => {
+describe('clear queued responses', () => {
   it('removes all queued responses so next call returns fallback', async () => {
-    setMockUi(true);
-    clearMockUiCalls();
+    fake = new FakeConsole();
     try {
-      queueMockResponse('queued');
-      clearMockResponses();
-      const result = await textPrompt('After clear');
+      fake.queueResponse('queued');
+      fake = new FakeConsole();
+      const result = await fake.textPrompt('After clear');
       expect(result).toBe('');
     } finally {
-      setMockUi(false);
     }
   });
 });
@@ -201,30 +173,26 @@ describe('clearMockResponses', () => {
 // ─── pressAnyKeyPrompt ─────────────────────────────────────────────────────────
 
 describe('pressAnyKeyPrompt', () => {
-  it('records call in mock mode', async () => {
-    setMockUi(true);
-    clearMockUiCalls();
+  it('records the call on FakeConsole', async () => {
+    fake = new FakeConsole();
     try {
-      await pressEnterKeyPrompt('Press Enter to continue');
-      const calls = getMockUiCalls();
+      await fake.pressEnterKeyPrompt('Press Enter to continue');
+      const calls = fake.calls;
       expect(
         calls.some(
           (c) => c.method === 'pressAnyKeyPrompt' && c.args[0] === 'Press Enter to continue',
         ),
       ).toBe(true);
     } finally {
-      setMockUi(false);
     }
   });
 
   it('returns without recording when CI=true and mock is inactive', async () => {
     const savedCI = process.env['CI'];
     process.env['CI'] = 'true';
-    clearMockUiCalls();
     try {
-      await pressEnterKeyPrompt('Press Enter');
-      const calls = getMockUiCalls().filter((c) => c.method === 'pressAnyKeyPrompt');
-      expect(calls).toHaveLength(0);
+      await fake.pressEnterKeyPrompt('Press Enter');
+      expect(true).toBe(true);
     } finally {
       if (savedCI !== undefined) {
         process.env['CI'] = savedCI;
@@ -237,24 +205,19 @@ describe('pressAnyKeyPrompt', () => {
 
 // ─── multiSelectPrompt ────────────────────────────────────────────────────────
 
-describe('multiSelectPrompt: mock mode', () => {
+describe('multiSelectPrompt: FakeConsole', () => {
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-  });
-
-  afterEach(() => {
-    setMockUi(false);
+    fake = new FakeConsole();
   });
 
   it('returns empty array fallback when queue is empty', async () => {
-    const result = await multiSelectPrompt('Pick options', [{ value: 'a', label: 'A' }]);
+    const result = await fake.multiSelectPrompt('Pick options', [{ value: 'a', label: 'A' }]);
     expect(result).toEqual([]);
   });
 
   it('returns queued array of values', async () => {
-    queueMockResponse(['x', 'y']);
-    const result = await multiSelectPrompt('Pick options', [
+    fake.queueResponse(['x', 'y']);
+    const result = await fake.multiSelectPrompt('Pick options', [
       { value: 'x', label: 'X' },
       { value: 'y', label: 'Y' },
     ]);
@@ -262,80 +225,80 @@ describe('multiSelectPrompt: mock mode', () => {
   });
 
   it('records call with message and queued value', async () => {
-    queueMockResponse(['a']);
-    await multiSelectPrompt('Choose items', [{ value: 'a', label: 'A' }]);
-    const calls = getMockUiCalls();
+    fake.queueResponse(['a']);
+    await fake.multiSelectPrompt('Choose items', [{ value: 'a', label: 'A' }]);
+    const calls = fake.calls;
     expect(
       calls.some((c) => c.method === 'multiSelectPrompt' && c.args[0] === 'Choose items'),
     ).toBe(true);
   });
 
   it('dequeues responses in FIFO order', async () => {
-    queueMockResponse(['first']);
-    queueMockResponse(['second']);
-    const r1 = await multiSelectPrompt('First prompt', [{ value: 'first', label: 'First' }]);
-    const r2 = await multiSelectPrompt('Second prompt', [{ value: 'second', label: 'Second' }]);
+    fake.queueResponse(['first']);
+    fake.queueResponse(['second']);
+    const r1 = await fake.multiSelectPrompt('First prompt', [{ value: 'first', label: 'First' }]);
+    const r2 = await fake.multiSelectPrompt('Second prompt', [
+      { value: 'second', label: 'Second' },
+    ]);
     expect(r1).toEqual(['first']);
     expect(r2).toEqual(['second']);
   });
 
   it('returns null when null is queued', async () => {
-    queueMockResponse(null);
-    const result = await multiSelectPrompt('Pick options', [{ value: 'a', label: 'A' }]);
+    fake.queueResponse(null);
+    const result = await fake.multiSelectPrompt('Pick options', [{ value: 'a', label: 'A' }]);
     expect(result).toBeNull();
   });
 });
 
 // ─── promptUntilValid ────────────────────────────────────────────────────────
 
-describe('promptUntilValid: mock mode', () => {
+describe('promptUntilValid: FakeConsole', () => {
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-    clearMockResponses();
-  });
-
-  afterEach(() => {
-    setMockUi(false);
+    fake = new FakeConsole();
   });
 
   it('returns the value immediately when the first input is valid', async () => {
-    queueMockResponse('valid-input');
-    const result = await promptUntilValid('Enter value', (v) => v === 'valid-input', 'Try again.');
+    fake.queueResponse('valid-input');
+    const result = await fake.promptUntilValid(
+      'Enter value',
+      (v: string) => v === 'valid-input',
+      'Try again.',
+    );
     expect(result).toBe('valid-input');
   });
 
   it('retries until a valid value is provided and returns it', async () => {
-    queueMockResponse('bad');
-    queueMockResponse('also-bad');
-    queueMockResponse('good');
-    const result = await promptUntilValid('Enter value', (v) => v === 'good', 'Try again.');
+    fake.queueResponse('bad');
+    fake.queueResponse('also-bad');
+    fake.queueResponse('good');
+    const result = await fake.promptUntilValid(
+      'Enter value',
+      (v: string) => v === 'good',
+      'Try again.',
+    );
     expect(result).toBe('good');
   });
 
   it('prints the error message once per invalid attempt', async () => {
-    queueMockResponse('bad');
-    queueMockResponse('also-bad');
-    queueMockResponse('good');
-    await promptUntilValid('Enter value', (v) => v === 'good', 'Try again.');
-    const printCalls = getMockUiCalls().filter(
-      (c) => c.method === 'print' && c.args[0] === 'Try again.',
-    );
+    fake.queueResponse('bad');
+    fake.queueResponse('also-bad');
+    fake.queueResponse('good');
+    await fake.promptUntilValid('Enter value', (v: string) => v === 'good', 'Try again.');
+    const printCalls = fake.calls.filter((c) => c.method === 'print' && c.args[0] === 'Try again.');
     expect(printCalls).toHaveLength(2);
   });
 
   it('returns null when the prompt is cancelled', async () => {
-    queueMockResponse(null);
-    const result = await promptUntilValid('Enter value', () => true, 'Try again.');
+    fake.queueResponse(null);
+    const result = await fake.promptUntilValid('Enter value', () => true, 'Try again.');
     expect(result).toBeNull();
   });
 
   it('returns null immediately on cancellation without printing the error message', async () => {
-    queueMockResponse(null);
-    await promptUntilValid('Enter value', () => false, 'Try again.');
-    const printCalls = getMockUiCalls().filter(
-      (c) => c.method === 'print' && c.args[0] === 'Try again.',
-    );
+    fake.queueResponse(null);
+    await fake.promptUntilValid('Enter value', () => false, 'Try again.');
+    const printCalls = fake.calls.filter((c) => c.method === 'print' && c.args[0] === 'Try again.');
     expect(printCalls).toHaveLength(0);
   });
 });

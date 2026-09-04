@@ -27,9 +27,7 @@ void mock.module('@/core/ui/colors.js', mockColorsTTY);
 
 import { mock } from 'bun:test';
 
-import { phase, phaseItem } from '@/core/ui';
-import { intro, outro } from '@/core/ui';
-import { blank } from '@/core/ui';
+import { phaseItem, TerminalConsole } from '@/core/ui';
 
 import { mockColorsTTY } from '../../../_common/colors-mock.ts';
 
@@ -43,7 +41,7 @@ describe('phase: TTY rendering', () => {
       return true;
     });
     try {
-      phase('Health Check', [phaseItem('Token', 'done')]);
+      new TerminalConsole().phase('Health Check', [phaseItem('Token', 'done')]);
       expect(output.join('')).toContain('Health Check');
     } finally {
       writeSpy.mockRestore();
@@ -57,7 +55,10 @@ describe('phase: TTY rendering', () => {
       return true;
     });
     try {
-      phase('Phase', [phaseItem('Token valid', 'done'), phaseItem('Server down', 'failed')]);
+      new TerminalConsole().phase('Phase', [
+        phaseItem('Token valid', 'done'),
+        phaseItem('Server down', 'failed'),
+      ]);
       const combined = output.join('');
       expect(combined).toContain('Token valid');
       expect(combined).toContain('Server down');
@@ -73,7 +74,7 @@ describe('phase: TTY rendering', () => {
       return true;
     });
     try {
-      phase('Phase', [phaseItem('Config', 'warn', 'field missing')]);
+      new TerminalConsole().phase('Phase', [phaseItem('Config', 'warn', 'field missing')]);
       expect(output.join('')).toContain('field missing');
     } finally {
       writeSpy.mockRestore();
@@ -87,7 +88,9 @@ describe('phase: TTY rendering', () => {
       return true;
     });
     try {
-      phase('Installed', [phaseItem('Feature', 'done', undefined, ['~/.config/a'])]);
+      new TerminalConsole().phase('Installed', [
+        phaseItem('Feature', 'done', undefined, ['~/.config/a']),
+      ]);
       expect(output.join('')).toContain('       ~/.config/a');
     } finally {
       writeSpy.mockRestore();
@@ -101,7 +104,7 @@ describe('phase: TTY rendering', () => {
       return true;
     });
     try {
-      phase('Custom', [phaseItem('step', 'info')], {
+      new TerminalConsole().phase('Custom', [phaseItem('step', 'info')], {
         titleColor: (s: string) => `>>>${s}<<<`,
         iconColors: { info: (s: string) => `[${s}]` },
       });
@@ -123,7 +126,7 @@ describe('intro: TTY rendering', () => {
       return true;
     });
     try {
-      intro('Getting Started');
+      new TerminalConsole().intro('Getting Started');
       const combined = output.join('');
       expect(combined).toContain('Getting Started');
       expect(combined).toContain('━');
@@ -139,7 +142,7 @@ describe('intro: TTY rendering', () => {
       return true;
     });
     try {
-      intro('Title', 'subtitle text');
+      new TerminalConsole().intro('Title', 'subtitle text');
       expect(output.join('')).toContain('subtitle text');
     } finally {
       writeSpy.mockRestore();
@@ -157,7 +160,7 @@ describe('outro: TTY rendering', () => {
       return true;
     });
     try {
-      outro('Setup complete', 'success');
+      new TerminalConsole().outro('Setup complete', 'success');
       const combined = output.join('');
       expect(combined).toContain('Setup complete');
       expect(combined).toContain('━');
@@ -173,7 +176,7 @@ describe('outro: TTY rendering', () => {
       return true;
     });
     try {
-      outro('Setup failed', 'error');
+      new TerminalConsole().outro('Setup failed', 'error');
       expect(output.join('')).toContain('Setup failed');
     } finally {
       writeSpy.mockRestore();
@@ -191,7 +194,7 @@ describe('blank: TTY rendering', () => {
       return true;
     });
     try {
-      blank();
+      new TerminalConsole().blank();
       expect(output).toContain('\n');
     } finally {
       writeSpy.mockRestore();

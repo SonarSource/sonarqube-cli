@@ -21,50 +21,18 @@
 // Public API for the UI module
 
 export { bold, dim, stripAnsi, visibleLength } from './colors.ts';
-export { note } from './components/note.ts';
-export type { PhaseItem, StepStatus } from './components/phase.ts';
-export { phase, phaseItem } from './components/phase.ts';
+export type { Console } from './console.ts';
+export { TerminalConsole } from './terminal-console.ts';
 export type {
+  ColorFn,
+  LogOptions,
   MultiSelectOption,
   MultiSelectPromptOptions,
+  NoteOptions,
+  OutputChannel,
+  PhaseItem,
+  PhaseOptions,
   SelectOption,
-} from './components/prompts.ts';
-export {
-  confirmPrompt,
-  multiSelectPrompt,
-  passwordPrompt,
-  pressEnterKeyPrompt,
-  promptUntilValid,
-  selectPrompt,
-  textPrompt,
-} from './components/prompts.ts';
-export { intro, outro } from './components/sections.ts';
-export { withSpinner } from './components/spinner.ts';
-export type { Console } from './console.ts';
-export {
-  blank,
-  discreetSuccess,
-  error,
-  getMessagesForFormattedOutput,
-  info,
-  isFormattedOutputMode,
-  print,
-  setFormattedOutputMode,
-  success,
-  text,
-  warn,
-  wrapText,
-} from './messages.ts';
-export type { UiCall, UiMethod } from './mock.ts';
-export {
-  clearMockResponses,
-  clearMockUiCalls,
-  findMockUiCall,
-  getMockUiCalls,
-  isMockActive,
-  queueMockResponse,
-  setMockTty,
-  setMockUi,
-} from './mock.ts';
-export { TerminalConsole } from './terminal-console.ts';
-export type { ColorFn, LogOptions, NoteOptions, OutputChannel, PhaseOptions } from './types.ts';
+  StepStatus,
+} from './types.ts';
+export { phaseItem } from './types.ts';

@@ -22,7 +22,6 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { setMockTty } from '@/core/ui';
 
 import { ScaScanOrchestrator } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
 import type { AnalyzeProjectResponse } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
@@ -245,7 +244,6 @@ describe('analyzeDependencyRisks - output format', () => {
   beforeEach(() => {
     fake = new FakeConsole();
     FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(FAKE_AUTH, fake);
-    setMockTty(false);
     runSpy = spyOn(ScaScanOrchestrator.prototype, 'run').mockResolvedValue({
       response: SCAN_RESULT_STUB,
       scanDurationMs: 0,

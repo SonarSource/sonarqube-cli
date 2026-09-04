@@ -91,6 +91,7 @@ async function buildSqaaJsonReportFromEntries(
       branch,
       wireDepth,
       displayDepth,
+      runOptions.telemetryCtx.console,
     ),
   );
   const report = buildJsonReport(tally, [], allPaths, cwd, displayDepth);
@@ -144,6 +145,7 @@ async function buildSqaaJsonReportFromChangeSet(
       resolvedBranch,
       wireDepth,
       displayDepth,
+      console,
     ),
   );
   const report = buildJsonReport(tally, ignored, allPaths, repoRoot, displayDepth);

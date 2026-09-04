@@ -29,7 +29,6 @@ import * as hooks from '@/commands/integrate/claude/hooks.ts';
 import type { AgentExtension, CliState, HookExtension } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
-import { setMockUi } from '@/core/ui';
 import * as migration from '@/core/update/claude-hooks-migration.ts';
 import { migrateClaudeCodeHooks } from '@/core/update/claude-hooks-migration.ts';
 
@@ -339,13 +338,11 @@ describe('migrateHookScripts', () => {
   let testDir: string;
 
   beforeEach(() => {
-    setMockUi(true);
     testDir = join(tmpdir(), `sonar-cli-migration-test-${Date.now()}`);
     fs.mkdirSync(testDir, { recursive: true });
   });
 
   afterEach(() => {
-    setMockUi(false);
     fs.rmSync(testDir, { recursive: true, force: true });
   });
 
@@ -436,13 +433,11 @@ describe('removeObsoleteHookArtifacts', () => {
   let testDir: string;
 
   beforeEach(() => {
-    setMockUi(true);
     testDir = join(tmpdir(), `sonar-cli-migration-test-${Date.now()}`);
     fs.mkdirSync(testDir, { recursive: true });
   });
 
   afterEach(() => {
-    setMockUi(false);
     fs.rmSync(testDir, { recursive: true, force: true });
   });
 

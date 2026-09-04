@@ -24,13 +24,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-import {
-  confirmPrompt,
-  passwordPrompt,
-  pressEnterKeyPrompt,
-  selectPrompt,
-  textPrompt,
-} from '@/core/ui';
+import { TerminalConsole } from '@/core/ui';
 
 // Mutable state for controlling what each prompt returns
 let mockTextResult: string | symbol = 'default';
@@ -38,6 +32,7 @@ let mockConfirmResult: boolean | symbol = true;
 let mockSelectResult: unknown = 'default';
 let mockPasswordResult: string | symbol = 'default';
 let capturedPasswordRenders: string[] = [];
+const terminal = new TerminalConsole();
 
 void mock.module('@clack/core', () => {
   class TextPromptMock {
@@ -157,19 +152,19 @@ describe('textPrompt: real prompt path', () => {
 
   it('returns the string value from prompt', async () => {
     mockTextResult = 'entered-value';
-    const result = await textPrompt('Enter name');
+    const result = await terminal.textPrompt('Enter name');
     expect(result).toBe('entered-value');
   });
 
   it('returns null when prompt is cancelled (symbol returned)', async () => {
     mockTextResult = Symbol('cancel');
-    const result = await textPrompt('Enter name');
+    const result = await terminal.textPrompt('Enter name');
     expect(result).toBeNull();
   });
 
   it('returns empty string when prompt returns empty string', async () => {
     mockTextResult = '';
-    const result = await textPrompt('Enter name');
+    const result = await terminal.textPrompt('Enter name');
     expect(result).toBe('');
   });
 });
@@ -183,19 +178,19 @@ describe('confirmPrompt: real prompt path', () => {
 
   it('returns true when prompt confirms', async () => {
     mockConfirmResult = true;
-    const result = await confirmPrompt('Are you sure?', true);
+    const result = await terminal.confirmPrompt('Are you sure?', true);
     expect(result).toBe(true);
   });
 
   it('returns false when prompt declines', async () => {
     mockConfirmResult = false;
-    const result = await confirmPrompt('Are you sure?', true);
+    const result = await terminal.confirmPrompt('Are you sure?', true);
     expect(result).toBe(false);
   });
 
   it('returns null when prompt is cancelled (symbol returned)', async () => {
     mockConfirmResult = Symbol('cancel');
-    const result = await confirmPrompt('Are you sure?', true);
+    const result = await terminal.confirmPrompt('Are you sure?', true);
     expect(result).toBeNull();
   });
 });
@@ -214,13 +209,13 @@ describe('selectPrompt: real prompt path', () => {
 
   it('returns the selected value from prompt', async () => {
     mockSelectResult = 'opt-b';
-    const result = await selectPrompt('Pick one', options);
+    const result = await terminal.selectPrompt('Pick one', options);
     expect(result).toBe('opt-b');
   });
 
   it('returns null when prompt is cancelled (symbol returned)', async () => {
     mockSelectResult = Symbol('cancel');
-    const result = await selectPrompt('Pick one', options);
+    const result = await terminal.selectPrompt('Pick one', options);
     expect(result).toBeNull();
   });
 });
@@ -235,19 +230,19 @@ describe('passwordPrompt: real prompt path', () => {
 
   it('returns the string value from prompt', async () => {
     mockPasswordResult = 's3cr3t';
-    const result = await passwordPrompt('Enter token');
+    const result = await terminal.passwordPrompt('Enter token');
     expect(result).toBe('s3cr3t');
   });
 
   it('returns null when prompt is cancelled (symbol returned)', async () => {
     mockPasswordResult = Symbol('cancel');
-    const result = await passwordPrompt('Enter token');
+    const result = await terminal.passwordPrompt('Enter token');
     expect(result).toBeNull();
   });
 
   it('submit render omits the actual value — password is never echoed', async () => {
     mockPasswordResult = 's3cr3t';
-    await passwordPrompt('Enter token');
+    await terminal.passwordPrompt('Enter token');
     const submitRender = capturedPasswordRenders[1]; // [0]=initial, [1]=submit, [2]=cancel
     expect(submitRender).toContain('Enter token');
     expect(submitRender).not.toContain('s3cr3t');
@@ -255,7 +250,7 @@ describe('passwordPrompt: real prompt path', () => {
 
   it('initial render shows masked input (bullets) not the real value', async () => {
     mockPasswordResult = 's3cr3t';
-    await passwordPrompt('Enter token');
+    await terminal.passwordPrompt('Enter token');
     const initialRender = capturedPasswordRenders[0];
     expect(initialRender).toContain('•••');
     expect(initialRender).not.toContain('s3cr3t');
@@ -301,7 +296,7 @@ describe('pressEnterKeyPrompt: TTY path', () => {
 
   it('writes prompt message and enables raw mode', async () => {
     setTimeout(() => process.stdin.emit('data', Buffer.from([0x0d])), 0);
-    await pressEnterKeyPrompt('Press Enter');
+    await terminal.pressEnterKeyPrompt('Press Enter');
     expect(writeSpy).toHaveBeenCalledWith(expect.stringContaining('Press Enter'));
     expect(setRawModeSpy).toHaveBeenCalledWith(true);
     expect(setRawModeSpy).toHaveBeenCalledWith(false);
@@ -309,13 +304,13 @@ describe('pressEnterKeyPrompt: TTY path', () => {
 
   it('resolves when Enter (CR 0x0d) is pressed', async () => {
     setTimeout(() => process.stdin.emit('data', Buffer.from([0x0d])), 0);
-    const result = await pressEnterKeyPrompt('Press Enter');
+    const result = await terminal.pressEnterKeyPrompt('Press Enter');
     expect(result).toBeUndefined();
   });
 
   it('resolves when Enter (LF 0x0a) is pressed', async () => {
     setTimeout(() => process.stdin.emit('data', Buffer.from([0x0a])), 0);
-    const result = await pressEnterKeyPrompt('Press Enter');
+    const result = await terminal.pressEnterKeyPrompt('Press Enter');
     expect(result).toBeUndefined();
   });
 
@@ -325,13 +320,13 @@ describe('pressEnterKeyPrompt: TTY path', () => {
       process.stdin.emit('data', Buffer.from([0x1b])); // Escape — ignored
       process.stdin.emit('data', Buffer.from([0x0d])); // Enter — resolves
     }, 0);
-    const result = await pressEnterKeyPrompt('Press Enter');
+    const result = await terminal.pressEnterKeyPrompt('Press Enter');
     expect(result).toBeUndefined();
   });
 
   it('calls process.exit(130) on Ctrl+C', async () => {
     // Start the prompt (don't await — it won't resolve when exit is mocked as no-op)
-    const promptPromise = pressEnterKeyPrompt('Press Enter');
+    const promptPromise = terminal.pressEnterKeyPrompt('Press Enter');
     setTimeout(() => process.stdin.emit('data', Buffer.from([0x03])), 0);
     await new Promise<void>((r) => setTimeout(r, 20));
     expect(mockExit).toHaveBeenCalledWith(130);

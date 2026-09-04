@@ -32,7 +32,6 @@ import { SonarQubeClient } from '@/core/server/client.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
-import { setMockTty } from '@/core/ui';
 
 import { analyzeSqaa, buildSqaaJsonReport } from '../../../../src/commands/analyze/sqaa.ts';
 import * as changesetModule from '../../../../src/commands/analyze/sqaa-changeset.ts';
@@ -86,7 +85,6 @@ function makeDiscoveredProject(projectKey: string | undefined) {
 beforeEach(() => {
   fake = new FakeConsole();
   FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(FAKE_AUTH, fake);
-  setMockTty(false);
 
   loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeCloudState());
   saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);

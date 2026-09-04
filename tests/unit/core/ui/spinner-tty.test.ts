@@ -23,7 +23,7 @@
 
 import { describe, expect, it, spyOn } from 'bun:test';
 
-import { withSpinner } from '@/core/ui';
+import { TerminalConsole } from '@/core/ui';
 
 async function withTTY(fn: () => Promise<void>): Promise<void> {
   const original = process.stdout.isTTY;
@@ -44,7 +44,7 @@ describe('withSpinner: TTY success path', () => {
     });
     try {
       await withTTY(async () => {
-        await withSpinner('Loading', () => Promise.resolve('done'));
+        await new TerminalConsole().withSpinner('Loading', () => Promise.resolve('done'));
       });
       expect(output.some((s) => s.includes('✓') && s.includes('Loading'))).toBe(true);
     } finally {
@@ -57,7 +57,9 @@ describe('withSpinner: TTY success path', () => {
     try {
       let result: string | undefined;
       await withTTY(async () => {
-        result = await withSpinner('Task', async () => Promise.resolve('value'));
+        result = await new TerminalConsole().withSpinner('Task', async () =>
+          Promise.resolve('value'),
+        );
       });
       expect(result).toBe('value');
     } finally {
@@ -75,7 +77,7 @@ describe('withSpinner: TTY animation frame', () => {
     });
     try {
       await withTTY(async () => {
-        await withSpinner('Animating', async () => {
+        await new TerminalConsole().withSpinner('Animating', async () => {
           await Bun.sleep(100); // > INTERVAL_MS=80, triggers at least one frame
           return 'done';
         });
@@ -96,9 +98,11 @@ describe('withSpinner: TTY error path', () => {
     });
     try {
       await withTTY(async () => {
-        await withSpinner('Failing', () => {
-          throw new Error('tty task error');
-        }).catch(() => {});
+        await new TerminalConsole()
+          .withSpinner('Failing', () => {
+            throw new Error('tty task error');
+          })
+          .catch(() => {});
       });
       expect(output.some((s) => s.includes('✗') && s.includes('Failing'))).toBe(true);
     } finally {
@@ -111,7 +115,7 @@ describe('withSpinner: TTY error path', () => {
     try {
       await withTTY(() => {
         expect(
-          withSpinner('Failing', () => {
+          new TerminalConsole().withSpinner('Failing', () => {
             throw new Error('propagated');
           }),
         ).rejects.toThrow('propagated');

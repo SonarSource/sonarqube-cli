@@ -53,7 +53,7 @@ const SEVERITY_COLORS: Record<string, (s: string) => string> = {
   INFO: dim,
 };
 
-// Mirrors MULTISELECT_MAX_SELECTED in src/core/ui/components/prompts.ts. Kept local
+// Mirrors MULTISELECT_MAX_SELECTED in src/core/ui/terminal-console.ts. Kept local
 // to avoid coupling the command surface to a UI implementation constant.
 const MAX_REMEDIATION_ISSUES = 20;
 

@@ -23,8 +23,7 @@
 import * as readline from 'node:readline';
 
 import { cyan, yellow } from '../colors.ts';
-import { warn } from '../messages.ts';
-import { isMockActive, recordCall } from '../mock.ts';
+import type { Console } from '../console.ts';
 
 export type FileStatus = 'waiting' | 'analyzing' | 'done' | 'failed' | 'skipped' | 'ignored';
 
@@ -52,6 +51,7 @@ export class SqaaProgress {
   private readonly statuses: FileStatus[];
   private readonly isTTY: boolean;
   private readonly silent: boolean;
+  private readonly console: Console;
   private readonly processableTotal: number;
   private liveLineRendered = false;
 
@@ -66,6 +66,7 @@ export class SqaaProgress {
     ignoredFiles?: string[];
     isTTY?: boolean;
     silent?: boolean;
+    console: Console;
   }) {
     const ignored = opts.ignoredFiles ?? [];
     this.allFiles = [...opts.files, ...ignored];
@@ -74,15 +75,12 @@ export class SqaaProgress {
     this.statuses = [...opts.files.map(() => waiting), ...ignored.map(() => ignoredStatus)];
     this.isTTY = opts.isTTY ?? process.stdout.isTTY;
     this.silent = opts.silent ?? false;
+    this.console = opts.console;
     this.processableTotal = opts.files.length;
   }
 
   start(): void {
     if (this.silent) return;
-    if (isMockActive()) {
-      recordCall('sqaaProgress.start');
-      return;
-    }
     if (this.isTTY) {
       this.startDotAnimation();
       this.renderLiveLine();
@@ -94,16 +92,12 @@ export class SqaaProgress {
     if (this.payloadSplitWarned) return;
     this.payloadSplitWarned = true;
     if (this.silent) return;
-    if (isMockActive()) {
-      recordCall('sqaaProgress.warnPayloadSplit');
-      return;
-    }
     // Erase the live line first so the warning is not overwritten by the
     // next animation tick; the live line is re-rendered fresh below it.
     if (this.isTTY) {
       this.eraseLiveLine();
     }
-    warn(PAYLOAD_SPLIT_WARNING);
+    this.console.warn(PAYLOAD_SPLIT_WARNING);
   }
 
   updateChunk(_chunkIndex: number, status: Exclude<FileStatus, 'ignored'>): void {
@@ -114,10 +108,6 @@ export class SqaaProgress {
       this.retryLabel = undefined;
     }
     if (this.silent) return;
-    if (isMockActive()) {
-      recordCall('sqaaProgress.updateChunk', _chunkIndex, status);
-      return;
-    }
     if (this.isTTY) {
       this.renderLiveLine();
     }
@@ -126,10 +116,6 @@ export class SqaaProgress {
   update(globalIndex: number, status: FileStatus): void {
     this.statuses[globalIndex] = status;
     if (this.silent) return;
-    if (isMockActive()) {
-      recordCall('sqaaProgress.update', globalIndex, status);
-      return;
-    }
     if (this.isTTY) {
       this.renderLiveLine();
     }
@@ -145,10 +131,6 @@ export class SqaaProgress {
     if (this.silent) {
       await sleep(delayMs);
       this.runPhase = 'analyzing';
-      return;
-    }
-    if (isMockActive()) {
-      recordCall('sqaaProgress.retryingChunk', _chunkIndex, attempt, maxRetries, delayMs);
       return;
     }
 
@@ -178,10 +160,6 @@ export class SqaaProgress {
       }
     }
     if (this.silent) return;
-    if (isMockActive()) {
-      recordCall('sqaaProgress.skipRemaining', fromIndex);
-      return;
-    }
     if (this.isTTY) {
       this.renderLiveLine();
     }
@@ -194,10 +172,6 @@ export class SqaaProgress {
   finish(): void {
     this.stopDotAnimation();
     if (this.silent) return;
-    if (isMockActive()) {
-      recordCall('sqaaProgress.finish');
-      return;
-    }
     if (this.isTTY) {
       this.eraseLiveLine();
     }

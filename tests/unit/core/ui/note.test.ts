@@ -19,37 +19,36 @@
  */
 
 /**
- * Tests for note() component:
- * - mock mode: records call, skips rendering
+ * Tests for fake.note() component:
+ * - FakeConsole: records call, skips rendering
  * - TTY box rendering (renderTTY): borders, title, content, string splitting
  */
 
-import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
+import { beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import { mockColorsTTY } from '../../../_common/colors-mock.ts';
 
 // Override colors to simulate TTY environment — must be before any imports
 void mock.module('@/core/ui/colors.js', mockColorsTTY);
 
-import { clearMockUiCalls, getMockUiCalls, note, setMockUi, stripAnsi } from '@/core/ui';
+import { stripAnsi, TerminalConsole } from '@/core/ui';
 
-// ─── Mock mode ────────────────────────────────────────────────────────────────
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
-describe('note(): mock mode', () => {
+// ─── FakeConsole ────────────────────────────────────────────────────────────────
+
+describe('fake.note(): FakeConsole', () => {
+  let fake: FakeConsole;
+
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-  });
-
-  afterEach(() => {
-    setMockUi(false);
+    fake = new FakeConsole();
   });
 
   it('records call without writing to stdout', () => {
     const writeSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
     try {
-      note('some content', 'My Title');
-      const calls = getMockUiCalls();
+      fake.note('some content', 'My Title');
+      const calls = fake.calls;
       expect(calls.some((c) => c.method === 'note')).toBe(true);
       expect(writeSpy).not.toHaveBeenCalled();
     } finally {
@@ -58,8 +57,8 @@ describe('note(): mock mode', () => {
   });
 
   it('records content and title arguments', () => {
-    note(['line1', 'line2'], 'Section Title');
-    const calls = getMockUiCalls();
+    fake.note(['line1', 'line2'], 'Section Title');
+    const calls = fake.calls;
     const noteCall = calls.find((c) => c.method === 'note');
     expect(noteCall).toBeDefined();
     expect(noteCall!.args[0]).toEqual(['line1', 'line2']);
@@ -67,15 +66,15 @@ describe('note(): mock mode', () => {
   });
 
   it('records call without title when title is omitted', () => {
-    note('plain content');
-    const calls = getMockUiCalls();
+    fake.note('plain content');
+    const calls = fake.calls;
     expect(calls.some((c) => c.method === 'note')).toBe(true);
   });
 });
 
 // ─── TTY box rendering ────────────────────────────────────────────────────────
 
-describe('note(): TTY box rendering (renderTTY)', () => {
+describe('new TerminalConsole().note(): TTY box rendering (renderTTY)', () => {
   it('renders box borders around content', () => {
     const output: string[] = [];
     const writeSpy = spyOn(process.stdout, 'write').mockImplementation((s) => {
@@ -83,7 +82,7 @@ describe('note(): TTY box rendering (renderTTY)', () => {
       return true;
     });
     try {
-      note(['First line', 'Second line']);
+      new TerminalConsole().note(['First line', 'Second line']);
       expect(writeSpy).toHaveBeenCalled();
       const rendered = output.join('');
       expect(rendered).toContain('First line');
@@ -103,7 +102,7 @@ describe('note(): TTY box rendering (renderTTY)', () => {
       return true;
     });
     try {
-      note(['content line'], 'My Title');
+      new TerminalConsole().note(['content line'], 'My Title');
       const rendered = output.join('');
       expect(rendered).toContain('My Title');
       expect(rendered).toContain('┌─');
@@ -119,7 +118,7 @@ describe('note(): TTY box rendering (renderTTY)', () => {
       return true;
     });
     try {
-      note('line one\nline two');
+      new TerminalConsole().note('line one\nline two');
       const rendered = output.join('');
       expect(rendered).toContain('line one');
       expect(rendered).toContain('line two');
@@ -135,7 +134,7 @@ describe('note(): TTY box rendering (renderTTY)', () => {
       return true;
     });
     try {
-      note(['only content']);
+      new TerminalConsole().note(['only content']);
       const rendered = output.join('');
       expect(rendered).toContain('only content');
       // No title → plain top border starting with '┌─'
@@ -153,7 +152,7 @@ describe('note(): TTY box rendering (renderTTY)', () => {
         return true;
       });
       try {
-        note(content);
+        new TerminalConsole().note(content);
         return output.join('');
       } finally {
         writeSpy.mockRestore();
@@ -177,7 +176,7 @@ describe('note(): TTY box rendering (renderTTY)', () => {
     try {
       // A dim-styled line far wider than the box.
       const styled = `\x1b[2m${'x'.repeat(200)}\x1b[22m`;
-      note([styled]);
+      new TerminalConsole().note([styled]);
       const rendered = output.join('');
       // The overflow cut strips styling entirely.
       expect(rendered).not.toContain('\x1b[2m');
@@ -195,7 +194,7 @@ describe('note(): TTY box rendering (renderTTY)', () => {
       return true;
     });
     try {
-      note(['content']);
+      new TerminalConsole().note(['content']);
       const rendered = output.join('');
       expect(rendered.endsWith('\n')).toBe(true);
     } finally {

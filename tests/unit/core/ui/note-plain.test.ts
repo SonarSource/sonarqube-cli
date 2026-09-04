@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Tests for note() renderPlain path (non-TTY, no mock)
+// Tests for new TerminalConsole().note() renderPlain path (non-TTY, no mock)
 // mock.module forces isTTY: false so renderPlain executes regardless of terminal
 
 import { describe, expect, it, spyOn } from 'bun:test';
@@ -27,7 +27,7 @@ void mock.module('@/core/ui/colors.js', mockColorsNonTTY);
 
 import { mock } from 'bun:test';
 
-import { note } from '@/core/ui';
+import { TerminalConsole } from '@/core/ui';
 
 import { mockColorsNonTTY } from '../../../_common/colors-mock.ts';
 
@@ -39,7 +39,7 @@ describe('note: renderPlain (non-TTY)', () => {
       return true;
     });
     try {
-      note('some content');
+      new TerminalConsole().note('some content');
       const combined = output.join('');
       expect(combined).toContain('some content');
       expect(combined).not.toContain('┌');
@@ -56,7 +56,7 @@ describe('note: renderPlain (non-TTY)', () => {
       return true;
     });
     try {
-      note('content line', 'My Title');
+      new TerminalConsole().note('content line', 'My Title');
       const combined = output.join('');
       expect(combined).toContain('[My Title]');
       expect(combined).toContain('content line');
@@ -72,7 +72,7 @@ describe('note: renderPlain (non-TTY)', () => {
       return true;
     });
     try {
-      note('just content');
+      new TerminalConsole().note('just content');
       const combined = output.join('');
       expect(combined).not.toContain('[');
     } finally {
@@ -87,7 +87,7 @@ describe('note: renderPlain (non-TTY)', () => {
       return true;
     });
     try {
-      note(['line one', 'line two']);
+      new TerminalConsole().note(['line one', 'line two']);
       const combined = output.join('');
       expect(combined).toContain('line one');
       expect(combined).toContain('line two');
