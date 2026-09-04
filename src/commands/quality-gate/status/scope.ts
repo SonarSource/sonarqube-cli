@@ -22,6 +22,7 @@
 
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { resolveCurrentGitBranch } from '@/core/host/git/branch.ts';
+import logger from '@/core/observability/logger.ts';
 import { BranchesClient } from '@/core/server/branches.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { PullRequestsClient } from '@/core/server/pull-requests.ts';
@@ -68,7 +69,11 @@ export async function resolveQualityGateScope(
     };
   }
 
-  const autoDetected = await resolveAutoPullRequest(client, projectKey);
+  const branchesClient = new BranchesClient(client);
+  const [autoDetected, branches] = await Promise.all([
+    resolveAutoPullRequest(client, projectKey),
+    branchesClient.listBranches(projectKey),
+  ]);
   if (autoDetected) {
     return {
       queryParams: { pullRequest: autoDetected.pullRequest },
@@ -80,8 +85,6 @@ export async function resolveQualityGateScope(
     };
   }
 
-  const branchesClient = new BranchesClient(client);
-  const branches = await branchesClient.listBranches(projectKey);
   const defaultBranch = branches.find((b) => b.isMain);
   if (!defaultBranch) {
     throw new CommandFailedError(`Could not determine the default branch for '${projectKey}'.`, {
@@ -91,7 +94,7 @@ export async function resolveQualityGateScope(
   return { queryParams: {}, scope: { kind: 'default', value: defaultBranch.name } };
 }
 
-// Never throws — undefined (no git branch, endpoint unavailable, no/ambiguous match) means the caller falls back to the default branch.
+// Never throws — undefined (no git branch, lookup failed, no/ambiguous match) means the caller falls back to the default branch.
 async function resolveAutoPullRequest(
   client: SonarHttpClient,
   projectKey: string,
@@ -101,11 +104,23 @@ async function resolveAutoPullRequest(
     return undefined;
   }
 
-  const pullRequests = await new PullRequestsClient(client).listPullRequests(projectKey);
+  const pullRequests = await tryListPullRequests(client, projectKey);
   const matches = pullRequests?.filter((pr) => pr.branch === branch) ?? [];
   if (matches.length !== 1) {
     return undefined;
   }
 
   return { pullRequest: matches[0].key, branch };
+}
+
+async function tryListPullRequests(
+  client: SonarHttpClient,
+  projectKey: string,
+): Promise<Awaited<ReturnType<PullRequestsClient['listPullRequests']>>> {
+  try {
+    return await new PullRequestsClient(client).listPullRequests(projectKey);
+  } catch (err) {
+    logger.debug(`Pull request auto-detection skipped for '${projectKey}'`, err);
+    return null;
+  }
 }

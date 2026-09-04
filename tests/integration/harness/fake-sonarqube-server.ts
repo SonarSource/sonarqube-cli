@@ -85,6 +85,7 @@ interface ProjectData {
   componentTreeErrorsByMetric: Map<string, ComponentTreeErrorConfig>;
   pullRequests?: PullRequestConfig[];
   pullRequestsUnsupported: boolean;
+  pullRequestsErrorStatus?: number;
 }
 
 export interface DopRepositoryConfig {
@@ -110,6 +111,7 @@ export class ProjectBuilder {
   private readonly componentTreeErrorsByMetric: Map<string, ComponentTreeErrorConfig> = new Map();
   private pullRequests?: PullRequestConfig[];
   private pullRequestsUnsupported = false;
+  private pullRequestsErrorStatus?: number;
 
   constructor(projectKey: string) {
     this.projectKey = projectKey;
@@ -174,6 +176,12 @@ export class ProjectBuilder {
     return this;
   }
 
+  // `GET /api/project_pull_requests/list` fails with the given non-404 status for this project.
+  withPullRequestsError(statusCode: number): this {
+    this.pullRequestsErrorStatus = statusCode;
+    return this;
+  }
+
   /**
    * Makes `GET /api/qualitygates/project_status` 404 when queried for this exact branch,
    * matching the real API's "no analysis for this branch yet" response — distinct from
@@ -231,6 +239,7 @@ export class ProjectBuilder {
       componentTreeErrorsByMetric: this.componentTreeErrorsByMetric,
       pullRequests: this.pullRequests,
       pullRequestsUnsupported: this.pullRequestsUnsupported,
+      pullRequestsErrorStatus: this.pullRequestsErrorStatus,
     };
   }
 }
@@ -976,6 +985,12 @@ export class FakeSonarQubeServerBuilder {
           if (projectData.pullRequestsUnsupported) {
             return new Response(JSON.stringify({ errors: [{ msg: `Unknown url: ${path}` }] }), {
               status: 404,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (projectData.pullRequestsErrorStatus !== undefined) {
+            return new Response(JSON.stringify({ errors: [{ msg: 'Internal error' }] }), {
+              status: projectData.pullRequestsErrorStatus,
               headers: { 'Content-Type': 'application/json' },
             });
           }
