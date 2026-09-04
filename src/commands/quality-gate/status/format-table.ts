@@ -101,6 +101,9 @@ export function formatQualityGateTable(vm: QualityGateTableViewModel): string {
 }
 
 function formatScopeLine(scope: QualityGateScope): string {
+  if (scope.kind === 'pullRequestAuto') {
+    return `Pull Request: ${scope.value} (auto-detected from branch ${scope.detectedFromBranch})`;
+  }
   if (scope.kind === 'pullRequest') {
     return `Pull Request: ${scope.value}`;
   }
@@ -174,6 +177,7 @@ function formatMoreEntriesLine(
 }
 
 function notComputedHint(scope: QualityGateScope): string {
-  const subject = scope.kind === 'pullRequest' ? 'pull request' : 'branch';
+  const subject =
+    scope.kind === 'pullRequest' || scope.kind === 'pullRequestAuto' ? 'pull request' : 'branch';
   return `This ${subject} either doesn't exist, hasn't been analyzed yet, or analysis ran but the quality gate status is not updated yet. You can run \`sonar analyze\` for local analysis.`;
 }

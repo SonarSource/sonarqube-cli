@@ -23,6 +23,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { TestHarness } from '../../harness';
+import { commitFile, git, initGitRepo } from '../hook/git-test-helpers';
 
 describe('quality-gate status', () => {
   let harness: TestHarness;
@@ -672,6 +673,151 @@ describe('quality-gate status', () => {
         .filter((r) => r.path === '/api/qualitygates/project_status');
       expect(requests).toHaveLength(1);
       expect(requests[0].query.pullRequest).toBe('42');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'auto-detects a pull request for the current git branch when no flags are given',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withProjectStatus('OK').withPullRequests([{ key: '42', branch: 'feature-x' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'a.txt', 'a');
+      git(['checkout', '-b', 'feature-x'], harness.cwd.path);
+
+      const result = await harness.run(`quality-gate status --project my-project --format table`);
+
+      expect(result.stdout).toContain('Pull Request: 42 (auto-detected from branch feature-x)');
+
+      const requests = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/qualitygates/project_status');
+      expect(requests).toHaveLength(1);
+      expect(requests[0].query.pullRequest).toBe('42');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'falls back to the default branch when no pull request matches the current git branch',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withProjectStatus('OK').withPullRequests([{ key: '7', branch: 'other-branch' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'a.txt', 'a');
+      git(['checkout', '-b', 'feature-x'], harness.cwd.path);
+
+      const result = await harness.run(`quality-gate status --project my-project --format table`);
+
+      expect(result.stdout).toContain('Branch:       main (default)');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'falls back to the default branch when more than one pull request matches the current git branch',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withProjectStatus('OK').withPullRequests([
+            { key: '1', branch: 'feature-x' },
+            { key: '2', branch: 'feature-x' },
+          ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'a.txt', 'a');
+      git(['checkout', '-b', 'feature-x'], harness.cwd.path);
+
+      const result = await harness.run(`quality-gate status --project my-project --format table`);
+
+      expect(result.stdout).toContain('Branch:       main (default)');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'falls back to the default branch when the server edition does not support pull request analysis',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK').withPullRequestsUnsupported())
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'a.txt', 'a');
+      git(['checkout', '-b', 'feature-x'], harness.cwd.path);
+
+      const result = await harness.run(`quality-gate status --project my-project --format table`);
+
+      expect(result.stdout).toContain('Branch:       main (default)');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'falls back to the default branch instead of failing when the pull request lookup errors out',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK').withPullRequestsError(500))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'a.txt', 'a');
+      git(['checkout', '-b', 'feature-x'], harness.cwd.path);
+
+      const result = await harness.run(`quality-gate status --project my-project --format table`);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Branch:       main (default)');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'does not look up pull requests when --branch is given explicitly',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withProjectStatus('OK').withPullRequests([{ key: '42', branch: 'feature-x' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'a.txt', 'a');
+      git(['checkout', '-b', 'feature-x'], harness.cwd.path);
+
+      const result = await harness.run(
+        `quality-gate status --project my-project --format table --branch feature-x`,
+      );
+
+      expect(result.stdout).toContain('Branch:       feature-x');
+      expect(result.stdout).not.toContain('(default)');
+      const pullRequestRequests = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/project_pull_requests/list');
+      expect(pullRequestRequests).toHaveLength(0);
     },
     { timeout: 15000 },
   );

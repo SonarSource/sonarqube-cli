@@ -156,6 +156,16 @@ export interface ProjectBranchesResponse {
   branches: ProjectBranch[];
 }
 
+/** One entry of `GET /api/project_pull_requests/list` — a PR SonarQube has analyzed at least once. */
+export interface ProjectPullRequest {
+  key: string;
+  branch: string;
+}
+
+export interface ProjectPullRequestsResponse {
+  pullRequests: ProjectPullRequest[];
+}
+
 export interface Metric {
   key: string;
   type: string;
