@@ -25,8 +25,7 @@ import type { ProjectsSearchParams, ProjectsSearchResponse } from './types.ts';
  * to any one resource. Confirmed identical across `components/search_projects`,
  * `measures/component_tree`, `issues/search`, and `metrics/search`'s own param docs ("must be
  * greater than 0 and less or equal than 500"). The unrelated, narrower
- * `DOP_REPOSITORIES_MAX_PAGE_SIZE` on `ImportApiClient` is a real exception specific to that one
- * API.
+ * `DOP_REPOSITORIES_MAX_PAGE_SIZE` is a real exception specific to that one API.
  */
 export const MAX_PAGE_SIZE = 500;
 
