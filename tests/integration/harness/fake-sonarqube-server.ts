@@ -61,6 +61,11 @@ export interface ComponentTreeFileConfig {
   value?: string;
 }
 
+export interface PullRequestConfig {
+  key: string;
+  branch: string;
+}
+
 interface ComponentTreeErrorConfig {
   statusCode: number;
   body?: string;
@@ -78,6 +83,8 @@ interface ProjectData {
   componentTreeStatusCode?: number;
   componentTreeStatusBody?: string;
   componentTreeErrorsByMetric: Map<string, ComponentTreeErrorConfig>;
+  pullRequests?: PullRequestConfig[];
+  pullRequestsUnsupported: boolean;
 }
 
 export interface DopRepositoryConfig {
@@ -101,6 +108,8 @@ export class ProjectBuilder {
   private componentTreeStatusCode?: number;
   private componentTreeStatusBody?: string;
   private readonly componentTreeErrorsByMetric: Map<string, ComponentTreeErrorConfig> = new Map();
+  private pullRequests?: PullRequestConfig[];
+  private pullRequestsUnsupported = false;
 
   constructor(projectKey: string) {
     this.projectKey = projectKey;
@@ -150,6 +159,18 @@ export class ProjectBuilder {
   /** No branch flagged `isMain: true` — `GET /api/project_branches/list` returns an empty array. */
   withNoDefaultBranch(): this {
     this.defaultBranchName = null;
+    return this;
+  }
+
+  /** Pull requests `GET /api/project_pull_requests/list` returns for this project. */
+  withPullRequests(pullRequests: PullRequestConfig[]): this {
+    this.pullRequests = pullRequests;
+    return this;
+  }
+
+  // `GET /api/project_pull_requests/list` 404s for this project (edition without PR analysis).
+  withPullRequestsUnsupported(): this {
+    this.pullRequestsUnsupported = true;
     return this;
   }
 
@@ -208,6 +229,8 @@ export class ProjectBuilder {
       componentTreeStatusCode: this.componentTreeStatusCode,
       componentTreeStatusBody: this.componentTreeStatusBody,
       componentTreeErrorsByMetric: this.componentTreeErrorsByMetric,
+      pullRequests: this.pullRequests,
+      pullRequestsUnsupported: this.pullRequestsUnsupported,
     };
   }
 }
@@ -939,6 +962,26 @@ export class FakeSonarQubeServerBuilder {
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );
+        }
+
+        if (path === '/api/project_pull_requests/list') {
+          const projectKey = query.project;
+          const projectData = projectKey ? projects.get(projectKey) : undefined;
+          if (!projectData) {
+            return new Response(
+              JSON.stringify({ errors: [{ msg: `Project '${projectKey}' not found` }] }),
+              { status: 404, headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+          if (projectData.pullRequestsUnsupported) {
+            return new Response(JSON.stringify({ errors: [{ msg: `Unknown url: ${path}` }] }), {
+              status: 404,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ pullRequests: projectData.pullRequests ?? [] }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
 
         if (path === '/api/components/show') {

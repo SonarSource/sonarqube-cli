@@ -39,7 +39,7 @@ import {
 import { selectConditions } from './condition-summary.ts';
 import { formatQualityGateJson } from './format-json.ts';
 import { formatQualityGateTable } from './format-table.ts';
-import { resolveDisplayScope, resolveScopeQueryParams } from './scope.ts';
+import { resolveQualityGateScope } from './scope.ts';
 import { exitCodeFor, toVerdict } from './verdict.ts';
 
 export const VALID_FORMATS = ['json', 'table'];
@@ -81,13 +81,10 @@ export async function qualityGateStatus(
   const client = new SonarHttpClient(auth.serverUrl, auth.token);
   await assertProjectExists(client, projectKey);
 
-  const queryParams = resolveScopeQueryParams(options);
+  const { queryParams, scope } = await resolveQualityGateScope(client, projectKey, options);
 
   const qualityGatesClient = new QualityGatesClient(client);
-  const [projectStatus, scope] = await Promise.all([
-    qualityGatesClient.getProjectStatus({ projectKey, ...queryParams }),
-    resolveDisplayScope(client, projectKey, options),
-  ]);
+  const projectStatus = await qualityGatesClient.getProjectStatus({ projectKey, ...queryParams });
 
   const rawConditions = projectStatus?.conditions ?? [];
   const hasFailingConditions = rawConditions.some((condition) => condition.status !== 'OK');
