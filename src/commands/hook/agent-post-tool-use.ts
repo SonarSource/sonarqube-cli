@@ -45,7 +45,7 @@ import type {
   ClaudePostToolUseSubscriber,
 } from './claude-hook-dispatch.ts';
 import { runClaudePostToolUseDispatch } from './claude-hook-dispatch.ts';
-import { contextAugmentationPostToolUseSubscriber } from './context-augmentation-hook-subscriber.ts';
+import { createContextAugmentationPostToolUseSubscriber } from './context-augmentation-hook-subscriber.ts';
 import { formatSqaaIssuesForHook } from './format-sqaa-hook-context.ts';
 import type { HookCommandResult } from './hook-command-result.ts';
 import { readStdinJsonWithRaw } from './stdin.ts';
@@ -70,7 +70,11 @@ async function handleSqaaPostToolUse(
     return { decision: 'none' };
   }
 
-  const { projectKey } = await discoverProject(process.cwd(), { auth, silent: true });
+  const { projectKey } = await discoverProject(process.cwd(), {
+    auth,
+    silent: true,
+    console: ctx.console,
+  });
   if (!projectKey) {
     return { decision: 'none' };
   }
@@ -173,7 +177,7 @@ export async function agentPostToolUse(ctx: CommandInvocationContext): Promise<H
 
   await runClaudePostToolUseDispatch(payload, raw, [
     createSqaaPostToolUseSubscriber(ctx),
-    contextAugmentationPostToolUseSubscriber,
+    createContextAugmentationPostToolUseSubscriber(ctx.console),
   ]);
 
   return { agentSessionId: fromHook };

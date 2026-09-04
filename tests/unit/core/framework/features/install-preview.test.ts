@@ -29,22 +29,24 @@ import type {
   FeatureContainer,
   FeatureDeclaration,
 } from '@/core/framework/features/types.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockTty, setMockUi } from '@/core/ui';
+
+import { FakeConsole } from '../../../../_common/fake-console.ts';
 
 function application(feature: FeatureDeclaration): FeatureApplication {
   return { feature, targetRoot: '/repo', scope: 'project' };
 }
 
+let fake: FakeConsole;
+
+beforeEach(() => {
+  fake = new FakeConsole();
+});
+
 describe('install preview', () => {
   describe('buildInstallPreviewLines', () => {
-    beforeEach(() => {
-      setMockUi(true);
-      setMockTty(false);
-    });
+    beforeEach(() => {});
 
-    afterEach(() => {
-      setMockUi(false);
-    });
+    afterEach(() => {});
 
     it('renders name lines with indented descriptions, separates features with a blank line, and omits missing descriptions', () => {
       const lines = buildInstallPreviewLines([
@@ -116,23 +118,18 @@ describe('install preview', () => {
   });
 
   describe('renderInstallPreviewAndConfirm', () => {
-    beforeEach(() => {
-      setMockUi(true);
-      setMockTty(false);
-      clearMockUiCalls();
-    });
+    beforeEach(() => {});
 
-    afterEach(() => {
-      setMockUi(false);
-    });
+    afterEach(() => {});
 
     it('prints the box and waits for Enter in interactive mode', async () => {
       await renderInstallPreviewAndConfirm(
         [application({ id: 'a', displayName: 'Feature A', previewDescription: 'Does A.' })],
         false,
+        fake,
       );
 
-      const methods = getMockUiCalls().map((call) => call.method);
+      const methods = fake.calls.map((call) => call.method);
       expect(methods).toContain('note');
       expect(methods).toContain('pressAnyKeyPrompt');
     });
@@ -141,16 +138,17 @@ describe('install preview', () => {
       await renderInstallPreviewAndConfirm(
         [application({ id: 'a', displayName: 'Feature A', previewDescription: 'Does A.' })],
         true,
+        fake,
       );
 
-      const methods = getMockUiCalls().map((call) => call.method);
+      const methods = fake.calls.map((call) => call.method);
       expect(methods).toContain('note');
       expect(methods).not.toContain('pressAnyKeyPrompt');
     });
 
     it('renders nothing when there is nothing to install', async () => {
-      await renderInstallPreviewAndConfirm([], false);
-      expect(getMockUiCalls()).toHaveLength(0);
+      await renderInstallPreviewAndConfirm([], false, fake);
+      expect(fake.calls).toHaveLength(0);
     });
   });
 });

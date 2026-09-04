@@ -32,7 +32,7 @@ import { SonarQubeClient } from '@/core/server/client.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockTty, setMockUi } from '@/core/ui';
+import { setMockTty } from '@/core/ui';
 
 import { analyzeSqaa, buildSqaaJsonReport } from '../../../../src/commands/analyze/sqaa.ts';
 import * as changesetModule from '../../../../src/commands/analyze/sqaa-changeset.ts';
@@ -52,10 +52,8 @@ const FAKE_AUTH: import('@/core/auth/auth-resolver.ts').ResolvedAuth = {
   connectionType: 'cloud',
 };
 
-const FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(
-  FAKE_AUTH,
-  new FakeConsole(),
-);
+let fake: FakeConsole;
+let FAKE_AUTHENTICATED_CONTEXT: CommandAuthenticatedInvocationContext;
 
 let loadStateSpy: ReturnType<typeof spyOn>;
 let saveStateSpy: ReturnType<typeof spyOn>;
@@ -86,9 +84,9 @@ function makeDiscoveredProject(projectKey: string | undefined) {
 }
 
 beforeEach(() => {
-  setMockUi(true);
+  fake = new FakeConsole();
+  FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(FAKE_AUTH, fake);
   setMockTty(false);
-  clearMockUiCalls();
 
   loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeCloudState());
   saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
@@ -122,7 +120,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  setMockUi(false);
   process.exitCode = 0;
   loadStateSpy.mockRestore();
   saveStateSpy.mockRestore();
@@ -177,7 +174,8 @@ describe('analyzeSqaa: auth resolution', () => {
     });
 
     expect(createAnalysisSpy).not.toHaveBeenCalled();
-    const output = getMockUiCalls()
+    const output = fake.calls
+      .filter((c) => c.method === 'warn' || c.method === 'text')
       .map((c) => String(c.args[0]))
       .join('\n');
     expect(output).toContain(
@@ -244,9 +242,7 @@ describe('analyzeSqaa: API call and result display', () => {
     await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
 
     expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
-    const lines = getMockUiCalls()
-      .filter((c) => c.method === 'text')
-      .map((c) => String(c.args[0]));
+    const lines = fake.calls.filter((c) => c.method === 'text').map((c) => String(c.args[0]));
     expect(lines.some((line) => line.includes('src/index.ts'))).toBe(true);
     expect(lines.some((line) => line.includes('Network error'))).toBe(true);
     expect(lines.some((line) => line.includes('Vortex analysis failed'))).toBe(false);
@@ -257,9 +253,7 @@ describe('analyzeSqaa: API call and result display', () => {
   it('renders file row and summary footer for a clean single-file result', async () => {
     await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
 
-    const lines = getMockUiCalls()
-      .filter((c) => c.method === 'text')
-      .map((c) => String(c.args[0]));
+    const lines = fake.calls.filter((c) => c.method === 'text').map((c) => String(c.args[0]));
     expect(lines.some((line) => line.includes('src/index.ts'))).toBe(true);
     expect(lines.some((line) => line.includes('No issues found'))).toBe(true);
     expect(lines.at(-1)).toContain('1 files analyzed · STANDARD analysis');
@@ -321,6 +315,7 @@ describe('buildSqaaJsonReport', () => {
     const report = await buildSqaaJsonReport(
       { file: ['src/index.ts'], forcedDepth: 'STANDARD' },
       FAKE_AUTH,
+      { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
     );
 
     expect(report).not.toBeNull();
@@ -329,7 +324,9 @@ describe('buildSqaaJsonReport', () => {
   });
 
   it('defaults multi-file reports to DEEP analysisDepth', async () => {
-    const report = await buildSqaaJsonReport({ file: ['src/a.ts', 'src/b.ts'] }, FAKE_AUTH);
+    const report = await buildSqaaJsonReport({ file: ['src/a.ts', 'src/b.ts'] }, FAKE_AUTH, {
+      telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,
+    });
 
     expect(report).not.toBeNull();
     expect(report?.analysisDepth).toBe('DEEP');
@@ -343,7 +340,9 @@ describe('buildSqaaJsonReport', () => {
       connectionType: 'on-premise' as const,
     };
 
-    const report = await buildSqaaJsonReport({ file: ['src/index.ts'] }, onPremiseAuth);
+    const report = await buildSqaaJsonReport({ file: ['src/index.ts'] }, onPremiseAuth, {
+      telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,
+    });
     expect(report).not.toBeNull();
     expect(createAnalysisSpy).toHaveBeenCalled();
     expect(createAnalysisSpy.mock.calls[0][0].organizationKey).toBeUndefined();
@@ -352,7 +351,9 @@ describe('buildSqaaJsonReport', () => {
   it('returns a failure entry when the API call fails', async () => {
     createAnalysisSpy.mockRejectedValue(new Error('Network error'));
 
-    const report = await buildSqaaJsonReport({ file: ['src/index.ts'] }, FAKE_AUTH);
+    const report = await buildSqaaJsonReport({ file: ['src/index.ts'] }, FAKE_AUTH, {
+      telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,
+    });
 
     expect(report?.failures).toHaveLength(1);
     expect(report?.failures[0].message).toContain('Network error');
@@ -361,7 +362,9 @@ describe('buildSqaaJsonReport', () => {
   it('throws InvalidOptionError for invalid --depth', async () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      buildSqaaJsonReport({ file: ['src/index.ts'], depth: 'INVALID' }, FAKE_AUTH),
+      buildSqaaJsonReport({ file: ['src/index.ts'], depth: 'INVALID' }, FAKE_AUTH, {
+        telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,
+      }),
     ).rejects.toThrow(InvalidOptionError);
   });
 });
@@ -401,9 +404,7 @@ describe('analyzeSqaa: change-set mode', () => {
 
     await analyzeSqaa({ staged: true }, FAKE_AUTHENTICATED_CONTEXT);
 
-    const output = getMockUiCalls()
-      .map((c) => String(c.args[0]))
-      .join('\n');
+    const output = fake.calls.map((c) => String(c.args[0])).join('\n');
     expect(output).toContain('no files in the change set to analyze');
     expect(createAnalysisSpy).not.toHaveBeenCalled();
   });
@@ -415,7 +416,9 @@ describe('analyzeSqaa: change-set mode', () => {
       repoRoot: process.cwd(),
     });
 
-    const report = await buildSqaaJsonReport({ staged: true }, FAKE_AUTH);
+    const report = await buildSqaaJsonReport({ staged: true }, FAKE_AUTH, {
+      telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,
+    });
 
     expect(report?.files).toHaveLength(0);
     expect(report?.ignored).toHaveLength(1);

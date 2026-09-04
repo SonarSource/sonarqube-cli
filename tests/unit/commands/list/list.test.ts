@@ -22,7 +22,7 @@
  * Tests for IssuesClient and issuesSearchCommand
  */
 
-import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
+import { beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -34,10 +34,10 @@ import type {
   ProjectsSearchResponse,
   SonarQubeIssue,
 } from '@/core/server/types.ts';
-import { setMockUi } from '@/core/ui';
 
 import { listIssues } from '../../../../src/commands/list/issues.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
+
 // Test constants
 const DEFAULT_PAGE_SIZE = 500;
 const CUSTOM_PAGE_SIZE = 100;
@@ -399,7 +399,8 @@ describe('issuesSearchCommand', () => {
     connectionType: 'cloud',
   };
 
-  const mockCtx = new CommandAuthenticatedInvocationContext(mockAuth, new FakeConsole());
+  let fake: FakeConsole;
+  let mockCtx: CommandAuthenticatedInvocationContext;
 
   const emptyApiResponse = {
     issues: [],
@@ -410,11 +411,8 @@ describe('issuesSearchCommand', () => {
   };
 
   beforeEach(() => {
-    setMockUi(true);
-  });
-
-  afterEach(() => {
-    setMockUi(false);
+    fake = new FakeConsole();
+    mockCtx = new CommandAuthenticatedInvocationContext(mockAuth, fake);
   });
 
   it('throws when --project is missing', async () => {

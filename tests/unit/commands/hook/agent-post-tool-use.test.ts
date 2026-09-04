@@ -35,7 +35,7 @@ import * as projectInfo from '@/core/project-info.ts';
 import * as clientModule from '@/core/server/client.ts';
 
 import { agentPostToolUse } from '../../../../src/commands/hook/agent-post-tool-use.ts';
-import { contextAugmentationPostToolUseSubscriber } from '../../../../src/commands/hook/context-augmentation-hook-subscriber.ts';
+import * as cagSubscriber from '../../../../src/commands/hook/context-augmentation-hook-subscriber.ts';
 import * as hookOutput from '../../../../src/commands/hook/format-sqaa-hook-context.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
@@ -79,9 +79,14 @@ describe('agentPostToolUse', () => {
       raw: '{}',
       parsed: { tool_name: 'Edit', tool_input: { file_path: TEST_FILE } },
     });
-    cagMatchesSpy = spyOn(contextAugmentationPostToolUseSubscriber, 'matches').mockReturnValue(
-      false,
-    );
+    cagMatchesSpy = spyOn(
+      cagSubscriber,
+      'createContextAugmentationPostToolUseSubscriber',
+    ).mockReturnValue({
+      id: 'context-augmentation',
+      matches: () => false,
+      handle: () => Promise.resolve({ decision: 'none' as const }),
+    });
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
     readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue('const x = 1;');
     discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({

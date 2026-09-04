@@ -55,8 +55,10 @@ export class SonarSourceBinaryDependency implements DependencyDeclaration {
     this.version = options.version ?? options.spec.version;
   }
 
-  async installOrUpdate(_context: DependencyInstallContext): Promise<InstalledDependency> {
-    const result = await installBinary(this.options.spec);
+  async installOrUpdate(context: DependencyInstallContext): Promise<InstalledDependency> {
+    const result = await installBinary(this.options.spec, {
+      console: context.console,
+    });
     return {
       id: this.id,
       version: this.version,

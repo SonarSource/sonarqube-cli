@@ -35,7 +35,6 @@ import * as installSecrets from '@/core/host/install/secrets.ts';
 import * as processLib from '@/core/process/process.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
@@ -50,10 +49,8 @@ const FAKE_AUTH: ResolvedAuth = {
   connectionType: 'cloud',
 };
 
-const FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(
-  FAKE_AUTH,
-  new FakeConsole(),
-);
+let fake: FakeConsole;
+let FAKE_AUTHENTICATED_CONTEXT: CommandAuthenticatedInvocationContext;
 
 // Helper: make binary exist, file exist (or not), by controlling existsSync
 function mockBinaryExists(fileAlsoExists = true) {
@@ -70,8 +67,11 @@ let spawnSpy: ReturnType<typeof spyOn>;
 let resolveSecretsBinarySpy: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
-  setMockUi(true);
-  clearMockUiCalls();
+  fake = new FakeConsole();
+  FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(FAKE_AUTH, fake);
+});
+
+beforeEach(() => {
   loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
   saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
   spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
@@ -90,7 +90,6 @@ afterEach(() => {
   saveStateSpy.mockRestore();
   spawnSpy.mockRestore();
   resolveSecretsBinarySpy.mockRestore();
-  setMockUi(false);
 });
 
 // ─── Auth forwarding paths ────────────────────────────────────────────────────
@@ -191,7 +190,7 @@ describe('secretCheckCommand: successful scan', () => {
       existsSpy.mockRestore();
     }
 
-    const successes = getMockUiCalls()
+    const successes = fake.calls
       .filter((c) => c.method === 'success')
       .map((c) => String(c.args[0]));
     expect(successes.some((m) => m.includes('No issues found'))).toBe(true);
@@ -211,9 +210,7 @@ describe('secretCheckCommand: successful scan', () => {
       existsSpy.mockRestore();
     }
 
-    const prints = getMockUiCalls()
-      .filter((c) => c.method === 'print')
-      .map((c) => String(c.args[0]));
+    const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
     expect(prints.some((m) => m.includes('src/index.ts'))).toBe(true);
   });
 
@@ -231,7 +228,7 @@ describe('secretCheckCommand: successful scan', () => {
       existsSpy.mockRestore();
     }
 
-    const successes = getMockUiCalls()
+    const successes = fake.calls
       .filter((c) => c.method === 'success')
       .map((c) => String(c.args[0]));
     expect(successes.some((m) => m.includes('No issues found'))).toBe(true);
@@ -251,7 +248,7 @@ describe('secretCheckCommand: successful scan', () => {
       existsSpy.mockRestore();
     }
 
-    const successes = getMockUiCalls()
+    const successes = fake.calls
       .filter((c) => c.method === 'success')
       .map((c) => String(c.args[0]));
     expect(successes.some((m) => m.includes('No issues found'))).toBe(true);
@@ -271,9 +268,7 @@ describe('secretCheckCommand: successful scan', () => {
       existsSpy.mockRestore();
     }
 
-    const warns = getMockUiCalls()
-      .filter((c) => c.method === 'warn')
-      .map((c) => String(c.args[0]));
+    const warns = fake.calls.filter((c) => c.method === 'warn').map((c) => String(c.args[0]));
     expect(warns.some((m) => m.includes('auth failed'))).toBe(true);
     expect(warns.some((m) => m.includes('partial scan'))).toBe(true);
   });
@@ -347,9 +342,7 @@ describe('secretCheckCommand: scan failures', () => {
       existsSpy.mockRestore();
     }
 
-    const prints = getMockUiCalls()
-      .filter((c) => c.method === 'print')
-      .map((c) => String(c.args[0]));
+    const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
     expect(prints.some((m) => m.includes('src/index.ts'))).toBe(true);
     expect(
       prints.some(
@@ -383,9 +376,7 @@ describe('secretCheckCommand: scan failures', () => {
       existsSpy.mockRestore();
     }
 
-    const warns = getMockUiCalls()
-      .filter((c) => c.method === 'warn')
-      .map((c) => String(c.args[0]));
+    const warns = fake.calls.filter((c) => c.method === 'warn').map((c) => String(c.args[0]));
     expect(warns.some((m) => m.includes('scan was incomplete'))).toBe(true);
   });
 
@@ -431,9 +422,7 @@ describe('secretCheckCommand: scan failures', () => {
       "Run 'sonar integrate' to reinstall the secrets analyzer, then retry.",
     );
 
-    const prints = getMockUiCalls()
-      .filter((c) => c.method === 'print')
-      .map((c) => String(c.args[0]));
+    const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
     expect(prints.some((m) => m.includes(stderrMsg))).toBe(true);
   });
 
@@ -458,9 +447,7 @@ describe('secretCheckCommand: scan failures', () => {
       "Run 'sonar integrate' to reinstall the secrets analyzer, then retry.",
     );
 
-    const prints = getMockUiCalls()
-      .filter((c) => c.method === 'print')
-      .map((c) => String(c.args[0]));
+    const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
     expect(prints.some((m) => m.includes(stdoutMsg))).toBe(true);
   });
 });
@@ -573,7 +560,7 @@ describe('secretCheckCommand: stdin scan', () => {
 
     expect(spawnSpy.mock.calls[0][1]).toEqual(['--non-interactive', '--json', '--input']);
 
-    const successes = getMockUiCalls()
+    const successes = fake.calls
       .filter((c) => c.method === 'success')
       .map((c) => String(c.args[0]));
     expect(successes.some((m) => m.includes('No issues found'))).toBe(true);

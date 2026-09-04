@@ -21,6 +21,7 @@
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import type { SqaaTelemetryCallerCommand } from './sqaa-analysis-telemetry.ts';
 import type { SqaaAuth } from './sqaa-auth.ts';
@@ -61,6 +62,7 @@ export interface SqaaResolvedContext {
 export interface SqaaBatchRunOptions {
   resolved: SqaaResolvedContext;
   auth: ResolvedAuth;
+  console: Console;
   branch?: string;
   format?: OutputFormat;
   wireDepth?: SqaaDeepWireDepth;
@@ -70,6 +72,7 @@ export interface SqaaBatchRunOptions {
 }
 
 export interface SingleFileRunOptions {
+  console: Console;
   branch?: string;
   explicitProject?: string;
   format?: OutputFormat;

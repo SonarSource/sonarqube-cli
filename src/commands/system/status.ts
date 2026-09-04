@@ -27,6 +27,7 @@ import { parse as parseToml } from 'smol-toml';
 import { isSonarQubeCloud, resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
+import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { getBanner } from '@/core/commands/root-help.ts';
 import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '@/core/config-constants.ts';
 import { recordedFeatureResources } from '@/core/framework/features';
@@ -52,7 +53,7 @@ import { getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 import type { VortexEntitlementResult } from '@/core/server/client.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { loadState } from '@/core/state/state-repository.ts';
-import { blank, print, success, text, warn } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 import { isNewerVersion, stripBuildNumber } from '@/core/version.ts';
 import { isVortexEntitlementLoss, resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
@@ -399,7 +400,11 @@ async function resolveAuthenticatedChecks(auth: ResolvedAuth | null): Promise<Au
   return { tokenStatus, vortex };
 }
 
-export async function systemStatus(options: SystemStatusOptions): Promise<void> {
+export async function systemStatus(
+  options: SystemStatusOptions,
+  ctx: CommandInvocationContext,
+): Promise<void> {
+  const { console } = ctx;
   const state = loadState();
   const integrations = getInstalledIntegrations(state);
   const vortexInstalled = state.integrations.installed.some((integration) =>
@@ -477,11 +482,11 @@ export async function systemStatus(options: SystemStatusOptions): Promise<void> 
   };
 
   if (options.json) {
-    printJsonStatus(VERSION, data);
+    printJsonStatus(VERSION, data, console);
     return;
   }
 
-  renderTextStatus(VERSION, data);
+  renderTextStatus(VERSION, data, console);
 }
 
 type BinaryInfo = {
@@ -578,7 +583,7 @@ function buildClientCertJson(network: ResolvedNetworkConfig) {
   return null;
 }
 
-function printJsonStatus(version: string, data: StatusData): void {
+function printJsonStatus(version: string, data: StatusData, console: Console): void {
   const {
     auth,
     tokenStatus,
@@ -590,7 +595,7 @@ function printJsonStatus(version: string, data: StatusData): void {
     hasIssues,
     recommendations,
   } = data;
-  print(
+  console.print(
     JSON.stringify(
       {
         version,
@@ -660,136 +665,145 @@ function printJsonStatus(version: string, data: StatusData): void {
   );
 }
 
-function renderTokenLine(tokenStatus: TokenCheckResult | null, serverUrl?: string): void {
+function renderTokenLine(
+  tokenStatus: TokenCheckResult | null,
+  serverUrl: string | undefined,
+  console: Console,
+): void {
   if (tokenStatus === null) {
-    text('  • Token:   Not Set');
+    console.text('  • Token:   Not Set');
   } else if (tokenStatus.status === 'valid') {
-    text('  • Token:   Active');
+    console.text('  • Token:   Active');
   } else if (tokenStatus.status === 'invalid') {
-    text('  • Token:   Invalid');
+    console.text('  • Token:   Invalid');
   } else {
     const detail = tokenStatus.errorMessage ? `: ${tokenStatus.errorMessage}` : '';
-    text(`  • Token:   Set, Unverified (${serverUrl} is unreachable${detail})`);
+    console.text(`  • Token:   Set, Unverified (${serverUrl} is unreachable${detail})`);
   }
 }
 
-function renderAuthSection(auth: ResolvedAuth | null, tokenStatus: TokenCheckResult | null): void {
-  text('AUTHENTICATION');
+function renderAuthSection(
+  auth: ResolvedAuth | null,
+  tokenStatus: TokenCheckResult | null,
+  console: Console,
+): void {
+  console.text('AUTHENTICATION');
   if (auth) {
-    text(`  • Server:  ${auth.serverUrl}`);
-    if (auth.orgKey) text(`  • Org:     ${auth.orgKey}`);
+    console.text(`  • Server:  ${auth.serverUrl}`);
+    if (auth.orgKey) console.text(`  • Org:     ${auth.orgKey}`);
   }
-  renderTokenLine(tokenStatus, auth?.serverUrl);
+  renderTokenLine(tokenStatus, auth?.serverUrl, console);
 }
 
-function renderBinariesSection(binaries: BinaryInfo[]): void {
+function renderBinariesSection(binaries: BinaryInfo[], console: Console): void {
   if (binaries.length === 0) return;
-  blank();
-  text('BINARIES');
+  console.blank();
+  console.text('BINARIES');
   for (const b of binaries) {
     const displayName = getBinaryDisplayName(b.name);
-    text(`  • ${displayName}: Installed (${b.path})`);
+    console.text(`  • ${displayName}: Installed (${b.path})`);
     const versionSuffix = b.updateAvailable
       ? ` (Update available: v${stripBuildNumber(b.latestVersion)})`
       : '';
-    text(`      Version:  v${b.version}${versionSuffix}`);
+    console.text(`      Version:  v${b.version}${versionSuffix}`);
   }
 }
 
-function renderCacheSection(cache: CacheInfo[]): void {
-  blank();
-  text('CACHE');
+function renderCacheSection(cache: CacheInfo[], console: Console): void {
+  console.blank();
+  console.text('CACHE');
   for (const c of cache) {
     const status = c.present ? c.path : 'empty';
-    text(`  • ${c.name}: ${status}`);
+    console.text(`  • ${c.name}: ${status}`);
   }
 }
 
-function renderIntegrationsSection(integrations: IntegrationInfo[]): void {
+function renderIntegrationsSection(integrations: IntegrationInfo[], console: Console): void {
   if (integrations.length === 0) return;
-  blank();
-  text('INTEGRATIONS');
+  console.blank();
+  console.text('INTEGRATIONS');
   for (const i of integrations) {
     const line = i.path ? `${i.name}: CONFIGURED (${i.path})` : `${i.name}: CONFIGURED`;
-    text(`  • ${line}`);
+    console.text(`  • ${line}`);
     if (i.mcp) {
-      text(`    • MCP Server: ${mcpStatusLine(i.mcp)}`);
+      console.text(`    • MCP Server: ${mcpStatusLine(i.mcp)}`);
     }
     if (i.hooks) {
-      text(`    • Secrets Hook: ${integrationConfigStatusLine(i.hooks.config)}`);
+      console.text(`    • Secrets Hook: ${integrationConfigStatusLine(i.hooks.config)}`);
     }
   }
 }
 
-function renderRecommendationsSection(recommendations: string[]): void {
+function renderRecommendationsSection(recommendations: string[], console: Console): void {
   if (recommendations.length === 0) return;
-  blank();
-  text('RECOMMENDATIONS');
+  console.blank();
+  console.text('RECOMMENDATIONS');
   for (const r of recommendations) {
-    text(`  • ${r}`);
+    console.text(`  • ${r}`);
   }
 }
 
-function renderProxySubsection(proxy: ProxyGroup): void {
-  blank();
-  text(`  Proxy (${PROXY_SOURCE_LABELS[proxy.source]}):`);
+function renderProxySubsection(proxy: ProxyGroup, console: Console): void {
+  console.blank();
+  console.text(`  Proxy (${PROXY_SOURCE_LABELS[proxy.source]}):`);
   if (proxy.proxyHttps) {
-    text(`    • HTTPS:     ${proxy.proxyHttps.getUrl()}`);
+    console.text(`    • HTTPS:     ${proxy.proxyHttps.getUrl()}`);
   }
   if (proxy.proxyHttp) {
-    text(`    • HTTP:      ${proxy.proxyHttp.getUrl()}`);
+    console.text(`    • HTTP:      ${proxy.proxyHttp.getUrl()}`);
   }
   if (proxy.noProxy) {
-    text(`    • No Proxy:  ${proxy.noProxy}`);
+    console.text(`    • No Proxy:  ${proxy.noProxy}`);
   }
 }
 
-function renderCaCertSubsection(caCert: CaCertConfig): void {
-  blank();
-  text(`  CA Certificate (${CA_CERT_SOURCE_LABELS[caCert.source]}):`);
-  text(`    • ${caCert.path}`);
+function renderCaCertSubsection(caCert: CaCertConfig, console: Console): void {
+  console.blank();
+  console.text(`  CA Certificate (${CA_CERT_SOURCE_LABELS[caCert.source]}):`);
+  console.text(`    • ${caCert.path}`);
 }
 
 function renderClientCertSubsection(
   clientCert: ClientCertConfig | null,
   error: string | undefined,
+  console: Console,
 ): void {
-  blank();
-  text(`  Client Certificate (${CLIENT_CERT_SOURCE_LABEL}):`);
+  console.blank();
+  console.text(`  Client Certificate (${CLIENT_CERT_SOURCE_LABEL}):`);
   if (clientCert) {
-    text(`    • Certificate: ${clientCert.certPath}`);
+    console.text(`    • Certificate: ${clientCert.certPath}`);
     if (clientCert.keyPath !== null) {
-      text(`    • Key:         ${clientCert.keyPath}`);
+      console.text(`    • Key:         ${clientCert.keyPath}`);
     }
-    text(`    • Passphrase:  ${clientCert.passphrase ? 'Set' : 'Not set'}`);
+    console.text(`    • Passphrase:  ${clientCert.passphrase ? 'Set' : 'Not set'}`);
   } else {
-    warn(`    ✗ ${error}`);
+    console.warn(`    ✗ ${error}`);
   }
 }
 
-function renderNetworkSection(network: ResolvedNetworkConfig): void {
-  blank();
-  text('NETWORK');
+function renderNetworkSection(network: ResolvedNetworkConfig, console: Console): void {
+  console.blank();
+  console.text('NETWORK');
   if (!network.proxy && !network.caCert && !network.clientCert && !network.error) {
-    text('  No advanced network configuration detected.');
+    console.text('  No advanced network configuration detected.');
     return;
   }
-  text(
+  console.text(
     '  Note: Not all CLI features currently support proxy and certificate configuration. ' +
       'Secrets hook, Vortex Context and Software Composition Analysis might currently not pick up the network configuration.',
   );
   if (network.proxy) {
-    renderProxySubsection(network.proxy);
+    renderProxySubsection(network.proxy, console);
   }
   if (network.caCert) {
-    renderCaCertSubsection(network.caCert);
+    renderCaCertSubsection(network.caCert, console);
   }
   if (network.clientCert ?? network.error) {
-    renderClientCertSubsection(network.clientCert, network.error);
+    renderClientCertSubsection(network.clientCert, network.error, console);
   }
 }
 
-function renderTextStatus(version: string, data: StatusData): void {
+function renderTextStatus(version: string, data: StatusData, console: Console): void {
   const {
     auth,
     tokenStatus,
@@ -801,21 +815,21 @@ function renderTextStatus(version: string, data: StatusData): void {
     hasIssues,
     recommendations,
   } = data;
-  print(getBanner(version));
-  blank();
+  console.print(getBanner(version));
+  console.blank();
 
   if (hasIssues) {
-    warn('SYSTEM CHECK: Issues found');
+    console.warn('SYSTEM CHECK: Issues found');
   } else {
-    success('SYSTEM CHECK: Healthy');
+    console.success('SYSTEM CHECK: Healthy');
   }
-  blank();
+  console.blank();
 
-  renderAuthSection(auth, tokenStatus);
-  renderNetworkSection(network);
-  renderBinariesSection(binaries);
-  renderCacheSection(cache);
-  renderIntegrationsSection(integrations);
-  renderVortexSection(vortex);
-  renderRecommendationsSection(recommendations);
+  renderAuthSection(auth, tokenStatus, console);
+  renderNetworkSection(network, console);
+  renderBinariesSection(binaries, console);
+  renderCacheSection(cache, console);
+  renderIntegrationsSection(integrations, console);
+  renderVortexSection(vortex, console);
+  renderRecommendationsSection(recommendations, console);
 }

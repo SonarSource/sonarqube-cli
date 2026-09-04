@@ -24,6 +24,7 @@ import type {
   InstalledIntegrationFeature,
   InstalledSubfeature,
 } from '@/core/state/state.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import type { DependencyDeclaration } from '../dependencies';
 import type { ResourceDeclaration } from '../resources';
@@ -88,6 +89,7 @@ interface ApplyFeatureCallbacks<TOptions = Record<string, unknown>> {
 }
 
 interface ApplyAndRecordFeaturesOptions<TOptions = Record<string, unknown>> {
+  console: Console;
   callbacks?: ApplyFeatureCallbacks<TOptions>;
   continueOnFeatureError?: boolean;
   executionMode?: IntegrationExecutionMode;
@@ -174,13 +176,14 @@ export class IntegrationInstaller {
     state: CliState,
     integration: IntegrationDeclaration<TOptions>,
     applications: FeatureApplication<TOptions>[],
-    options: ApplyAndRecordFeaturesOptions<TOptions> = {},
+    options: ApplyAndRecordFeaturesOptions<TOptions>,
   ): Promise<InstalledIntegrationFeature[]> {
     const executions = this.prepareFeatureExecutions(
       state,
       integration,
       applications,
       options.executionMode ?? 'install',
+      options.console,
     );
     if (executions.length === 0) {
       return [];
@@ -286,13 +289,13 @@ export class IntegrationInstaller {
     state: CliState,
     integration: IntegrationDeclaration<TOptions>,
     applications: FeatureApplication<TOptions>[],
-    options: { callbacks?: RemoveFeatureCallbacks<TOptions> } = {},
+    options: { console: Console; callbacks?: RemoveFeatureCallbacks<TOptions> },
   ): Promise<FeatureDeclaration<TOptions>[]> {
     const removed: FeatureDeclaration<TOptions>[] = [];
 
     for (const application of applications) {
       const feature = application.feature;
-      const context = this.contextForApplication(state, application, 'install');
+      const context = this.contextForApplication(state, application, 'install', options.console);
 
       options.callbacks?.onFeatureRemoveStart?.(feature);
       await this.removeFeature(context, feature, options.callbacks ?? {});
@@ -496,9 +499,10 @@ export class IntegrationInstaller {
     integration: IntegrationDeclaration<TOptions>,
     applications: FeatureApplication<TOptions>[],
     executionMode: IntegrationExecutionMode,
+    console: Console,
   ): PreparedFeatureExecution<TOptions>[] {
     return applications.map((application) => {
-      const context = this.contextForApplication(state, application, executionMode);
+      const context = this.contextForApplication(state, application, executionMode, console);
       return {
         application,
         context,
@@ -511,12 +515,14 @@ export class IntegrationInstaller {
     state: CliState,
     application: FeatureApplication<TOptions>,
     executionMode: IntegrationExecutionMode,
+    console: Console,
   ): IntegrationContext {
     return {
       state,
       targetRoot: application.targetRoot,
       scope: application.scope,
       executionMode,
+      console,
       auth: application.auth,
       force: application.force,
       attrs: application.attrs,

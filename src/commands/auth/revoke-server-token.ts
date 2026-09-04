@@ -20,7 +20,7 @@
 
 import { SonarQubeClient } from '@/core/server/client.ts';
 import type { AuthConnection } from '@/core/state/state.ts';
-import { warn } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
 /** The part of a connection needed to revoke a token. */
 export type RevocableToken = Pick<AuthConnection, 'serverUrl' | 'tokenName'>;
@@ -33,6 +33,7 @@ export type RevokeServerTokenResult =
 export interface ReportRevokeServerTokenOutcomeOptions {
   continuingMessage: string;
   serverUrl?: string;
+  console: Console;
 }
 
 /**
@@ -43,17 +44,18 @@ export function reportRevokeServerTokenOutcome(
   outcome: RevokeServerTokenResult,
   options: ReportRevokeServerTokenOutcomeOptions,
 ): void {
+  const console = options.console;
   switch (outcome.status) {
     case 'success':
       return;
     case 'skipped':
-      warn(outcome.message);
+      console.warn(outcome.message);
       return;
     case 'failed': {
       const message = options.serverUrl
         ? `${outcome.message} for ${options.serverUrl}. ${options.continuingMessage}`
         : `${outcome.message}. ${options.continuingMessage}`;
-      warn(message);
+      console.warn(message);
     }
   }
 }

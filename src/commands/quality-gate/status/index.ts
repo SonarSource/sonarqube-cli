@@ -27,7 +27,6 @@ import { SonarQubeClient } from '@/core/server/client.ts';
 import { MetricsClient } from '@/core/server/metrics.ts';
 import { QualityGatesClient } from '@/core/server/quality-gates.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
-import { print } from '@/core/ui';
 
 import { selectConditions } from './condition-summary.ts';
 import { formatQualityGateJson } from './format-json.ts';
@@ -49,8 +48,8 @@ export async function qualityGateStatus(
   options: QualityGateStatusOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const { auth } = ctx;
-  const projectKey = await resolveProjectKey(options.project, auth, true);
+  const { auth, console } = ctx;
+  const projectKey = await resolveProjectKey(options.project, auth, console, true);
   noteProject(auth, projectKey);
 
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
@@ -80,7 +79,7 @@ export async function qualityGateStatus(
     format === 'table'
       ? formatQualityGateTable({ verdict, project: projectKey, scope, conditions })
       : formatQualityGateJson({ verdict, project: projectKey, scope, conditions });
-  print(message);
+  console.print(message);
 
   process.exitCode = exitCodeFor(verdict);
 }

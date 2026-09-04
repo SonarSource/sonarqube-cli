@@ -32,8 +32,8 @@ import { installSecretsBinary } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
 import type { SpawnResult, StdioMode } from '@/core/process/process.ts';
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
-import { blank, print, success, warn } from '@/core/ui';
 import { green, yellow } from '@/core/ui/colors.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
 import {
@@ -284,7 +284,7 @@ async function handleCheckCommand(
 ): Promise<void> {
   const { auth } = ctx;
   validateScanOptions(options);
-  const binaryPath = await installSecretsBinary();
+  const binaryPath = await installSecretsBinary(ctx.console);
   const scanStartTime = Date.now();
   const callerCommand = options.telemetryCallerCommand ?? SECRETS_CALLER_COMMANDS.analyzeSecrets;
 
@@ -295,7 +295,7 @@ async function handleCheckCommand(
       () => runSecretsBinary(binaryPath, ['--input'], auth, 'inherit'),
       ctx,
     );
-    reportScanResult(result, parsed, scanStartTime, { paths: [] });
+    reportScanResult(result, parsed, scanStartTime, { paths: [] }, ctx.console);
   } else {
     await performPathsScan(
       binaryPath,
@@ -343,7 +343,7 @@ async function performPathsScan(
     () => runSecretsBinary(binaryPath, paths, auth),
     ctx,
   );
-  reportScanResult(result, parsed, scanStartTime, { paths });
+  reportScanResult(result, parsed, scanStartTime, { paths }, ctx.console);
 }
 
 function reportScanResult(
@@ -351,13 +351,14 @@ function reportScanResult(
   parsed: SecretsJsonOutput,
   scanStartTime: number,
   context: ScanDisplayContext,
+  console: Console,
 ): void {
   const scanDurationMs = Date.now() - scanStartTime;
   const exitCode = result.exitCode ?? 1;
   if (exitCode === 0) {
-    handleScanSuccess(parsed, scanDurationMs, context);
+    handleScanSuccess(parsed, scanDurationMs, context, console);
   } else {
-    handleScanFailure(result, parsed, scanDurationMs, exitCode);
+    handleScanFailure(result, parsed, scanDurationMs, exitCode, console);
   }
 }
 
@@ -365,19 +366,20 @@ function handleScanSuccess(
   parsed: SecretsJsonOutput,
   scanDurationMs: number,
   context: ScanDisplayContext,
+  console: Console,
 ): void {
-  blank();
+  console.blank();
   const { errors } = parsed;
   const displayPaths = context.paths.length > 0 ? context.paths : ['(stdin)'];
   for (const p of displayPaths) {
-    print(`  ${green('✓')}  ${p}`);
+    console.print(`  ${green('✓')}  ${p}`);
   }
-  warnScanErrors(errors);
-  blank();
-  success(`No issues found · ${scanDurationMs}ms`);
+  warnScanErrors(console, errors);
+  console.blank();
+  console.success(`No issues found · ${scanDurationMs}ms`);
 }
 
-function displaySecretsFindings(issues: SecretsJsonIssue[]): void {
+function displaySecretsFindings(issues: SecretsJsonIssue[], console: Console): void {
   const groups = new Map<string, SecretsJsonIssue[]>();
   for (const issue of issues) {
     const key = issue.file ?? '(stdin)';
@@ -391,11 +393,11 @@ function displaySecretsFindings(issues: SecretsJsonIssue[]): void {
 
   let first = true;
   for (const [file, fileIssues] of groups) {
-    if (!first) blank();
+    if (!first) console.blank();
     first = false;
-    print(`  ${yellow('!')}  ${file}`);
+    console.print(`  ${yellow('!')}  ${file}`);
     fileIssues.forEach((issue, idx) => {
-      print(formatSecretsIssueLine(issue, idx + 1));
+      console.print(formatSecretsIssueLine(issue, idx + 1));
     });
   }
 }
@@ -412,10 +414,10 @@ function formatSecretsIssueLine(issue: SecretsJsonIssue, index: number): string 
   return `     ${parts.join('  ')}`;
 }
 
-export function warnScanErrors(errors?: string[]): void {
+export function warnScanErrors(console: Console, errors?: string[]): void {
   if (!errors?.length) return;
   for (const msg of errors) {
-    warn(`  Scan warning: ${msg}`);
+    console.warn(`  Scan warning: ${msg}`);
   }
 }
 
@@ -424,19 +426,20 @@ function handleScanFailure(
   parsed: SecretsJsonOutput,
   scanDurationMs: number,
   exitCode: number,
+  console: Console,
 ): void {
-  blank();
+  console.blank();
 
   if (exitCode === EXIT_CODE_SECRETS_FOUND) {
     const { issues, errors } = parsed;
     if (issues.length > 0) {
-      displaySecretsFindings(issues);
-      blank();
+      displaySecretsFindings(issues, console);
+      console.blank();
     } else if (result.stderr) {
-      print(result.stderr);
-      blank();
+      console.print(result.stderr);
+      console.blank();
     }
-    warnScanErrors(errors);
+    warnScanErrors(console, errors);
     const count = issues.length;
     const secretWord = count === 1 ? 'secret' : 'secrets';
     // count === 0 means exit 51 but no parseable issues — report generically.
@@ -453,8 +456,8 @@ function handleScanFailure(
 
   const output = [result.stderr, result.stdout].filter(Boolean).join('\n');
   if (output) {
-    print(output);
-    blank();
+    console.print(output);
+    console.blank();
   }
 
   throw new CommandFailedError(`Scan error (exit code ${exitCode})`, {

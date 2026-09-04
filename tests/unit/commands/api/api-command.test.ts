@@ -23,7 +23,6 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { apiCommand } from '../../../../src/commands/api/api.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
@@ -38,14 +37,15 @@ const FAKE_AUTH: ResolvedAuth = {
   connectionType: 'on-premise',
 };
 
-const FAKE_CTX = new CommandAuthenticatedInvocationContext(FAKE_AUTH, new FakeConsole());
+let fake: FakeConsole;
+let FAKE_CTX: CommandAuthenticatedInvocationContext;
 
 let genericRequestSpy: ReturnType<typeof spyOn>;
 
 describe('apiCommand', () => {
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
+    fake = new FakeConsole();
+    FAKE_CTX = new CommandAuthenticatedInvocationContext(FAKE_AUTH, fake);
 
     genericRequestSpy = spyOn(SonarQubeClient.prototype, 'genericRequest').mockResolvedValue(
       '{"status":"UP"}',
@@ -53,7 +53,6 @@ describe('apiCommand', () => {
   });
 
   afterEach(() => {
-    setMockUi(false);
     genericRequestSpy.mockRestore();
   });
 
@@ -96,13 +95,14 @@ describe('apiCommand', () => {
     await apiCommand(FAKE_CTX, 'get', '/api/system/status', {});
 
     expect(genericRequestSpy).toHaveBeenCalledTimes(1);
-    const [method, endpoint, data, contentType] = genericRequestSpy.mock.calls[0];
+    const [method, endpoint, passedConsole, data, contentType] = genericRequestSpy.mock.calls[0];
     expect(method).toBe('GET');
     expect(endpoint).toBe('/api/system/status');
+    expect(passedConsole).toBe(fake);
     expect(data).toBeUndefined();
     expect(contentType).toBe('form');
 
-    const output = getMockUiCalls().filter((c) => c.method === 'print');
+    const output = fake.calls.filter((c) => c.method === 'print');
     expect(output.some((c) => String(c.args[0]).includes('UP'))).toBe(true);
   });
 
@@ -117,21 +117,21 @@ describe('apiCommand', () => {
     const body = '{"key":"value"}';
     await apiCommand(FAKE_CTX, 'post', '/api/issues/search', { data: body });
 
-    const [, , data] = genericRequestSpy.mock.calls[0];
+    const [, , , data] = genericRequestSpy.mock.calls[0];
     expect(data).toBe(body);
   });
 
   it('uses json content type for /api/v2/ endpoints', async () => {
     await apiCommand(FAKE_CTX, 'get', '/api/v2/issues/search', {});
 
-    const [, , , contentType] = genericRequestSpy.mock.calls[0];
+    const [, , , , contentType] = genericRequestSpy.mock.calls[0];
     expect(contentType).toBe('json');
   });
 
   it('uses form content type for /api/ endpoints', async () => {
     await apiCommand(FAKE_CTX, 'get', '/api/issues/search', {});
 
-    const [, , , contentType] = genericRequestSpy.mock.calls[0];
+    const [, , , , contentType] = genericRequestSpy.mock.calls[0];
     expect(contentType).toBe('form');
   });
 
@@ -139,7 +139,7 @@ describe('apiCommand', () => {
     await apiCommand(FAKE_CTX, 'delete', '/api/authentication/validate', {});
 
     expect(genericRequestSpy).toHaveBeenCalledTimes(1);
-    const [method, , data] = genericRequestSpy.mock.calls[0];
+    const [method, , , data] = genericRequestSpy.mock.calls[0];
     expect(method).toBe('DELETE');
     expect(data).toBeUndefined();
   });
@@ -155,7 +155,7 @@ describe('apiCommand', () => {
     const body = '{"key":"val"}';
     await apiCommand(FAKE_CTX, 'put', '/api/v2/settings/set', { data: body });
 
-    const [method, , data, contentType] = genericRequestSpy.mock.calls[0];
+    const [method, , , data, contentType] = genericRequestSpy.mock.calls[0];
     expect(method).toBe('PUT');
     expect(data).toBe(body);
     expect(contentType).toBe('json');

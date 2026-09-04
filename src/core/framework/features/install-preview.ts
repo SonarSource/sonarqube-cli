@@ -21,7 +21,8 @@
 // Framework-rendered "What will be installed" preview shared by every
 // `sonar integrate` command.
 
-import { bold, dim, note, pressEnterKeyPrompt, wrapText } from '@/core/ui';
+import { bold, dim, wrapText } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
 import type { FeatureApplication, FeatureDeclaration } from './types.ts';
 import { isFeatureContainer } from './types.ts';
@@ -68,12 +69,13 @@ function resolvePreviewDescription<TOptions>(
 export async function renderInstallPreviewAndConfirm<TOptions>(
   toInstall: FeatureApplication<TOptions>[],
   nonInteractive: boolean | undefined,
+  console: Console,
 ): Promise<void> {
   if (toInstall.length === 0) {
     return;
   }
-  note(buildInstallPreviewLines(toInstall), PREVIEW_BOX_TITLE);
+  console.note(buildInstallPreviewLines(toInstall), PREVIEW_BOX_TITLE);
   if (!nonInteractive) {
-    await pressEnterKeyPrompt(INSTALL_PROMPT);
+    await console.pressEnterKeyPrompt(INSTALL_PROMPT);
   }
 }

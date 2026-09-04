@@ -32,7 +32,8 @@ import { SONAR_SECRETS_VERSION } from '@/core/host/install/signatures.ts';
 import * as processLib from '@/core/process/process.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
 // Import the real module first, then register it as a mock with the same object.
 // Because mock.module returns a plain mutable object (not a frozen ES namespace),
@@ -49,6 +50,12 @@ const { resolveSecretsBinary } = await import('@/core/host/install/secrets.ts');
 // SECTION: resolveSecretsBinary — happy path
 // =============================================================================
 
+let fake: FakeConsole;
+
+beforeEach(() => {
+  fake = new FakeConsole();
+});
+
 describe('resolveSecretsBinary: happy path', () => {
   let downloadBinarySpy: ReturnType<typeof spyOn>;
   let verifyBinarySignatureSpy: ReturnType<typeof spyOn>;
@@ -58,8 +65,6 @@ describe('resolveSecretsBinary: happy path', () => {
   let tempBinDir: string;
 
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
     tempBinDir = join(tmpdir(), `sonar-install-test-${Date.now()}`);
     mkdirSync(tempBinDir, { recursive: true });
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
@@ -86,12 +91,14 @@ describe('resolveSecretsBinary: happy path', () => {
     spawnSpy.mockRestore();
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
-    setMockUi(false);
     rmSync(tempBinDir, { recursive: true, force: true });
   });
 
   it('returns freshlyInstalled: true and binaryPath when install succeeds', async () => {
-    const result = await resolveSecretsBinary({ force: true }, { binDir: tempBinDir });
+    const result = await resolveSecretsBinary(
+      { force: true, console: fake },
+      { binDir: tempBinDir },
+    );
 
     expect(result.freshlyInstalled).toBe(true);
     expect(result.binaryPath).toContain('sonar-secrets');
@@ -103,7 +110,10 @@ describe('resolveSecretsBinary: happy path', () => {
     const binaryPath = join(tempBinDir, buildLocalBinaryName(detectPlatform()));
     writeFileSync(binaryPath, '');
 
-    const result = await resolveSecretsBinary({ force: false }, { binDir: tempBinDir });
+    const result = await resolveSecretsBinary(
+      { force: false, console: fake },
+      { binDir: tempBinDir },
+    );
 
     expect(result.freshlyInstalled).toBe(false);
     expect(downloadBinarySpy).not.toHaveBeenCalled();
@@ -123,7 +133,7 @@ describe('resolveSecretsBinary: happy path', () => {
     writeFileSync(oldBinary1, '');
     writeFileSync(oldBinary2, '');
 
-    await resolveSecretsBinary({ force: true }, { binDir: tempBinDir });
+    await resolveSecretsBinary({ force: true, console: fake }, { binDir: tempBinDir });
 
     expect(existsSync(oldBinary1)).toBe(false);
     expect(existsSync(oldBinary2)).toBe(false);
@@ -145,8 +155,6 @@ describe('resolveSecretsBinary: error paths', () => {
   let tempBinDir: string;
 
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
     tempBinDir = join(tmpdir(), `sonar-install-err-${Date.now()}`);
     mkdirSync(tempBinDir, { recursive: true });
   });
@@ -157,7 +165,6 @@ describe('resolveSecretsBinary: error paths', () => {
     verifyBinarySignatureSpy?.mockRestore();
     loadStateSpy?.mockRestore();
     saveStateSpy?.mockRestore();
-    setMockUi(false);
     rmSync(tempBinDir, { recursive: true, force: true });
   });
 
@@ -174,7 +181,7 @@ describe('resolveSecretsBinary: error paths', () => {
 
     let error: unknown;
     try {
-      await resolveSecretsBinary({ force: true }, { binDir: tempBinDir });
+      await resolveSecretsBinary({ force: true, console: fake }, { binDir: tempBinDir });
     } catch (err) {
       error = err;
     }
@@ -201,7 +208,7 @@ describe('resolveSecretsBinary: error paths', () => {
 
     let caughtError: unknown;
     try {
-      await resolveSecretsBinary({ force: true }, { binDir: tempBinDir });
+      await resolveSecretsBinary({ force: true, console: fake }, { binDir: tempBinDir });
     } catch (err) {
       caughtError = err;
     }
@@ -232,12 +239,13 @@ describe('resolveSecretsBinary: error paths', () => {
     });
 
     // Act: should not throw despite state error
-    const result = await resolveSecretsBinary({ force: true }, { binDir: tempBinDir });
+    const result = await resolveSecretsBinary(
+      { force: true, console: fake },
+      { binDir: tempBinDir },
+    );
 
     // Assert: install succeeded; user is warned but not blocked
-    const warns = getMockUiCalls()
-      .filter((c) => c.method === 'warn')
-      .map((c) => String(c.args[0]));
+    const warns = fake.calls.filter((c) => c.method === 'warn').map((c) => String(c.args[0]));
     expect(result.freshlyInstalled).toBe(true);
     expect(warns.some((m) => m.includes('Failed to update state'))).toBe(true);
   });

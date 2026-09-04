@@ -45,6 +45,7 @@ import {
   runPreCommitInstall,
   upsertSonarHook,
 } from '../../../../../src/commands/integrate/git/tools/pre-commit';
+import { FakeConsole } from '../../../../_common/fake-console.ts';
 
 const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.git-precommit-framework-tmp');
 
@@ -54,6 +55,7 @@ function context(): ContainerIntegrationContext {
     targetRoot: TEMP_DIR,
     scope: 'global',
     executionMode: 'install',
+    console: new FakeConsole(),
     resolvedDependencies: new Map(),
     activeSubfeatures: [],
   };
@@ -695,6 +697,7 @@ describe('pre-commit integration remove', () => {
       targetRoot: TEMP_DIR,
       scope: 'project',
       executionMode: 'install',
+      console: new FakeConsole(),
       resolvedDependencies: new Map(),
       activeSubfeatures: [],
     };

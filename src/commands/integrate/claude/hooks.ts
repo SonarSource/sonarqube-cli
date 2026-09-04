@@ -26,7 +26,7 @@ import { basename, dirname, join } from 'node:path';
 
 import type { IntegrationContext } from '@/core/framework/features';
 import logger from '@/core/observability/logger.ts';
-import { warn } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
 import {
   buildUnixHookScript,
@@ -195,16 +195,19 @@ async function probeSecretsHook(hooksRoot: string): Promise<SecretsHookState> {
  * project-level secrets hooks), and `undefined` otherwise.
  *
  *  - Healthy global install → silent, returns the hook dir.
- *  - Orphaned install → `warn(...)` and returns `undefined`.
+ *  - Orphaned install → `console.warn(...)` and returns `undefined`.
  *  - No global install → silent, returns `undefined`.
  */
-export async function detectGlobalSecretsHook(hooksRoot: string): Promise<string | undefined> {
+export async function detectGlobalSecretsHook(
+  hooksRoot: string,
+  console: Console,
+): Promise<string | undefined> {
   const state = await probeSecretsHook(hooksRoot);
   if (state.kind === 'installed') {
     return state.hookDir;
   }
   if (state.kind === 'orphaned') {
-    warn(
+    console.warn(
       `WARNING: Global hook configuration detected, but the source files are missing at ${state.hookDir}. Falling back to local project installation`,
     );
   }

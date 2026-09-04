@@ -21,7 +21,6 @@
 // Integrate command — setup SonarQube integration for Cursor.
 
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { warn } from '@/core/ui';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 
 import { finalizeAgentInstall } from '../_common/agent-integrate-postlude.ts';
@@ -33,18 +32,25 @@ export async function integrateCursor(
   options: IntegrateAgentOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const { auth } = ctx;
+  const { auth, console } = ctx;
   if (!options.nonInteractive) {
     printAgentNonInteractiveAlternativeHint(
+      console,
       'sonar integrate cursor --non-interactive',
       'sonar integrate cursor --non-interactive -g',
     );
   }
 
-  const integrateCtx = await displayAgentIntegratePrelude('Cursor', 'cursor', options, auth);
+  const integrateCtx = await displayAgentIntegratePrelude(
+    'Cursor',
+    'cursor',
+    options,
+    auth,
+    console,
+  );
 
   if (integrateCtx.isGlobal) {
-    warn(
+    console.warn(
       "Cursor's cloud/background agents only pick up project-level hooks, not global ones. Re-run without --global from a project directory for full hook coverage.",
     );
   }

@@ -25,8 +25,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { SONARCLOUD_URL } from '@/core/config-constants.ts';
 import { discoverOrganization, discoverProject, discoverServer } from '@/core/project-info.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
+import { FakeConsole } from '../../../_common/fake-console.ts';
 import { TestHarness } from '../../harness';
 
 async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
@@ -39,17 +39,22 @@ async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
+let fake: FakeConsole;
+
+beforeEach(() => {
+  fake = new FakeConsole();
+});
+
+afterEach(() => {});
+
 describe('Project workspace + SonarLint (harness)', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
     harness = await TestHarness.create();
-    setMockUi(true);
   });
 
   afterEach(async () => {
-    clearMockUiCalls();
-    setMockUi(false);
     await harness.dispose();
   });
 
@@ -70,7 +75,7 @@ describe('Project workspace + SonarLint (harness)', () => {
         }),
       );
 
-      const discovered = await discoverProject(root);
+      const discovered = await discoverProject(root, { console: fake });
       expect(discovered.serverUrl).toBe('https://sonarqube.example.com');
       expect(discovered.projectKey).toBe('my_server_project');
       expect(discovered.organization).toBeUndefined();
@@ -92,7 +97,7 @@ describe('Project workspace + SonarLint (harness)', () => {
         }),
       );
 
-      const discovered = await discoverProject(root);
+      const discovered = await discoverProject(root, { console: fake });
       expect(discovered.serverUrl).toBe(SONARCLOUD_URL);
       expect(discovered.organization).toBe('my-org');
       expect(discovered.projectKey).toBe('cloud_project_key');
@@ -114,7 +119,7 @@ describe('Project workspace + SonarLint (harness)', () => {
         }),
       );
 
-      const discovered = await discoverProject(root);
+      const discovered = await discoverProject(root, { console: fake });
       expect(discovered.configSources).toEqual([join('.sonarlint', 'MySolution.json')]);
       expect(discovered.projectKey).toBe('acme_solution');
       expect(discovered.organization).toBe('acme');
@@ -128,7 +133,7 @@ describe('Project workspace + SonarLint (harness)', () => {
       const root = projectRoot('no-sonarlint');
       mkdirSync(root, { recursive: true });
 
-      const discovered = await discoverProject(root);
+      const discovered = await discoverProject(root, { console: fake });
       expect(discovered.serverUrl).toBeUndefined();
       expect(discovered.projectKey).toBeUndefined();
       expect(discovered.configSources).toEqual([]);
@@ -143,7 +148,7 @@ describe('Project workspace + SonarLint (harness)', () => {
       mkdirSync(join(root, '.sonarlint'), { recursive: true });
       writeFileSync(join(root, '.sonarlint', 'notes.txt'), 'not json');
 
-      const discovered = await discoverProject(root);
+      const discovered = await discoverProject(root, { console: fake });
       expect(discovered.serverUrl).toBeUndefined();
       expect(discovered.projectKey).toBeUndefined();
       expect(discovered.configSources).toEqual([]);
@@ -165,7 +170,7 @@ describe('Project workspace + SonarLint (harness)', () => {
       );
 
       await withCwd(root, async () => {
-        expect(await discoverOrganization()).toBe('from-lint-org');
+        expect(await discoverOrganization(fake)).toBe('from-lint-org');
       });
     },
     { timeout: 15000 },
@@ -185,11 +190,11 @@ describe('Project workspace + SonarLint (harness)', () => {
       );
 
       await withCwd(root, async () => {
-        expect(await discoverServer()).toBe('https://sonarqube.from-lint.test');
+        expect(await discoverServer(fake)).toBe('https://sonarqube.from-lint.test');
       });
 
       expect(
-        getMockUiCalls().some((c) => {
+        fake.calls.some((c) => {
           if (c.method !== 'print') return false;
           const message = String(c.args[0]);
           return (

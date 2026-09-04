@@ -18,11 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { CommandFailedError } from '@/core/command-error.ts';
 import type { SqaaIssue } from '@/core/server/client.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import type { FileResult, RunTally } from '../../../../src/commands/analyze/sqaa-analysis.ts';
 import {
@@ -34,6 +33,7 @@ import {
   renderFailureDetailLines,
   SQAA_COLLAPSE_CLEAN_THRESHOLD,
 } from '../../../../src/commands/analyze/sqaa-display.ts';
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
 const ANSI_ESCAPE_CODES = /\x1b\[[0-9;]*m/g;
 
@@ -41,10 +41,8 @@ function stripAnsi(text: string): string {
   return text.replaceAll(ANSI_ESCAPE_CODES, '');
 }
 
-function getMockTextLines(): string[] {
-  return getMockUiCalls()
-    .filter((c) => c.method === 'text')
-    .map((c) => stripAnsi(String(c.args[0])));
+function getMockTextLines(fake: FakeConsole): string[] {
+  return fake.calls.filter((c) => c.method === 'text').map((c) => stripAnsi(String(c.args[0])));
 }
 
 const SAMPLE_ISSUE: SqaaIssue = {
@@ -113,14 +111,18 @@ describe('formatSqaaRunSummaryPlain', () => {
 });
 
 describe('printSqaaTextReport', () => {
+  let fake: FakeConsole;
+
+  beforeEach(() => {
+    fake = new FakeConsole();
+  });
+
   afterEach(() => {
-    setMockUi(false);
     process.exitCode = 0;
   });
 
   it('renders clean and finding files inline with summary footer', () => {
-    setMockUi(true);
-    clearMockUiCalls();
+    fake.calls.length = 0;
 
     const tally: RunTally = {
       allResults: [success('src/a.ts'), success('src/b.ts', [SAMPLE_ISSUE])],
@@ -129,9 +131,12 @@ describe('printSqaaTextReport', () => {
       totalFailures: 0,
     };
 
-    printSqaaTextReport({ tally, allPaths: ['src/a.ts', 'src/b.ts'], analysisDepth: 'STANDARD' });
+    printSqaaTextReport(
+      { tally, allPaths: ['src/a.ts', 'src/b.ts'], analysisDepth: 'STANDARD' },
+      fake,
+    );
 
-    const texts = getMockTextLines();
+    const texts = getMockTextLines(fake);
 
     expect(texts.some((l) => l.includes('src/a.ts'))).toBe(true);
     expect(texts.some((l) => l.includes('src/b.ts') && l.includes('1 issue'))).toBe(true);
@@ -143,8 +148,7 @@ describe('printSqaaTextReport', () => {
   });
 
   it('collapses clean files when count exceeds threshold', () => {
-    setMockUi(true);
-    clearMockUiCalls();
+    fake.calls.length = 0;
 
     const cleanPaths = Array.from(
       { length: SQAA_COLLAPSE_CLEAN_THRESHOLD },
@@ -160,9 +164,9 @@ describe('printSqaaTextReport', () => {
       totalFailures: 0,
     };
 
-    printSqaaTextReport({ tally, allPaths, analysisDepth: 'DEEP' });
+    printSqaaTextReport({ tally, allPaths, analysisDepth: 'DEEP' }, fake);
 
-    const texts = getMockTextLines();
+    const texts = getMockTextLines(fake);
 
     expect(
       texts.some(
@@ -174,8 +178,7 @@ describe('printSqaaTextReport', () => {
   });
 
   it('renders failed and skipped files', () => {
-    setMockUi(true);
-    clearMockUiCalls();
+    fake.calls.length = 0;
 
     const tally: RunTally = {
       allResults: [success('src/a.ts'), failure('src/b.ts', 'network error')],
@@ -184,13 +187,16 @@ describe('printSqaaTextReport', () => {
       totalFailures: 1,
     };
 
-    printSqaaTextReport({
-      tally,
-      allPaths: ['src/a.ts', 'src/b.ts', 'src/c.ts'],
-      analysisDepth: 'STANDARD',
-    });
+    printSqaaTextReport(
+      {
+        tally,
+        allPaths: ['src/a.ts', 'src/b.ts', 'src/c.ts'],
+        analysisDepth: 'STANDARD',
+      },
+      fake,
+    );
 
-    const texts = getMockTextLines();
+    const texts = getMockTextLines(fake);
 
     expect(texts.some((l) => l.includes('src/b.ts'))).toBe(true);
     expect(texts.some((l) => l.includes('network error'))).toBe(true);
@@ -199,8 +205,7 @@ describe('printSqaaTextReport', () => {
   });
 
   it('renders per-file failure detail and remediation hint without redundant heading', () => {
-    setMockUi(true);
-    clearMockUiCalls();
+    fake.calls.length = 0;
 
     const tally: RunTally = {
       allResults: [
@@ -217,9 +222,9 @@ describe('printSqaaTextReport', () => {
       totalFailures: 1,
     };
 
-    printSqaaTextReport({ tally, allPaths: ['b.ts'], analysisDepth: 'STANDARD' });
+    printSqaaTextReport({ tally, allPaths: ['b.ts'], analysisDepth: 'STANDARD' }, fake);
 
-    const texts = getMockTextLines();
+    const texts = getMockTextLines(fake);
     expect(texts.some((l) => l.includes('Vortex analysis failed'))).toBe(false);
     expect(texts.some((l) => l.includes("File path must use forward slashes: 'b\\.ts'"))).toBe(
       true,
@@ -228,8 +233,7 @@ describe('printSqaaTextReport', () => {
   });
 
   it('renders all failed files with a failures-only summary', () => {
-    setMockUi(true);
-    clearMockUiCalls();
+    fake.calls.length = 0;
 
     const validationError = new CommandFailedError(
       'Vortex analysis failed. File path must use forward slashes.',
@@ -245,9 +249,9 @@ describe('printSqaaTextReport', () => {
       totalFailures: 2,
     };
 
-    printSqaaTextReport({ tally, allPaths: ['a.ts', 'b.ts'], analysisDepth: 'STANDARD' });
+    printSqaaTextReport({ tally, allPaths: ['a.ts', 'b.ts'], analysisDepth: 'STANDARD' }, fake);
 
-    const texts = getMockTextLines();
+    const texts = getMockTextLines(fake);
     expect(texts.filter((l) => l.includes('a.ts') || l.includes('b.ts'))).toHaveLength(2);
     expect(texts.some((l) => l.includes('forward slashes'))).toBe(true);
     expect(texts.at(-1)).toBe('2 files analyzed · 2 failures · STANDARD analysis');

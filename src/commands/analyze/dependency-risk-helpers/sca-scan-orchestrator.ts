@@ -34,7 +34,7 @@ import logger, { getLogLevelConfig } from '@/core/observability/logger.ts';
 import { type SonarQubeClient } from '@/core/server/client.ts';
 import { assertScaAvailable } from '@/core/server/sca-availability.ts';
 import type { SettingsValue } from '@/core/server/settings-value.ts';
-import { withSpinner } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
 import { parseAnalysisProperties } from './analysis-properties.ts';
 import { preScanManifestsForSecrets } from './manifest-secrets-guard.ts';
@@ -67,7 +67,7 @@ export class ScaScanOrchestrator {
     // `assertScaAvailable`, and the secrets pre-scan — intentionally emit no SCA event: they
     // mean the scanner never ran (mirroring the secrets/SQAA producers, which likewise only
     // measure the analyzer run). Command-level failures remain visible via CliCommandExecuted.
-    const settings = await this.synchronizeSettings(auth, projectKey);
+    const settings = await this.synchronizeSettings(auth, projectKey, ctx.console);
     const properties = parseAnalysisProperties(settings);
     logger.debug(`Resolved analysis properties: ${JSON.stringify(properties)}`);
     const { apiBaseUrl, downloadBaseUrl } = buildScaUrls(auth);
@@ -102,7 +102,7 @@ export class ScaScanOrchestrator {
     // reflect the sca-scanner alone — never the settings sync or the secrets pre-scan above.
     const scanStart = performance.now();
     try {
-      const response = await this.analyzeDependencyRisks(invocation);
+      const response = await this.analyzeDependencyRisks(invocation, ctx.console);
       return { response, scanDurationMs: Math.round(performance.now() - scanStart) };
     } catch (err) {
       recordScaAnalysisTelemetry(
@@ -117,8 +117,12 @@ export class ScaScanOrchestrator {
     }
   }
 
-  private synchronizeSettings(auth: ResolvedAuth, projectKey: string): Promise<SettingsValue[]> {
-    return withSpinner(
+  private synchronizeSettings(
+    auth: ResolvedAuth,
+    projectKey: string,
+    console: Console,
+  ): Promise<SettingsValue[]> {
+    return console.withSpinner(
       'Synchronizing settings',
       async () => {
         await assertScaAvailable(this.client, auth);
@@ -130,7 +134,8 @@ export class ScaScanOrchestrator {
 
   private analyzeDependencyRisks(
     invocation: ScaScannerInvocation,
+    console: Console,
   ): Promise<AnalyzeProjectResponse> {
-    return new ScaScannerRunner(this.installer, this.spawner).run(invocation);
+    return new ScaScannerRunner(this.installer, this.spawner).run(invocation, console);
   }
 }

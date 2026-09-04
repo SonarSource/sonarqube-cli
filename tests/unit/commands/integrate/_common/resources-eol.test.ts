@@ -35,6 +35,8 @@ import {
 } from '@/core/framework/resources/common.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 
+import { FakeConsole } from '../../../../_common/fake-console.ts';
+
 describe('EOL-preserving resource writes', () => {
   let tempDir: string;
 
@@ -52,6 +54,7 @@ describe('EOL-preserving resource writes', () => {
       state: getDefaultState('test'),
       scope: 'project',
       executionMode: 'install',
+      console: new FakeConsole(),
       resolvedDependencies: new Map(),
     };
   }

@@ -58,7 +58,7 @@ export class ContextAugmentationBinaryDependency implements DependencyDeclaratio
       await stopAllContextAugmentationTools(previousBinaryPath);
     }
 
-    const binaryPath = await installContextAugmentationBinary();
+    const binaryPath = await installContextAugmentationBinary(context.console);
     return {
       id: this.id,
       version: this.version,

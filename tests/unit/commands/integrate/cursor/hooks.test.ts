@@ -26,6 +26,7 @@ import {
   resolveCursorHookMatcher,
   upsertCursorHooks,
 } from '../../../../../src/commands/integrate/cursor/hooks.ts';
+import { FakeConsole } from '../../../../_common/fake-console.ts';
 
 const FAKE_CONTEXT = {
   targetRoot: '/project',
@@ -33,6 +34,7 @@ const FAKE_CONTEXT = {
   attrs: {},
   state: {} as never,
   executionMode: 'install' as const,
+  console: new FakeConsole(),
   resolvedDependencies: new Map(),
 };
 

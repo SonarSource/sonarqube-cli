@@ -24,7 +24,6 @@ import { InvalidOptionError } from '@/core/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { MAX_PAGE_SIZE, ProjectsClient } from '@/core/server/projects.ts';
-import { print } from '@/core/ui';
 
 export interface ListProjectsOptions {
   query?: string;
@@ -39,7 +38,7 @@ export async function listProjects(
   options: ListProjectsOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const { auth } = ctx;
+  const { auth, console } = ctx;
   const pageSize = options.pageSize;
   if (pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
     throw new InvalidOptionError(
@@ -64,7 +63,7 @@ export async function listProjects(
 
   const hasNextPage = result.paging.pageIndex * result.paging.pageSize < result.paging.total;
 
-  print(
+  console.print(
     JSON.stringify({
       projects: result.components.map((c) => ({ key: c.key, name: c.name })),
       paging: {

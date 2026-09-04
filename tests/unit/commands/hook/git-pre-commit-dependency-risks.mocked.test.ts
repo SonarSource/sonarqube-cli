@@ -24,7 +24,6 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as scaInstall from '@/core/host/install/sca-scanner.ts';
-import { clearMockUiCalls, findMockUiCall, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { ScaScanOrchestrator } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
 import type {
@@ -35,8 +34,10 @@ import { ScaWatchPatternsRunner } from '../../../../src/commands/analyze/depende
 import { runDepRisksStage } from '../../../../src/commands/hook/git-pre-commit-dependency-risks.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
+let fake: FakeConsole;
+
 function makeCtx() {
-  return new CommandInvocationContext(new FakeConsole());
+  return new CommandInvocationContext(fake);
 }
 
 const FAKE_AUTH: ResolvedAuth = {
@@ -182,7 +183,7 @@ describe('runDepRisksStage', () => {
   let orchestratorRunSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    setMockUi(true);
+    fake = new FakeConsole();
     resolveScaScannerBinaryPathSpy = spyOn(
       scaInstall,
       'resolveScaScannerBinaryPath',
@@ -199,8 +200,6 @@ describe('runDepRisksStage', () => {
     resolveScaScannerBinaryPathSpy.mockRestore();
     watchPatternsSpy.mockRestore();
     orchestratorRunSpy.mockRestore();
-    setMockUi(false);
-    clearMockUiCalls();
   });
 
   it('throws CommandFailedError with a minimal summary when risks are found', async () => {
@@ -255,7 +254,7 @@ describe('runDepRisksStage', () => {
       ctx: makeCtx(),
     });
 
-    const successCall = findMockUiCall('discreetSuccess', 'No dependency risks found.');
+    const successCall = fake.findCall('discreetSuccess', 'No dependency risks found.');
     expect(successCall).toBeDefined();
   });
 
@@ -290,8 +289,8 @@ describe('runDepRisksStage', () => {
       ctx: makeCtx(),
     });
 
-    expect(getMockUiCalls().filter((c) => c.method === 'print')).toHaveLength(0);
-    const successCall = findMockUiCall('discreetSuccess', 'No dependency risks found.');
+    expect(fake.calls.filter((c) => c.method === 'print')).toHaveLength(0);
+    const successCall = fake.findCall('discreetSuccess', 'No dependency risks found.');
     expect(successCall).toBeDefined();
   });
 
@@ -304,7 +303,7 @@ describe('runDepRisksStage', () => {
     });
 
     expect(orchestratorRunSpy).not.toHaveBeenCalled();
-    const skipCall = findMockUiCall('success', 'No dependency manifests changed in this commit');
+    const skipCall = fake.findCall('success', 'No dependency manifests changed in this commit');
     expect(skipCall).toBeDefined();
   });
 });

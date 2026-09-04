@@ -27,7 +27,7 @@ import type { Command } from 'commander';
 
 import { createCommandTree } from '@/commands/command-tree.ts';
 import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
-import { setFormattedOutputMode } from '@/core/ui';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
 
@@ -37,7 +37,8 @@ process.env.SONAR_USER_HOME = tempHome;
 
 // Building the tree registers every .showUpdateNotification() into the root's
 // UpdateNotifier — reuse that same instance here rather than constructing a fresh one.
-const COMMAND_TREE = await createCommandTree();
+const console = new TerminalConsole();
+const COMMAND_TREE = await createCommandTree({ console });
 const updateNotifier = COMMAND_TREE.updateNotifier;
 
 function resolveCommand(path: string[]): Command {
@@ -89,7 +90,7 @@ describe('update notification suppression', () => {
     delete process.env[TELEMETRY_FLUSH_MODE_ENV];
     Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: true });
     Object.defineProperty(process.stderr, 'isTTY', { configurable: true, value: true });
-    setFormattedOutputMode(false);
+    console.setFormattedOutputMode(false);
   });
 
   afterEach(() => {
@@ -102,7 +103,7 @@ describe('update notification suppression', () => {
       configurable: true,
       value: originalStderrIsTTY,
     });
-    setFormattedOutputMode(false);
+    console.setFormattedOutputMode(false);
   });
 
   it('suppresses in CI and machine-readable modes', () => {
@@ -111,8 +112,9 @@ describe('update notification suppression', () => {
     expect(updateNotifier.shouldSuppress(command)).toBe(true);
 
     delete process.env.CI;
-    setFormattedOutputMode(true);
+    console.setFormattedOutputMode(true);
     expect(updateNotifier.shouldSuppress(command)).toBe(true);
+    console.setFormattedOutputMode(false);
   });
 
   it('suppresses list issues when format is json', () => {
@@ -151,7 +153,7 @@ describe('updateNotifier.maybeNotify', () => {
     delete process.env[TELEMETRY_FLUSH_MODE_ENV];
     Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: true });
     Object.defineProperty(process.stderr, 'isTTY', { configurable: true, value: true });
-    setFormattedOutputMode(false);
+    console.setFormattedOutputMode(false);
     process.exitCode = 0;
     fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(((url: string | URL | Request) => {
       const fetchUrl = fetchUrlString(url);
@@ -172,7 +174,7 @@ describe('updateNotifier.maybeNotify', () => {
     fetchSpy.mockRestore();
     stdoutSpy.mockRestore();
     stderrSpy.mockRestore();
-    setFormattedOutputMode(false);
+    console.setFormattedOutputMode(false);
   });
 
   function notificationOutput(): string {

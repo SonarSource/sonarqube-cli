@@ -18,11 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { type CliState, getDefaultState, type InstalledIntegration } from '@/core/state/state.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
 import type { PhaseItem } from '@/core/ui';
-import { info, phase, print, success, text, textPrompt, warn } from '@/core/ui';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import { version as VERSION } from '../../../package.json';
 import { supportedIntegrations } from '../integrate';
@@ -67,21 +68,25 @@ function mergeCleanedFields(fields: CleanedFields[]): CleanedFields {
  * Reset the CLI to factory defaults: remove tokens, binaries, integrations,
  * and cached files. Telemetry settings are preserved.
  */
-export async function systemReset(options: SystemResetOptions): Promise<void> {
+export async function systemReset(
+  options: SystemResetOptions,
+  ctx: CommandInvocationContext,
+): Promise<void> {
+  const { console } = ctx;
   if (!options.force) {
-    printAgentNonInteractiveAlternativeHint('sonar system reset --force');
-    if (!(await confirmDestructiveAction())) {
+    printAgentNonInteractiveAlternativeHint(console, 'sonar system reset --force');
+    if (!(await confirmDestructiveAction(console))) {
       return;
     }
   }
 
-  info('Cleaning up SonarQube CLI environment...');
+  console.info('Cleaning up SonarQube CLI environment...');
 
   const state = loadState();
   const results: StepResult[] = [];
 
   try {
-    const authResult = await purgeAuth(state);
+    const authResult = await purgeAuth(state, console);
     results.push({
       item: authResult.item,
       cleaned: emptyCleanedFields({ authConnectionIds: authResult.authConnectionIds }),
@@ -93,7 +98,7 @@ export async function systemReset(options: SystemResetOptions): Promise<void> {
       cleaned: emptyCleanedFields({ dependencyIds: binaryResult.dependencyIds }),
     });
 
-    const integrationResult = await removeAllIntegrations(state, supportedIntegrations);
+    const integrationResult = await removeAllIntegrations(state, supportedIntegrations, console);
     results.push({
       item: integrationResult.item,
       cleaned: emptyCleanedFields({
@@ -105,7 +110,7 @@ export async function systemReset(options: SystemResetOptions): Promise<void> {
     results.push({ item: filesystemResult.item, cleaned: emptyCleanedFields() });
   } finally {
     if (results.length > 0) {
-      phase(
+      console.phase(
         'Reset',
         results.map((r) => r.item),
       );
@@ -121,27 +126,27 @@ export async function systemReset(options: SystemResetOptions): Promise<void> {
   const hasWarnings = results.some((r) => r.item.status === 'warn');
 
   if (hasWarnings) {
-    text(
+    console.text(
       'CLI has been partially reset. Review the details above and clean up remaining items manually.',
     );
-    warn('System reset completed with warnings.');
+    console.warn('System reset completed with warnings.');
     return;
   }
 
-  success('CLI has been successfully reset to factory settings.');
+  console.success('CLI has been successfully reset to factory settings.');
 }
 
-async function confirmDestructiveAction(): Promise<boolean> {
+async function confirmDestructiveAction(console: Console): Promise<boolean> {
   if (!process.stdin.isTTY) {
-    print('Reset cancelled. Use --force to skip the prompt in non-interactive mode.');
+    console.print('Reset cancelled. Use --force to skip the prompt in non-interactive mode.');
     return false;
   }
-  warn(
+  console.warn(
     'This will remove all local credentials, uninstall Sonar binaries, and break active tool integrations.',
   );
-  const answer = await textPrompt('Please type RESET to continue');
+  const answer = await console.textPrompt('Please type RESET to continue');
   if (answer?.trim() !== 'RESET') {
-    print('Reset cancelled.');
+    console.print('Reset cancelled.');
     return false;
   }
   return true;

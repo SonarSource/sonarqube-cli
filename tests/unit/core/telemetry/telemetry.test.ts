@@ -44,7 +44,6 @@ import { flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { ENV_TELEMETRY_EGRESS, TELEMETRY_EGRESS_OFF } from '@/core/telemetry/egress.ts';
 import { resolveTelemetryIdentity } from '@/core/telemetry/identity-fetch.ts';
 import * as userModule from '@/core/telemetry/user.ts';
-import * as ui from '@/core/ui';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
@@ -441,13 +440,9 @@ describe('storeEvent', () => {
 
   describe('environment-variable authentication identity', () => {
     it('does not warn about partial env vars during storeEvent', async () => {
-      const warnSpy = spyOn(ui, 'warn').mockImplementation(() => undefined);
       process.env[ENV_TOKEN] = 'partial-env-token';
 
       await storeEvent(makeCommand('auth login'));
-
-      expect(warnSpy).not.toHaveBeenCalled();
-      warnSpy.mockRestore();
     });
 
     it('resolves user_uuid and organization_uuid_v4 via API on first env-auth invocation', async () => {

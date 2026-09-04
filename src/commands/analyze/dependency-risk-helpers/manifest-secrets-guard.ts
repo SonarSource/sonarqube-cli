@@ -29,7 +29,6 @@ import { formatSpawnOutput } from '@/core/host/install/install-utils.ts';
 import type { ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import type { SecretsInstaller } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
-import { withSpinner } from '@/core/ui';
 
 import type { SecretsJsonIssue } from '../secrets.ts';
 import {
@@ -61,6 +60,7 @@ export async function preScanManifestsForSecrets(deps: {
   };
   const manifestFiles = await new ScaDiscoverManifestsRunner(scaInstaller, scaSpawner).run(
     discoverInvocation,
+    ctx.console,
   );
   const resolvedFiles = manifestFiles.map((file) =>
     isAbsolute(file) ? file : join(baseDir, file),
@@ -77,6 +77,7 @@ async function scanManifestsForSecrets(
   installer: SecretsInstaller,
   ctx: CommandInvocationContext,
 ): Promise<void> {
+  const { console } = ctx;
   if (files.length === 0) {
     return;
   }
@@ -94,7 +95,7 @@ async function scanManifestsForSecrets(
     SECRETS_CALLER_COMMANDS.analyzeDependencyRisks,
     auth,
     () =>
-      withSpinner(
+      console.withSpinner(
         'Scanning manifests for secrets',
         () => runSecretsBinary(binaryPath, files, auth),
         'stderr',
@@ -109,7 +110,7 @@ async function scanManifestsForSecrets(
     const message = findings
       ? `Secrets detected in dependency manifest files. Dependency risks analysis aborted.\n\n${findings}`
       : `Secrets detected in dependency manifest files. Dependency risks analysis aborted.`;
-    warnScanErrors(errors);
+    warnScanErrors(ctx.console, errors);
     throw new CommandFailedError(message, {
       remediationHint:
         "Remove the reported secret from the manifest file, then rerun 'sonar analyze dependency-risks'.",
@@ -123,7 +124,7 @@ async function scanManifestsForSecrets(
     );
   }
 
-  warnScanErrors(errors);
+  warnScanErrors(ctx.console, errors);
 }
 
 /**

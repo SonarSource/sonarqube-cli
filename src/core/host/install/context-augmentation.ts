@@ -41,7 +41,7 @@ import {
 } from '@/core/host/install/sonarsource-releases.ts';
 import { extractFileFromTarGz } from '@/core/io/tar.ts';
 import { recordInstalledDependency } from '@/core/state/state-manager.ts';
-import { text, withSpinner } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
 import {
   cleanupOldVersionBinaries,
@@ -51,6 +51,7 @@ import {
 } from './install-utils.ts';
 
 export interface ContextAugmentationInstallOptions {
+  console: Console;
   force?: boolean;
   binDir?: string;
 }
@@ -74,8 +75,8 @@ export function buildLocalCagBinaryName(platform: PlatformInfo): string {
  * Install sonar-context-augmentation when not already present. Returns the
  * binary path.
  */
-export async function installContextAugmentationBinary(): Promise<string> {
-  const { binaryPath } = await resolveContextAugmentationBinary({});
+export async function installContextAugmentationBinary(console: Console): Promise<string> {
+  const { binaryPath } = await resolveContextAugmentationBinary({ console });
   return binaryPath;
 }
 
@@ -105,15 +106,16 @@ export async function resolveContextAugmentationBinary(
     return { binaryPath, freshlyInstalled: false };
   }
 
-  text(`     Installing sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION}`);
-  text(`     Platform: ${platform.os}-${platform.arch}`);
+  const { console } = options;
+  console.text(`     Installing sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION}`);
+  console.text(`     Platform: ${platform.os}-${platform.arch}`);
 
   const archivePath = `${binaryPath}.tar.gz`;
   const ascPath = `${archivePath}.asc`;
   const archiveUrl = buildCagDownloadUrl(SONAR_CONTEXT_AUGMENTATION_VERSION, platform);
   const ascUrl = `${archiveUrl}.asc`;
 
-  await withSpinner(
+  await console.withSpinner(
     `Downloading sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION}`,
     () => Promise.all([downloadBinary(archiveUrl, archivePath), downloadBinary(ascUrl, ascPath)]),
   );
@@ -122,7 +124,7 @@ export async function resolveContextAugmentationBinary(
   const armoredSignature = readFileSync(ascPath, 'utf-8');
 
   try {
-    await withSpinner('Verifying signature', () =>
+    await console.withSpinner('Verifying signature', () =>
       verifySignatureForPlatform(archiveBytes, armoredSignature, platform),
     );
   } catch (err) {
@@ -143,7 +145,7 @@ export async function resolveContextAugmentationBinary(
   }
 
   try {
-    await withSpinner('Verifying installation', () => verifyInstallation(binaryPath));
+    await console.withSpinner('Verifying installation', () => verifyInstallation(binaryPath));
   } catch (err) {
     rmSync(binaryPath, { force: true });
     throw err;
@@ -153,6 +155,7 @@ export async function resolveContextAugmentationBinary(
     CONTEXT_AUGMENTATION_BINARY_NAME,
     SONAR_CONTEXT_AUGMENTATION_VERSION,
     binaryPath,
+    console,
   );
   cleanupOldVersionBinaries(resolvedBinDir, CONTEXT_AUGMENTATION_BINARY_NAME, localName);
 

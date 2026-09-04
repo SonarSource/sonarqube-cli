@@ -25,7 +25,6 @@ import { CommandFailedError } from '@/core/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 import * as processLib from '@/core/process/process.ts';
-import { clearMockUiCalls, findMockUiCall, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import * as analyzeSecrets from '../../../../src/commands/analyze/secrets.ts';
 import { gitPreCommit } from '../../../../src/commands/hook/git-pre-commit.ts';
@@ -41,6 +40,8 @@ import { FakeConsole } from '../../../_common/fake-console.ts';
 
 const { EXIT_CODE_SECRETS_FOUND } = analyzeSecrets;
 
+let fake: FakeConsole;
+
 const FAKE_AUTH = {
   token: 'tok',
   serverUrl: 'https://sonarcloud.io',
@@ -52,7 +53,7 @@ const OK_RESULT = { exitCode: 0, stdout: '', stderr: '' };
 const SECRETS_RESULT = { exitCode: EXIT_CODE_SECRETS_FOUND, stdout: '', stderr: '' };
 
 function makeCtx() {
-  return new CommandInvocationContext(new FakeConsole());
+  return new CommandInvocationContext(fake);
 }
 
 const SECRETS_RESULT_WITH_ISSUES = {
@@ -78,8 +79,7 @@ describe('gitPreCommit', () => {
   let runSecretsBinarySpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
+    fake = new FakeConsole();
     resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
     spawnProcessSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
       exitCode: 0,
@@ -93,7 +93,6 @@ describe('gitPreCommit', () => {
   });
 
   afterEach(() => {
-    setMockUi(false);
     resolveAuthSpy.mockRestore();
     spawnProcessSpy.mockRestore();
     resolveSecretsBinaryPathSpy.mockRestore();
@@ -126,9 +125,7 @@ describe('gitPreCommit', () => {
 
     await gitPreCommit({}, [], makeCtx()).catch(() => undefined);
 
-    const prints = getMockUiCalls()
-      .filter((c) => c.method === 'print')
-      .map((c) => String(c.args[0]));
+    const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
     expect(prints.some((m) => m.includes('src/config.ts:12'))).toBe(true);
     expect(prints.some((m) => m.includes('AWS key detected'))).toBe(true);
     expect(prints.some((m) => m.includes('AKIA****'))).toBe(true);
@@ -138,8 +135,8 @@ describe('gitPreCommit', () => {
     await gitPreCommit({}, [], makeCtx());
 
     expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
-    expect(getMockUiCalls().filter((c) => c.method === 'print')).toHaveLength(0);
-    expect(findMockUiCall('warn', 'Secrets scan failed')).toBeUndefined();
+    expect(fake.calls.filter((c) => c.method === 'print')).toHaveLength(0);
+    expect(fake.findCall('warn', 'Secrets scan failed')).toBeUndefined();
   });
 
   it('skips scan when no staged files', async () => {
@@ -203,9 +200,9 @@ describe('gitPreCommit', () => {
 
     expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
     expect(
-      findMockUiCall('warn', 'Commit is not blocked, but secrets were not checked'),
+      fake.findCall('warn', 'Commit is not blocked, but secrets were not checked'),
     ).toBeDefined();
-    expect(findMockUiCall('warn', 'Reason: binary crashed')).toBeDefined();
+    expect(fake.findCall('warn', 'Reason: binary crashed')).toBeDefined();
   });
 
   it('skips scan when git spawn throws while listing staged files', async () => {
@@ -237,8 +234,7 @@ describe('gitPrePush', () => {
   };
 
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
+    fake = new FakeConsole();
     resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
     spawnProcessSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
       exitCode: 0,
@@ -253,7 +249,6 @@ describe('gitPrePush', () => {
   });
 
   afterEach(() => {
-    setMockUi(false);
     resolveAuthSpy.mockRestore();
     spawnProcessSpy.mockRestore();
     resolveSecretsBinaryPathSpy.mockRestore();
@@ -287,9 +282,7 @@ describe('gitPrePush', () => {
 
     await gitPrePush([], makeCtx()).catch(() => undefined);
 
-    const prints = getMockUiCalls()
-      .filter((c) => c.method === 'print')
-      .map((c) => String(c.args[0]));
+    const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
     expect(prints.some((m) => m.includes('src/config.ts:12'))).toBe(true);
     expect(prints.some((m) => m.includes('AWS key detected'))).toBe(true);
     expect(prints.some((m) => m.includes('AKIA****'))).toBe(true);
@@ -299,8 +292,8 @@ describe('gitPrePush', () => {
     await gitPrePush([], makeCtx());
 
     expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
-    expect(getMockUiCalls().filter((c) => c.method === 'print')).toHaveLength(0);
-    expect(findMockUiCall('warn', 'Secrets scan failed')).toBeUndefined();
+    expect(fake.calls.filter((c) => c.method === 'print')).toHaveLength(0);
+    expect(fake.findCall('warn', 'Secrets scan failed')).toBeUndefined();
   });
 
   it('skips scan when refs are empty', async () => {
@@ -382,9 +375,9 @@ describe('gitPrePush', () => {
 
     expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
     expect(
-      findMockUiCall('warn', 'Push is not blocked, but secrets were not checked'),
+      fake.findCall('warn', 'Push is not blocked, but secrets were not checked'),
     ).toBeDefined();
-    expect(findMockUiCall('warn', 'Reason: binary crashed')).toBeDefined();
+    expect(fake.findCall('warn', 'Reason: binary crashed')).toBeDefined();
   });
 
   it('calls the secrets binary once per ref group', async () => {

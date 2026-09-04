@@ -33,7 +33,8 @@ import {
   verifyBinarySignature,
 } from '@/core/host/install/sonarsource-releases.ts';
 import { recordInstalledDependency } from '@/core/state/state-manager.ts';
-import { type OutputChannel, text, withSpinner } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
+import type { OutputChannel } from '@/core/ui/types.ts';
 
 import {
   cleanupOldVersionBinaries,
@@ -51,6 +52,7 @@ export interface BinarySpec {
 }
 
 export interface InstallOptions {
+  console: Console;
   force?: boolean;
   binDir?: string;
   channel?: OutputChannel;
@@ -94,7 +96,7 @@ export function removeBinary(spec: BinarySpec, binDir?: string): boolean {
  */
 export async function installBinary(
   spec: BinarySpec,
-  options: InstallOptions = {},
+  options: InstallOptions,
 ): Promise<InstallResult> {
   const { skipped, binaryPath } = await downloadAndInstall(spec, options);
   return { binaryPath, freshlyInstalled: !skipped };
@@ -114,18 +116,19 @@ async function downloadAndInstall(
   }
 
   const channel = options.channel ?? 'stdout';
+  const { console } = options;
 
-  text(`     Installing ${spec.name} ${spec.version}`, undefined, channel);
+  console.text(`     Installing ${spec.name} ${spec.version}`, undefined, channel);
 
   const downloadUrl = buildDownloadUrl(spec.name, spec.version, spec.distPrefix, platform);
-  await withSpinner(
+  await console.withSpinner(
     `Downloading ${spec.name} ${spec.version}`,
     () => downloadBinary(downloadUrl, binaryPath),
     channel,
   );
 
   try {
-    await withSpinner(
+    await console.withSpinner(
       'Verifying signature',
       () => verifyBinarySignature(binaryPath, platform, spec.signatures, spec.publicKey),
       channel,
@@ -139,9 +142,13 @@ async function downloadAndInstall(
     await makeExecutable(binaryPath);
   }
 
-  await withSpinner('Verifying installation', () => verifyInstallation(binaryPath), channel);
+  await console.withSpinner(
+    'Verifying installation',
+    () => verifyInstallation(binaryPath),
+    channel,
+  );
 
-  recordInstalledDependency(spec.name, spec.version, binaryPath);
+  recordInstalledDependency(spec.name, spec.version, binaryPath, console);
   cleanupOldVersionBinaries(resolvedBinDir, spec.name, binaryName);
 
   return { skipped: false, binaryPath };

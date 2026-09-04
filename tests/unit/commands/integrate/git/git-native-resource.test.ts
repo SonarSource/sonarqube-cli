@@ -33,6 +33,7 @@ import {
   nativeGitIntegration,
 } from '../../../../../src/commands/integrate/git/tools/native';
 import { LEGACY_HOOK_MARKER } from '../../../../../src/commands/integrate/git/tools/shared.ts';
+import { FakeConsole } from '../../../../_common/fake-console.ts';
 
 const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.git-native-resource-tmp');
 
@@ -54,6 +55,7 @@ function context(
     targetRoot: TEMP_DIR,
     scope: 'global',
     executionMode: 'install',
+    console: new FakeConsole(),
     resolvedDependencies: new Map(),
     activeSubfeatures: [],
     ...overrides,

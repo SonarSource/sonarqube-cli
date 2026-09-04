@@ -60,6 +60,7 @@ import { getDefaultState } from '@/core/state/state.ts';
 
 import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
 import { version as CURRENT_CLI_VERSION } from '../../../package.json';
+import { FakeConsole } from '../../_common/fake-console.ts';
 import { IS_WINDOWS } from './platform';
 
 function resolveBinaryFixturePath(fixture: BinarySpec): string {
@@ -480,7 +481,14 @@ export class EnvironmentBuilder {
       }
       recordInstalledFeature(
         state,
-        { targetRoot, scope, executionMode: 'install', resolvedDependencies: new Map(), attrs: {} },
+        {
+          targetRoot,
+          scope,
+          executionMode: 'install',
+          console: new FakeConsole(),
+          resolvedDependencies: new Map(),
+          attrs: {},
+        },
         integration,
         feature,
         { dependencies: [], resources: [], operations: [] },

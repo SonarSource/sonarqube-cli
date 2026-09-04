@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockTty, setMockUi } from '@/core/ui';
+import { setMockTty } from '@/core/ui';
 
 import { ScaScanOrchestrator } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
 import type { AnalyzeProjectResponse } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
@@ -36,10 +36,8 @@ const FAKE_AUTH: ResolvedAuth = {
   connectionType: 'cloud',
 };
 
-const FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(
-  FAKE_AUTH,
-  new FakeConsole(),
-);
+let fake: FakeConsole;
+let FAKE_AUTHENTICATED_CONTEXT: CommandAuthenticatedInvocationContext;
 
 const SCAN_RESULT_STUB: AnalyzeProjectResponse = {
   releases: [
@@ -245,7 +243,8 @@ describe('analyzeDependencyRisks - output format', () => {
   let runSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    setMockUi(true);
+    fake = new FakeConsole();
+    FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(FAKE_AUTH, fake);
     setMockTty(false);
     runSpy = spyOn(ScaScanOrchestrator.prototype, 'run').mockResolvedValue({
       response: SCAN_RESULT_STUB,
@@ -255,12 +254,10 @@ describe('analyzeDependencyRisks - output format', () => {
 
   afterEach(() => {
     runSpy.mockRestore();
-    setMockUi(false);
-    clearMockUiCalls();
   });
 
   function getPrinted(): string {
-    const calls = getMockUiCalls().filter((c) => c.method === 'print');
+    const calls = fake.calls.filter((c) => c.method === 'print');
     const call = calls.at(-1);
     if (!call) throw new Error('expected print() to be called');
     return call.args[0] as string;

@@ -27,7 +27,7 @@ import {
   SCA_SCANNER_CLI_VERSION,
   SONARSOURCE_PUBLIC_KEY,
 } from '@/core/host/install/signatures.ts';
-import { discreetSuccess } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
 import {
   type BinarySpec,
@@ -44,12 +44,13 @@ export const SCA_SCANNER_SPEC: BinarySpec = {
   publicKey: SONARSOURCE_PUBLIC_KEY,
 };
 
-export async function installScaScannerBinary(): Promise<string> {
+export async function installScaScannerBinary(console: Console): Promise<string> {
   const { binaryPath, freshlyInstalled } = await installBinary(SCA_SCANNER_SPEC, {
+    console,
     channel: 'stderr',
   });
   if (freshlyInstalled) {
-    discreetSuccess(`${SCA_SCANNER_BINARY_NAME} installed at ${binaryPath}`, 'stderr');
+    console.discreetSuccess(`${SCA_SCANNER_BINARY_NAME} installed at ${binaryPath}`, 'stderr');
   }
   return binaryPath;
 }
@@ -71,8 +72,9 @@ export interface ScaScannerInstaller {
 }
 
 export class DefaultScaScannerInstaller implements ScaScannerInstaller {
+  constructor(private readonly console: Console) {}
   install(): Promise<string> {
-    return installScaScannerBinary();
+    return installScaScannerBinary(this.console);
   }
 }
 
