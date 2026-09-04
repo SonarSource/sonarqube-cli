@@ -834,7 +834,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     )
     .option(
       '--sonar-token-var-name <name>',
-      'Name of the GitLab CI/CD variable that holds the SonarQube analysis token (default: SONAR_TOKEN)',
+      'Name of the GitLab CI/CD variable that holds the SonarQube analysis token',
       'SONAR_TOKEN',
     )
     .option('--trigger-on <events>', 'Pipeline triggers: mr | main | both', 'both')
