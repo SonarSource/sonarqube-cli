@@ -127,7 +127,6 @@ function formatPhaseItem(
   return lines.join('\n');
 }
 
-/** Selection hint line shown while the multi-select prompt is active (not submitted/cancelled). */
 function buildSelectHint(countLabel: string, atCap: boolean): string {
   if (atCap) {
     return dim(`(${countLabel} - at max, deselect to choose others)`);
@@ -194,32 +193,6 @@ export function checkboxComponent(isSelected: boolean, unavailable: boolean): st
   }
 
   return '◯';
-}
-
-class MultiSelectLoadMorePrompt extends Prompt<unknown[]> {
-  private pendingLoadMoreSubmitBlock = false;
-
-  blockSubmit(): void {
-    this.pendingLoadMoreSubmitBlock = true;
-  }
-
-  allowSubmit(): void {
-    this.pendingLoadMoreSubmitBlock = false;
-  }
-
-  protected override _shouldSubmit(): boolean {
-    return !this.pendingLoadMoreSubmitBlock;
-  }
-
-  /**
-   * Forces a redraw outside of a keypress (needed once an async `onLoadMore()` resolves).
-   * `render` is private on the base class, but `output` is protected and the base
-   * constructor already wires `output.on('resize', this.render)` for terminal resizes —
-   * reusing that plumbing to trigger a render is simpler than re-implementing it.
-   */
-  refresh(): void {
-    this.output.emit('resize');
-  }
 }
 
 /** Production {@link Console}: writes to stdout/stderr. */
@@ -447,20 +420,6 @@ export class TerminalConsole implements Console {
     return result as T;
   }
 
-  /**
-   * Multi-select prompt. Space to toggle, Enter to confirm. Max 20 selections by default
-   * (override via `loadMoreOpts.maxSelected`). Options with `disabled: true` are shown (dimmed,
-   * like an at-cap row) but the cursor can't toggle them.
-   * Returns the selected values array (may be empty) or null if cancelled (Ctrl+C or q).
-   * Renders a scrolling viewport when the option list exceeds MULTISELECT_VIEWPORT_SIZE.
-   *
-   * When `loadMoreOpts` is given, a non-toggleable "Load more..." row is appended while
-   * `hasMore()` is true; pressing Enter on that row calls `onLoadMore()` instead of submitting.
-   * Selections are preserved across a load-more because they're tracked by value identity
-   * (`===`) rather than by index — callers must return `===`-stable values for options that
-   * were already present before the reload. When `onLoadMore` returns a `Promise`, the row shows
-   * a loading indicator until it resolves; Enter is ignored on every other row while it's pending.
-   */
   async multiSelectPrompt<T>(
     message: string,
     initialOptions: MultiSelectOption<T>[],
@@ -477,6 +436,23 @@ export class TerminalConsole implements Console {
     const hasMore = (): boolean => onLoadMore !== undefined && (loadMoreOpts?.hasMore?.() ?? false);
     const isOnLoadMoreRow = (): boolean => hasMore() && cursor === options.length;
     const getTotal = (): number => loadMoreOpts?.total?.() ?? options.length;
+
+    // Calling `onLoadMore()` can reveal the last page, flipping `hasMore()` to false — so
+    // `isOnLoadMoreRow()` must be frozen BEFORE calling it. `_shouldSubmit` runs right after our
+    // 'key' handler within the same keypress, so recomputing live here would otherwise let the
+    // very keypress that triggered the load also submit the prompt in the same tick.
+    let pendingLoadMoreSubmitBlock = false;
+
+    class MultiSelectLoadMorePrompt extends Prompt<T[]> {
+      protected override _shouldSubmit(): boolean {
+        return !pendingLoadMoreSubmitBlock;
+      }
+
+      /** Redraw via the base class's resize handler; `render` is private on Prompt. */
+      refresh(): void {
+        this.output.emit('resize');
+      }
+    }
 
     const prompt = new MultiSelectLoadMorePrompt(
       {
@@ -545,11 +521,11 @@ export class TerminalConsole implements Console {
         if (loadingMore) {
           // A load is already in flight — ignore Enter entirely rather than letting it submit
           // (or start a second overlapping load) while `options` is about to be replaced.
-          prompt.blockSubmit();
+          pendingLoadMoreSubmitBlock = true;
           return;
         }
         if (isOnLoadMoreRow() && onLoadMore) {
-          prompt.blockSubmit();
+          pendingLoadMoreSubmitBlock = true;
           loadingMore = true;
           loadMoreError = null;
           void Promise.resolve(onLoadMore())
@@ -558,7 +534,7 @@ export class TerminalConsole implements Console {
             })
             .catch((err: unknown) => {
               // Leave `options`/`hasMore()` untouched so the row reappears and Enter retries.
-              loadMoreError = err instanceof Error ? err.message : String(err);
+              loadMoreError = err instanceof Error ? err.message : 'Failed to load more options';
             })
             .finally(() => {
               loadingMore = false;
@@ -566,7 +542,7 @@ export class TerminalConsole implements Console {
             });
           return;
         }
-        prompt.allowSubmit();
+        pendingLoadMoreSubmitBlock = false;
         prompt.value = [...selected];
       } else if (s.name === 'q') {
         prompt.state = 'cancel';
@@ -575,7 +551,7 @@ export class TerminalConsole implements Console {
 
     const result = await prompt.prompt();
     if (isCancel(result)) return null;
-    return (result ?? []) as T[];
+    return result ?? [];
   }
 
   async promptUntilValid(
