@@ -1,2 +1,6 @@
 # https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 .github/CODEOWNERS @sonarsource/remediation-ide-experience-squad
+
+src/commands/admin/onboard-ci/ @sonarsource/orchestration-workflow-squad
+tests/integration/specs/admin/onboard-ci-gitlab.test.ts @sonarsource/orchestration-workflow-squad
+tests/unit/commands/admin/onboard-ci/ @sonarsource/orchestration-workflow-squad
