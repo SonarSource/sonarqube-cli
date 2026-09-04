@@ -127,6 +127,7 @@ function formatPhaseItem(
   return lines.join('\n');
 }
 
+/** Selection hint shown while the multi-select prompt is active (not submitted/cancelled). */
 function buildSelectHint(countLabel: string, atCap: boolean): string {
   if (atCap) {
     return dim(`(${countLabel} - at max, deselect to choose others)`);
@@ -534,7 +535,7 @@ export class TerminalConsole implements Console {
             })
             .catch((err: unknown) => {
               // Leave `options`/`hasMore()` untouched so the row reappears and Enter retries.
-              loadMoreError = err instanceof Error ? err.message : 'Failed to load more options';
+              loadMoreError = err instanceof Error ? err.message : String(err);
             })
             .finally(() => {
               loadingMore = false;
