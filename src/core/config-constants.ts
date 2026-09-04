@@ -225,6 +225,12 @@ export const CURSOR_IGNORE_FILE = '.cursorignore';
 export const SONAR_CONTEXT_INVOCATION = 'sonar context';
 
 // ---------------------------------------------------------------------------
+// Shared project config
+// ---------------------------------------------------------------------------
+
+export const SHARED_PROJECT_CONFIG_FILE_NAME = '.sonar-config.json';
+
+// ---------------------------------------------------------------------------
 // MCP Server
 // ---------------------------------------------------------------------------
 
