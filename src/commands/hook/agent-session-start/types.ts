@@ -35,5 +35,5 @@ export interface SessionStartOutput {
 
 export interface SessionStartAgentAdapter {
   parse: (payload: unknown) => SessionStartInput;
-  emit: (output: SessionStartOutput, input: SessionStartInput) => void;
+  emit: (output: SessionStartOutput, input: SessionStartInput) => unknown;
 }
