@@ -24,7 +24,7 @@ import type {
   SqaaAnalysisDepth,
   SqaaAnalysisFile,
   SqaaAnalysisRequest,
-} from '@/core/server/client.ts';
+} from './sqaa-wire-types.ts';
 
 export interface SqaaChunkFile {
   /** Absolute path on disk (for reading / error reporting). */

@@ -19,7 +19,6 @@
  */
 
 import { CommandFailedError } from '@/core/command-error.ts';
-import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 import { warn } from '@/core/ui';
 
 import type { SqaaAuthResolution } from './sqaa-auth.ts';
@@ -31,6 +30,7 @@ import {
   type SqaaDeepWireDepth,
 } from './sqaa-depth.ts';
 import type { OutputFormat, SqaaResolvedContext } from './sqaa-types.ts';
+import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
 /** Change-set size above which the user is prompted to confirm before proceeding. */
 const SQAA_LARGE_CHANGESET_THRESHOLD = 50;

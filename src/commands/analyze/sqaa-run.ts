@@ -20,7 +20,6 @@
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { timed } from '@/core/observability/timed.ts';
-import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
 import { print } from '@/core/ui';
 import { SqaaProgress } from '@/core/ui/components/sqaa-progress.ts';
@@ -56,6 +55,7 @@ import type {
   SqaaBatchRunOptions,
   SqaaResolvedContext,
 } from './sqaa-types.ts';
+import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
 function resolveSqaaCommandExitCode(
   totalIssues: number,

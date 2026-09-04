@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { type DopRepository, SonarQubeClient } from '@/core/server/client.ts';
+import { type DopRepository, ImportApiClient } from './import-api.ts';
 
 export type FetchPage = (
   pageIndex: number,
@@ -100,9 +100,9 @@ export async function* iterateRepoPages(
 ): AsyncGenerator<{ repositories: DopRepository[]; total: number }, void> {
   let pageIndex = 1;
   for (;;) {
-    const page = await fetchPage(pageIndex, SonarQubeClient.DOP_REPOSITORIES_MAX_PAGE_SIZE);
+    const page = await fetchPage(pageIndex, ImportApiClient.DOP_REPOSITORIES_MAX_PAGE_SIZE);
     yield page;
-    if (page.repositories.length < SonarQubeClient.DOP_REPOSITORIES_MAX_PAGE_SIZE) {
+    if (page.repositories.length < ImportApiClient.DOP_REPOSITORIES_MAX_PAGE_SIZE) {
       return;
     }
     pageIndex++;
@@ -192,12 +192,12 @@ export class RepositoryCollection {
 
     const page = await this.fetchPage(
       this.nextPageIndex,
-      SonarQubeClient.DOP_REPOSITORIES_MAX_PAGE_SIZE,
+      ImportApiClient.DOP_REPOSITORIES_MAX_PAGE_SIZE,
     );
     this.nextPageIndex++;
 
     this.serverTotal = page.total;
-    if (page.repositories.length < SonarQubeClient.DOP_REPOSITORIES_MAX_PAGE_SIZE) {
+    if (page.repositories.length < ImportApiClient.DOP_REPOSITORIES_MAX_PAGE_SIZE) {
       this.exhausted = true;
     }
 

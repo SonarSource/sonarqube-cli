@@ -101,7 +101,7 @@ export class SonarHttpClient {
     return headers;
   }
 
-  protected async raiseForStatus(response: Response, method: HttpMethod) {
+  private async raiseForStatus(response: Response, method: HttpMethod) {
     if (response.ok) return;
 
     // Status-specific typed errors apply regardless of HTTP method.

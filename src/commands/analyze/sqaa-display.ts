@@ -23,17 +23,14 @@
 import { basename, dirname } from 'node:path';
 
 import { CliError } from '@/core/command-error.ts';
-import type {
-  SqaaAnalysisDepth,
-  SqaaIssue,
-  VortexEntitlementStatus,
-} from '@/core/server/client.ts';
 import { text } from '@/core/ui';
 import { bold, dim, green, red, softBlue, yellow } from '@/core/ui/colors.ts';
 import { vortexUnavailableCommandMessage } from '@/core/vortex/availability-messages.ts';
+import type { VortexEntitlementStatus } from '@/core/vortex/entitlement.ts';
 
 import type { FileResult, FileSuccess, RunTally } from './sqaa-analysis.ts';
 import { SQAA_FAILURE_HEADING } from './sqaa-errors.ts';
+import type { SqaaAnalysisDepth, SqaaIssue } from './sqaa-wire-types.ts';
 
 /** When analyzed file count exceeds this, clean files collapse to one summary row. */
 export const SQAA_COLLAPSE_CLEAN_THRESHOLD = 20;

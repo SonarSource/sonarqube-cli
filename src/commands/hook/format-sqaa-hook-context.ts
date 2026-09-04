@@ -20,7 +20,7 @@
 
 // Text formatting for PostToolUse hook additionalContext (Claude + Codex).
 
-import type { SqaaIssue } from '@/core/server/client.ts';
+import type { SqaaIssue } from '@/commands/analyze/sqaa-wire-types.ts';
 
 import {
   formatPlainCleanCollapsedRow,

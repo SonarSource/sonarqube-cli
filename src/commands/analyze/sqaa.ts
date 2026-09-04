@@ -24,7 +24,6 @@ import type {
   CommandAuthenticatedInvocationContext,
   CommandInvocationContext,
 } from '@/core/commands/invocation-context.ts';
-import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 import { text } from '@/core/ui';
 
 import { resolveSqaaAuthAndProject } from './sqaa-auth.ts';
@@ -50,6 +49,7 @@ import type {
   OutputFormat,
   SqaaBatchRunOptions,
 } from './sqaa-types.ts';
+import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
 export { buildSqaaJsonReport } from './sqaa-json-report.ts';
 export {
