@@ -34,6 +34,7 @@ import logger, { getLogLevelConfig } from '@/core/observability/logger.ts';
 import { type SonarQubeClient } from '@/core/server/client.ts';
 import { assertScaAvailable } from '@/core/server/sca-availability.ts';
 import type { SettingsValue } from '@/core/server/settings-value.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import { parseAnalysisProperties } from './analysis-properties.ts';
 import { preScanManifestsForSecrets } from './manifest-secrets-guard.ts';
@@ -119,7 +120,7 @@ export class ScaScanOrchestrator {
   private synchronizeSettings(
     auth: ResolvedAuth,
     projectKey: string,
-    console: CommandInvocationContext['console'],
+    console: Console,
   ): Promise<SettingsValue[]> {
     return console.withSpinner(
       'Synchronizing settings',
@@ -133,7 +134,7 @@ export class ScaScanOrchestrator {
 
   private analyzeDependencyRisks(
     invocation: ScaScannerInvocation,
-    console: CommandInvocationContext['console'],
+    console: Console,
   ): Promise<AnalyzeProjectResponse> {
     return new ScaScannerRunner(this.installer, this.spawner).run(invocation, console);
   }

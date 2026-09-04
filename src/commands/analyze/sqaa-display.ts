@@ -477,8 +477,8 @@ export function printSqaaTextReport(options: PrintSqaaTextReportOptions, console
 export function printSingleFileTextFailure(
   filePath: string,
   error: Error,
-  analysisDepth: SqaaAnalysisDepth,
   console: Console,
+  analysisDepth: SqaaAnalysisDepth = 'STANDARD',
 ): void {
   const tally: RunTally = {
     allResults: [{ file: filePath, filePath, failure: error }],
@@ -518,8 +518,8 @@ export function displaySqaaResults(
   issues: SqaaIssue[],
   errors: Array<{ code: string; message: string }> | null | undefined,
   filePath: string,
-  analysisDepth: SqaaAnalysisDepth,
   console: Console,
+  analysisDepth: SqaaAnalysisDepth = 'STANDARD',
 ): number {
   const result: FileSuccess = {
     file: filePath,

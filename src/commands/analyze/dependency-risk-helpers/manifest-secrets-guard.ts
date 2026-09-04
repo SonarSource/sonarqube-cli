@@ -110,7 +110,7 @@ async function scanManifestsForSecrets(
     const message = findings
       ? `Secrets detected in dependency manifest files. Dependency risks analysis aborted.\n\n${findings}`
       : `Secrets detected in dependency manifest files. Dependency risks analysis aborted.`;
-    warnScanErrors(errors, ctx.console);
+    warnScanErrors(ctx.console, errors);
     throw new CommandFailedError(message, {
       remediationHint:
         "Remove the reported secret from the manifest file, then rerun 'sonar analyze dependency-risks'.",
@@ -124,7 +124,7 @@ async function scanManifestsForSecrets(
     );
   }
 
-  warnScanErrors(errors, ctx.console);
+  warnScanErrors(ctx.console, errors);
 }
 
 /**

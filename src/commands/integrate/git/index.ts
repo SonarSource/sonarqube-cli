@@ -35,6 +35,7 @@ import { discoverProject } from '@/core/project-info.ts';
 import { phaseItem } from '@/core/ui';
 import { yellow } from '@/core/ui/colors.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import { resolveIntegrateScope } from '../_common/integrate-scope.ts';
 import { recordIntegrationConfigured } from '../_common/integrate-telemetry.ts';
@@ -204,7 +205,7 @@ async function resolveProjectKey(
   options: IntegrateGitOptions,
   root: string,
   auth: ResolvedAuth,
-  console: CommandAuthenticatedInvocationContext['console'],
+  console: Console,
 ): Promise<IntegrateGitOptions> {
   if (options.project) {
     console.phase('Project', [phaseItem('Key', 'done', options.project)]);

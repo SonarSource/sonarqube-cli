@@ -71,13 +71,13 @@ export type SqaaAuthResolution =
 export async function resolveSqaaAuthAndProject(
   auth: ResolvedAuth,
   explicitProject: string | undefined,
-  projectRoot: string | undefined,
   console: Console,
+  projectRoot?: string,
 ): Promise<SqaaAuthResolution> {
   const sqaaAuth = resolveSqaaAuth(auth, explicitProject, console);
   if (!sqaaAuth) return { kind: 'no-org' };
 
-  const projectKey = explicitProject ?? (await resolveSqaaProjectKey(auth, projectRoot, console));
+  const projectKey = explicitProject ?? (await resolveSqaaProjectKey(auth, console, projectRoot));
   if (!projectKey) return { kind: 'no-project' };
 
   noteProject(auth, projectKey);
@@ -124,8 +124,8 @@ export function resolveSqaaAuth(
  */
 export async function resolveSqaaProjectKey(
   auth: ResolvedAuth,
-  projectRoot: string | undefined,
   console: Console,
+  projectRoot?: string,
 ): Promise<string | null> {
   const discovered = await discoverProject(projectRoot ?? process.cwd(), {
     auth,

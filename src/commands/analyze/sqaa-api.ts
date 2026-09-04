@@ -505,8 +505,8 @@ export async function callSqaaApiAndDisplay(
   file: string,
   fileContent: string,
   branch: string | undefined,
-  analysisDepth: SqaaDeepWireDepth | undefined,
   console: Console,
+  analysisDepth?: SqaaDeepWireDepth,
 ): Promise<number> {
   const filePath = toRelativePosixPath(file);
   const displayDepth = analysisDepth === 'DEEP' ? 'DEEP' : 'STANDARD';
@@ -514,9 +514,9 @@ export async function callSqaaApiAndDisplay(
     const response = await fetchWithRetry(auth, projectKey, file, fileContent, branch, {
       analysisDepth,
     });
-    return displaySqaaResults(response.issues, response.errors, filePath, displayDepth, console);
+    return displaySqaaResults(response.issues, response.errors, filePath, console, displayDepth);
   } catch (err) {
-    printSingleFileTextFailure(filePath, err as Error, displayDepth, console);
+    printSingleFileTextFailure(filePath, err as Error, console, displayDepth);
     return 0;
   }
 }

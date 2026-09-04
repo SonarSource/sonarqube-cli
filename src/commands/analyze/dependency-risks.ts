@@ -29,6 +29,7 @@ import { DefaultSecretsInstaller } from '@/core/host/install/secrets.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import { countSelectedRisks } from './dependency-risk-helpers/count-selected-risks.ts';
 import { DefaultScaScannerSpawner } from './dependency-risk-helpers/default-sca-scanner-spawner.ts';
@@ -114,11 +115,7 @@ export async function analyzeDependencyRisks(
   );
 }
 
-function handleResult(
-  unresolvedRisksCount: number,
-  errorCount: number,
-  console: CommandAuthenticatedInvocationContext['console'],
-) {
+function handleResult(unresolvedRisksCount: number, errorCount: number, console: Console) {
   function warnErrorsDuringAnalysis() {
     if (errorCount > 0) {
       console.warn(`Found ${errorCount} ${pluralize(errorCount, 'analysis error')}.`);

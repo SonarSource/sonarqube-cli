@@ -28,6 +28,7 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import { spawnProcess } from '@/core/process/process.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import { runDepRisksStage } from './git-pre-commit-dependency-risks.ts';
 import { runCommitSecretsStage } from './git-pre-commit-secrets.ts';
@@ -47,7 +48,7 @@ export interface GitPreCommitOptions {
 async function resolveDepRisksProjectKey(
   options: GitPreCommitOptions,
   auth: ResolvedAuth | null,
-  console: CommandInvocationContext['console'],
+  console: Console,
 ): Promise<string | undefined> {
   if (options.project) {
     return options.project;

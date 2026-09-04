@@ -62,7 +62,7 @@ export async function runCommitSecretsStage(
 
   const { result, parsed } = scan;
   const { issues, errors } = parsed;
-  warnScanErrors(errors, ctx.console);
+  warnScanErrors(ctx.console, errors);
 
   if ((result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND) {
     printSecretsFindingsOrStderr(issues, result.stderr, ctx.console);
