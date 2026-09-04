@@ -592,6 +592,10 @@ jobs:
       - publish-binaries
       - scan
     if: ${{ !cancelled() && !failure() && (github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-')) }}
+    # promote 2.0.0 re-runs get-build-number, which claims refs/build-number/* and
+    # 403s on this repo. Passing BUILD_NUMBER skips that claim (from-env).
+    env:
+      BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
     steps:
       - uses: SonarSource/ci-github-actions/promote@d41706a4180f70b6c0d0479795309a6c99726022 # 2.0.0
         env:
