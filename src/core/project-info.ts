@@ -42,6 +42,10 @@ import {
   discoverProjectKeyByGitRemote,
   GIT_REMOTE_BINDING_SOURCE,
 } from '@/core/server/discover-project-by-remote.ts';
+import {
+  type SharedProjectConfigMapping,
+  SharedProjectConfigRepositoryImpl,
+} from '@/core/shared-project-config.ts';
 import type { CliState, KnownServerProjectMapping } from '@/core/state/state.ts';
 import { getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState } from '@/core/state/state-repository.ts';
@@ -52,6 +56,9 @@ import { canonicalizePath } from './io/fs-utils.ts';
 import logger from './observability/logger.ts';
 
 export const KNOWN_SERVER_PROJECT_MAPPING_SOURCE = 'known project mapping';
+export const SHARED_PROJECT_CONFIG_SOURCE = 'shared project config';
+
+const sharedProjectConfigRepository = new SharedProjectConfigRepositoryImpl();
 
 /** Local config files found at exactly one directory — no git, no root resolution. */
 interface LocalProjectConfig {
@@ -142,9 +149,10 @@ async function loadLocalProjectConfig(dir: string): Promise<LocalProjectConfig> 
 }
 
 /**
- * Tries each source in turn — known-server-project-mapping, then local config files, then
- * git-remote binding (a single repo-level last resort) — with the first two walking the
- * same nearest-first `resolveLookupPaths` list, so "closer wins" uniformly.
+ * Tries each source in turn — shared project config, then known-server-project-mapping,
+ * then local config files, then git-remote binding (a single repo-level last resort) — the
+ * first three walking the same nearest-first `resolveLookupPaths` list, so "closer wins"
+ * uniformly.
  */
 export async function discoverProject(
   startDir: string,
@@ -173,6 +181,7 @@ export async function discoverProject(
       : undefined;
 
     const resolved =
+      (await applySharedProjectConfig(config, lookupPaths, options)) ||
       (knownMappings !== undefined &&
         applyKnownServerProjectMapping(config, lookupPaths, knownMappings, options)) ||
       (await applyLocalConfigAcrossLookupPaths(config, lookupPaths, options));
@@ -299,6 +308,53 @@ async function applyLocalConfigAcrossLookupPaths(
       config.projectRoot = projectRoot;
       return true;
     }
+  }
+
+  return false;
+}
+
+function applySharedProjectConfigEntry(
+  config: DiscoveredProject,
+  mapping: SharedProjectConfigMapping,
+  options: DiscoverProjectOptions,
+): void {
+  config.configSources.push(SHARED_PROJECT_CONFIG_SOURCE);
+  config.projectKey = mapping.projectKey;
+  config.serverUrl = mapping.serverUrl;
+  config.organization = mapping.organization;
+  config.projectRoot = mapping.projectRoot;
+
+  if (options.silent) {
+    return;
+  }
+  const fields = formatConfigFields(config.serverUrl, config.projectKey, config.organization);
+  if (fields) {
+    print(`Found ${SHARED_PROJECT_CONFIG_SOURCE}: ${fields}`);
+  }
+}
+
+/** Walks lookupPaths nearest-first for the first `.sonar-config.json` found; it always applies — one file holds exactly one mapping, so there's no "found but doesn't match" case. */
+async function applySharedProjectConfig(
+  config: DiscoveredProject,
+  lookupPaths: LookupPath[],
+  options: DiscoverProjectOptions,
+): Promise<boolean> {
+  for (const { checkPath } of lookupPaths) {
+    let mapping: SharedProjectConfigMapping | null;
+    try {
+      mapping = await sharedProjectConfigRepository.load(checkPath);
+    } catch (error) {
+      logger.debug(
+        `Shared project config lookup skipped for ${checkPath}: ${(error as Error).message}`,
+      );
+      continue;
+    }
+    if (mapping === null) {
+      continue;
+    }
+
+    applySharedProjectConfigEntry(config, mapping, options);
+    return true;
   }
 
   return false;

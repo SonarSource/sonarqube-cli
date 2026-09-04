@@ -23,7 +23,11 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
-import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
+import {
+  SHARED_PROJECT_CONFIG_FILE_NAME,
+  SONARCLOUD_URL,
+  SONARCLOUD_US_URL,
+} from '@/core/config-constants.ts';
 import * as gitDiscover from '@/core/host/git/discover.ts';
 import * as lookupPathResolver from '@/core/host/git/lookup-path-resolver.ts';
 import * as gitWorktree from '@/core/host/git/worktree.ts';
@@ -34,6 +38,7 @@ import {
   discoverProject,
   discoverServer,
   KNOWN_SERVER_PROJECT_MAPPING_SOURCE,
+  SHARED_PROJECT_CONFIG_SOURCE,
 } from '@/core/project-info.ts';
 import * as discoverByRemote from '@/core/server/discover-project-by-remote.ts';
 import { GIT_REMOTE_BINDING_SOURCE } from '@/core/server/discover-project-by-remote.ts';
@@ -93,6 +98,10 @@ function mockKnownMappings(
     ...getDefaultState('1.0.0'),
     knownServerProjectMappings: mappings,
   });
+}
+
+function writeSharedProjectConfig(dir: string, entry: unknown): void {
+  fakeFs.writeFile(join(dir, SHARED_PROJECT_CONFIG_FILE_NAME), JSON.stringify({ project: entry }));
 }
 
 describe('discoverProject', () => {
@@ -379,6 +388,120 @@ describe('discoverProject', () => {
     expect(result.projectKey).toBeUndefined();
     expect(result.projectRoot).toBe(canonicalizePath(testDir));
     expect(result.configSources).toEqual([]);
+  });
+
+  describe('shared project config', () => {
+    it('uses a Cloud entry from .sonar-config.json when no other source provides one', async () => {
+      writeSharedProjectConfig(testDir, {
+        region: 'eu',
+        organization: 'shared-org',
+        projectKey: 'shared-project',
+        path: '.',
+      });
+
+      const result = await discoverProject(testDir);
+
+      expect(result.projectKey).toBe('shared-project');
+      expect(result.serverUrl).toBe(SONARCLOUD_URL);
+      expect(result.organization).toBe('shared-org');
+      expect(result.configSources).toEqual([SHARED_PROJECT_CONFIG_SOURCE]);
+      expect(result.projectRoot).toBe(canonicalizePath(testDir));
+    });
+
+    it('uses a Server entry from .sonar-config.json', async () => {
+      writeSharedProjectConfig(testDir, {
+        serverUrl: 'https://sonarqube.internal',
+        projectKey: 'onprem-project',
+        path: '.',
+      });
+
+      const result = await discoverProject(testDir);
+
+      expect(result.projectKey).toBe('onprem-project');
+      expect(result.serverUrl).toBe('https://sonarqube.internal');
+      expect(result.organization).toBeUndefined();
+    });
+
+    it("resolves projectRoot from the entry's path, which can differ from the invocation directory", async () => {
+      writeSharedProjectConfig(testDir, {
+        serverUrl: 'https://shared.example.com',
+        projectKey: 'shared-project',
+        path: 'services/eu',
+      });
+
+      const result = await discoverProject(testDir);
+
+      expect(result.projectKey).toBe('shared-project');
+      expect(result.projectRoot).toBe(canonicalizePath(join(testDir, 'services/eu')));
+    });
+
+    it('finds the file while climbing from a nested directory with no file of its own', async () => {
+      const subDir = join(testDir, 'nested', 'sub');
+      writeSharedProjectConfig(testDir, {
+        region: 'eu',
+        organization: 'shared-org',
+        projectKey: 'root-project',
+        path: '.',
+      });
+      mockClimb(lookupPathsSpy, subDir, join(testDir, 'nested'), testDir);
+
+      const result = await discoverProject(subDir);
+
+      expect(result.projectKey).toBe('root-project');
+      expect(result.projectRoot).toBe(canonicalizePath(testDir));
+    });
+
+    it('wins over a known project mapping and sonar-project.properties', async () => {
+      writeSharedProjectConfig(testDir, {
+        serverUrl: 'https://shared.example.com',
+        projectKey: 'shared-project',
+        path: '.',
+      });
+      mockKnownMappings(loadStateSpy, [
+        makeKnownMapping({ targetRoot: canonicalizePath(testDir) }),
+      ]);
+      fakeFs.writeFile(
+        join(testDir, 'sonar-project.properties'),
+        'sonar.host.url=https://props-server.io\nsonar.projectKey=props_project\n',
+      );
+
+      const result = await discoverProject(testDir);
+
+      expect(result.projectKey).toBe('shared-project');
+      expect(result.configSources).toEqual([SHARED_PROJECT_CONFIG_SOURCE]);
+    });
+
+    it('does not treat invalid JSON as a match and falls through to the next source', async () => {
+      fakeFs.writeFile(join(testDir, SHARED_PROJECT_CONFIG_FILE_NAME), '{ not valid json ]');
+      mockKnownMappings(loadStateSpy, [
+        makeKnownMapping({ targetRoot: canonicalizePath(testDir) }),
+      ]);
+
+      const result = await discoverProject(testDir);
+
+      expect(result.projectKey).toBe('known-project');
+    });
+
+    it('stops at the first .sonar-config.json found, applying it even though a farther file would otherwise match', async () => {
+      const subDir = join(testDir, 'packages', 'api');
+      // Nearer file, unrelated path — must still win over the farther, exactly-matching one.
+      writeSharedProjectConfig(subDir, {
+        serverUrl: 'https://shared.example.com',
+        projectKey: 'nearest-project',
+        path: 'unrelated',
+      });
+      writeSharedProjectConfig(testDir, {
+        serverUrl: 'https://shared.example.com',
+        projectKey: 'root-project',
+        path: 'packages/api',
+      });
+      mockClimb(lookupPathsSpy, subDir, join(testDir, 'packages'), testDir);
+
+      const result = await discoverProject(subDir);
+
+      expect(result.projectKey).toBe('nearest-project');
+      expect(result.projectRoot).toBe(canonicalizePath(join(subDir, 'unrelated')));
+    });
   });
 
   describe('known server project mapping', () => {
