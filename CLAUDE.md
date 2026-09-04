@@ -47,7 +47,7 @@ The bare `sonar analyze` command accepts `-p, --project <project>` for the agent
 
 `sonar quality-gate status` shows the project-level quality gate verdict. Backed by `QualityGatesClient.getProjectStatus()` (
 `src/core/server/quality-gates.ts`) calling `GET /api/qualitygates/project_status`, whose params and response shape are identical on SonarQube Cloud and Server (no `isCloud`
-branching needed).
+branching needed). `resolveQualityGateScope()` (`src/commands/quality-gate/status/scope.ts`) resolves the effective branch/PR: `--branch`/`--pull-request` win when given (mutually exclusive); otherwise it tries to auto-detect an open pull request for the current git branch via `PullRequestsClient.listPullRequests()` (`GET /api/project_pull_requests/list` — the project's own record of PRs it has analyzed, not a live DevOps-platform call, so no ALM credentials are needed), and falls back to the project's default branch whenever that lookup is unavailable, empty, or ambiguous (no git branch resolvable, the endpoint 404s on an edition without PR analysis, or more than one PR matches). The output always states which branch/PR was actually used (`Branch main (default)` / `Pull Request 42 (auto-detected from branch feature-x)`), so the result is never ambiguous.
 
 `sonar analyze dependency-risks` accepts an optional `-p, --project <project>`. When omitted, the project key is auto-detected via `discoverProject()`.
 
