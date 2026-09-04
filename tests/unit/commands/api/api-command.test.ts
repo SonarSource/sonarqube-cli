@@ -47,9 +47,10 @@ describe('apiCommand', () => {
     fake = new FakeConsole();
     FAKE_CTX = new CommandAuthenticatedInvocationContext(FAKE_AUTH, fake);
 
-    genericRequestSpy = spyOn(SonarHttpClient.prototype, 'genericRequest').mockResolvedValue(
-      '{"status":"UP"}',
-    );
+    genericRequestSpy = spyOn(SonarHttpClient.prototype, 'genericRequest').mockResolvedValue({
+      ok: true,
+      value: '{"status":"UP"}',
+    });
   });
 
   afterEach(() => {

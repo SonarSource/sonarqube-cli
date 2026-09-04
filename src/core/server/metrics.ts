@@ -20,6 +20,7 @@
 
 // SonarQube Metrics API wrapper
 
+import { unwrap } from '../result.ts';
 import { type SonarHttpClient } from './http-client.ts';
 import type { Metric, MetricsSearchResponse } from './types.ts';
 
@@ -43,10 +44,12 @@ export class MetricsClient {
     let page = 1;
     let response: MetricsSearchResponse;
     do {
-      response = await this.client.get<MetricsSearchResponse>('/api/metrics/search', {
-        p: page,
-        ps: METRICS_PAGE_SIZE,
-      });
+      response = unwrap(
+        await this.client.get<MetricsSearchResponse>('/api/metrics/search', {
+          p: page,
+          ps: METRICS_PAGE_SIZE,
+        }),
+      );
       metrics.push(...response.metrics);
       page += 1;
     } while (metrics.length < response.total && response.metrics.length > 0);

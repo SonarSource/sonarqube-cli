@@ -21,6 +21,7 @@
 // SonarQube project-bindings API wrapper: mapping DevOps platform repositories to projects.
 
 import logger from '../observability/logger.ts';
+import { unwrap } from '../result.ts';
 import { stripGitRemoteUrlUserinfo } from './git-remote-url.ts';
 import type { SonarHttpClient } from './http-client.ts';
 
@@ -107,9 +108,11 @@ export class ProjectBindingsClient {
   // ---------------------------------------------------------------------------
 
   async listGitlabDopSettings(): Promise<Array<{ id: string; key: string; url: string }>> {
-    const result = await this.client.get<{
-      dopSettings: Array<{ id: string; key: string; type: string; url: string }>;
-    }>('/api/v2/dop-translation/dop-settings');
+    const result = unwrap(
+      await this.client.get<{
+        dopSettings: Array<{ id: string; key: string; type: string; url: string }>;
+      }>('/api/v2/dop-translation/dop-settings'),
+    );
     return result.dopSettings.filter((s) => s.type === 'gitlab');
   }
 
@@ -119,14 +122,16 @@ export class ProjectBindingsClient {
     let pageIndex = 1;
     const pageSize = 500;
     for (;;) {
-      const result = await this.client.get<{
-        projectBindings: Array<{ projectKey: string; repository: string }>;
-        page: { total: number; pageSize: number; pageIndex: number };
-      }>('/api/v2/dop-translation/project-bindings', {
-        pageSize,
-        pageIndex,
-        dopSettingId,
-      });
+      const result = unwrap(
+        await this.client.get<{
+          projectBindings: Array<{ projectKey: string; repository: string }>;
+          page: { total: number; pageSize: number; pageIndex: number };
+        }>('/api/v2/dop-translation/project-bindings', {
+          pageSize,
+          pageIndex,
+          dopSettingId,
+        }),
+      );
       for (const binding of result.projectBindings) {
         bindingMap.set(binding.repository, binding.projectKey);
       }

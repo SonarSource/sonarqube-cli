@@ -26,6 +26,7 @@ import { beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import type { Result } from '@/core/result.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
 import { MAX_PAGE_SIZE, ProjectsClient } from '@/core/server/projects.ts';
@@ -77,17 +78,20 @@ function createMockIssuesResponse(
   page: number,
   pageSize: number,
   total: number,
-): Promise<IssuesSearchResponse> {
+): Promise<Result<IssuesSearchResponse>> {
   return Promise.resolve({
-    total,
-    p: page,
-    ps: pageSize,
-    paging: {
-      pageIndex: page,
-      pageSize,
+    ok: true,
+    value: {
       total,
+      p: page,
+      ps: pageSize,
+      paging: {
+        pageIndex: page,
+        pageSize,
+        total,
+      },
+      issues,
     },
-    issues,
   });
 }
 
@@ -102,10 +106,13 @@ function createMockProjectsResponse(
   pageIndex: number,
   pageSize: number,
   total: number,
-): Promise<ProjectsSearchResponse> {
+): Promise<Result<ProjectsSearchResponse>> {
   return Promise.resolve({
-    paging: { pageIndex, pageSize, total },
-    components,
+    ok: true,
+    value: {
+      paging: { pageIndex, pageSize, total },
+      components,
+    },
   });
 }
 
@@ -463,7 +470,7 @@ describe('issuesSearchCommand', () => {
     const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockImplementation(
       <T>(_endpoint: string, params?: Record<string, string | number | boolean>) => {
         capturedParams = params as Record<string, string>;
-        return Promise.resolve(emptyApiResponse as unknown as T);
+        return Promise.resolve({ ok: true, value: emptyApiResponse as unknown as T });
       },
     );
 
@@ -479,7 +486,10 @@ describe('issuesSearchCommand', () => {
   });
 
   it('succeeds when issues search returns results', async () => {
-    const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockResolvedValue(emptyApiResponse);
+    const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockResolvedValue({
+      ok: true,
+      value: emptyApiResponse,
+    });
 
     try {
       await listIssues({ project: 'my-project', page: 1, pageSize: 500 }, mockCtx);
@@ -494,7 +504,7 @@ describe('issuesSearchCommand', () => {
     const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockImplementation(
       <T>(_endpoint: string, params?: Record<string, string | number | boolean>) => {
         capturedParams = params as Record<string, string>;
-        return Promise.resolve(emptyApiResponse as unknown as T);
+        return Promise.resolve({ ok: true, value: emptyApiResponse as unknown as T });
       },
     );
     try {
@@ -514,7 +524,7 @@ describe('issuesSearchCommand', () => {
     const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockImplementation(
       <T>(_endpoint: string, params?: Record<string, string | number | boolean>) => {
         capturedParams = params as Record<string, string>;
-        return Promise.resolve(emptyApiResponse as unknown as T);
+        return Promise.resolve({ ok: true, value: emptyApiResponse as unknown as T });
       },
     );
     try {
@@ -541,7 +551,7 @@ describe('issuesSearchCommand', () => {
     const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockImplementation(
       <T>(_endpoint: string, params?: Record<string, string | number | boolean>) => {
         capturedParams = params as Record<string, string>;
-        return Promise.resolve(emptyApiResponse as unknown as T);
+        return Promise.resolve({ ok: true, value: emptyApiResponse as unknown as T });
       },
     );
     const modeSpy = spyOn(SystemClient.prototype, 'getServerMode').mockResolvedValue('standard');

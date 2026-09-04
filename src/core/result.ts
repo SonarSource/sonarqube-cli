@@ -18,23 +18,22 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// SonarQube System API wrapper — instance status and clean-code policy mode.
+// Generic Result monad. `Ok`/`Err` are capitalized because `ok` already names
+// `response.ok` / `result.ok` throughout the codebase.
 
-import { unwrap } from '../result.ts';
-import type { SonarHttpClient } from './http-client.ts';
+export type Result<T, E extends Error = Error> = { ok: true; value: T } | { ok: false; error: E };
 
-export class SystemClient {
-  private readonly client: SonarHttpClient;
+export function Ok<T>(value: T): Result<T, never> {
+  return { ok: true, value };
+}
 
-  constructor(client: SonarHttpClient) {
-    this.client = client;
+export function Err<E extends Error>(error: E): Result<never, E> {
+  return { ok: false, error };
+}
+
+export function unwrap<T, E extends Error>(result: Result<T, E>): T {
+  if (!result.ok) {
+    throw result.error;
   }
-
-  async getServerMode(): Promise<'mqr' | 'standard'> {
-    if (this.client.isCloud) return 'mqr';
-    const result = unwrap(
-      await this.client.getOrNotFound<{ mode: string }>('/api/v2/clean-code-policy/mode'),
-    );
-    return result?.mode === 'MQR' ? 'mqr' : 'standard';
-  }
+  return result.value;
 }

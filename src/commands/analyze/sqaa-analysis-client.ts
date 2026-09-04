@@ -39,19 +39,19 @@ export class SqaaAnalysisClient {
    */
   async createAnalysis(request: SqaaAnalysisRequest): Promise<SqaaAnalysisResponse> {
     const endpoint = this.client.isCloud ? '/a3s-analysis/analyses' : '/api/v2/a3s/analyses';
-    try {
-      return await this.client.post<SqaaAnalysisResponse>(
-        endpoint,
-        request,
-        this.client.apiHostFor(endpoint),
-        { [SONAR_INVOCATION_ID_HEADER]: INVOCATION_ID },
-      );
-    } catch (err) {
+    const result = await this.client.post<SqaaAnalysisResponse>(
+      endpoint,
+      request,
+      this.client.apiHostFor(endpoint),
+      { [SONAR_INVOCATION_ID_HEADER]: INVOCATION_ID },
+    );
+    if (!result.ok) {
       // 403 on this endpoint means Agentic Pack entitlement was revoked.
-      if (err instanceof ForbiddenApiError) {
+      if (result.error instanceof ForbiddenApiError) {
         throw new SqaaForbiddenError();
       }
-      throw err;
+      throw result.error;
     }
+    return result.value;
   }
 }
