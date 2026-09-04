@@ -839,8 +839,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('--dry-run', 'Preview what would be processed without making any changes', false)
     .authenticatedAction(async (ctx, options: OnboardCiGitlabOptions) => {
       validateOnboardCiGitlabOptions(options);
-      const gitlabToken = await resolveGitlabToken();
-      return onboardCiGitlab(ctx.auth, gitlabToken, options);
+      const gitlabToken = await resolveGitlabToken(ctx.console);
+      return onboardCiGitlab(ctx.auth, gitlabToken, options, ctx.console);
     });
 
   // Hidden flush command — only registered when running as a telemetry worker.
