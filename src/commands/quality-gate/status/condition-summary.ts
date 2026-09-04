@@ -32,11 +32,26 @@ export interface QualityGateBreakdownEntry {
   formattedValue: string;
 }
 
-export interface QualityGateMetricBreakdown {
+export interface DuplicationsBreakdownEntry extends QualityGateBreakdownEntry {
+  blockCount?: number;
+  duplicatesWith?: string[];
+}
+
+export interface CoverageMetricBreakdown {
+  category: 'coverage';
   totalCount: number;
   fetchedCount: number;
   entries: QualityGateBreakdownEntry[];
 }
+
+export interface DuplicationsMetricBreakdown {
+  category: 'duplications';
+  totalCount: number;
+  fetchedCount: number;
+  entries: DuplicationsBreakdownEntry[];
+}
+
+export type QualityGateMetricBreakdown = CoverageMetricBreakdown | DuplicationsMetricBreakdown;
 
 export interface QualityGateConditionSummary {
   metric: string;

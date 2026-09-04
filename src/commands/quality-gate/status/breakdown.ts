@@ -22,15 +22,15 @@
 
 import logger from '@/core/observability/logger.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
-import { isNewCodeMetric, MeasuresClient } from '@/core/server/measures.ts';
-import type { ComponentTreeComponent, Metric, QualityGateCondition } from '@/core/server/types.ts';
+import { MeasuresClient } from '@/core/server/measures.ts';
+import type { Metric, QualityGateCondition } from '@/core/server/types.ts';
 
 import type {
-  QualityGateBreakdownEntry,
   QualityGateConditionSummary,
   QualityGateMetricBreakdown,
 } from './condition-summary.ts';
-import { formatMetricValue } from './format-metric-value.ts';
+import { fetchDuplicationsBreakdown } from './duplications-enrichment.ts';
+import { fetchWorstFileEntries } from './worst-file-entries.ts';
 
 /** Metric keys owned by each `--category` value, both overall and new-code variants. */
 const CATEGORY_METRICS: Record<string, string[]> = {
@@ -41,6 +41,15 @@ const CATEGORY_METRICS: Record<string, string[]> = {
     'new_coverage',
     'new_branch_coverage',
     'new_line_coverage',
+  ],
+  duplications: [
+    'duplicated_lines_density',
+    'duplicated_blocks',
+    'duplicated_files',
+    'duplicated_lines',
+    'new_duplicated_lines_density',
+    'new_duplicated_blocks',
+    'new_duplicated_lines',
   ],
 };
 
@@ -63,10 +72,7 @@ export interface AttachBreakdownsParams {
   pullRequest?: string;
 }
 
-/**
- * True when a failing condition's metric falls into an implemented category, filtered to
- * `category` when given.
- */
+/** True when failing and in an implemented category, filtered to `category` if given. */
 function isFailingMetricInCategory(
   metricKey: string,
   status: string,
@@ -76,11 +82,7 @@ function isFailingMetricInCategory(
   return status !== 'OK' && !!conditionCategory && (!category || category === conditionCategory);
 }
 
-/**
- * True when at least one failing condition falls into `category` - distinct from the resulting
- * breakdown being empty for another reason (a matching condition's enrichment fetch failing, or
- * returning no files), which should stay silent rather than warn.
- */
+/** True when a failing condition falls into `category` - kept distinct from an empty breakdown result, which shouldn't warn. */
 export function hasFailingConditionInCategory(
   conditions: QualityGateCondition[],
   category: string,
@@ -90,12 +92,19 @@ export function hasFailingConditionInCategory(
   );
 }
 
-/** A failing condition whose metric falls into an implemented category, when given. */
-function isEnrichableCondition(
+/** The condition's category when enrichable, or undefined when there's nothing to build. */
+function resolveEnrichableCategory(
   condition: QualityGateConditionSummary,
-  category: string | undefined,
-): boolean {
-  return isFailingMetricInCategory(condition.metric, condition.status, category);
+  filterCategory: string | undefined,
+): string | undefined {
+  if (condition.status === 'OK') {
+    return undefined;
+  }
+  const conditionCategory = METRIC_CATEGORIES.get(condition.metric);
+  if (!conditionCategory || (filterCategory && filterCategory !== conditionCategory)) {
+    return undefined;
+  }
+  return conditionCategory;
 }
 
 /**
@@ -112,65 +121,58 @@ export async function attachBreakdowns(
 
   return Promise.all(
     conditions.map(async (condition) => {
-      if (!isEnrichableCondition(condition, params.category)) {
+      const category = resolveEnrichableCategory(condition, params.category);
+      if (!category) {
         return condition;
       }
-      const breakdown = await fetchMetricBreakdown(measuresClient, params, condition, metricsByKey);
+      const breakdown = await fetchCategoryBreakdown(
+        category,
+        measuresClient,
+        params,
+        condition,
+        metricsByKey.get(condition.metric),
+      );
       return breakdown ? { ...condition, breakdown } : condition;
     }),
   );
+}
+
+function fetchCategoryBreakdown(
+  category: string,
+  measuresClient: MeasuresClient,
+  params: AttachBreakdownsParams,
+  condition: QualityGateConditionSummary,
+  metric: Metric | undefined,
+): Promise<QualityGateMetricBreakdown | undefined> {
+  switch (category) {
+    case 'coverage':
+      return fetchMetricBreakdown(measuresClient, params, condition, metric);
+    case 'duplications':
+      return fetchDuplicationsBreakdown(measuresClient, params, condition, metric);
+    default:
+      return Promise.resolve(undefined);
+  }
 }
 
 async function fetchMetricBreakdown(
   measuresClient: MeasuresClient,
   params: AttachBreakdownsParams,
   condition: QualityGateConditionSummary,
-  metricsByKey: Map<string, Metric>,
+  metric: Metric | undefined,
 ): Promise<QualityGateMetricBreakdown | undefined> {
   try {
-    const { components, totalCount } = await measuresClient.getWorstComponentsByMetric({
-      projectKey: params.projectKey,
-      metricKey: condition.metric,
-      ascending: condition.comparator === 'LT',
-      top: params.top,
-      branch: params.branch,
-      pullRequest: params.pullRequest,
-    });
-
-    const entries = components.flatMap((component) =>
-      toBreakdownEntry(component, condition.metric, metricsByKey.get(condition.metric)),
+    const { entries, totalCount, fetchedCount } = await fetchWorstFileEntries(
+      measuresClient,
+      params,
+      condition,
+      metric,
     );
-    return entries.length > 0
-      ? { totalCount, fetchedCount: components.length, entries }
-      : undefined;
+    if (entries.length === 0) {
+      return undefined;
+    }
+    return { category: 'coverage', totalCount, fetchedCount, entries };
   } catch (err) {
     logger.debug(`Failed to build quality gate breakdown for '${condition.metric}'`, err);
     return undefined;
   }
-}
-
-function toBreakdownEntry(
-  component: ComponentTreeComponent,
-  metricKey: string,
-  metric: Metric | undefined,
-): QualityGateBreakdownEntry[] {
-  if (!component.path) {
-    return [];
-  }
-  const measure = component.measures.find((m) => m.metric === metricKey);
-  const rawValue = isNewCodeMetric(metricKey)
-    ? measure?.periods?.[0]?.value
-    : (measure?.value ?? measure?.periods?.[0]?.value);
-  if (rawValue === undefined) {
-    return [];
-  }
-  return [
-    {
-      path: component.path,
-      value: rawValue,
-      formattedValue: metric
-        ? formatMetricValue(metric.type, rawValue, metric.decimalScale)
-        : rawValue,
-    },
-  ];
 }

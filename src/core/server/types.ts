@@ -207,3 +207,28 @@ export interface ComponentTreeResponse {
   baseComponent: ComponentTreeComponent;
   components: ComponentTreeComponent[];
 }
+
+export interface DuplicationsShowBlock {
+  from: number;
+  size: number;
+  _ref?: string;
+}
+
+export interface DuplicationsShowDuplication {
+  blocks: DuplicationsShowBlock[];
+}
+
+export interface DuplicationsShowFile {
+  key: string;
+  name: string;
+  uuid: string;
+  project: string;
+  projectUuid: string;
+  projectName: string;
+}
+
+export interface DuplicationsShowResponse {
+  duplications: DuplicationsShowDuplication[];
+  /** Keyed by block `_ref` - a ref for a peer that isn't browsable or was since removed has no entry. */
+  files: Record<string, DuplicationsShowFile | undefined>;
+}

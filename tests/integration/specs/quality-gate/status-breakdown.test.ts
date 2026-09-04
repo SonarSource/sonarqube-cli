@@ -74,6 +74,7 @@ describe('quality-gate status — breakdown', () => {
         (c: { metric: string }) => c.metric === 'new_coverage',
       );
       expect(condition.breakdown).toEqual({
+        category: 'coverage',
         totalCount: 5,
         fetchedCount: 2,
         entries: [
@@ -119,6 +120,7 @@ describe('quality-gate status — breakdown', () => {
         (c: { metric: string }) => c.metric === 'new_coverage',
       );
       expect(condition.breakdown).toEqual({
+        category: 'coverage',
         totalCount: 3,
         fetchedCount: 3,
         entries: [
@@ -131,6 +133,67 @@ describe('quality-gate status — breakdown', () => {
       // no "N more" hint to show, even though entries.length (2) is less than totalCount (3).
       const tableResult = await harness.run(
         `quality-gate status --project my-project --format table`,
+      );
+      expect(tableResult.stdout).not.toContain('more');
+      expect(tableResult.stdout).not.toContain('--top');
+    },
+    { timeout: 15000 },
+  );
+  it(
+    "excludes files at the metric's non-contributing boundary, and grounds totalCount/fetchedCount to the exact contributing count once one is hit",
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '62.4',
+              },
+            ])
+            // Worst-first (ascending): the fetched page hits 100% (nothing left to cover) at
+            // index 2, before --top 3 is exhausted. Two more 100% files exist beyond the page,
+            // but the boundary hit already proves neither of them contributes either.
+            .withComponentTreeFiles('new_coverage', [
+              { path: 'src/a.ts', value: '10.0' },
+              { path: 'src/b.ts', value: '20.0' },
+              { path: 'src/perfect-1.ts', value: '100.0' },
+              { path: 'src/perfect-2.ts', value: '100.0' },
+              { path: 'src/perfect-3.ts', value: '100.0' },
+            ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const jsonResult = await harness.run(
+        `quality-gate status --project my-project --top 3 --format json`,
+      );
+      const parsed = JSON.parse(jsonResult.stdout);
+      const condition = parsed.qualityGate.conditions.find(
+        (c: { metric: string }) => c.metric === 'new_coverage',
+      );
+      expect(condition.breakdown).toEqual({
+        category: 'coverage',
+        // Grounded to the real count of contributing files (2), not the API's
+        // "files with any measure" total (5) or the raw fetched page size (3).
+        totalCount: 2,
+        fetchedCount: 2,
+        entries: [
+          { path: 'src/a.ts', value: '10.0', formattedValue: '10.0%' },
+          { path: 'src/b.ts', value: '20.0', formattedValue: '20.0%' },
+        ],
+      });
+
+      // No "N more" hint either - the boundary hit already proves there's nothing more to find.
+      const tableResult = await harness.run(
+        `quality-gate status --project my-project --top 3 --format table`,
       );
       expect(tableResult.stdout).not.toContain('more');
       expect(tableResult.stdout).not.toContain('--top');
@@ -403,6 +466,7 @@ describe('quality-gate status — breakdown', () => {
       );
       expect(coverageCondition.breakdown).toBeUndefined();
       expect(newCoverageCondition.breakdown).toEqual({
+        category: 'coverage',
         totalCount: 1,
         fetchedCount: 1,
         entries: [{ path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' }],
@@ -461,6 +525,7 @@ describe('quality-gate status — breakdown', () => {
         expect.objectContaining({
           metric: 'coverage',
           breakdown: {
+            category: 'coverage',
             totalCount: 1,
             fetchedCount: 1,
             entries: [{ path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' }],
@@ -469,6 +534,7 @@ describe('quality-gate status — breakdown', () => {
         expect.objectContaining({
           metric: 'branch_coverage',
           breakdown: {
+            category: 'coverage',
             totalCount: 1,
             fetchedCount: 1,
             entries: [{ path: 'src/cart.ts', value: '40.0', formattedValue: '40.0%' }],
@@ -477,6 +543,7 @@ describe('quality-gate status — breakdown', () => {
         expect.objectContaining({
           metric: 'new_coverage',
           breakdown: {
+            category: 'coverage',
             totalCount: 1,
             fetchedCount: 1,
             entries: [{ path: 'src/pay.ts', value: '55.0', formattedValue: '55.0%' }],
@@ -727,6 +794,7 @@ describe('quality-gate status — breakdown', () => {
       );
       expect(violationsCondition.breakdown).toBeUndefined();
       expect(coverageCondition.breakdown).toEqual({
+        category: 'coverage',
         totalCount: 1,
         fetchedCount: 1,
         entries: [{ path: 'src/checkout.ts', value: '31.0', formattedValue: '31.0%' }],
@@ -844,7 +912,7 @@ describe('quality-gate status — breakdown', () => {
 
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain(
-        "Invalid --category option: 'security'. Must be one of: coverage",
+        "Invalid --category option: 'security'. Must be one of: coverage, duplications",
       );
       const statusRequests = server
         .getRecordedRequests()
