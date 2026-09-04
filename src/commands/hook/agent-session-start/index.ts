@@ -23,12 +23,17 @@
 // Fails open at every step: a hook that blocks or errors on agent startup is
 // worse than one that delivers no context.
 
-import { printSessionStartContext } from '@/commands/integrate/_common/context-augmentation.ts';
+import {
+  ENV_SKIP_CAG,
+  isContextAugmentationSkipped,
+  printSessionStartContext,
+} from '@/commands/integrate/_common/context-augmentation.ts';
 import { isSonarQubeCloud, resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { SonarQubeClient } from '@/core/server/client.ts';
+import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 import type { HookCommandResult } from '../hook-command-result.ts';
@@ -71,6 +76,11 @@ export async function agentSessionStart(agent: string): Promise<HookCommandResul
 async function resolveSessionStartContext(
   input: SessionStartInput,
 ): Promise<SessionStartOutput | null> {
+  if (isContextAugmentationSkipped()) {
+    logSkip(`${ENV_SKIP_CAG} is set`);
+    return null;
+  }
+
   const auth = await resolveAuth().catch(() => null);
   if (!auth) {
     logSkip('not authenticated');
@@ -85,6 +95,7 @@ async function resolveSessionStartContext(
     logSkip('no project key resolved');
     return null;
   }
+  noteProject(auth, discovered.projectKey);
 
   const [vortexEntitlement, scaEnabled] = await Promise.all([
     resolveVortexEntitlement(auth),
