@@ -162,11 +162,11 @@ async function analyzeSqaaExplicitFiles(
   }
 
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'multi-file', forcedDepth);
-  const resolution = await resolveSqaaAuthAndProject(auth, project, undefined, console);
+  const resolution = await resolveSqaaAuthAndProject(auth, project, console);
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
 
-  if (!(await confirmLargeRunIfNeeded(entries.length, force, format, console))) return;
+  if (!(await confirmLargeRunIfNeeded(entries.length, console, force, format))) return;
 
   await runSqaaAnalysisOnExplicitFiles(entries, {
     resolved,
@@ -227,11 +227,11 @@ async function analyzeSqaaChangeSet(params: {
     return;
   }
 
-  const resolution = await resolveSqaaAuthAndProject(auth, project, changeSet.repoRoot, console);
+  const resolution = await resolveSqaaAuthAndProject(auth, project, console, changeSet.repoRoot);
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
 
-  if (!(await confirmLargeRunIfNeeded(changeSet.files.length, force, format, console))) return;
+  if (!(await confirmLargeRunIfNeeded(changeSet.files.length, console, force, format))) return;
 
   await runSqaaAnalysisOnFiles(changeSet, {
     resolved,

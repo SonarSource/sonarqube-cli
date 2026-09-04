@@ -374,7 +374,7 @@ function handleScanSuccess(
   for (const p of displayPaths) {
     console.print(`  ${green('✓')}  ${p}`);
   }
-  warnScanErrors(errors, console);
+  warnScanErrors(console, errors);
   console.blank();
   console.success(`No issues found · ${scanDurationMs}ms`);
 }
@@ -414,7 +414,7 @@ function formatSecretsIssueLine(issue: SecretsJsonIssue, index: number): string 
   return `     ${parts.join('  ')}`;
 }
 
-export function warnScanErrors(errors: string[] | undefined, console: Console): void {
+export function warnScanErrors(console: Console, errors?: string[]): void {
   if (!errors?.length) return;
   for (const msg of errors) {
     console.warn(`  Scan warning: ${msg}`);
@@ -439,7 +439,7 @@ function handleScanFailure(
       console.print(result.stderr);
       console.blank();
     }
-    warnScanErrors(errors, console);
+    warnScanErrors(console, errors);
     const count = issues.length;
     const secretWord = count === 1 ? 'secret' : 'secrets';
     // count === 0 means exit 51 but no parseable issues — report generically.

@@ -156,7 +156,7 @@ function displaySingleFileReport(
   console: Console,
 ): void {
   const file = report.files[0];
-  displaySqaaResults(file.issues, file.errors, file.path, displayDepth, console);
+  displaySqaaResults(file.issues, file.errors, file.path, console, displayDepth);
 }
 
 export async function runSqaaAnalysesTallyForResolved(
@@ -228,7 +228,7 @@ export async function runSqaaAnalysis(
   } = options;
 
   const console = resolveRunConsole(options);
-  const resolution = await resolveSqaaAuthAndProject(auth, explicitProject, undefined, console);
+  const resolution = await resolveSqaaAuthAndProject(auth, explicitProject, console);
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
 
@@ -246,7 +246,7 @@ export async function runSqaaAnalysis(
   } else if (error instanceof SqaaForbiddenError) {
     await printVortexUnavailableForForbidden(auth, resolveRunConsole(options));
   } else if (error) {
-    printSingleFileTextFailure(filePath, error, displayDepth, resolveRunConsole(options));
+    printSingleFileTextFailure(filePath, error, resolveRunConsole(options), displayDepth);
   } else {
     displaySingleFileReport(report, displayDepth, resolveRunConsole(options));
   }

@@ -114,16 +114,16 @@ async function buildSqaaJsonReportFromChangeSet(
   }
 
   const console = runOptions.telemetryCtx!.console;
-  const resolution = await resolveSqaaAuthAndProject(auth, project, changeSet.repoRoot, console);
+  const resolution = await resolveSqaaAuthAndProject(auth, project, console, changeSet.repoRoot);
   const resolved = resolveSqaaContext(resolution, { requireProject: false }, console);
   if (!resolved) return null;
 
   if (
     !(await confirmLargeRunIfNeeded(
       changeSet.files.length,
+      console,
       force,
       options.format ?? 'text',
-      console,
     ))
   ) {
     return null;
@@ -163,7 +163,7 @@ export async function buildSqaaJsonReport(
     const entries = resolveSqaaFileArgs(rawFiles);
     const resolvedBranch = await resolveSqaaBranch(branch, entries[0].absolutePath);
     const console = runOptions.telemetryCtx!.console;
-    const resolution = await resolveSqaaAuthAndProject(auth, project, undefined, console);
+    const resolution = await resolveSqaaAuthAndProject(auth, project, console);
     const resolved = resolveSqaaContext(resolution, { requireProject: false }, console);
     if (!resolved) return null;
 
@@ -182,7 +182,7 @@ export async function buildSqaaJsonReport(
 
     const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'multi-file', forcedDepth);
     if (
-      !(await confirmLargeRunIfNeeded(entries.length, force, options.format ?? 'text', console))
+      !(await confirmLargeRunIfNeeded(entries.length, console, force, options.format ?? 'text'))
     ) {
       return null;
     }

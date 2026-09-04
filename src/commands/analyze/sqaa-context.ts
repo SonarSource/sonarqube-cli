@@ -90,9 +90,9 @@ export function resolveDepthForMode(
 
 export async function confirmLargeRunIfNeeded(
   fileCount: number,
-  force: boolean | undefined,
-  format: OutputFormat,
   console: Console,
+  force?: boolean,
+  format: OutputFormat = 'text',
 ): Promise<boolean> {
   if (!force && format !== 'json' && fileCount > SQAA_LARGE_CHANGESET_THRESHOLD) {
     return await confirmLargeChangeset(fileCount, console);

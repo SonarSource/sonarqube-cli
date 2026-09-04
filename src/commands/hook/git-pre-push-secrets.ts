@@ -62,7 +62,7 @@ export async function runSecretsStage(
   }
 
   const { result, parsed } = scan;
-  warnScanErrors(parsed.errors, ctx.console);
+  warnScanErrors(ctx.console, parsed.errors);
 
   if ((result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND) {
     printSecretsFindingsOrStderr(parsed.issues, result.stderr, ctx.console);

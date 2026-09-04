@@ -152,7 +152,7 @@ async function confirmEntitlement(
 async function resolveProjectKey(
   options: RemediateOptions,
   auth: ResolvedAuth,
-  console: CommandAuthenticatedInvocationContext['console'],
+  console: Console,
 ): Promise<string> {
   if (options.project) {
     return options.project;
