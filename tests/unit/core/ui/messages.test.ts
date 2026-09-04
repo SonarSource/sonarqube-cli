@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Tests for messages.ts: info, success, warn, error, text, print, blank
+// Tests for TerminalConsole line output: info, success, warn, error, text, print, blank
 // Covers both FakeConsole recording and real output paths
 
 import { beforeEach, describe, expect, it, spyOn } from 'bun:test';
