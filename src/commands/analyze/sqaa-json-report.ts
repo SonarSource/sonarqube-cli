@@ -19,6 +19,7 @@
  */
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { timed } from '@/core/observability/timed.ts';
 import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 
@@ -48,6 +49,10 @@ import type {
   SqaaResolvedContext,
 } from './sqaa-types.ts';
 
+type JsonReportRunOptions = AnalyzeSqaaRunOptions & {
+  telemetryCtx: CommandInvocationContext;
+};
+
 async function buildSqaaJsonReportFromEntries(
   entries: ResolvedSqaaFileEntry[],
   resolved: SqaaResolvedContext,
@@ -55,7 +60,7 @@ async function buildSqaaJsonReportFromEntries(
   branch: string | undefined,
   wireDepth: SqaaDeepWireDepth | undefined,
   displayDepth: SqaaAnalysisDepth,
-  runOptions: AnalyzeSqaaRunOptions,
+  runOptions: JsonReportRunOptions,
 ): Promise<SqaaJsonReport> {
   if (entries.length === 1) {
     const { absolutePath } = entries[0];
@@ -98,7 +103,7 @@ async function buildSqaaJsonReportFromChangeSet(
   auth: ResolvedAuth,
   rawDepth: string | undefined,
   forcedDepth: SqaaAnalysisDepth | undefined,
-  runOptions: AnalyzeSqaaRunOptions,
+  runOptions: JsonReportRunOptions,
 ): Promise<SqaaJsonReport | null> {
   const { staged, base, branch, project, force } = options;
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'change-set', forcedDepth);
@@ -113,7 +118,7 @@ async function buildSqaaJsonReportFromChangeSet(
     );
   }
 
-  const console = runOptions.telemetryCtx!.console;
+  const { console } = runOptions.telemetryCtx;
   const resolution = await resolveSqaaAuthAndProject(auth, project, console, changeSet.repoRoot);
   const resolved = resolveSqaaContext(resolution, { requireProject: false }, console);
   if (!resolved) return null;
@@ -154,7 +159,7 @@ async function buildSqaaJsonReportFromChangeSet(
 export async function buildSqaaJsonReport(
   options: AnalyzeSqaaOptions,
   auth: ResolvedAuth,
-  runOptions: AnalyzeSqaaRunOptions = {},
+  runOptions: JsonReportRunOptions,
 ): Promise<SqaaJsonReport | null> {
   const telemetryOptions = { ...runOptions, auth };
   const { file: rawFiles, branch, project, force, depth: rawDepth, forcedDepth } = options;
@@ -162,7 +167,7 @@ export async function buildSqaaJsonReport(
   if (rawFiles?.length) {
     const entries = resolveSqaaFileArgs(rawFiles);
     const resolvedBranch = await resolveSqaaBranch(branch, entries[0].absolutePath);
-    const console = runOptions.telemetryCtx!.console;
+    const { console } = runOptions.telemetryCtx;
     const resolution = await resolveSqaaAuthAndProject(auth, project, console);
     const resolved = resolveSqaaContext(resolution, { requireProject: false }, console);
     if (!resolved) return null;
