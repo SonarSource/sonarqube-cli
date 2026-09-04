@@ -18,15 +18,17 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+
 import { runContextPassthrough } from '../context/index.ts';
 import { readRawStdin } from './stdin.ts';
 
-export async function claudePostToolUseFailure(): Promise<void> {
+export async function claudePostToolUseFailure(ctx: CommandInvocationContext): Promise<void> {
   let raw: string;
   try {
     raw = await readRawStdin();
   } catch {
     return; // timeout or read error — non-blocking
   }
-  await runContextPassthrough('__hook', ['Claude'], { stdinPayload: raw });
+  await runContextPassthrough('__hook', ['Claude'], { stdinPayload: raw, console: ctx.console });
 }

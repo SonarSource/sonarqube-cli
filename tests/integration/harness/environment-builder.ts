@@ -57,10 +57,10 @@ import type {
   KnownServerProjectMapping,
 } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
 import { version as CURRENT_CLI_VERSION } from '../../../package.json';
+import { FakeConsole } from '../../_common/fake-console.ts';
 import { IS_WINDOWS } from './platform';
 
 function resolveBinaryFixturePath(fixture: BinarySpec): string {
@@ -485,7 +485,7 @@ export class EnvironmentBuilder {
           targetRoot,
           scope,
           executionMode: 'install',
-          console: new TerminalConsole(),
+          console: new FakeConsole(),
           resolvedDependencies: new Map(),
           attrs: {},
         },

@@ -23,16 +23,16 @@ import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describe, expect, it, mock, spyOn } from 'bun:test';
+import { beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import { CommandFailedError } from '@/core/command-error.ts';
 import type { ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import type { SpawnResult } from '@/core/process/process.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { ScaDiscoverManifestsRunner } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-discover-manifests.ts';
 import type { ScaScannerInvocation } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner-runner-base.ts';
 import type { ScaScannerSpawner } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner-spawner.ts';
+import { FakeConsole } from '../../../../_common/fake-console.ts';
 import { makeScaInvocation as makeInvocation, okScaInstaller as okInstaller } from './_helpers.ts';
 
 function spawnerReturning(result: SpawnResult): ScaScannerSpawner {
@@ -44,6 +44,12 @@ function discoverManifestsArgs(invocation: ScaScannerInvocation): string[] {
   return new ScaDiscoverManifestsRunner(okInstaller, spawner).buildArgs(invocation);
 }
 
+let fake: FakeConsole;
+
+beforeEach(() => {
+  fake = new FakeConsole();
+});
+
 describe('ScaDiscoverManifestsRunner.run', () => {
   it('parses the files array and drops non-string entries', async () => {
     const stdout = JSON.stringify({
@@ -54,7 +60,7 @@ describe('ScaDiscoverManifestsRunner.run', () => {
       spawnerReturning({ exitCode: 0, stdout, stderr: '' }),
     );
 
-    const files = await runner.run(makeInvocation());
+    const files = await runner.run(makeInvocation(), fake);
 
     expect(files).toEqual(['package-lock.json', 'pom.xml']);
   });
@@ -65,7 +71,7 @@ describe('ScaDiscoverManifestsRunner.run', () => {
       spawnerReturning({ exitCode: 0, stdout: JSON.stringify({ files: [] }), stderr: '' }),
     );
 
-    expect(await runner.run(makeInvocation())).toEqual([]);
+    expect(await runner.run(makeInvocation(), fake)).toEqual([]);
   });
 
   it('throws CommandFailedError on a non-zero exit code', async () => {
@@ -75,7 +81,7 @@ describe('ScaDiscoverManifestsRunner.run', () => {
     );
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(runner.run(makeInvocation())).rejects.toThrow(
+    await expect(runner.run(makeInvocation(), fake)).rejects.toThrow(
       /Manifest discovery error: sca-scanner exited with code 1\./,
     );
   });
@@ -88,7 +94,7 @@ describe('ScaDiscoverManifestsRunner.run', () => {
 
     let caught: unknown;
     try {
-      await runner.run(makeInvocation());
+      await runner.run(makeInvocation(), fake);
     } catch (err) {
       caught = err;
     }
@@ -105,7 +111,7 @@ describe('ScaDiscoverManifestsRunner.run', () => {
 
     let caught: unknown;
     try {
-      await runner.run(makeInvocation());
+      await runner.run(makeInvocation(), fake);
     } catch (err) {
       caught = err;
     }
@@ -124,7 +130,7 @@ describe('ScaDiscoverManifestsRunner.run', () => {
 
     let caught: unknown;
     try {
-      await runner.run(makeInvocation());
+      await runner.run(makeInvocation(), fake);
     } catch (err) {
       caught = err;
     }
@@ -150,7 +156,7 @@ describe('ScaDiscoverManifestsRunner.run', () => {
       scannerProperties: { 'sonar.sca.foo': 'bar' },
     });
 
-    await new ScaDiscoverManifestsRunner(installer, { spawn }).run(invocation);
+    await new ScaDiscoverManifestsRunner(installer, { spawn }).run(invocation, fake);
 
     expect(spawn).toHaveBeenCalledTimes(1);
     expect(spawn).toHaveBeenCalledWith(
@@ -167,7 +173,7 @@ describe('ScaDiscoverManifestsRunner.run', () => {
       spawnerReturning({ exitCode: 0, stdout: JSON.stringify({ files: [] }), stderr: '' }),
     );
 
-    await runner.run(makeInvocation({ workDir }));
+    await runner.run(makeInvocation({ workDir }), fake);
 
     expect(existsSync(workDir)).toBe(false);
   });
@@ -181,7 +187,7 @@ describe('ScaDiscoverManifestsRunner.run', () => {
 
     let caught: unknown;
     try {
-      await runner.run(makeInvocation({ workDir }));
+      await runner.run(makeInvocation({ workDir }), fake);
     } catch (err) {
       caught = err;
     }
@@ -194,18 +200,19 @@ describe('ScaDiscoverManifestsRunner.run', () => {
     const rmSpy = spyOn(fs, 'rmSync').mockImplementation(() => {
       throw new Error('EBUSY: resource busy or locked');
     });
-    setMockUi(true);
-    clearMockUiCalls();
     const runner = new ScaDiscoverManifestsRunner(
       okInstaller,
       spawnerReturning({ exitCode: 0, stdout: JSON.stringify({ files: [] }), stderr: '' }),
     );
 
     try {
-      const files = await runner.run(makeInvocation({ workDir: join(tmpdir(), 'sca-cleanup') }));
+      const files = await runner.run(
+        makeInvocation({ workDir: join(tmpdir(), 'sca-cleanup') }),
+        fake,
+      );
 
       expect(files).toEqual([]);
-      const warned = getMockUiCalls().some(
+      const warned = fake.calls.some(
         (call) =>
           call.method === 'warn' &&
           String(call.args[0]).includes('Failed to clean up SCA scanner working directory'),
@@ -213,7 +220,6 @@ describe('ScaDiscoverManifestsRunner.run', () => {
       expect(warned).toBe(true);
     } finally {
       rmSpy.mockRestore();
-      setMockUi(false);
     }
   });
 });

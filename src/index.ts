@@ -28,7 +28,6 @@ import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.t
 import { installHooks } from '@/commands/integrate/claude/hooks.ts';
 import { loadPrivateBetaContext } from '@/core/launch-darkly/startup.ts';
 import { flushSentry } from '@/core/observability/sentry.ts';
-import { setFormattedOutputMode } from '@/core/ui';
 import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 import * as postUpdate from '@/core/update/post-update.ts';
 
@@ -41,27 +40,25 @@ function argvRequestsFormattedOutput(): boolean {
   );
 }
 
+const console = new TerminalConsole();
+
 // Activate formatted output mode early so startup messages are collected
 // rather than printed to stdout when the command will produce JSON output.
 // Handles both `--format json` (space-separated) and `--format=json` (equals form).
 if (argvRequestsFormattedOutput()) {
-  setFormattedOutputMode(true);
+  console.setFormattedOutputMode(true);
 }
 
 await postUpdate.runPostUpdateActions({
   supportedIntegrations,
   claudeIntegrationId: CLAUDE_INTEGRATION_ID,
   installHooks,
+  console,
 });
-
-const cliConsole = new TerminalConsole();
-if (argvRequestsFormattedOutput()) {
-  cliConsole.setFormattedOutputMode(true);
-}
 
 const tree = await createCommandTree({
   loadPrivateBetaContext,
-  console: cliConsole,
+  console,
 });
 
 await tree.parseAsync(process.argv);

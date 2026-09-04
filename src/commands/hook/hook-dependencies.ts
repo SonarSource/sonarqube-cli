@@ -28,7 +28,6 @@ import { CommandFailedError } from '@/core/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import {
   runSecretsBinary,
@@ -55,11 +54,7 @@ export class MissingDependenciesError extends Error {
   }
 }
 
-export function handleScanError(
-  context: 'Commit' | 'Push',
-  err: Error,
-  console: Console = new TerminalConsole(),
-): void {
+export function handleScanError(context: 'Commit' | 'Push', err: Error, console: Console): void {
   if (isEnvBasedAuth()) {
     throw new CommandFailedError('Secrets scan failed.', {
       remediationHint:

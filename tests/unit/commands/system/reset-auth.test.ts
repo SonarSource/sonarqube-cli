@@ -27,6 +27,13 @@ import type { CliState } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 
 import * as revokeServerToken from '../../../../src/commands/auth/revoke-server-token.ts';
+import { FakeConsole } from '../../../_common/fake-console.ts';
+
+let fake: FakeConsole;
+
+beforeEach(() => {
+  fake = new FakeConsole();
+});
 
 function stateWithConnection(): CliState {
   const state = getDefaultState('test');
@@ -67,7 +74,7 @@ describe('purgeAuth keychain read failures', () => {
     );
     const deleteTokenSpy = spyOn(keychain, 'deleteToken').mockResolvedValue(undefined);
 
-    const result = await purgeAuth(stateWithConnection());
+    const result = await purgeAuth(stateWithConnection(), fake);
 
     expect(result.authConnectionIds).toEqual(['conn-1']);
     expect(result.item.status).toBe('warn');
@@ -84,7 +91,7 @@ describe('purgeAuth keychain read failures', () => {
       new CommandFailedError('Failed to access the system keychain.'),
     );
 
-    const result = await purgeAuth(stateWithConnection());
+    const result = await purgeAuth(stateWithConnection(), fake);
 
     expect(result.authConnectionIds).toEqual(['conn-1']);
     expect(result.item.detail).toContain('2 keychain operations failed');

@@ -18,13 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { type CliState, getDefaultState, type InstalledIntegration } from '@/core/state/state.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
 import type { PhaseItem } from '@/core/ui';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { version as VERSION } from '../../../package.json';
 import { supportedIntegrations } from '../integrate';
@@ -71,7 +70,7 @@ function mergeCleanedFields(fields: CleanedFields[]): CleanedFields {
  */
 export async function systemReset(
   options: SystemResetOptions,
-  ctx: CommandInvocationContext = new CommandInvocationContext(new TerminalConsole()),
+  ctx: CommandInvocationContext,
 ): Promise<void> {
   const { console } = ctx;
   if (!options.force) {
@@ -137,9 +136,7 @@ export async function systemReset(
   console.success('CLI has been successfully reset to factory settings.');
 }
 
-async function confirmDestructiveAction(
-  console: Console = new TerminalConsole(),
-): Promise<boolean> {
+async function confirmDestructiveAction(console: Console): Promise<boolean> {
   if (!process.stdin.isTTY) {
     console.print('Reset cancelled. Use --force to skip the prompt in non-interactive mode.');
     return false;

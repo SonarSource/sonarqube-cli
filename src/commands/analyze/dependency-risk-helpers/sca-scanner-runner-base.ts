@@ -27,7 +27,6 @@ import { type ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import logger from '@/core/observability/logger.ts';
 import type { SpawnResult } from '@/core/process/process.ts';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { type ScaScannerSpawner } from './sca-scanner-spawner.ts';
 
@@ -64,10 +63,7 @@ export abstract class ScaScannerRunnerBase<T> {
     protected readonly spawner: ScaScannerSpawner,
   ) {}
 
-  async run(
-    invocation: ScaScannerInvocation,
-    console: Console = new TerminalConsole(),
-  ): Promise<T> {
+  async run(invocation: ScaScannerInvocation, console: Console): Promise<T> {
     const args = this.buildArgs(invocation);
     logger.debug(`sca-scanner args: ${JSON.stringify(args)}`);
     const env = { ...buildSubprocessNetworkEnv(), [SONAR_TOKEN_ENV]: invocation.sonarToken };

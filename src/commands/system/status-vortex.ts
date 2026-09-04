@@ -19,7 +19,6 @@
  */
 
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 import {
   isVortexEntitlementLoss,
   type VortexEntitlementResult,
@@ -68,10 +67,7 @@ export function buildVortexRecommendation(
   return `Re-enable Vortex${target}, or run 'sonar integrate' to remove the Vortex integration`;
 }
 
-export function renderVortexSection(
-  vortex: VortexEntitlementResult,
-  console: Console = new TerminalConsole(),
-): void {
+export function renderVortexSection(vortex: VortexEntitlementResult, console: Console): void {
   if (vortex.status === 'not_applicable') {
     return;
   }

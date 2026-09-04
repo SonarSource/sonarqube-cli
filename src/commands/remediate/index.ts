@@ -38,7 +38,6 @@ import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { cyan, dim, red, yellow } from '@/core/ui/colors.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { RemediateApiClient } from './remediate-api.ts';
 
@@ -124,7 +123,7 @@ function assertInteractiveOrIssuesSupplied(suppliedIssueKeys: string[] | undefin
 async function confirmEntitlement(
   client: RemediateApiClient,
   orgKey: string,
-  console: Console = new TerminalConsole(),
+  console: Console,
 ): Promise<boolean> {
   const { status: entitlement } = await client.checkAiRemediationEntitlement(orgKey);
   if (entitlement === 'not_eligible') {
@@ -179,7 +178,7 @@ async function submitRemediationJob(
   projectId: string,
   issueKeys: string[],
   orgKey: string,
-  console: Console = new TerminalConsole(),
+  console: Console,
 ): Promise<string> {
   console.blank();
   const jobRequest = { projectId, issueKeys, triggerSource: 'CLI' as const };
@@ -203,7 +202,7 @@ function reportSubmissionSuccess(
   projectKey: string,
   selectedKeys: string[],
   taskId: string,
-  console: Console = new TerminalConsole(),
+  console: Console,
 ): void {
   const issueWord = selectedKeys.length === 1 ? 'issue' : 'issues';
   console.blank();
@@ -258,7 +257,7 @@ async function selectIssuesInteractively(
   client: RemediateApiClient,
   orgKey: string,
   projectKey: string,
-  console: Console = new TerminalConsole(),
+  console: Console,
 ): Promise<string[] | null> {
   const issuesClient = client.issues;
 

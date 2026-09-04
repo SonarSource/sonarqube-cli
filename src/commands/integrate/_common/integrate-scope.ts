@@ -22,7 +22,7 @@ import { CommandFailedError } from '@/core/command-error.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import type { IntegrationScope } from '@/core/state/state.ts';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
+
 export interface IntegrateScopeOptions {
   global?: boolean;
   nonInteractive?: boolean;
@@ -30,7 +30,7 @@ export interface IntegrateScopeOptions {
   projectRoot?: string;
   /** Explicit project key (e.g. `--project`); implies project scope and skips the prompt. */
   projectKey?: string;
-  console?: Console;
+  console: Console;
 }
 
 function formatNonInteractiveDefaultInfo(projectRoot: string | undefined): string {
@@ -55,7 +55,7 @@ export function buildProjectScopeLabel(projectRoot: string): string {
 export async function resolveIntegrateScope(
   options: IntegrateScopeOptions,
 ): Promise<IntegrationScope> {
-  const console = options.console ?? new TerminalConsole();
+  const console = options.console;
   if (options.global === true) {
     return 'global';
   }

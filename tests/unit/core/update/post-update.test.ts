@@ -36,12 +36,14 @@ import { migrateDeclarativeIntegrations, runPostUpdateActions } from '@/core/upd
 import * as versionLib from '@/core/version.ts';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
 function makeDeps(): PostUpdateDependencies {
   return {
     supportedIntegrations,
     claudeIntegrationId: CLAUDE_INTEGRATION_ID,
     installHooks: hooks.installHooks,
+    console: new FakeConsole(),
   };
 }
 
@@ -232,7 +234,7 @@ describe('migrateDeclarativeIntegrations', () => {
 
     const registry = new IntegrationRegistry();
 
-    await migrateDeclarativeIntegrations(registry);
+    await migrateDeclarativeIntegrations(registry, new FakeConsole());
 
     expect(loadStateSpy).toHaveBeenCalledTimes(1);
     expect(saveStateSpy).not.toHaveBeenCalled();
@@ -274,7 +276,7 @@ describe('migrateDeclarativeIntegrations', () => {
       features: [],
     });
 
-    await migrateDeclarativeIntegrations(registry);
+    await migrateDeclarativeIntegrations(registry, new FakeConsole());
 
     expect(saveStateSpy).toHaveBeenCalledTimes(1);
     expect(saveStateSpy.mock.calls[0][0].integrations.installed[0].features).toHaveLength(0);

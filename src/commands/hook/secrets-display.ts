@@ -20,7 +20,6 @@
 
 import type { SecretsJsonIssue } from '@/commands/analyze/secrets.ts';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 function formatSecretsFindingLine(issue: SecretsJsonIssue): string {
   const location = issue.location ? `:${String(issue.location.startLine)}` : '';
   const secret = issue.maskedSecret ? ` (secret: ${issue.maskedSecret})` : '';
@@ -31,7 +30,7 @@ function formatSecretsFindingLine(issue: SecretsJsonIssue): string {
 export function printSecretsFindingsOrStderr(
   issues: SecretsJsonIssue[],
   stderr: string,
-  console: Console = new TerminalConsole(),
+  console: Console,
 ): void {
   if (issues.length > 0) {
     console.print(issues.map(formatSecretsFindingLine).join('\n'));

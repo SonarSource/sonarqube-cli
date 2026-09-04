@@ -31,6 +31,7 @@ import {
   SqaaForbiddenError,
 } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import { SqaaAnalysisClient } from './sqaa-analysis-client.ts';
 import type { SqaaAuth } from './sqaa-auth.ts';
@@ -505,7 +506,8 @@ export async function callSqaaApiAndDisplay(
   file: string,
   fileContent: string,
   branch: string | undefined,
-  analysisDepth?: SqaaDeepWireDepth,
+  analysisDepth: SqaaDeepWireDepth | undefined,
+  console: Console,
 ): Promise<number> {
   const filePath = toRelativePosixPath(file);
   const displayDepth = analysisDepth === 'DEEP' ? 'DEEP' : 'STANDARD';
@@ -513,9 +515,9 @@ export async function callSqaaApiAndDisplay(
     const response = await fetchWithRetry(auth, projectKey, file, fileContent, branch, {
       analysisDepth,
     });
-    return displaySqaaResults(response.issues, response.errors, filePath, displayDepth);
+    return displaySqaaResults(response.issues, response.errors, filePath, displayDepth, console);
   } catch (err) {
-    printSingleFileTextFailure(filePath, err as Error, displayDepth);
+    printSingleFileTextFailure(filePath, err as Error, displayDepth, console);
     return 0;
   }
 }

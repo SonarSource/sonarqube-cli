@@ -22,23 +22,23 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import type { SecretsJsonIssue } from '@/commands/analyze/secrets.ts';
 import { printSecretsFindingsOrStderr } from '@/commands/hook/secrets-display.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
 function printedLines(): string[] {
-  return getMockUiCalls()
-    .filter((c) => c.method === 'print')
-    .map((c) => String(c.args[0]));
+  return fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
 }
 
-describe('printSecretsFindingsOrStderr', () => {
-  beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-  });
+let fake: FakeConsole;
 
-  afterEach(() => {
-    setMockUi(false);
-  });
+beforeEach(() => {
+  fake = new FakeConsole();
+});
+
+describe('printSecretsFindingsOrStderr', () => {
+  beforeEach(() => {});
+
+  afterEach(() => {});
 
   it('formats a full finding with file, line, description, and masked secret', () => {
     const issue: SecretsJsonIssue = {
@@ -49,7 +49,7 @@ describe('printSecretsFindingsOrStderr', () => {
       maskedSecret: 'AKIA****',
     };
 
-    printSecretsFindingsOrStderr([issue], '');
+    printSecretsFindingsOrStderr([issue], '', fake);
 
     const [line] = printedLines();
     expect(line).toBe('  • src/config.ts:12 — AWS key detected (secret: AKIA****)');
@@ -63,7 +63,7 @@ describe('printSecretsFindingsOrStderr', () => {
       maskedSecret: 'AKIA****',
     };
 
-    printSecretsFindingsOrStderr([issue], '');
+    printSecretsFindingsOrStderr([issue], '', fake);
 
     const [line] = printedLines();
     expect(line).toBe('  • src/config.ts — AWS key detected (secret: AKIA****)');
@@ -77,7 +77,7 @@ describe('printSecretsFindingsOrStderr', () => {
       location: { startLine: 12, startColumn: 1, endLine: 12, endColumn: 20 },
     };
 
-    printSecretsFindingsOrStderr([issue], '');
+    printSecretsFindingsOrStderr([issue], '', fake);
 
     const [line] = printedLines();
     expect(line).toBe('  • src/config.ts:12 — AWS key detected');
@@ -89,7 +89,7 @@ describe('printSecretsFindingsOrStderr', () => {
       description: 'AWS key detected',
     };
 
-    printSecretsFindingsOrStderr([issue], '');
+    printSecretsFindingsOrStderr([issue], '', fake);
 
     const [line] = printedLines();
     expect(line).toBe('  • (unknown) — AWS key detected');
@@ -101,9 +101,9 @@ describe('printSecretsFindingsOrStderr', () => {
       { ruleKey: 'gh-token', description: 'GitHub token detected', file: 'src/b.ts' },
     ];
 
-    printSecretsFindingsOrStderr(issues, '');
+    printSecretsFindingsOrStderr(issues, '', fake);
 
-    const calls = getMockUiCalls().filter((c) => c.method === 'print');
+    const calls = fake.calls.filter((c) => c.method === 'print');
     expect(calls).toHaveLength(1);
     expect(String(calls[0]?.args[0])).toBe(
       '  • src/a.ts — AWS key detected\n  • src/b.ts — GitHub token detected',
@@ -111,13 +111,13 @@ describe('printSecretsFindingsOrStderr', () => {
   });
 
   it('prints stderr when there are no issues but stderr is non-empty', () => {
-    printSecretsFindingsOrStderr([], 'binary crashed');
+    printSecretsFindingsOrStderr([], 'binary crashed', fake);
 
     expect(printedLines()).toEqual(['binary crashed']);
   });
 
   it('prints nothing when there are no issues and stderr is empty', () => {
-    printSecretsFindingsOrStderr([], '');
+    printSecretsFindingsOrStderr([], '', fake);
 
     expect(printedLines()).toEqual([]);
   });

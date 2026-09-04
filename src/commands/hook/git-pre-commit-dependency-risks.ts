@@ -40,7 +40,6 @@ import { ResolveOnlySecretsInstaller } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { countSelectedRisks } from '../analyze/dependency-risk-helpers/count-selected-risks.ts';
 import { DefaultScaScannerSpawner } from '../analyze/dependency-risk-helpers/default-sca-scanner-spawner.ts';
@@ -151,7 +150,7 @@ function formatSeverityBreakdown(viewModel: DependencyRisksViewModel): string {
 async function shouldRunDependencyRiskAnalysis(
   binaryPath: string,
   changedFiles: string[],
-  console: Console = new TerminalConsole(),
+  console: Console,
 ) {
   const patterns = await new ScaWatchPatternsRunner(
     new ScaScannerNoopInstaller(binaryPath),

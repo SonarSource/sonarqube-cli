@@ -24,7 +24,6 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import type { SecretsJsonIssue } from './secrets.ts';
 import {
@@ -71,7 +70,7 @@ function secretsReport(
 function printCombinedReport(
   secrets: SecretsReport | null,
   agentic: SqaaJsonReport | null,
-  console: Console = new TerminalConsole(),
+  console: Console,
 ): void {
   console.print(
     JSON.stringify(

@@ -415,7 +415,7 @@ describe('Private Beta command registration', () => {
   });
 
   it('omits Private Beta commands from createCommandTree by default', async () => {
-    const tree = await createCommandTree();
+    const tree = await createCommandTree({ console: new FakeConsole() });
     const names = tree.commands.map((c) => c.name());
     expect(names).toContain('context');
     // No Private Beta commands exist yet; default runtime omits gated ones.
@@ -434,7 +434,7 @@ describe('Private Beta command registration', () => {
       }),
     );
 
-    await createCommandTree({ loadPrivateBetaContext });
+    await createCommandTree({ loadPrivateBetaContext, console: new FakeConsole() });
 
     expect(loadPrivateBetaContext).not.toHaveBeenCalled();
   });
@@ -453,7 +453,10 @@ describe('Private Beta command registration', () => {
     });
 
     try {
-      const tree = await createCommandTree({ loadPrivateBetaContext });
+      const tree = await createCommandTree({
+        loadPrivateBetaContext,
+        console: new FakeConsole(),
+      });
       expect(loadPrivateBetaContext).toHaveBeenCalledTimes(1);
       expect(tree.runtime.auth).toEqual(cloudAuth);
       expect(tree.runtime.isPrivateBetaEnabled('cli.beta.lazy')).toBe(true);

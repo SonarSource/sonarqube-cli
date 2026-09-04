@@ -23,7 +23,6 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { readOrInitJson, SONAR_SECRETS_MARKER } from '../_common/hooks.ts';
 
@@ -62,9 +61,7 @@ export interface HooksJson {
  *    script is missing) → `console.warn(...)` and return `undefined`.
  *  - No global install → silent, return `undefined`.
  */
-export async function detectGlobalSecretsHook(
-  console: Console = new TerminalConsole(),
-): Promise<string | undefined> {
+export async function detectGlobalSecretsHook(console: Console): Promise<string | undefined> {
   const hooksJsonPath = join(GLOBAL_HOOKS_DIR, HOOKS_JSON);
   if (!existsSync(hooksJsonPath)) return undefined;
   const parsed = await readOrInitJson<HooksJson>(hooksJsonPath, { version: 1, hooks: {} });

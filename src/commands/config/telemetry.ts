@@ -20,10 +20,9 @@
 // Configure CLI settings
 
 import { InvalidOptionError } from '@/core/command-error.ts';
-import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
 import { describeTelemetryStatus, isDoNotTrackRequested } from '@/core/telemetry/enabled.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 export interface ConfigureTelemetryOptions {
   enabled?: boolean;
@@ -32,7 +31,7 @@ export interface ConfigureTelemetryOptions {
 
 export function configureTelemetry(
   options: ConfigureTelemetryOptions,
-  ctx: CommandInvocationContext = new CommandInvocationContext(new TerminalConsole()),
+  ctx: CommandInvocationContext,
 ): Promise<void> {
   const { console } = ctx;
   if (options.enabled && options.disabled) {

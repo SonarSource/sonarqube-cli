@@ -451,7 +451,7 @@ export class SonarCommand extends Command {
     super.action((...args: TArgs) =>
       this.runCommand(async () => {
         // Prefer auth resolved once at startup; fall back for isolated unit tests.
-        const auth = this._runtime.auth ?? (await resolveAuth());
+        const auth = this._runtime.auth ?? (await resolveAuth({ console: this._console }));
         if (!auth) {
           throw new CommandFailedError('Not authenticated.', {
             remediationHint: "Run 'sonar auth login' to authenticate.",

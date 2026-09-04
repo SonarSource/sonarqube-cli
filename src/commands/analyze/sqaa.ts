@@ -156,6 +156,7 @@ async function analyzeSqaaExplicitFiles(
       displayDepth,
       telemetryCallerCommand,
       telemetryCtx,
+      console,
     });
     return;
   }
@@ -176,6 +177,7 @@ async function analyzeSqaaExplicitFiles(
     displayDepth,
     telemetryCallerCommand,
     telemetryCtx,
+    console,
   });
 }
 
@@ -240,5 +242,6 @@ async function analyzeSqaaChangeSet(params: {
     displayDepth,
     telemetryCallerCommand,
     telemetryCtx,
+    console,
   });
 }

@@ -22,9 +22,9 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { SONARCLOUD_API_URL, SONARCLOUD_URL } from '@/core/config-constants.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { version as VERSION } from '../../../../package.json';
+import { FakeConsole } from '../../../_common/fake-console.ts';
 import { lastFetchInit, lastFetchUrl, mockFetch } from '../../helpers/mock-fetch.ts';
 
 const SERVER_URL = 'https://sonarqube.example.com';
@@ -33,8 +33,10 @@ const TOKEN = 'squ_test_token';
 describe('SonarHttpClient', () => {
   let client: SonarHttpClient;
   let fetchSpy: ReturnType<typeof spyOn>;
+  let fake: FakeConsole;
 
   beforeEach(() => {
+    fake = new FakeConsole();
     client = new SonarHttpClient(SERVER_URL, TOKEN);
   });
 
@@ -252,18 +254,9 @@ describe('SonarHttpClient', () => {
   });
 
   describe('genericRequest', () => {
-    beforeEach(() => {
-      setMockUi(true);
-      clearMockUiCalls();
-    });
-
-    afterEach(() => {
-      setMockUi(false);
-    });
-
     it('makes a GET request and returns response text', async () => {
       fetchSpy = mockFetch({ status: 'UP' });
-      const result = await client.genericRequest('GET', '/api/system/status');
+      const result = await client.genericRequest('GET', '/api/system/status', fake);
       expect(result).toBe('{"status":"UP"}');
 
       const url = (fetchSpy.mock.calls[0][0] as string).toString();
@@ -277,7 +270,7 @@ describe('SonarHttpClient', () => {
     it('sends POST with JSON body when contentType is json', async () => {
       fetchSpy = mockFetch({ ok: true });
       const data = '{"key":"value"}';
-      await client.genericRequest('POST', '/api/v2/issues', data, 'json');
+      await client.genericRequest('POST', '/api/v2/issues', fake, data, 'json');
 
       const init = fetchSpy.mock.calls[0][1] as RequestInit;
       expect(init.method).toBe('POST');
@@ -288,7 +281,7 @@ describe('SonarHttpClient', () => {
     it('sends POST with form-encoded body when contentType is form', async () => {
       fetchSpy = mockFetch({ ok: true });
       const data = '{"component":"my-project","severity":"MAJOR"}';
-      await client.genericRequest('POST', '/api/issues/do_transition', data, 'form');
+      await client.genericRequest('POST', '/api/issues/do_transition', fake, data, 'form');
 
       const init = fetchSpy.mock.calls[0][1] as RequestInit;
       expect(init.body).toBe('component=my-project&severity=MAJOR');
@@ -300,7 +293,7 @@ describe('SonarHttpClient', () => {
     it('sends PATCH with JSON body', async () => {
       fetchSpy = mockFetch({ ok: true });
       const data = '{"name":"updated"}';
-      await client.genericRequest('PATCH', '/api/v2/projects', data, 'json');
+      await client.genericRequest('PATCH', '/api/v2/projects', fake, data, 'json');
 
       const init = fetchSpy.mock.calls[0][1] as RequestInit;
       expect(init.method).toBe('PATCH');
@@ -309,7 +302,7 @@ describe('SonarHttpClient', () => {
 
     it('sends PUT with JSON body', async () => {
       fetchSpy = mockFetch({ ok: true });
-      await client.genericRequest('PUT', '/api/v2/settings', '{"k":"v"}', 'json');
+      await client.genericRequest('PUT', '/api/v2/settings', fake, '{"k":"v"}', 'json');
 
       const init = fetchSpy.mock.calls[0][1] as RequestInit;
       expect(init.method).toBe('PUT');
@@ -318,7 +311,7 @@ describe('SonarHttpClient', () => {
 
     it('does not send body for DELETE', async () => {
       fetchSpy = mockFetch({ ok: true });
-      await client.genericRequest('DELETE', '/api/v2/tokens/revoke');
+      await client.genericRequest('DELETE', '/api/v2/tokens/revoke', fake);
 
       const init = fetchSpy.mock.calls[0][1] as RequestInit;
       expect(init.method).toBe('DELETE');
@@ -327,9 +320,9 @@ describe('SonarHttpClient', () => {
 
     it('prints debug output when debug is true', async () => {
       fetchSpy = mockFetch({ status: 'UP' });
-      await client.genericRequest('GET', '/api/system/status', undefined, 'json', true);
+      await client.genericRequest('GET', '/api/system/status', fake, undefined, 'json', true);
 
-      const output = getMockUiCalls().filter((c) => c.method === 'print');
+      const output = fake.calls.filter((c) => c.method === 'print');
       const messages = output.map((c) => String(c.args[0]));
       expect(messages.some((m) => m.includes('request method: GET'))).toBe(true);
       expect(messages.some((m) => m.includes('request url:'))).toBe(true);
@@ -338,9 +331,9 @@ describe('SonarHttpClient', () => {
 
     it('does not print debug output when debug is false', async () => {
       fetchSpy = mockFetch({ status: 'UP' });
-      await client.genericRequest('GET', '/api/system/status');
+      await client.genericRequest('GET', '/api/system/status', fake);
 
-      const output = getMockUiCalls().filter((c) => c.method === 'print');
+      const output = fake.calls.filter((c) => c.method === 'print');
       const messages = output.map((c) => String(c.args[0]));
       expect(messages.some((m) => m.includes('request method:'))).toBe(false);
     });
@@ -349,7 +342,7 @@ describe('SonarHttpClient', () => {
       fetchSpy = mockFetch({ message: 'Bad request' }, { ok: false, status: 400 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(
-        client.genericRequest('POST', '/api/issues/do_transition', '{"k":"v"}', 'form'),
+        client.genericRequest('POST', '/api/issues/do_transition', fake, '{"k":"v"}', 'form'),
       ).rejects.toMatchObject({ name: 'BadRequestError', message: 'Bad request' });
     });
 
@@ -357,7 +350,7 @@ describe('SonarHttpClient', () => {
       fetchSpy = mockFetch({ errors: [{ msg: 'Transition failed' }] }, { ok: false, status: 400 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(
-        client.genericRequest('POST', '/api/issues/do_transition', '{"k":"v"}', 'form'),
+        client.genericRequest('POST', '/api/issues/do_transition', fake, '{"k":"v"}', 'form'),
       ).rejects.toMatchObject({
         name: 'BadRequestError',
         message: expect.stringContaining('Transition failed'),
@@ -367,7 +360,7 @@ describe('SonarHttpClient', () => {
     it('throws access denied on GET 403', async () => {
       fetchSpy = mockFetch({}, { ok: false, status: 403 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(client.genericRequest('GET', '/api/system/status')).rejects.toThrow(
+      await expect(client.genericRequest('GET', '/api/system/status', fake)).rejects.toThrow(
         'Access denied',
       );
     });
@@ -375,7 +368,7 @@ describe('SonarHttpClient', () => {
     it('resolves a plain SonarCloud /api endpoint correctly', async () => {
       const cloudClient = new SonarHttpClient(SONARCLOUD_URL, TOKEN);
       fetchSpy = mockFetch({ ok: true });
-      await cloudClient.genericRequest('GET', '/api/issues/search');
+      await cloudClient.genericRequest('GET', '/api/issues/search', fake);
 
       const url = (fetchSpy.mock.calls[0][0] as string).toString();
       expect(url).toBe(`${SONARCLOUD_URL}/api/issues/search`);
@@ -384,7 +377,7 @@ describe('SonarHttpClient', () => {
     it('strips the /api/v2 prefix and routes to the API host on SonarCloud', async () => {
       const cloudClient = new SonarHttpClient(SONARCLOUD_URL, TOKEN);
       fetchSpy = mockFetch({ ok: true });
-      await cloudClient.genericRequest('GET', '/api/v2/sca/issues-releases');
+      await cloudClient.genericRequest('GET', '/api/v2/sca/issues-releases', fake);
 
       const url = (fetchSpy.mock.calls[0][0] as string).toString();
       expect(url).toBe(`${SONARCLOUD_API_URL}/sca/issues-releases`);

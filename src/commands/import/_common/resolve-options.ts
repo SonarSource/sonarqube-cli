@@ -21,7 +21,6 @@
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { type MultiSelectOption } from '@/core/ui';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import type { DopRepository, ImportApiClient } from './import-api.ts';
 import {
@@ -317,10 +316,10 @@ export async function resolveRepos(
     all?: boolean;
     regex?: string;
     nonInteractive?: boolean;
-    console?: Console;
+    console: Console;
   },
 ): Promise<RepoResolution> {
-  const console = opts.console ?? new TerminalConsole();
+  const console = opts.console;
   const regexFromFlag = validateSelectionFlags(opts);
 
   if (opts.nonInteractive && !opts.repo?.length && !opts.all && !opts.regex) {

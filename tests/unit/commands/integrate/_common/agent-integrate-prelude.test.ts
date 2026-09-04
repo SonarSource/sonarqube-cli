@@ -18,18 +18,17 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { beforeEach, describe, expect, it } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import {
   assertSonarCloudOrganization,
   buildAgentIntegrateContext,
   warnMissingIntegrateProjectKey,
 } from '../../../../../src/commands/integrate/_common/agent-integrate-prelude.ts';
+import { FakeConsole } from '../../../../_common/fake-console.ts';
 
 const AUTH: ResolvedAuth = {
   token: 'token',
@@ -63,25 +62,25 @@ describe('buildAgentIntegrateContext', () => {
 });
 
 describe('warnMissingIntegrateProjectKey', () => {
-  beforeEach(() => setMockUi(true));
-  afterEach(() => {
-    clearMockUiCalls();
-    setMockUi(false);
+  let fake: FakeConsole;
+
+  beforeEach(() => {
+    fake = new FakeConsole();
   });
 
   it('warns for project-scoped install without a project key', () => {
-    warnMissingIntegrateProjectKey('codex', false, undefined, new TerminalConsole());
+    warnMissingIntegrateProjectKey('codex', false, undefined, fake);
 
     expect(
-      getMockUiCalls().some(
+      fake.calls.some(
         (c) => c.method === 'warn' && String(c.args[0]).includes('sonar integrate codex --help'),
       ),
     ).toBe(true);
   });
 
   it('stays silent for global install without a project key', () => {
-    warnMissingIntegrateProjectKey('copilot', true, undefined, new TerminalConsole());
+    warnMissingIntegrateProjectKey('copilot', true, undefined, fake);
 
-    expect(getMockUiCalls().some((c) => c.method === 'warn')).toBe(false);
+    expect(fake.calls.some((c) => c.method === 'warn')).toBe(false);
   });
 });

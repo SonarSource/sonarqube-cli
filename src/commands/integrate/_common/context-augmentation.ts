@@ -29,7 +29,6 @@ import logger from '@/core/observability/logger.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 import { type OutputChannel } from '@/core/ui';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 // Type-only, so it does not create a runtime cycle with vortex.ts.
 import type { ResolvedVortexSetup } from './vortex.ts';
@@ -93,7 +92,7 @@ export interface ApplyContextAugmentationToolIntegrationParams {
   projectRoot: string;
   projectKey: string | undefined;
   scaEnabled: boolean;
-  console?: Console;
+  console: Console;
 }
 
 export interface PrintContextAugmentationSkillParams {
@@ -131,7 +130,7 @@ export class CagStepFailedError extends Error {
 export async function runToolIntegrateCommand(
   p: ApplyContextAugmentationToolIntegrationParams,
 ): Promise<void> {
-  const console = p.console ?? new TerminalConsole();
+  const console = p.console;
   console.text('     Installing Vortex Context...');
 
   const initEnv = buildContextAugmentationEnv({
@@ -148,8 +147,8 @@ export async function runToolIntegrateCommand(
     p.binaryPath,
     ['tool', 'integrate', '--invocation-prefix', SONAR_CONTEXT_INVOCATION],
     p.projectRoot,
-    initEnv,
     console,
+    initEnv,
   );
   console.discreetSuccess('Vortex Context configured');
 }
@@ -215,8 +214,8 @@ async function runCagStepOrThrow(
   binaryPath: string,
   args: string[],
   projectRoot: string,
+  console: Console,
   env: NodeJS.ProcessEnv = buildContextAugmentationEnv(),
-  console: Console = new TerminalConsole(),
 ): Promise<void> {
   if (process.stdout.isTTY) {
     try {

@@ -27,7 +27,6 @@ import { basename, dirname, join } from 'node:path';
 import type { IntegrationContext } from '@/core/framework/features';
 import logger from '@/core/observability/logger.ts';
 import type { Console } from '@/core/ui/console.ts';
-import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import {
   buildUnixHookScript,
@@ -201,7 +200,7 @@ async function probeSecretsHook(hooksRoot: string): Promise<SecretsHookState> {
  */
 export async function detectGlobalSecretsHook(
   hooksRoot: string,
-  console: Console = new TerminalConsole(),
+  console: Console,
 ): Promise<string | undefined> {
   const state = await probeSecretsHook(hooksRoot);
   if (state.kind === 'installed') {
