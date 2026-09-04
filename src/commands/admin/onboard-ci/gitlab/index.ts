@@ -254,8 +254,9 @@ async function fetchGroupData(
   return { repos, bindingMap };
 }
 
-function startRepoProgress(repos: RepoWithBranch[]): ConcurrentProgress {
+function startRepoProgress(repos: RepoWithBranch[], console: Console): ConcurrentProgress {
   const progress = new ConcurrentProgress({
+    console,
     maxVisible: SETUP_CI_CONCURRENCY_LIMIT,
     showResult: false,
   });
@@ -280,8 +281,9 @@ async function runConcurrent(
     progress: ConcurrentProgress,
   ) => Promise<void>,
   failed: { repo: string; error: string }[],
+  console: Console,
 ): Promise<void> {
-  const progress = startRepoProgress(repos);
+  const progress = startRepoProgress(repos, console);
   await runWithConcurrencyLimit(repos, SETUP_CI_CONCURRENCY_LIMIT, async (repo) => {
     const slug = repo.path_with_namespace;
     progress.update(slug, 'running');
@@ -305,6 +307,7 @@ async function runDryRun(
   ctx: ProcessRepoContext,
   repos: RepoWithBranch[],
   bindingMap: Map<string, string>,
+  console: Console,
 ): Promise<DryRunResults> {
   const classifications: ClassificationEntry[] = [];
   const failedRepos: { repo: string; error: string }[] = [];
@@ -320,6 +323,7 @@ async function runDryRun(
       return Promise.resolve();
     },
     failedRepos,
+    console,
   );
 
   return computeDryRunResults(classifications, failedRepos);
@@ -329,6 +333,7 @@ async function runLive(
   ctx: ProcessRepoContext,
   repos: RepoWithBranch[],
   bindingMap: Map<string, string>,
+  console: Console,
 ): Promise<OnboardCiResults> {
   const results: OnboardCiResults = { opened: [], skipped: [], failed: [] };
 
@@ -348,6 +353,7 @@ async function runLive(
       progress.update(slug, 'done', 'MR opened');
     },
     results.failed,
+    console,
   );
 
   return results;
@@ -394,7 +400,7 @@ export async function onboardCiGitlab(
   };
 
   if (options.dryRun) {
-    const dryRunResults = await runDryRun(ctx, repos, bindingMap);
+    const dryRunResults = await runDryRun(ctx, repos, bindingMap, console);
     const { wouldOpenMr, wouldSkip, failed } = dryRunResults;
     console.outro(
       buildOutroMessage(wouldOpenMr.length, wouldSkip.length, failed.length),
@@ -410,7 +416,7 @@ export async function onboardCiGitlab(
     return;
   }
 
-  const results = await runLive(ctx, repos, bindingMap);
+  const results = await runLive(ctx, repos, bindingMap, console);
   const { opened, skipped, failed } = results;
   console.outro(
     buildOutroMessage(opened.length, skipped.length, failed.length),
