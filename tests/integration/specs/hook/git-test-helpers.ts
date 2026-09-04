@@ -28,24 +28,32 @@ import { join } from 'node:path';
 // Resolve git binary once at module load — avoids PATH reliance in execFileSync calls.
 export const GIT_BIN = Bun.which('git') ?? '/usr/bin/git';
 
+const NON_WINDOWS_GIT_TIMEOUT_MS = 15_000;
+/** Hung `git add` must die before Bun's ~5s beforeEach timeout. */
+const WINDOWS_QUICK_GIT_TIMEOUT_MS = 1_000;
 /**
- * Cap each git spawn so a hung `git add` on Windows (index.lock held by the
- * virus scanner) cannot eat Bun's ~5s beforeEach timeout. Five 800ms attempts
- * plus backoff stay under that budget; non-Windows keeps a longer cap so a
- * genuine hang still fails the helper instead of the test runner.
+ * `git worktree add` copies the tree and routinely exceeds the quick cap on
+ * Windows. Killing it mid-flight leaves the new branch behind, so the retry
+ * fails with "a branch named 'feature/x' already exists".
  */
-const GIT_COMMAND_TIMEOUT_MS = process.platform === 'win32' ? 800 : 15_000;
+const WINDOWS_SLOW_GIT_TIMEOUT_MS = 15_000;
+
+function gitCommandTimeoutMs(args: string[]): number {
+  if (process.platform !== 'win32') {
+    return NON_WINDOWS_GIT_TIMEOUT_MS;
+  }
+  return args[0] === 'worktree' ? WINDOWS_SLOW_GIT_TIMEOUT_MS : WINDOWS_QUICK_GIT_TIMEOUT_MS;
+}
 
 /**
  * Windows CI intermittently fails git commands against a freshly-created repo
- * with ERROR_ACCESS_DENIED (exit status 5), a busy/locked file (EBUSY/EPERM/
- * EACCES), or a spawn timeout (ETIMEDOUT / SIGTERM) when the virus scanner or
- * search indexer briefly holds a handle on a file under the new `.git`
- * directory. These are transient and clear on a short retry; anything else
- * (real git errors, non-Windows failures) is rethrown immediately so genuine
- * problems still surface.
+ * with ERROR_ACCESS_DENIED (exit status 5) or a busy/locked file (EBUSY/EPERM/
+ * EACCES) when the virus scanner or search indexer briefly holds a handle on a
+ * file under the new `.git` directory. Spawn timeouts are only retried for
+ * idempotent commands — `worktree`/`commit` mutate refs, so a SIGTERM retry
+ * races the partial result. Anything else is rethrown immediately.
  */
-function isTransientWindowsGitError(error: unknown): boolean {
+function isTransientWindowsGitError(error: unknown, args: string[]): boolean {
   if (process.platform !== 'win32') {
     return false;
   }
@@ -55,15 +63,15 @@ function isTransientWindowsGitError(error: unknown): boolean {
     signal?: string | null;
     killed?: boolean;
   };
-  return (
-    status === 5 ||
-    code === 'EBUSY' ||
-    code === 'EPERM' ||
-    code === 'EACCES' ||
-    code === 'ETIMEDOUT' ||
-    signal === 'SIGTERM' ||
-    killed === true
-  );
+  if (status === 5 || code === 'EBUSY' || code === 'EPERM' || code === 'EACCES') {
+    return true;
+  }
+  const timedOut = code === 'ETIMEDOUT' || signal === 'SIGTERM' || killed === true;
+  if (!timedOut) {
+    return false;
+  }
+  const command = args[0];
+  return command !== 'worktree' && command !== 'commit';
 }
 
 export function git(args: string[], cwd: string): string {
@@ -75,10 +83,10 @@ export function git(args: string[], cwd: string): string {
         cwd,
         encoding: 'utf-8',
         stdio: ['ignore', 'pipe', 'pipe'],
-        timeout: GIT_COMMAND_TIMEOUT_MS,
+        timeout: gitCommandTimeoutMs(args),
       }).trim();
     } catch (error) {
-      if (attempt >= maxAttempts || !isTransientWindowsGitError(error)) {
+      if (attempt >= maxAttempts || !isTransientWindowsGitError(error, args)) {
         throw error;
       }
       Bun.sleepSync(50 * attempt);
