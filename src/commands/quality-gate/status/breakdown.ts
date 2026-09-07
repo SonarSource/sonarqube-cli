@@ -32,16 +32,26 @@ import type {
 } from './condition-summary.ts';
 import { formatMetricValue } from './format-metric-value.ts';
 
-const METRIC_CATEGORIES: Record<string, string> = {
-  coverage: 'coverage',
-  branch_coverage: 'coverage',
-  line_coverage: 'coverage',
-  new_coverage: 'coverage',
-  new_branch_coverage: 'coverage',
-  new_line_coverage: 'coverage',
+/** Metric keys owned by each `--category` value, both overall and new-code variants. */
+const CATEGORY_METRICS: Record<string, string[]> = {
+  coverage: [
+    'coverage',
+    'branch_coverage',
+    'line_coverage',
+    'new_coverage',
+    'new_branch_coverage',
+    'new_line_coverage',
+  ],
 };
 
-export const IMPLEMENTED_CATEGORIES = [...new Set(Object.values(METRIC_CATEGORIES))];
+/** Reverse lookup derived from `CATEGORY_METRICS`, for O(1) access by metric key. */
+const METRIC_CATEGORIES: ReadonlyMap<string, string> = new Map(
+  Object.entries(CATEGORY_METRICS).flatMap(([category, metrics]) =>
+    metrics.map((metric) => [metric, category] as const),
+  ),
+);
+
+export const IMPLEMENTED_CATEGORIES = Object.keys(CATEGORY_METRICS);
 
 export interface AttachBreakdownsParams {
   client: SonarHttpClient;
@@ -62,7 +72,7 @@ function isFailingMetricInCategory(
   status: string,
   category: string | undefined,
 ): boolean {
-  const conditionCategory = METRIC_CATEGORIES[metricKey];
+  const conditionCategory = METRIC_CATEGORIES.get(metricKey);
   return status !== 'OK' && !!conditionCategory && (!category || category === conditionCategory);
 }
 
