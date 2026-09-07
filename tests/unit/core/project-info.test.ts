@@ -40,8 +40,8 @@ import { GIT_REMOTE_BINDING_SOURCE } from '@/core/server/discover-project-by-rem
 import type { KnownServerProjectMapping } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
+import { FakeConsole } from '../../_common/fake-console.ts';
 import { createFakeFsTestHandle } from './fake-fs-test-handle.ts';
 
 const fakeFs = createFakeFsTestHandle();
@@ -107,7 +107,6 @@ describe('discoverProject', () => {
     fakeFs.setup();
     testDir = join(tmpdir(), `sonarqube-cli-test-discover-project-${Date.now()}`);
     fakeFs.mkdir(testDir);
-    setMockUi(true);
     // Isolate from the real ~/.sonar state.json — most tests here don't care about
     // known-project-mapping lookups, only the dedicated tests below do.
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('1.0.0'));
@@ -120,8 +119,6 @@ describe('discoverProject', () => {
   });
 
   afterEach(() => {
-    clearMockUiCalls();
-    setMockUi(false);
     fakeFs.teardown();
     loadStateSpy.mockRestore();
     getGitRemoteSpy.mockRestore();
@@ -131,15 +128,19 @@ describe('discoverProject', () => {
   });
 
   it('resolves repoRoot from filesystem, undefined outside a git repository', async () => {
-    expect((await discoverProject(testDir)).repoRoot).toBeUndefined();
+    expect(
+      (await discoverProject(testDir, { console: new FakeConsole() })).repoRoot,
+    ).toBeUndefined();
 
     fakeFs.mkdir(join(testDir, '.git'));
-    const withGit = await discoverProject(testDir);
+    const withGit = await discoverProject(testDir, { console: new FakeConsole() });
     expect(withGit.repoRoot).toBe(canonicalizePath(testDir));
   });
 
   it('defaults projectRoot to the invocation directory when nothing else resolves', async () => {
-    expect((await discoverProject(testDir)).projectRoot).toBe(canonicalizePath(testDir));
+    expect((await discoverProject(testDir, { console: new FakeConsole() })).projectRoot).toBe(
+      canonicalizePath(testDir),
+    );
   });
 
   it('defaults projectRoot to the invocation directory, not repoRoot, even inside a git repo', async () => {
@@ -147,20 +148,19 @@ describe('discoverProject', () => {
     const subDir = join(testDir, 'packages', 'app');
     fakeFs.mkdir(subDir);
 
-    const result = await discoverProject(subDir);
+    const result = await discoverProject(subDir, { console: new FakeConsole() });
 
     expect(result.repoRoot).toBe(canonicalizePath(testDir));
     expect(result.projectRoot).toBe(canonicalizePath(subDir));
   });
 
   it('no config: no server fields and no text UI', async () => {
-    const result = await discoverProject(testDir);
+    const fake = new FakeConsole();
+    const result = await discoverProject(testDir, { console: fake });
     expect(result.serverUrl).toBeUndefined();
     expect(result.projectKey).toBeUndefined();
     expect(result.organization).toBeUndefined();
-
-    await discoverProject(testDir);
-    expect(getMockUiCalls().filter((c) => c.method === 'print')).toHaveLength(0);
+    expect(fake.calls.filter((c) => c.method === 'print')).toHaveLength(0);
   });
 
   it('ignores comments and blank lines in sonar-project.properties', async () => {
@@ -169,7 +169,7 @@ describe('discoverProject', () => {
       '\n# comment\nsonar.host.url=https://sonarcloud.io\n\n# another\nsonar.projectKey=my_project\n',
     );
 
-    const result = await discoverProject(testDir);
+    const result = await discoverProject(testDir, { console: new FakeConsole() });
 
     expect(result.serverUrl).toBe('https://sonarcloud.io');
     expect(result.projectKey).toBe('my_project');
@@ -181,7 +181,7 @@ describe('discoverProject', () => {
       'sonar.host.url=https://sonarcloud.io\nsonar.projectKey=my_key\nINVALID_LINE_NO_EQUALS\n',
     );
 
-    const result = await discoverProject(testDir);
+    const result = await discoverProject(testDir, { console: new FakeConsole() });
 
     expect(result.projectKey).toBe('my_key');
   });
@@ -192,7 +192,7 @@ describe('discoverProject', () => {
       'sonar.projectName=My Project\nsonar.organization=my-org\n',
     );
 
-    const result = await discoverProject(testDir);
+    const result = await discoverProject(testDir, { console: new FakeConsole() });
 
     expect(result.serverUrl).toBeUndefined();
     expect(result.projectKey).toBeUndefined();
@@ -202,7 +202,7 @@ describe('discoverProject', () => {
   it('does not treat a .sonarlint dir with no usable binding file as a match', async () => {
     fakeFs.writeFile(join(testDir, '.sonarlint', 'notes.txt'), 'not json');
 
-    const result = await discoverProject(testDir);
+    const result = await discoverProject(testDir, { console: new FakeConsole() });
 
     expect(result.serverUrl).toBeUndefined();
     expect(result.projectKey).toBeUndefined();
@@ -214,7 +214,7 @@ describe('discoverProject', () => {
       join(testDir, 'sonar-project.properties'),
       'sonar.host.url=https://sonarcloud.io\nsonar.projectKey=my_project\nsonar.organization=my-org\n',
     );
-    const result = await discoverProject(testDir);
+    const result = await discoverProject(testDir, { console: new FakeConsole() });
     expect(result.serverUrl).toBe('https://sonarcloud.io');
     expect(result.projectKey).toBe('my_project');
     expect(result.organization).toBe('my-org');
@@ -230,7 +230,7 @@ describe('discoverProject', () => {
         organization: 'must-be-ignored',
       }),
     );
-    const result = await discoverProject(testDir);
+    const result = await discoverProject(testDir, { console: new FakeConsole() });
     expect(result.serverUrl).toBe('https://sonarqube.example.com');
     expect(result.projectKey).toBe('lint_project');
     expect(result.organization).toBeUndefined();
@@ -242,7 +242,6 @@ describe('discoverProject', () => {
       { region: 'EU', url: SONARCLOUD_URL },
       { region: 'US', url: SONARCLOUD_US_URL },
     ]) {
-      clearMockUiCalls();
       fakeFs.writeFile(
         join(testDir, '.sonarlint', 'connectedMode.json'),
         JSON.stringify({
@@ -251,7 +250,7 @@ describe('discoverProject', () => {
           region,
         }),
       );
-      const result = await discoverProject(testDir);
+      const result = await discoverProject(testDir, { console: new FakeConsole() });
       expect(result.serverUrl).toBe(url);
       expect(result.projectKey).toBe('org_project');
       expect(result.organization).toBe('my-org');
@@ -268,7 +267,7 @@ describe('discoverProject', () => {
       join(testDir, '.sonarlint', 'connectedMode.json'),
       JSON.stringify({ sonarQubeUri: 'https://sonarlint-server.com', projectKey: 'lint_project' }),
     );
-    const result = await discoverProject(testDir);
+    const result = await discoverProject(testDir, { console: new FakeConsole() });
     expect(result.serverUrl).toBe('https://props-server.io');
     expect(result.projectKey).toBe('props_project');
   });
@@ -282,7 +281,9 @@ describe('discoverProject', () => {
       join(testDir, '.sonarlint', 'connectedMode.json'),
       JSON.stringify({ sonarQubeUri: 'https://sonarlint-server.com', projectKey: 'from_lint' }),
     );
-    expect((await discoverProject(testDir)).projectKey).toBe('from_lint');
+    expect((await discoverProject(testDir, { console: new FakeConsole() })).projectKey).toBe(
+      'from_lint',
+    );
 
     fakeFs.rm(join(testDir, '.sonarlint'));
     fakeFs.writeFile(
@@ -293,7 +294,9 @@ describe('discoverProject', () => {
       join(testDir, '.sonarlint', 'connectedMode.json'),
       JSON.stringify({ sonarCloudOrganization: 'lint-org', projectKey: 'lint_project' }),
     );
-    expect((await discoverProject(testDir)).organization).toBe('lint-org');
+    expect((await discoverProject(testDir, { console: new FakeConsole() })).organization).toBe(
+      'lint-org',
+    );
   });
 
   it('updates configSources when both sonar-project.properties and .sonarlint exist', async () => {
@@ -305,7 +308,7 @@ describe('discoverProject', () => {
       join(testDir, '.sonarlint', 'connectedMode.json'),
       JSON.stringify({ sonarQubeUri: 'https://sonarlint-server.com', projectKey: 'lint_project' }),
     );
-    const result = await discoverProject(testDir);
+    const result = await discoverProject(testDir, { console: new FakeConsole() });
     expect(result.configSources).toEqual([
       'sonar-project.properties',
       join('.sonarlint', 'connectedMode.json'),
@@ -322,6 +325,7 @@ describe('discoverProject', () => {
     });
 
     const result = await discoverProject(testDir, {
+      console: new FakeConsole(),
       auth: {
         token: 'token',
         serverUrl: 'https://sonarcloud.io',
@@ -350,6 +354,7 @@ describe('discoverProject', () => {
     });
 
     const result = await discoverProject(testDir, {
+      console: new FakeConsole(),
       auth: { token: 't', serverUrl: 'https://sonarcloud.io', connectionType: 'cloud' },
     });
     expect(result.projectKey).toBe('local_key');
@@ -364,6 +369,7 @@ describe('discoverProject', () => {
     });
 
     await discoverProject(testDir, {
+      console: new FakeConsole(),
       auth: { token: 't', serverUrl: 'https://sonarcloud.io', connectionType: 'cloud' },
       tryGitRemoteBinding: false,
       silent: true,
@@ -374,7 +380,7 @@ describe('discoverProject', () => {
   it('returns a partial result instead of throwing when lookup-path resolution fails', async () => {
     lookupPathsSpy.mockRejectedValue(new Error('simulated failure'));
 
-    const result = await discoverProject(testDir);
+    const result = await discoverProject(testDir, { console: new FakeConsole() });
 
     expect(result.projectKey).toBeUndefined();
     expect(result.projectRoot).toBe(canonicalizePath(testDir));
@@ -387,7 +393,7 @@ describe('discoverProject', () => {
         makeKnownMapping({ targetRoot: canonicalizePath(testDir), orgKey: 'known-org' }),
       ]);
 
-      const result = await discoverProject(testDir);
+      const result = await discoverProject(testDir, { console: new FakeConsole() });
 
       expect(result.projectKey).toBe('known-project');
       expect(result.serverUrl).toBe('https://known.example.com');
@@ -407,7 +413,7 @@ describe('discoverProject', () => {
         }),
       ]);
 
-      const result = await discoverProject(testDir);
+      const result = await discoverProject(testDir, { console: new FakeConsole() });
 
       expect(result.projectKey).toBe('known-project');
       expect(result.projectRoot).toBe(canonicalizePath(testDir));
@@ -421,7 +427,7 @@ describe('discoverProject', () => {
       ]);
       mockClimb(lookupPathsSpy, subDir, join(testDir, 'nested'), testDir);
 
-      const result = await discoverProject(subDir);
+      const result = await discoverProject(subDir, { console: new FakeConsole() });
 
       expect(result.projectKey).toBe('known-project');
     });
@@ -436,7 +442,7 @@ describe('discoverProject', () => {
         }),
       ]);
 
-      await discoverProject(testDir);
+      await discoverProject(testDir, { console: new FakeConsole() });
 
       expect(lookupPathsSpy).toHaveBeenCalledWith(testDir, [
         canonicalizePath(testDir),
@@ -458,7 +464,7 @@ describe('discoverProject', () => {
       ]);
       mockClimb(lookupPathsSpy, invokeDir, packageDir, testDir);
 
-      const result = await discoverProject(invokeDir);
+      const result = await discoverProject(invokeDir, { console: new FakeConsole() });
 
       expect(result.projectKey).toBe('package-project');
       expect(result.projectRoot).toBe(canonicalizePath(packageDir));
@@ -472,7 +478,7 @@ describe('discoverProject', () => {
         }),
       ]);
 
-      const result = await discoverProject(testDir);
+      const result = await discoverProject(testDir, { console: new FakeConsole() });
 
       expect(result.projectKey).toBeUndefined();
     });
@@ -486,7 +492,7 @@ describe('discoverProject', () => {
         makeKnownMapping({ targetRoot: canonicalizePath(testDir) }),
       ]);
 
-      const result = await discoverProject(testDir);
+      const result = await discoverProject(testDir, { console: new FakeConsole() });
 
       expect(result.projectKey).toBe('known-project');
       expect(result.serverUrl).toBe('https://known.example.com');
@@ -504,6 +510,7 @@ describe('discoverProject', () => {
       });
 
       const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
         auth: { token: 't', serverUrl: 'https://sonarcloud.io', connectionType: 'cloud' },
       });
 
@@ -520,6 +527,7 @@ describe('discoverProject', () => {
       });
 
       const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
         auth: { token: 't', serverUrl: 'https://sonarcloud.io', connectionType: 'cloud' },
       });
 
@@ -531,7 +539,7 @@ describe('discoverProject', () => {
         throw new Error('state read failed');
       });
 
-      const result = await discoverProject(testDir);
+      const result = await discoverProject(testDir, { console: new FakeConsole() });
 
       expect(result.projectKey).toBeUndefined();
     });
@@ -565,7 +573,7 @@ describe('discoverProject', () => {
       ];
       loadStateSpy.mockReturnValue(state);
 
-      const result = await discoverProject(testDir);
+      const result = await discoverProject(testDir, { console: new FakeConsole() });
 
       expect(result.projectKey).toBe('live-project');
       expect(result.serverUrl).toBe('https://live.example.com');
@@ -608,7 +616,7 @@ describe('discoverProject', () => {
       ];
       loadStateSpy.mockReturnValue(state);
 
-      const result = await discoverProject(testDir);
+      const result = await discoverProject(testDir, { console: new FakeConsole() });
 
       expect(result.projectKey).toBe('live-project');
     });
@@ -654,7 +662,7 @@ describe('discoverProject', () => {
       ];
       loadStateSpy.mockReturnValue(state);
 
-      const result = await discoverProject(subDir);
+      const result = await discoverProject(subDir, { console: new FakeConsole() });
 
       expect(result.projectKey).toBe('live-sub-project');
     });
@@ -685,7 +693,7 @@ describe('discoverProject', () => {
         withActiveConnection(state);
         loadStateSpy.mockReturnValue(state);
 
-        const result = await discoverProject(testDir);
+        const result = await discoverProject(testDir, { console: new FakeConsole() });
 
         expect(result.projectKey).toBe('known-project');
         expect(result.serverUrl).toBe('https://active-connection.example.com');
@@ -709,7 +717,7 @@ describe('discoverProject', () => {
           'sonar.host.url=https://props-server.io\nsonar.projectKey=props_project\n',
         );
 
-        const result = await discoverProject(testDir);
+        const result = await discoverProject(testDir, { console: new FakeConsole() });
 
         expect(result.projectKey).toBe('props_project');
         expect(result.configSources).toEqual(['sonar-project.properties']);
@@ -730,6 +738,7 @@ describe('discoverProject', () => {
         loadStateSpy.mockReturnValue(state);
 
         const result = await discoverProject(testDir, {
+          console: new FakeConsole(),
           auth: {
             token: 't',
             serverUrl: 'https://env-auth.example.com',
@@ -754,7 +763,7 @@ describe('discoverProject', () => {
         withActiveConnection(state);
         loadStateSpy.mockReturnValue(state);
 
-        const result = await discoverProject(testDir);
+        const result = await discoverProject(testDir, { console: new FakeConsole() });
 
         expect(result.serverUrl).toBe('https://recorded.example.com');
         expect(result.organization).toBeUndefined();
@@ -770,7 +779,7 @@ describe('discoverProject', () => {
         'sonar.host.url=https://sub.example.com\nsonar.projectKey=sub_project\n',
       );
 
-      const result = await discoverProject(subDir);
+      const result = await discoverProject(subDir, { console: new FakeConsole() });
 
       expect(result.projectKey).toBe('sub_project');
       expect(result.serverUrl).toBe('https://sub.example.com');
@@ -789,7 +798,7 @@ describe('discoverProject', () => {
         }),
       );
 
-      const result = await discoverProject(subDir);
+      const result = await discoverProject(subDir, { console: new FakeConsole() });
 
       expect(result.projectKey).toBe('sub_lint_project');
       expect(result.serverUrl).toBe('https://sub-lint.example.com');
@@ -806,7 +815,7 @@ describe('discoverProject', () => {
         'sonar.host.url=https://sub.example.com\nsonar.projectKey=sub_project\n',
       );
 
-      const result = await discoverProject(subDir);
+      const result = await discoverProject(subDir, { console: new FakeConsole() });
 
       expect(result.projectKey).toBe('sub_project');
       expect(result.serverUrl).toBe('https://sub.example.com');
@@ -825,7 +834,7 @@ describe('discoverProject', () => {
       );
       mockClimb(lookupPathsSpy, subDir, join(testDir, 'packages'), testDir);
 
-      const result = await discoverProject(subDir);
+      const result = await discoverProject(subDir, { console: new FakeConsole() });
 
       expect(result.projectKey).toBe('root_project');
       expect(result.serverUrl).toBe('https://root.example.com');
@@ -844,7 +853,7 @@ describe('discoverProject', () => {
         'sonar.host.url=https://root.example.com\nsonar.projectKey=root_project\n',
       );
 
-      const result = await discoverProject(subDir);
+      const result = await discoverProject(subDir, { console: new FakeConsole() });
 
       expect(result.projectKey).toBeUndefined();
       expect(result.serverUrl).toBe('https://sub.example.com');
@@ -861,7 +870,7 @@ describe('discoverProject', () => {
       ]);
       mockClimb(lookupPathsSpy, subDir, join(testDir, 'packages'), testDir);
 
-      const result = await discoverProject(subDir);
+      const result = await discoverProject(subDir, { console: new FakeConsole() });
 
       expect(result.projectKey).toBe('mapped-project');
     });
@@ -881,7 +890,6 @@ describe('discoverOrganization', () => {
   });
 
   afterEach(() => {
-    clearMockUiCalls();
     fakeFs.teardown();
     lookupPathsSpy.mockRestore();
     cwdSpy.mockRestore();
@@ -895,7 +903,7 @@ describe('discoverOrganization', () => {
     );
 
     await withCwd(cwdSpy, testDir, async () => {
-      expect(await discoverOrganization()).toBe('from-props-org');
+      expect(await discoverOrganization(new FakeConsole())).toBe('from-props-org');
     });
   });
 
@@ -911,7 +919,7 @@ describe('discoverOrganization', () => {
     );
 
     await withCwd(cwdSpy, testDir, async () => {
-      expect(await discoverOrganization()).toBe('from-lint-org');
+      expect(await discoverOrganization(new FakeConsole())).toBe('from-lint-org');
     });
   });
 
@@ -923,7 +931,7 @@ describe('discoverOrganization', () => {
     );
 
     await withCwd(cwdSpy, testDir, async () => {
-      expect(await discoverOrganization()).toBeNull();
+      expect(await discoverOrganization(new FakeConsole())).toBeNull();
     });
   });
 
@@ -937,14 +945,14 @@ describe('discoverOrganization', () => {
     mockClimb(lookupPathsSpy, subDir, join(testDir, 'packages'), testDir);
 
     await withCwd(cwdSpy, subDir, async () => {
-      expect(await discoverOrganization()).toBe('ancestor-org');
+      expect(await discoverOrganization(new FakeConsole())).toBe('ancestor-org');
     });
   });
 
   it('returns null when local config discovery throws', async () => {
     lookupPathsSpy.mockRejectedValue(new Error('simulated failure'));
 
-    expect(await discoverOrganization()).toBeNull();
+    expect(await discoverOrganization(new FakeConsole())).toBeNull();
   });
 });
 
@@ -955,7 +963,6 @@ describe('discoverServer', () => {
 
   beforeEach(() => {
     fakeFs.setup();
-    setMockUi(true);
     lookupPathsSpy = spyOn(lookupPathResolver, 'resolveLookupPaths').mockImplementation(
       defaultLookupPaths,
     );
@@ -964,8 +971,6 @@ describe('discoverServer', () => {
   });
 
   afterEach(() => {
-    clearMockUiCalls();
-    setMockUi(false);
     fakeFs.teardown();
     lookupPathsSpy.mockRestore();
     cwdSpy.mockRestore();
@@ -984,10 +989,9 @@ describe('discoverServer', () => {
     );
 
     await withCwd(cwdSpy, testDir, async () => {
-      expect(await discoverServer()).toBe('https://from-props.integration.test');
-      const prints = getMockUiCalls()
-        .filter((c) => c.method === 'print')
-        .map((c) => String(c.args[0]));
+      const fake = new FakeConsole();
+      expect(await discoverServer(fake)).toBe('https://from-props.integration.test');
+      const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
       expect(prints.some((m) => m.includes('sonar-project.properties'))).toBe(true);
     });
   });
@@ -1012,11 +1016,9 @@ describe('discoverServer', () => {
       );
 
       await withCwd(cwdSpy, testDir, async () => {
-        clearMockUiCalls();
-        expect(await discoverServer()).toBe(cases[i].expectedUrl);
-        const prints = getMockUiCalls()
-          .filter((c) => c.method === 'print')
-          .map((c) => String(c.args[0]));
+        const fake = new FakeConsole();
+        expect(await discoverServer(fake)).toBe(cases[i].expectedUrl);
+        const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
         expect(prints.some((m) => m.includes('.sonarlint'))).toBe(true);
         expect(prints.some((m) => m.includes('sonar-project.properties'))).toBe(false);
       });
@@ -1028,8 +1030,9 @@ describe('discoverServer', () => {
     fakeFs.mkdir(testDir);
 
     await withCwd(cwdSpy, testDir, async () => {
-      expect(await discoverServer()).toBeNull();
-      expect(getMockUiCalls().filter((c) => c.method === 'print')).toHaveLength(0);
+      const fake = new FakeConsole();
+      expect(await discoverServer(fake)).toBeNull();
+      expect(fake.calls.filter((c) => c.method === 'print')).toHaveLength(0);
     });
   });
 
@@ -1043,14 +1046,14 @@ describe('discoverServer', () => {
     mockClimb(lookupPathsSpy, subDir, join(testDir, 'packages'), testDir);
 
     await withCwd(cwdSpy, subDir, async () => {
-      expect(await discoverServer()).toBe('https://ancestor.example.com');
+      expect(await discoverServer(new FakeConsole())).toBe('https://ancestor.example.com');
     });
   });
 
   it('returns null and logs when local config discovery throws', async () => {
     lookupPathsSpy.mockRejectedValue(new Error('simulated failure'));
 
-    expect(await discoverServer()).toBeNull();
+    expect(await discoverServer(new FakeConsole())).toBeNull();
     expect(debugSpy).toHaveBeenCalled();
     expect(String(debugSpy.mock.calls[0]?.[0] ?? '')).toContain('simulated failure');
   });

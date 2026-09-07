@@ -21,6 +21,7 @@
 // CAG owns a richer response shape than additionalContext, so it's forwarded untouched.
 
 import logger from '@/core/observability/logger.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import { runContextPassthrough } from '../context/index.ts';
 import type { ClaudePostToolUseSubscriber } from './claude-hook-dispatch.ts';
@@ -33,16 +34,20 @@ export function matchesContextAugmentationTool(toolName: string): boolean {
   return CONTEXT_AUGMENTATION_TOOL_NAMES.has(toolName);
 }
 
-export const contextAugmentationPostToolUseSubscriber: ClaudePostToolUseSubscriber = {
-  id: 'context-augmentation',
-  matches: matchesContextAugmentationTool,
-  handle: async (_payload, rawStdin) => {
-    try {
-      await runContextPassthrough('__hook', ['Claude'], { stdinPayload: rawStdin });
-      return { decision: 'handled' };
-    } catch (err) {
-      logger.debug(`CAG PostToolUse forward failed: ${(err as Error).message}`);
-      return { decision: 'none' };
-    }
-  },
-};
+export function createContextAugmentationPostToolUseSubscriber(
+  console: Console,
+): ClaudePostToolUseSubscriber {
+  return {
+    id: 'context-augmentation',
+    matches: matchesContextAugmentationTool,
+    handle: async (_payload, rawStdin) => {
+      try {
+        await runContextPassthrough('__hook', ['Claude'], { stdinPayload: rawStdin, console });
+        return { decision: 'handled' };
+      } catch (err) {
+        logger.debug(`CAG PostToolUse forward failed: ${(err as Error).message}`);
+        return { decision: 'none' };
+      }
+    },
+  };
+}

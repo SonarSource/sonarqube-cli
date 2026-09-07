@@ -21,7 +21,7 @@
 // Builds the per-file breakdown for failing quality gate conditions
 
 import logger from '@/core/observability/logger.ts';
-import type { SonarQubeClient } from '@/core/server/client.ts';
+import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { isNewCodeMetric, MeasuresClient } from '@/core/server/measures.ts';
 import type { ComponentTreeComponent, Metric, QualityGateCondition } from '@/core/server/types.ts';
 
@@ -54,7 +54,7 @@ const METRIC_CATEGORIES: ReadonlyMap<string, string> = new Map(
 export const IMPLEMENTED_CATEGORIES = Object.keys(CATEGORY_METRICS);
 
 export interface AttachBreakdownsParams {
-  client: SonarQubeClient;
+  client: SonarHttpClient;
   projectKey: string;
   metrics: Metric[];
   category?: string;

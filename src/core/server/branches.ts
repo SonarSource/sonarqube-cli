@@ -20,13 +20,13 @@
 
 // SonarQube Project Branches API wrapper
 
-import { type SonarQubeClient } from './client.ts';
+import { type SonarHttpClient } from './http-client.ts';
 import type { ProjectBranch, ProjectBranchesResponse } from './types.ts';
 
 export class BranchesClient {
-  private readonly client: SonarQubeClient;
+  private readonly client: SonarHttpClient;
 
-  constructor(client: SonarQubeClient) {
+  constructor(client: SonarHttpClient) {
     this.client = client;
   }
 

@@ -20,7 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { MeasuresClient } from '@/core/server/measures.ts';
 import type { ComponentTreeComponent, ComponentTreeResponse } from '@/core/server/types.ts';
 
@@ -82,7 +82,7 @@ describe('MeasuresClient', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    client = new MeasuresClient(new SonarQubeClient(SERVER_URL, TOKEN));
+    client = new MeasuresClient(new SonarHttpClient(SERVER_URL, TOKEN));
   });
 
   afterEach(() => {

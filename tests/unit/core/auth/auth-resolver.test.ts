@@ -34,8 +34,8 @@ import {
 } from '@/core/auth/auth-resolver.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
+import { FakeConsole } from '../../../_common/fake-console.ts';
 import { createKeychainTestHandle } from '../host/keychain-test-handle.ts';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
@@ -44,14 +44,17 @@ const FAKE_TOKEN_ENV = 'squ_env_token_xyz789';
 
 const handle = createKeychainTestHandle();
 
+let fake: FakeConsole;
+
+beforeEach(() => {
+  fake = new FakeConsole();
+});
+
 describe('resolveAuth', () => {
   let recordConnectionSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    handle.setup();
-    setMockUi(true);
-    clearMockUiCalls();
-    // Ensure env vars are clean
+    handle.setup(); // Ensure env vars are clean
     delete process.env[ENV_TOKEN];
     delete process.env[ENV_SERVER];
     resetEnvAuthRecordGuard();
@@ -66,7 +69,6 @@ describe('resolveAuth', () => {
 
   afterEach(() => {
     handle.teardown();
-    setMockUi(false);
     delete process.env[ENV_TOKEN];
     delete process.env[ENV_SERVER];
     recordConnectionSpy.mockRestore();
@@ -146,12 +148,12 @@ describe('resolveAuth', () => {
       await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
 
       try {
-        const result = await resolveAuth();
+        const result = await resolveAuth({ console: fake });
         expect(result).toMatchObject({
           token: FAKE_TOKEN,
           serverUrl: SONARCLOUD_URL,
         });
-        const warnings = getMockUiCalls().filter((c) => c.method === 'warn');
+        const warnings = fake.calls.filter((c) => c.method === 'warn');
         expect(warnings.some((c) => String(c.args[0]).includes(ENV_TOKEN))).toBe(true);
       } finally {
         loadStateSpy.mockRestore();
@@ -177,12 +179,12 @@ describe('resolveAuth', () => {
       await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
 
       try {
-        const result = await resolveAuth();
+        const result = await resolveAuth({ console: fake });
         expect(result).toMatchObject({
           token: FAKE_TOKEN,
           serverUrl: SONARCLOUD_URL,
         });
-        const warnings = getMockUiCalls().filter((c) => c.method === 'warn');
+        const warnings = fake.calls.filter((c) => c.method === 'warn');
         expect(warnings.some((c) => String(c.args[0]).includes(ENV_SERVER))).toBe(true);
       } finally {
         loadStateSpy.mockRestore();

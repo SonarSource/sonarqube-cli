@@ -19,8 +19,8 @@
  */
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { timed } from '@/core/observability/timed.ts';
-import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
 
 import { readSqaaFileContent, toRelativePosixPath } from './sqaa-api.ts';
 import { resolveSqaaAuthAndProject } from './sqaa-auth.ts';
@@ -47,6 +47,11 @@ import type {
   AnalyzeSqaaRunOptions,
   SqaaResolvedContext,
 } from './sqaa-types.ts';
+import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
+
+type JsonReportRunOptions = AnalyzeSqaaRunOptions & {
+  telemetryCtx: CommandInvocationContext;
+};
 
 async function buildSqaaJsonReportFromEntries(
   entries: ResolvedSqaaFileEntry[],
@@ -55,7 +60,7 @@ async function buildSqaaJsonReportFromEntries(
   branch: string | undefined,
   wireDepth: SqaaDeepWireDepth | undefined,
   displayDepth: SqaaAnalysisDepth,
-  runOptions: AnalyzeSqaaRunOptions,
+  runOptions: JsonReportRunOptions,
 ): Promise<SqaaJsonReport> {
   if (entries.length === 1) {
     const { absolutePath } = entries[0];
@@ -86,6 +91,7 @@ async function buildSqaaJsonReportFromEntries(
       branch,
       wireDepth,
       displayDepth,
+      runOptions.telemetryCtx.console,
     ),
   );
   const report = buildJsonReport(tally, [], allPaths, cwd, displayDepth);
@@ -98,7 +104,7 @@ async function buildSqaaJsonReportFromChangeSet(
   auth: ResolvedAuth,
   rawDepth: string | undefined,
   forcedDepth: SqaaAnalysisDepth | undefined,
-  runOptions: AnalyzeSqaaRunOptions,
+  runOptions: JsonReportRunOptions,
 ): Promise<SqaaJsonReport | null> {
   const { staged, base, branch, project, force } = options;
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'change-set', forcedDepth);
@@ -113,11 +119,19 @@ async function buildSqaaJsonReportFromChangeSet(
     );
   }
 
-  const resolution = await resolveSqaaAuthAndProject(auth, project, changeSet.repoRoot);
-  const resolved = resolveSqaaContext(resolution, { requireProject: false });
+  const { console } = runOptions.telemetryCtx;
+  const resolution = await resolveSqaaAuthAndProject(auth, project, console, changeSet.repoRoot);
+  const resolved = resolveSqaaContext(resolution, { requireProject: false }, console);
   if (!resolved) return null;
 
-  if (!(await confirmLargeRunIfNeeded(changeSet.files.length, force, options.format ?? 'text'))) {
+  if (
+    !(await confirmLargeRunIfNeeded(
+      changeSet.files.length,
+      console,
+      force,
+      options.format ?? 'text',
+    ))
+  ) {
     return null;
   }
 
@@ -131,6 +145,7 @@ async function buildSqaaJsonReportFromChangeSet(
       resolvedBranch,
       wireDepth,
       displayDepth,
+      console,
     ),
   );
   const report = buildJsonReport(tally, ignored, allPaths, repoRoot, displayDepth);
@@ -146,7 +161,7 @@ async function buildSqaaJsonReportFromChangeSet(
 export async function buildSqaaJsonReport(
   options: AnalyzeSqaaOptions,
   auth: ResolvedAuth,
-  runOptions: AnalyzeSqaaRunOptions = {},
+  runOptions: JsonReportRunOptions,
 ): Promise<SqaaJsonReport | null> {
   const telemetryOptions = { ...runOptions, auth };
   const { file: rawFiles, branch, project, force, depth: rawDepth, forcedDepth } = options;
@@ -154,8 +169,9 @@ export async function buildSqaaJsonReport(
   if (rawFiles?.length) {
     const entries = resolveSqaaFileArgs(rawFiles);
     const resolvedBranch = await resolveSqaaBranch(branch, entries[0].absolutePath);
-    const resolution = await resolveSqaaAuthAndProject(auth, project);
-    const resolved = resolveSqaaContext(resolution, { requireProject: false });
+    const { console } = runOptions.telemetryCtx;
+    const resolution = await resolveSqaaAuthAndProject(auth, project, console);
+    const resolved = resolveSqaaContext(resolution, { requireProject: false }, console);
     if (!resolved) return null;
 
     if (entries.length === 1) {
@@ -172,7 +188,9 @@ export async function buildSqaaJsonReport(
     }
 
     const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'multi-file', forcedDepth);
-    if (!(await confirmLargeRunIfNeeded(entries.length, force, options.format ?? 'text'))) {
+    if (
+      !(await confirmLargeRunIfNeeded(entries.length, console, force, options.format ?? 'text'))
+    ) {
       return null;
     }
 

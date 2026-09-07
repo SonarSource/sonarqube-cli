@@ -36,6 +36,14 @@ import {
 import type { CliState } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 
+import { FakeConsole } from '../../../../_common/fake-console.ts';
+
+let fake: FakeConsole;
+
+beforeEach(() => {
+  fake = new FakeConsole();
+});
+
 function makeState(): CliState {
   return getDefaultState('1.0.0');
 }
@@ -154,7 +162,7 @@ describe('reconcileInstalledIntegrations', () => {
       ],
     });
 
-    const changed = await reconcileInstalledIntegrations(state, registry);
+    const changed = await reconcileInstalledIntegrations(state, registry, fake);
 
     expect(fs.readFileSync(resourcePath, 'utf-8')).toBe('fresh content');
     expect(operationCalls).toEqual(['refresh-operation']);
@@ -280,7 +288,7 @@ describe('reconcileInstalledIntegrations', () => {
       ],
     });
 
-    const changed = await reconcileInstalledIntegrations(state, registry);
+    const changed = await reconcileInstalledIntegrations(state, registry, fake);
 
     expect(existingDependencyPaths).toEqual(['/old/shared-dependency']);
     expect(installCalls).toEqual(['install']);
@@ -342,7 +350,7 @@ describe('reconcileInstalledIntegrations', () => {
       features: [container],
     });
 
-    await reconcileInstalledIntegrations(state, registry);
+    await reconcileInstalledIntegrations(state, registry, fake);
 
     expect(capturedContexts).toHaveLength(1);
     expect('activeSubfeatures' in capturedContexts[0]).toBeTrue();
@@ -409,7 +417,7 @@ describe('reconcileInstalledIntegrations', () => {
       features: [container],
     });
 
-    await reconcileInstalledIntegrations(state, registry);
+    await reconcileInstalledIntegrations(state, registry, fake);
 
     expect(capturedContexts).toHaveLength(1);
     expect(
@@ -476,7 +484,7 @@ describe('reconcileInstalledIntegrations', () => {
       features: [container],
     });
 
-    await reconcileInstalledIntegrations(state, registry);
+    await reconcileInstalledIntegrations(state, registry, fake);
 
     expect(fs.readFileSync(recordedPath, 'utf-8')).toBe('a');
     expect(fs.existsSync(newPath)).toBeFalse();
@@ -534,7 +542,7 @@ describe('reconcileInstalledIntegrations', () => {
       ],
     });
 
-    await reconcileInstalledIntegrations(state, registry);
+    await reconcileInstalledIntegrations(state, registry, fake);
 
     expect(capturedContexts).toHaveLength(1);
     expect('activeSubfeatures' in capturedContexts[0]).toBeFalse();
@@ -599,7 +607,7 @@ describe('reconcileInstalledIntegrations', () => {
       ],
     });
 
-    await reconcileInstalledIntegrations(state, registry);
+    await reconcileInstalledIntegrations(state, registry, fake);
 
     expect(appliedAttrs).toEqual([
       { projectKey: 'project-key', orgKey: 'org-key', scaEnabled: true },
@@ -649,7 +657,7 @@ describe('reconcileInstalledIntegrations', () => {
       ],
     });
 
-    await reconcileInstalledIntegrations(state, registry);
+    await reconcileInstalledIntegrations(state, registry, fake);
 
     expect(appliedAttrs).toEqual([{ projectKey: 'context-project' }]);
   });
@@ -692,7 +700,7 @@ describe('reconcileInstalledIntegrations', () => {
       ],
     });
 
-    await reconcileInstalledIntegrations(state, registry);
+    await reconcileInstalledIntegrations(state, registry, fake);
 
     expect(appliedAttrs).toEqual([{ projectKey: 'project-key' }]);
     expect(state.integrations.installed[0].features).toHaveLength(1);

@@ -21,7 +21,7 @@
 import { CommandFailedError } from '@/core/command-error.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import type { IntegrationScope } from '@/core/state/state.ts';
-import { blank, info, selectPrompt } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
 export interface IntegrateScopeOptions {
   global?: boolean;
@@ -30,6 +30,7 @@ export interface IntegrateScopeOptions {
   projectRoot?: string;
   /** Explicit project key (e.g. `--project`); implies project scope and skips the prompt. */
   projectKey?: string;
+  console: Console;
 }
 
 function formatNonInteractiveDefaultInfo(projectRoot: string | undefined): string {
@@ -54,6 +55,7 @@ export function buildProjectScopeLabel(projectRoot: string): string {
 export async function resolveIntegrateScope(
   options: IntegrateScopeOptions,
 ): Promise<IntegrationScope> {
+  const console = options.console;
   if (options.global === true) {
     return 'global';
   }
@@ -63,7 +65,7 @@ export async function resolveIntegrateScope(
   }
 
   if (options.nonInteractive) {
-    info(formatNonInteractiveDefaultInfo(options.projectRoot));
+    console.info(formatNonInteractiveDefaultInfo(options.projectRoot));
     return 'project';
   }
 
@@ -72,20 +74,23 @@ export async function resolveIntegrateScope(
       ? 'This project (current directory)'
       : buildProjectScopeLabel(options.projectRoot);
 
-  const choice = await selectPrompt<IntegrationScope>('Where should SonarQube be integrated?', [
-    {
-      value: 'project',
-      label: projectLabel,
-    },
-    {
-      value: 'global',
-      label: 'Global (user home — applies across projects)',
-    },
-  ]);
+  const choice = await console.selectPrompt<IntegrationScope>(
+    'Where should SonarQube be integrated?',
+    [
+      {
+        value: 'project',
+        label: projectLabel,
+      },
+      {
+        value: 'global',
+        label: 'Global (user home — applies across projects)',
+      },
+    ],
+  );
   if (choice === null) {
     throw new CommandFailedError('Installation cancelled');
   }
-  blank();
+  console.blank();
   return choice;
 }
 

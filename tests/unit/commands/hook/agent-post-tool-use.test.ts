@@ -23,6 +23,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import * as clientModule from '@/commands/analyze/sqaa-analysis-client.ts';
 import * as sqaaTelemetry from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import {
   SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
@@ -32,13 +33,12 @@ import * as authResolver from '@/core/auth/auth-resolver.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as processLib from '@/core/process/process.ts';
 import * as projectInfo from '@/core/project-info.ts';
-import * as clientModule from '@/core/server/client.ts';
 
 import { agentPostToolUse } from '../../../../src/commands/hook/agent-post-tool-use.ts';
-import { contextAugmentationPostToolUseSubscriber } from '../../../../src/commands/hook/context-augmentation-hook-subscriber.ts';
+import * as cagSubscriber from '../../../../src/commands/hook/context-augmentation-hook-subscriber.ts';
 import * as hookOutput from '../../../../src/commands/hook/format-sqaa-hook-context.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
-
+import { FakeConsole } from '../../../_common/fake-console.ts';
 // Real path inside cwd so realpathSync resolves consistently for file and cwd.
 const TEST_FILE = join(process.cwd(), 'src/index.ts');
 
@@ -79,9 +79,14 @@ describe('agentPostToolUse', () => {
       raw: '{}',
       parsed: { tool_name: 'Edit', tool_input: { file_path: TEST_FILE } },
     });
-    cagMatchesSpy = spyOn(contextAugmentationPostToolUseSubscriber, 'matches').mockReturnValue(
-      false,
-    );
+    cagMatchesSpy = spyOn(
+      cagSubscriber,
+      'createContextAugmentationPostToolUseSubscriber',
+    ).mockReturnValue({
+      id: 'context-augmentation',
+      matches: () => false,
+      handle: () => Promise.resolve({ decision: 'none' as const }),
+    });
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
     readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue('const x = 1;');
     discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
@@ -91,14 +96,14 @@ describe('agentPostToolUse', () => {
       configSources: [],
     });
     createAnalysisSpy = spyOn(
-      clientModule.SonarQubeClient.prototype,
+      clientModule.SqaaAnalysisClient.prototype,
       'createAnalysis',
     ).mockResolvedValue({ id: 'analysis-id', issues: [], errors: null });
     emitSqaaAnalysisTelemetrySpy = spyOn(
       sqaaTelemetry,
       'recordSqaaAnalysisTelemetry',
     ).mockImplementation(() => {});
-    ctx = new CommandInvocationContext();
+    ctx = new CommandInvocationContext(new FakeConsole());
   });
 
   afterEach(() => {

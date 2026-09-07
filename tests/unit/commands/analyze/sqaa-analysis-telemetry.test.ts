@@ -34,15 +34,16 @@ import {
   tallyFromSqaaJsonReport,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display-json.ts';
+import type { SqaaIssue } from '@/commands/analyze/sqaa-wire-types.ts';
 import { commitTelemetryFacts } from '@/commands/telemetry-facts.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
-import type { SqaaIssue } from '@/core/server/client.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import * as userModule from '@/core/telemetry/user.ts';
 
+import { FakeConsole } from '../../../_common/fake-console.ts';
 import { makeTelemetryState, readAnalysisEvents } from '../../../_common/telemetry-helpers.ts';
 
 const AUTH: ResolvedAuth = {
@@ -59,7 +60,7 @@ async function emitSqaaAnalysisTelemetry(
   durationMs: number,
   exitCode?: number | null,
 ): Promise<void> {
-  const ctx = new CommandInvocationContext();
+  const ctx = new CommandInvocationContext(new FakeConsole());
   recordSqaaAnalysisTelemetry(ctx, AUTH, callerCommand, tally, durationMs, exitCode);
   await commitTelemetryFacts(ctx.telemetryFacts());
 }

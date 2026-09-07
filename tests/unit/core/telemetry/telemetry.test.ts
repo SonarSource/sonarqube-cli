@@ -44,8 +44,8 @@ import { flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { ENV_TELEMETRY_EGRESS, TELEMETRY_EGRESS_OFF } from '@/core/telemetry/egress.ts';
 import { resolveTelemetryIdentity } from '@/core/telemetry/identity-fetch.ts';
 import * as userModule from '@/core/telemetry/user.ts';
-import * as ui from '@/core/ui';
 
+import { FakeConsole } from '../../../_common/fake-console.ts';
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
 import type { StoredAnalysisCompletedEvent } from '../../../_common/telemetry-helpers.ts';
 import {
@@ -62,7 +62,7 @@ import { mockIdentityGetSafe } from './identity-api-mock.ts';
  * e.g. makeCommand('auth login') produces leaf `login` under `auth` under root.
  */
 function makeCommand(path: string): SonarCommand {
-  const root = new SonarCommand('sonar');
+  const root = new SonarCommand('sonar', { console: new FakeConsole() });
   let current: SonarCommand = root;
   for (const name of path.split(' ')) {
     current = current.command(name);
@@ -440,13 +440,13 @@ describe('storeEvent', () => {
 
   describe('environment-variable authentication identity', () => {
     it('does not warn about partial env vars during storeEvent', async () => {
-      const warnSpy = spyOn(ui, 'warn').mockImplementation(() => undefined);
+      const resolveAuthSpy = spyOn(authResolver, 'resolveAuth');
       process.env[ENV_TOKEN] = 'partial-env-token';
 
       await storeEvent(makeCommand('auth login'));
 
-      expect(warnSpy).not.toHaveBeenCalled();
-      warnSpy.mockRestore();
+      expect(resolveAuthSpy).toHaveBeenCalledWith({ silent: true });
+      resolveAuthSpy.mockRestore();
     });
 
     it('resolves user_uuid and organization_uuid_v4 via API on first env-auth invocation', async () => {

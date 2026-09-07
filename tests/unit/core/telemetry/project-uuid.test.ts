@@ -293,7 +293,7 @@ describe('resolveProjectUuid()', () => {
 
   it('never throws when the API client itself throws unexpectedly', async () => {
     const getSafeSpy = spyOn(
-      (await import('@/core/server/client.ts')).SonarQubeClient.prototype,
+      (await import('@/core/server/http-client.ts')).SonarHttpClient.prototype,
       'getSafe',
     ).mockImplementation(() => {
       throw new Error('synchronous failure before fetch');
@@ -378,7 +378,7 @@ describe('noteProject() / currentProjectUuid()', () => {
 
   it('never rejects when resolution fails, so storeEvent cannot be broken by it', async () => {
     const getSafeSpy = spyOn(
-      (await import('@/core/server/client.ts')).SonarQubeClient.prototype,
+      (await import('@/core/server/http-client.ts')).SonarHttpClient.prototype,
       'getSafe',
     ).mockRejectedValue(new Error('network down'));
 

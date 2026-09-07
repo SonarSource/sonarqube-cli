@@ -25,11 +25,11 @@ import {
   type CommandInvocationContext,
   TelemetryFact,
 } from '@/core/commands/invocation-context.ts';
-import type { SqaaIssue } from '@/core/server/client.ts';
 
 import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
 import type { FileResult, RunTally } from './sqaa-analysis.ts';
 import type { SqaaJsonReport } from './sqaa-display-json.ts';
+import type { SqaaIssue } from './sqaa-wire-types.ts';
 
 export const SQAA_ANALYZE_CALLER_COMMAND = 'analyze';
 

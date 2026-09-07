@@ -29,8 +29,10 @@ import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocatio
 import * as registry from '@/core/framework/features';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import * as discovery from '@/core/project-info.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
-import { clearMockUiCalls, setMockUi } from '@/core/ui';
+import { ComponentsClient } from '@/core/server/components.ts';
+import { VortexEntitlementClient } from '@/core/vortex/entitlement.ts';
+
+import { FakeConsole } from '../../../../_common/fake-console.ts';
 
 const SERVER_AUTH: ResolvedAuth = {
   token: 'test-token',
@@ -38,7 +40,7 @@ const SERVER_AUTH: ResolvedAuth = {
   connectionType: 'on-premise',
 };
 
-const SERVER_CTX = new CommandAuthenticatedInvocationContext(SERVER_AUTH);
+let SERVER_CTX: CommandAuthenticatedInvocationContext;
 
 const BASE_PROJECT: DiscoveredProject = {
   repoRoot: '/project/root',
@@ -46,6 +48,13 @@ const BASE_PROJECT: DiscoveredProject = {
   configSources: [],
   projectKey: 'my-project',
 };
+
+let fake: FakeConsole;
+
+beforeEach(() => {
+  fake = new FakeConsole();
+  SERVER_CTX = new CommandAuthenticatedInvocationContext(SERVER_AUTH, fake);
+});
 
 describe('integrateCopilot', () => {
   let checkTokenStatusSpy: Mock<
@@ -59,7 +68,7 @@ describe('integrateCopilot', () => {
   >;
   let hasVortexEntitlementSpy: Mock<
     Extract<
-      (typeof SonarQubeClient.prototype)['hasVortexEntitlement'],
+      (typeof VortexEntitlementClient.prototype)['hasVortexEntitlement'],
       (...args: never[]) => unknown
     >
   >;
@@ -67,22 +76,21 @@ describe('integrateCopilot', () => {
     Extract<(typeof hooks)['detectGlobalSecretsHook'], (...args: never[]) => unknown>
   >;
   let checkComponentSpy: Mock<
-    Extract<(typeof SonarQubeClient.prototype)['checkComponent'], (...args: never[]) => unknown>
+    Extract<(typeof ComponentsClient.prototype)['checkComponent'], (...args: never[]) => unknown>
   >;
   let resolveVortexSetupSpy: Mock<
     Extract<(typeof vortex)['resolveVortexSetup'], (...args: never[]) => unknown>
   >;
 
   beforeEach(() => {
-    setMockUi(true);
     checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
     discoverProjectSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(BASE_PROJECT);
     installIntegrationSpy = spyOn(registry, 'installIntegration').mockResolvedValue([]);
     hasVortexEntitlementSpy = spyOn(
-      SonarQubeClient.prototype,
+      VortexEntitlementClient.prototype,
       'hasVortexEntitlement',
     ).mockResolvedValue({ status: 'not_entitled' });
-    checkComponentSpy = spyOn(SonarQubeClient.prototype, 'checkComponent').mockResolvedValue(true);
+    checkComponentSpy = spyOn(ComponentsClient.prototype, 'checkComponent').mockResolvedValue(true);
     detectGlobalSecretsHookSpy = spyOn(hooks, 'detectGlobalSecretsHook').mockResolvedValue(
       undefined,
     );
@@ -92,8 +100,6 @@ describe('integrateCopilot', () => {
   });
 
   afterEach(() => {
-    clearMockUiCalls();
-    setMockUi(false);
     checkTokenStatusSpy.mockRestore();
     discoverProjectSpy.mockRestore();
     installIntegrationSpy.mockRestore();

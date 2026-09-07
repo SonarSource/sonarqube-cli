@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { MAX_PAGE_SIZE } from '@/core/server/client.ts';
+import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { cyan, green, red, yellow } from '@/core/ui/colors.ts';
 import { padColumns } from '@/core/ui/formatter/column-formatting.ts';
 

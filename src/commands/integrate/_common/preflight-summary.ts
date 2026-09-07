@@ -24,10 +24,12 @@ import { checkTokenStatus, type TokenCheckResult, type TokenStatus } from '@/cor
 import { CommandFailedError } from '@/core/command-error.ts';
 import { GitRepo } from '@/core/host/git/hooks.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { ComponentsClient } from '@/core/server/components.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
+import { OrganizationsClient } from '@/core/server/organizations.ts';
 import type { PhaseItem, StepStatus } from '@/core/ui';
-import { info, outro, phase, phaseItem, text } from '@/core/ui';
-
+import { phaseItem } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 export interface AgentPreflightSummaryOptions {
   serverUrl: string;
   organization?: string;
@@ -40,14 +42,15 @@ export interface AgentPreflightSummaryOptions {
 
 export async function printAgentPreflightSummary(
   options: AgentPreflightSummaryOptions,
+  console: Console,
 ): Promise<void> {
   const tokenResult: TokenCheckResult = await checkTokenStatus(options.serverUrl, options.token);
   const tokenStatus: TokenStatus = tokenResult.status;
-  phase('Connection', await buildConnectionItems(options, tokenStatus));
-  phase('Project', await buildProjectItems(options, tokenStatus));
+  console.phase('Connection', await buildConnectionItems(options, tokenStatus));
+  console.phase('Project', await buildProjectItems(options, tokenStatus));
 
   if (tokenStatus === 'unreachable') {
-    reportUnreachableServerFailure();
+    reportUnreachableServerFailure(console);
     const message = tokenResult.errorMessage
       ? `Server is unreachable: ${tokenResult.errorMessage}`
       : 'Server is unreachable.';
@@ -60,10 +63,10 @@ export async function printAgentPreflightSummary(
   }
 }
 
-function reportUnreachableServerFailure(): void {
-  outro('Setup failed', 'error');
-  info('Server could not be reached.');
-  text('   Ensure the URL is correct and check your network connection or SONAR_HOST_URL.');
+function reportUnreachableServerFailure(console: Console): void {
+  console.outro('Setup failed', 'error');
+  console.info('Server could not be reached.');
+  console.text('   Ensure the URL is correct and check your network connection or SONAR_HOST_URL.');
 }
 
 async function buildConnectionItems(
@@ -108,7 +111,7 @@ async function organizationAccessStatus(
   organization: string,
 ): Promise<[StepStatus, string | undefined]> {
   try {
-    const client = new SonarQubeClient(serverUrl, token);
+    const client = new OrganizationsClient(new SonarHttpClient(serverUrl, token));
     const accessible = await client.isOrganizationAccessible(organization);
     return accessible ? ['done', organization] : ['failed', `${organization} (not accessible)`];
   } catch {
@@ -170,7 +173,7 @@ async function projectKeyAccessStatus(
   projectKey: string,
 ): Promise<[StepStatus, string | undefined]> {
   try {
-    const client = new SonarQubeClient(serverUrl, token);
+    const client = new ComponentsClient(new SonarHttpClient(serverUrl, token));
     const accessible = await client.checkComponent(projectKey);
     return accessible ? ['done', projectKey] : ['failed', `${projectKey} (not accessible)`];
   } catch {
@@ -192,12 +195,12 @@ function tokenDisplayForStatus(tokenStatus: TokenStatus): {
   }
 }
 
-export async function printGitPreflightSummary(gitRoot: string): Promise<void> {
+export async function printGitPreflightSummary(gitRoot: string, console: Console): Promise<void> {
   const gitRepo = new GitRepo(gitRoot);
   const hooksDir = await gitRepo.getHooksDir();
   const framework = await resolveGitFrameworkLabel(gitRepo);
 
-  phase('Repository', [
+  console.phase('Repository', [
     phaseItem('Root', 'done', gitRoot),
     phaseItem('Git repository', 'done', 'detected'),
     phaseItem('Hooks directory', 'done', hooksDir),

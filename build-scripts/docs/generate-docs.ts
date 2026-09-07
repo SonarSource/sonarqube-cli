@@ -39,6 +39,7 @@ import {
   stageHelpTag,
   type StageName,
 } from '@/core/commands/sonar-command.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { version } from '../../package.json';
 import { EXAMPLES } from './examples';
@@ -129,7 +130,7 @@ interface ClidocCommand {
 }
 
 // Docs use the default runtime (Private Beta omitted; Open Beta and Deprecated included).
-const COMMAND_TREE = await createCommandTree();
+const COMMAND_TREE = await createCommandTree({ console: new TerminalConsole() });
 const allCommands: ClidocCommand[] = [];
 const help = COMMAND_TREE.createHelp();
 

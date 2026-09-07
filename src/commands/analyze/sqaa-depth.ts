@@ -19,7 +19,8 @@
  */
 
 import { InvalidOptionError } from '@/core/command-error.ts';
-import type { SqaaAnalysisDepth } from '@/core/server/client.ts';
+
+import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
 export const SQAA_DEPTH_CHOICES = ['STANDARD', 'DEEP'] as const;
 

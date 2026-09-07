@@ -20,13 +20,13 @@
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
-import type { SonarQubeClient } from '@/core/server/client.ts';
+import type { ScaClient } from '@/core/server/sca.ts';
 import { fetchServerVersion, isAtLeast } from '@/core/server/server-info.ts';
 
 export const MIN_SCA_SQS_VERSION = '2026.4';
 
 export async function assertScaAvailable(
-  client: Pick<SonarQubeClient, 'checkScaEnabled'>,
+  client: Pick<ScaClient, 'checkScaEnabled'>,
   auth: Pick<ResolvedAuth, 'connectionType' | 'serverUrl' | 'orgKey'>,
 ): Promise<void> {
   if (auth.connectionType !== 'cloud') {

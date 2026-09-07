@@ -18,9 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { VortexEntitlementResult, VortexEntitlementStatus } from '@/core/server/client.ts';
-import { blank, text } from '@/core/ui';
-import { isVortexEntitlementLoss } from '@/core/vortex/entitlement.ts';
+import type { Console } from '@/core/ui/console.ts';
+import {
+  isVortexEntitlementLoss,
+  type VortexEntitlementResult,
+  type VortexEntitlementStatus,
+} from '@/core/vortex/entitlement.ts';
 
 const VORTEX_STATUS_LABELS: Record<VortexEntitlementStatus, string> = {
   enabled: 'Active',
@@ -63,14 +66,14 @@ export function buildVortexRecommendation(
   return `Re-enable Vortex${target}, or run 'sonar integrate' to remove the Vortex integration`;
 }
 
-export function renderVortexSection(vortex: VortexEntitlementResult): void {
+export function renderVortexSection(vortex: VortexEntitlementResult, console: Console): void {
   if (vortex.status === 'not_applicable') {
     return;
   }
-  blank();
-  text('VORTEX');
-  text(`  • Status: ${VORTEX_STATUS_LABELS[vortex.status]}`);
+  console.blank();
+  console.text('VORTEX');
+  console.text(`  • Status: ${VORTEX_STATUS_LABELS[vortex.status]}`);
   if (vortex.consumption) {
-    text(`  • Usage limit: ${formatVortexUsage(vortex.consumption)}`);
+    console.text(`  • Usage limit: ${formatVortexUsage(vortex.consumption)}`);
   }
 }

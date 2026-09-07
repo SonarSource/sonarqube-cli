@@ -27,9 +27,9 @@ import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invo
 import { DefaultScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import { DefaultSecretsInstaller } from '@/core/host/install/secrets.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
-import { error, print, warn } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
 import { countSelectedRisks } from './dependency-risk-helpers/count-selected-risks.ts';
 import { DefaultScaScannerSpawner } from './dependency-risk-helpers/default-sca-scanner-spawner.ts';
@@ -37,6 +37,7 @@ import { formatDependencyRisksJson } from './dependency-risk-helpers/format-depe
 import { formatDependencyRisksToon } from './dependency-risk-helpers/format-dependency-risks-toon.ts';
 import { pluralize } from './dependency-risk-helpers/pluralize.ts';
 import { buildRiskFilter } from './dependency-risk-helpers/risk-filter.ts';
+import { createScaScanApi } from './dependency-risk-helpers/sca-api.ts';
 import { ScaScanOrchestrator } from './dependency-risk-helpers/sca-scan-orchestrator.ts';
 import type { Severity } from './dependency-risk-helpers/sca-scanner.ts';
 import { formatDependencyRisksTable } from './dependency-risk-helpers/table';
@@ -61,7 +62,7 @@ export async function analyzeDependencyRisks(
   options: AnalyzeDependencyRisksOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const { auth } = ctx;
+  const { auth, console } = ctx;
   const filter = buildRiskFilter(options.statuses, options.minSeverity);
   if (!filter) {
     throw new InvalidOptionError(
@@ -70,15 +71,15 @@ export async function analyzeDependencyRisks(
     );
   }
 
-  const projectKey = await resolveProjectKey(options.project, auth);
+  const projectKey = await resolveProjectKey(options.project, auth, ctx.console);
   noteProject(auth, projectKey);
 
-  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  const client = createScaScanApi(new SonarHttpClient(auth.serverUrl, auth.token));
   const orchestrator = new ScaScanOrchestrator(
     client,
-    new DefaultScaScannerInstaller(),
+    new DefaultScaScannerInstaller(ctx.console),
     new DefaultScaScannerSpawner(),
-    new DefaultSecretsInstaller(),
+    new DefaultSecretsInstaller(ctx.console),
   );
 
   // The orchestrator emits the failures_count:1 event itself if the SCA scan throws (scoped so a
@@ -93,16 +94,16 @@ export async function analyzeDependencyRisks(
   const viewModel = buildDependencyRisksViewModel(scan.response, filter);
   switch (options.format) {
     case 'json':
-      print(formatDependencyRisksJson(projectKey, viewModel));
+      console.print(formatDependencyRisksJson(projectKey, viewModel));
       break;
     case 'toon':
-      print(formatDependencyRisksToon(projectKey, viewModel));
+      console.print(formatDependencyRisksToon(projectKey, viewModel));
       break;
     default:
-      print(formatDependencyRisksTable(viewModel));
+      console.print(formatDependencyRisksTable(viewModel));
   }
 
-  handleResult(countUnresolvedIssues(viewModel), scan.response.errors.length);
+  handleResult(countUnresolvedIssues(viewModel), scan.response.errors.length, console);
 
   // Contribute after handleResult so exit_code carries the CLI's final process.exitCode (0/1/51).
   recordScaAnalysisTelemetry(
@@ -115,16 +116,16 @@ export async function analyzeDependencyRisks(
   );
 }
 
-function handleResult(unresolvedRisksCount: number, errorCount: number) {
+function handleResult(unresolvedRisksCount: number, errorCount: number, console: Console) {
   function warnErrorsDuringAnalysis() {
     if (errorCount > 0) {
-      warn(`Found ${errorCount} ${pluralize(errorCount, 'analysis error')}.`);
+      console.warn(`Found ${errorCount} ${pluralize(errorCount, 'analysis error')}.`);
     }
   }
 
   if (unresolvedRisksCount > 0) {
     warnErrorsDuringAnalysis();
-    error(
+    console.error(
       `Found ${unresolvedRisksCount} ${pluralize(unresolvedRisksCount, 'unresolved dependency risk')}.`,
     );
     process.exitCode = EXIT_CODE_UNRESOLVED_RISKS;

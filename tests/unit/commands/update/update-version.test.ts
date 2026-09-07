@@ -22,8 +22,10 @@ import { EventEmitter } from 'node:events';
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { clearNetworkConfigCache } from '@/core/host/connectivity/network-config.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
 // Spy on the real node:child_process / platform-detector modules rather than
 // mock.module()-ing them: mock.module() swaps the module in the global registry for the
@@ -76,6 +78,16 @@ function stableVersionResponse(version: string) {
     text: async () => Promise.resolve(`${version}\n`),
   };
 }
+
+let fake: FakeConsole;
+
+function updateCtx(): CommandInvocationContext {
+  return new CommandInvocationContext(fake);
+}
+
+beforeEach(() => {
+  fake = new FakeConsole();
+});
 
 describe('checkForUpdate', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
@@ -192,22 +204,19 @@ describe('updateVersion --status', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
     fetchSpy = spyOn(globalThis, 'fetch');
   });
 
   afterEach(() => {
     fetchSpy.mockRestore();
-    setMockUi(false);
   });
 
   it('reports an available update without installing', async () => {
     fetchSpy.mockResolvedValue(stableVersionResponse('99.0.0.241'));
 
-    await updateVersion({ status: true });
+    await updateVersion({ status: true }, updateCtx());
 
-    const messages = getMockUiCalls().map((c) => c.args.join(' '));
+    const messages = fake.calls.map((c) => c.args.join(' '));
     // Build number must be stripped from displayed versions
     expect(messages.some((m) => m.includes('99.0.0') && !m.includes('99.0.0.241'))).toBe(true);
     expect(messages.some((m) => /update available/i.test(m))).toBe(true);
@@ -216,9 +225,9 @@ describe('updateVersion --status', () => {
   it('reports already up to date', async () => {
     fetchSpy.mockResolvedValue(stableVersionResponse('0.0.1'));
 
-    await updateVersion({ status: true });
+    await updateVersion({ status: true }, updateCtx());
 
-    const messages = getMockUiCalls().map((c) => c.args.join(' '));
+    const messages = fake.calls.map((c) => c.args.join(' '));
     expect(messages.some((m) => /up to date/i.test(m))).toBe(true);
   });
 });
@@ -227,23 +236,20 @@ describe('updateVersion (no options)', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
     fetchSpy = spyOn(globalThis, 'fetch');
   });
 
   afterEach(() => {
     fetchSpy.mockRestore();
-    setMockUi(false);
   });
 
   it('reports already up to date and does not attempt to install', async () => {
     const [major, minor, patch] = (await import('../../../../package.json')).version.split('.');
     fetchSpy.mockResolvedValue(stableVersionResponse(`${major}.${minor}.${patch}.999`));
 
-    await updateVersion();
+    await updateVersion({}, updateCtx());
 
-    const messages = getMockUiCalls().map((c) => c.args.join(' '));
+    const messages = fake.calls.map((c) => c.args.join(' '));
     expect(messages.some((m) => /already up to date/i.test(m))).toBe(true);
     // Only the stable.version check should run; the install script must not be fetched.
     expect(fetchSpy).toHaveBeenCalledTimes(1);
@@ -254,8 +260,6 @@ describe('updateVersion --force', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
     spawnMock.mockClear();
     spawnMock.mockImplementation((() =>
       createSpawnChild()) as unknown as typeof childProcess.spawn);
@@ -266,7 +270,6 @@ describe('updateVersion --force', () => {
 
   afterEach(() => {
     fetchSpy.mockRestore();
-    setMockUi(false);
   });
 
   async function runForce(
@@ -285,14 +288,14 @@ describe('updateVersion --force', () => {
       }
       return Promise.reject(new Error(`Unexpected fetch: ${url}`));
     });
-    await updateVersion({ force: true });
+    await updateVersion({ force: true }, updateCtx());
   }
 
   it('installs even when already up to date', async () => {
     const [major, minor, patch] = (await import('../../../../package.json')).version.split('.');
     await runForce(`${major}.${minor}.${patch}.999`);
 
-    const messages = getMockUiCalls().map((c) => c.args.join(' '));
+    const messages = fake.calls.map((c) => c.args.join(' '));
     expect(messages.some((m) => /up to date/i.test(m))).toBe(false);
     expect(messages.some((m) => /force/i.test(m))).toBe(true);
   });
@@ -300,7 +303,7 @@ describe('updateVersion --force', () => {
   it('shows the normal update message when an update is also available', async () => {
     await runForce('99.0.0.241');
 
-    const messages = getMockUiCalls().map((c) => c.args.join(' '));
+    const messages = fake.calls.map((c) => c.args.join(' '));
     expect(messages.some((m) => /updating/i.test(m) && m.includes('99.0.0'))).toBe(true);
     expect(messages.some((m) => m.includes('99.0.0.241'))).toBe(false);
   });
@@ -308,7 +311,7 @@ describe('updateVersion --force', () => {
   it('emits a success message after a successful Unix update', async () => {
     await runForce('2.0.0.241');
 
-    const messages = getMockUiCalls().map((c) => c.args.join(' '));
+    const messages = fake.calls.map((c) => c.args.join(' '));
     expect(messages.some((m) => m.includes('Updated to v2.0.0'))).toBe(true);
     expect(messages.some((m) => m.includes('Updated to v2.0.0.241'))).toBe(false);
   });
@@ -346,7 +349,7 @@ describe('updateVersion --force', () => {
     isWindowsMock.mockImplementation(() => true);
     await runForce('2.0.0', 'Write-Host hi\n');
 
-    const messages = getMockUiCalls().map((c) => c.args.join(' '));
+    const messages = fake.calls.map((c) => c.args.join(' '));
     const [, args] = spawnMock.mock.calls[0] as unknown as [string, string[]];
     expect(
       messages.some((m) =>
@@ -373,7 +376,7 @@ describe('updateVersion --force', () => {
       );
     }
 
-    const messages = getMockUiCalls().map((c) => c.args.join(' '));
+    const messages = fake.calls.map((c) => c.args.join(' '));
     expect(messages.some((m) => m.includes('Starting update in a new terminal window...'))).toBe(
       false,
     );

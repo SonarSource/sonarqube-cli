@@ -32,9 +32,10 @@ import { findGitRoot } from '@/core/host/git/discover.ts';
 import { GitRepo, resolveGitHooksDir } from '@/core/host/git/hooks.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import { discoverProject } from '@/core/project-info.ts';
-import { blank, confirmPrompt, info, intro, phase, phaseItem, text, warn } from '@/core/ui';
+import { phaseItem } from '@/core/ui';
 import { yellow } from '@/core/ui/colors.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import { resolveIntegrateScope } from '../_common/integrate-scope.ts';
 import { recordIntegrationConfigured } from '../_common/integrate-telemetry.ts';
@@ -119,27 +120,30 @@ async function integrateGitGlobal(
   auth: ResolvedAuth,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
+  const { console } = ctx;
   validateHookOption(options.hook);
 
-  warn('Global hook installation');
-  text('  Git prioritizes local repository settings over global ones.');
-  text('  If a project has a local core.hooksPath set,');
-  text('  this global hook will NOT run in that project.');
-  blank();
-  text('  To enable the global hook in such a project, you will need to unset its local path:');
-  text('    git config --unset core.hooksPath');
-  blank();
-  text('  This will set git config --global core.hooksPath to:');
-  text(`  ${GLOBAL_HOOKS_DIR}`);
-  blank();
+  console.warn('Global hook installation');
+  console.text('  Git prioritizes local repository settings over global ones.');
+  console.text('  If a project has a local core.hooksPath set,');
+  console.text('  this global hook will NOT run in that project.');
+  console.blank();
+  console.text(
+    '  To enable the global hook in such a project, you will need to unset its local path:',
+  );
+  console.text('    git config --unset core.hooksPath');
+  console.blank();
+  console.text('  This will set git config --global core.hooksPath to:');
+  console.text(`  ${GLOBAL_HOOKS_DIR}`);
+  console.blank();
 
   if (!options.nonInteractive) {
-    const confirmed = await confirmPrompt('Proceed with global installation?', true);
+    const confirmed = await console.confirmPrompt('Proceed with global installation?', true);
     if (confirmed === false || confirmed === null) {
       throw new CommandFailedError('Installation cancelled');
     }
   }
-  blank();
+  console.blank();
 
   await installGitFeatures(options, GLOBAL_HOOKS_DIR, 'global', auth, ctx);
 }
@@ -148,7 +152,7 @@ export async function integrateGit(
   options: IntegrateGitOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const { auth } = ctx;
+  const { auth, console } = ctx;
   validateHookOption(options.hook);
 
   if (options.global && (options.dependencyRisks || options.project)) {
@@ -156,12 +160,14 @@ export async function integrateGit(
   }
 
   if (!options.nonInteractive) {
-    printAgentNonInteractiveAlternativeHint('sonar integrate git --non-interactive');
+    printAgentNonInteractiveAlternativeHint(console, 'sonar integrate git --non-interactive');
   }
 
-  intro('SonarQube Git Integration (source code scanning)');
-  info('This integration includes secrets and dependency risks detection in your git repository.');
-  info(yellow('Some scan types may be unavailable for certain hook types.'));
+  console.intro('SonarQube Git Integration (source code scanning)');
+  console.info(
+    'This integration includes secrets and dependency risks detection in your git repository.',
+  );
+  console.info(yellow('Some scan types may be unavailable for certain hook types.'));
 
   if (options.global) {
     return integrateGitGlobal(options, auth, ctx);
@@ -169,14 +175,15 @@ export async function integrateGit(
 
   const { gitRoot, isGit } = findGitRoot(process.cwd());
   if (isGit) {
-    await printGitPreflightSummary(gitRoot);
-    blank();
+    await printGitPreflightSummary(gitRoot, console);
+    console.blank();
   }
 
   const scope = await resolveIntegrateScope({
     ...options,
     projectKey: options.project,
     projectRoot: isGit ? gitRoot : process.cwd(),
+    console,
   });
   if (scope === 'global') {
     return integrateGitGlobal(options, auth, ctx);
@@ -189,7 +196,7 @@ export async function integrateGit(
     });
   }
 
-  const resolvedOptions = await resolveProjectKey(options, gitRoot, auth);
+  const resolvedOptions = await resolveProjectKey(options, gitRoot, auth, console);
 
   await installGitFeatures(resolvedOptions, gitRoot, 'project', auth, ctx);
 }
@@ -198,19 +205,20 @@ async function resolveProjectKey(
   options: IntegrateGitOptions,
   root: string,
   auth: ResolvedAuth,
+  console: Console,
 ): Promise<IntegrateGitOptions> {
   if (options.project) {
-    phase('Project', [phaseItem('Key', 'done', options.project)]);
+    console.phase('Project', [phaseItem('Key', 'done', options.project)]);
     return options;
   }
 
-  const discovered = await discoverProject(root, { auth, silent: true });
+  const discovered = await discoverProject(root, { auth, silent: true, console });
   if (discovered.projectKey) {
-    phase('Project', [phaseItem('Key', 'done', discovered.projectKey)]);
+    console.phase('Project', [phaseItem('Key', 'done', discovered.projectKey)]);
     return { ...options, project: discovered.projectKey };
   }
 
-  warn(
+  console.warn(
     'No project key detected — some features will not be available. Run `sonar integrate git --help` for ways to define a project.',
   );
   return options;
@@ -230,6 +238,7 @@ async function installGitFeatures(
     options,
     targetRoot,
     scope,
+    console: ctx.console,
     auth,
     force: options.force,
     nonInteractive: options.nonInteractive,

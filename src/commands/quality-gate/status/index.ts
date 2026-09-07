@@ -23,11 +23,12 @@
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
-import { MAX_PAGE_SIZE, SonarQubeClient } from '@/core/server/client.ts';
+import { ComponentsClient } from '@/core/server/components.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { MetricsClient } from '@/core/server/metrics.ts';
+import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { QualityGatesClient } from '@/core/server/quality-gates.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
-import { print, warn } from '@/core/ui';
 
 import {
   attachBreakdowns,
@@ -60,7 +61,7 @@ export async function qualityGateStatus(
   options: QualityGateStatusOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const { auth } = ctx;
+  const { auth, console } = ctx;
   const top = options.top ?? DEFAULT_TOP;
   if (top < 1 || top > MAX_PAGE_SIZE) {
     throw new InvalidOptionError(
@@ -73,10 +74,10 @@ export async function qualityGateStatus(
     );
   }
 
-  const projectKey = await resolveProjectKey(options.project, auth, true);
+  const projectKey = await resolveProjectKey(options.project, auth, console, true);
   noteProject(auth, projectKey);
 
-  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  const client = new SonarHttpClient(auth.serverUrl, auth.token);
   await assertProjectExists(client, projectKey);
 
   const queryParams = resolveScopeQueryParams(options);
@@ -113,7 +114,7 @@ export async function qualityGateStatus(
     hasFailingConditions &&
     !hasFailingConditionInCategory(rawConditions, options.category)
   ) {
-    warn(`No failing conditions match category '${options.category}'.`);
+    console.warn(`No failing conditions match category '${options.category}'.`);
   }
 
   const format = options.format ?? 'table';
@@ -121,13 +122,13 @@ export async function qualityGateStatus(
     format === 'table'
       ? formatQualityGateTable({ verdict, project: projectKey, scope, conditions })
       : formatQualityGateJson({ verdict, project: projectKey, scope, conditions });
-  print(message);
+  console.print(message);
 
   process.exitCode = exitCodeFor(verdict);
 }
 
-async function assertProjectExists(client: SonarQubeClient, projectKey: string): Promise<void> {
-  if (!(await client.componentExists(projectKey))) {
+async function assertProjectExists(client: SonarHttpClient, projectKey: string): Promise<void> {
+  if (!(await new ComponentsClient(client).componentExists(projectKey))) {
     throw new CommandFailedError(`Project '${projectKey}' does not exist or not accessible.`, {
       remediationHint: 'Check the project key and your access to the project on the server.',
     });

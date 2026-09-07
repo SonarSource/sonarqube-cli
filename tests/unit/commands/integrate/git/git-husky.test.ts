@@ -33,6 +33,7 @@ import {
 } from '../../../../../src/commands/integrate/git/tools/husky';
 import { getHookScript } from '../../../../../src/commands/integrate/git/tools/native';
 import { SONAR_HOOK_SKIP_SECRETS_MESSAGE } from '../../../../../src/commands/integrate/git/tools/shared.ts';
+import { FakeConsole } from '../../../../_common/fake-console.ts';
 
 const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.git-husky-tmp');
 
@@ -49,6 +50,7 @@ function context(): ContainerIntegrationContext {
     targetRoot: TEMP_DIR,
     scope: 'global',
     executionMode: 'install',
+    console: new FakeConsole(),
     resolvedDependencies: new Map(),
     activeSubfeatures: [],
   };

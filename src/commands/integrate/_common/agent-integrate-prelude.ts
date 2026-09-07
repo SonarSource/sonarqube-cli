@@ -26,7 +26,7 @@ import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.t
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { type DiscoveredProject, discoverProject } from '@/core/project-info.ts';
 import type { IntegrationScope } from '@/core/state/state.ts';
-import { intro, warn, withSpinner } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
 import { isGlobalIntegrateScope, resolveIntegrateScope } from './integrate-scope.ts';
 import { printAgentPreflightSummary } from './preflight-summary.ts';
@@ -52,25 +52,32 @@ export function assertIntegrateScopeOptions(options: IntegrateAgentOptions): voi
   }
 }
 
-export function introAgentIntegration(agentDisplayName: string): void {
-  intro(`SonarQube Integration Setup for ${agentDisplayName}`);
+export function introAgentIntegration(agentDisplayName: string, console: Console): void {
+  console.intro(`SonarQube Integration Setup for ${agentDisplayName}`);
 }
 
-export async function discoverIntegrateProject(auth: ResolvedAuth): Promise<DiscoveredProject> {
-  return withSpinner('Discovering project...', () =>
-    discoverProject(process.cwd(), { auth, silent: true }),
+export async function discoverIntegrateProject(
+  auth: ResolvedAuth,
+  console: Console,
+): Promise<DiscoveredProject> {
+  return console.withSpinner('Discovering project...', () =>
+    discoverProject(process.cwd(), { auth, silent: true, console }),
   );
 }
 
-export function warnAuthProjectMismatches(auth: ResolvedAuth, project: DiscoveredProject): void {
+export function warnAuthProjectMismatches(
+  auth: ResolvedAuth,
+  project: DiscoveredProject,
+  console: Console,
+): void {
   if (auth.serverUrl && project.serverUrl && auth.serverUrl !== project.serverUrl) {
-    warn(
+    console.warn(
       'Detected a Server URL mismatch between the current project configuration and the auth logged in configuration. If this is not intended please consider running "sonar auth logout" and re-run the integrate command',
     );
   }
 
   if (auth.orgKey && project.organization && auth.orgKey !== project.organization) {
-    warn(
+    console.warn(
       'Detected an organization mismatch between the current project configuration and the auth logged in configuration. If this is not intended please consider running "sonar auth logout" and re-run the integrate command',
     );
   }
@@ -80,9 +87,10 @@ export function warnMissingIntegrateProjectKey(
   subcommand: AgentIntegrateSubcommand,
   isGlobal: boolean,
   projectKey: string | undefined,
+  console: Console,
 ): void {
   if (!isGlobal && !projectKey) {
-    warn(
+    console.warn(
       `No project key provided - project related actions will be skipped. Run \`sonar integrate ${subcommand} --help\` for ways to define a project.`,
     );
   }
@@ -124,28 +132,33 @@ export async function displayAgentIntegratePrelude(
   subcommand: AgentIntegrateSubcommand,
   options: IntegrateAgentOptions,
   auth: ResolvedAuth,
+  console: Console,
 ): Promise<AgentIntegrateContext> {
   assertIntegrateScopeOptions(options);
-  introAgentIntegration(agentDisplayName);
-  const project = await discoverIntegrateProject(auth);
-  warnAuthProjectMismatches(auth, project);
+  introAgentIntegration(agentDisplayName, console);
+  const project = await discoverIntegrateProject(auth, console);
+  warnAuthProjectMismatches(auth, project, console);
   const projectKey = options.project || project.projectKey;
   assertSonarCloudOrganization(auth.serverUrl, auth.orgKey);
-  await printAgentPreflightSummary({
-    serverUrl: auth.serverUrl,
-    organization: auth.orgKey,
-    token: auth.token,
-    project,
-    projectKey,
-    cliProjectKey: options.project,
-  });
+  await printAgentPreflightSummary(
+    {
+      serverUrl: auth.serverUrl,
+      organization: auth.orgKey,
+      token: auth.token,
+      project,
+      projectKey,
+      cliProjectKey: options.project,
+    },
+    console,
+  );
   const scope = await resolveIntegrateScope({
     ...options,
     projectRoot: project.projectRoot,
     projectKey: options.project,
+    console,
   });
   const isGlobal = isGlobalIntegrateScope(scope);
-  warnMissingIntegrateProjectKey(subcommand, isGlobal, projectKey);
+  warnMissingIntegrateProjectKey(subcommand, isGlobal, projectKey, console);
   return buildAgentIntegrateContext({ ...options, global: isGlobal }, auth, project);
 }
 

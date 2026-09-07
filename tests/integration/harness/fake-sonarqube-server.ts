@@ -20,7 +20,7 @@
 
 // Lightweight in-process mock SonarQube HTTP server (Bun.serve)
 
-import type { Organization } from '@/core/server/client.ts';
+import type { Organization } from '@/core/server/organizations.ts';
 import type { SettingsValue } from '@/core/server/settings-value.ts';
 import type {
   Metric,

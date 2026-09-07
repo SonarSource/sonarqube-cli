@@ -30,10 +30,10 @@ import type { SecretsInstaller } from '@/core/host/install/secrets.ts';
 import type { SpawnResult } from '@/core/process/process.ts';
 
 import type { ScaScannerSpawner } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner-spawner.ts';
-import { makeScaInvocation as makeInvocation, okScaInstaller } from './_helpers.ts';
-
 // The guard calls `runSecretsBinary` from `../secrets`, which spawns a child
 // process. Re-register the module with a stable wrapper that delegates to a
+import { FakeConsole } from '../../../../_common/fake-console.ts';
+import { makeScaInvocation as makeInvocation, okScaInstaller } from './_helpers.ts';
 // swappable impl; the real exports (e.g. EXIT_CODE_SECRETS_FOUND) are preserved.
 const secretsModule = await import('../../../../../src/commands/analyze/secrets.ts');
 const { EXIT_CODE_SECRETS_FOUND } = secretsModule;
@@ -69,7 +69,7 @@ const AUTH: ResolvedAuth = {
 const BASE_DIR = join(tmpdir(), 'manifest-guard-repo');
 
 function makeCtx() {
-  return new CommandInvocationContext();
+  return new CommandInvocationContext(new FakeConsole());
 }
 
 // Spawner that returns the given manifest file list from `discover-manifests`.

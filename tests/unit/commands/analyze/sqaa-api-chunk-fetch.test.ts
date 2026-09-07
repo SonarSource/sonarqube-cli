@@ -20,9 +20,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { SqaaAnalysisClient } from '@/commands/analyze/sqaa-analysis-client.ts';
+import type { SqaaAnalysisRequest } from '@/commands/analyze/sqaa-wire-types.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { ENV_SQAA_RETRY_BASE_DELAY_MS } from '@/core/config-constants.ts';
-import { SonarQubeClient, type SqaaAnalysisRequest } from '@/core/server/client.ts';
 import { RequestPayloadTooLargeError, ServiceUnavailableError } from '@/core/server/errors.ts';
 
 import { fetchChunkWith413Split } from '../../../../src/commands/analyze/sqaa-api.ts';
@@ -51,7 +52,7 @@ describe('fetchChunkWith413Split', () => {
   beforeEach(() => {
     previousRetryDelay = process.env[ENV_SQAA_RETRY_BASE_DELAY_MS];
     process.env[ENV_SQAA_RETRY_BASE_DELAY_MS] = '0';
-    createAnalysisSpy = spyOn(SonarQubeClient.prototype, 'createAnalysis');
+    createAnalysisSpy = spyOn(SqaaAnalysisClient.prototype, 'createAnalysis');
   });
 
   afterEach(() => {

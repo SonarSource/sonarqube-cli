@@ -22,7 +22,7 @@
 
 import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
 import { getToken } from '@/core/host/keychain.ts';
-import { warn } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
 import { SONARCLOUD_URL } from '../config-constants.ts';
 import logger from '../observability/logger.ts';
@@ -61,6 +61,8 @@ export interface ResolvedAuth {
 export interface ResolveAuthOptions {
   /** Suppress the "partial env vars" warning. */
   silent?: boolean;
+  /** Used for the partial-env warning when `silent` is not set. */
+  console?: Console;
 }
 
 // Env vars are fixed for the process lifetime, so this only needs to run once per process.
@@ -124,12 +126,12 @@ export function resolveFromEnv(options: ResolveAuthOptions = {}): ResolvedAuth |
   // 3. Partial env vars → warn (unless silenced) and ignore both
   if (!options.silent) {
     if (envToken) {
-      warn(
+      options.console?.warn(
         `${ENV_TOKEN} is set, but either ${ENV_SERVER} or ${ENV_ORG} are required for environment variable authentication. Falling back to saved credentials.`,
       );
     } else if (envServer || envOrg) {
       const setEnv = envServer ? ENV_SERVER : ENV_ORG;
-      warn(
+      options.console?.warn(
         `${setEnv} is set, but ${ENV_TOKEN} is required for environment variable authentication. Falling back to saved credentials.`,
       );
     }

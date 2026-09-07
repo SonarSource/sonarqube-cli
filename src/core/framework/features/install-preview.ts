@@ -21,7 +21,8 @@
 // Framework-rendered "What will be installed" preview shared by every
 // `sonar integrate` command.
 
-import { bold, dim, note, pressEnterKeyPrompt, wrapText } from '@/core/ui';
+import { bold, dim } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
 import type { FeatureApplication, FeatureDeclaration } from './types.ts';
 import { isFeatureContainer } from './types.ts';
@@ -30,6 +31,30 @@ const PREVIEW_BOX_TITLE = 'What will be installed';
 const INSTALL_PROMPT = 'Press Enter to install…';
 const DESCRIPTION_INDENT = '  ';
 const DESCRIPTION_WRAP_WIDTH = 72;
+
+/**
+ * Greedy word wrap: packs whitespace-separated words into lines no longer than
+ * `width`. A single word longer than `width` is left on its own over-long line
+ * rather than split mid-word.
+ */
+function wrapText(content: string, width: number): string[] {
+  const lines: string[] = [];
+  let current = '';
+  for (const word of content.split(/\s+/)) {
+    if (current === '') {
+      current = word;
+    } else if (`${current} ${word}`.length <= width) {
+      current = `${current} ${word}`;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current !== '') {
+    lines.push(current);
+  }
+  return lines;
+}
 
 export function buildInstallPreviewLines<TOptions>(
   toInstall: FeatureApplication<TOptions>[],
@@ -68,12 +93,13 @@ function resolvePreviewDescription<TOptions>(
 export async function renderInstallPreviewAndConfirm<TOptions>(
   toInstall: FeatureApplication<TOptions>[],
   nonInteractive: boolean | undefined,
+  console: Console,
 ): Promise<void> {
   if (toInstall.length === 0) {
     return;
   }
-  note(buildInstallPreviewLines(toInstall), PREVIEW_BOX_TITLE);
+  console.note(buildInstallPreviewLines(toInstall), PREVIEW_BOX_TITLE);
   if (!nonInteractive) {
-    await pressEnterKeyPrompt(INSTALL_PROMPT);
+    await console.pressEnterKeyPrompt(INSTALL_PROMPT);
   }
 }

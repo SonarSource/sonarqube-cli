@@ -24,10 +24,11 @@ import { encode as encodeToToon } from '@toon-format/toon';
 
 import { InvalidOptionError } from '@/core/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { MAX_PAGE_SIZE, SonarQubeClient } from '@/core/server/client.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
+import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
+import { SystemClient } from '@/core/server/system.ts';
 import type { IssuesSearchParams } from '@/core/server/types.ts';
-import { print } from '@/core/ui';
 import { formatCSV } from '@/core/ui/formatter/csv.ts';
 import { formatTable } from '@/core/ui/formatter/table.ts';
 
@@ -76,7 +77,7 @@ export async function listIssues(
   options: ListIssuesOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const { auth } = ctx;
+  const { auth, console } = ctx;
   if (!options.project) {
     throw new InvalidOptionError('--project is required.', 'Add --project <key>.');
   }
@@ -126,11 +127,13 @@ export async function listIssues(
     }
   }
 
-  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  const client = new SonarHttpClient(auth.serverUrl, auth.token);
   const issuesClient = new IssuesClient(client);
 
   const { severities: normalizedSeverities, impactSeverities: normalizedImpactSeverities } =
-    options.severities ? parseSeverities(options.severities, await client.getServerMode()) : {};
+    options.severities
+      ? parseSeverities(options.severities, await new SystemClient(client).getServerMode())
+      : {};
 
   const params: IssuesSearchParams = {
     projects: options.project,
@@ -169,5 +172,5 @@ export async function listIssues(
       output = JSON.stringify(result, null, 2);
   }
 
-  print(output);
+  console.print(output);
 }

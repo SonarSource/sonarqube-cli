@@ -32,6 +32,8 @@ import type {
 } from '@/core/framework/features';
 import { getDefaultState } from '@/core/state/state.ts';
 
+import { FakeConsole } from '../../../../_common/fake-console.ts';
+
 const { IntegrationInstaller, jsonPatch, textSnippet, tomlPatch, wholeFile, yamlPatch } =
   await import('@/core/framework/features');
 
@@ -739,6 +741,7 @@ function makeContext(
     targetRoot,
     scope: 'project',
     executionMode: 'install',
+    console: new FakeConsole(),
     force,
     attrs,
     resolvedDependencies: new Map(),

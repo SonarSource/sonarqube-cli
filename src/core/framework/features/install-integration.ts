@@ -30,7 +30,7 @@ import type {
 } from '@/core/state/state.ts';
 import { loadState, saveStateKeepingInstalledDependencies } from '@/core/state/state-repository.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
-import { text, warn } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
 import { renderCompletionSummary } from './completion-summary.ts';
 import { buildApplications } from './feature-target.ts';
@@ -60,6 +60,7 @@ export interface InstallIntegrationOptions<TOptions> {
   options: TOptions;
   targetRoot: string;
   scope: IntegrationScope;
+  console: Console;
   auth?: ResolvedAuth;
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
@@ -74,6 +75,7 @@ export async function installIntegration<TOptions>({
   options,
   targetRoot,
   scope,
+  console,
   auth,
   force,
   attrs,
@@ -97,14 +99,15 @@ export async function installIntegration<TOptions>({
     integration,
     invocation,
     applications,
+    console,
   );
   if (toInstall.length === 0 && toRemove.length === 0) {
     throw new CommandFailedError(`No feature selected for ${integration.displayName}`);
   }
 
-  text('');
-  await renderInstallPreviewAndConfirm(toInstall, nonInteractive);
-  text('');
+  console.text('');
+  await renderInstallPreviewAndConfirm(toInstall, nonInteractive, console);
+  console.text('');
 
   try {
     const installedFeatures = await integrationInstaller.applyAndRecordFeatures(
@@ -114,21 +117,22 @@ export async function installIntegration<TOptions>({
       {
         callbacks: {
           onFeatureApplyStart: (feature) => {
-            text(`     Installing ${feature.displayName}...`);
+            console.text(`     Installing ${feature.displayName}...`);
             if (isFeatureContainer(feature)) {
               for (const subfeature of feature.subfeatures) {
-                text(`       - ${subfeature.displayName}`);
+                console.text(`       - ${subfeature.displayName}`);
               }
             }
           },
           onDependencySkipped: (dependency) => {
-            text(`     ${dependency.displayName ?? dependency.id} already installed`);
+            console.text(`     ${dependency.displayName ?? dependency.id} already installed`);
           },
           onResourceSkipped: (resource) => {
-            text(`     ${resource.displayName ?? resource.id} already installed`);
+            console.text(`     ${resource.displayName ?? resource.id} already installed`);
           },
         },
         executionMode: 'install',
+        console,
       },
     );
 
@@ -139,13 +143,14 @@ export async function installIntegration<TOptions>({
       {
         callbacks: {
           onFeatureRemoveStart: (feature) => {
-            text(`     Removing ${feature.displayName}...`);
+            console.text(`     Removing ${feature.displayName}...`);
           },
         },
+        console,
       },
     );
 
-    renderCompletionSummary(integration, installedFeatures, removedFeatures);
+    renderCompletionSummary(integration, installedFeatures, removedFeatures, console);
 
     // Publish the project for command-executed telemetry. Project scope only:
     // `--global` installs have no project key recorded, which is why they report null.
@@ -153,7 +158,7 @@ export async function installIntegration<TOptions>({
       noteProject(auth, projectKeyFromAttrs(attrs));
     }
 
-    const stateSaved = saveInstalledFeatures(state);
+    const stateSaved = saveInstalledFeatures(state, console);
     if (stateSaved) {
       await onSuccess?.({
         installedFeatures,
@@ -165,7 +170,7 @@ export async function installIntegration<TOptions>({
 
     return stateSaved ? installedFeatures : [];
   } catch (error) {
-    saveInstalledFeatures(state);
+    saveInstalledFeatures(state, console);
     throw error;
   }
 }
@@ -178,12 +183,14 @@ export function makeContext(
   auth: ResolvedAuth | undefined,
   force: boolean | undefined,
   attrs: Record<string, IntegrationStateAttribute> | undefined,
+  console: Console,
 ): IntegrationContext {
   return {
     state,
     targetRoot,
     scope,
     executionMode,
+    console,
     auth,
     force,
     attrs,
@@ -214,13 +221,13 @@ function resolveRepoRootForScope(scope: IntegrationScope, targetRoot: string): s
   return isGit ? gitRoot : null;
 }
 
-function saveInstalledFeatures(state: CliState): boolean {
+function saveInstalledFeatures(state: CliState, console: Console): boolean {
   try {
     saveStateKeepingInstalledDependencies(state);
     return true;
   } catch (err) {
     const msg = (err as Error).message;
-    warn(`Failed to update configuration state: ${msg}`);
+    console.warn(`Failed to update configuration state: ${msg}`);
     logger.warn(`Failed to update configuration state: ${msg}`);
     return false;
   }

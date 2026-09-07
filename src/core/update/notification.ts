@@ -24,8 +24,8 @@ import type { CliUpdateCheckState } from '@/core/state/state.ts';
 import { loadState, saveState } from '@/core/state/state-manager.ts';
 import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { isWithinCooldown, ONE_DAY_MS } from '@/core/time/cooldown.ts';
-import { isFormattedOutputMode, text } from '@/core/ui';
 import { cyan } from '@/core/ui/colors.ts';
+import type { Console } from '@/core/ui/console.ts';
 import { Version } from '@/core/version.ts';
 
 import { version as CURRENT_VERSION } from '../../../package.json';
@@ -44,6 +44,8 @@ export type UpdateNotificationCondition = (opts: Record<string, unknown>) => boo
  */
 export class UpdateNotifier {
   private readonly registry = new WeakMap<Command, true | UpdateNotificationCondition>();
+
+  constructor(private readonly console: Console) {}
 
   /** Opt a command into the post-command "new version available" stderr notice. */
   register(command: Command, when?: UpdateNotificationCondition): void {
@@ -64,7 +66,7 @@ export class UpdateNotifier {
     if (!process.env.SONARQUBE_CLI_MOCK_TTY && (!process.stderr.isTTY || !process.stdout.isTTY)) {
       return true;
     }
-    if (isFormattedOutputMode()) {
+    if (this.console.isFormattedOutputMode()) {
       return true;
     }
 
@@ -176,12 +178,16 @@ export class UpdateNotifier {
 
   private renderNotification(currentNoBuild: string, latestNoBuild: string): void {
     // Keep the whole notice on stderr so it never contaminates a command's stdout.
-    text('', undefined, 'stderr');
-    text(
+    this.console.text('', undefined, 'stderr');
+    this.console.text(
       `  ${cyan('ℹ')}  A new version of SonarQube CLI is available: ${currentNoBuild} → ${latestNoBuild}`,
       undefined,
       'stderr',
     );
-    text(`   → Run \`sonar update\` to update to v${latestNoBuild}`, undefined, 'stderr');
+    this.console.text(
+      `   → Run \`sonar update\` to update to v${latestNoBuild}`,
+      undefined,
+      'stderr',
+    );
   }
 }

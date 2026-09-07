@@ -22,7 +22,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { warn } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
 import { readOrInitJson, SONAR_SECRETS_MARKER } from '../_common/hooks.ts';
 
@@ -58,10 +58,10 @@ export interface HooksJson {
  *
  *  - Healthy global install → return the script path.
  *  - Orphaned install (`hooks.json` references sonar-secrets but the backing
- *    script is missing) → `warn(...)` and return `undefined`.
+ *    script is missing) → `console.warn(...)` and return `undefined`.
  *  - No global install → silent, return `undefined`.
  */
-export async function detectGlobalSecretsHook(): Promise<string | undefined> {
+export async function detectGlobalSecretsHook(console: Console): Promise<string | undefined> {
   const hooksJsonPath = join(GLOBAL_HOOKS_DIR, HOOKS_JSON);
   if (!existsSync(hooksJsonPath)) return undefined;
   const parsed = await readOrInitJson<HooksJson>(hooksJsonPath, { version: 1, hooks: {} });
@@ -73,7 +73,7 @@ export async function detectGlobalSecretsHook(): Promise<string | undefined> {
 
   const scriptPath = matchedEntry.bash ?? matchedEntry.powershell;
   if (!scriptPath || !existsSync(scriptPath)) {
-    warn(
+    console.warn(
       `Global hook configuration detected at ${hooksJsonPath} but the backing script is missing. Falling back to project-level installation.`,
     );
     return undefined;

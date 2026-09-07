@@ -47,7 +47,8 @@ import * as processLib from '@/core/process/process.ts';
 import * as discovery from '@/core/project-info.ts';
 import { type CliState, getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
-import { clearMockUiCalls, getMockUiCalls, queueMockResponse, setMockUi } from '@/core/ui';
+
+import { FakeConsole } from '../../../../_common/fake-console.ts';
 
 const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.integrate-git-tmp');
 
@@ -340,7 +341,8 @@ const MOCK_AUTH = {
   connectionType: 'on-premise' as const,
 };
 
-const MOCK_AUTH_CTX = new CommandAuthenticatedInvocationContext(MOCK_AUTH);
+let fake: FakeConsole;
+let MOCK_AUTH_CTX: CommandAuthenticatedInvocationContext;
 
 describe('integrateGit', () => {
   let findGitRootSpy: ReturnType<typeof spyOn>;
@@ -353,8 +355,8 @@ describe('integrateGit', () => {
   let state: CliState;
 
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
+    fake = new FakeConsole();
+    MOCK_AUTH_CTX = new CommandAuthenticatedInvocationContext(MOCK_AUTH, fake);
     findGitRootSpy = spyOn(gitDiscovery, 'findGitRoot');
     discoverProjectSpy = spyOn(discovery, 'discoverProject').mockResolvedValue({
       repoRoot: TEMP_DIR,
@@ -377,7 +379,6 @@ describe('integrateGit', () => {
   });
 
   afterEach(() => {
-    setMockUi(false);
     findGitRootSpy.mockRestore();
     discoverProjectSpy.mockRestore();
     printGitPreflightSummarySpy.mockRestore();
@@ -460,14 +461,14 @@ describe('integrateGit', () => {
 
   it('shows repository summary before the scope prompt when in a git repository', async () => {
     findGitRootSpy.mockReturnValue({ gitRoot: '/my/project', isGit: true });
-    queueMockResponse('project');
-    queueMockResponse(null); // user cancels at the hook-type prompt
+    fake.queueResponse('project');
+    fake.queueResponse(null); // user cancels at the hook-type prompt
     try {
       await integrateGit({}, MOCK_AUTH_CTX);
     } catch {
       // expected cancellation
     }
-    expect(printGitPreflightSummarySpy).toHaveBeenCalledWith('/my/project');
+    expect(printGitPreflightSummarySpy).toHaveBeenCalledWith('/my/project', MOCK_AUTH_CTX.console);
   });
 
   it('records the husky integration when core.hooksPath points to .husky', async () => {
@@ -577,9 +578,9 @@ describe('integrateGit', () => {
       configSources: [],
     });
     const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
-    queueMockResponse('project');
-    queueMockResponse(true);
-    queueMockResponse(null);
+    fake.queueResponse('project');
+    fake.queueResponse(true);
+    fake.queueResponse(null);
     let caughtError: unknown;
     try {
       await integrateGit({}, MOCK_AUTH_CTX);
@@ -589,7 +590,11 @@ describe('integrateGit', () => {
       spawnSpy.mockRestore();
       rmSync(TEMP_DIR, { recursive: true, force: true });
     }
-    expect(discoverProjectSpy).toHaveBeenCalledWith(TEMP_DIR, { auth: MOCK_AUTH, silent: true });
+    expect(discoverProjectSpy).toHaveBeenCalledWith(TEMP_DIR, {
+      auth: MOCK_AUTH,
+      silent: true,
+      console: MOCK_AUTH_CTX.console,
+    });
     expect(caughtError).toBeInstanceOf(CommandFailedError);
     expect((caughtError as Error).message).toContain('Installation cancelled');
   });
@@ -603,8 +608,8 @@ describe('integrateGitGlobal', () => {
   let state: CliState;
 
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
+    fake = new FakeConsole();
+    MOCK_AUTH_CTX = new CommandAuthenticatedInvocationContext(MOCK_AUTH, fake);
     installBinarySpy = spyOn(binaryInstall, 'installBinary').mockResolvedValue({
       binaryPath: '/usr/local/bin/sonar-secrets',
       freshlyInstalled: true,
@@ -616,7 +621,6 @@ describe('integrateGitGlobal', () => {
   });
 
   afterEach(() => {
-    setMockUi(false);
     installBinarySpy.mockRestore();
     resolveBinaryPathSpy.mockRestore();
     loadStateSpy.mockRestore();
@@ -624,7 +628,7 @@ describe('integrateGitGlobal', () => {
   });
 
   it('throws CommandFailedError when the user cancels the global install confirmation', async () => {
-    queueMockResponse(null);
+    fake.queueResponse(null);
     let caughtMessage = '';
     try {
       await integrateGit(
@@ -656,7 +660,7 @@ describe('integrateGitGlobal', () => {
     });
     try {
       await integrateGit({ global: true, nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH_CTX);
-      const calls = getMockUiCalls();
+      const calls = fake.calls;
       const summaryCall = calls.find((c) => c.method === 'phase' && c.args[0] === 'Installed');
       expect(summaryCall).toBeDefined();
       const items = (summaryCall?.args[1] ?? []) as Array<{ text: string }>;

@@ -22,21 +22,22 @@
  * Tests for IssuesClient and issuesSearchCommand
  */
 
-import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
+import { beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { MAX_PAGE_SIZE, SonarQubeClient } from '@/core/server/client.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
-import { ProjectsClient } from '@/core/server/projects.ts';
+import { MAX_PAGE_SIZE, ProjectsClient } from '@/core/server/projects.ts';
+import { SystemClient } from '@/core/server/system.ts';
 import type {
   IssuesSearchResponse,
   ProjectsSearchResponse,
   SonarQubeIssue,
 } from '@/core/server/types.ts';
-import { setMockUi } from '@/core/ui';
 
 import { listIssues } from '../../../../src/commands/list/issues.ts';
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
 // Test constants
 const DEFAULT_PAGE_SIZE = 500;
@@ -46,13 +47,13 @@ type MockParamValue = string | number | boolean;
 type MockParams = Record<string, MockParamValue>;
 type MockGetFn = (endpoint: string, params?: MockParams) => Promise<unknown>;
 
-// Helper to create a mock SonarQubeClient
+// Helper to create a mock SonarHttpClient
 function createMockClient(
   mockGet: MockGetFn,
   serverUrl = 'https://sonarcloud.io',
-): SonarQubeClient {
-  const client = new SonarQubeClient(serverUrl, 'test-token');
-  client.get = mockGet as SonarQubeClient['get'];
+): SonarHttpClient {
+  const client = new SonarHttpClient(serverUrl, 'test-token');
+  client.get = mockGet as SonarHttpClient['get'];
   return client;
 }
 
@@ -399,7 +400,8 @@ describe('issuesSearchCommand', () => {
     connectionType: 'cloud',
   };
 
-  const mockCtx = new CommandAuthenticatedInvocationContext(mockAuth);
+  let fake: FakeConsole;
+  let mockCtx: CommandAuthenticatedInvocationContext;
 
   const emptyApiResponse = {
     issues: [],
@@ -410,11 +412,8 @@ describe('issuesSearchCommand', () => {
   };
 
   beforeEach(() => {
-    setMockUi(true);
-  });
-
-  afterEach(() => {
-    setMockUi(false);
+    fake = new FakeConsole();
+    mockCtx = new CommandAuthenticatedInvocationContext(mockAuth, fake);
   });
 
   it('throws when --project is missing', async () => {
@@ -461,7 +460,7 @@ describe('issuesSearchCommand', () => {
 
   it('normalizes severities to uppercase before passing to API', async () => {
     let capturedParams: Record<string, string> | undefined;
-    const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockImplementation(
+    const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockImplementation(
       <T>(_endpoint: string, params?: Record<string, string | number | boolean>) => {
         capturedParams = params as Record<string, string>;
         return Promise.resolve(emptyApiResponse as unknown as T);
@@ -480,7 +479,7 @@ describe('issuesSearchCommand', () => {
   });
 
   it('succeeds when issues search returns results', async () => {
-    const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockResolvedValue(emptyApiResponse);
+    const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockResolvedValue(emptyApiResponse);
 
     try {
       await listIssues({ project: 'my-project', page: 1, pageSize: 500 }, mockCtx);
@@ -492,7 +491,7 @@ describe('issuesSearchCommand', () => {
 
   it('routes MQR severities to impactSeverities param on MQR server (SonarQube Cloud)', async () => {
     let capturedParams: Record<string, string> | undefined;
-    const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockImplementation(
+    const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockImplementation(
       <T>(_endpoint: string, params?: Record<string, string | number | boolean>) => {
         capturedParams = params as Record<string, string>;
         return Promise.resolve(emptyApiResponse as unknown as T);
@@ -512,7 +511,7 @@ describe('issuesSearchCommand', () => {
 
   it('routes BLOCKER and INFO to impactSeverities on MQR server', async () => {
     let capturedParams: Record<string, string> | undefined;
-    const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockImplementation(
+    const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockImplementation(
       <T>(_endpoint: string, params?: Record<string, string | number | boolean>) => {
         capturedParams = params as Record<string, string>;
         return Promise.resolve(emptyApiResponse as unknown as T);
@@ -539,13 +538,13 @@ describe('issuesSearchCommand', () => {
 
   it('routes Standard severities to severities param on Standard server', async () => {
     let capturedParams: Record<string, string> | undefined;
-    const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockImplementation(
+    const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockImplementation(
       <T>(_endpoint: string, params?: Record<string, string | number | boolean>) => {
         capturedParams = params as Record<string, string>;
         return Promise.resolve(emptyApiResponse as unknown as T);
       },
     );
-    const modeSpy = spyOn(SonarQubeClient.prototype, 'getServerMode').mockResolvedValue('standard');
+    const modeSpy = spyOn(SystemClient.prototype, 'getServerMode').mockResolvedValue('standard');
     try {
       await listIssues(
         { project: 'my-project', severities: 'MAJOR,CRITICAL', page: 1, pageSize: 500 },
@@ -560,7 +559,7 @@ describe('issuesSearchCommand', () => {
   });
 
   it('throws when MQR-only value is used on Standard server', async () => {
-    const modeSpy = spyOn(SonarQubeClient.prototype, 'getServerMode').mockResolvedValue('standard');
+    const modeSpy = spyOn(SystemClient.prototype, 'getServerMode').mockResolvedValue('standard');
     try {
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(

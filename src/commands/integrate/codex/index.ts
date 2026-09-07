@@ -32,15 +32,16 @@ export async function integrateCodex(
   options: IntegrateAgentOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const { auth } = ctx;
+  const { auth, console } = ctx;
   if (!options.nonInteractive) {
     printAgentNonInteractiveAlternativeHint(
+      console,
       'sonar integrate codex --non-interactive',
       'sonar integrate codex --non-interactive -g',
     );
   }
 
-  const integrateCtx = await displayAgentIntegratePrelude('Codex', 'codex', options, auth);
+  const integrateCtx = await displayAgentIntegratePrelude('Codex', 'codex', options, auth, console);
 
   await finalizeAgentInstall<CodexIntegrationOptions>({
     integrationId: CODEX_INTEGRATION_ID,

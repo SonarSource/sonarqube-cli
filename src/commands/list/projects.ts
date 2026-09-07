@@ -22,9 +22,8 @@
 
 import { InvalidOptionError } from '@/core/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { MAX_PAGE_SIZE, SonarQubeClient } from '@/core/server/client.ts';
-import { ProjectsClient } from '@/core/server/projects.ts';
-import { print } from '@/core/ui';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
+import { MAX_PAGE_SIZE, ProjectsClient } from '@/core/server/projects.ts';
 
 export interface ListProjectsOptions {
   query?: string;
@@ -39,7 +38,7 @@ export async function listProjects(
   options: ListProjectsOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const { auth } = ctx;
+  const { auth, console } = ctx;
   const pageSize = options.pageSize;
   if (pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
     throw new InvalidOptionError(
@@ -52,7 +51,7 @@ export async function listProjects(
     throw new InvalidOptionError(`Invalid --page option: '${page}'. Must be an integer >= 1`);
   }
 
-  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  const client = new SonarHttpClient(auth.serverUrl, auth.token);
   const projectsClient = new ProjectsClient(client);
 
   const result = await projectsClient.searchProjects({
@@ -64,7 +63,7 @@ export async function listProjects(
 
   const hasNextPage = result.paging.pageIndex * result.paging.pageSize < result.paging.total;
 
-  print(
+  console.print(
     JSON.stringify({
       projects: result.components.map((c) => ({ key: c.key, name: c.name })),
       paging: {

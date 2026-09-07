@@ -19,16 +19,10 @@
  */
 
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
-import { type DopRepository, type SonarQubeClient } from '@/core/server/client.ts';
-import {
-  type MultiSelectOption,
-  multiSelectPrompt,
-  print,
-  selectPrompt,
-  textPrompt,
-  withSpinner,
-} from '@/core/ui';
+import { type MultiSelectOption } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
+import type { DopRepository, ImportApiClient } from './import-api.ts';
 import {
   type FetchPage,
   isAlreadyImported,
@@ -107,7 +101,7 @@ function formatRepoLabel(
  * that the caller is an admin of it before proceeding.
  */
 export async function resolveOrg(
-  client: SonarQubeClient,
+  client: ImportApiClient,
   orgKey: string | undefined,
 ): Promise<ResolvedOrg> {
   if (!client.isCloud) {
@@ -125,10 +119,10 @@ export async function resolveOrg(
   return resolveOrgByKey(client, orgKey);
 }
 
-async function resolveOrgByKey(client: SonarQubeClient, orgKey: string): Promise<ResolvedOrg> {
+async function resolveOrgByKey(client: ImportApiClient, orgKey: string): Promise<ResolvedOrg> {
   let org;
   try {
-    org = await client.fetchOrganizationByKey(orgKey);
+    org = await client.organizations.fetchOrganizationByKey(orgKey);
   } catch (err) {
     throw new CommandFailedError(
       `Failed to look up organization '${orgKey}': ${err instanceof Error ? err.message : String(err)}`,
@@ -185,7 +179,7 @@ export function assertSupportedAlm(orgKey: string, almKey: string | undefined): 
 
 /** The key from the org record when it carries one, otherwise the organization-bindings lookup. */
 export async function resolveAlmKey(
-  client: SonarQubeClient,
+  client: ImportApiClient,
   orgKey: string,
   orgRecordAlmKey: string | undefined,
 ): Promise<string | undefined> {
@@ -194,7 +188,7 @@ export async function resolveAlmKey(
   }
 
   try {
-    return normalizeAlmKey(await client.getOrganizationAlmKey(orgKey));
+    return normalizeAlmKey(await client.organizations.getOrganizationAlmKey(orgKey));
   } catch (err) {
     throw new CommandFailedError(
       `Failed to look up the DevOps platform for organization '${orgKey}': ${err instanceof Error ? err.message : String(err)}`,
@@ -294,9 +288,9 @@ const BACK = Symbol('back');
  * wants one, so blank or invalid input just re-prompts. Cancelling (Ctrl+C) returns `BACK` to the
  * mode-select menu, consistent with cancelling the Manual picker.
  */
-async function promptForRegex(): Promise<RegExp | typeof BACK> {
+async function promptForRegex(console: Console): Promise<RegExp | typeof BACK> {
   for (;;) {
-    const input = await textPrompt(
+    const input = await console.textPrompt(
       'Import repositories whose name matches (regex, e.g. /^archived-/i)',
     );
     if (input === null) {
@@ -306,19 +300,26 @@ async function promptForRegex(): Promise<RegExp | typeof BACK> {
     if (compiled) {
       return compiled;
     }
-    print(
+    console.print(
       'Please enter a valid, non-empty regular expression (e.g. /pattern/i for case-insensitive).',
     );
   }
 }
 
 export async function resolveRepos(
-  client: SonarQubeClient,
+  client: ImportApiClient,
   orgKey: string,
   almKey: string | undefined,
   onlyPrivateProjects: OnlyPrivateProjects,
-  opts: { repo?: string[]; all?: boolean; regex?: string; nonInteractive?: boolean },
+  opts: {
+    repo?: string[];
+    all?: boolean;
+    regex?: string;
+    nonInteractive?: boolean;
+    console: Console;
+  },
 ): Promise<RepoResolution> {
+  const console = opts.console;
   const regexFromFlag = validateSelectionFlags(opts);
 
   if (opts.nonInteractive && !opts.repo?.length && !opts.all && !opts.regex) {
@@ -328,7 +329,7 @@ export async function resolveRepos(
     );
   }
 
-  const organizationId = await client.getOrganizationLegacyId(orgKey);
+  const organizationId = await client.organizations.getOrganizationLegacyId(orgKey);
   if (!organizationId) {
     throw new CommandFailedError(`Organization '${orgKey}' not found.`, {
       remediationHint: 'Check that the organization key is correct and that you have access to it.',
@@ -336,11 +337,17 @@ export async function resolveRepos(
   }
 
   if (opts.all) {
-    return resolveStreamingImport(client, organizationId, onlyPrivateProjects, undefined);
+    return resolveStreamingImport(client, organizationId, onlyPrivateProjects, undefined, console);
   }
 
   if (opts.regex) {
-    return resolveStreamingImport(client, organizationId, onlyPrivateProjects, regexFromFlag);
+    return resolveStreamingImport(
+      client,
+      organizationId,
+      onlyPrivateProjects,
+      regexFromFlag,
+      console,
+    );
   }
 
   if (opts.repo?.length) {
@@ -354,7 +361,7 @@ export async function resolveRepos(
     return { kind: 'batch', repos, skipped: [] };
   }
 
-  return resolveOnboardingMode(client, organizationId, almKey, onlyPrivateProjects);
+  return resolveOnboardingMode(client, organizationId, almKey, onlyPrivateProjects, console);
 }
 
 /**
@@ -363,13 +370,14 @@ export async function resolveRepos(
  * a fetch failure or an org with no repositories at all.
  */
 async function createRepositoryCollectionOrThrow(
-  client: SonarQubeClient,
+  client: ImportApiClient,
   organizationId: string,
   onlyPrivateProjects: OnlyPrivateProjects,
+  console: Console,
 ): Promise<RepositoryCollection> {
   let collection: RepositoryCollection;
   try {
-    collection = await withSpinner('Loading repositories...', () =>
+    collection = await console.withSpinner('Loading repositories...', () =>
       RepositoryCollection.create(
         (pageIndex, pageSize) =>
           client.fetchDopRepositoriesPage(organizationId, pageIndex, pageSize),
@@ -417,15 +425,17 @@ function handleNoEligibleRepos(collection: RepositoryCollection): never {
  * from this same collection rather than starting over from page one.
  */
 async function resolveOnboardingMode(
-  client: SonarQubeClient,
+  client: ImportApiClient,
   organizationId: string,
   almKey: string | undefined,
   onlyPrivateProjects: OnlyPrivateProjects,
+  console: Console,
 ): Promise<RepoResolution> {
   const collection = await createRepositoryCollectionOrThrow(
     client,
     organizationId,
     onlyPrivateProjects,
+    console,
   );
 
   if (collection.eligibleRepos.length === 0) {
@@ -449,7 +459,7 @@ async function resolveOnboardingMode(
   // instead of ending the command, so the user can pick a different mode rather than starting
   // `sonar import` over from scratch.
   for (;;) {
-    const choice = await selectPrompt('How do you want to import repositories?', options);
+    const choice = await console.selectPrompt('How do you want to import repositories?', options);
 
     if (choice === null) {
       throw new CommandFailedError('Repository selection cancelled');
@@ -458,14 +468,14 @@ async function resolveOnboardingMode(
       return { kind: 'streaming', collection, regex: undefined };
     }
     if (choice === BY_PATTERN) {
-      const regex = await promptForRegex();
+      const regex = await promptForRegex(console);
       if (regex === BACK) {
         continue;
       }
       return { kind: 'streaming', collection, regex };
     }
 
-    const repos = await promptForReposFromCollection(collection, almKey);
+    const repos = await promptForReposFromCollection(collection, almKey, console);
     if (repos === BACK) {
       continue;
     }
@@ -474,7 +484,7 @@ async function resolveOnboardingMode(
 }
 
 async function resolveReposBySlug(
-  client: SonarQubeClient,
+  client: ImportApiClient,
   organizationId: string,
   almKey: string | undefined,
   onlyPrivateProjects: OnlyPrivateProjects,
@@ -560,15 +570,17 @@ function isRepoSelectable(
  * instead of waiting for the whole org to be scanned first.
  */
 async function resolveStreamingImport(
-  client: SonarQubeClient,
+  client: ImportApiClient,
   organizationId: string,
   onlyPrivateProjects: OnlyPrivateProjects,
   regex: RegExp | undefined,
+  console: Console,
 ): Promise<RepoResolution> {
   const collection = await createRepositoryCollectionOrThrow(
     client,
     organizationId,
     onlyPrivateProjects,
+    console,
   );
 
   if (collection.eligibleRepos.length === 0) {
@@ -612,6 +624,7 @@ async function findReposBySlugs(
 async function promptForReposFromCollection(
   collection: RepositoryCollection,
   almKey: string | undefined,
+  console: Console,
 ): Promise<ResolvedRepo[] | typeof BACK> {
   // `multiSelectPrompt` tracks selections by `===` identity, so the same `DopRepository`
   // must always map to the same `ResolvedRepo` object across a "Load more" reload, or
@@ -639,7 +652,7 @@ async function promptForReposFromCollection(
     ...collection.alreadyImportedRepos.map((repo) => toOption(repo, true)),
   ];
 
-  const result = await multiSelectPrompt('Select repositories to import', buildOptions(), {
+  const result = await console.multiSelectPrompt('Select repositories to import', buildOptions(), {
     hasMore: () => collection.hasMore,
     onLoadMore: async () => {
       await collection.loadMore();

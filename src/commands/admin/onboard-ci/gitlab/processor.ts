@@ -24,8 +24,8 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { GitLabClient, GitLabRepo, GitLabTreeEntry } from '@/core/gitlab/client.ts';
 import { GitLabApiError } from '@/core/gitlab/client.ts';
 import { HTTP_STATUS_BAD_REQUEST } from '@/core/http-constants.ts';
-import type { SonarQubeClient } from '@/core/server/client.ts';
 
+import type { OnboardCiSqsClient } from './sqs-api.ts';
 import { buildUpdatedCiYml, generateCiYml, generateMrDescription } from './templates.ts';
 import type { OnboardCiGitlabOptions } from './types.ts';
 import { GITLAB_DEFAULT_STAGES, GITLAB_IMPLICIT_STAGES, SkipReason } from './types.ts';
@@ -50,7 +50,7 @@ export type RepoWithBranch = GitLabRepo & { default_branch: string };
 
 export interface ProcessRepoContext {
   gitlab: GitLabClient;
-  sqs: SonarQubeClient;
+  sqs: OnboardCiSqsClient;
   dopSettingId: string;
   auth: ResolvedAuth;
   options: OnboardCiGitlabOptions;
@@ -102,7 +102,7 @@ export async function classifyRepo(
     };
   }
 
-  if (await ctx.sqs.hasProjectBeenAnalyzed(existingProjectKey)) {
+  if (await ctx.sqs.components.hasProjectBeenAnalyzed(existingProjectKey)) {
     return {
       outcome: 'skip',
       reason: SkipReason.AlreadyConfigured,

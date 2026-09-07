@@ -21,7 +21,8 @@
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { SonarQubeClient, type VortexEntitlementStatus } from '@/core/server/client.ts';
+import type { VortexEntitlementStatus } from '@/core/vortex/entitlement.ts';
+import { VortexEntitlementClient } from '@/core/vortex/entitlement.ts';
 import { recheckVortexEntitlement, resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 function cloudAuth(orgKey = 'my-org'): ResolvedAuth {
@@ -36,7 +37,10 @@ describe('recheckVortexEntitlement', () => {
   });
 
   it('returns the client status verbatim and forwards the org key', async () => {
-    entitlementSpy = spyOn(SonarQubeClient.prototype, 'hasVortexEntitlement').mockResolvedValue({
+    entitlementSpy = spyOn(
+      VortexEntitlementClient.prototype,
+      'hasVortexEntitlement',
+    ).mockResolvedValue({
       status: 'not_entitled',
     });
 
@@ -49,7 +53,10 @@ describe('recheckVortexEntitlement', () => {
   it.each<VortexEntitlementStatus>(['enabled', 'over_consumption', 'not_entitled', 'check_failed'])(
     'passes through the %s verdict',
     async (verdict) => {
-      entitlementSpy = spyOn(SonarQubeClient.prototype, 'hasVortexEntitlement').mockResolvedValue({
+      entitlementSpy = spyOn(
+        VortexEntitlementClient.prototype,
+        'hasVortexEntitlement',
+      ).mockResolvedValue({
         status: verdict,
       });
 
@@ -74,13 +81,13 @@ describe('resolveVortexEntitlement', () => {
   });
 
   it('returns not_applicable without calling the API when unauthenticated', async () => {
-    entitlementSpy = spyOn(SonarQubeClient.prototype, 'hasVortexEntitlement');
+    entitlementSpy = spyOn(VortexEntitlementClient.prototype, 'hasVortexEntitlement');
     expect(await resolveVortexEntitlement(null)).toEqual({ status: 'not_applicable' });
     expect(entitlementSpy).not.toHaveBeenCalled();
   });
 
   it('returns not_applicable without calling the API for Cloud without an org', async () => {
-    entitlementSpy = spyOn(SonarQubeClient.prototype, 'hasVortexEntitlement');
+    entitlementSpy = spyOn(VortexEntitlementClient.prototype, 'hasVortexEntitlement');
     expect(await resolveVortexEntitlement({ ...cloudAuth(), orgKey: undefined })).toEqual({
       status: 'not_applicable',
     });
@@ -88,7 +95,10 @@ describe('resolveVortexEntitlement', () => {
   });
 
   it('queries entitlement on a Server connection', async () => {
-    entitlementSpy = spyOn(SonarQubeClient.prototype, 'hasVortexEntitlement').mockResolvedValue({
+    entitlementSpy = spyOn(
+      VortexEntitlementClient.prototype,
+      'hasVortexEntitlement',
+    ).mockResolvedValue({
       status: 'enabled',
     });
     expect(await resolveVortexEntitlement(serverAuth())).toEqual({ status: 'enabled' });

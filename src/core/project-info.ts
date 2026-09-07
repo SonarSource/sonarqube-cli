@@ -45,7 +45,7 @@ import {
 import type { CliState, KnownServerProjectMapping } from '@/core/state/state.ts';
 import { getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState } from '@/core/state/state-repository.ts';
-import { print } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
 import { loadSonarLintConfig, type SonarLintConfig } from './host/sonarlint-connected-mode.ts';
 import { canonicalizePath } from './io/fs-utils.ts';
@@ -86,6 +86,7 @@ export interface DiscoverProjectOptions {
   tryGitRemoteBinding?: boolean;
   /** Suppresses the "Found ..." stderr hints. Defaults to false. */
   silent?: boolean;
+  console: Console;
 }
 
 export interface SonarProperties {
@@ -99,17 +100,18 @@ export interface SonarProperties {
 async function discoverLocalConfig(
   startDir: string,
   silent: boolean,
+  console: Console,
 ): Promise<Pick<DiscoveredProject, 'serverUrl' | 'organization'>> {
   const config: DiscoveredProject = { projectRoot: canonicalizePath(startDir), configSources: [] };
   const lookupPaths = await resolveLookupPaths(startDir, collectKnownRoots(loadKnownMappings()));
-  await applyLocalConfigAcrossLookupPaths(config, lookupPaths, { silent });
+  await applyLocalConfigAcrossLookupPaths(config, lookupPaths, { silent, console });
   return config;
 }
 
 /** Try to find server URL from project configs. */
-export async function discoverServer(): Promise<string | null> {
+export async function discoverServer(console: Console): Promise<string | null> {
   try {
-    const { serverUrl } = await discoverLocalConfig(process.cwd(), false);
+    const { serverUrl } = await discoverLocalConfig(process.cwd(), false, console);
     return serverUrl ?? null;
   } catch (error) {
     logger.debug(`Error finding server in configs: ${(error as Error).message}`);
@@ -118,9 +120,9 @@ export async function discoverServer(): Promise<string | null> {
 }
 
 /** Try to find organization from project configs. */
-export async function discoverOrganization(): Promise<string | null> {
+export async function discoverOrganization(console: Console): Promise<string | null> {
   try {
-    const { organization } = await discoverLocalConfig(process.cwd(), true);
+    const { organization } = await discoverLocalConfig(process.cwd(), true, console);
     return organization ?? null;
   } catch {
     return null;
@@ -148,7 +150,7 @@ async function loadLocalProjectConfig(dir: string): Promise<LocalProjectConfig> 
  */
 export async function discoverProject(
   startDir: string,
-  options: DiscoverProjectOptions = {},
+  options: DiscoverProjectOptions,
 ): Promise<DiscoveredProject> {
   const invocationDir = canonicalizePath(startDir);
   const config: DiscoveredProject = {
@@ -199,19 +201,20 @@ export async function discoverProject(
 export async function resolveProjectKey(
   explicitProject: string | undefined,
   auth: ResolvedAuth,
+  console: Console,
   silent = false,
 ): Promise<string> {
   if (explicitProject) {
     if (!silent) {
-      print(`     Using project key: ${explicitProject}`, 'stderr');
+      console.print(`     Using project key: ${explicitProject}`, 'stderr');
     }
     return explicitProject;
   }
 
-  const discovered = await discoverProject(process.cwd(), { auth, silent: true });
+  const discovered = await discoverProject(process.cwd(), { auth, silent: true, console });
   if (discovered.projectKey) {
     if (!silent) {
-      print(`     Using auto-detected project key: ${discovered.projectKey}`, 'stderr');
+      console.print(`     Using auto-detected project key: ${discovered.projectKey}`, 'stderr');
     }
     return discovered.projectKey;
   }
@@ -241,7 +244,7 @@ function applyLocalSonarProperties(
   }
   const fields = formatConfigFields(config.serverUrl, config.projectKey, config.organization);
   if (fields) {
-    print(`Found sonar-project.properties: ${fields}`);
+    options.console.print(`Found sonar-project.properties: ${fields}`);
   }
 }
 
@@ -267,7 +270,7 @@ function applySonarLintConfig(
       local.sonarLintData.organization,
     );
     if (fields) {
-      print(`Found ${local.sonarLintConfigPath}: ${fields}`);
+      options.console.print(`Found ${local.sonarLintConfigPath}: ${fields}`);
     }
   }
 
@@ -393,7 +396,7 @@ function applyKnownServerProjectMapping(
   if (!options.silent) {
     const fields = formatConfigFields(config.serverUrl, config.projectKey, config.organization);
     if (fields) {
-      print(`Found ${KNOWN_SERVER_PROJECT_MAPPING_SOURCE}: ${fields}`);
+      options.console.print(`Found ${KNOWN_SERVER_PROJECT_MAPPING_SOURCE}: ${fields}`);
     }
   }
 
@@ -410,7 +413,7 @@ async function applyGitRemoteBindingFromRemote(
     return;
   }
 
-  const auth = options.auth === undefined ? await resolveAuth() : options.auth;
+  const auth = options.auth === undefined ? await resolveAuth({ silent: true }) : options.auth;
   if (!auth) {
     return;
   }
@@ -431,7 +434,7 @@ async function applyGitRemoteBindingFromRemote(
 
   const fields = formatConfigFields(config.serverUrl, config.projectKey, config.organization);
   if (fields) {
-    print(`Found ${GIT_REMOTE_BINDING_SOURCE}: ${fields}`);
+    options.console.print(`Found ${GIT_REMOTE_BINDING_SOURCE}: ${fields}`);
   }
 }
 

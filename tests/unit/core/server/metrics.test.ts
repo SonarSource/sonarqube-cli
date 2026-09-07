@@ -20,7 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { MetricsClient } from '@/core/server/metrics.ts';
 import type { Metric, MetricsSearchResponse } from '@/core/server/types.ts';
 
@@ -72,7 +72,7 @@ describe('MetricsClient', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    client = new MetricsClient(new SonarQubeClient(SERVER_URL, TOKEN));
+    client = new MetricsClient(new SonarHttpClient(SERVER_URL, TOKEN));
   });
 
   afterEach(() => {

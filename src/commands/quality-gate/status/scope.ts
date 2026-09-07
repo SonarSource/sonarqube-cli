@@ -22,7 +22,7 @@
 
 import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
 import { BranchesClient } from '@/core/server/branches.ts';
-import type { SonarQubeClient } from '@/core/server/client.ts';
+import type { SonarHttpClient } from '@/core/server/http-client.ts';
 
 export interface QualityGateStatusScopeOptions {
   branch?: string;
@@ -66,7 +66,7 @@ export function resolveScopeQueryParams(options: QualityGateStatusScopeOptions):
  * Resolves the scope purely for display (the "Branch:"/"Pull Request:" line).
  */
 export async function resolveDisplayScope(
-  client: SonarQubeClient,
+  client: SonarHttpClient,
   projectKey: string,
   options: QualityGateStatusScopeOptions,
 ): Promise<QualityGateScope> {

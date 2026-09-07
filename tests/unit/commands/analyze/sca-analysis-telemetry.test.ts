@@ -46,6 +46,7 @@ import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import * as userModule from '@/core/telemetry/user.ts';
 
+import { FakeConsole } from '../../../_common/fake-console.ts';
 import { makeTelemetryState, readAnalysisEvents } from '../../../_common/telemetry-helpers.ts';
 
 const AUTH: ResolvedAuth = {
@@ -62,7 +63,7 @@ async function emitScaAnalysisTelemetry(
   durationMs: number,
   exitCode: number | null,
 ): Promise<void> {
-  const ctx = new CommandInvocationContext();
+  const ctx = new CommandInvocationContext(new FakeConsole());
   recordScaAnalysisTelemetry(ctx, AUTH, callerCommand, response, durationMs, exitCode);
   await commitTelemetryFacts(ctx.telemetryFacts());
 }

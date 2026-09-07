@@ -33,6 +33,7 @@ import * as sqaaApi from '../../../../src/commands/analyze/sqaa-api.ts';
 import type { SqaaAuth } from '../../../../src/commands/analyze/sqaa-auth.ts';
 import type { SqaaChunkFile } from '../../../../src/commands/analyze/sqaa-chunking.ts';
 import { payloadTooLargeCommandError } from '../../../../src/commands/analyze/sqaa-errors.ts';
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
 describe('distributeChunkResponse', () => {
   it('attaches chunk-level errors only to the first file', () => {
@@ -169,7 +170,11 @@ describe('runAnalyses partial 413', () => {
     });
 
     const files = ['/repo/a.ts', '/repo/b.ts', '/repo/c.ts'];
-    const progress = new SqaaProgress({ files: ['a.ts', 'b.ts', 'c.ts'], silent: true });
+    const progress = new SqaaProgress({
+      files: ['a.ts', 'b.ts', 'c.ts'],
+      silent: true,
+      console: new FakeConsole(),
+    });
     const tally = await runAnalyses({
       files,
       allPaths: ['a.ts', 'b.ts', 'c.ts'],
@@ -201,7 +206,11 @@ describe('runAnalyses partial 413', () => {
       groupErrors: [],
     });
 
-    const progress = new SqaaProgress({ files: ['ok.ts', 'bad.ts'], silent: true });
+    const progress = new SqaaProgress({
+      files: ['ok.ts', 'bad.ts'],
+      silent: true,
+      console: new FakeConsole(),
+    });
     const tally = await runAnalyses({
       files: ['/repo/ok.ts', '/repo/bad.ts'],
       allPaths: ['ok.ts', 'bad.ts'],

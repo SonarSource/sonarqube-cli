@@ -33,11 +33,19 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { authLogin } from '@/commands/auth/login.ts';
 import * as tokenModule from '@/core/auth/token.ts';
+import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SONARCLOUD_URL } from '@/core/config-constants.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
-import { clearMockUiCalls, setMockUi } from '@/core/ui';
+import { OrganizationsClient } from '@/core/server/organizations.ts';
+import { UsersClient } from '@/core/server/users.ts';
 
+import { FakeConsole } from '../../../_common/fake-console.ts';
 import { createKeychainTestHandle } from '../../core/host/keychain-test-handle.ts';
+
+let fake: FakeConsole;
+
+beforeEach(() => {
+  fake = new FakeConsole();
+});
 
 describe('authLogin stdin release', () => {
   let spies: ReturnType<typeof spyOn>[] = [];
@@ -52,20 +60,17 @@ describe('authLogin stdin release', () => {
     keychain.setup();
     Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
     pauseSpy = spyOn(process.stdin, 'pause').mockReturnValue(process.stdin);
-    revokeSpy = spyOn(SonarQubeClient.prototype, 'revokeUserToken').mockResolvedValue(undefined);
-    resolveAccessSpy = spyOn(SonarQubeClient.prototype, 'resolveOrganizationAccess');
+    revokeSpy = spyOn(UsersClient.prototype, 'revokeUserToken').mockResolvedValue(undefined);
+    resolveAccessSpy = spyOn(OrganizationsClient.prototype, 'resolveOrganizationAccess');
     generateTokenSpy = spyOn(tokenModule, 'generateTokenViaBrowser').mockResolvedValue({
       token: 'minted-token',
       tokenName: 'cli-browser-token',
     });
     spies = [pauseSpy, revokeSpy, resolveAccessSpy, generateTokenSpy];
-    setMockUi(true);
   });
 
   afterEach(() => {
     keychain.teardown();
-    setMockUi(false);
-    clearMockUiCalls();
     Object.defineProperty(process.stdin, 'isTTY', {
       value: originalIsTTY,
       configurable: true,
@@ -81,9 +86,9 @@ describe('authLogin stdin release', () => {
     generateTokenSpy.mockRejectedValueOnce(new Error('Authentication cancelled'));
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-    await expect(authLogin({ server: SONARCLOUD_URL, org: 'my-org' })).rejects.toThrow(
-      'Authentication cancelled',
-    );
+    await expect(
+      authLogin({ server: SONARCLOUD_URL, org: 'my-org' }, new CommandInvocationContext(fake)),
+    ).rejects.toThrow('Authentication cancelled');
 
     expect(pauseSpy).toHaveBeenCalled();
   });
@@ -92,9 +97,12 @@ describe('authLogin stdin release', () => {
     resolveAccessSpy.mockResolvedValue({ status: 'not_found' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-    await expect(authLogin({ server: SONARCLOUD_URL, org: 'nonexistent-org' })).rejects.toThrow(
-      "Organization 'nonexistent-org' not found or not accessible.",
-    );
+    await expect(
+      authLogin(
+        { server: SONARCLOUD_URL, org: 'nonexistent-org' },
+        new CommandInvocationContext(fake),
+      ),
+    ).rejects.toThrow("Organization 'nonexistent-org' not found or not accessible.");
 
     expect(pauseSpy).toHaveBeenCalled();
   });
@@ -103,9 +111,9 @@ describe('authLogin stdin release', () => {
     resolveAccessSpy.mockResolvedValue({ status: 'check_failed', reason: 'connection refused' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-    await expect(authLogin({ server: SONARCLOUD_URL, org: 'my-org' })).rejects.toThrow(
-      "Could not verify organization 'my-org'",
-    );
+    await expect(
+      authLogin({ server: SONARCLOUD_URL, org: 'my-org' }, new CommandInvocationContext(fake)),
+    ).rejects.toThrow("Could not verify organization 'my-org'");
 
     expect(pauseSpy).toHaveBeenCalled();
   });
@@ -114,7 +122,12 @@ describe('authLogin stdin release', () => {
     resolveAccessSpy.mockResolvedValue({ status: 'not_found' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-    await expect(authLogin({ server: SONARCLOUD_URL, org: 'nonexistent-org' })).rejects.toThrow();
+    await expect(
+      authLogin(
+        { server: SONARCLOUD_URL, org: 'nonexistent-org' },
+        new CommandInvocationContext(fake),
+      ),
+    ).rejects.toThrow();
 
     expect(revokeSpy).toHaveBeenCalledWith('cli-browser-token');
   });

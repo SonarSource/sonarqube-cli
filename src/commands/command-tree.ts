@@ -36,11 +36,12 @@ import {
 import { resolveGitlabToken } from '@/core/gitlab/token.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
-import { GENERIC_HTTP_METHODS, MAX_PAGE_SIZE } from '@/core/server/client.ts';
+import { GENERIC_HTTP_METHODS } from '@/core/server/http-client.ts';
+import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { tryLoadState } from '@/core/state/state-repository.ts';
 import { flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
-import { blank, error } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 import { parseInteger } from '@/core/ui/parsing.ts';
 
 import { version as VERSION } from '../../package.json';
@@ -152,14 +153,16 @@ export type LoadPrivateBetaContext = (flagKeys: readonly string[]) => Promise<{
 export interface CreateCommandTreeOptions {
   isAlphaEnabled?: boolean;
   loadPrivateBetaContext?: LoadPrivateBetaContext;
+  /** Shared tree console. Construct once at the process entry and pass it in. */
+  console: Console;
 }
 
 /** Registers the full command tree for the given runtime (sync). */
-function buildCommandTree(runtime: CliRuntime): SonarCommand {
+function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   // Hook handlers write an agent-native session id when present; postAction
   // resolves (env fallback) before telemetry flush.
   let capturedAgentSessionId: string | null = null;
-  const COMMAND_TREE = new SonarCommand({ runtime });
+  const COMMAND_TREE = new SonarCommand({ runtime, console });
 
   const handleHookInvocation =
     <TArgs extends unknown[]>(
@@ -179,8 +182,8 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .enablePositionalOptions()
     .configureOutput({
       outputError: (str) => {
-        blank();
-        error(str.trim());
+        console.blank();
+        console.error(str.trim());
       },
     })
     .configureHelp({
@@ -220,17 +223,17 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       'SonarQube Server URL, SonarQube Cloud EU (https://sonarcloud.io), or SonarQube Cloud US (https://sonarqube.us). Defaults to SonarQube Cloud EU.',
     )
     .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
-    .anonymousAction((_ctx, options: AuthLoginOptions) => authLogin(options));
+    .anonymousAction((ctx, options: AuthLoginOptions) => authLogin(options, ctx));
 
   auth
     .command('logout')
     .description('Remove active connection token from keychain')
-    .anonymousAction((_ctx) => authLogout());
+    .anonymousAction((ctx) => authLogout(ctx));
 
   auth
     .command('status')
     .description('Show active authentication connection with token verification')
-    .anonymousAction((_ctx) => authStatus());
+    .anonymousAction((ctx) => authStatus(ctx));
 
   // List Sonar resources
   const list = COMMAND_TREE.command('list')
@@ -447,7 +450,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       args: string[],
     ) {
       setPassthroughSubcommand(this, derivePassthroughSubcommand(action, args));
-      return runContextPassthrough(action, args);
+      return runContextPassthrough(action, args, { console: _ctx.console });
     });
 
   integrateCommand
@@ -642,7 +645,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .description('Configure telemetry settings')
     .option('--enabled', 'Enable collection of anonymous usage statistics')
     .option('--disabled', 'Disable collection of anonymous usage statistics')
-    .anonymousAction((_ctx, options: ConfigureTelemetryOptions) => configureTelemetry(options));
+    .anonymousAction((ctx, options: ConfigureTelemetryOptions) => configureTelemetry(options, ctx));
 
   // System diagnostics and maintenance
   const system = COMMAND_TREE.command('system')
@@ -656,7 +659,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .description('Show overall system status: authentication, installed binaries, and integrations')
     .showUpdateNotification((opts) => !opts.json)
     .option('--json', 'Output as JSON for machine consumption')
-    .anonymousAction((_ctx, options: SystemStatusOptions) => systemStatus(options));
+    .anonymousAction((ctx, options: SystemStatusOptions) => systemStatus(options, ctx));
 
   system
     .command('reset')
@@ -668,7 +671,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       '--force',
       'Skip the interactive confirmation prompt (required for non-interactive use)',
     )
-    .anonymousAction((_ctx, options: SystemResetOptions) => systemReset(options));
+    .anonymousAction((ctx, options: SystemResetOptions) => systemReset(options, ctx));
 
   // Update the CLI to the latest version
   if (CURRENT_DISTRIBUTION.enableSelfUpdate) {
@@ -679,7 +682,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       })
       .option('--status', 'Check for a newer version without installing')
       .option('--force', 'Install the latest version even if already up to date')
-      .anonymousAction((_ctx, options: UpdateVersionOptions) => updateVersion(options));
+      .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx));
 
     // Hidden compatibility alias for `sonar update`.
     COMMAND_TREE.command('self-update', { hidden: true })
@@ -687,7 +690,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
       .stage(Stage.Deprecated({ sinceVersion: '1.4', replacement: 'sonar update' }))
       .option('--status', 'Check for a newer version without installing')
       .option('--force', 'Install the latest version even if already up to date')
-      .anonymousAction((_ctx, options: UpdateVersionOptions) => updateVersion(options));
+      .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx));
   }
 
   const runCommand = COMMAND_TREE.command('run', { hidden: true }).description(
@@ -781,7 +784,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .description(
       'PostToolUseFailure handler: forward the failed tool call to Vortex context augmentation',
     )
-    .anonymousAction((_ctx) => claudePostToolUseFailure());
+    .anonymousAction((ctx) => claudePostToolUseFailure(ctx));
 
   hookCommand
     .command('codex-post-tool-use')
@@ -833,7 +836,7 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     )
     .option(
       '--sonar-token-var-name <name>',
-      'Name of the GitLab CI/CD variable that holds the SonarQube analysis token (default: SONAR_TOKEN)',
+      'Name of the GitLab CI/CD variable that holds the SonarQube analysis token',
       'SONAR_TOKEN',
     )
     .option('--trigger-on <events>', 'Pipeline triggers: mr | main | both', 'both')
@@ -848,8 +851,8 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
     .option('--dry-run', 'Preview what would be processed without making any changes', false)
     .authenticatedAction(async (ctx, options: OnboardCiGitlabOptions) => {
       validateOnboardCiGitlabOptions(options);
-      const gitlabToken = await resolveGitlabToken();
-      return onboardCiGitlab(ctx.auth, gitlabToken, options);
+      const gitlabToken = await resolveGitlabToken(ctx.console);
+      return onboardCiGitlab(ctx.auth, gitlabToken, options, ctx.console);
     });
 
   // Hidden flush command — only registered when running as a telemetry worker.
@@ -892,17 +895,19 @@ function buildCommandTree(runtime: CliRuntime): SonarCommand {
  * call `loadPrivateBetaContext` (auth + LaunchDarkly). Otherwise the probe tree
  * is returned and LaunchDarkly is never contacted.
  */
-export async function createCommandTree(
-  options: CreateCommandTreeOptions = {},
-): Promise<SonarCommand> {
+export async function createCommandTree(options: CreateCommandTreeOptions): Promise<SonarCommand> {
   const isAlphaEnabled = options.isAlphaEnabled ?? isAlphaEnabledFromEnv();
+  const { console } = options;
 
-  const probe = buildCommandTree({
-    auth: null,
-    isAlphaEnabled,
-    // Allow all Private Beta commands so Stage.Beta('…') keys are discoverable.
-    isPrivateBetaEnabled: () => true,
-  });
+  const probe = buildCommandTree(
+    {
+      auth: null,
+      isAlphaEnabled,
+      // Allow all Private Beta commands so Stage.Beta('…') keys are discoverable.
+      isPrivateBetaEnabled: () => true,
+    },
+    console,
+  );
 
   const flagKeys = collectPrivateBetaFlagKeys(probe);
   if (flagKeys.length === 0) {
@@ -911,17 +916,23 @@ export async function createCommandTree(
 
   if (options.loadPrivateBetaContext) {
     const { auth, flags } = await options.loadPrivateBetaContext(flagKeys);
-    return buildCommandTree({
-      auth,
-      isAlphaEnabled,
-      isPrivateBetaEnabled: (flagKey) => flags[flagKey] ?? false,
-    });
+    return buildCommandTree(
+      {
+        auth,
+        isAlphaEnabled,
+        isPrivateBetaEnabled: (flagKey) => flags[flagKey] ?? false,
+      },
+      console,
+    );
   }
 
   // Keys exist but no loader (e.g. docs generation): omit Private Beta commands.
-  return buildCommandTree({
-    ...createDefaultCliRuntime(),
-    isAlphaEnabled,
-    isPrivateBetaEnabled: () => false,
-  });
+  return buildCommandTree(
+    {
+      ...createDefaultCliRuntime(),
+      isAlphaEnabled,
+      isPrivateBetaEnabled: () => false,
+    },
+    console,
+  );
 }

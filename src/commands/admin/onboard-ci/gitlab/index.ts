@@ -25,15 +25,16 @@ import { CommandFailedError } from '@/core/command-error.ts';
 import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
 import type { GitLabRepo } from '@/core/gitlab/client.ts';
 import { GitLabClient } from '@/core/gitlab/client.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
-import { info, intro, outro, warn, withSpinner } from '@/core/ui';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { ConcurrentProgress } from '@/core/ui/components/concurrent-progress.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import type { ClassificationEntry } from './dry-run.ts';
 import { computeDryRunResults } from './dry-run.ts';
 import type { ProcessRepoContext, RepoClassification, RepoWithBranch } from './processor.ts';
 import { classifyRepo, executeRepo } from './processor.ts';
 import { writeReportFile } from './report.ts';
+import { OnboardCiSqsClient } from './sqs-api.ts';
 import type { DryRunResults, OnboardCiGitlabOptions, OnboardCiResults } from './types.ts';
 import { TriggerOn } from './types.ts';
 
@@ -112,10 +113,10 @@ export function validateOnboardCiGitlabOptions(options: OnboardCiGitlabOptions):
 }
 
 async function resolveDopSetting(
-  sqs: SonarQubeClient,
+  sqs: OnboardCiSqsClient,
   bindingName?: string,
 ): Promise<{ dopSettingId: string; dopSettingKey: string; gitlabUrl: string }> {
-  const settings = await sqs.listGitlabDopSettings();
+  const settings = await sqs.bindings.listGitlabDopSettings();
 
   if (settings.length === 0) {
     throw new CommandFailedError(
@@ -156,6 +157,7 @@ function applyReposFileFilter<T extends GitLabRepo>(
   repos: T[],
   reposFile: string,
   group: string,
+  console: Console,
 ): T[] {
   let fileContent: string;
   try {
@@ -181,11 +183,11 @@ function applyReposFileFilter<T extends GitLabRepo>(
   for (const e of entries) {
     if (repos.some((r) => relativePath(r) === e)) continue;
     if (allRepos.some((r) => relativePath(r) === e)) {
-      warn(
+      console.warn(
         `→ '${e}' from --repos-file is not eligible (empty repository or pending deletion) — skipped`,
       );
     } else {
-      warn(`→ '${e}' from --repos-file not found in group — skipped`);
+      console.warn(`→ '${e}' from --repos-file not found in group — skipped`);
     }
   }
 
@@ -197,7 +199,7 @@ async function preflight(
   gitlabToken: string,
   options: OnboardCiGitlabOptions,
 ): Promise<{
-  sqsClient: SonarQubeClient;
+  sqsClient: OnboardCiSqsClient;
   gitlabClient: GitLabClient;
   dopSettingId: string;
   dopSettingKey: string;
@@ -212,8 +214,8 @@ async function preflight(
     );
   }
 
-  const sqsClient = new SonarQubeClient(auth.serverUrl, auth.token);
-  if (!(await sqsClient.hasProvisionProjectsPermission())) {
+  const sqsClient = new OnboardCiSqsClient(new SonarHttpClient(auth.serverUrl, auth.token));
+  if (!(await sqsClient.users.hasProvisionProjectsPermission())) {
     throw new CommandFailedError(
       'This command requires the "Provision Projects" global permission in SonarQube.',
     );
@@ -229,15 +231,16 @@ async function preflight(
 }
 
 async function fetchGroupData(
-  sqsClient: SonarQubeClient,
+  sqsClient: OnboardCiSqsClient,
   gitlabClient: GitLabClient,
   dopSettingId: string,
   options: OnboardCiGitlabOptions,
+  console: Console,
 ): Promise<{ repos: RepoWithBranch[]; bindingMap: Map<string, string> }> {
-  const bindingMap = await withSpinner('Fetching SonarQube project bindings...', () =>
-    sqsClient.getAllProjectBindings(dopSettingId),
+  const bindingMap = await console.withSpinner('Fetching SonarQube project bindings...', () =>
+    sqsClient.bindings.getAllProjectBindings(dopSettingId),
   );
-  const allRepos = await withSpinner('Fetching GitLab repositories...', () =>
+  const allRepos = await console.withSpinner('Fetching GitLab repositories...', () =>
     gitlabClient.listGroupRepos(options.group),
   );
 
@@ -246,14 +249,15 @@ async function fetchGroupData(
   );
 
   if (options.reposFile) {
-    repos = applyReposFileFilter(allRepos, repos, options.reposFile, options.group);
+    repos = applyReposFileFilter(allRepos, repos, options.reposFile, options.group, console);
   }
 
   return { repos, bindingMap };
 }
 
-function startRepoProgress(repos: RepoWithBranch[]): ConcurrentProgress {
+function startRepoProgress(repos: RepoWithBranch[], console: Console): ConcurrentProgress {
   const progress = new ConcurrentProgress({
+    console,
     maxVisible: SETUP_CI_CONCURRENCY_LIMIT,
     showResult: false,
   });
@@ -278,8 +282,9 @@ async function runConcurrent(
     progress: ConcurrentProgress,
   ) => Promise<void>,
   failed: { repo: string; error: string }[],
+  console: Console,
 ): Promise<void> {
-  const progress = startRepoProgress(repos);
+  const progress = startRepoProgress(repos, console);
   await runWithConcurrencyLimit(repos, SETUP_CI_CONCURRENCY_LIMIT, async (repo) => {
     const slug = repo.path_with_namespace;
     progress.update(slug, 'running');
@@ -303,6 +308,7 @@ async function runDryRun(
   ctx: ProcessRepoContext,
   repos: RepoWithBranch[],
   bindingMap: Map<string, string>,
+  console: Console,
 ): Promise<DryRunResults> {
   const classifications: ClassificationEntry[] = [];
   const failedRepos: { repo: string; error: string }[] = [];
@@ -318,6 +324,7 @@ async function runDryRun(
       return Promise.resolve();
     },
     failedRepos,
+    console,
   );
 
   return computeDryRunResults(classifications, failedRepos);
@@ -327,6 +334,7 @@ async function runLive(
   ctx: ProcessRepoContext,
   repos: RepoWithBranch[],
   bindingMap: Map<string, string>,
+  console: Console,
 ): Promise<OnboardCiResults> {
   const results: OnboardCiResults = { opened: [], skipped: [], failed: [] };
 
@@ -346,6 +354,7 @@ async function runLive(
       progress.update(slug, 'done', 'MR opened');
     },
     results.failed,
+    console,
   );
 
   return results;
@@ -359,6 +368,7 @@ export async function onboardCiGitlab(
   auth: ResolvedAuth,
   gitlabToken: string,
   options: OnboardCiGitlabOptions,
+  console: Console,
 ): Promise<void> {
   const { sqsClient, gitlabClient, dopSettingId, dopSettingKey, gitlabUrl } = await preflight(
     auth,
@@ -366,20 +376,21 @@ export async function onboardCiGitlab(
     options,
   );
 
-  intro('Onboard CI configuration', 'GitLab');
-  if (options.dryRun) info('DRY RUN — no changes will be made \n');
+  console.intro('Onboard CI configuration', 'GitLab');
+  if (options.dryRun) console.info('DRY RUN — no changes will be made \n');
 
-  info(`Using GitLab configuration '${dopSettingKey}' (${gitlabUrl})`);
-  info(`Processing group: ${options.group}`);
+  console.info(`Using GitLab configuration '${dopSettingKey}' (${gitlabUrl})`);
+  console.info(`Processing group: ${options.group}`);
 
   const { repos, bindingMap } = await fetchGroupData(
     sqsClient,
     gitlabClient,
     dopSettingId,
     options,
+    console,
   );
 
-  info(`Found ${repos.length.toLocaleString()} repositories to process`);
+  console.info(`Found ${repos.length.toLocaleString()} repositories to process`);
 
   const ctx: ProcessRepoContext = {
     gitlab: gitlabClient,
@@ -390,14 +401,14 @@ export async function onboardCiGitlab(
   };
 
   if (options.dryRun) {
-    const dryRunResults = await runDryRun(ctx, repos, bindingMap);
+    const dryRunResults = await runDryRun(ctx, repos, bindingMap, console);
     const { wouldOpenMr, wouldSkip, failed } = dryRunResults;
-    outro(
+    console.outro(
       buildOutroMessage(wouldOpenMr.length, wouldSkip.length, failed.length),
       failed.length > 0 ? 'error' : 'success',
       'No changes were made',
     );
-    writeReportFile(dryRunResults, 'sonar-onboard-ci-report-dry.json');
+    writeReportFile(dryRunResults, 'sonar-onboard-ci-report-dry.json', console);
     if (failed.length > 0) {
       throw new CommandFailedError(`${failed.length} repositories failed to process.`, {
         remediationHint: 'See the per-repository errors above and the report file for details.',
@@ -406,13 +417,13 @@ export async function onboardCiGitlab(
     return;
   }
 
-  const results = await runLive(ctx, repos, bindingMap);
+  const results = await runLive(ctx, repos, bindingMap, console);
   const { opened, skipped, failed } = results;
-  outro(
+  console.outro(
     buildOutroMessage(opened.length, skipped.length, failed.length),
     failed.length > 0 ? 'error' : 'success',
   );
-  writeReportFile(results, 'sonar-onboard-ci-report.json');
+  writeReportFile(results, 'sonar-onboard-ci-report.json', console);
   if (failed.length > 0) {
     throw new CommandFailedError(`${failed.length} repositories failed to process.`, {
       remediationHint: 'See the per-repository errors above and the report file for details.',

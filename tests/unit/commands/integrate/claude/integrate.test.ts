@@ -32,11 +32,15 @@ import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocatio
 import * as registry from '@/core/framework/features';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import * as discovery from '@/core/project-info.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { ComponentsClient } from '@/core/server/components.ts';
+import { OrganizationsClient } from '@/core/server/organizations.ts';
+import { ScaClient } from '@/core/server/sca.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import type { PhaseItem } from '@/core/ui';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+import { VortexEntitlementClient } from '@/core/vortex/entitlement.ts';
+
+import { FakeConsole } from '../../../../_common/fake-console.ts';
 
 const SERVER_AUTH: ResolvedAuth = {
   token: 'test-token',
@@ -51,11 +55,12 @@ const CLOUD_AUTH: ResolvedAuth = {
   connectionType: 'cloud',
 };
 
-const SERVER_CTX = new CommandAuthenticatedInvocationContext(SERVER_AUTH);
-const CLOUD_CTX = new CommandAuthenticatedInvocationContext(CLOUD_AUTH);
+let fake: FakeConsole;
+let SERVER_CTX: CommandAuthenticatedInvocationContext;
+let CLOUD_CTX: CommandAuthenticatedInvocationContext;
 
 function getPhaseItems(title: string): PhaseItem[] {
-  const call = getMockUiCalls().find((c) => c.method === 'phase' && c.args[0] === title);
+  const call = fake.calls.find((c) => c.method === 'phase' && c.args[0] === title);
   return (call?.args[1] ?? []) as PhaseItem[];
 }
 
@@ -63,16 +68,22 @@ describe('integrateCommand', () => {
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
   let hasVortexEntitlementSpy: Mock<
-    Extract<(typeof SonarQubeClient.prototype)['hasVortexEntitlement'], (...args: any[]) => any>
+    Extract<
+      (typeof VortexEntitlementClient.prototype)['hasVortexEntitlement'],
+      (...args: any[]) => any
+    >
   >;
   let checkTokenStatusSpy: Mock<
     Extract<(typeof token)['checkTokenStatus'], (...args: any[]) => any>
   >;
   let checkComponentSpy: Mock<
-    Extract<(typeof SonarQubeClient.prototype)['checkComponent'], (...args: any[]) => any>
+    Extract<(typeof ComponentsClient.prototype)['checkComponent'], (...args: any[]) => any>
   >;
   let isOrganizationAccessibleSpy: Mock<
-    Extract<(typeof SonarQubeClient.prototype)['isOrganizationAccessible'], (...args: any[]) => any>
+    Extract<
+      (typeof OrganizationsClient.prototype)['isOrganizationAccessible'],
+      (...args: any[]) => any
+    >
   >;
   let discoverProjectSpy: Mock<
     Extract<(typeof discovery)['discoverProject'], (...args: any[]) => any>
@@ -84,15 +95,17 @@ describe('integrateCommand', () => {
     Extract<(typeof hooks)['detectGlobalSecretsHook'], (...args: any[]) => any>
   >;
   let getScaEnablementSpy: Mock<
-    Extract<(typeof SonarQubeClient.prototype)['getScaEnablement'], (...args: any[]) => any>
+    Extract<(typeof ScaClient.prototype)['getScaEnablement'], (...args: any[]) => any>
   >;
 
   beforeEach(() => {
-    setMockUi(true);
+    fake = new FakeConsole();
+    SERVER_CTX = new CommandAuthenticatedInvocationContext(SERVER_AUTH, fake);
+    CLOUD_CTX = new CommandAuthenticatedInvocationContext(CLOUD_AUTH, fake);
 
-    hasVortexEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasVortexEntitlement');
+    hasVortexEntitlementSpy = spyOn(VortexEntitlementClient.prototype, 'hasVortexEntitlement');
     hasVortexEntitlementSpy.mockResolvedValue({ status: 'not_entitled' });
-    getScaEnablementSpy = spyOn(SonarQubeClient.prototype, 'getScaEnablement').mockResolvedValue(
+    getScaEnablementSpy = spyOn(ScaClient.prototype, 'getScaEnablement').mockResolvedValue(
       'not_enabled',
     );
 
@@ -100,9 +113,9 @@ describe('integrateCommand', () => {
     saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
 
     checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
-    checkComponentSpy = spyOn(SonarQubeClient.prototype, 'checkComponent').mockResolvedValue(true);
+    checkComponentSpy = spyOn(ComponentsClient.prototype, 'checkComponent').mockResolvedValue(true);
     isOrganizationAccessibleSpy = spyOn(
-      SonarQubeClient.prototype,
+      OrganizationsClient.prototype,
       'isOrganizationAccessible',
     ).mockResolvedValue(true);
     discoverProjectSpy = spyOn(discovery, 'discoverProject');
@@ -115,8 +128,6 @@ describe('integrateCommand', () => {
   });
 
   afterEach(() => {
-    clearMockUiCalls();
-    setMockUi(false);
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     hasVortexEntitlementSpy.mockRestore();
@@ -132,7 +143,7 @@ describe('integrateCommand', () => {
   it('shows intro message', async () => {
     await integrateClaude({}, SERVER_CTX);
 
-    const introText = getMockUiCalls().find(
+    const introText = fake.calls.find(
       (c) =>
         c.method === 'intro' && String(c.args[0]) === 'SonarQube Integration Setup for Claude Code',
     );
@@ -143,7 +154,7 @@ describe('integrateCommand', () => {
     await integrateClaude({}, SERVER_CTX);
 
     expect(
-      getMockUiCalls().some(
+      fake.calls.some(
         (c) => c.method === 'spinner' && String(c.args[0]) === 'Discovering project...',
       ),
     ).toBe(true);
@@ -171,7 +182,7 @@ describe('integrateCommand', () => {
 
     await integrateClaude({}, CLOUD_CTX);
 
-    const warnText = getMockUiCalls().find(
+    const warnText = fake.calls.find(
       (c) => c.method === 'warn' && String(c.args[0]).includes('Server URL mismatch'),
     );
     expect(warnText).toBeDefined();
@@ -182,7 +193,7 @@ describe('integrateCommand', () => {
 
     await integrateClaude({}, CLOUD_CTX);
 
-    const warnText = getMockUiCalls().find(
+    const warnText = fake.calls.find(
       (c) => c.method === 'warn' && String(c.args[0]).includes('organization mismatch'),
     );
     expect(warnText).toBeDefined();
@@ -198,7 +209,10 @@ describe('integrateCommand', () => {
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      integrateClaude({}, new CommandAuthenticatedInvocationContext(cloudAuthNoOrg)),
+      integrateClaude(
+        {},
+        new CommandAuthenticatedInvocationContext(cloudAuthNoOrg, new FakeConsole()),
+      ),
     ).rejects.toThrow(CommandFailedError);
   });
 
@@ -509,7 +523,7 @@ describe('integrateCommand', () => {
     it('does not print the "already configured globally" skip notice (no probe is run)', async () => {
       await integrateClaude({ global: true }, SERVER_CTX);
 
-      const skipNotice = getMockUiCalls().find(
+      const skipNotice = fake.calls.find(
         (c) =>
           c.method === 'info' && String(c.args[0]).includes('already configured for SonarQube'),
       );
@@ -533,7 +547,7 @@ describe('integrateCommand', () => {
         vortexDisposition: 'preserve',
       });
 
-      const warnNotice = getMockUiCalls().find(
+      const warnNotice = fake.calls.find(
         (c) => c.method === 'warn' && String(c.args[0]).includes('not supported with --global'),
       );
       expect(warnNotice).toBeDefined();

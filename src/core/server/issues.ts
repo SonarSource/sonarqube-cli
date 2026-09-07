@@ -20,13 +20,13 @@
 
 // SonarQube Issues API wrapper
 
-import { type SonarQubeClient } from './client.ts';
+import { type SonarHttpClient } from './http-client.ts';
 import type { IssuesSearchParams, IssuesSearchResponse } from './types.ts';
 
 export class IssuesClient {
-  private readonly client: SonarQubeClient;
+  private readonly client: SonarHttpClient;
 
-  constructor(client: SonarQubeClient) {
+  constructor(client: SonarHttpClient) {
     this.client = client;
   }
 

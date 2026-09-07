@@ -31,6 +31,14 @@ import {
   updateSecretsBinaryIfNeeded,
 } from '@/core/update/binary-refresh.ts';
 
+import { FakeConsole } from '../../../_common/fake-console.ts';
+
+let fake: FakeConsole;
+
+beforeEach(() => {
+  fake = new FakeConsole();
+});
+
 function makeState(): CliState {
   return getDefaultState('1.0.0');
 }
@@ -70,13 +78,13 @@ describe('updateSecretsBinaryIfNeeded', () => {
   it('does nothing when no previous binary is recorded in state', async () => {
     loadStateSpy.mockReturnValue(makeState()); // dependencies.installed is empty
 
-    await updateSecretsBinaryIfNeeded();
+    await updateSecretsBinaryIfNeeded(fake);
 
     expect(installSecretsBinarySpy).not.toHaveBeenCalled();
   });
 
   it('calls installSecretsBinary when a previous installation is recorded in state', async () => {
-    await updateSecretsBinaryIfNeeded();
+    await updateSecretsBinaryIfNeeded(fake);
 
     expect(installSecretsBinarySpy).toHaveBeenCalledTimes(1);
   });
@@ -85,7 +93,7 @@ describe('updateSecretsBinaryIfNeeded', () => {
     installSecretsBinarySpy.mockRejectedValue(new Error('download failed'));
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-    await expect(updateSecretsBinaryIfNeeded()).rejects.toThrow('download failed');
+    await expect(updateSecretsBinaryIfNeeded(fake)).rejects.toThrow('download failed');
   });
 });
 
@@ -125,13 +133,13 @@ describe('updateScaScannerBinaryIfNeeded', () => {
   it('does nothing when no previous binary is recorded in state', async () => {
     loadStateSpy.mockReturnValue(makeState()); // dependencies.installed is empty
 
-    await updateScaScannerBinaryIfNeeded();
+    await updateScaScannerBinaryIfNeeded(fake);
 
     expect(installScaScannerBinarySpy).not.toHaveBeenCalled();
   });
 
   it('calls installScaScannerBinary when a previous installation is recorded in state', async () => {
-    await updateScaScannerBinaryIfNeeded();
+    await updateScaScannerBinaryIfNeeded(fake);
 
     expect(installScaScannerBinarySpy).toHaveBeenCalledTimes(1);
   });
@@ -140,6 +148,6 @@ describe('updateScaScannerBinaryIfNeeded', () => {
     installScaScannerBinarySpy.mockRejectedValue(new Error('download failed'));
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-    await expect(updateScaScannerBinaryIfNeeded()).rejects.toThrow('download failed');
+    await expect(updateScaScannerBinaryIfNeeded(fake)).rejects.toThrow('download failed');
   });
 });

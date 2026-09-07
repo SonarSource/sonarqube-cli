@@ -48,13 +48,15 @@ import { createRedactedUrl } from '@/core/host/redacted-url.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import * as projectInfo from '@/core/project-info.ts';
 
+import { FakeConsole } from '../../../_common/fake-console.ts';
+
 const FAKE_AUTH: ResolvedAuth = {
   token: 'test-token',
   serverUrl: 'http://localhost:9000',
   connectionType: 'on-premise',
 };
 
-const FAKE_CTX = new CommandAuthenticatedInvocationContext(FAKE_AUTH);
+const FAKE_CTX = new CommandAuthenticatedInvocationContext(FAKE_AUTH, new FakeConsole());
 
 const NO_NETWORK: ResolvedNetworkConfig = { proxy: null, caCert: null, clientCert: null };
 

@@ -20,16 +20,17 @@
 
 import { describe, expect, it, mock, spyOn } from 'bun:test';
 
+import type { ScaScanApi } from '@/commands/analyze/dependency-risk-helpers/sca-api.ts';
 import * as scaTelemetry from '@/commands/analyze/sca-analysis-telemetry.ts';
 import { SCA_CALLER_COMMANDS } from '@/commands/analyze/sca-analysis-telemetry.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import type { SecretsInstaller } from '@/core/host/install/secrets.ts';
-import type { SonarQubeClient } from '@/core/server/client.ts';
 import type { SettingsValue } from '@/core/server/settings-value.ts';
 
 import { ScaScanOrchestrator } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
+import { FakeConsole } from '../../../../_common/fake-console.ts';
 import { okScaInstaller as okInstaller } from './_helpers.ts';
 
 const CLOUD_AUTH: ResolvedAuth = {
@@ -46,11 +47,11 @@ function makeClient(
     checkScaEnabled?: () => Promise<boolean>;
     getProjectSettings?: () => Promise<SettingsValue[]>;
   } = {},
-): SonarQubeClient {
+): ScaScanApi {
   return {
     checkScaEnabled: overrides.checkScaEnabled ?? (() => Promise.resolve(true)),
     getProjectSettings: overrides.getProjectSettings ?? (() => Promise.resolve([])),
-  } as unknown as SonarQubeClient;
+  };
 }
 
 // The orchestrator runs `discover-manifests` (pre-scan) before `analyze-project`.
@@ -68,7 +69,7 @@ function mockSpawner(payload: unknown) {
 const noopSecretsInstaller: SecretsInstaller = { install: () => Promise.resolve(null) };
 
 function makeCtx() {
-  return new CommandInvocationContext();
+  return new CommandInvocationContext(new FakeConsole());
 }
 
 describe('ScaScanOrchestrator', () => {

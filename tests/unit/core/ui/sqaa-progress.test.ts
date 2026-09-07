@@ -18,10 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 import { SqaaProgress } from '@/core/ui/components/sqaa-progress.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 const FILES = ['src/a.ts', 'src/b.ts', 'src/c.ts'];
 
@@ -59,7 +59,11 @@ function countNewlines(text: string): number {
 
 describe('SqaaProgress — non-TTY', () => {
   it('writes nothing on start or finish', () => {
-    const progress = new SqaaProgress({ files: FILES, isTTY: false });
+    const progress = new SqaaProgress({
+      files: FILES,
+      isTTY: false,
+      console: new TerminalConsole(),
+    });
     const header = captureStdout(() => progress.start());
     expect(header).toBe('');
 
@@ -72,7 +76,11 @@ describe('SqaaProgress — non-TTY', () => {
   });
 
   it('does not print per-file lines during the run', () => {
-    const progress = new SqaaProgress({ files: FILES, isTTY: false });
+    const progress = new SqaaProgress({
+      files: FILES,
+      isTTY: false,
+      console: new TerminalConsole(),
+    });
     progress.start();
     progress.update(0, 'done');
     progress.update(1, 'done');
@@ -87,6 +95,7 @@ describe('SqaaProgress — non-TTY', () => {
       files: FILES,
       ignoredFiles: ['build/output.bin'],
       isTTY: false,
+      console: new TerminalConsole(),
     });
     const header = captureStdout(() => progress.start());
     expect(header).toBe('');
@@ -94,7 +103,11 @@ describe('SqaaProgress — non-TTY', () => {
   });
 
   it('retryingChunk prints a countdown line', async () => {
-    const progress = new SqaaProgress({ files: FILES, isTTY: false });
+    const progress = new SqaaProgress({
+      files: FILES,
+      isTTY: false,
+      console: new TerminalConsole(),
+    });
     progress.start();
     const output = await captureStdoutAsync(() => progress.retryingChunk(0, 1, 3, 1));
     expect(output).toContain('Server busy (503)');
@@ -104,7 +117,11 @@ describe('SqaaProgress — non-TTY', () => {
 
 describe('SqaaProgress — TTY', () => {
   it('shows one live line while running and erases it on finish', () => {
-    const progress = new SqaaProgress({ files: FILES, isTTY: true });
+    const progress = new SqaaProgress({
+      files: FILES,
+      isTTY: true,
+      console: new TerminalConsole(),
+    });
     const start = captureStdout(() => progress.start());
     expect(start).toMatch(/Analyzing 3 files\.+/);
     expect(start).not.toContain('chunk');
@@ -130,7 +147,11 @@ describe('SqaaProgress — TTY', () => {
   });
 
   it('cycles animated dots while the live line is active', async () => {
-    const progress = new SqaaProgress({ files: FILES, isTTY: true });
+    const progress = new SqaaProgress({
+      files: FILES,
+      isTTY: true,
+      console: new TerminalConsole(),
+    });
     const output: string[] = [];
     const writeSpy = spyOn(process.stdout, 'write').mockImplementation((chunk: unknown) => {
       output.push(String(chunk));
@@ -149,7 +170,11 @@ describe('SqaaProgress — TTY', () => {
   });
 
   it('retryingChunk updates the single live line', async () => {
-    const progress = new SqaaProgress({ files: FILES, isTTY: true });
+    const progress = new SqaaProgress({
+      files: FILES,
+      isTTY: true,
+      console: new TerminalConsole(),
+    });
     captureStdout(() => progress.start());
     const output = await captureStdoutAsync(() => progress.retryingChunk(0, 1, 3, 500));
     captureStdout(() => progress.finish());
@@ -158,7 +183,11 @@ describe('SqaaProgress — TTY', () => {
   });
 
   it('warnPayloadSplit writes to stderr only', () => {
-    const progress = new SqaaProgress({ files: FILES, isTTY: true });
+    const progress = new SqaaProgress({
+      files: FILES,
+      isTTY: true,
+      console: new TerminalConsole(),
+    });
     captureStdout(() => progress.start());
     const stderrSpy = spyOn(process.stderr, 'write').mockImplementation(() => true);
     try {
@@ -172,7 +201,11 @@ describe('SqaaProgress — TTY', () => {
   });
 
   it('warnPayloadSplit erases the live line before writing the warning', () => {
-    const progress = new SqaaProgress({ files: FILES, isTTY: true });
+    const progress = new SqaaProgress({
+      files: FILES,
+      isTTY: true,
+      console: new TerminalConsole(),
+    });
     captureStdout(() => progress.start());
 
     const events: Array<'stdout-erase' | 'stderr-warn'> = [];
@@ -202,47 +235,13 @@ describe('SqaaProgress — TTY', () => {
   });
 });
 
-describe('SqaaProgress — mock mode', () => {
-  beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-  });
-  afterEach(() => setMockUi(false));
-
-  it('records method calls and writes nothing to stdout', async () => {
-    const progress = new SqaaProgress({ files: FILES });
-
-    const output = captureStdout(() => {
-      progress.start();
-      progress.updateChunk(0, 'done');
-      progress.update(0, 'done');
-      progress.warnPayloadSplit();
-      progress.skipRemaining(1);
-      progress.finish();
-    });
-    await progress.retryingChunk(0, 1, 3, 1);
-
-    expect(output).toBe('');
-    const methods = getMockUiCalls().map((c) => c.method);
-    expect(methods).toContain('sqaaProgress.start');
-    expect(methods).toContain('sqaaProgress.updateChunk');
-    expect(methods).toContain('sqaaProgress.warnPayloadSplit');
-    expect(methods).toContain('sqaaProgress.update');
-    expect(methods).toContain('sqaaProgress.skipRemaining');
-    expect(methods).toContain('sqaaProgress.finish');
-    expect(methods).toContain('sqaaProgress.retryingChunk');
-  });
-});
-
 describe('SqaaProgress — silent flag (used by --format json)', () => {
-  beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-  });
-  afterEach(() => setMockUi(false));
-
-  it('writes nothing to stdout and records no mock calls', async () => {
-    const progress = new SqaaProgress({ files: FILES, silent: true });
+  it('writes nothing to stdout', async () => {
+    const progress = new SqaaProgress({
+      files: FILES,
+      silent: true,
+      console: new TerminalConsole(),
+    });
 
     const output = await captureStdoutAsync(async () => {
       progress.start();
@@ -255,11 +254,14 @@ describe('SqaaProgress — silent flag (used by --format json)', () => {
     });
 
     expect(output).toBe('');
-    expect(getMockUiCalls()).toHaveLength(0);
   });
 
   it('still updates internal status for skipRemaining', async () => {
-    const progress = new SqaaProgress({ files: FILES, silent: true });
+    const progress = new SqaaProgress({
+      files: FILES,
+      silent: true,
+      console: new TerminalConsole(),
+    });
     progress.start();
 
     progress.update(0, 'done');
