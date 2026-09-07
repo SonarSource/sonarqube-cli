@@ -579,7 +579,7 @@ describe('issuesSearchCommand', () => {
 
   describe('table format', () => {
     async function printTable(issues: SonarQubeIssue[]): Promise<string> {
-      const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockResolvedValue({
+      const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockResolvedValue({
         issues,
         total: issues.length,
         p: 1,
