@@ -36,7 +36,7 @@ import {
   type OrganizationAccess,
   OrganizationsClient,
 } from '@/core/server/organizations.ts';
-import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
+import { cloudRegionFromUrl, isTrustedSonarQubeCloudUrl } from '@/core/server/sonarcloud-region.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -365,7 +365,7 @@ async function validateOrSelectOrganization(
 }
 
 export async function confirmServerTrust(server: string, console: Console): Promise<void> {
-  if (isSonarQubeCloud(server)) {
+  if (isTrustedSonarQubeCloudUrl(server)) {
     return;
   }
   console.warn('Only connect to servers you trust.');

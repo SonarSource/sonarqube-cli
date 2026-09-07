@@ -202,7 +202,7 @@ describe('auth login', () => {
   );
 
   it(
-    'does not show trust warning when --server is SonarCloud US',
+    'still asks for trust confirmation when the SonarCloud US URL is overridden to a non-production host',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -210,7 +210,7 @@ describe('auth login', () => {
         .withOrganizations([{ key: 'us-org', name: 'US Org' }])
         .start();
 
-      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+      const result = await confirmTrust(harness, `auth login --server ${server.baseUrl()}`, {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_US_URL: server.baseUrl(),
           SONARQUBE_CLI_SONARCLOUD_US_API_URL: server.baseUrl(),
@@ -219,7 +219,7 @@ describe('auth login', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stderr).not.toContain('Only connect to servers you trust');
+      expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
     },
     { timeout: 15000 },
   );

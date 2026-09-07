@@ -27,6 +27,7 @@ import {
   SONARCLOUD_US_API_URL,
   SONARCLOUD_US_HOSTNAME,
   SONARCLOUD_US_URL,
+  SONARQUBE_CLOUD_PRODUCTION_HOSTNAMES,
 } from '../config-constants.ts';
 import type { CloudRegion } from '../state/state.ts';
 
@@ -43,6 +44,18 @@ export function cloudRegionFromUrl(serverUrl: string): CloudRegion | undefined {
 
 export function isSonarQubeCloud(serverUrl: string): boolean {
   return cloudRegionFromUrl(serverUrl) !== undefined;
+}
+
+/**
+ * True only for the real SonarQube Cloud hosts. Use this for trust decisions;
+ * `isSonarQubeCloud` follows the env-overridable URLs and must not gate them.
+ */
+export function isTrustedSonarQubeCloudUrl(serverUrl: string): boolean {
+  try {
+    return SONARQUBE_CLOUD_PRODUCTION_HOSTNAMES.includes(new URL(serverUrl).hostname);
+  } catch {
+    return false;
+  }
 }
 
 /**

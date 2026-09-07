@@ -178,11 +178,24 @@ export const UPDATE_SCRIPT_BASE_URL =
 // SonarCloud
 // ---------------------------------------------------------------------------
 
-export const SONARCLOUD_URL = process.env.SONARQUBE_CLI_SONARCLOUD_URL ?? 'https://sonarcloud.io';
+const DEFAULT_SONARCLOUD_URL = 'https://sonarcloud.io';
+const DEFAULT_SONARCLOUD_US_URL = 'https://sonarqube.us';
+
+export const SONARCLOUD_URL = process.env.SONARQUBE_CLI_SONARCLOUD_URL ?? DEFAULT_SONARCLOUD_URL;
 export const SONARCLOUD_US_URL =
-  process.env.SONARQUBE_CLI_SONARCLOUD_US_URL ?? 'https://sonarqube.us';
+  process.env.SONARQUBE_CLI_SONARCLOUD_US_URL ?? DEFAULT_SONARCLOUD_US_URL;
 export const SONARCLOUD_HOSTNAME = new URL(SONARCLOUD_URL).hostname;
 export const SONARCLOUD_US_HOSTNAME = new URL(SONARCLOUD_US_URL).hostname;
+
+/**
+ * Hostnames of the real SonarQube Cloud instances. Deliberately derived from the
+ * hardcoded defaults above, not from the env-overridable URLs, so a test/CI override
+ * of SONARQUBE_CLI_SONARCLOUD_URL cannot make an arbitrary host count as trusted Cloud.
+ */
+export const SONARQUBE_CLOUD_PRODUCTION_HOSTNAMES: readonly string[] = [
+  new URL(DEFAULT_SONARCLOUD_URL).hostname,
+  new URL(DEFAULT_SONARCLOUD_US_URL).hostname,
+];
 export const SONARCLOUD_API_URL =
   process.env.SONARQUBE_CLI_SONARCLOUD_API_URL ?? 'https://api.sonarcloud.io';
 export const SONARCLOUD_US_API_URL =
