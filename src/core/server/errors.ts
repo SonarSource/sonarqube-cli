@@ -18,6 +18,19 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+/**
+ * Wraps a failure that happened before a response was received at all — the request
+ * never reached the server, or never came back (DNS/TLS/proxy failure, connection
+ * refused, timeout, abort). Distinct from every other error in this file, which is
+ * built from an actual HTTP response.
+ */
+export class TransportError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'TransportError';
+  }
+}
+
 /** Thrown by the API client on HTTP 429 (Too Many Requests). */
 export class RateLimitError extends Error {
   constructor() {
@@ -85,4 +98,24 @@ export class RequestPayloadTooLargeError extends Error {
     this.code = code;
     this.meta = meta;
   }
+}
+
+/**
+ * Distinguishes a critical failure — the request could not be carried out at all, or
+ * the server is rejecting all traffic — from an expected one, a well-formed rejection
+ * of this particular request that a caller may reasonably treat as a normal outcome
+ * (e.g. "this organization doesn't exist").
+ *
+ * `Result`-returning `SonarHttpClient` methods don't apply this themselves: they hand
+ * back whichever error they built, critical or not, and leave the decision to the
+ * caller. Swallow-to-fallback call sites should check this before discarding an error,
+ * so an outage or a misconfigured proxy fails loudly instead of looking like the normal
+ * "not found" case it is being folded into.
+ */
+export function isCriticalFailure(error: Error): boolean {
+  return (
+    error instanceof TransportError ||
+    error instanceof RateLimitError ||
+    error instanceof ServiceUnavailableError
+  );
 }

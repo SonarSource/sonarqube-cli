@@ -44,6 +44,7 @@ import {
   RequestPayloadTooLargeError,
   type RequestPayloadTooLargeMeta,
   ServiceUnavailableError,
+  TransportError,
 } from './errors.ts';
 import { buildRequest, fetchAuthenticated } from './fetch.ts';
 import {
@@ -372,8 +373,15 @@ export class SonarHttpClient {
   }
 }
 
-function toError(err: unknown): Error {
-  return err instanceof Error ? err : new Error(String(err));
+/**
+ * Every call site of `toError` catches a throw from `fetchAuthenticated` itself, never
+ * from a parsed HTTP response — so whatever comes through here is by definition a
+ * critical, transport-level failure (see `isCriticalFailure`), and is wrapped as one.
+ */
+function toError(err: unknown): TransportError {
+  return err instanceof Error
+    ? new TransportError(err.message, { cause: err })
+    : new TransportError(String(err));
 }
 
 function redactSensitiveHeaders(headers: Record<string, string>): Record<string, string> {
