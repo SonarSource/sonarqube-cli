@@ -173,7 +173,14 @@ describe('quality-gate status — breakdown', () => {
 
       const lines = result.stdout.split('\n');
       const conditionIndex = lines.findIndex((l) => l.includes('Coverage on New Code'));
+      // Value leads label on the condition line, and value leads path on each breakdown line.
+      expect(lines[conditionIndex].indexOf('62.4%')).toBeLessThan(
+        lines[conditionIndex].indexOf('Coverage on New Code'),
+      );
       expect(lines[conditionIndex + 1]).toContain('src/a.ts');
+      expect(lines[conditionIndex + 1].indexOf('10.0%')).toBeLessThan(
+        lines[conditionIndex + 1].indexOf('src/a.ts'),
+      );
       expect(lines[conditionIndex + 2]).toContain('src/b.ts');
       expect(lines[conditionIndex + 3]).toContain('… 3 more');
       expect(lines[conditionIndex + 3]).toContain('use --top 5 to display all');

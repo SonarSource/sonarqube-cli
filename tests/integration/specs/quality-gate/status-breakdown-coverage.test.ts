@@ -222,7 +222,7 @@ describe('quality-gate status — coverage breakdown', () => {
     { timeout: 15000 },
   );
   it(
-    'renders the coverage breakdown in the table, nested under its condition, without long paths colliding with the value',
+    'renders the coverage breakdown in the table, nested under its condition, with paths aligned across differing value widths',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -240,8 +240,8 @@ describe('quality-gate status — coverage breakdown', () => {
               },
             ])
             .withComponentTreeFiles('new_coverage', [
-              { path: 'src/checkout.ts', value: '31.0' },
-              { path: 'src/a-very-long-file-name-that-should-not-collide.ts', value: '45.2' },
+              { path: 'src/checkout.ts', value: '5.0' },
+              { path: 'src/a-very-long-file-name-that-should-not-collide.ts', value: '45.25' },
             ]),
         )
         .start();
@@ -256,9 +256,11 @@ describe('quality-gate status — coverage breakdown', () => {
       );
       expect(shortLine).toBeDefined();
       expect(longLine).toBeDefined();
-      // Both value columns must start at the same offset, proving the short path was padded
-      // out to the long path's width rather than butting straight up against its own value.
-      expect(shortLine?.indexOf('31.0')).toBe(longLine?.indexOf('45.2'));
+      // The value column is padded to a uniform width, so both paths start at the same
+      // offset even though '5.0%' is two characters shorter than '45.25%'.
+      expect(shortLine?.indexOf('src/checkout.ts')).toBe(
+        longLine?.indexOf('src/a-very-long-file-name-that-should-not-collide.ts'),
+      );
     },
     { timeout: 15000 },
   );

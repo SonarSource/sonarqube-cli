@@ -554,7 +554,7 @@ describe('quality-gate status', () => {
     { timeout: 15000 },
   );
   it(
-    'keeps a gap between label and value when a metric name overflows the label column',
+    'keeps a gap between label and requirement when a metric name overflows the label column',
     async () => {
       const longName = 'Severity of a licensing dependency risk';
       const server = await harness
@@ -580,7 +580,53 @@ describe('quality-gate status', () => {
       );
 
       const conditionLine = result.stdout.split('\n').find((line) => line.includes(longName));
-      expect(conditionLine).toContain(`${longName}  0`);
+      expect(conditionLine).toContain(`${longName}  (required`);
+    },
+    { timeout: 15000 },
+  );
+  it(
+    'keeps condition labels aligned across values of very different widths',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([
+          { key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code' },
+          { key: 'sca_severity_licensing', type: 'INT', name: 'Licensing Risk Severity' },
+        ])
+        .withProject('my-project', (p) =>
+          p.withProjectStatus('OK').withConditions([
+            {
+              status: 'OK',
+              metricKey: 'new_coverage',
+              comparator: 'LT',
+              errorThreshold: '80',
+              actualValue: '5.0',
+            },
+            {
+              status: 'OK',
+              metricKey: 'sca_severity_licensing',
+              comparator: 'GT',
+              errorThreshold: '999999999',
+              actualValue: '123456789',
+            },
+          ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status --project my-project --all --format table`,
+      );
+
+      const lines = result.stdout.split('\n');
+      const shortValueLine = lines.find((line) => line.includes('Coverage on New Code'));
+      const longValueLine = lines.find((line) => line.includes('Licensing Risk Severity'));
+      // Both labels must start at the same offset even though '5.0%' is five characters
+      // shorter than '123456789', proving the value column pads to a shared width.
+      expect(shortValueLine?.indexOf('Coverage on New Code')).toBe(
+        longValueLine?.indexOf('Licensing Risk Severity'),
+      );
     },
     { timeout: 15000 },
   );

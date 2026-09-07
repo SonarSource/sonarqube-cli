@@ -29,19 +29,14 @@ import type {
 import type { QualityGateScope } from './scope.ts';
 import type { QualityGateVerdict } from './verdict.ts';
 
-/**
- * These are only the floors `padColumns` falls back to - a table of short names stays compact
- * instead of always reserving space for a name long enough to never appear.
- */
+/** Fits "Coverage on New Code" without padding. */
 const MIN_CONDITION_LABEL_WIDTH = 20;
-const MIN_CONDITION_VALUE_WIDTH = 14;
-/** Guarantees at least this much space after each column even when its content sets the width. */
-const CONDITION_GAP = 2;
+const CONDITION_LABEL_GAP = 2;
+const CONDITION_VALUE_GAP = 2;
 
-/** Same floor/gap technique as the condition columns above, so a long file path never runs into its value. */
-const MIN_BREAKDOWN_PATH_WIDTH = 40;
-const BREAKDOWN_GAP = 2;
-const BREAKDOWN_INDENT = '       ';
+const BREAKDOWN_VALUE_GAP = 2;
+/** One indent level deeper than a condition line. */
+const BREAKDOWN_INDENT = '        ';
 
 const VERDICT_BRACKETS: Record<QualityGateVerdict, string> = {
   OK: '[✓ Passed]',
@@ -79,19 +74,21 @@ export function formatQualityGateTable(vm: QualityGateTableViewModel): string {
   }
 
   if (vm.conditions.length > 0) {
-    const [labels, values] = padColumns(
-      [
-        vm.conditions.map((condition) => condition.metricName),
-        vm.conditions.map((condition) => condition.formattedActualValue ?? '—'),
-      ],
-      [MIN_CONDITION_LABEL_WIDTH, MIN_CONDITION_VALUE_WIDTH],
-      CONDITION_GAP,
+    const [values] = padColumns(
+      [vm.conditions.map((condition) => condition.formattedActualValue ?? '—')],
+      [],
+      CONDITION_VALUE_GAP,
+    );
+    const [labels] = padColumns(
+      [vm.conditions.map((condition) => condition.metricName)],
+      [MIN_CONDITION_LABEL_WIDTH],
+      CONDITION_LABEL_GAP,
     );
     lines.push(
       '',
       'Conditions:',
       ...vm.conditions.flatMap((condition, i) => [
-        formatConditionLine(condition, labels[i], values[i]),
+        formatConditionLine(condition, values[i], labels[i]),
         ...formatBreakdownLines(condition),
       ]),
     );
@@ -121,15 +118,15 @@ function formatVerdictBracket(verdict: QualityGateVerdict): string {
 
 function formatConditionLine(
   condition: QualityGateConditionSummary,
-  paddedLabel: string,
   paddedValue: string,
+  paddedLabel: string,
 ): string {
   const marker = condition.status === 'OK' ? green('✓') : red('✗');
   const requirement =
     condition.formattedThreshold !== undefined
       ? `(required ${INVERSE_COMPARATOR_SYMBOLS[condition.comparator] ?? condition.comparator} ${condition.formattedThreshold})`
       : '';
-  return `    ${marker}  ${paddedLabel}${paddedValue}${requirement}`;
+  return `    ${marker}  ${paddedValue}${paddedLabel}${requirement}`;
 }
 
 function formatBreakdownLines(condition: QualityGateConditionSummary): string[] {
@@ -138,15 +135,14 @@ function formatBreakdownLines(condition: QualityGateConditionSummary): string[] 
     return [];
   }
 
-  const [paths, values] = padColumns(
-    [
-      metricBreakdown.entries.map((entry) => entry.path),
-      metricBreakdown.entries.map((entry) => entry.formattedValue),
-    ],
-    [MIN_BREAKDOWN_PATH_WIDTH],
-    BREAKDOWN_GAP,
+  const [values] = padColumns(
+    [metricBreakdown.entries.map((entry) => entry.formattedValue)],
+    [],
+    BREAKDOWN_VALUE_GAP,
   );
-  const lines = metricBreakdown.entries.map((_, i) => `${BREAKDOWN_INDENT}${paths[i]}${values[i]}`);
+  const lines = metricBreakdown.entries.map(
+    (entry, i) => `${BREAKDOWN_INDENT}${values[i]}${entry.path}`,
+  );
 
   const remaining = metricBreakdown.totalCount - metricBreakdown.fetchedCount;
   if (remaining > 0) {
