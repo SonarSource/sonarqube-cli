@@ -44,7 +44,7 @@ import {
 } from '@/core/server/discover-project-by-remote.ts';
 import {
   type SharedProjectConfigMapping,
-  SharedProjectConfigRepositoryImpl,
+  sharedProjectConfigRepository,
 } from '@/core/shared-project-config.ts';
 import type { CliState, KnownServerProjectMapping } from '@/core/state/state.ts';
 import { getActiveConnection } from '@/core/state/state-manager.ts';
@@ -57,8 +57,6 @@ import logger from './observability/logger.ts';
 
 export const KNOWN_SERVER_PROJECT_MAPPING_SOURCE = 'known project mapping';
 export const SHARED_PROJECT_CONFIG_SOURCE = 'shared project config';
-
-const sharedProjectConfigRepository = new SharedProjectConfigRepositoryImpl();
 
 /** Local config files found at exactly one directory — no git, no root resolution. */
 interface LocalProjectConfig {

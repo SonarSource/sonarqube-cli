@@ -28,23 +28,19 @@ import { resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 import {
   resolveContainedPath,
-  type SharedProjectConfigEntryInput,
-  type SharedProjectConfigRepository,
-  SharedProjectConfigRepositoryImpl,
+  type SharedProjectConfigEntry,
+  sharedProjectConfigRepository,
 } from '@/core/shared-project-config.ts';
 
 export interface LinkOptions {
   path: string;
 }
 
-const sharedProjectConfigRepository: SharedProjectConfigRepository =
-  new SharedProjectConfigRepositoryImpl();
-
 function deriveEntryFromAuth(
   auth: ResolvedAuth,
   projectKey: string,
   path: string,
-): SharedProjectConfigEntryInput {
+): SharedProjectConfigEntry {
   if (auth.connectionType !== 'cloud') {
     return { projectKey, path, serverUrl: auth.serverUrl };
   }

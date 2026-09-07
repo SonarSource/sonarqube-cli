@@ -35,30 +35,32 @@ export interface SharedProjectConfigMapping {
   organization?: string;
 }
 
-export type SharedProjectConfigEntryInput =
-  | { projectKey: string; path: string; serverUrl: string }
-  | { projectKey: string; path: string; region: CloudRegion; organization: string };
+/**
+ * The wire shape of a `project` entry — identical whether it's about to be written by
+ * `set()` or was just read back and validated by `load()`, since `set()` serializes it
+ * verbatim as JSON. One type serves both directions instead of a write-side and a
+ * read-side DTO declaring the same two shapes twice.
+ */
+export type SonarCloudProjectConfigEntry = {
+  projectKey: string;
+  path: string;
+  region: CloudRegion;
+  organization: string;
+};
+
+export type SonarQubeServerProjectConfigEntry = {
+  projectKey: string;
+  path: string;
+  serverUrl: string;
+};
+
+export type SharedProjectConfigEntry =
+  SonarCloudProjectConfigEntry | SonarQubeServerProjectConfigEntry;
 
 export interface SharedProjectConfigRepository {
   load(dir: string): Promise<SharedProjectConfigMapping | null>;
-  set(dir: string, entry: SharedProjectConfigEntryInput): Promise<void>;
+  set(dir: string, entry: SharedProjectConfigEntry): Promise<void>;
 }
-
-type SonarCloudProjectConfigEntryDto = {
-  region: CloudRegion;
-  organization: string;
-  projectKey: string;
-  path: string;
-};
-
-type SonarQubeServerProjectConfigEntryDto = {
-  serverUrl: string;
-  projectKey: string;
-  path: string;
-};
-
-type SharedProjectConfigEntryDto =
-  SonarCloudProjectConfigEntryDto | SonarQubeServerProjectConfigEntryDto;
 
 /** File root — a container so other top-level fields can be added later without disturbing `project`. */
 interface SharedProjectConfigFileDto {
@@ -71,7 +73,7 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
-function isCloudEntryDto(value: Record<string, unknown>): value is SonarCloudProjectConfigEntryDto {
+function isCloudEntry(value: Record<string, unknown>): value is SonarCloudProjectConfigEntry {
   return (
     value.serverUrl === undefined &&
     VALID_CLOUD_REGIONS.has(value.region as CloudRegion) &&
@@ -79,9 +81,7 @@ function isCloudEntryDto(value: Record<string, unknown>): value is SonarCloudPro
   );
 }
 
-function isServerEntryDto(
-  value: Record<string, unknown>,
-): value is SonarQubeServerProjectConfigEntryDto {
+function isServerEntry(value: Record<string, unknown>): value is SonarQubeServerProjectConfigEntry {
   return (
     value.region === undefined &&
     value.organization === undefined &&
@@ -89,7 +89,7 @@ function isServerEntryDto(
   );
 }
 
-function isValidEntryDto(value: unknown): value is SharedProjectConfigEntryDto {
+function isValidEntry(value: unknown): value is SharedProjectConfigEntry {
   if (typeof value !== 'object' || value === null) {
     return false;
   }
@@ -97,7 +97,7 @@ function isValidEntryDto(value: unknown): value is SharedProjectConfigEntryDto {
   if (!isNonEmptyString(record.projectKey) || !isNonEmptyString(record.path)) {
     return false;
   }
-  return isCloudEntryDto(record) || isServerEntryDto(record);
+  return isCloudEntry(record) || isServerEntry(record);
 }
 
 /**
@@ -128,7 +128,7 @@ export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRep
     return root === null ? null : this.resolveEntry(dir, root.project);
   }
 
-  async set(dir: string, entry: SharedProjectConfigEntryInput): Promise<void> {
+  async set(dir: string, entry: SharedProjectConfigEntry): Promise<void> {
     const file: SharedProjectConfigFileDto = { project: entry };
     await writeFile(this.configPath(dir), JSON.stringify(file, null, 2), 'utf-8');
   }
@@ -157,7 +157,7 @@ export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRep
   }
 
   private resolveEntry(dir: string, raw: unknown): SharedProjectConfigMapping | null {
-    if (!isValidEntryDto(raw)) {
+    if (!isValidEntry(raw)) {
       logger.debug(`Dropping invalid ${SHARED_PROJECT_CONFIG_FILE_NAME} entry in ${dir}`);
       return null;
     }
@@ -170,7 +170,7 @@ export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRep
       return null;
     }
 
-    if (isServerEntryDto(raw)) {
+    if (isServerEntry(raw)) {
       return {
         projectRoot,
         projectKey: raw.projectKey,
@@ -187,3 +187,7 @@ export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRep
     };
   }
 }
+
+/** Shared singleton so `project-info.ts` and `link/index.ts` mock the same instance in tests via `spyOn`. */
+export const sharedProjectConfigRepository: SharedProjectConfigRepository =
+  new SharedProjectConfigRepositoryImpl();
