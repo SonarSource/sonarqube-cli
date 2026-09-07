@@ -208,6 +208,32 @@ describe('sonar remediate', () => {
   );
 
   it(
+    'exits with code 0 and shows buy-it message when the org lookup is forbidden',
+    async () => {
+      // A 403 on the org lookup is not a transport failure (unlike the 5xx case above): it is
+      // treated the same as "no such organization" — the caller is not eligible either way.
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withProject(TEST_PROJECT, (p) => {
+          p.withIssue({ ruleKey: 'java:S100', message: 'Fixable issue', fixableByAgent: true });
+        })
+        .withOrgsLookupError(403)
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      const result = await harness.run(`remediate --project ${TEST_PROJECT}`);
+
+      expect(result.exitCode).toBe(0);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('Remediation Agent is not available for your organisation');
+      expect(output).toContain('sonarsource.com/products/agent-essentials');
+      expect(output).not.toContain('Which issues');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits with code 0 and reports zero eligible issues when none are fixable by agent',
     async () => {
       const server = await harness
