@@ -24,6 +24,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as readline from 'node:readline';
 
 import { isSonarQubeCloud } from '@/core/auth/auth-resolver.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { openBrowser } from '@/core/host/browser.ts';
 import { startLoopbackServer } from '@/core/host/loopback-server.ts';
 import logger from '@/core/observability/logger.ts';
@@ -34,6 +35,8 @@ import { blue } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 const HTTP_STATUS_OK = 200;
+const HTTP_STATUS_UNAUTHORIZED = 401;
+const HTTP_STATUS_INTERNAL_SERVER_ERROR = 500;
 const HTTP_STATUS_METHOD_NOT_ALLOWED = 405;
 const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
 const MAX_POST_BODY_BYTES = 4096;
@@ -49,6 +52,8 @@ export interface BrowserAuthResult {
   token: string;
   tokenName?: string;
 }
+
+type TokenCallback = (token: string, tokenName?: string) => unknown;
 
 export async function checkTokenStatus(
   serverURL: string,
@@ -121,16 +126,21 @@ export async function openBrowserWithFallback(authURL: string, console: Console)
 /**
  * Send success response to HTTP client
  */
-export function sendSuccessResponse(
+export async function sendSuccessResponse(
   res: ServerResponse,
   extractedAuthResult?: BrowserAuthResult,
-  onToken?: (token: string, tokenName?: string) => void,
-): void {
+  onToken?: TokenCallback,
+): Promise<void> {
+  if (extractedAuthResult && onToken) {
+    const accepted = await onToken(extractedAuthResult.token, extractedAuthResult.tokenName);
+    if (accepted === false) {
+      res.writeHead(HTTP_STATUS_UNAUTHORIZED);
+      res.end('Token rejected');
+      return;
+    }
+  }
   res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/plain' });
   res.end('OK');
-  if (extractedAuthResult && onToken) {
-    onToken(extractedAuthResult.token, extractedAuthResult.tokenName);
-  }
 }
 
 /**
@@ -139,7 +149,7 @@ export function sendSuccessResponse(
 export function handlePostRequest(
   req: IncomingMessage,
   res: ServerResponse,
-  onToken: (token: string, tokenName?: string) => void,
+  onToken: TokenCallback,
 ): void {
   let body = '';
   let bodySize = 0;
@@ -159,14 +169,20 @@ export function handlePostRequest(
       return;
     }
     const extractedAuthResult = parseBrowserAuthCallback(body);
-    sendSuccessResponse(res, extractedAuthResult, onToken);
+    void sendSuccessResponse(res, extractedAuthResult, onToken).catch((error: unknown) => {
+      logger.warn(`Auth callback handling failed: ${(error as Error).message}`);
+      if (!res.headersSent) {
+        res.writeHead(HTTP_STATUS_INTERNAL_SERVER_ERROR);
+        res.end('Internal Server Error');
+      }
+    });
   });
 }
 
 /**
  * Create request handler for loopback server
  */
-export function createRequestHandler(onToken: (token: string, tokenName?: string) => void) {
+export function createRequestHandler(onToken: TokenCallback) {
   return (req: IncomingMessage, res: ServerResponse) => {
     if (req.method === 'POST') {
       handlePostRequest(req, res, onToken);
@@ -236,6 +252,7 @@ export async function generateTokenViaBrowser(
   openBrowserFn: (url: string) => Promise<void> = (url) => openBrowserWithFallback(url, console),
 ): Promise<BrowserAuthResult> {
   let resolveToken: ((result: BrowserAuthResult) => void) | null = null;
+  const callbackState: { validatedToken?: string } = {};
 
   const tokenPromise = new Promise<BrowserAuthResult>((resolve) => {
     resolveToken = resolve;
@@ -248,10 +265,13 @@ export async function generateTokenViaBrowser(
   // Allow the Sonar server origin so the OAuth callback POST is not blocked by DNS rebinding protection
   const serverOrigin = new URL(serverURL).origin;
   const server = await startLoopbackServer(
-    createRequestHandler((token: string, tokenName?: string) => {
-      if (resolveToken) {
-        resolveToken({ token, tokenName });
+    createRequestHandler(async (token: string, tokenName?: string) => {
+      const isValid = (await checkTokenStatus(serverURL, token)).status === 'valid';
+      if (isValid) {
+        callbackState.validatedToken = token;
+        resolveToken?.({ token, tokenName });
       }
+      return isValid;
     }),
     { allowedOrigins: [serverOrigin] },
   );
@@ -276,6 +296,15 @@ export async function generateTokenViaBrowser(
     await server.close().catch((err: unknown) => {
       logger.warn(`Auth server shutdown error: ${(err as Error).message}`);
     });
+  }
+
+  if (callbackState.validatedToken !== authResult.token) {
+    const validation = await checkTokenStatus(serverURL, authResult.token);
+    if (validation.status !== 'valid') {
+      throw new CommandFailedError(
+        'The provided token could not be validated by the SonarQube server.',
+      );
+    }
   }
 
   return authResult;

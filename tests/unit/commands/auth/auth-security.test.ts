@@ -29,6 +29,7 @@ import { type LoopbackServerResult, startLoopbackServer } from '@/core/host/loop
 const LOOPBACK_HOST = '127.0.0.1';
 const HTTP_SCHEME = 'http';
 const HTTP_STATUS_OK = 200;
+const HTTP_STATUS_UNAUTHORIZED = 401;
 const HTTP_STATUS_FORBIDDEN = 403;
 const HTTP_STATUS_METHOD_NOT_ALLOWED = 405;
 const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
@@ -68,6 +69,18 @@ describe('Auth: security features via real HTTP', () => {
     expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
     expect(response.headers.get('X-Frame-Options')).toBe('DENY');
     expect(response.headers.get('Cache-Control')).toBe('no-store');
+  });
+
+  it('should reject a token when its validator declines it', async () => {
+    const handler = createRequestHandler(() => false);
+    server = await startLoopbackServer(handler);
+
+    const response = await fetch(serverUrl(server.port), {
+      method: 'POST',
+      body: JSON.stringify({ token: 'squ_rejected_token' }),
+    });
+
+    expect(response.status).toBe(HTTP_STATUS_UNAUTHORIZED);
   });
 
   it('should include security headers on unsupported method response (405)', async () => {

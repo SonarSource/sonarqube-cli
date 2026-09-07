@@ -178,10 +178,26 @@ describe('recordConnectionFromAuth', () => {
     getSafeSpy.mockRestore();
   });
 
+  it('updates a matching complete connection with the envOnly marker', async () => {
+    const state = loadState();
+    const existing = addOrUpdateConnection(state, 'https://sq.example.com', 'on-premise');
+    existing.userUuid = null;
+    existing.sqsInstallationId = 'sqs-existing';
+    saveState(state);
+    const getSafeSpy = mockIdentityGetSafe();
+
+    const connection = await recordConnectionFromAuth(serverAuth('t7'), { envOnly: true });
+
+    expect(connection.envOnly).toBe(true);
+    expect(connection.sqsInstallationId).toBe('sqs-existing');
+    expect(getSafeSpy).not.toHaveBeenCalled();
+    getSafeSpy.mockRestore();
+  });
+
   it('leaves envOnly unset for a login-style call (no envOnly option)', async () => {
     const getSafeSpy = mockIdentityGetSafe({ status: [{ ok: true, id: 'sqs-login' }] });
 
-    const connection = await recordConnectionFromAuth(serverAuth('t7'), {
+    const connection = await recordConnectionFromAuth(serverAuth('t8'), {
       tokenName: 'cli-token',
       force: true,
     });
