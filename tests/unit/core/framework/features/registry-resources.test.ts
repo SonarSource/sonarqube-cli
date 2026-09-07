@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -143,6 +143,27 @@ describe('declarative integration framework - resources and state recording', ()
         '',
       ].join('\n'),
     );
+  });
+
+  it('rejects symlinked resource targets without modifying the linked file', async () => {
+    const state = getDefaultState('test');
+    const context = makeContext(state, tempDir);
+    const outsidePath = join(tempDir, 'outside.txt');
+    const targetPath = join(tempDir, 'managed.txt');
+    await writeFile(outsidePath, 'user content\n');
+    symlinkSync(outsidePath, targetPath);
+    const resource = wholeFile({
+      id: 'managed',
+      targetPath,
+      content: 'managed content\n',
+    });
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(resource.apply(context)).rejects.toThrow('symbolic link resource path');
+    expect(await readFile(outsidePath, 'utf-8')).toBe('user content\n');
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(resource.remove(context)).rejects.toThrow('symbolic link resource path');
+    expect(await readFile(outsidePath, 'utf-8')).toBe('user content\n');
   });
 
   it('replaces legacy text snippets that only contain the start marker', async () => {
