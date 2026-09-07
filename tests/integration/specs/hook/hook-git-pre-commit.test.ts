@@ -378,12 +378,33 @@ describe('sonar hook git-pre-commit', () => {
         harness.state().withSecretsBinaryInstalled();
         harness.state().withScaScannerBinaryInstalled();
         harness.withAuth(FAKE_SERVER, VALID_TOKEN, TEST_ORG);
-        stageFile(harness.cwd.path, 'index.ts', CLEAN_CONTENT);
+        // A manifest must be staged, or the hook skips before checking for a project key.
+        stageFile(harness.cwd.path, 'package.json', PACKAGE_JSON_CONTENT);
 
         const result = await harness.run('hook git-pre-commit --dependency-risks');
 
         expect(result.exitCode).toBe(0);
         expect(result.stderr).toContain('no SonarQube project resolved for this repo');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'exits 0 without a project-key warning when no dependency manifests changed and no project key resolves',
+      async () => {
+        initGitRepo(harness.cwd.path);
+        harness.state().withSecretsBinaryInstalled();
+        harness.state().withScaScannerBinaryInstalled();
+        harness.withAuth(FAKE_SERVER, VALID_TOKEN, TEST_ORG);
+        stageFile(harness.cwd.path, 'index.ts', CLEAN_CONTENT);
+
+        const result = await harness.run('hook git-pre-commit --dependency-risks');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain(
+          'No dependency manifests changed in this commit',
+        );
+        expect(result.stderr).not.toContain('no SonarQube project resolved for this repo');
       },
       { timeout: 30000 },
     );

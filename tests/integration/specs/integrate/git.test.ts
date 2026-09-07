@@ -745,6 +745,40 @@ describe('integrate git (native hooks)', () => {
   );
 
   it(
+    'declining the dependency-risks prompt installs the hook without dependency-risks scanning',
+    async () => {
+      // sca-scanner-cli is intentionally not pre-installed, so its absence below is conclusive.
+      await setupAuthenticated(harness, { withSecretsBinary: true, scaEnabled: true });
+      initGitRepo(harness);
+      harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=auto-project\n');
+
+      const session = harness.runInteractive('integrate git');
+      await session.accept('Where should SonarQube be integrated?');
+      await session.accept('Install pre-commit code scanning hook?');
+      await session.decline('Install pre-commit dependency-risks scan?');
+      await session.decline('Install pre-push code scanning hook?');
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      const hookContent = readFileSync(
+        join(harness.cwd.path, '.git', 'hooks', 'pre-commit'),
+        'utf-8',
+      );
+      expect(hookContent).not.toContain('--dependency-risks');
+
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const gitIntegration = getInstalledIntegration(state, 'native-git');
+      const feature = gitIntegration.features[0];
+      expect(feature.featureId).toBe('pre-commit-hook');
+      expect(feature.subfeatures?.some((s) => s.featureId === 'pre-commit-dependency-risks')).toBe(
+        false,
+      );
+      expect(state.dependencies.installed.some((d) => d.id === 'sca-scanner-cli')).toBe(false);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'fails with an explicit notice when the user declines every per-feature prompt',
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
