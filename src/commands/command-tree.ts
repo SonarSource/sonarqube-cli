@@ -124,6 +124,8 @@ import {
 } from './quality-gate/status';
 import { remediate, type RemediateOptions } from './remediate';
 import { runMcp } from './run/mcp.ts';
+import { sonarStats, STATS_SINCE_CHOICES, type StatsOptions } from './stats/index.ts';
+import { commitStatsFacts } from './stats-facts.ts';
 import { systemReset, type SystemResetOptions } from './system/reset.ts';
 import { systemStatus, type SystemStatusOptions } from './system/status.ts';
 import { updateVersion, type UpdateVersionOptions } from './update';
@@ -326,6 +328,19 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .authenticatedAction((ctx, file: string | undefined, options: QualityGateStatusOptions) =>
       qualityGateStatus({ ...options, file }, ctx),
     );
+
+  COMMAND_TREE.command('stats')
+    .description("Show this machine's local sonar-secrets/Vortex/dependency-risks activity")
+    .rootHelp({
+      category: 'data',
+    })
+    .addOption(
+      new SonarOption('--since <since>', 'Time window to summarize')
+        .choices(STATS_SINCE_CHOICES)
+        .default('30d'),
+    )
+    .option('--json', 'Machine-readable output')
+    .anonymousAction((ctx, options: StatsOptions) => sonarStats(options, ctx));
 
   // Import repositories from DevOps platforms into SonarQube (hidden while in development)
   COMMAND_TREE.command('import', { hidden: true })
@@ -916,6 +931,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   COMMAND_TREE.hook('postAction', async (_thisCommand, actionCommand) => {
     const command = actionCommand as SonarCommand;
     const handlerFacts = command.invocationContext?.telemetryFacts() ?? [];
+    commitStatsFacts(command.invocationContext?.statsFacts() ?? []);
     await commitTelemetryFacts([...handlerFacts, await buildCommandExecutedFact(command)], {
       agentSessionId: resolveAgentSessionId(capturedAgentSessionId),
       auth: await resolveInvocationAuthForTelemetry(command.invocationContext),
