@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 
@@ -99,13 +100,25 @@ function isValidEntryDto(value: unknown): value is SharedProjectConfigEntryDto {
   return isCloudEntryDto(record) || isServerEntryDto(record);
 }
 
-/** A committed config must not steer writes/mounts outside the directory holding it. */
+/**
+ * A committed config must not steer writes/mounts outside the directory holding it.
+ * Requires the resolved path to actually exist: `canonicalizePath()` falls back to a
+ * purely lexical `resolve()` for a path that doesn't exist yet, which would leave an
+ * existing symlinked intermediate directory unresolved and able to escape `dir`
+ * undetected. Requiring existence sidesteps that gap entirely — a project root that
+ * isn't there is invalid regardless — and there is no legitimate case where the
+ * project root should point at a directory that doesn't exist.
+ */
 export function resolveContainedPath(dir: string, rawPath: string): string | null {
   if (isAbsolute(rawPath)) {
     return null;
   }
   const canonicalDir = canonicalizePath(dir);
-  const resolved = canonicalizePath(join(canonicalDir, rawPath));
+  const lexical = join(canonicalDir, rawPath);
+  if (!existsSync(lexical)) {
+    return null;
+  }
+  const resolved = canonicalizePath(lexical);
   return isAncestorOrSelf(canonicalDir, resolved) ? resolved : null;
 }
 
@@ -152,7 +165,7 @@ export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRep
     const projectRoot = resolveContainedPath(dir, raw.path);
     if (projectRoot === null) {
       logger.debug(
-        `Dropping ${SHARED_PROJECT_CONFIG_FILE_NAME} entry in ${dir}: "path" escapes it`,
+        `Dropping ${SHARED_PROJECT_CONFIG_FILE_NAME} entry in ${dir}: "path" does not exist or escapes it`,
       );
       return null;
     }

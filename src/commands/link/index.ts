@@ -65,29 +65,42 @@ export async function link(
   options: LinkOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
+  if (options.path.trim().length === 0) {
+    throw new CommandFailedError('--path must not be empty.', {
+      remediationHint: "Use '--path .' for a project at the repository root.",
+    });
+  }
+
   const entry = deriveEntryFromAuth(ctx.auth, project, options.path);
 
   const cwd = process.cwd();
   const gitRoot = await resolveGitRepoRoot(cwd);
-  if (!gitRoot) {
-    ctx.console.warn('No git repository found. Writing to the current directory instead.');
-  }
   const targetDir = gitRoot ?? cwd;
 
   const projectRoot = resolveContainedPath(targetDir, options.path);
   if (projectRoot === null) {
-    throw new CommandFailedError(`--path "${options.path}" must stay within ${targetDir}.`, {
-      remediationHint:
-        'Use a path relative to the repository root, e.g. --path . or --path services/api.',
-    });
+    throw new CommandFailedError(
+      `--path "${options.path}" must point to an existing directory inside ${targetDir}.`,
+      {
+        remediationHint:
+          'Use a path relative to the repository root, e.g. --path . or --path services/api.',
+      },
+    );
+  }
+
+  if (!gitRoot) {
+    ctx.console.warn('No git repository found. Writing to the current directory instead.');
   }
 
   await sharedProjectConfigRepository.set(targetDir, entry);
 
   const configPath = join(targetDir, SHARED_PROJECT_CONFIG_FILE_NAME);
-  ctx.console.success(
-    `Linked ${projectRoot} to project ${project}\n` +
-      `Config saved to ${configPath}\n` +
-      `Commit ${SHARED_PROJECT_CONFIG_FILE_NAME} to share it.`,
-  );
+  const summaryLines = [
+    `Linked ${projectRoot} to project ${project}`,
+    `Config saved to ${configPath}`,
+  ];
+  if (gitRoot) {
+    summaryLines.push(`Commit ${SHARED_PROJECT_CONFIG_FILE_NAME} to share it.`);
+  }
+  ctx.console.success(summaryLines.join('\n'));
 }

@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -50,6 +50,7 @@ function writeProjectConfig(dir: string, project: unknown): void {
 describe('SharedProjectConfigFileRepository.load', () => {
   it('resolves a Cloud entry', async () => {
     const dir = tempDir('cloud');
+    mkdirSync(join(dir, 'services/eu'), { recursive: true });
     writeProjectConfig(dir, {
       region: 'eu',
       organization: 'acme',
@@ -89,6 +90,7 @@ describe('SharedProjectConfigFileRepository.load', () => {
 
   it('resolves a Server entry', async () => {
     const dir = tempDir('server');
+    mkdirSync(join(dir, 'services/onprem'), { recursive: true });
     writeProjectConfig(dir, {
       serverUrl: 'https://sonarqube.internal',
       projectKey: 'onprem_key',
@@ -239,6 +241,7 @@ describe('SharedProjectConfigFileRepository.load', () => {
 
   it('accepts a "path" that stays within the directory holding the config', async () => {
     const dir = tempDir('contained');
+    mkdirSync(join(dir, 'b'));
     writeProjectConfig(dir, {
       serverUrl: 'https://sq.example',
       projectKey: 'x',
@@ -251,11 +254,55 @@ describe('SharedProjectConfigFileRepository.load', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('returns null when "path" is empty', async () => {
+    const dir = tempDir('empty-path');
+    writeProjectConfig(dir, { serverUrl: 'https://sq.example', projectKey: 'x', path: '' });
+    try {
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns null when "path" escapes through a symlinked intermediate directory', async () => {
+    const dir = tempDir('escape-symlink');
+    const outside = tempDir('escape-symlink-outside');
+    mkdirSync(join(outside, 'secret'));
+    writeProjectConfig(dir, {
+      serverUrl: 'https://sq.example',
+      projectKey: 'x',
+      // "vendor" is a symlink resolving outside `dir`; "secret" exists under its target.
+      path: 'vendor/secret',
+    });
+    symlinkSync(outside, join(dir, 'vendor'));
+    try {
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('returns null when "path" points to a directory that does not exist', async () => {
+    const dir = tempDir('missing-target');
+    writeProjectConfig(dir, {
+      serverUrl: 'https://sq.example',
+      projectKey: 'x',
+      path: 'services/never-created',
+    });
+    try {
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('SharedProjectConfigFileRepository.set', () => {
   it('writes a Server entry that round-trips through load()', async () => {
     const dir = tempDir('write-server');
+    mkdirSync(join(dir, 'services/onprem'), { recursive: true });
     try {
       const repo = new SharedProjectConfigRepositoryImpl();
       await repo.set(dir, {

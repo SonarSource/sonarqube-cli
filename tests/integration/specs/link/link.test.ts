@@ -20,6 +20,8 @@
 
 // Integration tests for `sonar link`
 
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { SONARCLOUD_URL } from '@/core/config-constants.ts';
@@ -54,9 +56,32 @@ describe('sonar link', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout + result.stderr).toContain('No git repository found');
+    // Nothing to commit outside a repository, so the sharing hint must not appear.
+    expect(result.stdout).not.toContain('Commit .sonar-config.json to share it.');
     expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
       project: { serverUrl: SERVER_URL, projectKey: 'my_project', path: '.' },
     });
+  });
+
+  it('rejects an empty --path without writing anything', async () => {
+    harness.withAuth(SERVER_URL, 'test-token');
+
+    const result = await harness.run('link my_project --path " "');
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain('--path must not be empty');
+    expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
+  });
+
+  it('validates --path before warning about the missing git repository', async () => {
+    harness.withAuth(SERVER_URL, 'test-token');
+
+    const result = await harness.run('link my_project --path ../../../../etc');
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain('must point to an existing directory inside');
+    expect(result.stdout + result.stderr).not.toContain('No git repository found');
+    expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
   });
 
   describe('inside a git repository', () => {
@@ -71,10 +96,10 @@ describe('sonar link', () => {
       const result = await harness.run('link my_project --path .');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('Linked');
-      expect(result.stdout).toContain('to project my_project');
-      expect(result.stdout).toContain('Config saved to');
-      expect(result.stdout).toContain('.sonar-config.json');
+      expect(result.stdout).toContain(`Linked ${harness.cwd.path} to project my_project`);
+      expect(result.stdout).toContain(
+        `Config saved to ${join(harness.cwd.path, '.sonar-config.json')}`,
+      );
       expect(result.stdout).toContain('Commit .sonar-config.json to share it.');
       expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
         project: { serverUrl: SERVER_URL, projectKey: 'my_project', path: '.' },
@@ -94,6 +119,7 @@ describe('sonar link', () => {
 
     it('writes a Cloud entry derived from a Cloud connection', async () => {
       harness.withAuth(SONARCLOUD_URL, 'test-token', 'my-org');
+      harness.cwd.writeFile('services/api/.keep', '');
 
       const result = await harness.run('link my_project --path services/api');
 
@@ -147,7 +173,7 @@ describe('sonar link', () => {
       const result = await harness.run('link my_project --path ../../../../etc');
 
       expect(result.exitCode).not.toBe(0);
-      expect(result.stdout + result.stderr).toContain('must stay within');
+      expect(result.stdout + result.stderr).toContain('must point to an existing directory inside');
       expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
     });
   });

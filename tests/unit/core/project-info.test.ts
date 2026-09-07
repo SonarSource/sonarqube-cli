@@ -429,6 +429,7 @@ describe('discoverProject', () => {
     });
 
     it("resolves projectRoot from the entry's path, which can differ from the invocation directory", async () => {
+      fakeFs.mkdir(join(testDir, 'services/eu'));
       writeSharedProjectConfig(testDir, {
         serverUrl: 'https://shared.example.com',
         projectKey: 'shared-project',
@@ -490,6 +491,7 @@ describe('discoverProject', () => {
 
     it('stops at the first .sonar-config.json found, applying it even though a farther file would otherwise match', async () => {
       const subDir = join(testDir, 'packages', 'api');
+      fakeFs.mkdir(join(subDir, 'unrelated'));
       // Nearer file, unrelated path — must still win over the farther, exactly-matching one.
       writeSharedProjectConfig(subDir, {
         serverUrl: 'https://shared.example.com',
