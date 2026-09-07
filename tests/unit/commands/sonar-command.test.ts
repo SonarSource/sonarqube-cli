@@ -98,9 +98,10 @@ describe('SonarCommand', () => {
     it('requires a console', () => {
       expect(
         () =>
+          // @ts-expect-error console is intentionally omitted to test the runtime guard
           new SonarCommand({
             runtime: { auth: null, isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
-          } as unknown as SonarCommandOptions),
+          }),
       ).toThrow('SonarCommand requires a console');
     });
 
