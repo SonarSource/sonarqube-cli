@@ -18,10 +18,29 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
+
 import type { OnboardCiGitlabOptions } from './types.ts';
 import { GITLAB_DEFAULT_STAGES, TriggerOn } from './types.ts';
 
 const SCANNER_IMAGE = 'sonarsource/sonar-scanner-cli:latest';
+const BASH_EMBEDDED_SINGLE_QUOTE = String.raw`'\''`;
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", BASH_EMBEDDED_SINGLE_QUOTE)}'`;
+}
+
+function yamlQuote(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+function assertSingleLine(field: string, value: string): void {
+  if (/[\r\n]/.test(value)) {
+    throw new CommandFailedError(
+      `Cannot generate GitLab CI configuration: ${field} must be a single line.`,
+    );
+  }
+}
 
 export function generateCiYml(
   projectKey: string,
@@ -32,6 +51,9 @@ export function generateCiYml(
   >,
   isNewFile = false,
 ): string {
+  assertSingleLine('project key', projectKey);
+  assertSingleLine('server URL', serverUrl);
+
   const rules: string[] = [];
   if (options.triggerOn === TriggerOn.Mr || options.triggerOn === TriggerOn.Both) {
     rules.push("    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'");
@@ -59,18 +81,21 @@ export function generateCiYml(
           .map((p) => {
             const eqIdx = p.indexOf('=');
             const key = p.slice(0, eqIdx);
-            const value = p.slice(eqIdx + 1).replaceAll("'", "'\\''");
-            return ` -D${key}='${value}'`;
+            const value = p.slice(eqIdx + 1);
+            assertSingleLine(`scanner property '${key}'`, value);
+            return ` -D${key}=${shellQuote(value)}`;
           })
           .join('')
       : '';
 
+  const scannerCommand = `sonar-scanner -Dsonar.projectKey=${shellQuote(projectKey)}${extraProps}`;
+
   return `${stagesBlock}sonarqube-analysis:
   image: ${SCANNER_IMAGE}${stageLine}
   script:
-    - sonar-scanner -Dsonar.projectKey="${projectKey}"${extraProps}
+    - ${yamlQuote(scannerCommand)}
   variables:
-    SONAR_HOST_URL: "${serverUrl}"
+    SONAR_HOST_URL: ${yamlQuote(serverUrl)}
     GIT_DEPTH: "0"${tokenLine}
   rules:
 ${rules.join('\n')}${allowFailureLine}
