@@ -350,7 +350,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       category: 'core',
     })
     .argument('<project>', 'SonarQube project key')
-    .requiredOption('--path <path>', 'Path to the project root, relative to the repository root')
+    .option('--path <path>', 'Path to the project root, relative to the repository root', '.')
     .authenticatedAction((ctx, project: string, options: LinkOptions) =>
       link(project, options, ctx),
     );

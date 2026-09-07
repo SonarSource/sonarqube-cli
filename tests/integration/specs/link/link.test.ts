@@ -71,7 +71,22 @@ describe('sonar link', () => {
       const result = await harness.run('link my_project --path .');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('Added my_project to .sonar-config.json');
+      expect(result.stdout).toContain('Linked');
+      expect(result.stdout).toContain('to project my_project');
+      expect(result.stdout).toContain('Config saved to');
+      expect(result.stdout).toContain('.sonar-config.json');
+      expect(result.stdout).toContain('Commit .sonar-config.json to share it.');
+      expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+        project: { serverUrl: SERVER_URL, projectKey: 'my_project', path: '.' },
+      });
+    });
+
+    it('defaults --path to the repository root when omitted', async () => {
+      harness.withAuth(SERVER_URL, 'test-token');
+
+      const result = await harness.run('link my_project');
+
+      expect(result.exitCode).toBe(0);
       expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
         project: { serverUrl: SERVER_URL, projectKey: 'my_project', path: '.' },
       });

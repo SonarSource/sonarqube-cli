@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { join } from 'node:path';
+
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -72,7 +74,8 @@ export async function link(
   }
   const targetDir = gitRoot ?? cwd;
 
-  if (resolveContainedPath(targetDir, options.path) === null) {
+  const projectRoot = resolveContainedPath(targetDir, options.path);
+  if (projectRoot === null) {
     throw new CommandFailedError(`--path "${options.path}" must stay within ${targetDir}.`, {
       remediationHint:
         'Use a path relative to the repository root, e.g. --path . or --path services/api.',
@@ -80,5 +83,11 @@ export async function link(
   }
 
   await sharedProjectConfigRepository.set(targetDir, entry);
-  ctx.console.success(`Added ${project} to ${SHARED_PROJECT_CONFIG_FILE_NAME}.`);
+
+  const configPath = join(targetDir, SHARED_PROJECT_CONFIG_FILE_NAME);
+  ctx.console.success(
+    `Linked ${projectRoot} to project ${project}\n` +
+      `Config saved to ${configPath}\n` +
+      `Commit ${SHARED_PROJECT_CONFIG_FILE_NAME} to share it.`,
+  );
 }
