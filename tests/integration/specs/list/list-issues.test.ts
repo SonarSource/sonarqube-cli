@@ -248,16 +248,32 @@ describe('list issues — argument validation', () => {
     { timeout: 15000 },
   );
 
-  it(
-    'exits with code 2 when --page-size is greater than 500',
-    async () => {
+  it.each([
+    [
+      '--page-size is greater than 500',
+      'list issues --project my-project --page-size 501',
+      'Invalid --page-size',
+    ],
+    [
+      '--severities is not a recognised value',
+      'list issues --project my-project --severities UNKNOWN',
+      'Invalid severity',
+    ],
+    [
+      '--statuses is not a recognised value',
+      'list issues --project my-project --statuses UNKNOWN',
+      'Invalid status(es)',
+    ],
+  ])(
+    'exits with code 2 when %s',
+    async (_, command, expectedError) => {
       // Validation runs inside the handler — auth must pass first
       harness.withAuth('http://localhost:19999', 'fake-token');
 
-      const result = await harness.run('list issues --project my-project --page-size 501');
+      const result = await harness.run(command);
 
       expect(result.exitCode).toBe(2);
-      expect(result.stdout + result.stderr).toContain('Invalid --page-size');
+      expect(result.stdout + result.stderr).toContain(expectedError);
     },
     { timeout: 15000 },
   );
@@ -274,19 +290,6 @@ describe('list issues — argument validation', () => {
       expect(result.stdout + result.stderr).toContain(
         "error: option '--format <format>' argument 'xml' is invalid. Allowed choices are json, toon, table, csv.",
       );
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'exits with code 2 when --severities is not a recognised value',
-    async () => {
-      harness.withAuth('http://localhost:19999', 'fake-token');
-
-      const result = await harness.run('list issues --project my-project --severities UNKNOWN');
-
-      expect(result.exitCode).toBe(2);
-      expect(result.stdout + result.stderr).toContain('Invalid severity');
     },
     { timeout: 15000 },
   );
@@ -398,20 +401,6 @@ describe('list issues — argument validation', () => {
       const issuesReq = recorded.find((r) => r.path === '/api/issues/search');
       expect(issuesReq?.query.severities).toBe('MAJOR');
       expect(result.stdout).toContain('"total": 1');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'exits with code 2 when --statuses is not a recognised value',
-    async () => {
-      // Validation runs inside the handler — auth must pass first
-      harness.withAuth('http://localhost:19999', 'fake-token');
-
-      const result = await harness.run('list issues --project my-project --statuses UNKNOWN');
-
-      expect(result.exitCode).toBe(2);
-      expect(result.stdout + result.stderr).toContain('Invalid status(es)');
     },
     { timeout: 15000 },
   );

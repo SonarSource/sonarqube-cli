@@ -156,56 +156,25 @@ describe('run mcp', () => {
     { timeout: 15000 },
   );
 
-  it(
-    'passes SONARQUBE_DEBUG_ENABLED=true to docker when --debug is set',
-    async () => {
+  it.each([
+    ['--debug', '-e SONARQUBE_DEBUG_ENABLED', 'ENV_DEBUG_ENABLED=true'],
+    ['--read-only', '-e SONARQUBE_READ_ONLY', 'ENV_READ_ONLY=true'],
+    ['--toolsets issues,rules', '-e SONARQUBE_TOOLSETS', 'ENV_TOOLSETS=issues,rules'],
+    ['--toolsets cag,vortex,issues', '-e SONARQUBE_TOOLSETS', 'ENV_TOOLSETS=cag,vortex,issues'],
+  ])(
+    'passes correct env var to docker for: %s',
+    async (flag, envFlag, envValue) => {
       const server = await harness.newFakeServer().withAuthToken('test-token').start();
       harness.withAuth(server.baseUrl(), 'test-token');
       const fakeBinDir = setupFakeDocker();
 
-      const result = await harness.run('run mcp --debug', {
+      const result = await harness.run(`run mcp ${flag}`, {
         extraEnv: { PATH: `${fakeBinDir}${PATH_SEP}${process.env.PATH ?? ''}` },
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('-e SONARQUBE_DEBUG_ENABLED');
-      expect(result.stdout).toContain('ENV_DEBUG_ENABLED=true');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'passes SONARQUBE_READ_ONLY=true to docker when --read-only is set',
-    async () => {
-      const server = await harness.newFakeServer().withAuthToken('test-token').start();
-      harness.withAuth(server.baseUrl(), 'test-token');
-      const fakeBinDir = setupFakeDocker();
-
-      const result = await harness.run('run mcp --read-only', {
-        extraEnv: { PATH: `${fakeBinDir}${PATH_SEP}${process.env.PATH ?? ''}` },
-      });
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('-e SONARQUBE_READ_ONLY');
-      expect(result.stdout).toContain('ENV_READ_ONLY=true');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'passes SONARQUBE_TOOLSETS to docker when --toolsets is set',
-    async () => {
-      const server = await harness.newFakeServer().withAuthToken('test-token').start();
-      harness.withAuth(server.baseUrl(), 'test-token');
-      const fakeBinDir = setupFakeDocker();
-
-      const result = await harness.run('run mcp --toolsets issues,rules', {
-        extraEnv: { PATH: `${fakeBinDir}${PATH_SEP}${process.env.PATH ?? ''}` },
-      });
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('-e SONARQUBE_TOOLSETS');
-      expect(result.stdout).toContain('ENV_TOOLSETS=issues,rules');
+      expect(result.stdout).toContain(envFlag);
+      expect(result.stdout).toContain(envValue);
     },
     { timeout: 15000 },
   );
@@ -231,24 +200,6 @@ describe('run mcp', () => {
       );
       expect(result.stdout).not.toContain('cag');
       expect(result.stdout).not.toContain('vortex');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'passes cag/vortex through when explicitly included in --toolsets',
-    async () => {
-      const server = await harness.newFakeServer().withAuthToken('test-token').start();
-      harness.withAuth(server.baseUrl(), 'test-token');
-      const fakeBinDir = setupFakeDocker();
-
-      const result = await harness.run('run mcp --toolsets cag,vortex,issues', {
-        extraEnv: { PATH: `${fakeBinDir}${PATH_SEP}${process.env.PATH ?? ''}` },
-      });
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('-e SONARQUBE_TOOLSETS');
-      expect(result.stdout).toContain('ENV_TOOLSETS=cag,vortex,issues');
     },
     { timeout: 15000 },
   );
