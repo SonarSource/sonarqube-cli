@@ -107,6 +107,32 @@ describe('auth login', () => {
   );
 
   it(
+    'ignores an invalid browser callback and accepts a valid manual token',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-login-token').start();
+      const session = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
+        extraEnv: { CI: 'false' },
+        browserToken: 'invalid-browser-token',
+      });
+
+      await session.accept('Connect to:');
+      await session.waitText('Waiting for authorization');
+      session.write('my-login-token');
+      session.keyEnter();
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Authentication successful');
+      expect(
+        server
+          .getRecordedRequests()
+          .filter((request) => request.path === '/api/authentication/validate').length,
+      ).toBeGreaterThanOrEqual(2);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'persists tokenName returned by the browser auth callback',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('browser-login-token').start();

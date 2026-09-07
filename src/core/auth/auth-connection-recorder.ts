@@ -67,6 +67,10 @@ export async function recordConnectionFromAuth(
     seedConnection &&
     !needsIdentityEnrichment(seedIdentity, auth.connectionType, seedConnection)
   ) {
+    if (options.envOnly === true && seedConnection.envOnly !== true) {
+      seedConnection.envOnly = true;
+      saveState(state);
+    }
     return seedConnection;
   }
 
