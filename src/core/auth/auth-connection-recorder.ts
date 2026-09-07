@@ -21,6 +21,7 @@
 // Records a resolved auth into state.auth.connections like `sonar auth login` does, minus saveToken().
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { getToken } from '@/core/host/keychain.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 
 import type { AuthConnection } from '../state/state.ts';
@@ -56,13 +57,18 @@ export async function recordConnectionFromAuth(
   const seedConnection =
     active !== undefined && authMatchesConnection(auth, active) ? active : undefined;
   const seedIdentity = identityFromConnection(seedConnection);
+  // Logout treats envOnly as already logged out, so never stamp it on a
+  // keychain-backed (login-created) connection — that would leave the stored
+  // token behind, unrevoked.
+  const envOnly =
+    options.envOnly === true && (await getToken(auth.serverUrl, auth.orgKey)) === null;
 
   if (
     !options.force &&
     seedConnection &&
     !needsIdentityEnrichment(seedIdentity, auth.connectionType, seedConnection)
   ) {
-    if (options.envOnly === true && seedConnection.envOnly !== true) {
+    if (envOnly && seedConnection.envOnly !== true) {
       seedConnection.envOnly = true;
       saveState(state);
     }
@@ -73,7 +79,7 @@ export async function recordConnectionFromAuth(
     orgKey: auth.orgKey,
     region: cloudRegionFromUrl(auth.serverUrl),
     tokenName: options.tokenName,
-    envOnly: options.envOnly,
+    envOnly,
   });
 
   const identity = await resolveTelemetryIdentity(auth, seedIdentity);

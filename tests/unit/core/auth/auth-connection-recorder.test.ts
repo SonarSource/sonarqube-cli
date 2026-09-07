@@ -36,6 +36,7 @@ import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
 
+import { createKeychainTestHandle } from '../host/keychain-test-handle.ts';
 import { mockIdentityGetSafe } from '../telemetry/identity-api-mock.ts';
 
 function serverAuth(token: string, serverUrl = 'https://sq.example.com'): ResolvedAuth {
@@ -47,13 +48,16 @@ function cloudAuth(token: string, orgKey = 'my-org'): ResolvedAuth {
 }
 
 let testDir: string;
+const keychain = createKeychainTestHandle();
 
 beforeEach(() => {
   testDir = mkdtempSync(join(tmpdir(), 'auth-connection-recorder-test-'));
   process.env[ENV_SONAR_USER_HOME] = testDir;
+  keychain.setup();
 });
 
 afterEach(() => {
+  keychain.teardown();
   delete process.env[ENV_SONAR_USER_HOME];
   rmSync(testDir, { recursive: true, force: true });
 });
@@ -191,6 +195,39 @@ describe('recordConnectionFromAuth', () => {
     expect(connection.envOnly).toBe(true);
     expect(connection.sqsInstallationId).toBe('sqs-existing');
     expect(getSafeSpy).not.toHaveBeenCalled();
+    getSafeSpy.mockRestore();
+  });
+
+  it('does not stamp envOnly on a matching complete connection that has a keychain token', async () => {
+    const state = loadState();
+    const existing = addOrUpdateConnection(state, 'https://sq.example.com', 'on-premise');
+    existing.userUuid = null;
+    existing.sqsInstallationId = 'sqs-existing';
+    saveState(state);
+    await keychain.seedToken('https://sq.example.com', 'login-token');
+    const getSafeSpy = mockIdentityGetSafe();
+
+    const connection = await recordConnectionFromAuth(serverAuth('t7-keychain'), { envOnly: true });
+
+    expect(connection.envOnly).toBeUndefined();
+    expect(connection.sqsInstallationId).toBe('sqs-existing');
+    expect(getSafeSpy).not.toHaveBeenCalled();
+    getSafeSpy.mockRestore();
+  });
+
+  it('does not stamp envOnly on a keychain-backed connection that still needs identity', async () => {
+    const state = loadState();
+    addOrUpdateConnection(state, 'https://sq.example.com', 'on-premise');
+    saveState(state);
+    await keychain.seedToken('https://sq.example.com', 'login-token');
+    const getSafeSpy = mockIdentityGetSafe({ status: [{ ok: true, id: 'sqs-enriched' }] });
+
+    const connection = await recordConnectionFromAuth(serverAuth('t-env-keychain'), {
+      envOnly: true,
+    });
+
+    expect(connection.envOnly).toBeUndefined();
+    expect(connection.sqsInstallationId).toBe('sqs-enriched');
     getSafeSpy.mockRestore();
   });
 

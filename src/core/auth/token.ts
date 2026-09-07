@@ -73,6 +73,30 @@ export async function checkTokenStatus(
   }
 }
 
+/** Throws when a token check did not confirm the token is valid. */
+export function assertTokenCheckSucceeded(validation: TokenCheckResult, serverURL: string): void {
+  switch (validation.status) {
+    case 'valid':
+      return;
+    case 'unreachable':
+      throw new CommandFailedError(
+        `Could not reach ${serverURL} to validate the token: ${validation.errorMessage ?? 'unknown error'}`,
+        {
+          remediationHint:
+            'Check your network connection and the server status, then rerun the command.',
+        },
+      );
+    case 'invalid':
+      throw new CommandFailedError('The provided token was rejected by the SonarQube server.', {
+        remediationHint: 'Generate a new user token and try again.',
+      });
+    default: {
+      const _exhaustive: never = validation.status;
+      throw new CommandFailedError(`Unexpected token check status: ${String(_exhaustive)}`);
+    }
+  }
+}
+
 /**
  * Parse the JSON body sent by the browser OAuth callback.
  * Returns the token and, when present, the server-generated token name.
@@ -252,11 +276,17 @@ export async function generateTokenViaBrowser(
   openBrowserFn: (url: string) => Promise<void> = (url) => openBrowserWithFallback(url, console),
 ): Promise<BrowserAuthResult> {
   let resolveToken: ((result: BrowserAuthResult) => void) | null = null;
+  let rejectToken: ((err: Error) => void) | null = null;
   const callbackState: { validatedToken?: string } = {};
 
-  const tokenPromise = new Promise<BrowserAuthResult>((resolve) => {
+  const tokenPromise = new Promise<BrowserAuthResult>((resolve, reject) => {
     resolveToken = resolve;
+    rejectToken = reject;
   });
+  // The callback can reject before this function reaches `await tokenPromise`
+  // (CI delivers the POST as soon as the URL is printed). Absorb that so it
+  // is not an unhandled rejection; the await below still observes the error.
+  void tokenPromise.catch(() => undefined);
 
   const serverVersion = isSonarQubeCloud(serverURL)
     ? undefined
@@ -266,10 +296,20 @@ export async function generateTokenViaBrowser(
   const serverOrigin = new URL(serverURL).origin;
   const server = await startLoopbackServer(
     createRequestHandler(async (token: string, tokenName?: string) => {
-      const isValid = (await checkTokenStatus(serverURL, token)).status === 'valid';
+      const validation = await checkTokenStatus(serverURL, token);
+      const isValid = validation.status === 'valid';
       if (isValid) {
         callbackState.validatedToken = token;
         resolveToken?.({ token, tokenName });
+      } else if (process.env.CI === 'true') {
+        logger.warn(
+          `Auth callback token rejected: ${validation.status}${
+            validation.errorMessage ? ` (${validation.errorMessage})` : ''
+          }`,
+        );
+        rejectToken?.(
+          new CommandFailedError('The token delivered by the browser could not be validated.'),
+        );
       }
       return isValid;
     }),
@@ -300,11 +340,7 @@ export async function generateTokenViaBrowser(
 
   if (callbackState.validatedToken !== authResult.token) {
     const validation = await checkTokenStatus(serverURL, authResult.token);
-    if (validation.status !== 'valid') {
-      throw new CommandFailedError(
-        'The provided token could not be validated by the SonarQube server.',
-      );
-    }
+    assertTokenCheckSucceeded(validation, serverURL);
   }
 
   return authResult;

@@ -133,6 +133,21 @@ describe('auth login', () => {
   );
 
   it(
+    'exits with code 1 in CI when the browser callback token is invalid',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-login-token').start();
+
+      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+        browserToken: 'invalid-browser-token',
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('The token delivered by the browser could not be validated.');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'persists tokenName returned by the browser auth callback',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('browser-login-token').start();
