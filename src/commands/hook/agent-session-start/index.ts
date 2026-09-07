@@ -28,11 +28,12 @@ import {
   isContextAugmentationSkipped,
   printSessionStartContext,
 } from '@/commands/integrate/_common/context-augmentation.ts';
-import { isSonarQubeCloud, resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
-import { SonarQubeClient } from '@/core/server/client.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
+import { ScaClient } from '@/core/server/sca.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
@@ -136,13 +137,6 @@ async function resolveSessionStartContext(
 }
 
 async function isScaEnabled(auth: ResolvedAuth): Promise<boolean> {
-  try {
-    return await new SonarQubeClient(auth.serverUrl, auth.token).checkScaEnabled(
-      isSonarQubeCloud(auth.serverUrl) ? 'cloud' : 'on-premise',
-      auth.orgKey,
-    );
-  } catch (err) {
-    logger.debug(`Session start context: SCA availability check failed: ${(err as Error).message}`);
-    return false;
-  }
+  const client = new ScaClient(new SonarHttpClient(auth.serverUrl, auth.token));
+  return client.checkScaEnabled(auth.connectionType, auth.orgKey);
 }
