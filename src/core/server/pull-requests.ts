@@ -18,30 +18,24 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { QualityGateConditionSummary } from './condition-summary.ts';
-import type { QualityGateScope } from './scope.ts';
-import type { QualityGateVerdict } from './verdict.ts';
+// SonarQube Project Pull Requests API wrapper
 
-export interface QualityGateJsonViewModel {
-  verdict: QualityGateVerdict;
-  project: string;
-  scope: QualityGateScope;
-  conditions: QualityGateConditionSummary[];
-}
+import { type SonarHttpClient } from './http-client.ts';
+import type { ProjectPullRequest, ProjectPullRequestsResponse } from './types.ts';
 
-export function formatQualityGateJson(vm: QualityGateJsonViewModel): string {
-  const isPullRequest = vm.scope.kind === 'pullRequest' || vm.scope.kind === 'pullRequestAuto';
-  return JSON.stringify(
-    {
-      qualityGate: {
-        status: vm.verdict,
-        project: vm.project,
-        branch: isPullRequest ? undefined : vm.scope.value,
-        pullRequest: isPullRequest ? vm.scope.value : undefined,
-        conditions: vm.conditions,
-      },
-    },
-    null,
-    2,
-  );
+export class PullRequestsClient {
+  private readonly client: SonarHttpClient;
+
+  constructor(client: SonarHttpClient) {
+    this.client = client;
+  }
+
+  // Returns null on a 404 (edition without PR analysis) instead of throwing.
+  async listPullRequests(projectKey: string): Promise<ProjectPullRequest[] | null> {
+    const result = await this.client.getOrNotFound<ProjectPullRequestsResponse>(
+      '/api/project_pull_requests/list',
+      { project: projectKey },
+    );
+    return result?.pullRequests ?? null;
+  }
 }
