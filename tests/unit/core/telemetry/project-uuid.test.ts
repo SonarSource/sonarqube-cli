@@ -376,7 +376,7 @@ describe('noteProject() / currentProjectUuid()', () => {
     getSafeSpy.mockRestore();
   });
 
-  it('never rejects when resolution fails, so storeEvent cannot be broken by it', async () => {
+  it('never rejects when resolution fails, so CliCommandExecuted cannot be broken by it', async () => {
     const getSafeSpy = spyOn(
       (await import('@/core/server/http-client.ts')).SonarHttpClient.prototype,
       'getSafe',
