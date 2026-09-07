@@ -24,7 +24,6 @@
 
 import { resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import logger from '@/core/observability/logger.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
@@ -83,20 +82,12 @@ export async function gitPreCommit(
   await runCommitSecretsStage(stagedFiles, auth, ctx);
 
   if (options.dependencyRisks) {
-    if (projectKey) {
-      await runDepRisksStage({
-        project: projectKey,
-        changedFiles: stagedFiles,
-        auth,
-        ctx,
-      });
-    } else {
-      logger.warn('Dependency-risks hook: no project key resolved, skipping.');
-      ctx.console.warn(
-        'Dependency-risks scan skipped: no SonarQube project resolved for this repo; ' +
-          "commit not blocked. Re-run 'sonar integrate git -p <project>' to set one explicitly.",
-      );
-    }
+    await runDepRisksStage({
+      project: projectKey,
+      changedFiles: stagedFiles,
+      auth,
+      ctx,
+    });
   }
 }
 
