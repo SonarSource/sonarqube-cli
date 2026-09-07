@@ -590,11 +590,14 @@ describe('issuesSearchCommand', () => {
   describe('table format', () => {
     async function printTable(issues: SonarQubeIssue[]): Promise<string> {
       const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockResolvedValue({
-        issues,
-        total: issues.length,
-        p: 1,
-        ps: 500,
-        paging: { pageIndex: 1, pageSize: 500, total: issues.length },
+        ok: true,
+        value: {
+          issues,
+          total: issues.length,
+          p: 1,
+          ps: 500,
+          paging: { pageIndex: 1, pageSize: 500, total: issues.length },
+        },
       });
       try {
         await listIssues(

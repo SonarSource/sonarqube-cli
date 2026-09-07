@@ -22,6 +22,7 @@
 
 import logger from '../observability/logger.ts';
 import { unwrap } from '../result.ts';
+import { isCriticalFailure } from './errors.ts';
 import type { SonarHttpClient } from './http-client.ts';
 
 export interface Organization {
@@ -89,6 +90,9 @@ export class OrganizationsClient {
       this.client.apiHostFor(endpoint),
     );
     if (!result.ok) {
+      if (isCriticalFailure(result.error)) {
+        throw result.error;
+      }
       return null;
     }
     return result.value[0] ?? null;
@@ -193,6 +197,9 @@ export class OrganizationsClient {
       this.client.apiHostFor(endpoint),
     );
     if (!result.ok) {
+      if (isCriticalFailure(result.error)) {
+        throw result.error;
+      }
       logger.debug(`Failed to check '${entitlement}' billing entitlement`, result.error);
       return false;
     }

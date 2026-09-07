@@ -21,6 +21,7 @@
 // SonarQube Components API wrapper — project existence, identity and project-scoped settings.
 
 import { unwrap } from '../result.ts';
+import { isCriticalFailure } from './errors.ts';
 import type { SonarHttpClient } from './http-client.ts';
 import type { SettingsValue } from './settings-value.ts';
 
@@ -36,6 +37,9 @@ export class ComponentsClient {
    */
   async checkComponent(projectKey: string): Promise<boolean> {
     const result = await this.client.get('/api/components/show', { component: projectKey });
+    if (!result.ok && isCriticalFailure(result.error)) {
+      throw result.error;
+    }
     return result.ok;
   }
 
@@ -60,7 +64,13 @@ export class ComponentsClient {
     const result = await this.client.get<{ id: string }>('/api/navigation/component', {
       component: componentKey,
     });
-    return result.ok ? result.value.id : null;
+    if (!result.ok) {
+      if (isCriticalFailure(result.error)) {
+        throw result.error;
+      }
+      return null;
+    }
+    return result.value.id;
   }
 
   async hasProjectBeenAnalyzed(projectKey: string): Promise<boolean> {
