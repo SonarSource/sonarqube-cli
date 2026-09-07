@@ -29,8 +29,10 @@ import {
 import { TriggerOn } from '@/commands/admin/onboard-ci/gitlab/types.ts';
 
 interface GeneratedCiConfig {
+  stages?: string[];
   'sonarqube-analysis': {
     script: string[];
+    stage?: string;
     variables: {
       SONAR_HOST_URL: string;
     };
@@ -59,7 +61,7 @@ describe('generateCiYml', () => {
       ...base,
       stage: 'quality',
     });
-    expect(yml).toContain('  stage: quality');
+    expect(yml).toContain("  stage: 'quality'");
   });
 
   it('emits a stages block for a custom stage when creating a new file', () => {
@@ -69,8 +71,8 @@ describe('generateCiYml', () => {
       { ...base, stage: 'security' },
       true,
     );
-    expect(yml).toMatch(/^stages:\n  - security\n/);
-    expect(yml).toContain('  stage: security');
+    expect(yml).toMatch(/^stages:\n  - 'security'\n/);
+    expect(yml).toContain("  stage: 'security'");
   });
 
   it('does not emit a stages block for a GitLab default stage even when creating a new file', () => {
@@ -93,7 +95,7 @@ describe('generateCiYml', () => {
       false,
     );
     expect(yml).not.toContain('stages:');
-    expect(yml).toContain('  stage: security');
+    expect(yml).toContain("  stage: 'security'");
   });
 
   it('includes both MR and main branch rules for trigger-on both', () => {
@@ -218,6 +220,29 @@ describe('generateCiYml', () => {
       }),
     )['sonarqube-analysis'];
     expect(config.script[0]).toContain(String.raw`-Dsonar.projectName='It'\''s a test'`);
+  });
+
+  it('rejects invalid scanner property keys', () => {
+    expect(() =>
+      generateCiYml('my_project', 'https://sonar.example.com', {
+        ...base,
+        scannerProperty: ['sonar.foo; rm -rf /=x'],
+      }),
+    ).toThrow("invalid scanner property key 'sonar.foo; rm -rf /'");
+  });
+
+  it('yaml-quotes stage names that would otherwise be parsed as booleans', () => {
+    const yml = generateCiYml(
+      'my_project',
+      'https://sonar.example.com',
+      { ...base, stage: 'no' },
+      true,
+    );
+    const config = parseGeneratedCiYml(yml);
+    expect(yml).toContain("stage: 'no'");
+    expect(yml).toMatch(/^stages:\n  - 'no'\n/);
+    expect(config.stages).toEqual(['no']);
+    expect(config['sonarqube-analysis'].stage).toBe('no');
   });
 });
 

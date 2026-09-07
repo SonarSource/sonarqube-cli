@@ -25,6 +25,7 @@ import { GITLAB_DEFAULT_STAGES, TriggerOn } from './types.ts';
 
 const SCANNER_IMAGE = 'sonarsource/sonar-scanner-cli:latest';
 const BASH_EMBEDDED_SINGLE_QUOTE = String.raw`'\''`;
+const SCANNER_PROPERTY_KEY_RE = /^[a-zA-Z][a-zA-Z0-9._-]*$/;
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", BASH_EMBEDDED_SINGLE_QUOTE)}'`;
@@ -62,7 +63,7 @@ export function generateCiYml(
     rules.push('    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH');
   }
 
-  const stageLine = options.stage != null ? `\n  stage: ${options.stage}` : '';
+  const stageLine = options.stage != null ? `\n  stage: ${yamlQuote(options.stage)}` : '';
   const allowFailureLine = options.allowFailure ? '\n  allow_failure: true' : '';
 
   const tokenLine =
@@ -72,7 +73,7 @@ export function generateCiYml(
 
   const stagesBlock =
     options.stage && isNewFile && !GITLAB_DEFAULT_STAGES.has(options.stage)
-      ? `stages:\n  - ${options.stage}\n\n`
+      ? `stages:\n  - ${yamlQuote(options.stage)}\n\n`
       : '';
 
   const extraProps =
@@ -82,6 +83,11 @@ export function generateCiYml(
             const eqIdx = p.indexOf('=');
             const key = p.slice(0, eqIdx);
             const value = p.slice(eqIdx + 1);
+            if (!SCANNER_PROPERTY_KEY_RE.test(key)) {
+              throw new CommandFailedError(
+                `Cannot generate GitLab CI configuration: invalid scanner property key '${key}'.`,
+              );
+            }
             assertSingleLine(`scanner property '${key}'`, value);
             return ` -D${key}=${shellQuote(value)}`;
           })
