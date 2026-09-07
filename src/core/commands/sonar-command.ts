@@ -206,6 +206,7 @@ class SonarHelp extends Help {
  *  - createOption()        returns {@link SonarOption}; stage via addOption(), not .option()
  *  - addOption()           accepts {@link SonarOption} only; omits Alpha/Private Beta options
  *                          the caller is not entitled to use
+ *  - commandAndSubcommand() top-level command + remainder (passthrough override when set)
  */
 export class SonarCommand extends Command {
   // Valid because Commander declares `options` as readonly (covariant), so we can narrow Option to SonarOption.
@@ -217,6 +218,7 @@ export class SonarCommand extends Command {
   private readonly _runtime: CliRuntime;
   private readonly _console: Console;
   private _invocationContext: CommandInvocationContext | undefined;
+  private _passthroughSubcommand?: string | null;
 
   /**
    * `updateNotifier` / `runtime` default so the root command owns the
@@ -312,6 +314,42 @@ export class SonarCommand extends Command {
    */
   get invocationContext(): CommandInvocationContext | undefined {
     return this._invocationContext;
+  }
+
+  /**
+   * Top-level command and remaining path, as recorded in CliCommandExecuted.
+   *
+   * `command` is the first segment after the program name (`auth` in
+   * `sonar auth login`). `subcommand` is the remainder (`login`), or a
+   * passthrough override when {@link setPassthroughSubcommand} was called
+   * (including an explicit `null`).
+   */
+  commandAndSubcommand(): { command: string | undefined; subcommand: string | null } {
+    const names: string[] = [];
+    if (this.parent !== null) {
+      names.unshift(this.name());
+      for (let ancestor = this.parent; ancestor.parent !== null; ancestor = ancestor.parent) {
+        names.unshift(ancestor.name());
+      }
+    }
+    const derivedSubcommand = names.length > 1 ? names.slice(1).join(' ') : null;
+    let subcommand = derivedSubcommand;
+    // Explicit null means "no remainder"; ?? would collapse that to the derived path.
+    if (this._passthroughSubcommand !== undefined) {
+      subcommand = this._passthroughSubcommand;
+    }
+    return { command: names[0], subcommand };
+  }
+
+  /**
+   * Override the remaining path used by {@link commandAndSubcommand}.
+   * Passthrough commands (e.g. `sonar context`) stash the forwarded action here
+   * because it is not a Commander subcommand. Pass `null` to record no
+   * subcommand even when the command chain has children.
+   */
+  setPassthroughSubcommand(subcommand: string | null): this {
+    this._passthroughSubcommand = subcommand;
+    return this;
   }
 
   /**

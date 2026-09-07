@@ -18,12 +18,80 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { TelemetryFact } from '@/core/commands/invocation-context.ts';
+import type { SonarCommand } from '@/core/commands/sonar-command.ts';
+import { DISTRIBUTION, type Distribution } from '@/core/host/distribution.ts';
+
 import { tryLoadState } from '../state/state-manager.ts';
 import { resolveTelemetryEgress } from './egress.ts';
 import { isTelemetryEnabled } from './enabled.ts';
-import { flushTelemetryEvents } from './telemetry-events.ts';
+import { currentProjectUuid } from './project-uuid.ts';
+import {
+  emitTelemetryEvent,
+  flushTelemetryEvents,
+  type IdentityEmitOptions,
+} from './telemetry-events.ts';
 
 export const TELEMETRY_FLUSH_MODE_ENV = '__SQ_CLI_TELEMETRY_FLUSH__';
+
+export const CLI_COMMAND_EXECUTED = 'CliCommandExecuted';
+
+/** Domain payload for CliCommandExecuted (identity is filled at drain time). */
+export type CommandExecutedPayload = {
+  command: string | undefined;
+  subcommand: string | null;
+  result: 'success' | 'failure';
+  distribution: Distribution;
+  project_uuid: string | null;
+};
+
+/**
+ * Drain recorded telemetry facts through the generic telemetry emit, then spawn
+ * the detached flush worker. Identity / invocation correlation are applied in
+ * core; emit failures are swallowed.
+ *
+ * No-ops when called from within a flush worker (prevents infinite recursion).
+ */
+export async function commitTelemetryFacts(
+  facts: readonly TelemetryFact[],
+  options?: IdentityEmitOptions,
+): Promise<void> {
+  if (process.env[TELEMETRY_FLUSH_MODE_ENV]) return;
+
+  for (const fact of facts) {
+    try {
+      await emitTelemetryEvent(fact.name, fact.payload as object, {
+        eventTimestampMs: fact.timestamp,
+        agentSessionId: options?.agentSessionId,
+        auth: fact.auth,
+      });
+    } catch {
+      // Telemetry is strictly fire-and-forget.
+    }
+  }
+
+  scheduleTelemetryFlush();
+}
+
+/**
+ * Build a CliCommandExecuted fact for a finished command.
+ *
+ * `result` is derived from `process.exitCode` (`success` when 0 or unset).
+ * `project_uuid` is resolved here (async, never rejects). Identity is applied at commit.
+ * Command/subcommand come from {@link SonarCommand.commandAndSubcommand}.
+ */
+export async function buildCommandExecutedFact(
+  command: SonarCommand,
+): Promise<TelemetryFact<CommandExecutedPayload>> {
+  const { command: commandName, subcommand } = command.commandAndSubcommand();
+  return new TelemetryFact(CLI_COMMAND_EXECUTED, {
+    command: commandName,
+    subcommand,
+    result: (process.exitCode ?? 0) === 0 ? 'success' : 'failure',
+    distribution: DISTRIBUTION,
+    project_uuid: await currentProjectUuid(),
+  });
+}
 
 /**
  * Spawn the detached flush worker when consent and egress allow it.

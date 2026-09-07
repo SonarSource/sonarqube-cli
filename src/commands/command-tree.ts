@@ -40,9 +40,15 @@ import { initSentry } from '@/core/observability/sentry.ts';
 import { GENERIC_HTTP_METHODS } from '@/core/server/http-client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { tryLoadState } from '@/core/state/state-repository.ts';
-import { flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
+import {
+  buildCommandExecutedFact,
+  commitTelemetryFacts,
+  flushTelemetry,
+  TELEMETRY_FLUSH_MODE_ENV,
+} from '@/core/telemetry';
 import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
 import type { Console } from '@/core/ui/console.ts';
+import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
 
 import { version as VERSION } from '../../package.json';
 import {
@@ -76,13 +82,8 @@ import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './api/api.
 import { authLogin, type AuthLoginOptions } from './auth/login.ts';
 import { authLogout } from './auth/logout.ts';
 import { authStatus } from './auth/status.ts';
-import {
-  buildCommandExecutedFact,
-  setPassthroughSubcommand,
-} from './command-executed-telemetry.ts';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
-import { isTableFormatOption } from './formatting-options.ts';
 import { agentPostToolUse } from './hook/agent-post-tool-use.ts';
 import { agentPromptSubmit } from './hook/agent-prompt-submit.ts';
 import { antigravityPreToolUse } from './hook/antigravity-pre-tool-use.ts';
@@ -126,10 +127,18 @@ import { remediate, type RemediateOptions } from './remediate';
 import { runMcp } from './run/mcp.ts';
 import { systemReset, type SystemResetOptions } from './system/reset.ts';
 import { systemStatus, type SystemStatusOptions } from './system/status.ts';
-import { commitTelemetryFacts } from './telemetry-facts.ts';
 import { updateVersion, type UpdateVersionOptions } from './update';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
+
+/**
+ * Condition for commands with a `--format` option: only notify for `table`,
+ * since JSON (and other machine-readable formats) stdout must stay pure.
+ */
+const isTableFormatOption: UpdateNotificationCondition = (opts) => {
+  const format = typeof opts.format === 'string' ? opts.format : 'json';
+  return format.toLowerCase() === 'table';
+};
 
 const projectKeyExtraHelp = `
 Instead of providing an explicit --project, you can add sonar.projectKey to sonar-project.properties at the repository root.
@@ -449,7 +458,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       action: string | undefined,
       args: string[],
     ) {
-      setPassthroughSubcommand(this, derivePassthroughSubcommand(action, args));
+      this.setPassthroughSubcommand(derivePassthroughSubcommand(action, args));
       return runContextPassthrough(action, args, { console: _ctx.console });
     });
 
@@ -875,13 +884,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   // Emit handler facts plus CliCommandExecuted in one commit.
   COMMAND_TREE.hook('postAction', async (_thisCommand, actionCommand) => {
-    const handlerFacts =
-      actionCommand instanceof SonarCommand
-        ? (actionCommand.invocationContext?.telemetryFacts() ?? [])
-        : [];
-    await commitTelemetryFacts([...handlerFacts, await buildCommandExecutedFact(actionCommand)], {
-      agentSessionId: resolveAgentSessionId(capturedAgentSessionId),
-    });
+    if (actionCommand instanceof SonarCommand) {
+      const handlerFacts = actionCommand.invocationContext?.telemetryFacts() ?? [];
+      await commitTelemetryFacts([...handlerFacts, await buildCommandExecutedFact(actionCommand)], {
+        agentSessionId: resolveAgentSessionId(capturedAgentSessionId),
+      });
+    }
     await COMMAND_TREE.updateNotifier.maybeNotify(actionCommand);
   });
 
