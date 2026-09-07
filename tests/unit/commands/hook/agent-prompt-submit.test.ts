@@ -35,9 +35,10 @@ import {
   SECRETS_INACTIVE_UNAUTHENTICATED,
 } from '../../../../src/commands/hook/hook-dependencies.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
 function makeCtx() {
-  return new CommandInvocationContext();
+  return new CommandInvocationContext(new FakeConsole());
 }
 
 describe('agentPromptSubmit (unit — impractical-via-e2e paths)', () => {

@@ -33,6 +33,7 @@ import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 import { analyzeAll } from '../../../../src/commands/analyze/analyze-all.ts';
 import * as sqaaModule from '../../../../src/commands/analyze/sqaa.ts';
 import * as sqaaFileArg from '../../../../src/commands/analyze/sqaa-file-arg.ts';
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
 const FAKE_AUTH: ResolvedAuth = {
   token: 'tok',
@@ -41,7 +42,10 @@ const FAKE_AUTH: ResolvedAuth = {
   connectionType: 'cloud',
 };
 
-const FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(FAKE_AUTH);
+const FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(
+  FAKE_AUTH,
+  new FakeConsole(),
+);
 
 describe('analyzeAll --format json: SecretsReport.warnings', () => {
   let spawnSpy: ReturnType<typeof spyOn>;

@@ -33,13 +33,15 @@ import { ComponentsClient } from '@/core/server/components.ts';
 import { clearMockUiCalls, setMockUi } from '@/core/ui';
 import { VortexEntitlementClient } from '@/core/vortex/entitlement.ts';
 
+import { FakeConsole } from '../../../../_common/fake-console.ts';
+
 const SERVER_AUTH: ResolvedAuth = {
   token: 'test-token',
   serverUrl: 'https://sonar.example.com',
   connectionType: 'on-premise',
 };
 
-const SERVER_CTX = new CommandAuthenticatedInvocationContext(SERVER_AUTH);
+const SERVER_CTX = new CommandAuthenticatedInvocationContext(SERVER_AUTH, new FakeConsole());
 
 const BASE_PROJECT: DiscoveredProject = {
   repoRoot: '/project/root',

@@ -40,6 +40,7 @@ export {
 } from './components/prompts.ts';
 export { intro, outro } from './components/sections.ts';
 export { withSpinner } from './components/spinner.ts';
+export type { Console } from './console.ts';
 export {
   blank,
   discreetSuccess,
@@ -65,4 +66,5 @@ export {
   setMockTty,
   setMockUi,
 } from './mock.ts';
+export { TerminalConsole } from './terminal-console.ts';
 export type { ColorFn, LogOptions, NoteOptions, OutputChannel, PhaseOptions } from './types.ts';

@@ -46,6 +46,7 @@ import * as stateManager from '@/core/state/state-manager.ts';
 import * as identityFetch from '@/core/telemetry/identity-fetch.ts';
 
 import { version as VERSION } from '../../../../package.json';
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
 const cloudAuth: ResolvedAuth = {
   connectionType: 'cloud',
@@ -388,6 +389,7 @@ describe('Private Beta command registration', () => {
   it('registers Private Beta commands only when the flag is enabled', () => {
     const enabled = new SonarCommand('sonar', {
       runtime: runtimeWithFlags({ 'cli.beta.private': true }),
+      console: new FakeConsole(),
     });
     enabled.command('stable').description('Stable command');
     enabled.command('open-beta').description('Open beta').stage(Stage.Beta());
@@ -400,6 +402,7 @@ describe('Private Beta command registration', () => {
 
     const denied = new SonarCommand('sonar', {
       runtime: runtimeWithFlags({ 'cli.beta.private': false }),
+      console: new FakeConsole(),
     });
     denied.command('stable').description('Stable command');
     denied.command('open-beta').description('Open beta').stage(Stage.Beta());
@@ -467,6 +470,7 @@ describe('Private Beta command registration', () => {
         isAlphaEnabled: false,
         isPrivateBetaEnabled: () => true,
       },
+      console: new FakeConsole(),
     });
     root.command('stable');
     root.command('open').stage(Stage.Beta());

@@ -49,6 +49,8 @@ import { type CliState, getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import { clearMockUiCalls, getMockUiCalls, queueMockResponse, setMockUi } from '@/core/ui';
 
+import { FakeConsole } from '../../../../_common/fake-console.ts';
+
 const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.integrate-git-tmp');
 
 /** Simulate `git config core.hooksPath` returning "not set" (exit code 1). */
@@ -340,7 +342,7 @@ const MOCK_AUTH = {
   connectionType: 'on-premise' as const,
 };
 
-const MOCK_AUTH_CTX = new CommandAuthenticatedInvocationContext(MOCK_AUTH);
+const MOCK_AUTH_CTX = new CommandAuthenticatedInvocationContext(MOCK_AUTH, new FakeConsole());
 
 describe('integrateGit', () => {
   let findGitRootSpy: ReturnType<typeof spyOn>;
