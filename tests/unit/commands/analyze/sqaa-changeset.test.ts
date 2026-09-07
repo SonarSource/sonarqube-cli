@@ -116,24 +116,27 @@ describe('resolveSqaaBranch', () => {
 });
 
 describe('resolveChangeSet', () => {
-  it('excludes changed symlinks that resolve outside the repository', async () => {
-    tempDir = mkdtempSync(join(tmpdir(), 'sqaa-changeset-'));
-    const repoRoot = join(tempDir, 'repo');
-    const outsideFile = join(tempDir, 'outside.ts');
-    const symlinkPath = join(repoRoot, 'external.ts');
-    mkdirSync(repoRoot);
-    writeFileSync(outsideFile, 'outside content');
-    symlinkSync(outsideFile, symlinkPath);
+  it.skipIf(process.platform === 'win32')(
+    'excludes changed symlinks that resolve outside the repository',
+    async () => {
+      tempDir = mkdtempSync(join(tmpdir(), 'sqaa-changeset-'));
+      const repoRoot = join(tempDir, 'repo');
+      const outsideFile = join(tempDir, 'outside.ts');
+      const symlinkPath = join(repoRoot, 'external.ts');
+      mkdirSync(repoRoot);
+      writeFileSync(outsideFile, 'outside content');
+      symlinkSync(outsideFile, symlinkPath);
 
-    mockGitResponses({
-      'rev-parse --show-toplevel': `${repoRoot}\n`,
-      'diff --name-only --diff-filter=ACMR -z HEAD': 'external.ts\0',
-      'ls-files -z --others --exclude-standard': '',
-    });
+      mockGitResponses({
+        'rev-parse --show-toplevel': `${repoRoot}\n`,
+        'diff --name-only --diff-filter=ACMR -z HEAD': 'external.ts\0',
+        'ls-files -z --others --exclude-standard': '',
+      });
 
-    const result = await resolveChangeSet(repoRoot);
+      const result = await resolveChangeSet(repoRoot);
 
-    expect(result.files).toEqual([]);
-    expect(result.ignored).toEqual([]);
-  });
+      expect(result.files).toEqual([]);
+      expect(result.ignored).toEqual([{ path: symlinkPath, reason: 'outside-repository' }]);
+    },
+  );
 });

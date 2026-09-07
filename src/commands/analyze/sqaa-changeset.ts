@@ -42,7 +42,7 @@ export interface ChangeSetOptions {
 /** A file excluded from analysis with the reason it was skipped. */
 export interface IgnoredFile {
   path: string;
-  reason: 'binary' | 'oversized';
+  reason: 'binary' | 'oversized' | 'outside-repository';
 }
 
 /** Result of resolving a change set: files to analyze and files silently ignored. */
@@ -77,12 +77,20 @@ export async function resolveChangeSet(
   const diffFiles = await getDiffFiles(repoRoot, { staged, base });
   const untrackedFiles = staged ? [] : await getUntrackedNonIgnoredFiles(repoRoot);
   const absolute = [...diffFiles, ...untrackedFiles].map((f) => join(repoRoot, f));
-  const inRepo = absolute.filter((file) => toRelativePosixPathOrNull(file, repoRoot) !== null);
+  const inRepo: string[] = [];
+  const outsideIgnored: IgnoredFile[] = [];
+  for (const file of absolute) {
+    if (toRelativePosixPathOrNull(file, repoRoot) === null) {
+      outsideIgnored.push({ path: file, reason: 'outside-repository' });
+    } else {
+      inRepo.push(file);
+    }
+  }
 
   const { files: nonBinary, ignored: binaryIgnored } = partitionBinary(inRepo);
   const { files, ignored: oversizedIgnored } = partitionBySize(nonBinary);
 
-  return { files, ignored: [...binaryIgnored, ...oversizedIgnored], repoRoot };
+  return { files, ignored: [...outsideIgnored, ...binaryIgnored, ...oversizedIgnored], repoRoot };
 }
 
 /** Explicit `--branch` wins; otherwise auto-detect from git when possible. */

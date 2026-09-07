@@ -86,7 +86,9 @@ function appendIgnoredLines(lines: string[], ignored: SqaaJsonReport['ignored'])
   if (ignored.length === 0) {
     return;
   }
-  lines.push(`Excluded ${ignored.length} file(s) from analysis (binary or oversized):`);
+  lines.push(
+    `Excluded ${ignored.length} file(s) from analysis (binary, oversized, or outside the repository):`,
+  );
   for (const file of ignored) {
     lines.push(`  ${file.path} (${file.reason})`);
   }
@@ -98,7 +100,7 @@ function formatNoAnalyzedContent(report: SqaaJsonReport): string {
     lines.push(`Skipped ${report.skipped.length} file(s) (analysis not completed).`);
   } else if (report.ignored.length > 0 && report.files.length === 0) {
     lines.push(
-      'Vortex analysis: no files to analyze — all change set files were excluded (binary or oversized).',
+      'Vortex analysis: no files to analyze — all change set files were excluded (binary, oversized, or outside the repository).',
     );
   } else {
     lines.push(formatSqaaRunSummaryPlain(hookSummaryFromReport(report)));

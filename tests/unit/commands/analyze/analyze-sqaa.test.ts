@@ -21,6 +21,8 @@
 // Unit tests for analyzeSqaa command
 
 import * as fs from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
@@ -435,5 +437,26 @@ describe('analyzeSqaa: change-set mode', () => {
 
     expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
     expect(createAnalysisSpy.mock.calls[0][0].analysisDepth).toBe('DEEP');
+  });
+
+  it('does not abort when an ignored change-set file is outside the repository', async () => {
+    const filePath = `${process.cwd()}/src/index.ts`;
+    const outside = join(tmpdir(), 'outside-repo.ts');
+    resolveChangeSetSpy.mockResolvedValue({
+      files: [filePath],
+      ignored: [{ path: outside, reason: 'outside-repository' as const }],
+      repoRoot: process.cwd(),
+    });
+
+    await analyzeSqaa({ staged: true }, FAKE_AUTHENTICATED_CONTEXT);
+
+    expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
+    const output = fake.calls.map((c) => String(c.args[0])).join('\n');
+    expect(output).toContain(outside);
+
+    const report = await buildSqaaJsonReport({ staged: true }, FAKE_AUTH, {
+      telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,
+    });
+    expect(report?.ignored).toEqual([{ path: outside, reason: 'outside-repository' }]);
   });
 });
