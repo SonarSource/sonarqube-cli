@@ -71,7 +71,7 @@ export interface SafeGetResult<T> {
 }
 
 export class SonarHttpClient {
-  public readonly serverURL: string;
+  private readonly serverURL: string;
   public readonly isCloud: boolean;
   private readonly token: string;
 
