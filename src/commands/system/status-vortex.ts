@@ -25,7 +25,6 @@ import {
   type VortexEntitlementStatus,
 } from '@/core/vortex/entitlement.ts';
 
-
 const VORTEX_STATUS_LABELS: Record<VortexEntitlementStatus, string> = {
   enabled: 'Active',
   over_consumption: 'Active (quota exhausted)',
