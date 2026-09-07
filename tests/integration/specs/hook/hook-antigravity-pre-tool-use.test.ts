@@ -142,6 +142,25 @@ describe('sonar hook antigravity-pre-tool-use', () => {
   );
 
   it(
+    'exits 0 and skips a file outside the workspace',
+    async () => {
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(FAKE_SERVER, VALID_TOKEN);
+      harness.cliHome.writeFile('outside-secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+      const filePath = harness.cliHome.file('outside-secret.js').path;
+
+      const result = await harness.runWithStdin(
+        'hook antigravity-pre-tool-use',
+        viewFilePayload(filePath),
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain('"deny"');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits 0 and denies with the unauthenticated message when not authenticated',
     async () => {
       harness.state().withSecretsBinaryInstalled();
