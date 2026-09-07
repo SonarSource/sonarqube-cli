@@ -21,8 +21,9 @@
 import { type Command, Help, InvalidArgumentError } from 'commander';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { parseInteger } from '@/core/commands/parsing.ts';
 import { getBanner, getCustomRootHelp } from '@/core/commands/root-help.ts';
 import {
   type CliRuntime,
@@ -42,7 +43,6 @@ import { tryLoadState } from '@/core/state/state-repository.ts';
 import { flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
 import type { Console } from '@/core/ui/console.ts';
-import { parseInteger } from '@/core/ui/parsing.ts';
 
 import { version as VERSION } from '../../package.json';
 import {

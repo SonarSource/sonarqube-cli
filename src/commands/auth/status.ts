@@ -21,7 +21,7 @@
 import { ENV_ORG, ENV_SERVER, ENV_TOKEN, resolveFromEnv } from '@/core/auth/auth-resolver.ts';
 import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { getToken as getKeystoreToken } from '@/core/host/keychain.ts';
 import { loadState } from '@/core/state/state-repository.ts';

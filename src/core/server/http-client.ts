@@ -31,7 +31,7 @@ import {
   HTTP_STATUS_PAYLOAD_TOO_LARGE,
   HTTP_STATUS_SERVICE_UNAVAILABLE,
   HTTP_STATUS_TOO_MANY_REQUESTS,
-} from '@/core/http-constants.ts';
+} from '@/core/server/http-constants.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { version as VERSION } from '../../../package.json';

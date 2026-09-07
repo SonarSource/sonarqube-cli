@@ -289,7 +289,7 @@ describe('sonar hook git-pre-commit', () => {
           .withProjectSettings('demo', [])
           .start();
 
-        // Do NOT enable flush mode: TELEMETRY_FLUSH_MODE_ENV no-ops storeEvent(), which owns
+        // Do NOT enable flush mode: TELEMETRY_FLUSH_MODE_ENV no-ops commitTelemetryFacts(), which owns
         // CliCommandExecuted, so the command event would never be written.
         harness.state().withTelemetryEnabled();
         harness.state().withSecretsBinaryInstalled();

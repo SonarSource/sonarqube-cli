@@ -30,7 +30,7 @@ import {
   SCA_CALLER_COMMANDS,
 } from '@/commands/analyze/sca-analysis-telemetry.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import {
   resolveScaScannerBinaryPath,

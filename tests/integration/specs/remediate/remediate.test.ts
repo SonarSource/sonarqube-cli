@@ -1007,7 +1007,7 @@ describe('sonar remediate', () => {
         .withAuthToken(VALID_TOKEN)
         .withProject(TEST_PROJECT)
         .start();
-      // Deliberately do NOT set TELEMETRY_FLUSH_MODE_ENV: it makes storeEvent() (which owns
+      // Deliberately do NOT set TELEMETRY_FLUSH_MODE_ENV: it makes commitTelemetryFacts() (which owns
       // CliCommandExecuted) no-op, since it also doubles as the guard that stops the detached
       // flush worker from recursively emitting its own CliCommandExecuted event.
       harness.state().withTelemetryEnabled();

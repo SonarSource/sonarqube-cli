@@ -21,7 +21,7 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { InvalidOptionError } from '@/core/command-error.ts';
+import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import { ScaClient } from '@/core/server/sca.ts';
 
 import type { IntegrateGitOptions } from '../../../../../src/commands/integrate/git/options.ts';

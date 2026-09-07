@@ -28,8 +28,7 @@ import { homedir } from 'node:os';
 import { sep } from 'node:path';
 
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
-import { phaseItem } from '@/core/ui';
-import type { Console } from '@/core/ui/console.ts';
+import { type Console, phaseItem } from '@/core/ui/console.ts';
 
 import { recordedFeatureResources } from './installation-recorder.ts';
 import type { FeatureDeclaration, IntegrationDeclaration, PostInstallExample } from './types.ts';

@@ -23,7 +23,7 @@
 
 import { beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { TerminalConsole } from '@/core/ui';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 

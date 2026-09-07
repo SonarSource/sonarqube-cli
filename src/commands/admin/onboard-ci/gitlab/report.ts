@@ -21,7 +21,7 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import type { DryRunResults, OnboardCiResults } from './types.ts';

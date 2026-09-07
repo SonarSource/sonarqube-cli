@@ -20,7 +20,10 @@
 
 // Map SQAA API errors to CLI errors with remediation hints.
 
-import { CommandFailedError, type CommandFailedErrorOptions } from '@/core/command-error.ts';
+import {
+  CommandFailedError,
+  type CommandFailedErrorOptions,
+} from '@/core/commands/command-error.ts';
 import {
   BadRequestError,
   RequestPayloadTooLargeError,

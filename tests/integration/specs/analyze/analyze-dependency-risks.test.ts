@@ -401,7 +401,7 @@ describe('analyze dependency-risks — project_uuid telemetry', () => {
         .withProject('demo')
         .withProjectSettings('demo', [])
         .start();
-      // Deliberately do NOT set TELEMETRY_FLUSH_MODE_ENV here: that flag makes storeEvent()
+      // Deliberately do NOT set TELEMETRY_FLUSH_MODE_ENV here: that flag makes commitTelemetryFacts()
       // (which owns CliCommandExecuted) no-op, since it also doubles as the guard that stops
       // the detached flush worker from recursively emitting its own CliCommandExecuted event.
       harness.state().withTelemetryEnabled();

@@ -20,7 +20,7 @@
 
 import { describe, expect, it, spyOn } from 'bun:test';
 
-import { SqaaProgress } from '@/core/ui/components/sqaa-progress.ts';
+import { SqaaProgress } from '@/commands/analyze/sqaa-progress.ts';
 import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 const FILES = ['src/a.ts', 'src/b.ts', 'src/c.ts'];

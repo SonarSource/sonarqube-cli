@@ -21,8 +21,8 @@
 // Vortex entitlement: the two hub queries and every way the CLI asks about them.
 
 import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { HTTP_STATUS_NOT_FOUND } from '@/core/http-constants.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
+import { HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 
 /**

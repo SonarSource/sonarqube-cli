@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { CommandFailedError, remediationHintFor } from '@/core/command-error.ts';
+import { CommandFailedError, remediationHintFor } from '@/core/commands/command-error.ts';
 import { NetworkConfigError } from '@/core/errors.ts';
 import { RateLimitError, ServiceUnavailableError } from '@/core/server/errors.ts';
 

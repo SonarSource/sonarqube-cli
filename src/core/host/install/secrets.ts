@@ -27,8 +27,7 @@ import {
   SONAR_SECRETS_VERSION,
   SONARSOURCE_PUBLIC_KEY,
 } from '@/core/host/install/signatures.ts';
-import type { Console } from '@/core/ui/console.ts';
-import type { OutputChannel } from '@/core/ui/types.ts';
+import type { Console, OutputChannel } from '@/core/ui/console.ts';
 
 import {
   type BinarySpec,

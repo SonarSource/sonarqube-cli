@@ -21,9 +21,8 @@
 import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { type CliState, getDefaultState, type InstalledIntegration } from '@/core/state/state.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
-import type { PhaseItem } from '@/core/ui';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
-import type { Console } from '@/core/ui/console.ts';
+import type { Console, PhaseItem } from '@/core/ui/console.ts';
 
 import { version as VERSION } from '../../../package.json';
 import { supportedIntegrations } from '../integrate';

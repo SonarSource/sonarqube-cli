@@ -21,7 +21,6 @@
 // Sequential chunked execution engine for SQAA change-set analysis
 
 import { getSqaaRetry503BaseDelayMs } from '@/core/config-constants.ts';
-import type { SqaaProgress } from '@/core/ui/components/sqaa-progress.ts';
 
 import {
   fetchChunkWith413Split,
@@ -34,6 +33,7 @@ import type { SqaaAuth } from './sqaa-auth.ts';
 import { type SqaaChunk, type SqaaChunkFile } from './sqaa-chunking.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import { isGlobalSqaaError, isPayloadTooLargeCommandError } from './sqaa-errors.ts';
+import type { SqaaProgress } from './sqaa-progress.ts';
 import type { SqaaAnalysisDepth, SqaaIssue } from './sqaa-wire-types.ts';
 
 export type FileSuccess = {

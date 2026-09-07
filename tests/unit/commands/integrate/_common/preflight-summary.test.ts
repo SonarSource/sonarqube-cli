@@ -25,12 +25,12 @@ import {
   printGitPreflightSummary,
 } from '@/commands/integrate/_common/preflight-summary.ts';
 import * as token from '@/core/auth/token.ts';
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import * as processLib from '@/core/process/process.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
-import type { PhaseItem } from '@/core/ui';
+import type { PhaseItem } from '@/core/ui/console.ts';
 
 import { FakeConsole } from '../../../../_common/fake-console.ts';
 

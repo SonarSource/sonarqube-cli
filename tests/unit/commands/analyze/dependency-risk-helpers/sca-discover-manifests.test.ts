@@ -25,7 +25,7 @@ import { join } from 'node:path';
 
 import { beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import type { SpawnResult } from '@/core/process/process.ts';
 

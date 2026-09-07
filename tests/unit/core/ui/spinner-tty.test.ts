@@ -23,8 +23,7 @@
 
 import { describe, expect, it, spyOn } from 'bun:test';
 
-import { TerminalConsole } from '@/core/ui';
-
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 async function withTTY(fn: () => Promise<void>): Promise<void> {
   const original = process.stdout.isTTY;
   Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });

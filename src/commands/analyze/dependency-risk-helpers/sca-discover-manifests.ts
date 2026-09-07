@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { SpawnResult } from '@/core/process/process.ts';
 
 import { type ScaScannerInvocation, ScaScannerRunnerBase } from './sca-scanner-runner-base.ts';

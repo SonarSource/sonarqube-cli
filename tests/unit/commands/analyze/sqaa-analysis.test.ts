@@ -20,9 +20,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { CommandFailedError } from '@/core/command-error.ts';
+import { SqaaProgress } from '@/commands/analyze/sqaa-progress.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { RequestPayloadTooLargeError } from '@/core/server/errors.ts';
-import { SqaaProgress } from '@/core/ui/components/sqaa-progress.ts';
 
 import {
   distributeChunkResponse,

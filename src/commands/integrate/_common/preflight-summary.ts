@@ -21,15 +21,15 @@
 // Preflight summaries shown at the start of integrate commands, before install.
 
 import { checkTokenStatus, type TokenCheckResult, type TokenStatus } from '@/core/auth/token.ts';
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { GitRepo } from '@/core/host/git/hooks.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
-import type { PhaseItem, StepStatus } from '@/core/ui';
-import { phaseItem } from '@/core/ui';
-import type { Console } from '@/core/ui/console.ts';
+import type { StepStatus } from '@/core/ui/colors.ts';
+import { type Console, type PhaseItem, phaseItem } from '@/core/ui/console.ts';
+
 export interface AgentPreflightSummaryOptions {
   serverUrl: string;
   organization?: string;

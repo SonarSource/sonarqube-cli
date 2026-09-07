@@ -18,14 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { buildRequest, fetchAuthenticated } from '@/core/server/fetch.ts';
 import {
   HTTP_STATUS_BAD_GATEWAY,
   HTTP_STATUS_GATEWAY_TIMEOUT,
   HTTP_STATUS_NOT_FOUND,
   HTTP_STATUS_SERVICE_UNAVAILABLE,
   HTTP_STATUS_TOO_MANY_REQUESTS,
-} from '@/core/http-constants.ts';
-import { buildRequest, fetchAuthenticated } from '@/core/server/fetch.ts';
+} from '@/core/server/http-constants.ts';
 
 export interface GitLabRepo {
   id: number;

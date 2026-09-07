@@ -27,7 +27,7 @@ import { integrateClaude } from '@/commands/integrate/claude';
 import * as hooks from '@/commands/integrate/claude/hooks.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import * as token from '@/core/auth/token.ts';
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as registry from '@/core/framework/features';
 import type { DiscoveredProject } from '@/core/project-info.ts';
@@ -37,7 +37,7 @@ import { OrganizationsClient } from '@/core/server/organizations.ts';
 import { ScaClient } from '@/core/server/sca.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
-import type { PhaseItem } from '@/core/ui';
+import type { PhaseItem } from '@/core/ui/console.ts';
 import { VortexEntitlementClient } from '@/core/vortex/entitlement.ts';
 
 import { FakeConsole } from '../../../../_common/fake-console.ts';

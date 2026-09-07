@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { BadRequestError, RequestPayloadTooLargeError } from '@/core/server/errors.ts';
 
 import {

@@ -22,7 +22,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 
 import { APP_NAME } from '../config-constants.ts';
 

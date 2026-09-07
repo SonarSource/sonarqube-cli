@@ -23,7 +23,7 @@
 import { statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { normalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
 
 export interface ResolvedSqaaFileEntry {

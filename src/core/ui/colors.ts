@@ -22,7 +22,22 @@
 
 import pc from 'picocolors';
 
-import type { ColorFn, NoteOptions, StepStatus } from './types.ts';
+export type ColorFn = (text: string) => string;
+
+export type StepStatus =
+  | 'done' // ✓  green
+  | 'running' // →  cyan
+  | 'failed' // ✗  red
+  | 'skipped' // ⏭  dim
+  | 'warn' // ⚠  yellow
+  | 'pending' // ○  dim
+  | 'info'; // ℹ  cyan
+
+export interface NoteOptions {
+  borderColor?: ColorFn;
+  titleColor?: ColorFn;
+  contentColor?: ColorFn;
+}
 
 // When stdout is not a TTY (piped), all color functions become identity
 export const isTTY = process.stdout.isTTY;

@@ -576,6 +576,76 @@ describe('issuesSearchCommand', () => {
       listIssues({ project: 'proj', statuses: 'UNKNOWN', page: 1, pageSize: 500 }, mockCtx),
     ).rejects.toThrow('UNKNOWN');
   });
+
+  describe('table format', () => {
+    async function printTable(issues: SonarQubeIssue[]): Promise<string> {
+      const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockResolvedValue({
+        issues,
+        total: issues.length,
+        p: 1,
+        ps: 500,
+        paging: { pageIndex: 1, pageSize: 500, total: issues.length },
+      });
+      try {
+        await listIssues(
+          { project: 'my-project', format: 'table', page: 1, pageSize: 500 },
+          mockCtx,
+        );
+        const printed = fake.calls.find((c) => c.method === 'print')?.args[0];
+        expect(typeof printed).toBe('string');
+        return printed as string;
+      } finally {
+        getSpy.mockRestore();
+      }
+    }
+
+    it('prints "No issues found" when the search returns nothing', async () => {
+      expect(await printTable([])).toBe('No issues found');
+    });
+
+    it('prints a header and one data row per issue', async () => {
+      const output = await printTable([
+        { ...createMockIssue('a'), severity: 'CRITICAL', rule: 'java:S001', message: 'Fix me' },
+        createMockIssue('b'),
+        createMockIssue('c'),
+      ]);
+      const lines = output.split('\n');
+      expect(lines[0]).toContain('SEVERITY');
+      expect(lines[0]).toContain('RULE');
+      expect(lines[0]).toContain('MESSAGE');
+      expect(lines[0]).toContain('FILE');
+      expect(lines[1]).toMatch(/^-+$/);
+      expect(lines[2]).toContain('CRITICAL');
+      expect(lines[2]).toContain('java:S001');
+      expect(lines[2]).toContain('Fix me');
+      expect(lines).toHaveLength(5);
+    });
+
+    it('prints the path after the project key and the line number', async () => {
+      const output = await printTable([
+        {
+          ...createMockIssue('a'),
+          component: 'proj:src/utils/helper.ts',
+          line: 42,
+        },
+      ]);
+      expect(output).toContain('src/utils/helper.ts:42');
+      expect(output).not.toContain('proj:src');
+    });
+
+    it('prints the full component and ? when the path has no colon or line', async () => {
+      const output = await printTable([
+        { ...createMockIssue('a'), component: 'standalone-component' },
+      ]);
+      expect(output).toContain('standalone-component:?');
+    });
+
+    it('widens the rule column when the rule key exceeds the minimum width', async () => {
+      const longRule = 'a'.repeat(40);
+      const output = await printTable([{ ...createMockIssue('a'), rule: longRule }]);
+      expect(output).toContain(longRule);
+    });
+  });
 });
 
 describe('ProjectsClient', () => {

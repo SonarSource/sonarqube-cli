@@ -31,7 +31,8 @@ import { mockColorsTTY } from '../../../_common/colors-mock.ts';
 // Override colors to simulate TTY environment — must be before any imports
 void mock.module('@/core/ui/colors.js', mockColorsTTY);
 
-import { stripAnsi, TerminalConsole } from '@/core/ui';
+import { stripAnsi } from '@/core/ui/colors.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 

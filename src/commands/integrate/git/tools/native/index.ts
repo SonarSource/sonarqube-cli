@@ -20,7 +20,7 @@
 
 import { join } from 'node:path';
 
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { sonarSecretsBinaryDependency } from '@/core/framework/dependencies';
 import type {
   FeatureContainer,

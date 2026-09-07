@@ -25,7 +25,7 @@ import { join } from 'node:path';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { findGitRoot, getGitRemote } from '@/core/host/git/discover.ts';
 import { type LookupPath, resolveLookupPaths } from '@/core/host/git/lookup-path-resolver.ts';
 import { resolveMainWorktreeRoot } from '@/core/host/git/worktree.ts';

@@ -25,7 +25,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { type IntegrationDeclaration, renderCompletionSummary } from '@/core/framework/features';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
-import type { PhaseItem } from '@/core/ui';
+import type { PhaseItem } from '@/core/ui/console.ts';
 
 import { FakeConsole } from '../../../../_common/fake-console.ts';
 

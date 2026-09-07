@@ -23,7 +23,8 @@
 import { existsSync, statSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 
-import { CommandFailedError } from '../../command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
+
 import { normalizePath } from '../../io/fs-utils.ts';
 import { spawnProcess } from '../../process/process.ts';
 

@@ -29,9 +29,7 @@ import type {
   InstalledIntegration,
   InstalledIntegrationFeature,
 } from '@/core/state/state.ts';
-import type { PhaseItem } from '@/core/ui';
-import { phaseItem } from '@/core/ui';
-import type { Console } from '@/core/ui/console.ts';
+import { type Console, type PhaseItem, phaseItem } from '@/core/ui/console.ts';
 
 export interface IntegrationResetResult {
   item: PhaseItem;

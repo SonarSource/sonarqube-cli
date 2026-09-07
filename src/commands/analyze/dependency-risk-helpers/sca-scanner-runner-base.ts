@@ -20,7 +20,7 @@
 
 import { rmSync } from 'node:fs';
 
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { LOG_FILE } from '@/core/config-constants.ts';
 import { buildSubprocessNetworkEnv } from '@/core/host/connectivity/network-config.ts';
 import { type ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';

@@ -21,7 +21,7 @@
 // Auth and project-key resolution for SQAA commands.
 
 import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';

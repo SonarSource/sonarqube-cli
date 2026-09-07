@@ -19,7 +19,7 @@
  */
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import {
   scaScannerBinaryDependency,
   sonarSecretsBinaryDependency,

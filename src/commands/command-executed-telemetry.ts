@@ -20,7 +20,6 @@
 
 import { type Command } from 'commander';
 
-import { commitTelemetryFacts } from '@/commands/telemetry-facts.ts';
 import { TelemetryFact } from '@/core/commands/invocation-context.ts';
 import { DISTRIBUTION, type Distribution } from '@/core/host/distribution.ts';
 import { currentProjectUuid } from '@/core/telemetry/project-uuid.ts';
@@ -69,20 +68,5 @@ export async function buildCommandExecutedFact(
     result: (process.exitCode ?? 0) === 0 ? 'success' : 'failure',
     distribution: DISTRIBUTION,
     project_uuid: await currentProjectUuid(),
-  });
-}
-
-/**
- * Record and commit one CliCommandExecuted fact, then schedule the flush.
- *
- * Used by unit tests that do not go through the command tree `postAction`.
- * Production drains this fact together with handler facts in `postAction`.
- */
-export async function storeEvent(
-  command: Command,
-  agentSessionId: string | null = null,
-): Promise<void> {
-  await commitTelemetryFacts([await buildCommandExecutedFact(command)], {
-    agentSessionId,
   });
 }

@@ -25,7 +25,7 @@ import { Command, Help, Option } from 'commander';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
-import { CliError, CommandFailedError, remediationHintFor } from '@/core/command-error.ts';
+import { CliError, CommandFailedError, remediationHintFor } from '@/core/commands/command-error.ts';
 import { qualifiedCommandPath } from '@/core/commands/path.ts';
 import {
   ALPHA_ENV_VAR,

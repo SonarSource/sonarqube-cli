@@ -23,7 +23,7 @@
 import { closeSync, openSync, readSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { resolveCurrentGitBranch, resolveGitBranchAtRepoRoot } from '@/core/host/git/branch.ts';
 import { resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
 import { spawnProcess } from '@/core/process/process.ts';

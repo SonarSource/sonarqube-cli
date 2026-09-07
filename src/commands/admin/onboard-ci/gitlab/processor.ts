@@ -23,7 +23,7 @@ import * as yaml from 'js-yaml';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { GitLabClient, GitLabRepo, GitLabTreeEntry } from '@/core/gitlab/client.ts';
 import { GitLabApiError } from '@/core/gitlab/client.ts';
-import { HTTP_STATUS_BAD_REQUEST } from '@/core/http-constants.ts';
+import { HTTP_STATUS_BAD_REQUEST } from '@/core/server/http-constants.ts';
 
 import type { OnboardCiSqsClient } from './sqs-api.ts';
 import { buildUpdatedCiYml, generateCiYml, generateMrDescription } from './templates.ts';

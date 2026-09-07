@@ -20,7 +20,7 @@
 
 // quality-gate status command - fetch the quality gate verdict for a project
 
-import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
 import { ComponentsClient } from '@/core/server/components.ts';

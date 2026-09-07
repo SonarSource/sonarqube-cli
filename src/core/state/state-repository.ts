@@ -27,7 +27,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import { join } from 'node:path';
 
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import logger from '@/core/observability/logger.ts';
 
 import { version as VERSION } from '../../../package.json';

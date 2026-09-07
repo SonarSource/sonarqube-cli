@@ -24,7 +24,7 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:te
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import {
   CommandAuthenticatedInvocationContext,
   CommandInvocationContext,

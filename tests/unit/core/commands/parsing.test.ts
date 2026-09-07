@@ -17,4 +17,18 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-declare module 'smol-toml';
+
+import { describe, expect, it } from 'bun:test';
+import { InvalidArgumentError } from 'commander';
+
+import { parseInteger } from '@/core/commands/parsing.ts';
+
+describe('CLI option parsing', () => {
+  it('should throw if not a valid number', () => {
+    expect(() => parseInteger('x')).toThrow(new InvalidArgumentError('Not a number.'));
+  });
+
+  it('should successfully parse a valid number', () => {
+    expect(parseInteger('42')).toBe(42);
+  });
+});

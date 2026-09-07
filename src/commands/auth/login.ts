@@ -21,7 +21,7 @@
 import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
 import { isSonarQubeCloud } from '@/core/auth/auth-resolver.ts';
 import { type BrowserAuthResult, generateTokenViaBrowser } from '@/core/auth/token.ts';
-import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 import {
