@@ -22,6 +22,7 @@
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { getToken } from '@/core/host/keychain.ts';
+import logger from '@/core/observability/logger.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 
 import type { AuthConnection } from '../state/state.ts';
@@ -59,9 +60,9 @@ export async function recordConnectionFromAuth(
   const seedIdentity = identityFromConnection(seedConnection);
   // Logout treats envOnly as already logged out, so never stamp it on a
   // keychain-backed (login-created) connection — that would leave the stored
-  // token behind, unrevoked.
-  const envOnly =
-    options.envOnly === true && (await getToken(auth.serverUrl, auth.orgKey)) === null;
+  // token behind, unrevoked. A keychain we cannot read (headless CI, no
+  // libsecret) must not break env-var recording, so it degrades to "unknown".
+  const envOnly = options.envOnly === true && !(await hasStoredToken(auth));
 
   if (
     !options.force &&
@@ -87,6 +88,15 @@ export async function recordConnectionFromAuth(
 
   saveState(state);
   return connection;
+}
+
+async function hasStoredToken(auth: ResolvedAuth): Promise<boolean> {
+  try {
+    return (await getToken(auth.serverUrl, auth.orgKey)) !== null;
+  } catch (err) {
+    logger.debug(`Keychain unavailable while recording connection: ${(err as Error).message}`);
+    return true;
+  }
 }
 
 /** Applies fetched identity fields to the connection, per connection type. */

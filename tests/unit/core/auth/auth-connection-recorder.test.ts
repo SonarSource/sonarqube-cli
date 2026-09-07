@@ -28,11 +28,13 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
+import * as keychainModule from '@/core/host/keychain.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
 
@@ -229,6 +231,26 @@ describe('recordConnectionFromAuth', () => {
     expect(connection.envOnly).toBeUndefined();
     expect(connection.sqsInstallationId).toBe('sqs-enriched');
     getSafeSpy.mockRestore();
+  });
+
+  it('still records the connection when the keychain is unreachable, without stamping envOnly', async () => {
+    const getTokenSpy = spyOn(keychainModule, 'getToken').mockRejectedValue(
+      new CommandFailedError('Failed to access the system keychain.'),
+    );
+    const getSafeSpy = mockIdentityGetSafe({ status: [{ ok: true, id: 'sqs-no-keychain' }] });
+
+    try {
+      const connection = await recordConnectionFromAuth(serverAuth('t-unreachable'), {
+        envOnly: true,
+      });
+
+      expect(connection.serverUrl).toBe('https://sq.example.com');
+      expect(connection.envOnly).toBeUndefined();
+      expect(getActiveConnection(loadState())?.serverUrl).toBe('https://sq.example.com');
+    } finally {
+      getTokenSpy.mockRestore();
+      getSafeSpy.mockRestore();
+    }
   });
 
   it('leaves envOnly unset for a login-style call (no envOnly option)', async () => {

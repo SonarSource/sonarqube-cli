@@ -137,7 +137,7 @@ describe('auth login', () => {
     async () => {
       const server = await harness.newFakeServer().withAuthToken('my-login-token').start();
 
-      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+      const result = await confirmTrust(harness, `auth login --server ${server.baseUrl()}`, {
         browserToken: 'invalid-browser-token',
       });
 
