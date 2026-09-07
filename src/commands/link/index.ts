@@ -25,6 +25,7 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 import {
   resolveContainedPath,
@@ -71,7 +72,7 @@ export async function link(
 
   const cwd = process.cwd();
   const gitRoot = await resolveGitRepoRoot(cwd);
-  const targetDir = gitRoot ?? cwd;
+  const targetDir = canonicalizePath(gitRoot ?? cwd);
 
   const projectRoot = resolveContainedPath(targetDir, options.path);
   if (projectRoot === null) {

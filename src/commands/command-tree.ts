@@ -142,6 +142,10 @@ Dependency manifest files (e.g. package-lock.json, pom.xml) will be uploaded to 
 Learn more: https://docs.sonarsource.com/sonarqube-server/advanced-security/analyzing-projects-for-dependencies#supported-languages-and-package-managers
 ${projectKeyExtraHelp}`;
 
+const linkExtraHelp = `
+Supports one project per repository; monorepo support is coming soon.
+`;
+
 /**
  * Loads auth + Private Beta flag decisions. Invoked at most once, only when the
  * tree declares at least one Private Beta command.
@@ -341,16 +345,15 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('--non-interactive', 'Skip all prompts; require explicit flags')
     .authenticatedAction((ctx, options: ImportOptions) => importHandler(options, ctx));
 
-  // Append a project binding to .sonar-config.json (barebones; UX will change)
+  // Overwrites the single .sonar-config.json project binding (barebones; UX will change)
   COMMAND_TREE.command('link')
-    .description(
-      'Link a project to the active connection in .sonar-config.json. Supports one project per repository; monorepo support is coming soon.',
-    )
+    .description('Link a project to the active connection in .sonar-config.json')
     .rootHelp({
       category: 'core',
     })
     .argument('<project>', 'SonarQube project key')
     .option('--path <path>', 'Path to the project root, relative to the repository root', '.')
+    .addHelpText('after', linkExtraHelp)
     .authenticatedAction((ctx, project: string, options: LinkOptions) =>
       link(project, options, ctx),
     );

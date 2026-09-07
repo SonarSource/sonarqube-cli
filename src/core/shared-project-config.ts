@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync } from 'node:fs';
+import { statSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 
@@ -115,7 +115,8 @@ export function resolveContainedPath(dir: string, rawPath: string): string | nul
   }
   const canonicalDir = canonicalizePath(dir);
   const lexical = join(canonicalDir, rawPath);
-  if (!existsSync(lexical)) {
+  // Must be a directory: the result is later joined with file names and used as a write/mount target.
+  if (!statSync(lexical, { throwIfNoEntry: false })?.isDirectory()) {
     return null;
   }
   const resolved = canonicalizePath(lexical);
@@ -129,12 +130,38 @@ export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRep
   }
 
   async set(dir: string, entry: SharedProjectConfigEntry): Promise<void> {
-    const file: SharedProjectConfigFileDto = { project: entry };
+    const existing = await this.readExistingRootForWrite(dir);
+    const file: SharedProjectConfigFileDto = { ...existing, project: entry };
     await writeFile(this.configPath(dir), JSON.stringify(file, null, 2), 'utf-8');
   }
 
   private configPath(dir: string): string {
     return join(dir, SHARED_PROJECT_CONFIG_FILE_NAME);
+  }
+
+  /**
+   * Read the existing file to merge into, so `set()` preserves any other top-level
+   * fields already there. Unlike `readRawRoot()` (used by `load()`, which treats an
+   * unreadable/invalid file as "no mapping" and moves on), a write must not silently
+   * clobber content it failed to read: only a genuinely absent file is safe to treat
+   * as empty — any other read or parse failure aborts the write instead.
+   */
+  private async readExistingRootForWrite(dir: string): Promise<SharedProjectConfigFileDto> {
+    let content: string;
+    try {
+      content = await readFile(this.configPath(dir), 'utf-8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return {};
+      }
+      throw error;
+    }
+
+    const parsed: unknown = JSON.parse(content);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      throw new Error(`${this.configPath(dir)} does not contain a JSON object`);
+    }
+    return parsed;
   }
 
   private async readRawRoot(dir: string): Promise<SharedProjectConfigFileDto | null> {

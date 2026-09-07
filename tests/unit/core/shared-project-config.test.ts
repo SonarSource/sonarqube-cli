@@ -297,6 +297,21 @@ describe('SharedProjectConfigFileRepository.load', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('returns null when "path" points to a regular file rather than a directory', async () => {
+    const dir = tempDir('path-is-file');
+    writeFileSync(join(dir, 'not-a-directory'), 'x');
+    writeProjectConfig(dir, {
+      serverUrl: 'https://sq.example',
+      projectKey: 'x',
+      path: 'not-a-directory',
+    });
+    try {
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('SharedProjectConfigFileRepository.set', () => {
@@ -369,6 +384,59 @@ describe('SharedProjectConfigFileRepository.set', () => {
       expect(raw).toEqual({
         project: { projectKey: 'x', path: '.', serverUrl: 'https://sq.example' },
       });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves other top-level fields already in the file when overwriting "project"', async () => {
+    const dir = tempDir('preserve-siblings');
+    writeConfig(dir, JSON.stringify({ someFutureField: 'keep-me' }));
+    try {
+      const repo = new SharedProjectConfigRepositoryImpl();
+      await repo.set(dir, { projectKey: 'x', path: '.', serverUrl: 'https://sq.example' });
+
+      const raw = JSON.parse(readFileSync(join(dir, SHARED_PROJECT_CONFIG_FILE_NAME), 'utf-8'));
+      expect(raw).toEqual({
+        someFutureField: 'keep-me',
+        project: { projectKey: 'x', path: '.', serverUrl: 'https://sq.example' },
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects the write instead of clobbering a file it could not parse', async () => {
+    const dir = tempDir('unreadable-existing');
+    writeConfig(dir, '{ not valid json ]');
+    try {
+      const repo = new SharedProjectConfigRepositoryImpl();
+      const before = readFileSync(join(dir, SHARED_PROJECT_CONFIG_FILE_NAME), 'utf-8');
+
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(
+        repo.set(dir, { projectKey: 'x', path: '.', serverUrl: 'https://sq.example' }),
+      ).rejects.toThrow();
+
+      expect(readFileSync(join(dir, SHARED_PROJECT_CONFIG_FILE_NAME), 'utf-8')).toBe(before);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects the write when the existing root is not a JSON object (old array format)', async () => {
+    const dir = tempDir('unreadable-array');
+    writeConfig(
+      dir,
+      JSON.stringify([{ serverUrl: 'https://sq.example', projectKey: 'x', path: '.' }]),
+    );
+    try {
+      const repo = new SharedProjectConfigRepositoryImpl();
+
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(
+        repo.set(dir, { projectKey: 'x', path: '.', serverUrl: 'https://sq.example' }),
+      ).rejects.toThrow();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

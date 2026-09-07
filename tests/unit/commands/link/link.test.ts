@@ -22,11 +22,17 @@
 // resolution instead of touching a real repository (covered end-to-end by the
 // integration spec at tests/integration/specs/link/link.test.ts).
 
+import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import * as gitWorktree from '@/core/host/git/worktree.ts';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import { sharedProjectConfigRepository } from '@/core/shared-project-config.ts';
 
 import { link, type LinkOptions } from '../../../../src/commands/link/index.ts';
@@ -130,5 +136,29 @@ describe('link', () => {
     await link('my_project', { path: '.' }, ctxFor(onPremAuth));
 
     expect(fake.calls.filter((c) => c.method === 'warn')).toHaveLength(0);
+  });
+
+  it('canonicalizes a symlinked git root so the write target and summary agree', async () => {
+    const realDir = mkdtempSync(join(tmpdir(), 'link-canon-real-'));
+    const symlinkDir = join(tmpdir(), `link-canon-symlink-${Date.now()}`);
+    symlinkSync(realDir, symlinkDir);
+    gitRootSpy.mockResolvedValue(symlinkDir);
+
+    try {
+      await link('my_project', { path: '.' }, ctxFor(onPremAuth));
+
+      const canonicalRealDir = canonicalizePath(realDir);
+      expect(setSpy).toHaveBeenCalledWith(canonicalRealDir, expect.anything());
+
+      const successCall = fake.calls.find((c) => c.method === 'success');
+      const message = String(successCall?.args[0]);
+      expect(message).toContain(`Linked ${canonicalRealDir}`);
+      expect(message).toContain(
+        `Config saved to ${join(canonicalRealDir, SHARED_PROJECT_CONFIG_FILE_NAME)}`,
+      );
+    } finally {
+      rmSync(symlinkDir, { recursive: true, force: true });
+      rmSync(realDir, { recursive: true, force: true });
+    }
   });
 });

@@ -46,7 +46,7 @@ function getExpectedRootHelp(): string {
     '    2. Run sonar analyze --file <file> to scan your code for issues',
     '',
     '  COMMANDS',
-    '    link                                                     Link a project to the active connection in .sonar-config.json. Supports one project per repository; monorepo support is coming soon.',
+    '    link                                                     Link a project to the active connection in .sonar-config.json',
     '    analyze                                                  Analyze code for quality and security issues',
     '    analyze secrets                                          Scan files or stdin for hardcoded secrets',
     '    analyze dependency-risks                                 Analyze project dependencies for security and license risks',
