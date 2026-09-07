@@ -25,6 +25,7 @@ import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 import {
+  resolveContainedPath,
   type SharedProjectConfigEntryInput,
   type SharedProjectConfigRepository,
   SharedProjectConfigRepositoryImpl,
@@ -69,7 +70,15 @@ export async function link(
   if (!gitRoot) {
     ctx.console.warn('No git repository found. Writing to the current directory instead.');
   }
+  const targetDir = gitRoot ?? cwd;
 
-  await sharedProjectConfigRepository.set(gitRoot ?? cwd, entry);
+  if (resolveContainedPath(targetDir, options.path) === null) {
+    throw new CommandFailedError(`--path "${options.path}" must stay within ${targetDir}.`, {
+      remediationHint:
+        'Use a path relative to the repository root, e.g. --path . or --path services/api.',
+    });
+  }
+
+  await sharedProjectConfigRepository.set(targetDir, entry);
   ctx.console.success(`Added ${project} to ${SHARED_PROJECT_CONFIG_FILE_NAME}.`);
 }

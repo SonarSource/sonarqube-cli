@@ -35,7 +35,7 @@ import { SharedProjectConfigRepositoryImpl } from '@/core/shared-project-config.
 function tempDir(name: string): string {
   const dir = join(tmpdir(), `shared-project-config-ut-${name}-${Date.now()}`);
   mkdirSync(dir, { recursive: true });
-  return dir;
+  return canonicalizePath(dir);
 }
 
 function writeConfig(dir: string, content: string): void {
@@ -204,6 +204,49 @@ describe('SharedProjectConfigFileRepository.load', () => {
     });
     try {
       expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns null when "path" escapes the directory holding the config via "../"', async () => {
+    const dir = tempDir('escape-relative');
+    writeProjectConfig(dir, {
+      serverUrl: 'https://sq.example',
+      projectKey: 'x',
+      path: '../../../../etc',
+    });
+    try {
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns null when "path" is absolute', async () => {
+    const dir = tempDir('escape-absolute');
+    writeProjectConfig(dir, {
+      serverUrl: 'https://sq.example',
+      projectKey: 'x',
+      path: process.platform === 'win32' ? 'C:\\Windows' : '/etc',
+    });
+    try {
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('accepts a "path" that stays within the directory holding the config', async () => {
+    const dir = tempDir('contained');
+    writeProjectConfig(dir, {
+      serverUrl: 'https://sq.example',
+      projectKey: 'x',
+      path: 'a/../b',
+    });
+    try {
+      const mapping = await new SharedProjectConfigRepositoryImpl().load(dir);
+      expect(mapping?.projectRoot).toBe(canonicalizePath(join(dir, 'b')));
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

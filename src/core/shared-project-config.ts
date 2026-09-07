@@ -19,10 +19,10 @@
  */
 
 import { readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
-import { canonicalizePath } from '@/core/io/fs-utils.ts';
+import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import { cloudRegionToUrl } from '@/core/server/sonarcloud-region.ts';
 import type { CloudRegion } from '@/core/state/state.ts';
@@ -99,6 +99,16 @@ function isValidEntryDto(value: unknown): value is SharedProjectConfigEntryDto {
   return isCloudEntryDto(record) || isServerEntryDto(record);
 }
 
+/** A committed config must not steer writes/mounts outside the directory holding it. */
+export function resolveContainedPath(dir: string, rawPath: string): string | null {
+  if (isAbsolute(rawPath)) {
+    return null;
+  }
+  const canonicalDir = canonicalizePath(dir);
+  const resolved = canonicalizePath(join(canonicalDir, rawPath));
+  return isAncestorOrSelf(canonicalDir, resolved) ? resolved : null;
+}
+
 export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRepository {
   async load(dir: string): Promise<SharedProjectConfigMapping | null> {
     const root = await this.readRawRoot(dir);
@@ -139,9 +149,17 @@ export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRep
       return null;
     }
 
+    const projectRoot = resolveContainedPath(dir, raw.path);
+    if (projectRoot === null) {
+      logger.debug(
+        `Dropping ${SHARED_PROJECT_CONFIG_FILE_NAME} entry in ${dir}: "path" escapes it`,
+      );
+      return null;
+    }
+
     if (isServerEntryDto(raw)) {
       return {
-        projectRoot: canonicalizePath(join(dir, raw.path)),
+        projectRoot,
         projectKey: raw.projectKey,
         serverUrl: raw.serverUrl,
         organization: undefined,
@@ -149,7 +167,7 @@ export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRep
     }
 
     return {
-      projectRoot: canonicalizePath(join(dir, raw.path)),
+      projectRoot,
       projectKey: raw.projectKey,
       serverUrl: cloudRegionToUrl(raw.region),
       organization: raw.organization,

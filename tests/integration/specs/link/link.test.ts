@@ -125,5 +125,15 @@ describe('sonar link', () => {
       expect(result.exitCode).not.toBe(0);
       expect(result.stdout + result.stderr).toContain('region');
     });
+
+    it('fails with a helpful message when --path escapes the repository root', async () => {
+      harness.withAuth(SERVER_URL, 'test-token');
+
+      const result = await harness.run('link my_project --path ../../../../etc');
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain('must stay within');
+      expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
+    });
   });
 });
