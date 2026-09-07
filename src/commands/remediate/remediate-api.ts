@@ -53,8 +53,6 @@ export class RemediateApiClient {
   async checkAiRemediationEntitlement(
     orgKey: string,
   ): Promise<{ status: AiRemediationEntitlement }> {
-    // Not OrganizationsClient.getOrganizationLegacyId: it maps a failed lookup to null,
-    // which would report an unreachable server as 'not_eligible' instead of 'unknown'.
     const orgsEndpoint = '/organizations/organizations';
     const orgsResult = await this.client.get<Array<{ id: string; uuidV4: string; name?: string }>>(
       orgsEndpoint,
