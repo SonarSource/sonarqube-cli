@@ -23,13 +23,12 @@ import * as fsPromises from 'node:fs/promises';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
-
 import {
   areHooksInstalled,
   detectGlobalSecretsHook,
   installHooks,
 } from '../../../../../src/commands/integrate/claude/hooks.ts';
+import { FakeConsole } from '../../../../_common/fake-console.ts';
 
 const PROJECT_ROOT = '/fake/project';
 const GLOBAL_DIR = '/fake/global';
@@ -67,6 +66,7 @@ let writeFileSpy: Mock<Extract<(typeof fsPromises)['writeFile'], (...args: any[]
 describe('detectGlobalSecretsHook', () => {
   let existsSyncSpy: Mock<Extract<(typeof nodeFs)['existsSync'], (...args: any[]) => any>>;
   let readFileSpy: Mock<Extract<(typeof fsPromises)['readFile'], (...args: any[]) => any>>;
+  let fake: FakeConsole;
 
   const SETTINGS_WITH_SECRETS = {
     hooks: {
@@ -82,14 +82,12 @@ describe('detectGlobalSecretsHook', () => {
   };
 
   beforeEach(() => {
-    setMockUi(true);
+    fake = new FakeConsole();
     existsSyncSpy = spyOn(nodeFs, 'existsSync').mockReturnValue(true);
     readFileSpy = spyOn(fsPromises, 'readFile').mockResolvedValue('{}');
   });
 
   afterEach(() => {
-    clearMockUiCalls();
-    setMockUi(false);
     existsSyncSpy.mockRestore();
     readFileSpy.mockRestore();
   });
@@ -97,24 +95,24 @@ describe('detectGlobalSecretsHook', () => {
   it('returns undefined and stays silent when settings.json does not exist (absent)', async () => {
     existsSyncSpy.mockReturnValue(false);
 
-    expect(await detectGlobalSecretsHook(PROJECT_ROOT)).toBeUndefined();
-    const noisy = getMockUiCalls().filter((c) => c.method === 'info' || c.method === 'warn');
+    expect(await detectGlobalSecretsHook(PROJECT_ROOT, fake)).toBeUndefined();
+    const noisy = fake.calls.filter((c) => c.method === 'info' || c.method === 'warn');
     expect(noisy).toHaveLength(0);
   });
 
   it('returns undefined and stays silent when no PreToolUse entry references sonar-secrets (absent)', async () => {
     readFileSpy.mockResolvedValue(JSON.stringify({ hooks: { PreToolUse: [] } }));
 
-    expect(await detectGlobalSecretsHook(PROJECT_ROOT)).toBeUndefined();
-    const noisy = getMockUiCalls().filter((c) => c.method === 'info' || c.method === 'warn');
+    expect(await detectGlobalSecretsHook(PROJECT_ROOT, fake)).toBeUndefined();
+    const noisy = fake.calls.filter((c) => c.method === 'info' || c.method === 'warn');
     expect(noisy).toHaveLength(0);
   });
 
   it('returns undefined and stays silent when settings.json contains malformed JSON (absent)', async () => {
     readFileSpy.mockResolvedValue('{ invalid json !!!');
 
-    expect(await detectGlobalSecretsHook(PROJECT_ROOT)).toBeUndefined();
-    const noisy = getMockUiCalls().filter((c) => c.method === 'info' || c.method === 'warn');
+    expect(await detectGlobalSecretsHook(PROJECT_ROOT, fake)).toBeUndefined();
+    const noisy = fake.calls.filter((c) => c.method === 'info' || c.method === 'warn');
     expect(noisy).toHaveLength(0);
   });
 
@@ -126,10 +124,10 @@ describe('detectGlobalSecretsHook', () => {
       return path.endsWith('.claude/settings.json');
     });
 
-    const result = await detectGlobalSecretsHook(PROJECT_ROOT);
+    const result = await detectGlobalSecretsHook(PROJECT_ROOT, fake);
 
     expect(result).toBeUndefined();
-    const warnCall = getMockUiCalls().find(
+    const warnCall = fake.calls.find(
       (c) =>
         c.method === 'warn' &&
         String(c.args[0]).includes(
@@ -146,11 +144,11 @@ describe('detectGlobalSecretsHook', () => {
       return path.endsWith('.claude/settings.json') || path.endsWith('.claude/hooks/sonar-secrets');
     });
 
-    const result = await detectGlobalSecretsHook(PROJECT_ROOT);
+    const result = await detectGlobalSecretsHook(PROJECT_ROOT, fake);
 
     expect(result).toBeDefined();
     expect(normPath(result ?? '')).toEndWith('.claude/hooks/sonar-secrets');
-    const infoCall = getMockUiCalls().find((c) => c.method === 'info');
+    const infoCall = fake.calls.find((c) => c.method === 'info');
     expect(infoCall).toBeUndefined();
   });
 });

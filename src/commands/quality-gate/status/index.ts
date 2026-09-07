@@ -29,7 +29,6 @@ import { MetricsClient } from '@/core/server/metrics.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { QualityGatesClient } from '@/core/server/quality-gates.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
-import { print, warn } from '@/core/ui';
 
 import {
   attachBreakdowns,
@@ -62,7 +61,7 @@ export async function qualityGateStatus(
   options: QualityGateStatusOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const { auth } = ctx;
+  const { auth, console } = ctx;
   const top = options.top ?? DEFAULT_TOP;
   if (top < 1 || top > MAX_PAGE_SIZE) {
     throw new InvalidOptionError(
@@ -75,7 +74,7 @@ export async function qualityGateStatus(
     );
   }
 
-  const projectKey = await resolveProjectKey(options.project, auth, true);
+  const projectKey = await resolveProjectKey(options.project, auth, console, true);
   noteProject(auth, projectKey);
 
   const client = new SonarHttpClient(auth.serverUrl, auth.token);
@@ -115,7 +114,7 @@ export async function qualityGateStatus(
     hasFailingConditions &&
     !hasFailingConditionInCategory(rawConditions, options.category)
   ) {
-    warn(`No failing conditions match category '${options.category}'.`);
+    console.warn(`No failing conditions match category '${options.category}'.`);
   }
 
   const format = options.format ?? 'table';
@@ -123,7 +122,7 @@ export async function qualityGateStatus(
     format === 'table'
       ? formatQualityGateTable({ verdict, project: projectKey, scope, conditions })
       : formatQualityGateJson({ verdict, project: projectKey, scope, conditions });
-  print(message);
+  console.print(message);
 
   process.exitCode = exitCodeFor(verdict);
 }

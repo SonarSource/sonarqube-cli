@@ -27,7 +27,7 @@ import crypto from 'node:crypto';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import logger from '@/core/observability/logger.ts';
-import { warn } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
 import { version as VERSION } from '../../../package.json';
 import { pathComparisonKey } from '../io/fs-utils.ts';
@@ -135,7 +135,12 @@ export function removeConnection(state: CliState, connectionId: string): void {
  * Record an installed binary in state.json under `dependencies.installed[]`.
  * Failures are logged but do not propagate — state writes must not fail an install.
  */
-export function recordInstalledDependency(id: string, version: string, path: string): void {
+export function recordInstalledDependency(
+  id: string,
+  version: string,
+  path: string,
+  console: Console,
+): void {
   try {
     const state = loadState();
     state.dependencies.installed = state.dependencies.installed.filter(
@@ -150,7 +155,7 @@ export function recordInstalledDependency(id: string, version: string, path: str
     });
     saveState(state);
   } catch (err) {
-    warn(`Failed to update state: ${(err as Error).message}`);
+    console.warn(`Failed to update state: ${(err as Error).message}`);
     logger.warn(`Failed to update state: ${(err as Error).message}`);
   }
 }

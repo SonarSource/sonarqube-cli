@@ -27,6 +27,7 @@ import type {
   InstalledIntegrationFeature,
   IntegrationStateAttribute,
 } from '@/core/state/state.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import { findInstalledIntegration } from './installation-recorder.ts';
 import { integrationInstaller } from './installer.ts';
@@ -44,11 +45,12 @@ import { isFeatureContainer } from './types.ts';
 export async function reconcileInstalledIntegrations(
   state: CliState,
   registry: IntegrationRegistry,
+  console: Console,
 ): Promise<boolean> {
   let stateChanged = false;
 
   for (const integration of registry.list()) {
-    if (await reconcileIntegration(state, integration)) {
+    if (await reconcileIntegration(state, integration, console)) {
       stateChanged = true;
     }
   }
@@ -59,6 +61,7 @@ export async function reconcileInstalledIntegrations(
 async function reconcileIntegration(
   state: CliState,
   integration: IntegrationDeclaration,
+  console: Console,
 ): Promise<boolean> {
   const installedIntegration = findInstalledIntegration(state, integration);
   if (!installedIntegration) {
@@ -80,6 +83,7 @@ async function reconcileIntegration(
       {
         continueOnFeatureError: true,
         executionMode: 'update',
+        console,
         onFeatureError: (application, err) => {
           logger.debug(
             `Declarative reconciliation failed for ${integration.id}.${application.feature.id}: ${err.message}`,

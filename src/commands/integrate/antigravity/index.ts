@@ -37,9 +37,10 @@ export async function integrateAntigravity(
   options: IntegrateAgentOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const { auth } = ctx;
+  const { auth, console } = ctx;
   if (!options.nonInteractive) {
     printAgentNonInteractiveAlternativeHint(
+      console,
       'sonar integrate antigravity --non-interactive',
       'sonar integrate antigravity --non-interactive -g',
     );
@@ -50,13 +51,17 @@ export async function integrateAntigravity(
     'antigravity',
     options,
     auth,
+    console,
   );
 
-  const vortex = await resolveVortexSetup({
-    auth,
-    projectKey: integrateCtx.projectKey,
-    isGlobal: integrateCtx.isGlobal,
-  });
+  const vortex = await resolveVortexSetup(
+    {
+      auth,
+      projectKey: integrateCtx.projectKey,
+      isGlobal: integrateCtx.isGlobal,
+    },
+    console,
+  );
 
   const { installRoot: targetRoot, installScope: scope } = resolveAntigravityInstallTarget(
     integrateCtx.isGlobal,
@@ -64,7 +69,7 @@ export async function integrateAntigravity(
   );
   const existingGlobalHookPath = integrateCtx.isGlobal
     ? undefined
-    : await detectGlobalSecretsHook();
+    : await detectGlobalSecretsHook(console);
   const globalSecretsHookExists = existingGlobalHookPath !== undefined;
 
   const integrationOptions: AntigravityIntegrationOptions = {
@@ -89,6 +94,7 @@ export async function integrateAntigravity(
     options: integrationOptions,
     targetRoot,
     scope,
+    console: ctx.console,
     auth,
     nonInteractive: options.nonInteractive,
     attrs,

@@ -19,7 +19,8 @@
  */
 
 import { CommandFailedError } from '@/core/command-error.ts';
-import { blank, info, success, text, warn } from '@/core/ui';
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import { checkForUpdate } from './update-check.ts';
 
@@ -28,50 +29,54 @@ export interface UpdateVersionOptions {
   force?: boolean;
 }
 
-async function updateVersionStatus(): Promise<void> {
-  info('Checking for updates...');
+async function updateVersionStatus(console: Console): Promise<void> {
+  console.info('Checking for updates...');
 
   const { currentVersion, latest, upToDate } = await checkForUpdate();
 
-  text(`Current version: v${currentVersion.text}`);
-  text(`Latest version:  v${latest.version.noBuild.text}`);
-  blank();
+  console.text(`Current version: v${currentVersion.text}`);
+  console.text(`Latest version:  v${latest.version.noBuild.text}`);
+  console.blank();
 
   if (upToDate) {
-    success('Already up to date');
+    console.success('Already up to date');
   } else {
-    warn(`Update available: v${latest.version.noBuild.text}`);
-    text('  Run: sonar update');
+    console.warn(`Update available: v${latest.version.noBuild.text}`);
+    console.text('  Run: sonar update');
   }
 }
 
-export async function updateVersion(options: UpdateVersionOptions = {}): Promise<void> {
+export async function updateVersion(
+  options: UpdateVersionOptions,
+  ctx: CommandInvocationContext,
+): Promise<void> {
+  const { console } = ctx;
   if (options.status) {
-    await updateVersionStatus();
+    await updateVersionStatus(console);
     return;
   }
 
-  info('Checking for updates...');
+  console.info('Checking for updates...');
 
   const { currentVersion, latest, upToDate } = await checkForUpdate();
   const latestVersion = latest.version.noBuild.text;
 
   if (upToDate && !options.force) {
-    success(`Already up to date (v${currentVersion.text})`);
+    console.success(`Already up to date (v${currentVersion.text})`);
     return;
   }
 
   if (upToDate) {
-    info(`Force installing v${latestVersion}...`);
+    console.info(`Force installing v${latestVersion}...`);
   } else {
-    info(`Updating v${currentVersion.text} → v${latestVersion}...`);
+    console.info(`Updating v${currentVersion.text} → v${latestVersion}...`);
   }
 
   const installResult = await latest.install();
   switch (installResult.status) {
     case 'launched_in_new_terminal':
-      info('Starting update in a new terminal window...');
-      text('Check the new terminal window to confirm the update completed.');
+      console.info('Starting update in a new terminal window...');
+      console.text('Check the new terminal window to confirm the update completed.');
       return;
     case 'failed': {
       const message = installResult.scriptErrorMessage
@@ -83,6 +88,6 @@ export async function updateVersion(options: UpdateVersionOptions = {}): Promise
       });
     }
     case 'installed':
-      success(`Updated to v${latestVersion}`);
+      console.success(`Updated to v${latestVersion}`);
   }
 }

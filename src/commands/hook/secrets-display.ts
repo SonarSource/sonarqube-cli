@@ -19,8 +19,7 @@
  */
 
 import type { SecretsJsonIssue } from '@/commands/analyze/secrets.ts';
-import { print } from '@/core/ui';
-
+import type { Console } from '@/core/ui/console.ts';
 function formatSecretsFindingLine(issue: SecretsJsonIssue): string {
   const location = issue.location ? `:${String(issue.location.startLine)}` : '';
   const secret = issue.maskedSecret ? ` (secret: ${issue.maskedSecret})` : '';
@@ -28,10 +27,14 @@ function formatSecretsFindingLine(issue: SecretsJsonIssue): string {
 }
 
 /** Shared by the git pre-commit/pre-push hooks to surface finding detail before blocking. */
-export function printSecretsFindingsOrStderr(issues: SecretsJsonIssue[], stderr: string): void {
+export function printSecretsFindingsOrStderr(
+  issues: SecretsJsonIssue[],
+  stderr: string,
+  console: Console,
+): void {
   if (issues.length > 0) {
-    print(issues.map(formatSecretsFindingLine).join('\n'));
+    console.print(issues.map(formatSecretsFindingLine).join('\n'));
   } else if (stderr) {
-    print(stderr);
+    console.print(stderr);
   }
 }

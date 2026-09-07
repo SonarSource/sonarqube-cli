@@ -29,7 +29,7 @@ import {
   ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR_FROM_AGENTS,
 } from '@/core/config-constants.ts';
 import type { IntegrationContext } from '@/core/framework/features';
-import { warn } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
 import { HOOK_TIMEOUT_SEC, readOrInitJson, SONAR_SECRETS_MARKER } from '../_common/hooks.ts';
 
@@ -68,7 +68,7 @@ export type AntigravityHooksDocument = Record<string, AntigravityHookBlock | und
  * PreToolUse hook. Returns the active hook script path when healthy, so project
  * installs can skip duplicate secrets scanning.
  */
-export async function detectGlobalSecretsHook(): Promise<string | undefined> {
+export async function detectGlobalSecretsHook(console: Console): Promise<string | undefined> {
   if (!existsSync(ANTIGRAVITY_GLOBAL_HOOKS_JSON)) return undefined;
 
   const parsed = await readOrInitJson<AntigravityHooksDocument>(ANTIGRAVITY_GLOBAL_HOOKS_JSON, {});
@@ -84,7 +84,7 @@ export async function detectGlobalSecretsHook(): Promise<string | undefined> {
     (command ? extractScriptPathFromHookCommand(command) : undefined) ??
     join(ANTIGRAVITY_GLOBAL_SONAR_HOOKS_DIR, hookScriptName());
   if (!existsSync(scriptPath)) {
-    warn(
+    console.warn(
       `Global hook configuration detected at ${ANTIGRAVITY_GLOBAL_HOOKS_JSON} but the backing script is missing. Falling back to project-level installation.`,
     );
     return undefined;

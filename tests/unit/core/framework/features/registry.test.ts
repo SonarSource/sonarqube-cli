@@ -38,6 +38,8 @@ import type {
 import { isContainerIntegrationContext } from '@/core/framework/features/types.ts';
 import { getDefaultState, type InstalledIntegrationFeature } from '@/core/state/state.ts';
 
+import { FakeConsole } from '../../../../_common/fake-console.ts';
+
 const binaryInstall = await import('@/core/host/install/binary.ts');
 void mock.module('@/core/host/install/binary.ts', () => ({
   ...binaryInstall,
@@ -72,10 +74,14 @@ async function selectForInvocation<TOptions>(
   invocation: IntegrationInvocation<TOptions>,
 ) {
   const applications = await buildApplications(invocation, integration.features);
-  return selectFeaturesForInvocation(integration, invocation, applications);
+  return selectFeaturesForInvocation(integration, invocation, applications, fake);
 }
 
-const { findMockUiCall, getMockUiCalls, queueMockResponse, setMockUi } = await import('@/core/ui');
+let fake: FakeConsole;
+
+beforeEach(() => {
+  fake = new FakeConsole();
+});
 
 describe('declarative integration framework', () => {
   const installer = new IntegrationInstaller();
@@ -95,7 +101,6 @@ describe('declarative integration framework', () => {
   afterEach(() => {
     installBinarySpy.mockRestore();
     resolveBinaryPathSpy.mockRestore();
-    setMockUi(false);
     rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -504,9 +509,12 @@ describe('declarative integration framework', () => {
     const state = getDefaultState('test');
 
     const filteredContainer = { ...container, subfeatures: [container.subfeatures[0]] };
-    await installer.applyAndRecordFeatures(state, integration, [
-      { feature: filteredContainer, targetRoot: tempDir, scope: 'project' },
-    ]);
+    await installer.applyAndRecordFeatures(
+      state,
+      integration,
+      [{ feature: filteredContainer, targetRoot: tempDir, scope: 'project' }],
+      { console: fake },
+    );
 
     expect(integrationContext).toBeDefined();
     expect(isContainerIntegrationContext(integrationContext!)).toBeTrue();
@@ -516,7 +524,6 @@ describe('declarative integration framework', () => {
   });
 
   it('selectFeaturesForInvocation prompts for subfeature askUser, installing on confirm and skipping on decline', async () => {
-    setMockUi(true);
     const container: FeatureContainer<Record<string, unknown>> = {
       id: 'container',
       displayName: 'Container',
@@ -536,8 +543,8 @@ describe('declarative integration framework', () => {
       defaultInstallSubfeatureIds: [],
     };
     const integration = makeIntegration({ features: [container] });
-    queueMockResponse(true); // accept 'opted-in'
-    queueMockResponse(false); // decline 'declined'
+    fake.queueResponse(true); // accept 'opted-in'
+    fake.queueResponse(false); // decline 'declined'
 
     const result = await selectForInvocation(integration, {
       options: {},
@@ -552,13 +559,12 @@ describe('declarative integration framework', () => {
     expect(selected).toHaveLength(1);
     expect(selected[0]?.id).toBe('opted-in');
     expect(result.declined).toEqual(['declined']);
-    const confirmCalls = getMockUiCalls().filter((c) => c.method === 'confirmPrompt');
+    const confirmCalls = fake.calls.filter((c) => c.method === 'confirmPrompt');
     expect(confirmCalls).toHaveLength(2);
     expect(confirmCalls[0]?.args[0]).toBe('Enable it?');
   });
 
   it('selectFeaturesForInvocation throws CommandFailedError on Ctrl+C at subfeature prompt', async () => {
-    setMockUi(true);
     const container: FeatureContainer<Record<string, unknown>> = {
       id: 'container',
       displayName: 'Container',
@@ -573,7 +579,7 @@ describe('declarative integration framework', () => {
       defaultInstallSubfeatureIds: [],
     };
     const integration = makeIntegration({ features: [container] });
-    queueMockResponse(null); // Ctrl+C
+    fake.queueResponse(null); // Ctrl+C
 
     let caughtError: unknown;
     try {
@@ -592,14 +598,16 @@ describe('declarative integration framework', () => {
   });
 
   it('selectFeaturesForInvocation throws CommandFailedError on Ctrl+C at the Keep? prompt', async () => {
-    setMockUi(true);
     const integration = makeIntegration({ features: [{ id: 'feature', displayName: 'Feature' }] });
     const state = getDefaultState('test');
     // Seed the feature as already installed so the keep/remove flow kicks in.
-    await installer.applyAndRecordFeatures(state, integration, [
-      { feature: integration.features[0], targetRoot: tempDir, scope: 'project' },
-    ]);
-    queueMockResponse(null); // Ctrl+C at "Keep?"
+    await installer.applyAndRecordFeatures(
+      state,
+      integration,
+      [{ feature: integration.features[0], targetRoot: tempDir, scope: 'project' }],
+      { console: fake },
+    );
+    fake.queueResponse(null); // Ctrl+C at "Keep?"
 
     let caughtError: unknown;
     try {
@@ -618,14 +626,16 @@ describe('declarative integration framework', () => {
   });
 
   it('selectFeaturesForInvocation throws CommandFailedError on Ctrl+C at the removal confirmation', async () => {
-    setMockUi(true);
     const integration = makeIntegration({ features: [{ id: 'feature', displayName: 'Feature' }] });
     const state = getDefaultState('test');
-    await installer.applyAndRecordFeatures(state, integration, [
-      { feature: integration.features[0], targetRoot: tempDir, scope: 'project' },
-    ]);
-    queueMockResponse(false); // decline "Keep?"
-    queueMockResponse(null); // Ctrl+C at "Proceed with removal?"
+    await installer.applyAndRecordFeatures(
+      state,
+      integration,
+      [{ feature: integration.features[0], targetRoot: tempDir, scope: 'project' }],
+      { console: fake },
+    );
+    fake.queueResponse(false); // decline "Keep?"
+    fake.queueResponse(null); // Ctrl+C at "Proceed with removal?"
 
     let caughtError: unknown;
     try {
@@ -644,14 +654,16 @@ describe('declarative integration framework', () => {
   });
 
   it('routes a user-confirmed uninstall to toRemove, not declined', async () => {
-    setMockUi(true);
     const integration = makeIntegration({ features: [{ id: 'feature', displayName: 'Feature' }] });
     const state = getDefaultState('test');
-    await installer.applyAndRecordFeatures(state, integration, [
-      { feature: integration.features[0], targetRoot: tempDir, scope: 'project' },
-    ]);
-    queueMockResponse(false); // decline "Keep?"
-    queueMockResponse(true); // confirm "Proceed with removal?"
+    await installer.applyAndRecordFeatures(
+      state,
+      integration,
+      [{ feature: integration.features[0], targetRoot: tempDir, scope: 'project' }],
+      { console: fake },
+    );
+    fake.queueResponse(false); // decline "Keep?"
+    fake.queueResponse(true); // confirm "Proceed with removal?"
 
     const selected = await selectForInvocation(integration, {
       options: {},
@@ -669,7 +681,6 @@ describe('declarative integration framework', () => {
   it.each([true, false])(
     'selects an installed feature for removal when shouldInstall returns uninstall (nonInteractive: %p)',
     async (nonInteractive) => {
-      setMockUi(true);
       const integration = makeIntegration({
         features: [
           {
@@ -680,9 +691,12 @@ describe('declarative integration framework', () => {
         ],
       });
       const state = getDefaultState('test');
-      await installer.applyAndRecordFeatures(state, integration, [
-        { feature: integration.features[0], targetRoot: tempDir, scope: 'project' },
-      ]);
+      await installer.applyAndRecordFeatures(
+        state,
+        integration,
+        [{ feature: integration.features[0], targetRoot: tempDir, scope: 'project' }],
+        { console: fake },
+      );
 
       const selected = await selectForInvocation(integration, {
         options: {},
@@ -694,13 +708,12 @@ describe('declarative integration framework', () => {
 
       expect(selected.toRemove.map((application) => application.feature.id)).toEqual(['feature']);
       expect(selected.toInstall).toEqual([]);
-      expect(getMockUiCalls().filter((call) => call.method === 'confirmPrompt')).toEqual([]);
-      expect(findMockUiCall('info', 'Removing feature')).toBeDefined();
+      expect(fake.calls.filter((call) => call.method === 'confirmPrompt')).toEqual([]);
+      expect(fake.findCall('info', 'Removing feature')).toBeDefined();
     },
   );
 
   it('leaves an absent feature absent when its decision is uninstall', async () => {
-    setMockUi(true);
     const integration = makeIntegration({
       features: [
         {
@@ -720,7 +733,7 @@ describe('declarative integration framework', () => {
 
     expect(selected.toInstall).toEqual([]);
     expect(selected.toRemove).toEqual([]);
-    expect(findMockUiCall('info', 'Removing feature')).toBeUndefined();
+    expect(fake.findCall('info', 'Removing feature')).toBeUndefined();
   });
 
   it('preserves an installed feature when its decision is skip', async () => {
@@ -728,9 +741,12 @@ describe('declarative integration framework', () => {
       features: [{ id: 'feature', displayName: 'Feature', shouldInstall: () => skip() }],
     });
     const state = getDefaultState('test');
-    await installer.applyAndRecordFeatures(state, integration, [
-      { feature: integration.features[0], targetRoot: tempDir, scope: 'project' },
-    ]);
+    await installer.applyAndRecordFeatures(
+      state,
+      integration,
+      [{ feature: integration.features[0], targetRoot: tempDir, scope: 'project' }],
+      { console: fake },
+    );
 
     const selected = await selectForInvocation(integration, {
       options: {},
@@ -759,9 +775,12 @@ describe('declarative integration framework', () => {
     const context = makeContext(state, tempDir);
 
     const filteredContainer = { ...container, subfeatures: [container.subfeatures[0]] };
-    await installer.applyAndRecordFeatures(state, integration, [
-      { feature: filteredContainer, targetRoot: tempDir, scope: 'project' },
-    ]);
+    await installer.applyAndRecordFeatures(
+      state,
+      integration,
+      [{ feature: filteredContainer, targetRoot: tempDir, scope: 'project' }],
+      { console: fake },
+    );
 
     const recorded = state.integrations.installed[0]?.features[0];
     expect(recorded?.featureId).toBe('container');
@@ -788,17 +807,23 @@ describe('declarative integration framework', () => {
     const state = getDefaultState('test');
 
     // First install: subfeature declares dep-old
-    await installer.applyAndRecordFeatures(state, integration, [
-      { feature: makeContainer(depOld), targetRoot: tempDir, scope: 'project' },
-    ]);
+    await installer.applyAndRecordFeatures(
+      state,
+      integration,
+      [{ feature: makeContainer(depOld), targetRoot: tempDir, scope: 'project' }],
+      { console: fake },
+    );
     expect(state.integrations.installed[0]?.features[0]?.subfeatures?.[0]?.dependencies).toEqual([
       { id: 'dep-old' },
     ]);
 
     // Re-install: subfeature now declares dep-new instead
-    await installer.applyAndRecordFeatures(state, integration, [
-      { feature: makeContainer(depNew), targetRoot: tempDir, scope: 'project' },
-    ]);
+    await installer.applyAndRecordFeatures(
+      state,
+      integration,
+      [{ feature: makeContainer(depNew), targetRoot: tempDir, scope: 'project' }],
+      { console: fake },
+    );
     const subfeature = state.integrations.installed[0]?.features[0]?.subfeatures?.[0];
     expect(subfeature?.dependencies).toEqual([{ id: 'dep-new' }]);
   });
@@ -1014,7 +1039,6 @@ describe('declarative integration framework', () => {
   });
 
   it('reports an optional reason when a feature is skipped, and stays silent otherwise', async () => {
-    setMockUi(true);
     const integration = makeIntegration({
       features: [
         { id: 'with-reason', displayName: 'With reason', shouldInstall: () => skip('covered') },
@@ -1031,12 +1055,11 @@ describe('declarative integration framework', () => {
 
     expect(selected.toInstall).toEqual([]);
     expect(selected.declined).toEqual([]);
-    expect(findMockUiCall('info', 'covered')).toBeDefined();
-    expect(getMockUiCalls().filter((call) => call.method === 'info')).toHaveLength(1);
+    expect(fake.findCall('info', 'covered')).toBeDefined();
+    expect(fake.calls.filter((call) => call.method === 'info')).toHaveLength(1);
   });
 
   it('prints an optional message when a feature is installed, and stays silent otherwise', async () => {
-    setMockUi(true);
     const integration = makeIntegration({
       features: [
         {
@@ -1059,12 +1082,11 @@ describe('declarative integration framework', () => {
       'with-message',
       'silent',
     ]);
-    expect(findMockUiCall('discreetSuccess', 'auto-configured')).toBeDefined();
-    expect(getMockUiCalls().filter((call) => call.method === 'discreetSuccess')).toHaveLength(1);
+    expect(fake.findCall('discreetSuccess', 'auto-configured')).toBeDefined();
+    expect(fake.calls.filter((call) => call.method === 'discreetSuccess')).toHaveLength(1);
   });
 
   it('prompts the user when a feature asks, installing on confirm and skipping on decline', async () => {
-    setMockUi(true);
     const integration = makeIntegration({
       features: [
         { id: 'accepted', displayName: 'Accepted', shouldInstall: () => askUser() },
@@ -1075,8 +1097,8 @@ describe('declarative integration framework', () => {
         },
       ],
     });
-    queueMockResponse(true);
-    queueMockResponse(false);
+    fake.queueResponse(true);
+    fake.queueResponse(false);
 
     const selected = await selectForInvocation(integration, {
       options: {},
@@ -1088,13 +1110,12 @@ describe('declarative integration framework', () => {
     expect(selected.toInstall.map((application) => application.feature.id)).toEqual(['accepted']);
     expect(selected.declined).toEqual(['declined']);
     expect(selected.toRemove).toEqual([]);
-    const confirmCalls = getMockUiCalls().filter((call) => call.method === 'confirmPrompt');
+    const confirmCalls = fake.calls.filter((call) => call.method === 'confirmPrompt');
     expect(confirmCalls).toHaveLength(2);
     expect(confirmCalls[1]?.args[0]).toBe('Install the thing?');
   });
 
   it('appends the feature description to the default prompt but not to a custom one', async () => {
-    setMockUi(true);
     const integration = makeIntegration({
       features: [
         {
@@ -1111,8 +1132,8 @@ describe('declarative integration framework', () => {
         },
       ],
     });
-    queueMockResponse(true);
-    queueMockResponse(true);
+    fake.queueResponse(true);
+    fake.queueResponse(true);
 
     await selectForInvocation(integration, {
       options: {},
@@ -1121,17 +1142,16 @@ describe('declarative integration framework', () => {
       state: getDefaultState('test'),
     });
 
-    const confirmCalls = getMockUiCalls().filter((call) => call.method === 'confirmPrompt');
+    const confirmCalls = fake.calls.filter((call) => call.method === 'confirmPrompt');
     expect(confirmCalls[0]?.args[0]).toBe('Install Some feature? (some benefit)');
     expect(confirmCalls[1]?.args[0]).toBe('Install the thing?');
   });
 
   it('defaults to asking the user when a feature omits shouldInstall', async () => {
-    setMockUi(true);
     const integration = makeIntegration({
       features: [{ id: 'feature', displayName: 'Feature' }],
     });
-    queueMockResponse(false);
+    fake.queueResponse(false);
 
     const selected = await selectForInvocation(integration, {
       options: {},
@@ -1141,11 +1161,10 @@ describe('declarative integration framework', () => {
     });
 
     expect(selected.toInstall).toEqual([]);
-    expect(getMockUiCalls().filter((call) => call.method === 'confirmPrompt')).toHaveLength(1);
+    expect(fake.calls.filter((call) => call.method === 'confirmPrompt')).toHaveLength(1);
   });
 
   it('auto-confirms ask decisions in non-interactive mode without prompting', async () => {
-    setMockUi(true);
     const integration = makeIntegration({
       features: [
         { id: 'asked', displayName: 'Asked', shouldInstall: () => askUser() },
@@ -1166,7 +1185,7 @@ describe('declarative integration framework', () => {
       'defaulted',
     ]);
     expect(selected.declined).toEqual([]);
-    expect(getMockUiCalls().filter((call) => call.method === 'confirmPrompt')).toHaveLength(0);
+    expect(fake.calls.filter((call) => call.method === 'confirmPrompt')).toHaveLength(0);
   });
 
   it('runs legacy cleanups unconditionally even when state records resource at a higher version', async () => {
@@ -1392,6 +1411,7 @@ function makeContext(
     targetRoot,
     scope: 'project',
     executionMode,
+    console: new FakeConsole(),
     force,
     attrs,
     resolvedDependencies: new Map(),
@@ -1404,15 +1424,20 @@ async function applyAndRecord<TOptions>(
   integration: IntegrationDeclaration<TOptions>,
   feature: FeatureDeclaration<TOptions>,
 ): Promise<InstalledIntegrationFeature> {
-  const installed = await installer.applyAndRecordFeatures(context.state, integration, [
-    {
-      feature,
-      targetRoot: context.targetRoot,
-      scope: context.scope,
-      force: context.force,
-      attrs: context.attrs,
-    },
-  ]);
+  const installed = await installer.applyAndRecordFeatures(
+    context.state,
+    integration,
+    [
+      {
+        feature,
+        targetRoot: context.targetRoot,
+        scope: context.scope,
+        force: context.force,
+        attrs: context.attrs,
+      },
+    ],
+    { console: context.console },
+  );
 
   if (installed.length === 0) {
     throw new Error('Feature was not recorded');

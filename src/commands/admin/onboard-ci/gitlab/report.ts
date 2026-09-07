@@ -22,16 +22,20 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { CommandFailedError } from '@/core/command-error.ts';
-import { print } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
 import type { DryRunResults, OnboardCiResults } from './types.ts';
 
-export function writeReportFile(results: OnboardCiResults | DryRunResults, filename: string): void {
+export function writeReportFile(
+  results: OnboardCiResults | DryRunResults,
+  filename: string,
+  console: Console,
+): void {
   const dest = join(process.cwd(), filename);
   try {
     writeFileSync(dest, JSON.stringify(results, null, 2), 'utf8');
   } catch (err) {
     throw new CommandFailedError(`Failed to write report to ${dest}: ${String(err)}`);
   }
-  print(`Full report: ${filename}  (written to current directory)`);
+  console.print(`Full report: ${filename}  (written to current directory)`);
 }

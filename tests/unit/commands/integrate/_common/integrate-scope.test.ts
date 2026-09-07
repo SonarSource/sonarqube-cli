@@ -18,63 +18,65 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { beforeEach, describe, expect, it } from 'bun:test';
 
 import { CommandFailedError } from '@/core/command-error.ts';
-import {
-  clearMockUiCalls,
-  findMockUiCall,
-  getMockUiCalls,
-  queueMockResponse,
-  setMockUi,
-} from '@/core/ui';
 
 import {
   buildProjectScopeLabel,
   isGlobalIntegrateScope,
   resolveIntegrateScope,
 } from '../../../../../src/commands/integrate/_common/integrate-scope.ts';
+import { FakeConsole } from '../../../../_common/fake-console.ts';
+
+let fake: FakeConsole;
 
 describe('resolveIntegrateScope', () => {
-  beforeEach(() => setMockUi(true));
-  afterEach(() => {
-    clearMockUiCalls();
-    setMockUi(false);
+  beforeEach(() => {
+    fake = new FakeConsole();
   });
 
   it('returns global when --global is set', async () => {
-    expect(await resolveIntegrateScope({ global: true })).toBe('global');
-    expect(getMockUiCalls().some((c) => c.method === 'selectPrompt')).toBe(false);
+    expect(await resolveIntegrateScope({ global: true, console: fake })).toBe('global');
+    expect(fake.calls.some((c) => c.method === 'selectPrompt')).toBe(false);
   });
 
   it('defaults to project with an info line in non-interactive mode', async () => {
-    expect(await resolveIntegrateScope({ nonInteractive: true })).toBe('project');
-    expect(findMockUiCall('info', 'defaulting to this project')).toBeDefined();
+    expect(await resolveIntegrateScope({ nonInteractive: true, console: fake })).toBe('project');
+    expect(fake.findCall('info', 'defaulting to this project')).toBeDefined();
   });
 
   it('includes the project path in the non-interactive default info line', async () => {
     expect(
-      await resolveIntegrateScope({ nonInteractive: true, projectRoot: '/workspace/my-repo' }),
+      await resolveIntegrateScope({
+        nonInteractive: true,
+        projectRoot: '/workspace/my-repo',
+        console: fake,
+      }),
     ).toBe('project');
-    expect(findMockUiCall('info', 'defaulting to this project (/workspace/my-repo)')).toBeDefined();
+    expect(fake.findCall('info', 'defaulting to this project (/workspace/my-repo)')).toBeDefined();
   });
 
   it('returns project without prompting when a project key was provided', async () => {
-    expect(await resolveIntegrateScope({ projectKey: 'my-project' })).toBe('project');
-    expect(getMockUiCalls().some((c) => c.method === 'selectPrompt')).toBe(false);
+    expect(await resolveIntegrateScope({ projectKey: 'my-project', console: fake })).toBe(
+      'project',
+    );
+    expect(fake.calls.some((c) => c.method === 'selectPrompt')).toBe(false);
   });
 
   it('prompts interactively when a project root is provided', async () => {
-    queueMockResponse('project');
-    expect(await resolveIntegrateScope({ projectRoot: '/workspace/my-repo' })).toBe('project');
-    expect(getMockUiCalls().some((c) => c.method === 'selectPrompt')).toBe(true);
+    fake.queueResponse('project');
+    expect(await resolveIntegrateScope({ projectRoot: '/workspace/my-repo', console: fake })).toBe(
+      'project',
+    );
+    expect(fake.calls.some((c) => c.method === 'selectPrompt')).toBe(true);
   });
 
   it('prompts interactively when scope flags are omitted', async () => {
-    queueMockResponse('global');
-    expect(await resolveIntegrateScope({})).toBe('global');
+    fake.queueResponse('global');
+    expect(await resolveIntegrateScope({ console: fake })).toBe('global');
     expect(
-      getMockUiCalls().some(
+      fake.calls.some(
         (c) =>
           c.method === 'selectPrompt' &&
           typeof c.args[0] === 'string' &&
@@ -84,9 +86,9 @@ describe('resolveIntegrateScope', () => {
   });
 
   it('throws CommandFailedError when the user cancels the scope prompt', async () => {
-    queueMockResponse(null);
+    fake.queueResponse(null);
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(resolveIntegrateScope({})).rejects.toThrow(CommandFailedError);
+    await expect(resolveIntegrateScope({ console: fake })).rejects.toThrow(CommandFailedError);
   });
 });
 

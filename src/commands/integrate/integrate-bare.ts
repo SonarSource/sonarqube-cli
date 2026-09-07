@@ -20,7 +20,6 @@
 
 import { CommandFailedError } from '@/core/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { selectPrompt } from '@/core/ui';
 
 import { assertIntegrateScopeOptions } from './_common/agent-integrate-prelude.ts';
 import { integrateAntigravity } from './antigravity';
@@ -62,9 +61,10 @@ export async function integrateBare(
   ctx: CommandAuthenticatedInvocationContext,
   options: IntegrateBareOptions,
 ): Promise<void> {
+  const { console } = ctx;
   assertIntegrateScopeOptions(options);
 
-  const selected = await selectPrompt(
+  const selected = await console.selectPrompt(
     'Select the tool you want to integrate with',
     TOOLS.map((tool) => ({ value: tool, label: tool.label })),
   );

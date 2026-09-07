@@ -22,7 +22,7 @@ import { CommandFailedError } from '@/core/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
-import { info, intro, outro } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
 import {
   type DopRepository,
@@ -56,6 +56,7 @@ async function resolveOrgAndRepos(
   client: ImportApiClient,
   orgKey: string | undefined,
   options: ImportOptions,
+  console: Console,
 ): Promise<{ orgKey: string; almKey: string | undefined } & RepoResolution> {
   const {
     key: resolvedOrgKey,
@@ -63,7 +64,7 @@ async function resolveOrgAndRepos(
     onlyPrivateProjectsEnabled,
   } = await resolveOrg(client, orgKey);
 
-  info(`Organization: ${resolvedOrgKey}`);
+  console.info(`Organization: ${resolvedOrgKey}`);
 
   const [almKey, privateProjectsAvailable] = await Promise.all([
     resolveAlmKey(client, resolvedOrgKey, resolvedAlmKey),
@@ -79,7 +80,10 @@ async function resolveOrgAndRepos(
     available: privateProjectsAvailable,
   };
 
-  const outcome = await resolveRepos(client, resolvedOrgKey, almKey, onlyPrivateProjects, options);
+  const outcome = await resolveRepos(client, resolvedOrgKey, almKey, onlyPrivateProjects, {
+    ...options,
+    console,
+  });
 
   return { orgKey: resolvedOrgKey, almKey, ...outcome };
 }
@@ -183,15 +187,15 @@ async function runBulkImportJob(
   return { succeeded, failed, skipped: [...collection.skippedRepos, ...skippedByRegex] };
 }
 
-function reportSkipped(skipped: readonly SkippedRepo[]): void {
+function reportSkipped(skipped: readonly SkippedRepo[], console: Console): void {
   if (skipped.length === 0) return;
-  info(`Repositories skipped: ${skipped.length}`);
+  console.info(`Repositories skipped: ${skipped.length}`);
   const countsByReason = new Map<string, number>();
   for (const s of skipped) {
     countsByReason.set(s.reason, (countsByReason.get(s.reason) ?? 0) + 1);
   }
   for (const [reason, count] of countsByReason) {
-    info(`  - ${reason}: ${count}`);
+    console.info(`  - ${reason}: ${count}`);
   }
 }
 
@@ -205,6 +209,7 @@ function reportOutcome(
   failed: number,
   skippedCount: number,
   dashboardUrl: string,
+  console: Console,
 ): void {
   const skippedSuffix = skippedCount > 0 ? ` (${skippedCount} skipped)` : '';
 
@@ -220,7 +225,7 @@ function reportOutcome(
   }
 
   const succeededNoun = succeeded === 1 ? 'repository' : 'repositories';
-  outro(
+  console.outro(
     `Imported ${succeeded} ${succeededNoun}${skippedSuffix}`,
     'success',
     `Dashboard: ${dashboardUrl}`,
@@ -231,12 +236,12 @@ export async function importHandler(
   options: ImportOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const { auth } = ctx;
+  const { auth, console } = ctx;
   const client = new ImportApiClient(new SonarHttpClient(auth.serverUrl, auth.token));
 
-  intro('Import repositories', 'SonarQube');
+  console.intro('Import repositories', 'SonarQube');
 
-  const resolution = await resolveOrgAndRepos(client, auth.orgKey, options);
+  const resolution = await resolveOrgAndRepos(client, auth.orgKey, options, console);
 
   if (resolution.kind === 'streaming') {
     const { succeeded, failed, skipped } = await runBulkImportJob(
@@ -246,20 +251,21 @@ export async function importHandler(
       resolution.collection,
       resolution.regex,
     );
-    reportSkipped(skipped);
+    reportSkipped(skipped, console);
     reportOutcome(
       succeeded,
       failed,
       skipped.length,
       buildOnboardingDashboardUrl(auth.serverUrl, resolution.orgKey),
+      console,
     );
     return;
   }
 
   const { repos, skipped } = resolution;
 
-  info(`Repositories to import: ${repos.length}`);
-  reportSkipped(skipped);
+  console.info(`Repositories to import: ${repos.length}`);
+  reportSkipped(skipped, console);
 
   const progress = new ImportProgress({ maxVisible: IMPORT_PROVISION_CONCURRENCY_LIMIT });
   progress.setTotal(repos.length);
@@ -278,5 +284,6 @@ export async function importHandler(
     failed,
     skipped.length,
     buildOnboardingDashboardUrl(auth.serverUrl, resolution.orgKey),
+    console,
   );
 }

@@ -20,6 +20,7 @@
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CliState, IntegrationScope, IntegrationStateAttribute } from '@/core/state/state.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import type { DependencyDeclaration } from '../dependencies';
 import type { RemovableResource, ResourceDeclaration, ResourceIdentity } from '../resources';
@@ -33,6 +34,7 @@ export interface IntegrationContext {
   targetRoot: string;
   scope: IntegrationScope;
   executionMode: IntegrationExecutionMode;
+  console: Console;
   auth?: ResolvedAuth;
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;

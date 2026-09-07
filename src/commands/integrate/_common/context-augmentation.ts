@@ -27,7 +27,8 @@ import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-en
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
 import logger from '@/core/observability/logger.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
-import { discreetSuccess, type OutputChannel, print, text, warn, withSpinner } from '@/core/ui';
+import { type OutputChannel } from '@/core/ui';
+import type { Console } from '@/core/ui/console.ts';
 
 // Type-only, so it does not create a runtime cycle with vortex.ts.
 import type { ResolvedVortexSetup } from './vortex.ts';
@@ -91,6 +92,7 @@ export interface ApplyContextAugmentationToolIntegrationParams {
   projectRoot: string;
   projectKey: string | undefined;
   scaEnabled: boolean;
+  console: Console;
 }
 
 export interface PrintContextAugmentationSkillParams {
@@ -128,7 +130,8 @@ export class CagStepFailedError extends Error {
 export async function runToolIntegrateCommand(
   p: ApplyContextAugmentationToolIntegrationParams,
 ): Promise<void> {
-  text('     Installing Vortex Context...');
+  const console = p.console;
+  console.text('     Installing Vortex Context...');
 
   const initEnv = buildContextAugmentationEnv({
     organization: p.auth.orgKey,
@@ -144,9 +147,10 @@ export async function runToolIntegrateCommand(
     p.binaryPath,
     ['tool', 'integrate', '--invocation-prefix', SONAR_CONTEXT_INVOCATION],
     p.projectRoot,
+    console,
     initEnv,
   );
-  discreetSuccess('Vortex Context configured');
+  console.discreetSuccess('Vortex Context configured');
 }
 
 export async function printContextAugmentationSkill({
@@ -210,11 +214,12 @@ async function runCagStepOrThrow(
   binaryPath: string,
   args: string[],
   projectRoot: string,
+  console: Console,
   env: NodeJS.ProcessEnv = buildContextAugmentationEnv(),
 ): Promise<void> {
   if (process.stdout.isTTY) {
     try {
-      await withSpinner(successMessage, async () => {
+      await console.withSpinner(successMessage, async () => {
         const result = await runCagSubprocess(binaryPath, args, {
           projectRoot,
           env,
@@ -224,7 +229,7 @@ async function runCagStepOrThrow(
         }
       });
     } catch (error) {
-      reportCagFailureFromError(error);
+      reportCagFailureFromError(error, console);
       throw new CommandFailedError(failureMessage, {
         cause: error instanceof Error ? error : undefined,
       });
@@ -237,10 +242,10 @@ async function runCagStepOrThrow(
     env,
   });
   if (!result.ok) {
-    reportCagFailure(result);
+    reportCagFailure(result, console);
     throw new CommandFailedError(failureMessage);
   }
-  discreetSuccess(successMessage);
+  console.discreetSuccess(successMessage);
 }
 
 async function runCagSubprocess(
@@ -302,28 +307,28 @@ async function runCagSubprocess(
   });
 }
 
-function reportCagFailure(result: CagSubprocessResult): void {
+function reportCagFailure(result: CagSubprocessResult, console: Console): void {
   if (result.failureMessage) {
-    warn(result.failureMessage);
+    console.warn(result.failureMessage);
   }
-  printIndented(result.stdout, 'stdout');
-  printIndented(result.stderr, 'stderr');
+  printIndented(result.stdout, 'stdout', console);
+  printIndented(result.stderr, 'stderr', console);
 }
 
-function reportCagFailureFromError(error: unknown): void {
+function reportCagFailureFromError(error: unknown, console: Console): void {
   if (error instanceof CagStepFailedError) {
-    reportCagFailure(error.result);
+    reportCagFailure(error.result, console);
     return;
   }
-  warn((error as Error).message);
+  console.warn((error as Error).message);
 }
 
-function printIndented(buffer: string, channel: OutputChannel): void {
+function printIndented(buffer: string, channel: OutputChannel, console: Console): void {
   if (buffer.length === 0) {
     return;
   }
   const trimmed = buffer.endsWith('\n') ? buffer.slice(0, -1) : buffer;
   for (const line of trimmed.split('\n')) {
-    print(`  ${line}`, channel);
+    console.print(`  ${line}`, channel);
   }
 }
