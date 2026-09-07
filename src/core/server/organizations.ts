@@ -92,7 +92,13 @@ export class OrganizationsClient {
         this.client.apiHostFor(endpoint),
       )
       .map((result) => result[0] ?? null)
-      .orElse((error) => (isCriticalFailure(error) ? errAsync(error) : okAsync(null)));
+      .orElse((error) => {
+        if (isCriticalFailure(error)) return errAsync(error);
+        logger.debug(
+          `Organization lookup for '${organizationKey}' failed: ${error.name}: ${error.message}`,
+        );
+        return okAsync(null);
+      });
   }
 
   /**
