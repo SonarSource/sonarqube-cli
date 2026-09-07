@@ -440,9 +440,13 @@ describe('storeEvent', () => {
 
   describe('environment-variable authentication identity', () => {
     it('does not warn about partial env vars during storeEvent', async () => {
+      const resolveAuthSpy = spyOn(authResolver, 'resolveAuth');
       process.env[ENV_TOKEN] = 'partial-env-token';
 
       await storeEvent(makeCommand('auth login'));
+
+      expect(resolveAuthSpy).toHaveBeenCalledWith({ silent: true });
+      resolveAuthSpy.mockRestore();
     });
 
     it('resolves user_uuid and organization_uuid_v4 via API on first env-auth invocation', async () => {
