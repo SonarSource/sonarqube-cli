@@ -109,14 +109,13 @@ export interface LoopbackServerOptions {
   allowedOrigins?: string[];
 }
 
-/**
- * Attempt to bind a fresh HTTP server to a specific port on 127.0.0.1.
- * Returns the bound server on success; on EADDRINUSE returns null (caller tries next port).
- * Other errors are propagated immediately.
- */
-async function tryBindPort(
-  port: number,
-): Promise<{ srv: ReturnType<typeof createServer>; port: number } | null> {
+interface BoundServer {
+  srv: ReturnType<typeof createServer>;
+  port: number;
+}
+
+/** Bind a server, returning null when the address is already in use. */
+async function tryBindPort(port: number, host: string): Promise<BoundServer | null> {
   const srv = createServer();
   return new Promise((resolve, reject) => {
     srv.once('error', (err: NodeJS.ErrnoException) => {
@@ -127,7 +126,7 @@ async function tryBindPort(
         reject(err);
       }
     });
-    srv.listen(port, '127.0.0.1', () => {
+    srv.listen(port, host, () => {
       const address = srv.address();
       if (!address || typeof address === 'string') {
         srv.close();
@@ -139,47 +138,82 @@ async function tryBindPort(
   });
 }
 
+/** Check whether IPv6 loopback is available independently of candidate ports. */
+async function isIpv6LoopbackAvailable(): Promise<boolean> {
+  const srv = createServer();
+  return new Promise((resolve) => {
+    srv.once('error', () => {
+      resolve(false);
+    });
+    srv.listen(0, '::1', () =>
+      srv.close(() => {
+        resolve(true);
+      }),
+    );
+  });
+}
+
+function closeServer(srv: ReturnType<typeof createServer>): Promise<void> {
+  return new Promise<void>((resolve) => {
+    srv.close(() => {
+      resolve();
+    });
+
+    const forceCloseTimer = setTimeout(() => {
+      srv.closeAllConnections();
+    }, FORCE_CLOSE_TIMEOUT_MS);
+
+    forceCloseTimer.unref();
+  });
+}
+
 export async function startLoopbackServer(
   onRequest: RequestHandler,
   options?: LoopbackServerOptions,
 ): Promise<LoopbackServerResult> {
-  // Try each port in the SonarLint protocol range (64120-64130).
-  // SonarQube/SonarCloud validates that the callback port is within this range
-  // before sending the token — a random OS-assigned port is rejected.
-  let bound: { srv: ReturnType<typeof createServer>; port: number } | null = null;
+  const ipv6Available = await isIpv6LoopbackAvailable();
+
+  // The server accepts only the fixed SonarLint port range. Pair IPv4 and IPv6
+  // binds when IPv6 is available; otherwise, use IPv4-only.
+  let boundV4: BoundServer | null = null;
+  let boundV6: BoundServer | null = null;
   for (let i = 0; i < AUTH_PORT_COUNT; i++) {
     const candidate = AUTH_PORT_START + i;
-    bound = await tryBindPort(candidate);
-    if (bound !== null) break;
-    logger.debug(`Port ${candidate} in use, trying next`);
+    const v4 = await tryBindPort(candidate, '127.0.0.1');
+    if (v4 === null) {
+      logger.debug(`Port ${candidate} in use on IPv4, trying next`);
+      continue;
+    }
+
+    if (!ipv6Available) {
+      boundV4 = v4;
+      break;
+    }
+
+    const v6 = await tryBindPort(candidate, '::1');
+    if (v6 === null) {
+      logger.debug(
+        `Port ${candidate} free on IPv4 but its IPv6 loopback counterpart is already taken; ` +
+          'refusing to fall back to IPv4-only and trying the next port',
+      );
+      await closeServer(v4.srv);
+      continue;
+    }
+
+    boundV4 = v4;
+    boundV6 = v6;
+    break;
   }
 
-  if (bound === null) {
+  if (boundV4 === null) {
     throw new Error(
       `No available port in SonarLint range ${AUTH_PORT_START}-${AUTH_PORT_START + AUTH_PORT_COUNT - 1}`,
     );
   }
 
-  const { srv: finalServer, port: foundPort } = bound;
+  const { srv: finalServer, port: foundPort } = boundV4;
+  const serverV6 = boundV6?.srv ?? null;
   const allowedOrigins = options?.allowedOrigins ?? [];
-
-  // Also bind to IPv6 loopback on the same port.
-  // On macOS, dns.lookup('localhost') returns ::1 before 127.0.0.1, so browsers
-  // connect to [::1]:PORT first. Without this binding the OAuth callback from
-  // SonarCloud gets ECONNREFUSED and the token never arrives.
-  const serverV6 = createServer();
-  // Use an object to prevent TypeScript CFA from narrowing to false
-  const ipv6Status = { available: false };
-  await new Promise<void>((resolve) => {
-    serverV6.once('error', () => {
-      logger.debug('IPv6 loopback [::1] not available; using IPv4 only');
-      resolve();
-    });
-    serverV6.listen(foundPort, '::1', () => {
-      ipv6Status.available = true;
-      resolve();
-    });
-  });
 
   // Helper to wrap a response with security headers
   function wrapResponseWithSecurityHeaders(originalHandler: RequestHandler): RequestHandler {
@@ -257,27 +291,13 @@ export async function startLoopbackServer(
   // Set up secure request handler on both IPv4 and IPv6 servers
   const wrappedHandler = wrapResponseWithSecurityHeaders(onRequest);
   finalServer.on('request', wrappedHandler);
-  if (ipv6Status.available) {
+  if (serverV6) {
     serverV6.on('request', wrappedHandler);
-  }
-
-  function closeServer(srv: ReturnType<typeof createServer>): Promise<void> {
-    return new Promise<void>((resolve) => {
-      srv.close(() => {
-        resolve();
-      });
-
-      const forceCloseTimer = setTimeout(() => {
-        srv.closeAllConnections();
-      }, FORCE_CLOSE_TIMEOUT_MS);
-
-      forceCloseTimer.unref();
-    });
   }
 
   const close = async (): Promise<void> => {
     const pending: Promise<void>[] = [closeServer(finalServer)];
-    if (ipv6Status.available) {
+    if (serverV6) {
       pending.push(closeServer(serverV6));
     }
     await Promise.all(pending);

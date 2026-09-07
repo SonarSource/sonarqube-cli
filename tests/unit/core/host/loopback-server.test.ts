@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { createServer } from 'node:http';
+
 import { afterEach, describe, expect, it } from 'bun:test';
 
 import { AUTH_PORT_COUNT, AUTH_PORT_START } from '@/core/config-constants.ts';
@@ -420,6 +422,29 @@ describe('loopback-server', () => {
       });
 
       expect(response.status).toBe(HTTP_STATUS_FORBIDDEN);
+    });
+
+    // A squatted IPv6 candidate must not trigger an IPv4-only fallback.
+    it('should refuse IPv4-only fallback when the IPv6 loopback port is squatted', async () => {
+      const squatter = createServer();
+      await new Promise<void>((resolve, reject) => {
+        squatter.once('error', reject);
+        squatter.listen(AUTH_PORT_START, '::1', () => resolve());
+      });
+
+      try {
+        server = await startLoopbackServer((_req, res) => {
+          res.writeHead(HTTP_STATUS_OK);
+          res.end('OK');
+        });
+
+        expect(server.port).not.toBe(AUTH_PORT_START);
+
+        const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`);
+        expect(response.status).toBe(HTTP_STATUS_OK);
+      } finally {
+        await new Promise<void>((resolve) => squatter.close(() => resolve()));
+      }
     });
   });
 });
