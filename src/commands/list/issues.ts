@@ -36,7 +36,7 @@ const MIN_SEVERITY_WIDTH = 8;
 const MIN_RULE_WIDTH = 15;
 const MIN_MESSAGE_WIDTH = 50;
 
-function formatTable(issues: SonarQubeIssue[]): string {
+export function formatTable(issues: SonarQubeIssue[]): string {
   if (issues.length === 0) {
     return 'No issues found';
   }
