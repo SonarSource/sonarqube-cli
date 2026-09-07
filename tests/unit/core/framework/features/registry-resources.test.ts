@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -145,26 +145,75 @@ describe('declarative integration framework - resources and state recording', ()
     );
   });
 
-  it('rejects symlinked resource targets without modifying the linked file', async () => {
-    const state = getDefaultState('test');
-    const context = makeContext(state, tempDir);
-    const outsidePath = join(tempDir, 'outside.txt');
-    const targetPath = join(tempDir, 'managed.txt');
-    await writeFile(outsidePath, 'user content\n');
-    symlinkSync(outsidePath, targetPath);
-    const resource = wholeFile({
-      id: 'managed',
-      targetPath,
-      content: 'managed content\n',
-    });
+  it.skipIf(process.platform === 'win32')(
+    'rejects symlinked resource targets without modifying the linked file',
+    async () => {
+      const state = getDefaultState('test');
+      const context = makeContext(state, tempDir);
+      const outsidePath = join(tempDir, 'outside.txt');
+      const targetPath = join(tempDir, 'managed.txt');
+      await writeFile(outsidePath, 'user content\n');
+      symlinkSync(outsidePath, targetPath);
+      const resource = wholeFile({
+        id: 'managed',
+        targetPath,
+        content: 'managed content\n',
+      });
 
-    // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(resource.apply(context)).rejects.toThrow('symbolic link resource path');
-    expect(await readFile(outsidePath, 'utf-8')).toBe('user content\n');
-    // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(resource.remove(context)).rejects.toThrow('symbolic link resource path');
-    expect(await readFile(outsidePath, 'utf-8')).toBe('user content\n');
-  });
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(resource.apply(context)).rejects.toThrow('symbolic link resource path');
+      expect(await readFile(outsidePath, 'utf-8')).toBe('user content\n');
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(resource.remove(context)).rejects.toThrow('symbolic link resource path');
+      expect(await readFile(outsidePath, 'utf-8')).toBe('user content\n');
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'rejects writes through a symlinked parent directory without modifying the linked file',
+    async () => {
+      const state = getDefaultState('test');
+      const context = makeContext(state, tempDir);
+      const outsideDir = join(tempDir, 'outside');
+      mkdirSync(outsideDir);
+      const outsidePath = join(outsideDir, 'settings.json');
+      await writeFile(outsidePath, 'user content\n');
+      symlinkSync(outsideDir, join(tempDir, '.claude'));
+      const resource = wholeFile({
+        id: 'managed',
+        targetPath: join(tempDir, '.claude', 'settings.json'),
+        content: 'managed content\n',
+      });
+
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(resource.apply(context)).rejects.toThrow('symbolic link resource path');
+      expect(await readFile(outsidePath, 'utf-8')).toBe('user content\n');
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'does not refuse an out-of-root path whose ancestor above targetRoot is a symlink',
+    async () => {
+      const state = getDefaultState('test');
+      const projectRoot = join(tempDir, 'project');
+      mkdirSync(projectRoot);
+      const realHome = join(tempDir, 'real-home');
+      mkdirSync(realHome);
+      const mcpPath = join(realHome, 'mcp.json');
+      await writeFile(mcpPath, '{}\n');
+      const homeLink = join(tempDir, 'home');
+      symlinkSync(realHome, homeLink);
+      const context = makeContext(state, projectRoot);
+      const resource = wholeFile({
+        id: 'mcp',
+        targetPath: join(homeLink, 'mcp.json'),
+        content: '{}\n',
+      });
+
+      await resource.apply(context);
+      expect(await readFile(mcpPath, 'utf-8')).toBe('{}\n');
+    },
+  );
 
   it('replaces legacy text snippets that only contain the start marker', async () => {
     const state = getDefaultState('test');

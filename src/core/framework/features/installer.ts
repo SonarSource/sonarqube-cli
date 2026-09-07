@@ -264,8 +264,13 @@ export class IntegrationInstaller {
     callbacks: RemoveFeatureCallbacks<TOptions> = {},
   ): Promise<void> {
     for (const resource of resolveAllResources(feature)) {
-      await resource.remove(context);
-      callbacks.onResourceRemoved?.(resource);
+      try {
+        await resource.remove(context);
+        callbacks.onResourceRemoved?.(resource);
+      } catch (error) {
+        context.console.warn(`Skipping removal of ${resource.id}: ${(error as Error).message}`);
+        callbacks.onResourceSkipped?.(resource);
+      }
     }
 
     for (const cleanup of feature.legacyCleanups ?? []) {
@@ -358,7 +363,11 @@ export class IntegrationInstaller {
 
     for (const resource of subfeature.resources ?? []) {
       if (recordedResourceIds.has(resource.id)) {
-        await resource.remove(context);
+        try {
+          await resource.remove(context);
+        } catch (error) {
+          context.console.warn(`Skipping removal of ${resource.id}: ${(error as Error).message}`);
+        }
       }
     }
 

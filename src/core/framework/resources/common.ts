@@ -21,10 +21,11 @@
 import { existsSync, lstatSync } from 'node:fs';
 import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { EOL } from 'node:os';
-import { dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 
 import type { AppliedResource, IntegrationContext, MaybePromise } from '../features/types.ts';
 
@@ -59,7 +60,7 @@ export async function resolvePath(
   path: PathResolver,
 ): Promise<string> {
   const resolvedPath = typeof path === 'function' ? await path(context) : path;
-  assertNotSymlink(resolvedPath);
+  assertNotSymlink(resolvedPath, context.targetRoot);
   return resolvedPath;
 }
 
@@ -83,16 +84,52 @@ export async function writeFileIfChanged(
   await writeFile(path, content, mode === undefined ? undefined : { mode });
 }
 
-/** Refuse resource access through a symlink, including dangling links. */
-function assertNotSymlink(path: string): void {
+/** Refuse resource access through a symlink at any component below `root`. */
+function assertNotSymlink(path: string, root?: string): void {
+  const resolved = resolve(path);
+  if (root === undefined) {
+    if (isSymbolicLink(resolved)) {
+      throw symlinkRejected(resolved);
+    }
+    return;
+  }
+
+  const stop = canonicalizePath(root);
+  if (!isAncestorOrSelf(stop, canonicalizePath(resolved))) {
+    if (isSymbolicLink(resolved)) {
+      throw symlinkRejected(resolved);
+    }
+    return;
+  }
+
+  let current = resolved;
+  let parent = dirname(current);
+  while (parent !== current) {
+    if (isSymbolicLink(current)) {
+      throw symlinkRejected(current);
+    }
+    if (canonicalizePath(parent) === stop) {
+      return;
+    }
+    current = parent;
+    parent = dirname(current);
+  }
+}
+
+function symlinkRejected(path: string): CommandFailedError {
+  return new CommandFailedError(`Refusing to access symbolic link resource path: ${path}.`, {
+    remediationHint: `Replace the symbolic link at '${path}' with a regular file or directory, then retry.`,
+  });
+}
+
+function isSymbolicLink(path: string): boolean {
   try {
-    if (lstatSync(path).isSymbolicLink()) {
-      throw new CommandFailedError(`Refusing to access symbolic link resource path: ${path}.`);
-    }
+    return lstatSync(path).isSymbolicLink();
   } catch (error) {
-    if (error instanceof CommandFailedError) {
-      throw error;
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return false;
     }
+    throw error;
   }
 }
 
@@ -202,7 +239,6 @@ export abstract class RemoveablePatchResource<TDoc = unknown> implements Removab
 
   async remove(context: IntegrationContext): Promise<void> {
     const path = await resolvePath(context, this.options.targetPath);
-    assertNotSymlink(path);
     if (!existsSync(path)) {
       return;
     }
