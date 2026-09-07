@@ -26,6 +26,7 @@ import { join } from 'node:path';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { resolveCurrentGitBranch, resolveGitBranchAtRepoRoot } from '@/core/host/git/branch.ts';
 import { resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
+import { toRelativePosixPath as toRelativePosixPathOrNull } from '@/core/io/fs-utils.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 
 /** Maximum byte size per file sent to SQAA. Files exceeding this are skipped. */
@@ -76,8 +77,9 @@ export async function resolveChangeSet(
   const diffFiles = await getDiffFiles(repoRoot, { staged, base });
   const untrackedFiles = staged ? [] : await getUntrackedNonIgnoredFiles(repoRoot);
   const absolute = [...diffFiles, ...untrackedFiles].map((f) => join(repoRoot, f));
+  const inRepo = absolute.filter((file) => toRelativePosixPathOrNull(file, repoRoot) !== null);
 
-  const { files: nonBinary, ignored: binaryIgnored } = partitionBinary(absolute);
+  const { files: nonBinary, ignored: binaryIgnored } = partitionBinary(inRepo);
   const { files, ignored: oversizedIgnored } = partitionBySize(nonBinary);
 
   return { files, ignored: [...binaryIgnored, ...oversizedIgnored], repoRoot };

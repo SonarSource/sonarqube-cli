@@ -18,16 +18,23 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import * as processLib from '@/core/process/process.ts';
 
 import {
+  resolveChangeSet,
   resolveSqaaBranch,
   resolveSqaaBranchAtRepoRoot,
 } from '../../../../src/commands/analyze/sqaa-changeset.ts';
+import { clearGitStdoutCache } from '../../../../src/core/host/git/worktree.ts';
 
 let spawnProcessSpy: ReturnType<typeof spyOn>;
+let tempDir: string | undefined;
 
 function mockGitResponses(responses: Record<string, string | null>) {
   spawnProcessSpy.mockImplementation((_cmd: string, args: string[]) => {
@@ -49,6 +56,11 @@ beforeEach(() => {
 
 afterEach(() => {
   spawnProcessSpy.mockRestore();
+  clearGitStdoutCache();
+  if (tempDir !== undefined) {
+    rmSync(tempDir, { force: true, recursive: true });
+    tempDir = undefined;
+  }
 });
 
 describe('resolveSqaaBranch', () => {
@@ -100,5 +112,28 @@ describe('resolveSqaaBranch', () => {
     expect(
       spawnProcessSpy.mock.calls.some(([, args]: [string, string[]]) => args[0] === 'branch'),
     ).toBe(false);
+  });
+});
+
+describe('resolveChangeSet', () => {
+  it('excludes changed symlinks that resolve outside the repository', async () => {
+    tempDir = mkdtempSync(join(tmpdir(), 'sqaa-changeset-'));
+    const repoRoot = join(tempDir, 'repo');
+    const outsideFile = join(tempDir, 'outside.ts');
+    const symlinkPath = join(repoRoot, 'external.ts');
+    mkdirSync(repoRoot);
+    writeFileSync(outsideFile, 'outside content');
+    symlinkSync(outsideFile, symlinkPath);
+
+    mockGitResponses({
+      'rev-parse --show-toplevel': `${repoRoot}\n`,
+      'diff --name-only --diff-filter=ACMR -z HEAD': 'external.ts\0',
+      'ls-files -z --others --exclude-standard': '',
+    });
+
+    const result = await resolveChangeSet(repoRoot);
+
+    expect(result.files).toEqual([]);
+    expect(result.ignored).toEqual([]);
   });
 });
