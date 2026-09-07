@@ -18,11 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, lstatSync } from 'node:fs';
 import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { EOL } from 'node:os';
 import { dirname } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
+
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 
 import type { AppliedResource, IntegrationContext, MaybePromise } from '../features/types.ts';
 
@@ -56,7 +58,9 @@ export async function resolvePath(
   context: IntegrationContext,
   path: PathResolver,
 ): Promise<string> {
-  return typeof path === 'function' ? path(context) : path;
+  const resolvedPath = typeof path === 'function' ? await path(context) : path;
+  assertNotSymlink(resolvedPath);
+  return resolvedPath;
 }
 
 export async function writeFileIfChanged(
@@ -65,6 +69,7 @@ export async function writeFileIfChanged(
   executable?: boolean,
 ): Promise<void> {
   const mode = executable ? EXECUTABLE_FILE_MODE : undefined;
+  assertNotSymlink(path);
   if (existsSync(path)) {
     const existing = await readFile(path, 'utf-8');
     if (existing === content) {
@@ -78,7 +83,21 @@ export async function writeFileIfChanged(
   await writeFile(path, content, mode === undefined ? undefined : { mode });
 }
 
+/** Refuse resource access through a symlink, including dangling links. */
+function assertNotSymlink(path: string): void {
+  try {
+    if (lstatSync(path).isSymbolicLink()) {
+      throw new CommandFailedError(`Refusing to access symbolic link resource path: ${path}.`);
+    }
+  } catch (error) {
+    if (error instanceof CommandFailedError) {
+      throw error;
+    }
+  }
+}
+
 export async function readTextFile(path: string): Promise<string | undefined> {
+  assertNotSymlink(path);
   if (!existsSync(path)) {
     return undefined;
   }
@@ -183,6 +202,7 @@ export abstract class RemoveablePatchResource<TDoc = unknown> implements Removab
 
   async remove(context: IntegrationContext): Promise<void> {
     const path = await resolvePath(context, this.options.targetPath);
+    assertNotSymlink(path);
     if (!existsSync(path)) {
       return;
     }
