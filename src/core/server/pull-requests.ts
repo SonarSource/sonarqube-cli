@@ -20,6 +20,7 @@
 
 // SonarQube Project Pull Requests API wrapper
 
+import { unwrap } from '../result.ts';
 import { type SonarHttpClient } from './http-client.ts';
 import type { ProjectPullRequest, ProjectPullRequestsResponse } from './types.ts';
 
@@ -32,9 +33,11 @@ export class PullRequestsClient {
 
   // Returns null on a 404 (edition without PR analysis) instead of throwing.
   async listPullRequests(projectKey: string): Promise<ProjectPullRequest[] | null> {
-    const result = await this.client.getOrNotFound<ProjectPullRequestsResponse>(
-      '/api/project_pull_requests/list',
-      { project: projectKey },
+    const result = unwrap(
+      await this.client.getOrNotFound<ProjectPullRequestsResponse>(
+        '/api/project_pull_requests/list',
+        { project: projectKey },
+      ),
     );
     return result?.pullRequests ?? null;
   }
