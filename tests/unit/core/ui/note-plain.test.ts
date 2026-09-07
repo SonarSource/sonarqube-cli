@@ -27,7 +27,7 @@ void mock.module('@/core/ui/colors.js', mockColorsNonTTY);
 
 import { mock } from 'bun:test';
 
-import { TerminalConsole } from '@/core/ui';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { mockColorsNonTTY } from '../../../_common/colors-mock.ts';
 

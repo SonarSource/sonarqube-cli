@@ -20,7 +20,7 @@
 
 // Resolves which branch or pull request `quality-gate status` reports on
 
-import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { BranchesClient } from '@/core/server/branches.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 

@@ -19,7 +19,7 @@
  */
 // Configure CLI settings
 
-import { InvalidOptionError } from '@/core/command-error.ts';
+import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
 import { describeTelemetryStatus, isDoNotTrackRequested } from '@/core/telemetry/enabled.ts';

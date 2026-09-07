@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { InvalidOptionError } from '@/core/command-error.ts';
+import { InvalidOptionError } from '@/core/commands/command-error.ts';
 
 import {
   labelAnalysisDepth,

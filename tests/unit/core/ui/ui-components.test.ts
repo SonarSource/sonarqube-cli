@@ -28,7 +28,8 @@ void mock.module('@/core/ui/colors.js', mockColorsNonTTY);
 
 import { mock } from 'bun:test';
 
-import { phaseItem, TerminalConsole } from '@/core/ui';
+import { phaseItem } from '@/core/ui/console.ts';
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { mockColorsNonTTY } from '../../../_common/colors-mock.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';

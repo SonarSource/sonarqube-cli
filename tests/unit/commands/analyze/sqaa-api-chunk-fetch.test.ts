@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { SqaaAnalysisClient } from '@/commands/analyze/sqaa-analysis-client.ts';
 import type { SqaaAnalysisRequest } from '@/commands/analyze/sqaa-wire-types.ts';
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { ENV_SQAA_RETRY_BASE_DELAY_MS } from '@/core/config-constants.ts';
 import { RequestPayloadTooLargeError, ServiceUnavailableError } from '@/core/server/errors.ts';
 

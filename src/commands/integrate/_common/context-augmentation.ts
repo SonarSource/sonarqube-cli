@@ -21,14 +21,13 @@
 import { spawn } from 'node:child_process';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
 import logger from '@/core/observability/logger.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
-import { type OutputChannel } from '@/core/ui';
-import type { Console } from '@/core/ui/console.ts';
+import type { Console, OutputChannel } from '@/core/ui/console.ts';
 
 // Type-only, so it does not create a runtime cycle with vortex.ts.
 import type { ResolvedVortexSetup } from './vortex.ts';

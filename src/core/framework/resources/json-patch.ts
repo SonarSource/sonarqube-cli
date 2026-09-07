@@ -21,7 +21,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 
 import {
   PatchResource,

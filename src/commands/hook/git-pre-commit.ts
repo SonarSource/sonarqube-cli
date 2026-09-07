@@ -23,7 +23,7 @@
 // Replaces the shell logic that was previously embedded in the git hook script.
 
 import { resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { InvalidOptionError } from '@/core/command-error.ts';
+import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 import { discoverProject } from '@/core/project-info.ts';

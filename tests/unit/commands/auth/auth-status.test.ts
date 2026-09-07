@@ -22,7 +22,7 @@ import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { authStatus } from '@/commands/auth/status.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';

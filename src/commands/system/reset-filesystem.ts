@@ -27,8 +27,7 @@ import {
   LOG_DIR,
   SCA_SCANNER_CACHE_DIR,
 } from '@/core/config-constants.ts';
-import type { PhaseItem } from '@/core/ui';
-import { phaseItem } from '@/core/ui';
+import { type PhaseItem, phaseItem } from '@/core/ui/console.ts';
 
 import { directorySizeBytes, formatByteSize } from './dir-size.ts';
 import { resolveSafePath } from './safe-path.ts';

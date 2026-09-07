@@ -33,8 +33,7 @@ import {
   verifyBinarySignature,
 } from '@/core/host/install/sonarsource-releases.ts';
 import { recordInstalledDependency } from '@/core/state/state-manager.ts';
-import type { Console } from '@/core/ui/console.ts';
-import type { OutputChannel } from '@/core/ui/types.ts';
+import type { Console, OutputChannel } from '@/core/ui/console.ts';
 
 import {
   cleanupOldVersionBinaries,

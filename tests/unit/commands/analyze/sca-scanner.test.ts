@@ -26,7 +26,7 @@ import {
 } from '@/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import { ScaScannerInvocation } from '@/commands/analyze/dependency-risk-helpers/sca-scanner-runner-base.ts';
 import { ScaScannerSpawner } from '@/commands/analyze/dependency-risk-helpers/sca-scanner-spawner.ts';
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { LOG_FILE } from '@/core/config-constants.ts';
 import { clearNetworkConfigCache } from '@/core/host/connectivity/network-config.ts';
 import { ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';

@@ -23,7 +23,7 @@
 // version check) and the background update-notification check in
 // core/update/notification.ts.
 
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CLI_STABLE_VERSION_PATH, SONARSOURCE_BINARIES_URL } from '@/core/config-constants.ts';
 import { fetchAnonymous } from '@/core/server/fetch.ts';
 

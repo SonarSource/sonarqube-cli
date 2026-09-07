@@ -21,7 +21,6 @@
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { timed } from '@/core/observability/timed.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
-import { SqaaProgress } from '@/core/ui/components/sqaa-progress.ts';
 import type { Console } from '@/core/ui/console.ts';
 import { vortexUnavailableCommandMessage } from '@/core/vortex/availability-messages.ts';
 import { recheckVortexEntitlement } from '@/core/vortex/entitlement.ts';
@@ -49,6 +48,7 @@ import {
 } from './sqaa-display.ts';
 import { globalSqaaErrorKind, isGlobalSqaaError } from './sqaa-errors.ts';
 import type { ResolvedSqaaFileEntry } from './sqaa-file-arg.ts';
+import { SqaaProgress } from './sqaa-progress.ts';
 import type {
   AnalyzeSqaaRunOptions,
   SingleFileRunOptions,

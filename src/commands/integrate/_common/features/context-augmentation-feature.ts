@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { skip } from '@/core/framework/features/selection.ts';
 import type { IntegrationContext, SubfeatureDeclaration } from '@/core/framework/features/types.ts';
 import { wholeFile } from '@/core/framework/resources';

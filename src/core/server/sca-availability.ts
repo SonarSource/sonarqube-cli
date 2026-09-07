@@ -19,7 +19,7 @@
  */
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { ScaClient } from '@/core/server/sca.ts';
 import { fetchServerVersion, isAtLeast } from '@/core/server/server-info.ts';
 

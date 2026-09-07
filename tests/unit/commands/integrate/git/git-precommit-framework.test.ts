@@ -24,7 +24,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as yaml from 'js-yaml';
 
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { ContainerIntegrationContext } from '@/core/framework/features';
 import { IntegrationInstaller } from '@/core/framework/features';
 import * as processLib from '@/core/process/process.ts';

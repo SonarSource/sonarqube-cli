@@ -234,7 +234,7 @@ New API calls belong in the domain wrapper for their area, never back in the tra
 
 ## Error handling
 
-Please use the exception types defined in `src/core/command-error.ts` for production code. If you need to throw an error from a mock in test code, it's fine to use the generic `Error` type.
+Please use the exception types defined in `src/core/commands/command-error.ts` for production code. If you need to throw an error from a mock in test code, it's fine to use the generic `Error` type.
 
 Error subclasses extend the abstract `CliError` and carry their own `exitCode`, which `SonarCommand.runCommand()` forwards to `process.exitCode`:
 

@@ -24,7 +24,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'bun:test';
 
-import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 
 import {
   collectSqaaFileOption,

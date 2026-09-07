@@ -18,9 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CommandFailedError, InvalidOptionError } from '@/core/command-error.ts';
-import { type MultiSelectOption } from '@/core/ui';
-import type { Console } from '@/core/ui/console.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
+import type { Console, MultiSelectOption } from '@/core/ui/console.ts';
 
 import type { DopRepository, ImportApiClient } from './import-api.ts';
 import {

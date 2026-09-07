@@ -18,17 +18,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { Console } from '@/core/ui/console.ts';
+import type { ColorFn, NoteOptions } from '@/core/ui/colors.ts';
 import type {
-  ColorFn,
+  Console,
   MultiSelectOption,
   MultiSelectPromptOptions,
-  NoteOptions,
   OutputChannel,
   PhaseItem,
   PhaseOptions,
   SelectOption,
-} from '@/core/ui/types.ts';
+} from '@/core/ui/console.ts';
 
 export interface UiCall {
   method: string;

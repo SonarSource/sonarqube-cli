@@ -21,7 +21,7 @@
 import { spawn } from 'node:child_process';
 
 import { resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';

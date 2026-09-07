@@ -21,7 +21,7 @@
 import { readFileSync } from 'node:fs';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
 import type { GitLabRepo } from '@/core/gitlab/client.ts';
 import { GitLabClient } from '@/core/gitlab/client.ts';

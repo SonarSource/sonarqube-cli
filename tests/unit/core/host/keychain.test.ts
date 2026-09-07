@@ -31,7 +31,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import {
   clearTokenCache,
   deleteStaleTokens,

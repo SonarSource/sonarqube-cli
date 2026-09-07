@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { InvalidOptionError } from '@/core/command-error.ts';
+import { InvalidOptionError } from '@/core/commands/command-error.ts';
 
 import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 

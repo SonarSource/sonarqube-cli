@@ -30,30 +30,29 @@ import {
 
 import {
   bold,
+  type ColorFn,
   cyan,
   dim,
   green,
   isTTY,
+  type NoteOptions,
   red,
   STATUS_COLORS,
   STATUS_ICONS,
+  type StepStatus,
   stripAnsi,
   visibleLength,
   yellow,
 } from './colors.ts';
-import type { Console } from './console.ts';
-import { channelStream, write } from './streams.ts';
 import type {
-  ColorFn,
+  Console,
   MultiSelectOption,
   MultiSelectPromptOptions,
-  NoteOptions,
   OutputChannel,
   PhaseItem,
   PhaseOptions,
   SelectOption,
-  StepStatus,
-} from './types.ts';
+} from './console.ts';
 
 const NOTE_MIN_WIDTH = 40;
 const NOTE_MAX_WIDTH = 80;
@@ -201,12 +200,20 @@ export class TerminalConsole implements Console {
   private formattedOutputMode = false;
   private readonly collectedMessages: string[] = [];
 
+  private channelStream(channel: OutputChannel): NodeJS.WriteStream {
+    return channel === 'stderr' ? process.stderr : process.stdout;
+  }
+
+  private write(stream: NodeJS.WriteStream, line: string): void {
+    stream.write(line + '\n');
+  }
+
   info(message: string, channel: OutputChannel = 'stdout'): void {
     if (channel === 'stdout' && this.formattedOutputMode) {
       this.collectedMessages.push(`  ℹ  ${message}`);
       return;
     }
-    write(channelStream(channel), `  ${cyan('ℹ')}  ${message}`);
+    this.write(this.channelStream(channel), `  ${cyan('ℹ')}  ${message}`);
   }
 
   success(message: string): void {
@@ -214,7 +221,7 @@ export class TerminalConsole implements Console {
       this.collectedMessages.push(`✅ ${message}`);
       return;
     }
-    write(process.stdout, `✅ ${green(message)}`);
+    this.write(process.stdout, `✅ ${green(message)}`);
   }
 
   discreetSuccess(message: string, channel: OutputChannel = 'stdout'): void {
@@ -222,15 +229,15 @@ export class TerminalConsole implements Console {
       this.collectedMessages.push(`  ✓  ${message}`);
       return;
     }
-    write(channelStream(channel), `  ${green('✓')}  ${message}`);
+    this.write(this.channelStream(channel), `  ${green('✓')}  ${message}`);
   }
 
   warn(message: string): void {
-    write(process.stderr, `⚠️ ${yellow(message)}`);
+    this.write(process.stderr, `⚠️ ${yellow(message)}`);
   }
 
   error(message: string): void {
-    write(process.stderr, `❌ ${red(message)}`);
+    this.write(process.stderr, `❌ ${red(message)}`);
   }
 
   text(message: string, color?: ColorFn, channel: OutputChannel = 'stdout'): void {
@@ -239,11 +246,11 @@ export class TerminalConsole implements Console {
       return;
     }
     const formatted = color ? color(message) : message;
-    write(channelStream(channel), formatted);
+    this.write(this.channelStream(channel), formatted);
   }
 
   print(message: string, channel: OutputChannel = 'stdout'): void {
-    channelStream(channel).write(message + (message.endsWith('\n') ? '' : '\n'));
+    this.channelStream(channel).write(message + (message.endsWith('\n') ? '' : '\n'));
   }
 
   blank(): void {
@@ -320,7 +327,7 @@ export class TerminalConsole implements Console {
     task: () => Promise<T>,
     channel: OutputChannel = 'stdout',
   ): Promise<T> {
-    const stream = channelStream(channel);
+    const stream = this.channelStream(channel);
 
     if (!stream.isTTY) {
       stream.write(`${message}...\n`);

@@ -22,7 +22,7 @@
 
 import { basename, dirname } from 'node:path';
 
-import { CliError } from '@/core/command-error.ts';
+import { CliError } from '@/core/commands/command-error.ts';
 import { bold, dim, green, red, softBlue, yellow } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 import { vortexUnavailableCommandMessage } from '@/core/vortex/availability-messages.ts';

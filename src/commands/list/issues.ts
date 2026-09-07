@@ -22,15 +22,54 @@
 
 import { encode as encodeToToon } from '@toon-format/toon';
 
-import { InvalidOptionError } from '@/core/command-error.ts';
+import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { SystemClient } from '@/core/server/system.ts';
-import type { IssuesSearchParams } from '@/core/server/types.ts';
+import type { IssuesSearchParams, SonarQubeIssue } from '@/core/server/types.ts';
+import { columnFormatting } from '@/core/ui/formatter/column-formatting.ts';
 import { formatCSV } from '@/core/ui/formatter/csv.ts';
-import { formatTable } from '@/core/ui/formatter/table.ts';
+
+const MIN_SEVERITY_WIDTH = 8;
+const MIN_RULE_WIDTH = 15;
+const MIN_MESSAGE_WIDTH = 50;
+
+function formatTable(issues: SonarQubeIssue[]): string {
+  if (issues.length === 0) {
+    return 'No issues found';
+  }
+
+  const [severityWidth, ruleWidth, messageWidth] = columnFormatting(
+    [issues.map((i) => i.severity), issues.map((i) => i.rule), issues.map((i) => i.message)],
+    [MIN_SEVERITY_WIDTH, MIN_RULE_WIDTH, MIN_MESSAGE_WIDTH],
+  );
+
+  const header = [
+    'SEVERITY'.padEnd(severityWidth),
+    'RULE'.padEnd(ruleWidth),
+    'MESSAGE'.padEnd(messageWidth),
+    'FILE',
+  ].join(' | ');
+
+  const separator = '-'.repeat(header.length);
+
+  const lines = [header, separator];
+
+  for (const issue of issues) {
+    const file = issue.component.split(':').pop() || issue.component;
+    const line = [
+      issue.severity.padEnd(severityWidth),
+      issue.rule.padEnd(ruleWidth),
+      issue.message.substring(0, messageWidth).padEnd(messageWidth),
+      `${file}:${issue.line || '?'}`,
+    ].join(' | ');
+    lines.push(line);
+  }
+
+  return lines.join('\n');
+}
 
 export const VALID_FORMATS = ['json', 'toon', 'table', 'csv'];
 export const VALID_STANDARD_SEVERITIES = ['INFO', 'MINOR', 'MAJOR', 'CRITICAL', 'BLOCKER'];

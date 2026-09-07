@@ -21,7 +21,7 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { BIN_DIR } from '@/core/config-constants.ts';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import {

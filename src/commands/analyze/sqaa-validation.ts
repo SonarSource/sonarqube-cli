@@ -20,7 +20,7 @@
 
 // Pre-flight validation for SQAA analysis requests (before POST).
 
-import type { CommandFailedError } from '@/core/command-error.ts';
+import type { CommandFailedError } from '@/core/commands/command-error.ts';
 
 import { sqaaCommandFailedError } from './sqaa-errors.ts';
 import type { SqaaAnalysisDepth, SqaaAnalysisFile, SqaaFileScope } from './sqaa-wire-types.ts';

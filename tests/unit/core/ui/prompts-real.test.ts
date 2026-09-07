@@ -24,8 +24,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-import { TerminalConsole } from '@/core/ui';
-
+import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 // Mutable state for controlling what each prompt returns
 let mockTextResult: string | symbol = 'default';
 let mockConfirmResult: boolean | symbol = true;

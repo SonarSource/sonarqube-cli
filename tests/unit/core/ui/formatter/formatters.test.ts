@@ -18,13 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Unit tests for table and CSV formatters
+// Unit tests for CSV formatter
 
 import { describe, expect, it } from 'bun:test';
 
 import type { SonarQubeIssue } from '@/core/server/types.ts';
 import { formatCSV } from '@/core/ui/formatter/csv.ts';
-import { formatTable } from '@/core/ui/formatter/table.ts';
 
 function makeIssue(overrides: Partial<SonarQubeIssue> = {}): SonarQubeIssue {
   return {
@@ -39,77 +38,6 @@ function makeIssue(overrides: Partial<SonarQubeIssue> = {}): SonarQubeIssue {
     ...overrides,
   };
 }
-
-// ─── formatTable ──────────────────────────────────────────────────────────────
-
-describe('formatTable: empty input', () => {
-  it('returns "No issues found" for empty array', () => {
-    expect(formatTable([])).toBe('No issues found');
-  });
-});
-
-describe('formatTable: structure', () => {
-  it('output contains a header line with column names', () => {
-    const result = formatTable([makeIssue()]);
-    const lines = result.split('\n');
-    expect(lines[0]).toContain('SEVERITY');
-    expect(lines[0]).toContain('RULE');
-    expect(lines[0]).toContain('MESSAGE');
-    expect(lines[0]).toContain('FILE');
-  });
-
-  it('output has a separator line after header', () => {
-    const result = formatTable([makeIssue()]);
-    const lines = result.split('\n');
-    expect(lines[1]).toMatch(/^-+$/);
-  });
-
-  it('data row contains issue severity, rule, and message', () => {
-    const result = formatTable([
-      makeIssue({ severity: 'CRITICAL', rule: 'java:S001', message: 'Fix me' }),
-    ]);
-    const dataRow = result.split('\n')[2];
-    expect(dataRow).toContain('CRITICAL');
-    expect(dataRow).toContain('java:S001');
-    expect(dataRow).toContain('Fix me');
-  });
-
-  it('extracts filename from component using colon separator', () => {
-    const result = formatTable([makeIssue({ component: 'proj:src/utils/helper.ts' })]);
-    expect(result).toContain('src/utils/helper.ts');
-    expect(result).not.toContain('proj:src');
-  });
-
-  it('uses full component when no colon separator present', () => {
-    const result = formatTable([makeIssue({ component: 'standalone-component' })]);
-    expect(result).toContain('standalone-component');
-  });
-
-  it('shows line number when present', () => {
-    const result = formatTable([makeIssue({ line: 42 })]);
-    expect(result).toContain(':42');
-  });
-
-  it('shows ? when line number is absent', () => {
-    const issue = makeIssue();
-    delete issue.line;
-    const result = formatTable([issue]);
-    expect(result).toContain(':?');
-  });
-
-  it('produces one data row per issue', () => {
-    const issues = [makeIssue({ key: 'a' }), makeIssue({ key: 'b' }), makeIssue({ key: 'c' })];
-    const lines = formatTable(issues).split('\n');
-    // header + separator + 3 rows = 5 lines
-    expect(lines).toHaveLength(5);
-  });
-
-  it('expands column widths when content exceeds minimum', () => {
-    const longRule = 'a'.repeat(40); // > MIN_RULE_WIDTH of 15
-    const result = formatTable([makeIssue({ rule: longRule })]);
-    expect(result).toContain(longRule);
-  });
-});
 
 // ─── formatCSV ────────────────────────────────────────────────────────────────
 

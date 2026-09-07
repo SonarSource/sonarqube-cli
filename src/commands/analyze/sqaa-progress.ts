@@ -22,8 +22,8 @@
 
 import * as readline from 'node:readline';
 
-import { cyan, yellow } from '../colors.ts';
-import type { Console } from '../console.ts';
+import { cyan, yellow } from '@/core/ui/colors.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 export type FileStatus = 'waiting' | 'analyzing' | 'done' | 'failed' | 'skipped' | 'ignored';
 

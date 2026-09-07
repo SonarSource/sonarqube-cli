@@ -22,7 +22,7 @@ import {
   recordScaAnalysisTelemetry,
   SCA_CALLER_COMMANDS,
 } from '@/commands/analyze/sca-analysis-telemetry.ts';
-import { InvalidOptionError } from '@/core/command-error.ts';
+import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { DefaultScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import { DefaultSecretsInstaller } from '@/core/host/install/secrets.ts';

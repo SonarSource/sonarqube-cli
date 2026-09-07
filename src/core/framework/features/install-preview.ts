@@ -21,7 +21,7 @@
 // Framework-rendered "What will be installed" preview shared by every
 // `sonar integrate` command.
 
-import { bold, dim } from '@/core/ui';
+import { bold, dim } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import type { FeatureApplication, FeatureDeclaration } from './types.ts';

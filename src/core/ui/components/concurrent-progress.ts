@@ -24,7 +24,7 @@ import * as readline from 'node:readline';
 
 import { bold, dim, green, red, STATUS_COLORS, STATUS_ICONS, visibleLength } from '../colors.ts';
 import type { Console } from '../console.ts';
-import { phaseItem } from '../types.ts';
+import { phaseItem } from '../console.ts';
 
 export type ConcurrentItemStatus = 'pending' | 'running' | 'done' | 'failed';
 

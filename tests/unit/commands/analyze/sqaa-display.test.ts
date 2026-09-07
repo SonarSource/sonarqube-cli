@@ -21,7 +21,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import type { SqaaIssue } from '@/commands/analyze/sqaa-wire-types.ts';
-import { CommandFailedError } from '@/core/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 
 import type { FileResult, RunTally } from '../../../../src/commands/analyze/sqaa-analysis.ts';
 import {

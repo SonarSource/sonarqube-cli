@@ -20,7 +20,7 @@
 
 // Issues command - search for SonarQube issues
 
-import { InvalidOptionError } from '@/core/command-error.ts';
+import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { MAX_PAGE_SIZE, ProjectsClient } from '@/core/server/projects.ts';
