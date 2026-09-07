@@ -426,7 +426,7 @@ describe('SonarHttpClient', () => {
 
     it('returns an error result instead of throwing on a transport failure', async () => {
       fetchSpy = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
-      const result = await client.genericRequest('GET', '/api/system/status');
+      const result = await client.genericRequest('GET', '/api/system/status', fake);
       expect(result.ok).toBe(false);
       expect((result as { ok: false; error: Error }).error.message).toBe('ECONNREFUSED');
     });

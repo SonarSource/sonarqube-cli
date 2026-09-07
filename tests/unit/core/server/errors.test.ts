@@ -20,12 +20,14 @@
 
 import { describe, expect, it } from 'bun:test';
 
+import { NetworkConfigError } from '@/core/errors.ts';
 import {
   BadRequestError,
   ForbiddenApiError,
   isCriticalFailure,
   RateLimitError,
   RequestPayloadTooLargeError,
+  ServerError,
   ServiceUnavailableError,
   TransportError,
 } from '@/core/server/errors.ts';
@@ -35,12 +37,22 @@ describe('isCriticalFailure', () => {
     expect(isCriticalFailure(new TransportError('ECONNREFUSED'))).toBe(true);
   });
 
+  it('is critical for a network configuration failure', () => {
+    expect(isCriticalFailure(new NetworkConfigError('invalid proxy URL'))).toBe(true);
+  });
+
   it('is critical for a rate-limit response', () => {
     expect(isCriticalFailure(new RateLimitError())).toBe(true);
   });
 
   it('is critical for a service-unavailable response', () => {
     expect(isCriticalFailure(new ServiceUnavailableError())).toBe(true);
+  });
+
+  it('is critical for a 5xx server error other than 503', () => {
+    expect(isCriticalFailure(new ServerError(500, 'SonarQube API error: 500'))).toBe(true);
+    expect(isCriticalFailure(new ServerError(502, 'SonarQube API error: 502'))).toBe(true);
+    expect(isCriticalFailure(new ServerError(504, 'SonarQube API error: 504'))).toBe(true);
   });
 
   it('is expected for a bad-request response', () => {

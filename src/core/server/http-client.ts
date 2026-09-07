@@ -24,9 +24,11 @@
 // non-2xx response becomes a typed error. Everything above it — the per-domain API
 // wrappers — is written in terms of `get` / `post` and lives next to its callers.
 
+import { NetworkConfigError } from '@/core/errors.ts';
 import {
   HTTP_STATUS_BAD_REQUEST,
   HTTP_STATUS_FORBIDDEN,
+  HTTP_STATUS_INTERNAL_SERVER_ERROR,
   HTTP_STATUS_NOT_FOUND,
   HTTP_STATUS_PAYLOAD_TOO_LARGE,
   HTTP_STATUS_SERVICE_UNAVAILABLE,
@@ -43,6 +45,7 @@ import {
   RateLimitError,
   RequestPayloadTooLargeError,
   type RequestPayloadTooLargeMeta,
+  ServerError,
   ServiceUnavailableError,
   TransportError,
 } from './errors.ts';
@@ -127,6 +130,11 @@ export class SonarHttpClient {
       return new ForbiddenApiError(await response.text());
     }
 
+    // Any other 5xx (500/502/504) is server-side and critical, regardless of method.
+    const isServerFailure = response.status >= HTTP_STATUS_INTERNAL_SERVER_ERROR;
+    const buildError = (message: string): Error =>
+      isServerFailure ? new ServerError(response.status, message) : new Error(message);
+
     if (method === 'GET') {
       if (response.status === HTTP_STATUS_FORBIDDEN || response.status === HTTP_STATUS_NOT_FOUND) {
         return new Error(
@@ -135,11 +143,11 @@ export class SonarHttpClient {
       }
       const errorText = await response.text();
       logger.debug(`SonarQube GET ${response.url} failed: ${response.status} ${errorText}`);
-      return new Error(`SonarQube API error: ${response.status} ${response.statusText}`);
+      return buildError(`SonarQube API error: ${response.status} ${response.statusText}`);
     }
 
     const errorText = await response.text();
-    return new Error(
+    return buildError(
       `SonarQube API error: ${response.status} ${response.statusText} - ${errorText}`,
     );
   }
@@ -256,6 +264,12 @@ export class SonarHttpClient {
     return Ok(result.value);
   }
 
+  /**
+   * NOTE: unlike every other method on this class, `getSafe` still *rejects* on a
+   * transport failure (connection refused, timeout, rejected cross-origin redirect).
+   * Only a non-2xx status is reported non-throwingly, via `response`/`value`. Direct
+   * callers must keep their own try/catch.
+   */
   async getSafe<TValue>(
     endpoint: string,
     params?: QueryParams,
@@ -311,10 +325,10 @@ export class SonarHttpClient {
   }
 
   /**
-   * Generic helper to POST a form-encoded body to a SonarQube endpoint using
-   * the configured Bearer token. Resolves to `Err` (never throws) on a non-2xx
-   * response, a transport failure, or a malformed body, so callers can handle
-   * failures (e.g. best-effort logout).
+   * Generic helper to POST a form-encoded body to a SonarQube endpoint using the
+   * configured Bearer token. Resolves to `Err` (never throws) on a non-2xx response or a
+   * transport failure, so callers can handle failures (e.g. best-effort logout). The
+   * response body is discarded.
    */
   async postForm(
     endpoint: string,
@@ -374,11 +388,20 @@ export class SonarHttpClient {
 }
 
 /**
- * Every call site of `toError` catches a throw from `fetchAuthenticated` itself, never
- * from a parsed HTTP response — so whatever comes through here is by definition a
- * critical, transport-level failure (see `isCriticalFailure`), and is wrapped as one.
+ * Wraps whatever escaped the `try` around a request as a `TransportError`. This is
+ * almost always a throw from `fetchAuthenticated` (DNS/TLS/proxy failure, connection
+ * refused, timeout, abort), but a body read/parse failure on an otherwise successful
+ * response also lands here and is currently reported as a transport failure.
+ *
+ * `NetworkConfigError` is passed through unwrapped: it already describes the failure
+ * precisely and is matched by name elsewhere (e.g. `remediationHintFor`), so re-wrapping
+ * it would drop its remediation hint. It stays classified as critical in
+ * `isCriticalFailure` regardless.
  */
-function toError(err: unknown): TransportError {
+function toError(err: unknown): Error {
+  if (err instanceof NetworkConfigError) {
+    return err;
+  }
   return err instanceof Error
     ? new TransportError(err.message, { cause: err })
     : new TransportError(String(err));

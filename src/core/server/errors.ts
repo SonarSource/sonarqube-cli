@@ -24,6 +24,8 @@
  * refused, timeout, abort). Distinct from every other error in this file, which is
  * built from an actual HTTP response.
  */
+import { NetworkConfigError } from '@/core/errors.ts';
+
 export class TransportError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
@@ -57,6 +59,17 @@ export class BadRequestError extends Error {
     this.name = 'BadRequestError';
     this.code = code;
     this.meta = meta;
+  }
+}
+
+/** Thrown by the API client on any 5xx response other than 503 (Service Unavailable). */
+export class ServerError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ServerError';
+    this.status = status;
   }
 }
 
@@ -115,7 +128,9 @@ export class RequestPayloadTooLargeError extends Error {
 export function isCriticalFailure(error: Error): boolean {
   return (
     error instanceof TransportError ||
+    error instanceof NetworkConfigError ||
     error instanceof RateLimitError ||
-    error instanceof ServiceUnavailableError
+    error instanceof ServiceUnavailableError ||
+    error instanceof ServerError
   );
 }
