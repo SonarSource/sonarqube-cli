@@ -23,6 +23,7 @@ import { existsSync } from 'node:fs';
 import {
   type CommandAuthenticatedInvocationContext,
   type CommandInvocationContext,
+  StatsFact,
   TelemetryFact,
 } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
@@ -32,6 +33,7 @@ import { installSecretsBinary } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
 import type { SpawnResult, StdioMode } from '@/core/process/process.ts';
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
+import { dedupeAgainstSeen, type RecordAnalysisStatsInput } from '@/core/stats/stats-store.ts';
 import { blank, print, success, warn } from '@/core/ui';
 import { green, yellow } from '@/core/ui/colors.ts';
 
@@ -127,14 +129,15 @@ function buildSecretsAnalysisTelemetryFact(
   const failuresCount = exitCode === 0 || exitCode === EXIT_CODE_SECRETS_FOUND ? 0 : 1;
   const analysisId = randomUUID();
 
+  const countsByRule: Record<string, number> = {};
+  const filesWithFindings = new Set<string>();
+  for (const issue of issues) {
+    countsByRule[issue.ruleKey] = (countsByRule[issue.ruleKey] ?? 0) + 1;
+    if (issue.file) filesWithFindings.add(issue.file);
+  }
+
   let details = '';
   if (issues.length > 0) {
-    const countsByRule: Record<string, number> = {};
-    const filesWithFindings = new Set<string>();
-    for (const issue of issues) {
-      countsByRule[issue.ruleKey] = (countsByRule[issue.ruleKey] ?? 0) + 1;
-      if (issue.file) filesWithFindings.add(issue.file);
-    }
     const source: 'files' | 'stdin' = filesWithFindings.size > 0 ? 'files' : 'stdin';
     details = JSON.stringify({
       counts_by_rule: countsByRule,
@@ -161,6 +164,49 @@ function buildSecretsAnalysisTelemetryFact(
       { auth },
     ),
   };
+}
+
+const SECRETS_DEDUPE_SCOPE = 'sonar-secrets';
+
+export function buildSecretsFingerprint(
+  ruleKey: string,
+  file: string | undefined,
+  startLine: number | undefined,
+  startColumn: number | undefined,
+): string {
+  return `${ruleKey}|${file ?? ''}|${startLine ?? ''}|${startColumn ?? ''}`;
+}
+
+export function summarizeNewSecretsFindings(issues: readonly SecretsJsonIssue[]): {
+  findingsCount: number;
+  ruleCounts: Record<string, number>;
+  ruleMessages: Record<string, string>;
+} {
+  const ruleMessages: Record<string, string> = {};
+  for (const issue of issues) {
+    ruleMessages[issue.ruleKey] = issue.description;
+  }
+
+  const fingerprints = issues.map((issue) =>
+    buildSecretsFingerprint(
+      issue.ruleKey,
+      issue.file,
+      issue.location?.startLine,
+      issue.location?.startColumn,
+    ),
+  );
+  const newFingerprints = dedupeAgainstSeen(SECRETS_DEDUPE_SCOPE, fingerprints);
+
+  const ruleCounts: Record<string, number> = {};
+  const countedFingerprints = new Set<string>();
+  issues.forEach((issue, i) => {
+    const fingerprint = fingerprints[i];
+    if (!newFingerprints.has(fingerprint) || countedFingerprints.has(fingerprint)) return;
+    countedFingerprints.add(fingerprint);
+    ruleCounts[issue.ruleKey] = (ruleCounts[issue.ruleKey] ?? 0) + 1;
+  });
+
+  return { findingsCount: newFingerprints.size, ruleCounts, ruleMessages };
 }
 
 /**
@@ -191,6 +237,18 @@ export async function scanAndEmitSecrets(
       auth,
     );
     ctx.recordTelemetry(fact);
+    const { findingsCount, ruleCounts, ruleMessages } = summarizeNewSecretsFindings(parsed.issues);
+    ctx.recordStats(
+      new StatsFact({
+        analyzer: 'sonar-secrets',
+        callerCommand,
+        exitCode: fact.payload.exit_code,
+        durationMs: fact.payload.scan_duration_ms,
+        findingsCount,
+        ruleCounts,
+        ruleMessages,
+      } satisfies RecordAnalysisStatsInput),
+    );
     return { result, parsed };
   } catch (err) {
     const { fact } = buildSecretsAnalysisTelemetryFact(
@@ -200,6 +258,15 @@ export async function scanAndEmitSecrets(
       auth,
     );
     ctx.recordTelemetry(fact);
+    ctx.recordStats(
+      new StatsFact({
+        analyzer: 'sonar-secrets',
+        callerCommand,
+        exitCode: fact.payload.exit_code,
+        durationMs: fact.payload.scan_duration_ms,
+        findingsCount: 0,
+      } satisfies RecordAnalysisStatsInput),
+    );
     throw err;
   }
 }

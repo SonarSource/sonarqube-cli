@@ -73,6 +73,10 @@ export class TelemetryFact<TPayload = unknown> {
   }
 }
 
+export class StatsFact<TPayload = unknown> {
+  constructor(readonly payload: TPayload) {}
+}
+
 const STABLE_STAGE: CommandInvocationContextStage = {
   isAlpha: false,
   isBeta: false,
@@ -97,6 +101,7 @@ const DISABLED_RUNTIME: CommandInvocationContextRuntime = {
  */
 export class CommandInvocationContext {
   private readonly facts: TelemetryFact[] = [];
+  private readonly statsFactsBuffer: StatsFact[] = [];
 
   constructor(
     private readonly stage: CommandInvocationContextStage = STABLE_STAGE,
@@ -134,6 +139,17 @@ export class CommandInvocationContext {
   /** Snapshot of facts recorded during this invocation. */
   telemetryFacts(): readonly TelemetryFact[] {
     return this.facts.slice();
+  }
+
+  recordStats(...facts: StatsFact[]): void {
+    if (facts.length === 0) {
+      return;
+    }
+    this.statsFactsBuffer.push(...facts);
+  }
+
+  statsFacts(): readonly StatsFact[] {
+    return this.statsFactsBuffer.slice();
   }
 }
 

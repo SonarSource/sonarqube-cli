@@ -22,9 +22,11 @@ import { randomUUID } from 'node:crypto';
 
 import {
   type CommandInvocationContext,
+  StatsFact,
   TelemetryFact,
 } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { RecordAnalysisStatsInput } from '@/core/stats/stats-store.ts';
 
 import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
 import type { AnalyzeProjectResponse } from './dependency-risk-helpers/sca-scanner.ts';
@@ -105,6 +107,15 @@ export function recordScaAnalysisTelemetry(
         { auth },
       ),
     );
+    ctx.recordStats(
+      new StatsFact({
+        analyzer: 'sca-scanner-cli',
+        callerCommand,
+        exitCode,
+        durationMs,
+        findingsCount: 0,
+      } satisfies RecordAnalysisStatsInput),
+    );
     return;
   }
 
@@ -126,5 +137,15 @@ export function recordScaAnalysisTelemetry(
       } satisfies AnalysisCompletedPayload,
       { auth },
     ),
+  );
+  ctx.recordStats(
+    new StatsFact({
+      analyzer: 'sca-scanner-cli',
+      callerCommand,
+      exitCode,
+      durationMs,
+      findingsCount,
+      ruleCounts: findingsCount > 0 ? details.counts_by_rule : undefined,
+    } satisfies RecordAnalysisStatsInput),
   );
 }

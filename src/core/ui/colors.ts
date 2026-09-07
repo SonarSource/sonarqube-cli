@@ -52,6 +52,7 @@ function c(fn: (s: string) => string): ColorFn {
 }
 
 const SOFT_BLUE = 69; // #5F87FF
+const LAVENDER = 147;
 
 function ansi256(n: number): ColorFn {
   return (s: string) => (currentIsTTY() ? `\x1b[38;5;${n}m${s}\x1b[0m` : s);
@@ -68,6 +69,7 @@ export const underline = c(pc.underline);
 export const white = c(pc.white);
 export const blue = c(pc.blue);
 export const softBlue = ansi256(SOFT_BLUE);
+export const lavender = ansi256(LAVENDER);
 
 export const STATUS_COLORS: Record<StepStatus, ColorFn> = {
   done: green,

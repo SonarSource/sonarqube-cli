@@ -22,10 +22,12 @@ import { randomUUID } from 'node:crypto';
 
 import {
   type CommandInvocationContext,
+  StatsFact,
   TelemetryFact,
 } from '@/commands/command-invocation-context.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { SqaaIssue } from '@/core/server/client.ts';
+import type { RecordAnalysisStatsInput } from '@/core/stats/stats-store.ts';
 
 import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
 import type { FileResult, RunTally } from './sqaa-analysis.ts';
@@ -71,6 +73,16 @@ export function collectRuleCounts(
     rule_keys: Object.keys(countsByRule).sort((a, b) => a.localeCompare(b)),
     counts_by_rule: countsByRule,
   };
+}
+
+function collectRuleMessages(
+  issues: ReadonlyArray<Pick<SqaaIssue, 'rule' | 'message'>>,
+): Record<string, string> {
+  const messages: Record<string, string> = {};
+  for (const issue of issues) {
+    messages[issue.rule] = issue.message;
+  }
+  return messages;
 }
 
 function collectIssuesFromTally(tally: RunTally): SqaaIssue[] {
@@ -129,8 +141,9 @@ export function recordSqaaAnalysisTelemetry(
 ): void {
   const analysisId = randomUUID();
   const findingsCount = tally.totalIssues;
-  const details =
-    findingsCount > 0 ? JSON.stringify(collectRuleCounts(collectIssuesFromTally(tally))) : '';
+  const issues = findingsCount > 0 ? collectIssuesFromTally(tally) : [];
+  const ruleCounts = findingsCount > 0 ? collectRuleCounts(issues) : undefined;
+  const details = ruleCounts ? JSON.stringify(ruleCounts) : '';
 
   ctx.recordTelemetry(
     new TelemetryFact(
@@ -148,5 +161,16 @@ export function recordSqaaAnalysisTelemetry(
       } satisfies AnalysisCompletedPayload,
       { auth },
     ),
+  );
+  ctx.recordStats(
+    new StatsFact({
+      analyzer: 'sqaa',
+      callerCommand,
+      exitCode: exitCode ?? null,
+      durationMs,
+      findingsCount,
+      ruleCounts: ruleCounts?.counts_by_rule,
+      ruleMessages: findingsCount > 0 ? collectRuleMessages(issues) : undefined,
+    } satisfies RecordAnalysisStatsInput),
   );
 }
