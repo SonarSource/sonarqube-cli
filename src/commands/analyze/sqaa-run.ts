@@ -162,8 +162,9 @@ export async function runSqaaAnalysesTallyForResolved(
   branch: string | undefined,
   wireDepth: SqaaDeepWireDepth | undefined,
   displayDepth: SqaaAnalysisDepth,
+  console: Console,
 ): Promise<RunTally> {
-  const silentProgress = new SqaaProgress({ files: allPaths, silent: true });
+  const silentProgress = new SqaaProgress({ files: allPaths, silent: true, console });
   const ctx: RunContext = {
     files,
     allPaths,
@@ -269,7 +270,15 @@ export async function runSqaaAnalysisOnExplicitFiles(
 
   if (format === 'json') {
     const { result: tally, durationMs } = await timed(() =>
-      runSqaaAnalysesTallyForResolved(files, allPaths, resolved, branch, wireDepth, displayDepth),
+      runSqaaAnalysesTallyForResolved(
+        files,
+        allPaths,
+        resolved,
+        branch,
+        wireDepth,
+        displayDepth,
+        options.console,
+      ),
     );
     const report = buildJsonReport(tally, [], allPaths, cwd, displayDepth);
     await printSqaaJsonReport(report, options.auth, console);
@@ -277,7 +286,7 @@ export async function runSqaaAnalysisOnExplicitFiles(
     return;
   }
 
-  const progress = new SqaaProgress({ files: allPaths });
+  const progress = new SqaaProgress({ files: allPaths, console: options.console });
   const ctx: RunContext = {
     files,
     allPaths,
@@ -315,7 +324,15 @@ export async function runSqaaAnalysisOnFiles(
 
   if (format === 'json') {
     const { result: tally, durationMs } = await timed(() =>
-      runSqaaAnalysesTallyForResolved(files, allPaths, resolved, branch, wireDepth, displayDepth),
+      runSqaaAnalysesTallyForResolved(
+        files,
+        allPaths,
+        resolved,
+        branch,
+        wireDepth,
+        displayDepth,
+        options.console,
+      ),
     );
     const report = buildJsonReport(tally, ignored, allPaths, repoRoot, displayDepth);
     await printSqaaJsonReport(report, options.auth, console);
@@ -324,7 +341,11 @@ export async function runSqaaAnalysisOnFiles(
   }
 
   const ignoredPaths = ignored.map((f) => toRelativePosixPath(f.path, repoRoot));
-  const progress = new SqaaProgress({ files: allPaths, ignoredFiles: ignoredPaths });
+  const progress = new SqaaProgress({
+    files: allPaths,
+    ignoredFiles: ignoredPaths,
+    console: options.console,
+  });
   const ctx: RunContext = {
     files,
     allPaths,

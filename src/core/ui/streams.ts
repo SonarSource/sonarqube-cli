@@ -27,8 +27,3 @@ export function channelStream(channel: OutputChannel): NodeJS.WriteStream {
 export function write(stream: NodeJS.WriteStream, line: string): void {
   stream.write(line + '\n');
 }
-
-export function print(message: string, channel: OutputChannel = 'stdout'): void {
-  const stream = channelStream(channel);
-  stream.write(message + (message.endsWith('\n') ? '' : '\n'));
-}

@@ -40,7 +40,6 @@ import { GIT_REMOTE_BINDING_SOURCE } from '@/core/server/discover-project-by-rem
 import type { KnownServerProjectMapping } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
 
 import { FakeConsole } from '../../_common/fake-console.ts';
 import { createFakeFsTestHandle } from './fake-fs-test-handle.ts';
@@ -108,7 +107,6 @@ describe('discoverProject', () => {
     fakeFs.setup();
     testDir = join(tmpdir(), `sonarqube-cli-test-discover-project-${Date.now()}`);
     fakeFs.mkdir(testDir);
-    setMockUi(true);
     // Isolate from the real ~/.sonar state.json — most tests here don't care about
     // known-project-mapping lookups, only the dedicated tests below do.
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('1.0.0'));
@@ -121,8 +119,6 @@ describe('discoverProject', () => {
   });
 
   afterEach(() => {
-    clearMockUiCalls();
-    setMockUi(false);
     fakeFs.teardown();
     loadStateSpy.mockRestore();
     getGitRemoteSpy.mockRestore();
@@ -159,13 +155,12 @@ describe('discoverProject', () => {
   });
 
   it('no config: no server fields and no text UI', async () => {
-    const result = await discoverProject(testDir, { console: new FakeConsole() });
+    const fake = new FakeConsole();
+    const result = await discoverProject(testDir, { console: fake });
     expect(result.serverUrl).toBeUndefined();
     expect(result.projectKey).toBeUndefined();
     expect(result.organization).toBeUndefined();
-
-    await discoverProject(testDir, { console: new FakeConsole() });
-    expect(getMockUiCalls().filter((c) => c.method === 'print')).toHaveLength(0);
+    expect(fake.calls.filter((c) => c.method === 'print')).toHaveLength(0);
   });
 
   it('ignores comments and blank lines in sonar-project.properties', async () => {
@@ -247,7 +242,6 @@ describe('discoverProject', () => {
       { region: 'EU', url: SONARCLOUD_URL },
       { region: 'US', url: SONARCLOUD_US_URL },
     ]) {
-      clearMockUiCalls();
       fakeFs.writeFile(
         join(testDir, '.sonarlint', 'connectedMode.json'),
         JSON.stringify({
@@ -896,7 +890,6 @@ describe('discoverOrganization', () => {
   });
 
   afterEach(() => {
-    clearMockUiCalls();
     fakeFs.teardown();
     lookupPathsSpy.mockRestore();
     cwdSpy.mockRestore();
@@ -970,7 +963,6 @@ describe('discoverServer', () => {
 
   beforeEach(() => {
     fakeFs.setup();
-    setMockUi(true);
     lookupPathsSpy = spyOn(lookupPathResolver, 'resolveLookupPaths').mockImplementation(
       defaultLookupPaths,
     );
@@ -979,8 +971,6 @@ describe('discoverServer', () => {
   });
 
   afterEach(() => {
-    clearMockUiCalls();
-    setMockUi(false);
     fakeFs.teardown();
     lookupPathsSpy.mockRestore();
     cwdSpy.mockRestore();
@@ -1040,8 +1030,9 @@ describe('discoverServer', () => {
     fakeFs.mkdir(testDir);
 
     await withCwd(cwdSpy, testDir, async () => {
-      expect(await discoverServer(new FakeConsole())).toBeNull();
-      expect(getMockUiCalls().filter((c) => c.method === 'print')).toHaveLength(0);
+      const fake = new FakeConsole();
+      expect(await discoverServer(fake)).toBeNull();
+      expect(fake.calls.filter((c) => c.method === 'print')).toHaveLength(0);
     });
   });
 

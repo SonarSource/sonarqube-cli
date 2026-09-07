@@ -18,79 +18,69 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Tests for messages.ts: info, success, warn, error, text, print, blank
-// Covers both mock mode (recordCall) and real output paths
+// Tests for TerminalConsole line output: info, success, warn, error, text, print, blank
+// Covers both FakeConsole recording and real output paths
 
-import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import {
-  blank,
-  discreetSuccess,
-  error,
-  getMessagesForFormattedOutput,
-  info,
-  print,
-  setFormattedOutputMode,
-  success,
-  text,
-  warn,
-} from '@/core/ui';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '@/core/ui';
+import { TerminalConsole } from '@/core/ui';
 
-// ─── Mock mode ────────────────────────────────────────────────────────────────
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
-describe('messages: mock mode', () => {
+// ─── FakeConsole ────────────────────────────────────────────────────────────────
+
+describe('TerminalConsole lines: FakeConsole', () => {
+  let fake: FakeConsole;
+
   beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-  });
-  afterEach(() => {
-    setMockUi(false);
+    fake = new FakeConsole();
   });
 
   it('info records call', () => {
-    info('hello');
-    expect(getMockUiCalls().some((c) => c.method === 'info' && c.args[0] === 'hello')).toBe(true);
+    fake.info('hello');
+    expect(fake.calls.some((c) => c.method === 'info' && c.args[0] === 'hello')).toBe(true);
   });
 
   it('success records call', () => {
-    success('done');
-    expect(getMockUiCalls().some((c) => c.method === 'success' && c.args[0] === 'done')).toBe(true);
+    fake.success('done');
+    expect(fake.calls.some((c) => c.method === 'success' && c.args[0] === 'done')).toBe(true);
   });
 
   it('warn records call', () => {
-    warn('caution');
-    expect(getMockUiCalls().some((c) => c.method === 'warn' && c.args[0] === 'caution')).toBe(true);
+    fake.warn('caution');
+    expect(fake.calls.some((c) => c.method === 'warn' && c.args[0] === 'caution')).toBe(true);
   });
 
   it('error records call', () => {
-    error('oops');
-    expect(getMockUiCalls().some((c) => c.method === 'error' && c.args[0] === 'oops')).toBe(true);
+    fake.error('oops');
+    expect(fake.calls.some((c) => c.method === 'error' && c.args[0] === 'oops')).toBe(true);
   });
 
   it('text records call', () => {
-    text('plain text');
-    expect(getMockUiCalls().some((c) => c.method === 'text' && c.args[0] === 'plain text')).toBe(
-      true,
-    );
+    fake.text('plain text');
+    expect(fake.calls.some((c) => c.method === 'text' && c.args[0] === 'plain text')).toBe(true);
   });
 
   it('print records call', () => {
-    print('raw output');
-    expect(getMockUiCalls().some((c) => c.method === 'print' && c.args[0] === 'raw output')).toBe(
-      true,
-    );
+    fake.print('raw output');
+    expect(fake.calls.some((c) => c.method === 'print' && c.args[0] === 'raw output')).toBe(true);
   });
 
   it('blank records call', () => {
-    blank();
-    expect(getMockUiCalls().some((c) => c.method === 'blank')).toBe(true);
+    fake.blank();
+    expect(fake.calls.some((c) => c.method === 'blank')).toBe(true);
   });
 });
 
-// ─── Real output paths ────────────────────────────────────────────────────────
+// ─── Real output paths
 
-describe('messages: real output (non-mock)', () => {
+describe('TerminalConsole lines: real output', () => {
+  let terminal: TerminalConsole;
+
+  beforeEach(() => {
+    terminal = new TerminalConsole();
+  });
+
   it('info writes to stdout with ℹ prefix', () => {
     const output: string[] = [];
     const spy = spyOn(process.stdout, 'write').mockImplementation((s) => {
@@ -98,7 +88,7 @@ describe('messages: real output (non-mock)', () => {
       return true;
     });
     try {
-      info('test message');
+      terminal.info('test message');
       expect(output.join('')).toContain('test message');
     } finally {
       spy.mockRestore();
@@ -112,7 +102,7 @@ describe('messages: real output (non-mock)', () => {
       return true;
     });
     try {
-      info('test message', 'stderr');
+      terminal.info('test message', 'stderr');
       expect(output.join('')).toContain('test message');
     } finally {
       spy.mockRestore();
@@ -125,13 +115,13 @@ describe('messages: real output (non-mock)', () => {
       output.push(String(s));
       return true;
     });
-    setFormattedOutputMode(true);
+    terminal.setFormattedOutputMode(true);
     try {
-      info('test message', 'stderr');
+      terminal.info('test message', 'stderr');
       expect(output.join('')).toContain('test message');
-      expect(getMessagesForFormattedOutput()).toEqual([]);
+      expect(terminal.getMessagesForFormattedOutput()).toEqual([]);
     } finally {
-      setFormattedOutputMode(false);
+      terminal.setFormattedOutputMode(false);
       spy.mockRestore();
     }
   });
@@ -143,7 +133,7 @@ describe('messages: real output (non-mock)', () => {
       return true;
     });
     try {
-      success('all good');
+      terminal.success('all good');
       expect(output.join('')).toContain('all good');
     } finally {
       spy.mockRestore();
@@ -157,7 +147,7 @@ describe('messages: real output (non-mock)', () => {
       return true;
     });
     try {
-      warn('be careful');
+      terminal.warn('be careful');
       expect(output.join('')).toContain('be careful');
     } finally {
       spy.mockRestore();
@@ -171,7 +161,7 @@ describe('messages: real output (non-mock)', () => {
       return true;
     });
     try {
-      error('something failed');
+      terminal.error('something failed');
       expect(output.join('')).toContain('something failed');
     } finally {
       spy.mockRestore();
@@ -185,7 +175,7 @@ describe('messages: real output (non-mock)', () => {
       return true;
     });
     try {
-      text('plain output');
+      terminal.text('plain output');
       expect(output.join('')).toContain('plain output');
     } finally {
       spy.mockRestore();
@@ -199,7 +189,7 @@ describe('messages: real output (non-mock)', () => {
       return true;
     });
     try {
-      text('colored', (s: string) => `[${s}]`);
+      terminal.text('colored', (s: string) => `[${s}]`);
       expect(output.join('')).toContain('[colored]');
     } finally {
       spy.mockRestore();
@@ -213,7 +203,7 @@ describe('messages: real output (non-mock)', () => {
       return true;
     });
     try {
-      text('to stderr', undefined, 'stderr');
+      terminal.text('to stderr', undefined, 'stderr');
       expect(output.join('')).toContain('to stderr');
     } finally {
       spy.mockRestore();
@@ -226,26 +216,28 @@ describe('messages: real output (non-mock)', () => {
       output.push(String(s));
       return true;
     });
-    setFormattedOutputMode(true);
+    terminal.setFormattedOutputMode(true);
     try {
-      text('to stderr', undefined, 'stderr');
+      terminal.text('to stderr', undefined, 'stderr');
       expect(output.join('')).toContain('to stderr');
-      expect(getMessagesForFormattedOutput()).toEqual([]);
+      expect(terminal.getMessagesForFormattedOutput()).toEqual([]);
     } finally {
-      setFormattedOutputMode(false);
+      terminal.setFormattedOutputMode(false);
       spy.mockRestore();
     }
   });
 
   it('text on stdout is buffered in formatted-output mode', () => {
     const stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
-    setFormattedOutputMode(true);
+    terminal.setFormattedOutputMode(true);
     try {
-      text('buffered text');
-      expect(getMessagesForFormattedOutput().some((m) => m.includes('buffered text'))).toBe(true);
+      terminal.text('buffered text');
+      expect(
+        terminal.getMessagesForFormattedOutput().some((m) => m.includes('buffered text')),
+      ).toBe(true);
       expect(stdoutSpy).not.toHaveBeenCalled();
     } finally {
-      setFormattedOutputMode(false);
+      terminal.setFormattedOutputMode(false);
       stdoutSpy.mockRestore();
     }
   });
@@ -257,7 +249,7 @@ describe('messages: real output (non-mock)', () => {
       return true;
     });
     try {
-      print('raw line');
+      terminal.print('raw line');
       expect(output.join('')).toContain('raw line');
     } finally {
       spy.mockRestore();
@@ -271,7 +263,7 @@ describe('messages: real output (non-mock)', () => {
       return true;
     });
     try {
-      print('line\n');
+      terminal.print('line\n');
       expect(output.join('')).toBe('line\n');
     } finally {
       spy.mockRestore();
@@ -285,7 +277,7 @@ describe('messages: real output (non-mock)', () => {
       return true;
     });
     try {
-      discreetSuccess('installed');
+      terminal.discreetSuccess('installed');
       expect(output.join('')).toContain('installed');
     } finally {
       spy.mockRestore();
@@ -299,7 +291,7 @@ describe('messages: real output (non-mock)', () => {
       return true;
     });
     try {
-      discreetSuccess('installed', 'stderr');
+      terminal.discreetSuccess('installed', 'stderr');
       expect(output.join('')).toContain('installed');
     } finally {
       spy.mockRestore();
@@ -312,26 +304,28 @@ describe('messages: real output (non-mock)', () => {
       output.push(String(s));
       return true;
     });
-    setFormattedOutputMode(true);
+    terminal.setFormattedOutputMode(true);
     try {
-      discreetSuccess('installed', 'stderr');
+      terminal.discreetSuccess('installed', 'stderr');
       expect(output.join('')).toContain('installed');
-      expect(getMessagesForFormattedOutput()).toEqual([]);
+      expect(terminal.getMessagesForFormattedOutput()).toEqual([]);
     } finally {
-      setFormattedOutputMode(false);
+      terminal.setFormattedOutputMode(false);
       spy.mockRestore();
     }
   });
 
   it('discreetSuccess on stdout is buffered in formatted-output mode', () => {
     const stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
-    setFormattedOutputMode(true);
+    terminal.setFormattedOutputMode(true);
     try {
-      discreetSuccess('buffered line');
-      expect(getMessagesForFormattedOutput().some((m) => m.includes('buffered line'))).toBe(true);
+      terminal.discreetSuccess('buffered line');
+      expect(
+        terminal.getMessagesForFormattedOutput().some((m) => m.includes('buffered line')),
+      ).toBe(true);
       expect(stdoutSpy).not.toHaveBeenCalled();
     } finally {
-      setFormattedOutputMode(false);
+      terminal.setFormattedOutputMode(false);
       stdoutSpy.mockRestore();
     }
   });

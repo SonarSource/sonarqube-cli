@@ -196,16 +196,17 @@ whoever uses it. Shared domains stay in `src/core/server/`: `OrganizationsClient
 (`organizations.ts`, also home to `Organization` / `OrganizationAccess`), `ComponentsClient`
 (`components.ts`), `UsersClient` (`users.ts`), `SystemClient` (`system.ts`), `ProjectBindingsClient`
 (`project-bindings.ts`) and `ScaClient` (`sca.ts`), alongside the pre-existing `BranchesClient`,
-`IssuesClient`, `MetricsClient`, `ProjectsClient` and `QualityGatesClient`. Command-specific
-surfaces sit with their command: `ImportApiClient` (`src/commands/import/_common/import-api.ts`,
-owning `DopRepository` / `ProvisionedProject`), `RemediateApiClient`
-(`src/commands/remediate/remediate-api.ts`, owning the agent-job types), `SqaaAnalysisClient`
+`IssuesClient`, `MeasuresClient`, `MetricsClient`, `ProjectsClient` and `QualityGatesClient`.
+Command-specific surfaces sit with their command: `ImportApiClient`
+(`src/commands/import/_common/import-api.ts`, owning `DopRepository` / `ProvisionedProject`),
+`RemediateApiClient` (`src/commands/remediate/remediate-api.ts`, owning the agent-job types),
+`OnboardCiSqsClient` (`src/commands/admin/onboard-ci/gitlab/sqs-api.ts`), `SqaaAnalysisClient`
 (`src/commands/analyze/sqaa-analysis-client.ts`, with the wire shapes in `sqaa-wire-types.ts`), the
 `ScaScanApi` port (`src/commands/analyze/dependency-risk-helpers/sca-api.ts`), and
 `VortexEntitlementClient` (`src/core/vortex/entitlement.ts`, owning `VortexEntitlementResult` /
 `VortexEntitlementStatus` and `SERVER_ORGANIZATION_ID_PLACEHOLDER`).
 
-Three rules hold across all fifteen of them, with no exception — keep it that way when adding one.
+Three rules hold across all seventeen of them, with no exception — keep it that way when adding one.
 
 **Every API client is constructed from a `SonarHttpClient`**, never from a `(serverUrl, token)` pair
 it turns into one itself. The command handler builds the transport client once and passes it in, so
@@ -222,9 +223,12 @@ getter over `client.isCloud`, not a field set in the constructor.
 
 **A free function taking a client as its first parameter is the shape to avoid**: when the logic
 belongs to one client, it is a private method on it (see `VortexEntitlementClient.sqaaEndpoint`).
-Two shapes stay functions. `mergeVortexEntitlement` takes no client at all — it is a pure function
+A few shapes stay functions. `mergeVortexEntitlement` takes no client at all — it is a pure function
 of two results. `checkHubEntitlement` does take one, and stays a function anyway because it belongs
-to no single client: it is the response mapper the SQAA and CAG hubs share.
+to no single client: it is the response mapper the SQAA and CAG hubs share. Command-local query
+helpers whose parameters are command-specific (`fetchEligibleIssues` in
+`src/commands/remediate/index.ts`, the measures helpers in `src/commands/quality-gate/status/`)
+also stay functions — the filters they hardcode are that command's policy, not the client's.
 
 New API calls belong in the domain wrapper for their area, never back in the transport class.
 
@@ -274,7 +278,7 @@ Error subclasses extend the abstract `CliError` and carry their own `exitCode`, 
 
 Follow the structure of existing tests for the command or feature area you are working in.
 
-- Unit tests: `tests/unit/` — inject `FakeConsole` (`tests/_common/fake-console.ts`) via `CommandInvocationContext` / `SonarCommand({ console })`. The global `src/core/ui/mock.ts` (`setMockUi`) still works for unmigrated tests. Use `tests/unit/core/host/keychain-test-handle.ts` for keychain.
+- Unit tests: `tests/unit/` — inject `FakeConsole` (`tests/_common/fake-console.ts`) via `CommandInvocationContext` / `SonarCommand({ console })`. Use `tests/unit/core/host/keychain-test-handle.ts` for keychain.
 - Integration tests: `tests/integration/specs/<command>/` — run the compiled binary against fake servers. Use `TestHarness` from `tests/integration/harness/`.
 - E2E tests: `tests/e2e/` — real external dependencies that cannot be faked: OS keychain, install scripts with real network, real SonarQube server calls, and integration with external tools. Those tests are black-box tests and exercise the product from the outside. `tests/e2e/context/` is the offline real-binary suite for `sonar-context-augmentation`: it seeds CAG state in `state.json`, lets `runPostUpdateActions()` re-download CAG from `binaries.sonarsource.com`, and covers post-update refresh (`cag-offline.test.ts`), edge cases like missing project roots / global skills / multi-skill refresh / stale-binary cleanup (`cag-edge-cases.test.ts`), passthrough behaviors including unauthenticated errors and exit-code propagation (`cag-passthrough.test.ts`), the `copilot-cli` skill path (`cag-copilot.test.ts`), the `codex` skill path (`cag-codex.test.ts`), and `sonar integrate` pre-flight skip paths against a fake server — SonarQube Server connections and disabled entitlement (`cag-integrate.test.ts`; the happy path is deferred because CAG's daemon socket path exceeds the AF_UNIX limit under the harness `tmpdir` layout). Shared scaffolding lives in `_helpers.ts`. No SonarQube/Cloud access required — only the binaries CDN.
 

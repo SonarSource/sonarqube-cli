@@ -19,11 +19,15 @@
  */
 
 import type {
+  ColorFn,
   MultiSelectOption,
   MultiSelectPromptOptions,
+  NoteOptions,
+  OutputChannel,
+  PhaseItem,
+  PhaseOptions,
   SelectOption,
-} from './components/prompts.ts';
-import type { ColorFn, NoteOptions, OutputChannel, PhaseItem, PhaseOptions } from './types.ts';
+} from './types.ts';
 
 /**
  * Human-facing terminal I/O for the CLI (messages, notes, prompts, spinners).
@@ -132,7 +136,13 @@ export interface Console {
   selectPrompt<T>(message: string, options: SelectOption<T>[]): Promise<T | null>;
 
   /**
-   * Multi-select prompt. Returns the selected values or `null` if cancelled.
+   * Multi-select prompt. Space toggles, Enter confirms. Returns the selected values
+   * (may be empty) or `null` if cancelled (Ctrl+C or `q`). Default cap is 20
+   * (`loadMoreOpts.maxSelected`; pass `Infinity` for no cap). Disabled options are
+   * shown but not toggleable.
+   *
+   * When `loadMoreOpts` is given, a "Load more..." row is appended while `hasMore()`
+   * is true; Enter on that row calls `onLoadMore()` instead of submitting.
    */
   multiSelectPrompt<T>(
     message: string,
@@ -169,8 +179,4 @@ export interface Console {
   getMessagesForFormattedOutput(): string[];
 }
 
-export type {
-  MultiSelectOption,
-  MultiSelectPromptOptions,
-  SelectOption,
-} from './components/prompts.ts';
+export type { MultiSelectOption, MultiSelectPromptOptions, SelectOption } from './types.ts';
