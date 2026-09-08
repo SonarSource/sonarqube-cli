@@ -40,13 +40,9 @@ import { initSentry } from '@/core/observability/sentry.ts';
 import { GENERIC_HTTP_METHODS } from '@/core/server/http-client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { tryLoadState } from '@/core/state/state-repository.ts';
-import {
-  buildCommandExecutedFact,
-  commitTelemetryFacts,
-  flushTelemetry,
-  TELEMETRY_FLUSH_MODE_ENV,
-} from '@/core/telemetry';
+import { commitTelemetryFacts, flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
+import { buildCommandExecutedFact } from '@/core/telemetry/command-executed.ts';
 import type { Console } from '@/core/ui/console.ts';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
 

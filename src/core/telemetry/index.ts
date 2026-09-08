@@ -18,14 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { TelemetryFact } from '@/core/commands/invocation-context.ts';
-import type { SonarCommand } from '@/core/commands/sonar-command.ts';
-import { DISTRIBUTION, type Distribution } from '@/core/host/distribution.ts';
+import { type TelemetryFact } from '@/core/commands/invocation-context.ts';
 
 import { tryLoadState } from '../state/state-manager.ts';
 import { resolveTelemetryEgress } from './egress.ts';
 import { isTelemetryEnabled } from './enabled.ts';
-import { currentProjectUuid } from './project-uuid.ts';
 import {
   emitTelemetryEvent,
   flushTelemetryEvents,
@@ -33,17 +30,6 @@ import {
 } from './telemetry-events.ts';
 
 export const TELEMETRY_FLUSH_MODE_ENV = '__SQ_CLI_TELEMETRY_FLUSH__';
-
-export const CLI_COMMAND_EXECUTED = 'CliCommandExecuted';
-
-/** Domain payload for CliCommandExecuted (identity is filled at drain time). */
-export type CommandExecutedPayload = {
-  command: string | undefined;
-  subcommand: string | null;
-  result: 'success' | 'failure';
-  distribution: Distribution;
-  project_uuid: string | null;
-};
 
 /**
  * Drain recorded telemetry facts through the generic telemetry emit, then spawn
@@ -71,26 +57,6 @@ export async function commitTelemetryFacts(
   }
 
   scheduleTelemetryFlush();
-}
-
-/**
- * Build a CliCommandExecuted fact for a finished command.
- *
- * `result` is derived from `process.exitCode` (`success` when 0 or unset).
- * `project_uuid` is resolved here (async, never rejects). Identity is applied at commit.
- * Command/subcommand come from {@link SonarCommand.commandAndSubcommand}.
- */
-export async function buildCommandExecutedFact(
-  command: SonarCommand,
-): Promise<TelemetryFact<CommandExecutedPayload>> {
-  const { command: commandName, subcommand } = command.commandAndSubcommand();
-  return new TelemetryFact(CLI_COMMAND_EXECUTED, {
-    command: commandName,
-    subcommand,
-    result: (process.exitCode ?? 0) === 0 ? 'success' : 'failure',
-    distribution: DISTRIBUTION,
-    project_uuid: await currentProjectUuid(),
-  });
 }
 
 /**

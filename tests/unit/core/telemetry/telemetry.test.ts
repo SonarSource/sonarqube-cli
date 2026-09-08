@@ -19,7 +19,7 @@
  */
 
 /**
- * Tests for telemetry/index.ts:
+ * Tests for telemetry/index.ts and command-executed.ts:
  * CliCommandExecuted event building via telemetry-events.ndjson, no-op conditions
  * flushTelemetry (drains telemetry-events.ndjson, disabled state)
  */
@@ -39,12 +39,8 @@ import * as agentDetector from '@/core/host/environment/agent-detector.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
-import {
-  buildCommandExecutedFact,
-  commitTelemetryFacts,
-  flushTelemetry,
-  TELEMETRY_FLUSH_MODE_ENV,
-} from '@/core/telemetry';
+import { commitTelemetryFacts, flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
+import { buildCommandExecutedFact } from '@/core/telemetry/command-executed.ts';
 import { ENV_TELEMETRY_EGRESS, TELEMETRY_EGRESS_OFF } from '@/core/telemetry/egress.ts';
 import { resolveTelemetryIdentity } from '@/core/telemetry/identity-fetch.ts';
 import * as userModule from '@/core/telemetry/user.ts';
