@@ -25,6 +25,7 @@ import type {
   CliState,
   InstalledIntegration,
   InstalledIntegrationFeature,
+  IntegrationScope,
   IntegrationStateAttribute,
 } from '@/core/state/state.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -369,16 +370,7 @@ async function collapseGlobalScopeCoexistence(
 
 /**
  * A literal `scope: 'project'` on a feature already means "never run this at global scope" —
- * Vortex's container already relies on exactly this to stay project-only. A dynamic `scope`
- * function is treated as eligible: it can't be resolved headlessly here, and none of today's
- * declarations use one.
- *
- * TODO: subfeatures don't carry their own `scope` (`SubfeatureDeclaration` has no such field), so
- * a subfeature that must stay project-only independent of its siblings — e.g. git's
- * `pre-commit-dependency-risks`, whose own `shouldInstall` already refuses `scope === 'global'` —
- * isn't blocked here if it's active on a coexisting project entry. Revisit if that becomes a live
- * scenario; today `shouldInstall` already prevents it from ever being *installed* at global scope
- * in the first place, so this only matters for that container being merged by this migration.
+ * Vortex's container already relies on exactly this to stay project-only.
  */
 function isGlobalScopeEligible(feature: FeatureDeclaration): boolean {
   return feature.scope !== 'project';
@@ -407,7 +399,7 @@ async function collapseFeatureCoexistence(
   }
 
   const subfeatureIds = isFeatureContainer(successor)
-    ? unionActiveSubfeatureIds(successor, coexisting)
+    ? unionActiveSubfeatureIds(successor, coexisting, 'global')
     : undefined;
   const application = createFeatureApplication(
     featuresById,
@@ -446,16 +438,26 @@ async function collapseFeatureCoexistence(
   return true;
 }
 
-/** Union, across every coexisting entry, of the subfeature ids still declared on the container. */
+/**
+ * Union, across every coexisting entry, of the subfeature ids still declared on the container and
+ * eligible for `targetScope` — a subfeature pinned to another scope (e.g. `pre-commit-dependency-risks`
+ * refusing `'global'`) is dropped even when it was active on a project entry being merged in, since
+ * it must never end up active on the resulting record.
+ */
 function unionActiveSubfeatureIds(
   container: FeatureContainer,
   entries: InstalledIntegrationFeature[],
+  targetScope: IntegrationScope,
 ): string[] {
-  const declaredIds = new Set(container.subfeatures.map((subfeature) => subfeature.id));
+  const eligibleIds = new Set(
+    container.subfeatures
+      .filter((subfeature) => subfeature.scope === undefined || subfeature.scope === targetScope)
+      .map((subfeature) => subfeature.id),
+  );
   const active = new Set<string>();
   for (const entry of entries) {
     for (const id of effectiveActiveSubfeatureIds(entry, container)) {
-      if (declaredIds.has(id)) {
+      if (eligibleIds.has(id)) {
         active.add(id);
       }
     }

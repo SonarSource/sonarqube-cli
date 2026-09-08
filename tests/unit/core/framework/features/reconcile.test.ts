@@ -1012,5 +1012,74 @@ describe('reconcileInstalledIntegrations', () => {
       ] as ContainerIntegrationContext;
       expect(lastContext.activeSubfeatures.map((s) => s.id).sort()).toEqual(['sub-a', 'sub-b']);
     });
+
+    it('drops a project-pinned subfeature from the union instead of carrying it onto the global record', async () => {
+      const globalDir = join(tempDir, 'global');
+      const projectDir = join(tempDir, 'project');
+      fs.mkdirSync(globalDir, { recursive: true });
+      fs.mkdirSync(projectDir, { recursive: true });
+      const capturedContexts: IntegrationContext[] = [];
+
+      const state = makeState();
+      state.integrations.installed.push({
+        id: 'integration-id',
+        integrationId: 'test-integration',
+        installedByCliVersion: '0.9.0',
+        installedAt: '2026-01-01T00:00:00.000Z',
+        updatedByCliVersion: '0.9.0',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        features: [
+          recordedCoexistingFeature('container-feature', 'global', globalDir, undefined, [
+            { featureId: 'sub-a', dependencies: [] },
+          ]),
+          recordedCoexistingFeature(
+            'container-feature',
+            'project',
+            projectDir,
+            { projectKey: 'proj' },
+            [
+              { featureId: 'sub-a', dependencies: [] },
+              { featureId: 'project-only-sub', dependencies: [] },
+            ],
+          ),
+        ],
+      });
+
+      const container: FeatureContainer = {
+        id: 'container-feature',
+        displayName: 'Container feature',
+        subfeatures: [
+          { id: 'sub-a', displayName: 'Sub A' },
+          { id: 'project-only-sub', displayName: 'Project-only sub', scope: 'project' },
+        ],
+        defaultInstallSubfeatureIds: [],
+        operations: [
+          {
+            id: 'test-op',
+            apply: (ctx) => {
+              capturedContexts.push(ctx);
+            },
+          },
+        ],
+      };
+      const registry = new IntegrationRegistry();
+      registry.register({
+        id: 'test-integration',
+        displayName: 'Test integration',
+        features: [container],
+      });
+
+      await reconcileInstalledIntegrations(state, registry, fake);
+
+      expect(state.integrations.installed[0].features).toHaveLength(1);
+      const collapsedFeature = state.integrations.installed[0].features[0];
+      expect(collapsedFeature.scope).toBe('global');
+      expect((collapsedFeature.subfeatures ?? []).map((s) => s.featureId)).toEqual(['sub-a']);
+
+      const lastContext = capturedContexts[
+        capturedContexts.length - 1
+      ] as ContainerIntegrationContext;
+      expect(lastContext.activeSubfeatures.map((s) => s.id)).toEqual(['sub-a']);
+    });
   });
 });
