@@ -21,7 +21,6 @@
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
-import { unwrapOrThrow } from '@/core/result.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -69,7 +68,7 @@ async function resolveOrgAndRepos(
 
   const [almKey, privateProjectsAvailable] = await Promise.all([
     resolveAlmKey(client, resolvedOrgKey, resolvedAlmKey),
-    unwrapOrThrow(client.organizations.hasPrivateProjectsEntitlement(resolvedOrgKey)),
+    client.organizations.hasPrivateProjectsEntitlement(resolvedOrgKey).orThrow(),
   ]);
 
   // Before any repository is listed, so an unsupported org stops here rather than after a full

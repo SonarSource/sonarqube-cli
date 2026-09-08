@@ -21,7 +21,6 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { SONARCLOUD_API_URL, SONARCLOUD_URL } from '@/core/config-constants.ts';
-import { unwrapOrThrow } from '@/core/result.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 
 import { version as VERSION } from '../../../../package.json';
@@ -189,18 +188,18 @@ describe('SonarHttpClient', () => {
   describe('getSafe', () => {
     it('returns response and parsed value on success', async () => {
       fetchSpy = mockFetch({ valid: true });
-      const result = await unwrapOrThrow(
-        client.getSafe<{ valid: boolean }>('/api/authentication/validate'),
-      );
+      const result = await client
+        .getSafe<{ valid: boolean }>('/api/authentication/validate')
+        .orThrow();
       expect(result.response.ok).toBe(true);
       expect(result.value).toEqual({ valid: true });
     });
 
     it('returns response with undefined value on non-ok status (does not throw)', async () => {
       fetchSpy = mockFetch({ errors: [{ msg: 'Not found' }] }, { ok: false, status: 404 });
-      const result = await unwrapOrThrow(
-        client.getSafe('/api/settings/values', { component: 'missing' }),
-      );
+      const result = await client
+        .getSafe('/api/settings/values', { component: 'missing' })
+        .orThrow();
       expect(result.response.ok).toBe(false);
       expect(result.response.status).toBe(404);
       expect(result.value).toBeUndefined();
@@ -312,7 +311,7 @@ describe('SonarHttpClient', () => {
   describe('genericRequest', () => {
     it('makes a GET request and returns response text', async () => {
       fetchSpy = mockFetch({ status: 'UP' });
-      const result = await unwrapOrThrow(client.genericRequest('GET', '/api/system/status', fake));
+      const result = await client.genericRequest('GET', '/api/system/status', fake).orThrow();
       expect(result).toBe('{"status":"UP"}');
 
       const url = (fetchSpy.mock.calls[0][0] as string).toString();

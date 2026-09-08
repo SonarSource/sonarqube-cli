@@ -21,7 +21,6 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { SONARCLOUD_API_URL, SONARCLOUD_URL } from '@/core/config-constants.ts';
-import { unwrapOrThrow } from '@/core/result.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { ProjectBindingsClient } from '@/core/server/project-bindings.ts';
 
@@ -49,7 +48,7 @@ describe('ProjectBindingsClient', () => {
       fetchSpy = mockFetch({
         projectBindings: [{ projectId: 'proj:123', projectKey: 'my-project' }],
       });
-      const key = await unwrapOrThrow(client.getProjectKeyByGitRemote(remoteUrl));
+      const key = await client.getProjectKeyByGitRemote(remoteUrl).orThrow();
       expect(key).toBe('my-project');
       expect(lastFetchUrl(fetchSpy)).toBe(
         `${SERVER_URL}/api/v2/dop-translation/project-bindings?repositoryUrl=${encodeURIComponent(remoteUrl)}`,
@@ -58,7 +57,7 @@ describe('ProjectBindingsClient', () => {
 
     it('returns null when SQS has no bindings', async () => {
       fetchSpy = mockFetch({ projectBindings: [] });
-      expect(await unwrapOrThrow(client.getProjectKeyByGitRemote(remoteUrl))).toBeNull();
+      expect(await client.getProjectKeyByGitRemote(remoteUrl).orThrow()).toBeNull();
     });
 
     it('returns null when SQS has multiple bindings', async () => {
@@ -68,7 +67,7 @@ describe('ProjectBindingsClient', () => {
           { projectId: 'proj:2', projectKey: 'project-b' },
         ],
       });
-      expect(await unwrapOrThrow(client.getProjectKeyByGitRemote(remoteUrl))).toBeNull();
+      expect(await client.getProjectKeyByGitRemote(remoteUrl).orThrow()).toBeNull();
     });
 
     it('strips embedded credentials from the remote before calling SQS', async () => {
@@ -77,7 +76,7 @@ describe('ProjectBindingsClient', () => {
       fetchSpy = mockFetch({
         projectBindings: [{ projectId: 'proj:123', projectKey: 'my-project' }],
       });
-      const key = await unwrapOrThrow(client.getProjectKeyByGitRemote(remoteWithCredentials));
+      const key = await client.getProjectKeyByGitRemote(remoteWithCredentials).orThrow();
       expect(key).toBe('my-project');
       expect(lastFetchUrl(fetchSpy)).toBe(
         `${SERVER_URL}/api/v2/dop-translation/project-bindings?repositoryUrl=${encodeURIComponent(sanitizedRemote)}`,
@@ -86,14 +85,14 @@ describe('ProjectBindingsClient', () => {
 
     it('returns null when SQS project-bindings request fails', async () => {
       fetchSpy = mockFetch({ message: 'not found' }, { ok: false, status: 404 });
-      expect(await unwrapOrThrow(client.getProjectKeyByGitRemote(remoteUrl))).toBeNull();
+      expect(await client.getProjectKeyByGitRemote(remoteUrl).orThrow()).toBeNull();
     });
 
     it('returns null when SQS binding has no projectKey', async () => {
       fetchSpy = mockFetch({
         projectBindings: [{ projectId: 'proj:123', projectKey: '' }],
       });
-      expect(await unwrapOrThrow(client.getProjectKeyByGitRemote(remoteUrl))).toBeNull();
+      expect(await client.getProjectKeyByGitRemote(remoteUrl).orThrow()).toBeNull();
     });
 
     it('resolves SonarCloud project key via bindings then search_projects', async () => {
@@ -113,7 +112,7 @@ describe('ProjectBindingsClient', () => {
             Promise.resolve({ components: [{ key: 'cloud-project-key', name: 'Cloud Project' }] }),
         } as Response);
 
-      const key = await unwrapOrThrow(cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org'));
+      const key = await cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org').orThrow();
       expect(key).toBe('cloud-project-key');
       expect((fetchSpy.mock.calls[0][0] as URL).toString()).toBe(
         `${SONARCLOUD_API_URL}/dop-translation/project-bindings?url=${encodeURIComponent(remoteUrl)}`,
@@ -128,7 +127,7 @@ describe('ProjectBindingsClient', () => {
     it('returns null on SonarCloud when organization is missing', async () => {
       const cloudClient = new ProjectBindingsClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
       fetchSpy = mockFetch({ bindings: [{ projectId: 'proj:abc' }] });
-      expect(await unwrapOrThrow(cloudClient.getProjectKeyByGitRemote(remoteUrl))).toBeNull();
+      expect(await cloudClient.getProjectKeyByGitRemote(remoteUrl).orThrow()).toBeNull();
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
@@ -137,9 +136,7 @@ describe('ProjectBindingsClient', () => {
       fetchSpy = mockFetch({
         bindings: [{ projectId: 'proj:a' }, { projectId: 'proj:b' }],
       });
-      expect(
-        await unwrapOrThrow(cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org')),
-      ).toBeNull();
+      expect(await cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org').orThrow()).toBeNull();
       expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
 
@@ -162,9 +159,9 @@ describe('ProjectBindingsClient', () => {
             Promise.resolve({ components: [{ key: 'cloud-project-key', name: 'Cloud Project' }] }),
         } as Response);
 
-      const key = await unwrapOrThrow(
-        cloudClient.getProjectKeyByGitRemote(remoteWithCredentials, 'my-org'),
-      );
+      const key = await cloudClient
+        .getProjectKeyByGitRemote(remoteWithCredentials, 'my-org')
+        .orThrow();
       expect(key).toBe('cloud-project-key');
       expect((fetchSpy.mock.calls[0][0] as URL).toString()).toBe(
         `${SONARCLOUD_API_URL}/dop-translation/project-bindings?url=${encodeURIComponent(sanitizedRemote)}`,
@@ -174,9 +171,7 @@ describe('ProjectBindingsClient', () => {
     it('returns null when SonarCloud project-bindings request fails', async () => {
       const cloudClient = new ProjectBindingsClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
       fetchSpy = mockFetch({ message: 'not found' }, { ok: false, status: 404 });
-      expect(
-        await unwrapOrThrow(cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org')),
-      ).toBeNull();
+      expect(await cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org').orThrow()).toBeNull();
       expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
 
@@ -196,9 +191,7 @@ describe('ProjectBindingsClient', () => {
           json: () => Promise.resolve({ message: 'Insufficient privileges' }),
         } as Response);
 
-      expect(
-        await unwrapOrThrow(cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org')),
-      ).toBeNull();
+      expect(await cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org').orThrow()).toBeNull();
       expect(fetchSpy).toHaveBeenCalledTimes(2);
     });
 
@@ -218,9 +211,7 @@ describe('ProjectBindingsClient', () => {
           json: () => Promise.resolve({}),
         } as Response);
 
-      expect(
-        await unwrapOrThrow(cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org')),
-      ).toBeNull();
+      expect(await cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org').orThrow()).toBeNull();
       expect(fetchSpy).toHaveBeenCalledTimes(2);
     });
   });
@@ -233,14 +224,14 @@ describe('ProjectBindingsClient', () => {
           { id: 'gh1', key: 'my-github', type: 'github', url: 'https://github.com' },
         ],
       });
-      const result = await unwrapOrThrow(client.listGitlabDopSettings());
+      const result = await client.listGitlabDopSettings().orThrow();
       expect(result).toHaveLength(1);
       expect(result[0]).toMatchObject({ id: 'g1', key: 'my-gitlab', url: 'https://gitlab.com' });
     });
 
     it('returns empty array when no gitlab settings exist', async () => {
       fetchSpy = mockFetch({ dopSettings: [] });
-      expect(await unwrapOrThrow(client.listGitlabDopSettings())).toEqual([]);
+      expect(await client.listGitlabDopSettings().orThrow()).toEqual([]);
     });
   });
 
@@ -250,7 +241,7 @@ describe('ProjectBindingsClient', () => {
         projectBindings: [{ projectKey: 'my-project', repository: '123' }],
         page: { total: 1, pageSize: 500, pageIndex: 1 },
       });
-      const result = await unwrapOrThrow(client.getAllProjectBindings('dop-id'));
+      const result = await client.getAllProjectBindings('dop-id').orThrow();
       expect(result.get('123')).toBe('my-project');
       expect(result.size).toBe(1);
     });
@@ -281,7 +272,7 @@ describe('ProjectBindingsClient', () => {
           json: () => Promise.resolve(page2),
           text: () => Promise.resolve(''),
         } as Response);
-      const result = await unwrapOrThrow(client.getAllProjectBindings('dop-id'));
+      const result = await client.getAllProjectBindings('dop-id').orThrow();
       expect(result.size).toBe(3);
       expect(result.get('3')).toBe('p3');
     });
@@ -291,7 +282,7 @@ describe('ProjectBindingsClient', () => {
         projectBindings: [],
         page: { total: 0, pageSize: 500, pageIndex: 1 },
       });
-      await unwrapOrThrow(client.getAllProjectBindings('my-dop-id'));
+      await client.getAllProjectBindings('my-dop-id').orThrow();
       const url = new URL(lastFetchUrl(fetchSpy));
       expect(url.searchParams.get('dopSettingId')).toBe('my-dop-id');
     });

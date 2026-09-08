@@ -21,7 +21,7 @@
 // Every SonarQube API call `sonar remediate` makes, in one place next to the command.
 
 import logger from '@/core/observability/logger.ts';
-import { okAsync, unwrapOrThrow } from '@/core/result.ts';
+import { okAsync } from '@/core/result.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
 import { type SonarHttpClient } from '@/core/server/http-client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
@@ -88,8 +88,8 @@ export class RemediateApiClient {
    */
   scheduleAgentJob(request: AgentJobRequest): Promise<AgentJobResponse> {
     const endpoint = '/fix-suggestions/ai-agent-scheduled-jobs';
-    return unwrapOrThrow(
-      this.client.post<AgentJobResponse>(endpoint, request, this.client.apiHostFor(endpoint)),
-    );
+    return this.client
+      .post<AgentJobResponse>(endpoint, request, this.client.apiHostFor(endpoint))
+      .orThrow();
   }
 }

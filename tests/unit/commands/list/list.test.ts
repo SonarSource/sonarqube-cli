@@ -26,7 +26,7 @@ import { beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { okAsync, type ResultAsync, unwrapOrThrow } from '@/core/result.ts';
+import { okAsync, type ResultAsync } from '@/core/result.ts';
 import type { HttpClientError } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
@@ -382,7 +382,7 @@ describe('IssuesClient', () => {
       const client = createMockClient(mockGet);
       const issuesClient = new IssuesClient(client);
 
-      const result = await unwrapOrThrow(issuesClient.searchIssues({ projects: 'my-project' }));
+      const result = await issuesClient.searchIssues({ projects: 'my-project' }).orThrow();
 
       expect(result.issues).toHaveLength(twoIssues);
       expect(result.issues[0].key).toBe('issue-1');
@@ -782,7 +782,7 @@ describe('ProjectsClient', () => {
       const client = createMockClient(mockGet);
       const projectsClient = new ProjectsClient(client);
 
-      const result = await unwrapOrThrow(projectsClient.searchProjects({}));
+      const result = await projectsClient.searchProjects({}).orThrow();
 
       expect(result.components).toHaveLength(2);
       expect(result.components[0].key).toBe('proj-1');
@@ -797,7 +797,7 @@ describe('ProjectsClient', () => {
       const client = createMockClient(mockGet);
       const projectsClient = new ProjectsClient(client);
 
-      const result = await unwrapOrThrow(projectsClient.searchProjects({ p: 2, ps: 50 }));
+      const result = await projectsClient.searchProjects({ p: 2, ps: 50 }).orThrow();
 
       expect(result.paging.pageIndex).toBe(2);
       expect(result.paging.pageSize).toBe(50);
@@ -810,7 +810,7 @@ describe('ProjectsClient', () => {
       const client = createMockClient(mockGet);
       const projectsClient = new ProjectsClient(client);
 
-      const result = await unwrapOrThrow(projectsClient.searchProjects({}));
+      const result = await projectsClient.searchProjects({}).orThrow();
 
       expect(result.components).toHaveLength(0);
       expect(result.paging.total).toBe(0);

@@ -21,7 +21,6 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { SONARCLOUD_URL } from '@/core/config-constants.ts';
-import { unwrapOrThrow } from '@/core/result.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { SystemClient } from '@/core/server/system.ts';
 
@@ -46,18 +45,18 @@ describe('SystemClient', () => {
     it('returns mqr immediately for SonarQube Cloud without calling the API', async () => {
       const cloudClient = new SystemClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
       fetchSpy = spyOn(globalThis, 'fetch');
-      expect(await unwrapOrThrow(cloudClient.getServerMode())).toBe('mqr');
+      expect(await cloudClient.getServerMode().orThrow()).toBe('mqr');
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
     it('returns mqr when server responds with MQR mode', async () => {
       fetchSpy = mockFetch({ mode: 'MQR' });
-      expect(await unwrapOrThrow(client.getServerMode())).toBe('mqr');
+      expect(await client.getServerMode().orThrow()).toBe('mqr');
     });
 
     it('returns standard when server responds with STANDARD mode', async () => {
       fetchSpy = mockFetch({ mode: 'STANDARD' });
-      expect(await unwrapOrThrow(client.getServerMode())).toBe('standard');
+      expect(await client.getServerMode().orThrow()).toBe('standard');
     });
 
     it('returns standard when endpoint returns 404 (old server without MQR support)', async () => {
@@ -68,7 +67,7 @@ describe('SystemClient', () => {
         json: () => Promise.resolve({}),
         text: () => Promise.resolve('Not Found'),
       } as Response);
-      expect(await unwrapOrThrow(client.getServerMode())).toBe('standard');
+      expect(await client.getServerMode().orThrow()).toBe('standard');
     });
 
     it('resolves to an error when endpoint returns a server error', async () => {

@@ -20,7 +20,6 @@
 
 // Fetches the worst-N files for a metric and builds their base breakdown entries
 
-import { unwrapOrThrow } from '@/core/result.ts';
 import type { MeasuresClient } from '@/core/server/measures.ts';
 import { isNewCodeMetric } from '@/core/server/measures.ts';
 import type { ComponentTreeComponent, Metric } from '@/core/server/types.ts';
@@ -56,16 +55,16 @@ export async function fetchWorstFileEntries(
   condition: QualityGateConditionSummary,
   metric: Metric | undefined,
 ): Promise<WorstFileEntriesResult> {
-  const { components, totalCount } = await unwrapOrThrow(
-    measuresClient.getWorstComponentsByMetric({
+  const { components, totalCount } = await measuresClient
+    .getWorstComponentsByMetric({
       projectKey: params.projectKey,
       metricKey: condition.metric,
       ascending: condition.comparator === 'LT',
       top: params.top,
       branch: params.branch,
       pullRequest: params.pullRequest,
-    }),
-  );
+    })
+    .orThrow();
 
   const outcomes = components.map((component) =>
     toBreakdownEntryOutcome(component, condition, metric),

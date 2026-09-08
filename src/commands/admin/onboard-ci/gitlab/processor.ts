@@ -23,7 +23,6 @@ import * as yaml from 'js-yaml';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { GitLabClient, GitLabRepo, GitLabTreeEntry } from '@/core/gitlab/client.ts';
 import { GitLabApiError } from '@/core/gitlab/client.ts';
-import { unwrapOrThrow } from '@/core/result.ts';
 import { HTTP_STATUS_BAD_REQUEST } from '@/core/server/http-constants.ts';
 
 import type { OnboardCiSqsClient } from './sqs-api.ts';
@@ -103,7 +102,7 @@ export async function classifyRepo(
     };
   }
 
-  if (await unwrapOrThrow(ctx.sqs.components.hasProjectBeenAnalyzed(existingProjectKey))) {
+  if (await ctx.sqs.components.hasProjectBeenAnalyzed(existingProjectKey).orThrow()) {
     return {
       outcome: 'skip',
       reason: SkipReason.AlreadyConfigured,

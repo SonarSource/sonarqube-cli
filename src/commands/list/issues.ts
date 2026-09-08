@@ -24,7 +24,6 @@ import { encode as encodeToToon } from '@toon-format/toon';
 
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { unwrapOrThrow } from '@/core/result.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
@@ -174,7 +173,7 @@ export async function listIssues(
     options.severities
       ? parseSeverities(
           options.severities,
-          await unwrapOrThrow(new SystemClient(client).getServerMode()),
+          await new SystemClient(client).getServerMode().orThrow(),
         )
       : {};
 
@@ -194,7 +193,7 @@ export async function listIssues(
     p: page,
   };
 
-  const result = await unwrapOrThrow(issuesClient.searchIssues(params));
+  const result = await issuesClient.searchIssues(params).orThrow();
 
   let output: string;
 

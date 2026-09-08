@@ -27,7 +27,6 @@ import type {
   SubfeatureDeclaration,
 } from '@/core/framework/features';
 import { askUser, install, skip, uninstall } from '@/core/framework/features';
-import { unwrapOrThrow } from '@/core/result.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { ScaClient } from '@/core/server/sca.ts';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
@@ -140,9 +139,9 @@ async function resolveScaEnabled(
   console: Console,
 ): Promise<boolean> {
   const client = new ScaClient(new SonarHttpClient(auth.serverUrl, auth.token));
-  const scaStatus = await unwrapOrThrow(
-    client.getScaEnablement(isServer ? 'on-premise' : 'cloud', auth.orgKey),
-  );
+  const scaStatus = await client
+    .getScaEnablement(isServer ? 'on-premise' : 'cloud', auth.orgKey)
+    .orThrow();
   if (scaStatus === 'check_failed') {
     console.warn(VORTEX_SCA_CHECK_FAILED_MESSAGE);
   }

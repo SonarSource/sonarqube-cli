@@ -22,7 +22,6 @@
 
 import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
 import logger from '@/core/observability/logger.ts';
-import { unwrapOrThrow } from '@/core/result.ts';
 import { DuplicationsClient } from '@/core/server/duplications.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import type { MeasuresClient } from '@/core/server/measures.ts';
@@ -88,13 +87,13 @@ export async function enrichDuplicationsEntries(
       if (!componentKey) {
         return;
       }
-      const info = await unwrapOrThrow(
-        duplicationsClient.getDuplicationInfo({
+      const info = await duplicationsClient
+        .getDuplicationInfo({
           componentKey,
           branch: params.branch,
           pullRequest: params.pullRequest,
-        }),
-      );
+        })
+        .orThrow();
       entry.blockCount = info.blockCount;
       entry.duplicatesWith = info.duplicatesWith;
     },

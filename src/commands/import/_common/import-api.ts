@@ -25,7 +25,6 @@
 // than re-declared method by method.
 
 import logger from '@/core/observability/logger.ts';
-import { unwrapOrThrow } from '@/core/result.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 
@@ -70,12 +69,12 @@ export class ImportApiClient {
     pageSize: number,
   ): Promise<{ repositories: DopRepository[]; total: number }> {
     const endpoint = '/dop-translation/dop-repositories';
-    const result = await unwrapOrThrow(
-      this.client.get<{
+    const result = await this.client
+      .get<{
         repositories: DopRepository[];
         page: { total: number };
-      }>(endpoint, { organizationId, pageIndex, pageSize }, this.client.apiHostFor(endpoint)),
-    );
+      }>(endpoint, { organizationId, pageIndex, pageSize }, this.client.apiHostFor(endpoint))
+      .orThrow();
     return { repositories: result.repositories, total: result.page.total };
   }
 
@@ -91,12 +90,12 @@ export class ImportApiClient {
     organization: string,
     installationKey: string,
   ): Promise<{ projects: ProvisionedProject[] }> {
-    return unwrapOrThrow(
-      this.client.postFormJson<{ projects: ProvisionedProject[] }>(
-        '/api/alm_integration/provision_projects',
-        { organization, installationKeys: installationKey },
-      ),
-    );
+    return this.client
+      .postFormJson<{ projects: ProvisionedProject[] }>('/api/alm_integration/provision_projects', {
+        organization,
+        installationKeys: installationKey,
+      })
+      .orThrow();
   }
 
   /**

@@ -26,7 +26,6 @@ import {
 } from '@/core/framework/dependencies';
 import { askUser, install, skip } from '@/core/framework/features/selection.ts';
 import type { FeaturePreview, SubfeatureDeclaration } from '@/core/framework/features/types.ts';
-import { unwrapOrThrow } from '@/core/result.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { ScaClient } from '@/core/server/sca.ts';
 import { assertScaAvailable } from '@/core/server/sca-availability.ts';
@@ -50,7 +49,7 @@ async function scaSkipReason(auth: ResolvedAuth) {
   const client = new ScaClient(new SonarHttpClient(auth.serverUrl, auth.token));
   try {
     await assertScaAvailable(
-      { checkScaEnabled: (ct, orgKey) => unwrapOrThrow(client.checkScaEnabled(ct, orgKey)) },
+      { checkScaEnabled: (ct, orgKey) => client.checkScaEnabled(ct, orgKey).orThrow() },
       auth,
     );
     return null;

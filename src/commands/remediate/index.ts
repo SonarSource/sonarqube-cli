@@ -30,7 +30,6 @@ import {
 } from '@/core/config-constants.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
-import { unwrapOrThrow } from '@/core/result.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { type IssuesClient } from '@/core/server/issues.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
@@ -169,7 +168,7 @@ async function resolveProjectKey(
 
 // The AI agent API requires the project's legacy component ID, not its key.
 async function resolveProjectId(client: RemediateApiClient, projectKey: string): Promise<string> {
-  const resolvedId = await unwrapOrThrow(client.components.getComponentId(projectKey));
+  const resolvedId = await client.components.getComponentId(projectKey).orThrow();
   logger.debug(`getComponentId(${projectKey}) => ${resolvedId ?? 'null (falling back to key)'}`);
   return resolvedId ?? projectKey;
 }
@@ -225,16 +224,16 @@ async function fetchEligibleIssues(
   // We intentionally fetch a single page of up to MAX_PAGE_SIZE eligible issues:
   // larger result sets are overwhelming in an interactive multi-select without
   // additional filtering. Users can re-run the command after resolving some.
-  const result = await unwrapOrThrow(
-    issuesClient.searchIssues({
+  const result = await issuesClient
+    .searchIssues({
       projects: projectKey,
       organization: orgKey,
       issueStatuses: 'OPEN,CONFIRMED',
       fixableByAgent: true,
       ps: MAX_PAGE_SIZE,
       p: 1,
-    }),
-  );
+    })
+    .orThrow();
   return result.issues;
 }
 

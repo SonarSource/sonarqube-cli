@@ -19,7 +19,6 @@
  */
 
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
-import { unwrapOrThrow } from '@/core/result.ts';
 import type { Console, MultiSelectOption } from '@/core/ui/console.ts';
 
 import type { DopRepository, ImportApiClient } from './import-api.ts';
@@ -329,7 +328,7 @@ export async function resolveRepos(
     );
   }
 
-  const organizationId = await unwrapOrThrow(client.organizations.getOrganizationLegacyId(orgKey));
+  const organizationId = await client.organizations.getOrganizationLegacyId(orgKey).orThrow();
   if (!organizationId) {
     throw new CommandFailedError(`Organization '${orgKey}' not found.`, {
       remediationHint: 'Check that the organization key is correct and that you have access to it.',

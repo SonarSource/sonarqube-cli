@@ -19,23 +19,42 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import { err, ok } from 'neverthrow';
 
-import { errAsync, okAsync, unwrapOrThrow } from '@/core/result.ts';
+import { errAsync, okAsync } from '@/core/result.ts';
 
-describe('unwrapOrThrow', () => {
+describe('ResultAsync.orThrow', () => {
   it('resolves to the value of an ok result', async () => {
-    expect(await unwrapOrThrow(okAsync('value'))).toBe('value');
+    expect(await okAsync('value').orThrow()).toBe('value');
   });
 
   it('throws the exact error instance of an err result', async () => {
     const error = new Error('boom');
     // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(unwrapOrThrow(errAsync(error))).rejects.toThrow(error);
+    await expect(errAsync(error).orThrow()).rejects.toThrow(error);
     try {
-      await unwrapOrThrow(errAsync(error));
-      throw new Error('unwrapOrThrow should have thrown');
+      await errAsync(error).orThrow();
+      throw new Error('orThrow should have thrown');
     } catch (thrown) {
       expect(thrown).toBe(error);
     }
+  });
+
+  it('keeps working after chaining through map()/andThen()', async () => {
+    const chained = okAsync<number, never>(1)
+      .map((n: number) => n + 1)
+      .andThen((n: number) => okAsync(n * 10));
+    expect(await chained.orThrow()).toBe(20);
+  });
+});
+
+describe('Result.orThrow (sync)', () => {
+  it('returns the value of an Ok', () => {
+    expect(ok('value').orThrow()).toBe('value');
+  });
+
+  it('throws the exact error instance of an Err', () => {
+    const error = new Error('boom');
+    expect(() => err(error).orThrow()).toThrow(error);
   });
 });

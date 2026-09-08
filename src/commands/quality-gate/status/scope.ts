@@ -22,7 +22,6 @@
 
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { autoResolvePullRequest } from '@/core/pull-request-auto-resolve.ts';
-import { unwrapOrThrow } from '@/core/result.ts';
 import { BranchesClient } from '@/core/server/branches.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 
@@ -71,7 +70,7 @@ export async function resolveQualityGateScope(
   const branchesClient = new BranchesClient(client);
   const [autoDetected, branches] = await Promise.all([
     autoResolvePullRequest(client, projectKey),
-    unwrapOrThrow(branchesClient.listBranches(projectKey)),
+    branchesClient.listBranches(projectKey).orThrow(),
   ]);
   if (autoDetected) {
     return {

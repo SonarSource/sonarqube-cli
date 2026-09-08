@@ -20,7 +20,6 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { unwrapOrThrow } from '@/core/result.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { UsersClient } from '@/core/server/users.ts';
 
@@ -44,7 +43,7 @@ describe('UsersClient', () => {
   describe('revokeUserToken', () => {
     it('POSTs name=<tokenName> to /api/user_tokens/revoke', async () => {
       fetchSpy = mockFetch({}, { status: 204 });
-      await unwrapOrThrow(client.revokeUserToken('cli-token-name'));
+      await client.revokeUserToken('cli-token-name').orThrow();
       expect(lastFetchUrl(fetchSpy)).toBe(`${SERVER_URL}/api/user_tokens/revoke`);
       const init = lastFetchInit(fetchSpy);
       expect(init.method).toBe('POST');
@@ -57,7 +56,7 @@ describe('UsersClient', () => {
 
     it('URL-encodes special characters in the token name', async () => {
       fetchSpy = mockFetch({}, { status: 204 });
-      await unwrapOrThrow(client.revokeUserToken('cli token+with/special&chars'));
+      await client.revokeUserToken('cli token+with/special&chars').orThrow();
       expect(lastFetchInit(fetchSpy).body).toBe('name=cli+token%2Bwith%2Fspecial%26chars');
     });
 
@@ -74,12 +73,12 @@ describe('UsersClient', () => {
   describe('checkTokenValidity', () => {
     it("returns 'valid' when API reports the token as valid", async () => {
       fetchSpy = mockFetch({ valid: true });
-      expect(await unwrapOrThrow(client.checkTokenValidity())).toBe('valid');
+      expect(await client.checkTokenValidity().orThrow()).toBe('valid');
     });
 
     it("returns 'invalid' when API reports the token as invalid", async () => {
       fetchSpy = mockFetch({ valid: false });
-      expect(await unwrapOrThrow(client.checkTokenValidity())).toBe('invalid');
+      expect(await client.checkTokenValidity().orThrow()).toBe('invalid');
     });
 
     it('resolves to an error on network / API failure', async () => {
@@ -93,17 +92,17 @@ describe('UsersClient', () => {
   describe('hasProvisionProjectsPermission', () => {
     it('returns true when provisioning is in global permissions', async () => {
       fetchSpy = mockFetch({ permissions: { global: ['provisioning', 'scan'] } });
-      expect(await unwrapOrThrow(client.hasProvisionProjectsPermission())).toBe(true);
+      expect(await client.hasProvisionProjectsPermission().orThrow()).toBe(true);
     });
 
     it('returns false when provisioning is absent', async () => {
       fetchSpy = mockFetch({ permissions: { global: ['scan'] } });
-      expect(await unwrapOrThrow(client.hasProvisionProjectsPermission())).toBe(false);
+      expect(await client.hasProvisionProjectsPermission().orThrow()).toBe(false);
     });
 
     it('returns false when permissions field is absent', async () => {
       fetchSpy = mockFetch({});
-      expect(await unwrapOrThrow(client.hasProvisionProjectsPermission())).toBe(false);
+      expect(await client.hasProvisionProjectsPermission().orThrow()).toBe(false);
     });
   });
 });

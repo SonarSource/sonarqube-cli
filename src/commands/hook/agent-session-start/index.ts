@@ -33,7 +33,6 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
-import { unwrapOrThrow } from '@/core/result.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { ScaClient } from '@/core/server/sca.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
@@ -148,7 +147,7 @@ async function resolveSessionStartContext(
 
 function isScaEnabled(auth: ResolvedAuth): Promise<boolean> {
   const client = new ScaClient(new SonarHttpClient(auth.serverUrl, auth.token));
-  return unwrapOrThrow(client.checkScaEnabled(auth.connectionType, auth.orgKey));
+  return client.checkScaEnabled(auth.connectionType, auth.orgKey).orThrow();
 }
 
 function logSkip(reason: string): void {

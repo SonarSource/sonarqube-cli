@@ -20,7 +20,6 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { unwrapOrThrow } from '@/core/result.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { MetricsClient } from '@/core/server/metrics.ts';
 import type { Metric, MetricsSearchResponse } from '@/core/server/types.ts';
@@ -86,7 +85,7 @@ describe('MetricsClient', () => {
       jsonResponse(searchResponse({ metrics })),
     );
 
-    const result = await unwrapOrThrow(client.searchMetrics());
+    const result = await client.searchMetrics().orThrow();
 
     expect(result).toEqual(metrics);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
@@ -107,7 +106,7 @@ describe('MetricsClient', () => {
       jsonResponse(searchResponse({ metrics: [percentMetric, ratingMetric] })),
     );
 
-    const result = await unwrapOrThrow(client.searchMetrics());
+    const result = await client.searchMetrics().orThrow();
 
     expect(result).toEqual([percentMetric, ratingMetric]);
   });
@@ -119,7 +118,7 @@ describe('MetricsClient', () => {
       .mockResolvedValueOnce(jsonResponse(searchResponse({ metrics: firstPage, total: 3, p: 1 })))
       .mockResolvedValueOnce(jsonResponse(searchResponse({ metrics: secondPage, total: 3, p: 2 })));
 
-    const result = await unwrapOrThrow(client.searchMetrics());
+    const result = await client.searchMetrics().orThrow();
 
     expect(result).toEqual([...firstPage, ...secondPage]);
     expect(fetchSpy).toHaveBeenCalledTimes(2);
@@ -132,7 +131,7 @@ describe('MetricsClient', () => {
       jsonResponse(searchResponse({ metrics: [], total: 0 })),
     );
 
-    const result = await unwrapOrThrow(client.searchMetrics());
+    const result = await client.searchMetrics().orThrow();
 
     expect(result).toEqual([]);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
