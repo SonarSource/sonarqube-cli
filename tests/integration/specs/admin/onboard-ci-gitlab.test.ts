@@ -112,11 +112,12 @@ describe('sonar admin onboard-ci gitlab', () => {
       harness.withAuth(sqsServer.baseUrl(), 'test-token', 'my-org');
       harness.withExtraEnv({ SONARQUBE_CLI_MOCK_TTY: '1', GITLAB_TOKEN: '' });
 
-      const session = harness.runInteractive(`admin onboard-ci gitlab --group ${GROUP}`);
-      const result = await session.waitFinish();
+      const result = await harness.run(`admin onboard-ci gitlab --group ${GROUP}`);
 
       expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('SonarQube Server');
+      expect(result.stderr).toContain(
+        'sonar admin onboard-ci gitlab requires a SonarQube Server connection.',
+      );
       expect(result.stdout).not.toContain('GitLab personal access token');
     });
 
