@@ -36,7 +36,7 @@ export async function buildApplications<TOptions>(
     applications.push({
       feature,
       targetRoot: await resolveFeatureTargetRoot(invocation, feature),
-      scope: await resolveFeatureScope(invocation, feature),
+      scope: resolveFeatureScope(invocation, feature),
       auth: invocation.auth,
       force: invocation.force,
       attrs: invocation.attrs,
@@ -63,16 +63,11 @@ export async function resolveFeatureTargetRoot<TOptions>(
 
 /**
  * Resolve the scope a feature installs at for the given invocation. A feature
- * may pin a fixed scope, derive one from the invocation, or fall back to the
- * invocation's default scope.
+ * may pin a fixed scope, or fall back to the invocation's default scope.
  */
-export async function resolveFeatureScope<TOptions>(
+export function resolveFeatureScope<TOptions>(
   invocation: IntegrationInvocation<TOptions>,
   feature: FeatureDeclaration<TOptions>,
-): Promise<IntegrationScope> {
-  const { scope } = feature;
-  if (typeof scope === 'function') {
-    return scope(invocation);
-  }
-  return scope ?? invocation.scope;
+): IntegrationScope {
+  return feature.scope ?? invocation.scope;
 }
