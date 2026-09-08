@@ -73,6 +73,7 @@ const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pre-tool-use-secrets';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 
 export const CURSOR_INTEGRATION_ID = 'cursor';
+export const CURSOR_HOOKS_CONFIG_RESOURCE_ID = 'cursor-hooks-config';
 
 const RULES_DIR = 'rules';
 const SQAA_RULE_FILE = 'sonar-agentic-analysis.mdc';
@@ -117,7 +118,7 @@ function resolveCursorCagSkillPath(context: IntegrationContext): string {
 
 function createSessionStartHookConfigResource(): ResourceDeclaration {
   return jsonPatch({
-    id: 'cursor-hooks-config',
+    id: CURSOR_HOOKS_CONFIG_RESOURCE_ID,
     displayName: 'Cursor session start hook configuration',
     targetPath: resolveCursorHooksJsonPath,
     defaultValue: { version: 1, hooks: {} },

@@ -78,6 +78,7 @@ const POSTTOOL_SQAA_SCRIPT_REL = 'sonar-sqaa/build-scripts/posttool-sqaa';
 const SESSION_START_CONTEXT_LIMIT = 5_000;
 
 export const CODEX_INTEGRATION_ID = 'codex';
+export const CODEX_HOOKS_CONFIG_RESOURCE_ID = 'codex-hooks-config';
 const CODEX_DISPLAY_NAME = 'Codex';
 
 export interface CodexIntegrationOptions extends IntegrateAgentOptions {
@@ -177,7 +178,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
 
 function createCagHookConfigResource(): ResourceDeclaration {
   return jsonPatch({
-    id: 'codex-hooks-config',
+    id: CODEX_HOOKS_CONFIG_RESOURCE_ID,
     displayName: 'Codex session start hook configuration',
     targetPath: resolveCodexHooksPath,
     defaultValue: { hooks: {} },

@@ -82,6 +82,7 @@ import {
 } from './instructions.ts';
 
 export const COPILOT_INTEGRATION_ID = 'copilot-cli';
+export const COPILOT_HOOKS_CONFIG_RESOURCE_ID = 'copilot-hooks-config';
 const COPILOT_DISPLAY_NAME = 'Copilot';
 
 export interface CopilotIntegrationOptions extends IntegrateAgentOptions {
@@ -186,7 +187,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
 
 function createCagHookConfigResource(): ResourceDeclaration {
   return jsonPatch({
-    id: 'copilot-hooks-config',
+    id: COPILOT_HOOKS_CONFIG_RESOURCE_ID,
     displayName: 'Copilot session start hook configuration',
     targetPath: resolveHooksJsonPath,
     defaultValue: { version: 1, hooks: {} },
