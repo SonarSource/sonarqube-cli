@@ -20,14 +20,20 @@
 
 import type { Command } from 'commander';
 
-function commandPath(command: Command): string {
+/** Path segments below the program name, e.g. `['auth', 'login']` for `sonar auth login`. */
+export function commandPathSegments(command: Command): string[] {
+  if (command.parent === null) {
+    return [];
+  }
   const names = [command.name()];
-
-  for (let parent = command.parent; parent?.parent; parent = parent.parent) {
+  for (let parent = command.parent; parent.parent !== null; parent = parent.parent) {
     names.unshift(parent.name());
   }
+  return names;
+}
 
-  return names.join(' ');
+function commandPath(command: Command): string {
+  return commandPathSegments(command).join(' ');
 }
 
 /** Full invocation path including the program name, e.g. `sonar mcp start`. */

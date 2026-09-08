@@ -26,7 +26,7 @@ import { Command, Help, Option } from 'commander';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { CliError, CommandFailedError, remediationHintFor } from '@/core/commands/command-error.ts';
-import { qualifiedCommandPath } from '@/core/commands/path.ts';
+import { commandPathSegments, qualifiedCommandPath } from '@/core/commands/path.ts';
 import {
   ALPHA_ENV_VAR,
   ALPHA_HELP_GROUP,
@@ -325,13 +325,7 @@ export class SonarCommand extends Command {
    * (including an explicit `null`).
    */
   commandAndSubcommand(): { command: string | undefined; subcommand: string | null } {
-    const names: string[] = [];
-    if (this.parent !== null) {
-      names.unshift(this.name());
-      for (let ancestor = this.parent; ancestor.parent !== null; ancestor = ancestor.parent) {
-        names.unshift(ancestor.name());
-      }
-    }
+    const names = commandPathSegments(this);
     const derivedSubcommand = names.length > 1 ? names.slice(1).join(' ') : null;
     let subcommand = derivedSubcommand;
     // Explicit null means "no remainder"; ?? would collapse that to the derived path.

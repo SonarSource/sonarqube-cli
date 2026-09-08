@@ -95,9 +95,9 @@ export async function buildCommandExecutedFact(
 
 /**
  * Spawn the detached flush worker when consent and egress allow it.
- * Command producers call this after appending events.
+ * Called by {@link commitTelemetryFacts} after appending events.
  */
-export function scheduleTelemetryFlush(): void {
+function scheduleTelemetryFlush(): void {
   if (process.env[TELEMETRY_FLUSH_MODE_ENV]) return;
   const state = tryLoadState();
   if (!state || !isTelemetryEnabled(state)) return;
