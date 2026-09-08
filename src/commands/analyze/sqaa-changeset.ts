@@ -26,7 +26,7 @@ import { join } from 'node:path';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { resolveCurrentGitBranch, resolveGitBranchAtRepoRoot } from '@/core/host/git/branch.ts';
 import { resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
-import { toRelativePosixPath as toRelativePosixPathOrNull } from '@/core/io/fs-utils.ts';
+import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 
 /** Maximum byte size per file sent to SQAA. Files exceeding this are skipped. */
@@ -80,10 +80,10 @@ export async function resolveChangeSet(
   const inRepo: string[] = [];
   const outsideIgnored: IgnoredFile[] = [];
   for (const file of absolute) {
-    if (toRelativePosixPathOrNull(file, repoRoot) === null) {
-      outsideIgnored.push({ path: file, reason: 'outside-repository' });
-    } else {
+    if (isAncestorOrSelf(repoRoot, canonicalizePath(file))) {
       inRepo.push(file);
+    } else {
+      outsideIgnored.push({ path: file, reason: 'outside-repository' });
     }
   }
 

@@ -20,7 +20,10 @@
 
 // JSON report builders for SQAA results.
 
-import { toRelativePosixPath as toRelativePosixPathOrNull } from '@/core/io/fs-utils.ts';
+import {
+  normalizePath,
+  toRelativePosixPath as toRelativePosixPathOrNull,
+} from '@/core/io/fs-utils.ts';
 
 import type { FileFailure, FileSuccess, RunTally } from './sqaa-analysis.ts';
 import type { IgnoredFile } from './sqaa-changeset.ts';
@@ -100,7 +103,7 @@ export function buildJsonReport(
   const report: SqaaJsonReport = {
     files,
     ignored: ignored.map((f) => ({
-      path: toRelativePosixPathOrNull(f.path, pathBase) ?? f.path,
+      path: toRelativePosixPathOrNull(f.path, pathBase) ?? normalizePath(f.path),
       reason: f.reason,
     })),
     failures,

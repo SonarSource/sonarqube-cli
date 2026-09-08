@@ -29,6 +29,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { SqaaAnalysisClient } from '@/commands/analyze/sqaa-analysis-client.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import { normalizePath } from '@/core/io/fs-utils.ts';
 import * as processLib from '@/core/process/process.ts';
 import * as projectInfo from '@/core/project-info.ts';
 import { getDefaultState } from '@/core/state/state.ts';
@@ -452,11 +453,13 @@ describe('analyzeSqaa: change-set mode', () => {
 
     expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
     const output = fake.calls.map((c) => String(c.args[0])).join('\n');
-    expect(output).toContain(outside);
+    expect(output).toContain(normalizePath(outside));
 
     const report = await buildSqaaJsonReport({ staged: true }, FAKE_AUTH, {
       telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,
     });
-    expect(report?.ignored).toEqual([{ path: outside, reason: 'outside-repository' }]);
+    expect(report?.ignored).toEqual([
+      { path: normalizePath(outside), reason: 'outside-repository' },
+    ]);
   });
 });
