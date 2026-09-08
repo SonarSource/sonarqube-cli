@@ -34,6 +34,9 @@ import type { RecordedRequest } from './types.js';
 
 const HTTP_BAD_REQUEST = 400;
 
+/** Statuses `resolved=true` matches; `resolved=false` matches everything else. */
+const RESOLVED_ISSUE_STATUSES = new Set(['FALSE_POSITIVE', 'ACCEPTED', 'FIXED']);
+
 export interface IssueConfig {
   key?: string;
   ruleKey: string;
@@ -44,6 +47,8 @@ export interface IssueConfig {
   type?: string;
   line?: number;
   fixableByAgent?: boolean;
+  /** Marks the issue as introduced in the leak period, matched by `sinceLeakPeriod=true`. */
+  isNewCode?: boolean;
 }
 
 export interface SqaaIssueConfig {
@@ -99,6 +104,8 @@ interface ProjectData {
   pullRequestsErrorStatus?: number;
   duplicationsByFile: Map<string, DuplicationsShowConfig>;
   duplicationsErrorsByFile: Map<string, DuplicationsShowErrorConfig>;
+  issuesSearchStatusCode?: number;
+  issuesSearchStatusBody?: string;
 }
 
 export interface DopRepositoryConfig {
@@ -127,6 +134,8 @@ export class ProjectBuilder {
   private pullRequestsErrorStatus?: number;
   private readonly duplicationsByFile: Map<string, DuplicationsShowConfig> = new Map();
   private readonly duplicationsErrorsByFile: Map<string, DuplicationsShowErrorConfig> = new Map();
+  private issuesSearchStatusCode?: number;
+  private issuesSearchStatusBody?: string;
 
   constructor(projectKey: string) {
     this.projectKey = projectKey;
@@ -143,6 +152,7 @@ export class ProjectBuilder {
       type: issue.type ?? 'CODE_SMELL',
       line: issue.line ?? 1,
       fixableByAgent: issue.fixableByAgent ?? false,
+      isNewCode: issue.isNewCode ?? false,
     });
     return this;
   }
@@ -260,6 +270,17 @@ export class ProjectBuilder {
     return this;
   }
 
+  /**
+   * Force `GET /api/issues/search` to fail with the given HTTP status code for this project,
+   * simulating an issues-category breakdown enrichment failure independent of the primary
+   * verdict call.
+   */
+  withIssuesSearchError(statusCode: number, body?: string): this {
+    this.issuesSearchStatusCode = statusCode;
+    this.issuesSearchStatusBody = body;
+    return this;
+  }
+
   getData(): ProjectData {
     return {
       key: this.projectKey,
@@ -278,6 +299,8 @@ export class ProjectBuilder {
       pullRequestsErrorStatus: this.pullRequestsErrorStatus,
       duplicationsByFile: this.duplicationsByFile,
       duplicationsErrorsByFile: this.duplicationsErrorsByFile,
+      issuesSearchStatusCode: this.issuesSearchStatusCode,
+      issuesSearchStatusBody: this.issuesSearchStatusBody,
     };
   }
 }
@@ -865,8 +888,17 @@ export class FakeSonarQubeServerBuilder {
           const projectKey = query.components ?? query.projects;
           const projectData = projectKey ? projects.get(projectKey) : undefined;
 
+          if (projectData?.issuesSearchStatusCode !== undefined) {
+            return new Response(projectData.issuesSearchStatusBody ?? '', {
+              status: projectData.issuesSearchStatusCode,
+            });
+          }
+
           const issueStatusFilter = query.issueStatuses ? query.issueStatuses.split(',') : null;
           const severityFilter = query.severities ? query.severities.split(',') : null;
+          const typeFilter = query.types ? query.types.split(',') : null;
+          const resolvedFilter = query.resolved;
+          const sinceLeakPeriodFilter = query.sinceLeakPeriod === 'true';
 
           const fixableByAgentFilter = query.fixableByAgent;
 
@@ -874,6 +906,13 @@ export class FakeSonarQubeServerBuilder {
             projectData?.issues
               .filter((issue) => !issueStatusFilter || issueStatusFilter.includes(issue.status))
               .filter((issue) => !severityFilter || severityFilter.includes(issue.severity))
+              .filter((issue) => !typeFilter || typeFilter.includes(issue.type))
+              .filter(
+                (issue) =>
+                  resolvedFilter === undefined ||
+                  (resolvedFilter === 'false') !== RESOLVED_ISSUE_STATUSES.has(issue.status),
+              )
+              .filter((issue) => !sinceLeakPeriodFilter || issue.isNewCode)
               .filter((issue) => fixableByAgentFilter !== 'true' || issue.fixableByAgent)
               .map((issue) => ({
                 key: issue.key,

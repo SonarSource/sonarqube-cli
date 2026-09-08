@@ -22,6 +22,7 @@
 
 import logger from '@/core/observability/logger.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
+import { IssuesClient } from '@/core/server/issues.ts';
 import { MeasuresClient } from '@/core/server/measures.ts';
 import type { Metric, QualityGateCondition } from '@/core/server/types.ts';
 
@@ -30,6 +31,7 @@ import type {
   QualityGateMetricBreakdown,
 } from './condition-summary.ts';
 import { fetchDuplicationsBreakdown } from './duplications-enrichment.ts';
+import { fetchIssuesBreakdown } from './issues-enrichment.ts';
 import { fetchWorstFileEntries } from './worst-file-entries.ts';
 
 /** Metric keys owned by each `--category` value, both overall and new-code variants. */
@@ -51,6 +53,18 @@ const CATEGORY_METRICS: Record<string, string[]> = {
     'new_duplicated_blocks',
     'new_duplicated_lines',
   ],
+  issues: [
+    'violations',
+    'new_violations',
+    'bugs',
+    'new_bugs',
+    'reliability_rating',
+    'new_reliability_rating',
+    'code_smells',
+    'new_code_smells',
+    'sqale_rating',
+    'new_maintainability_rating',
+  ],
 };
 
 /** Reverse lookup derived from `CATEGORY_METRICS`, for O(1) access by metric key. */
@@ -65,6 +79,7 @@ export const IMPLEMENTED_CATEGORIES = Object.keys(CATEGORY_METRICS);
 export interface AttachBreakdownsParams {
   client: SonarHttpClient;
   projectKey: string;
+  orgKey?: string;
   metrics: Metric[];
   category?: string;
   top: number;
@@ -117,6 +132,7 @@ export async function attachBreakdowns(
   params: AttachBreakdownsParams,
 ): Promise<QualityGateConditionSummary[]> {
   const measuresClient = new MeasuresClient(params.client);
+  const issuesClient = new IssuesClient(params.client);
   const metricsByKey = new Map(params.metrics.map((metric) => [metric.key, metric]));
 
   return Promise.all(
@@ -128,6 +144,7 @@ export async function attachBreakdowns(
       const breakdown = await fetchCategoryBreakdown(
         category,
         measuresClient,
+        issuesClient,
         params,
         condition,
         metricsByKey.get(condition.metric),
@@ -140,6 +157,7 @@ export async function attachBreakdowns(
 function fetchCategoryBreakdown(
   category: string,
   measuresClient: MeasuresClient,
+  issuesClient: IssuesClient,
   params: AttachBreakdownsParams,
   condition: QualityGateConditionSummary,
   metric: Metric | undefined,
@@ -149,6 +167,8 @@ function fetchCategoryBreakdown(
       return fetchMetricBreakdown(measuresClient, params, condition, metric);
     case 'duplications':
       return fetchDuplicationsBreakdown(measuresClient, params, condition, metric);
+    case 'issues':
+      return fetchIssuesBreakdown(issuesClient, params, condition);
     default:
       return Promise.resolve(undefined);
   }
