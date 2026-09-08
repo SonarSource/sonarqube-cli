@@ -20,20 +20,20 @@ export default tseslint.config(
     files: ['src/**/*.ts'],
     plugins: { headers: headersPlugin },
     rules: {
-      'headers/header-format': ['error', {
-        source: 'file',
-        path: 'LICENSE',
-        blockPrefix: '\n'
-      }],
+      'headers/header-format': [
+        'error',
+        {
+          source: 'file',
+          path: 'LICENSE',
+          blockPrefix: '\n',
+        },
+      ],
     },
   },
   // Base TypeScript config for source files
   {
     files: ['src/**/*.ts'],
-    extends: [
-      ...tseslint.configs.strictTypeChecked,
-      ...tseslint.configs.stylisticTypeChecked,
-    ],
+    extends: [...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked],
     plugins: {
       'simple-import-sort': simpleImportSort,
     },
@@ -50,15 +50,24 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-misused-promises': 'error',
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
-      '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports', fixStyle: 'inline-type-imports' }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+      '@typescript-eslint/consistent-type-imports': [
+        'error',
+        { prefer: 'type-imports', fixStyle: 'inline-type-imports' },
+      ],
       '@typescript-eslint/consistent-type-definitions': 'off',
       '@typescript-eslint/no-non-null-assertion': 'warn',
       '@typescript-eslint/switch-exhaustiveness-check': 'error',
       '@typescript-eslint/prefer-nullish-coalescing': 'off',
       '@typescript-eslint/array-type': 'off',
       // Allow numbers and booleans in template literals — very common in CLI output
-      '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true, allowBoolean: true }],
+      '@typescript-eslint/restrict-template-expressions': [
+        'error',
+        { allowNumber: true, allowBoolean: true },
+      ],
       // Downgrade unsafe rules to warn — CLI code often interacts with loosely typed APIs
       '@typescript-eslint/no-unsafe-assignment': 'warn',
       '@typescript-eslint/no-unsafe-member-access': 'warn',
@@ -73,13 +82,23 @@ export default tseslint.config(
   },
 
   // Telemetry/Sentry destinations are reachable only from the two modules that own the
-  // outbound call; the owners are exempted in the block that follows.
+  // outbound call, and `neverthrow` is reachable only from the one module that patches its
+  // prototype with `orThrow()` as a side effect of being loaded; the owners are exempted
+  // in the blocks that follow. Two separate `no-restricted-imports` config objects on the
+  // same files would silently overwrite each other in flat config, so both restrictions
+  // for `src/**/*.ts` are combined into this one block.
   {
     files: ['src/**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
         {
+          paths: [
+            {
+              name: 'neverthrow',
+              message: "Import from '@/core/result.ts' instead, so orThrow() is always loaded.",
+            },
+          ],
           // Matched as a glob against the import string, so every spelling of the path is
           // covered — alias, ./, ../ and deeper.
           patterns: [
@@ -95,9 +114,32 @@ export default tseslint.config(
     },
   },
   {
-    files: ['src/core/telemetry/telemetry-events.ts', 'src/core/observability/sentry.ts'],
+    files: [
+      'src/core/telemetry/telemetry-events.ts',
+      'src/core/observability/sentry.ts',
+      'src/core/result.ts',
+    ],
     rules: {
       'no-restricted-imports': 'off',
+    },
+  },
+
+  // Tests don't need the telemetry restriction (they legitimately mock those constants),
+  // but should still be routed through result.ts rather than importing neverthrow raw.
+  {
+    files: ['tests/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'neverthrow',
+              message: "Import from '@/core/result.ts' instead, so orThrow() is always loaded.",
+            },
+          ],
+        },
+      ],
     },
   },
 
@@ -145,7 +187,10 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-call': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-floating-promises': 'error',
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
       'no-console': 'off',
     },
   },

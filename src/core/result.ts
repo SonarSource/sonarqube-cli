@@ -24,7 +24,11 @@
 
 import { Err, Ok, ResultAsync } from 'neverthrow';
 
-export { errAsync, okAsync, Result, ResultAsync } from 'neverthrow';
+// The only re-export of `neverthrow` in the codebase; an eslint rule
+// (`no-restricted-imports` in eslint.config.js) blocks importing `neverthrow` directly
+// anywhere else, so nothing can build a `Result`/`ResultAsync` without also loading the
+// `orThrow()` prototype patch below.
+export { Err, err, errAsync, Ok, ok, okAsync, Result, ResultAsync } from 'neverthrow';
 
 /* eslint-disable @typescript-eslint/no-unused-vars -- interface merging with neverthrow's
    classes requires matching their exact type parameter names and arity, even where this
@@ -35,23 +39,24 @@ declare module 'neverthrow' {
      * The one legitimate place a chain leaves the rail: the command boundary. Resolves
      * to the success value, or re-throws the error exactly as it would have been thrown
      * before this codebase used `Result`. Callers one frame up (ultimately
-     * `SonarCommand.runCommand()`) are unchanged.
+     * `SonarCommand.runCommand()`) are unchanged. Only callable when `E extends Error`,
+     * same guarantee the old free-function `unwrapOrThrow<T, E extends Error>` had.
      *
      * Calling this immediately after a `Result`-returning call is almost always a smell:
      * it means the chain never got a chance to run past that call. Prefer `.andThen()` /
      * `.map()` to keep composing, and reserve `orThrow()` for the end of a pipeline.
      */
-    orThrow(): Promise<T>;
+    orThrow(this: ResultAsync<T, Error>): Promise<T>;
   }
 
   interface Ok<T, E> {
     /** Sync counterpart of `ResultAsync.orThrow()`, for a `Result` already resolved. */
-    orThrow(): T;
+    orThrow(this: Ok<T, Error>): T;
   }
 
   interface Err<T, E> {
     /** Sync counterpart of `ResultAsync.orThrow()`, for a `Result` already resolved. */
-    orThrow(): never;
+    orThrow(this: Err<T, Error>): never;
   }
 }
 /* eslint-enable @typescript-eslint/no-unused-vars */

@@ -110,6 +110,19 @@ describe('SonarHttpClient', () => {
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().message).toBe('ECONNREFUSED');
     });
+
+    it('returns an error result instead of a rejected promise when reading the error body fails', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        headers: new Headers(),
+        text: () => Promise.reject(new Error('stream error')),
+        json: () => Promise.reject(new Error('stream error')),
+      } as unknown as Response);
+      const result = await client.get('/api/authentication/validate');
+      expect(result.isErr()).toBe(true);
+    });
   });
 
   describe('bearer token not forwarded on redirect', () => {
@@ -223,6 +236,12 @@ describe('SonarHttpClient', () => {
       const result = await client.getSafe('/api/some/endpoint');
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().name).toBe('UnexpectedApiError');
+    });
+
+    it('resolves to an error result instead of throwing on an unusable server URL', async () => {
+      const badClient = new SonarHttpClient('not a url', 'test-token');
+      const result = await badClient.getSafe('/api/system/status');
+      expect(result.isErr()).toBe(true);
     });
 
     it('appends query parameters to the URL', async () => {

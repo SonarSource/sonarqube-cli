@@ -19,9 +19,8 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { err, ok } from 'neverthrow';
 
-import { errAsync, okAsync } from '@/core/result.ts';
+import { err, errAsync, ok, okAsync } from '@/core/result.ts';
 
 describe('ResultAsync.orThrow', () => {
   it('resolves to the value of an ok result', async () => {
