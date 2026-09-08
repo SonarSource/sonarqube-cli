@@ -23,10 +23,12 @@ import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
 import type {
   FeatureContainer,
   InstallDecision,
+  IntegrationContext,
   IntegrationInvocation,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
 import { askUser, install, skip, uninstall } from '@/core/framework/features';
+import { wholeFileRemover } from '@/core/framework/resources';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { ScaClient } from '@/core/server/sca.ts';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
@@ -38,6 +40,7 @@ import { VORTEX_FEATURE_BENEFIT, VORTEX_FEATURE_PREVIEW } from './feature-consta
 import type { IntegrateAgentOptions, VortexDisposition } from './types.ts';
 
 export const VORTEX_FEATURE_ID = 'vortex';
+export const CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID = 'context-augmentation-skill-file'; // retired, removal only
 
 /** Vortex is project-scoped, so only these records carry usable project metadata. */
 export function isProjectVortexFeature(feature: InstalledIntegrationFeature): boolean {
@@ -51,6 +54,7 @@ export function isProjectVortexFeature(feature: InstalledIntegrationFeature): bo
  */
 export function createVortexFeature<TOptions extends IntegrateAgentOptions>(
   subfeatures: SubfeatureDeclaration<TOptions>[],
+  legacyCagSkillPath: (context: IntegrationContext) => string,
 ): FeatureContainer<TOptions> {
   const subfeatureIds = subfeatures.map((subfeature) => subfeature.id);
 
@@ -64,9 +68,12 @@ export function createVortexFeature<TOptions extends IntegrateAgentOptions>(
     scope: 'project',
     replacedIds: subfeatureIds,
     defaultInstallSubfeatureIds: subfeatureIds,
-    // No legacyCleanups are needed: the retired standalone features owned the
-    // same resources now owned by these subfeatures. Post-update replacement
-    // revokes only their state records, then re-applies and adopts the assets.
+    legacyCleanups: [
+      wholeFileRemover({
+        id: CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
+        targetPath: legacyCagSkillPath,
+      }),
+    ],
     subfeatures,
   };
 }

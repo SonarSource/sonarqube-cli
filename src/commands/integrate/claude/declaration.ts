@@ -25,6 +25,7 @@ import type {
   InstallDecision,
   IntegrationContext,
   IntegrationDeclaration,
+  ResourceDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
 import { jsonPatch, skip, wholeFile } from '@/core/framework/features';
@@ -40,7 +41,11 @@ import {
   SECRETS_COMBINED_FEATURE_BENEFIT,
   SECRETS_COMBINED_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
-import { createContextAugmentationSubfeature } from '../_common/features/context-augmentation-feature.ts';
+import {
+  createContextAugmentationSubfeature,
+  SESSION_START_SCRIPT_REL,
+  VORTEX_HOOK_MARKER,
+} from '../_common/features/context-augmentation-feature.ts';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
   createSqaaInstructionsSnippet,
@@ -155,13 +160,19 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       ],
       defaultInstallSubfeatureIds: ['sqaa-posttooluse', 'cag-posttooluse'],
     }),
-    createVortexFeature<ClaudeIntegrationOptions>([
-      createSqaaInstructionsSubfeature([createSqaaInstructionsSnippet(resolveClaudeMdPath)]),
-      createContextAugmentationSubfeature<ClaudeIntegrationOptions>({
-        targetPath: resolveClaudeSkillPath,
-      }),
-      createContextAugmentationFailureHookSubfeature(),
-    ]),
+    createVortexFeature<ClaudeIntegrationOptions>(
+      [
+        createSqaaInstructionsSubfeature([createSqaaInstructionsSnippet(resolveClaudeMdPath)]),
+        createContextAugmentationSubfeature<ClaudeIntegrationOptions>({
+          agent: 'claude',
+          scriptPath: (context) =>
+            resolveAgentHookScriptPath(context, CLAUDE_CONFIG_DIR, SESSION_START_SCRIPT_REL),
+          hookConfigResource: createCagHookConfigResource(),
+        }),
+        createContextAugmentationFailureHookSubfeature(),
+      ],
+      resolveClaudeSkillPath,
+    ),
     {
       id: 'mcp-server',
       displayName: 'MCP server',
@@ -198,6 +209,37 @@ function shouldInstallCagHook(
     return skip();
   }
   return vortexInstallDecision(options.vortexDisposition);
+}
+
+function createCagHookConfigResource(): ResourceDeclaration {
+  return jsonPatch({
+    id: 'claude-hooks-config',
+    displayName: 'Claude session start hook configuration',
+    targetPath: resolveClaudeSettingsPath,
+    defaultValue: { hooks: {} },
+    patch: (document, context) =>
+      upsertAgentHooks(document, [
+        createSessionStartHookEntry(context, 'SessionStart', 'startup|clear'),
+        createSessionStartHookEntry(context, 'SubagentStart', undefined),
+      ]),
+    removePatch: (document) => removeAgentHooks(document, [VORTEX_HOOK_MARKER]),
+  });
+}
+
+function createSessionStartHookEntry(
+  context: IntegrationContext,
+  eventType: string,
+  matcher: string | undefined,
+) {
+  return createAgentHookEntry(
+    context,
+    CLAUDE_CONFIG_DIR,
+    eventType,
+    matcher,
+    VORTEX_HOOK_MARKER,
+    SESSION_START_SCRIPT_REL,
+    { projectDirPlaceholder: CLAUDE_PROJECT_DIR_PLACEHOLDER },
+  );
 }
 
 function createContextAugmentationFailureHookSubfeature(): SubfeatureDeclaration<ClaudeIntegrationOptions> {

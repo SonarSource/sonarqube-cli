@@ -35,10 +35,11 @@ export interface HookCommand {
   type: 'command';
   command: string;
   timeout: number;
+  additionalContextLimit?: number; // Codex-only: allowed context size before it spills the rest to disk
 }
 
 export interface HookConfig {
-  matcher: string;
+  matcher?: string; // omitted when the event has no matcher, or must fire for everything
   hooks: HookCommand[];
 }
 
