@@ -166,11 +166,22 @@ async function resolveProjectKey(
   return discovered.projectKey;
 }
 
-// The AI agent API requires the project's legacy component ID, not its key.
-async function resolveProjectId(client: RemediateApiClient, projectKey: string): Promise<string> {
-  const resolvedId = await client.components.getComponentId(projectKey).orThrow();
-  logger.debug(`getComponentId(${projectKey}) => ${resolvedId ?? 'null (falling back to key)'}`);
-  return resolvedId ?? projectKey;
+// The AI agent API requires the project's legacy component ID, not its key. Always falls
+// back to the raw key on failure, critical or not. Resolving the legacy ID is a
+// best-effort optimization, not something worth aborting the whole command over.
+function resolveProjectId(client: RemediateApiClient, projectKey: string): Promise<string> {
+  return client.components.getComponentId(projectKey).match(
+    (resolvedId) => {
+      logger.debug(
+        `getComponentId(${projectKey}) => ${resolvedId ?? 'null (falling back to key)'}`,
+      );
+      return resolvedId ?? projectKey;
+    },
+    (error) => {
+      logger.debug(`getComponentId(${projectKey}) failed (${error.message}), falling back to key`);
+      return projectKey;
+    },
+  );
 }
 
 async function submitRemediationJob(

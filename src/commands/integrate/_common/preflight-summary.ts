@@ -110,13 +110,9 @@ async function organizationAccessStatus(
   token: string,
   organization: string,
 ): Promise<[StepStatus, string | undefined]> {
-  try {
-    const client = new OrganizationsClient(new SonarHttpClient(serverUrl, token));
-    const accessible = await client.isOrganizationAccessible(organization);
-    return accessible ? ['done', organization] : ['failed', `${organization} (not accessible)`];
-  } catch {
-    return ['failed', `${organization} (not accessible)`];
-  }
+  const client = new OrganizationsClient(new SonarHttpClient(serverUrl, token));
+  const accessible = await client.isOrganizationAccessible(organization);
+  return accessible ? ['done', organization] : ['failed', `${organization} (not accessible)`];
 }
 
 async function buildProjectItems(

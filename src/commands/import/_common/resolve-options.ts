@@ -328,7 +328,14 @@ export async function resolveRepos(
     );
   }
 
-  const organizationId = await client.organizations.getOrganizationLegacyId(orgKey).orThrow();
+  const organizationId = await client.organizations.getOrganizationLegacyId(orgKey).match(
+    (id) => id,
+    (error) => {
+      throw new CommandFailedError(`Failed to look up organization '${orgKey}': ${error.message}`, {
+        remediationHint: 'Check your network connection and authentication, then retry.',
+      });
+    },
+  );
   if (!organizationId) {
     throw new CommandFailedError(`Organization '${orgKey}' not found.`, {
       remediationHint: 'Check that the organization key is correct and that you have access to it.',

@@ -34,7 +34,7 @@ declare module 'neverthrow' {
     /**
      * The one legitimate place a chain leaves the rail: the command boundary. Resolves
      * to the success value, or re-throws the error exactly as it would have been thrown
-     * before this codebase used `Result` — callers one frame up (ultimately
+     * before this codebase used `Result`. Callers one frame up (ultimately
      * `SonarCommand.runCommand()`) are unchanged.
      *
      * Calling this immediately after a `Result`-returning call is almost always a smell:
@@ -57,7 +57,7 @@ declare module 'neverthrow' {
 /* eslint-enable @typescript-eslint/no-unused-vars */
 
 // neverthrow doesn't ship `orThrow()` itself, so this attaches it once, here, to the
-// three classes' prototypes — every `.map()`/`.andThen()`/etc. call returns a `new
+// three classes' prototypes. Every `.map()`/`.andThen()`/etc. call returns a `new
 // ResultAsync(...)`/`Ok(...)`/`Err(...)` sharing this same prototype, so the method
 // reaches the end of any chain built anywhere in the codebase. If a future neverthrow
 // version ships its own `orThrow` with an incompatible signature, the `declare module`
@@ -65,7 +65,7 @@ declare module 'neverthrow' {
 //
 // A prototype method can't itself be generic over the instance's T/E (those are erased
 // at runtime, and TypeScript has no way to attach a per-call type parameter to an
-// existing property slot) — the `any`s below are that, not a shortcut; the typed surface
+// existing property slot). The `any`s below are that, not a shortcut; the typed surface
 // callers actually see is the `declare module` block above.
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-return */
 ResultAsync.prototype.orThrow = function (this: ResultAsync<any, any>): Promise<any> {

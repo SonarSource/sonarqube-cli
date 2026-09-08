@@ -259,12 +259,15 @@ export class SonarHttpClient {
   }
 
   /**
-   * Resolves to `{ response, value }` and never rejects: a transport failure (DNS/TLS
-   * failure, connection refused, timeout) and a body-parse failure both become
-   * `HttpClientError` like every other method. Only the *status* is left uninterpreted —
-   * `value` is `undefined` on a non-2xx response — for the handful of callers
-   * (`getOrNotFound`, telemetry identity/project-uuid lookups) that need to branch on the
-   * status themselves instead of getting a single typed error for "not 2xx".
+   * Resolves to `{ response, value }` and never rejects. Only the *status* is left
+   * uninterpreted (`value` is `undefined` on a non-2xx response) for the handful of
+   * callers (`getOrNotFound`, telemetry identity/project-uuid lookups) that need to branch
+   * on the status themselves instead of getting a single typed error for "not 2xx". A
+   * transport failure (DNS/TLS failure, connection refused, timeout) becomes
+   * `TransportError`; a body-parse failure on an otherwise-2xx response becomes
+   * `UnexpectedApiError` instead, since the server did answer. Same split as
+   * `toStatusCheckedResult` below, so a malformed body classifies the same way regardless
+   * of which method reads it.
    */
   getSafe<TValue>(
     endpoint: string,
@@ -273,21 +276,26 @@ export class SonarHttpClient {
     timeoutMs: number = GET_REQUEST_TIMEOUT_MS,
   ): ResultAsync<SafeGetResult<TValue>, HttpClientError> {
     return ResultAsync.fromPromise(
-      (async (): Promise<SafeGetResult<TValue>> => {
+      (async (): Promise<Response> => {
         const url = new URL(`${baseUrl ?? this.serverURL}${endpoint}`);
         if (params) {
           Object.entries(params).forEach(([key, value]) => {
             url.searchParams.append(key, String(value));
           });
         }
-        const response = await fetchAuthenticated(
+        return fetchAuthenticated(
           url.toString(),
           buildRequest('GET', this.commonHeaders(), timeoutMs, undefined),
         );
-        const value = response.ok ? ((await response.json()) as TValue) : undefined;
-        return { response, value };
       })(),
       toError,
+    ).andThen((response) =>
+      ResultAsync.fromPromise(
+        (async (): Promise<TValue | undefined> =>
+          response.ok ? ((await response.json()) as TValue) : undefined)(),
+        (err) =>
+          new UnexpectedApiError(response.status, err instanceof Error ? err.message : String(err)),
+      ).map((value) => ({ response, value })),
     );
   }
 
@@ -373,7 +381,7 @@ export class SonarHttpClient {
   /**
    * Shared tail for every method built on a single request/response round trip: check
    * the response status, and only read the body when the status was OK. `readBody` must
-   * itself never reject on a well-formed response — a rejection there (e.g. malformed
+   * itself never reject on a well-formed response. A rejection there (e.g. malformed
    * JSON) is reported as `UnexpectedApiError` rather than `TransportError`, since the
    * server did answer.
    */
@@ -401,10 +409,11 @@ export class SonarHttpClient {
 }
 
 /**
- * Wraps whatever escaped the `try` around a request as a `TransportError`. This is
- * almost always a throw from `fetchAuthenticated` (DNS/TLS/proxy failure, connection
- * refused, timeout, abort), but a body read/parse failure on an otherwise successful
- * response also lands here and is currently reported as a transport failure.
+ * Wraps whatever escaped the request itself as a `TransportError`: a throw from
+ * `fetchAuthenticated` (DNS/TLS/proxy failure, connection refused, timeout, abort), before
+ * any response was received. A body-parse failure on a response that did arrive is a
+ * separate case, classified as `UnexpectedApiError` instead; see `getSafe` and
+ * `toStatusCheckedResult`, the only two places that read a body.
  *
  * `NetworkConfigError` is passed through unwrapped: it already describes the failure
  * precisely and is matched by name elsewhere (e.g. `remediationHintFor`), so re-wrapping

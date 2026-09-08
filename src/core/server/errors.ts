@@ -19,7 +19,7 @@
  */
 
 /**
- * Wraps a failure that happened before a response was received at all — the request
+ * Wraps a failure that happened before a response was received at all: the request
  * never reached the server, or never came back (DNS/TLS/proxy failure, connection
  * refused, timeout, abort). Distinct from every other error in this file, which is
  * built from an actual HTTP response.
@@ -139,7 +139,7 @@ export class RequestPayloadTooLargeError extends Error {
 
 /**
  * The closed set of errors a `SonarHttpClient` method can resolve to. Parameterising
- * `Result`/`ResultAsync` with this union — instead of the base `Error` — is what makes
+ * `Result`/`ResultAsync` with this union, instead of the base `Error`, is what makes
  * `.mapErr()` and a `switch` on `error.name` exhaustive at the call site.
  */
 export type HttpClientError =
@@ -155,8 +155,8 @@ export type HttpClientError =
   | UnexpectedApiError;
 
 /**
- * Distinguishes a critical failure — the request could not be carried out at all, or
- * the server is rejecting all traffic — from an expected one, a well-formed rejection
+ * Distinguishes a critical failure (the request could not be carried out at all, or
+ * the server is rejecting all traffic) from an expected one, a well-formed rejection
  * of this particular request that a caller may reasonably treat as a normal outcome
  * (e.g. "this organization doesn't exist").
  *

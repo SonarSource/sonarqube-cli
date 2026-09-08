@@ -122,7 +122,7 @@ export class OrganizationsClient {
    * The `organizations` filter is not limited to the caller's memberships: it also resolves
    * public organizations. That is why a hand-typed key can be validated with it.
    *
-   * Every outcome — accessible, not_found, or check_failed — is folded into a plain value here,
+   * Every outcome (accessible, not_found, or check_failed) is folded into a plain value here,
    * so this deliberately resolves to a `Promise`, not a `ResultAsync`: there is no error left to
    * propagate past this point.
    */

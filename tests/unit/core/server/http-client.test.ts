@@ -212,6 +212,19 @@ describe('SonarHttpClient', () => {
       expect(result._unsafeUnwrapErr().message).toBe('ECONNREFUSED');
     });
 
+    it('reports a malformed body on an ok response as UnexpectedApiError, not TransportError', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: () => Promise.reject(new SyntaxError('Unexpected token')),
+        text: () => Promise.resolve('not json'),
+      } as unknown as Response);
+      const result = await client.getSafe('/api/some/endpoint');
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().name).toBe('UnexpectedApiError');
+    });
+
     it('appends query parameters to the URL', async () => {
       fetchSpy = mockFetch({});
       await client.getSafe('/api/settings/values', { component: 'demo' });

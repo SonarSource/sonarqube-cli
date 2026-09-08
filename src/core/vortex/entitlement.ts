@@ -100,19 +100,15 @@ export class VortexEntitlementClient {
    * means Vortex is not available.
    */
   async hasVortexEntitlement(organizationKey?: string): Promise<VortexEntitlementResult> {
-    try {
-      const uuid = await this.resolveOrganizationId(organizationKey);
-      if (typeof uuid !== 'string') {
-        return uuid;
-      }
-      const [sqaa, cag] = await Promise.all([
-        checkHubEntitlement(this.client, this.sqaaEndpoint(uuid)),
-        checkHubEntitlement(this.client, this.cagEndpoint(uuid)),
-      ]);
-      return mergeVortexEntitlement(sqaa, cag);
-    } catch {
-      return { status: 'check_failed' };
+    const uuid = await this.resolveOrganizationId(organizationKey);
+    if (typeof uuid !== 'string') {
+      return uuid;
     }
+    const [sqaa, cag] = await Promise.all([
+      checkHubEntitlement(this.client, this.sqaaEndpoint(uuid)),
+      checkHubEntitlement(this.client, this.cagEndpoint(uuid)),
+    ]);
+    return mergeVortexEntitlement(sqaa, cag);
   }
 
   /**
