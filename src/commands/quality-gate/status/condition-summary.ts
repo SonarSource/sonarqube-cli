@@ -51,7 +51,23 @@ export interface DuplicationsMetricBreakdown {
   entries: DuplicationsBreakdownEntry[];
 }
 
-export type QualityGateMetricBreakdown = CoverageMetricBreakdown | DuplicationsMetricBreakdown;
+export interface IssuesBreakdownEntry {
+  file: string;
+  line?: number;
+  key: string;
+  rule: string;
+  message: string;
+}
+
+export interface IssuesMetricBreakdown {
+  category: 'issues';
+  totalCount: number;
+  fetchedCount: number;
+  entries: IssuesBreakdownEntry[];
+}
+
+export type QualityGateMetricBreakdown =
+  CoverageMetricBreakdown | DuplicationsMetricBreakdown | IssuesMetricBreakdown;
 
 export interface QualityGateConditionSummary {
   metric: string;
