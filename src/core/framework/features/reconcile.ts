@@ -32,7 +32,12 @@ import type { Console } from '@/core/ui/console.ts';
 import { findInstalledIntegration } from './installation-recorder.ts';
 import { integrationInstaller } from './installer.ts';
 import type { IntegrationRegistry } from './registry.ts';
-import type { FeatureApplication, FeatureDeclaration, IntegrationDeclaration } from './types.ts';
+import type {
+  FeatureApplication,
+  FeatureContainer,
+  FeatureDeclaration,
+  IntegrationDeclaration,
+} from './types.ts';
 import { isFeatureContainer } from './types.ts';
 
 /**
@@ -51,6 +56,15 @@ export async function reconcileInstalledIntegrations(
 
   for (const integration of registry.list()) {
     if (await reconcileIntegration(state, integration, console)) {
+      stateChanged = true;
+    }
+  }
+
+  // Last step, once every entry above is current: collapse any project-scope installs of a
+  // feature (or one of its `replacedIds`) that coexist with an already-installed global one for
+  // the same integration into that single global record.
+  for (const integration of registry.list()) {
+    if (await collapseGlobalScopeCoexistence(state, integration, console)) {
       stateChanged = true;
     }
   }
@@ -255,6 +269,22 @@ function mergeFeatureAttrs(
   return Object.keys(attrs).length > 0 ? attrs : undefined;
 }
 
+/**
+ * The subfeature ids a container falls back to when the caller has no recorded subfeature set to
+ * carry forward (an old plain-feature install, predating containers) — `defaultInstallSubfeatureIds`
+ * filtered by each subfeature's own `migrationEligible(attrs)`, since `shouldInstall`'s `options`
+ * don't exist during reconciliation.
+ */
+function defaultEligibleSubfeatureIds<TOptions>(
+  container: FeatureContainer<TOptions>,
+  attrs: InstalledIntegrationFeature['attrs'],
+): string[] {
+  return container.defaultInstallSubfeatureIds.filter((id) => {
+    const subfeature = container.subfeatures.find((s) => s.id === id);
+    return subfeature?.migrationEligible?.(attrs) ?? true;
+  });
+}
+
 function getFeature(
   featuresById: Map<string, FeatureDeclaration>,
   featureId: string,
@@ -268,12 +298,7 @@ function getFeature(
 
   let applicationFeature = feature;
   if (isFeatureContainer(feature)) {
-    const defaultIds =
-      subfeatureIds ??
-      feature.defaultInstallSubfeatureIds.filter((id) => {
-        const subfeature = feature.subfeatures.find((s) => s.id === id);
-        return subfeature?.migrationEligible?.(attrs) ?? true;
-      });
+    const defaultIds = subfeatureIds ?? defaultEligibleSubfeatureIds(feature, attrs);
     const activeIds = new Set(defaultIds);
     const filteredContainer = {
       ...feature,
@@ -305,4 +330,190 @@ function createFeatureApplication(
   }
 
   return { feature, targetRoot, scope, attrs };
+}
+
+/**
+ * Collapses project-scope installs of a feature (or one of its `replacedIds`) that coexist with
+ * an already-installed global one for the same integration into that single global record —
+ * merging attrs and unioning active subfeatures — then tears down the stale project installs.
+ * Several agents merge global and project config rather than one overriding the other, so leaving
+ * both around keeps the old per-repo install firing side-by-side with the new global one.
+ */
+async function collapseGlobalScopeCoexistence(
+  state: CliState,
+  integration: IntegrationDeclaration,
+  console: Console,
+): Promise<boolean> {
+  const installedIntegration = findInstalledIntegration(state, integration);
+  if (!installedIntegration) {
+    return false;
+  }
+  const featuresById = new Map(integration.features.map((feature) => [feature.id, feature]));
+
+  let stateChanged = false;
+  for (const successor of integration.features) {
+    const collapsed = await collapseFeatureCoexistence(
+      state,
+      integration,
+      installedIntegration,
+      featuresById,
+      successor,
+      console,
+    );
+    if (collapsed) {
+      stateChanged = true;
+    }
+  }
+  return stateChanged;
+}
+
+/**
+ * A literal `scope: 'project'` on a feature already means "never run this at global scope" —
+ * Vortex's container already relies on exactly this to stay project-only. A dynamic `scope`
+ * function is treated as eligible: it can't be resolved headlessly here, and none of today's
+ * declarations use one.
+ *
+ * TODO: subfeatures don't carry their own `scope` (`SubfeatureDeclaration` has no such field), so
+ * a subfeature that must stay project-only independent of its siblings — e.g. git's
+ * `pre-commit-dependency-risks`, whose own `shouldInstall` already refuses `scope === 'global'` —
+ * isn't blocked here if it's active on a coexisting project entry. Revisit if that becomes a live
+ * scenario; today `shouldInstall` already prevents it from ever being *installed* at global scope
+ * in the first place, so this only matters for that container being merged by this migration.
+ */
+function isGlobalScopeEligible(feature: FeatureDeclaration): boolean {
+  return feature.scope !== 'project';
+}
+
+async function collapseFeatureCoexistence(
+  state: CliState,
+  integration: IntegrationDeclaration,
+  installedIntegration: InstalledIntegration,
+  featuresById: Map<string, FeatureDeclaration>,
+  successor: FeatureDeclaration,
+  console: Console,
+): Promise<boolean> {
+  if (!isGlobalScopeEligible(successor)) {
+    return false;
+  }
+
+  const matchingIds = new Set([successor.id, ...(successor.replacedIds ?? [])]);
+  const coexisting = installedIntegration.features.filter((feature) =>
+    matchingIds.has(feature.featureId),
+  );
+  const globalEntry = coexisting.find((feature) => feature.scope === 'global');
+  const projectEntries = coexisting.filter((feature) => feature.scope === 'project');
+  if (!globalEntry || projectEntries.length === 0) {
+    return false;
+  }
+
+  const subfeatureIds = isFeatureContainer(successor)
+    ? unionActiveSubfeatureIds(successor, coexisting)
+    : undefined;
+  const application = createFeatureApplication(
+    featuresById,
+    successor.id,
+    subfeatureIds,
+    globalEntry.targetRoot,
+    'global',
+    mergeFeatureAttrs([...projectEntries, globalEntry]),
+  );
+  if (!application) {
+    return false;
+  }
+
+  let succeeded = false;
+  try {
+    const installedFeatures = await integrationInstaller.applyAndRecordFeatures(
+      state,
+      integration,
+      [application],
+      { console, executionMode: 'update' },
+    );
+    succeeded = installedFeatures.length > 0;
+  } catch (err) {
+    logger.debug(
+      `Global-scope coexistence collapse failed for ${integration.id}.${successor.id}: ${(err as Error).message}`,
+    );
+  }
+  if (!succeeded) {
+    return false;
+  }
+
+  await teardownStaleProjectEntries(state, integration, successor, projectEntries, console);
+  installedIntegration.features = installedIntegration.features.filter(
+    (feature) => !projectEntries.includes(feature),
+  );
+  return true;
+}
+
+/** Union, across every coexisting entry, of the subfeature ids still declared on the container. */
+function unionActiveSubfeatureIds(
+  container: FeatureContainer,
+  entries: InstalledIntegrationFeature[],
+): string[] {
+  const declaredIds = new Set(container.subfeatures.map((subfeature) => subfeature.id));
+  const active = new Set<string>();
+  for (const entry of entries) {
+    for (const id of effectiveActiveSubfeatureIds(entry, container)) {
+      if (declaredIds.has(id)) {
+        active.add(id);
+      }
+    }
+  }
+  return [...active];
+}
+
+/**
+ * The subfeature ids active on one recorded entry: its own recorded set if present — even if
+ * empty, a real "none active" signal distinct from `undefined` — otherwise the same
+ * default-filtered fallback used for pre-container legacy installs.
+ */
+function effectiveActiveSubfeatureIds(
+  entry: InstalledIntegrationFeature,
+  container: FeatureContainer,
+): string[] {
+  if (entry.subfeatures) {
+    return entry.subfeatures.map((subfeature) => subfeature.featureId);
+  }
+  return defaultEligibleSubfeatureIds(container, entry.attrs);
+}
+
+/**
+ * Real teardown for *same-id* stale project entries (no rename involved), using the current
+ * declaration's own resource/operation templates at each entry's own recorded targetRoot/attrs.
+ * An entry reached via `replacedIds` (a rename alongside the scope promotion) has no declaration
+ * left under its own id to resolve its resources with — the caller prunes its state entry
+ * regardless, and `legacyCleanups` is the existing mechanism for real cleanup in that case, same
+ * limitation as the `replacedIds` migration above.
+ */
+async function teardownStaleProjectEntries(
+  state: CliState,
+  integration: IntegrationDeclaration,
+  successor: FeatureDeclaration,
+  projectEntries: InstalledIntegrationFeature[],
+  console: Console,
+): Promise<void> {
+  const sameIdEntries = projectEntries.filter(
+    (entry) => entry.featureId === successor.id && fs.existsSync(entry.targetRoot),
+  );
+  if (sameIdEntries.length === 0) {
+    return;
+  }
+
+  const applications: FeatureApplication[] = sameIdEntries.map((entry) => ({
+    feature: successor,
+    targetRoot: entry.targetRoot,
+    scope: 'project',
+    attrs: entry.attrs,
+  }));
+
+  try {
+    await integrationInstaller.removeAndRecordFeatures(state, integration, applications, {
+      console,
+    });
+  } catch (err) {
+    logger.debug(
+      `Failed to remove stale project-scope install of ${integration.id}.${successor.id}: ${(err as Error).message}`,
+    );
+  }
 }
