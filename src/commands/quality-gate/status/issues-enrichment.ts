@@ -33,7 +33,7 @@ import type {
 } from './condition-summary.ts';
 
 /** Reliability and Maintainability conditions restrict enrichment to their own issue type; generic violations are unfiltered. */
-const ISSUE_TYPE_FILTER: Record<string, string> = {
+const ISSUE_TYPE_FILTER: Partial<Record<string, string>> = {
   bugs: 'BUG',
   new_bugs: 'BUG',
   reliability_rating: 'BUG',
@@ -44,18 +44,48 @@ const ISSUE_TYPE_FILTER: Record<string, string> = {
   new_maintainability_rating: 'CODE_SMELL',
 };
 
-export async function fetchIssuesBreakdown(
+/**
+ * Several condition pairs (`bugs`/`reliability_rating`, `code_smells`/`sqale_rating`, and their
+ * `new_*` equivalents) resolve to byte-identical search params - a gate failing both members of a
+ * pair would otherwise fire the same `/api/issues/search` request twice. Keyed by `types` +
+ * `sinceLeakPeriod` (the only params that vary by condition within one `attachBreakdowns` call)
+ * and shared across the whole call by `attachBreakdowns`.
+ */
+export type IssuesBreakdownCache = Map<string, Promise<QualityGateMetricBreakdown | undefined>>;
+
+export function fetchIssuesBreakdown(
   issuesClient: IssuesClient,
   params: AttachBreakdownsParams,
   condition: QualityGateConditionSummary,
+  cache: IssuesBreakdownCache,
+): Promise<QualityGateMetricBreakdown | undefined> {
+  const types = ISSUE_TYPE_FILTER[condition.metric];
+  const sinceLeakPeriod = isNewCodeMetric(condition.metric);
+  const cacheKey = `${types ?? ''}::${sinceLeakPeriod}`;
+
+  const cached = cache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const promise = searchIssuesBreakdown(issuesClient, params, condition, types, sinceLeakPeriod);
+  cache.set(cacheKey, promise);
+  return promise;
+}
+
+async function searchIssuesBreakdown(
+  issuesClient: IssuesClient,
+  params: AttachBreakdownsParams,
+  condition: QualityGateConditionSummary,
+  types: string | undefined,
+  sinceLeakPeriod: boolean,
 ): Promise<QualityGateMetricBreakdown | undefined> {
   try {
     const searchParams: IssuesSearchParams = {
       projects: params.projectKey,
       organization: params.orgKey,
-      types: ISSUE_TYPE_FILTER[condition.metric],
+      types,
       resolved: false,
-      sinceLeakPeriod: isNewCodeMetric(condition.metric) || undefined,
+      sinceLeakPeriod: sinceLeakPeriod || undefined,
       branch: params.branch,
       pullRequest: params.pullRequest,
       s: 'SEVERITY',
@@ -63,7 +93,7 @@ export async function fetchIssuesBreakdown(
       ps: params.top,
     };
     const { issues, paging } = await issuesClient.searchIssues(searchParams);
-    const entries = issues.map(toIssuesEntry);
+    const entries = issues.map((issue) => toIssuesEntry(issue, params.projectKey));
     if (entries.length === 0) {
       return undefined;
     }
@@ -74,11 +104,14 @@ export async function fetchIssuesBreakdown(
   }
 }
 
-/** `component` is `<projectKey>:<path>` - the project key prefix isn't useful in the breakdown. */
-function toIssuesEntry(issue: SonarQubeIssue): IssuesBreakdownEntry {
-  const separatorIndex = issue.component.indexOf(':');
+/** `component` is `<projectKey>:<path>` - strip the exact project key prefix, since the key
+ * itself may contain colons (e.g. Maven's default `groupId:artifactId`). */
+function toIssuesEntry(issue: SonarQubeIssue, projectKey: string): IssuesBreakdownEntry {
+  const prefix = `${projectKey}:`;
   return {
-    file: separatorIndex === -1 ? issue.component : issue.component.slice(separatorIndex + 1),
+    file: issue.component.startsWith(prefix)
+      ? issue.component.slice(prefix.length)
+      : issue.component,
     line: issue.line,
     key: issue.key,
     rule: issue.rule,

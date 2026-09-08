@@ -252,6 +252,91 @@ describe('quality-gate status — issues breakdown', () => {
   );
 
   it(
+    'strips the project key prefix from `component` even when the key itself contains colons (Maven-style)',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('com.example:my-app', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              { status: 'ERROR', metricKey: 'violations', comparator: 'GT', errorThreshold: '0' },
+            ])
+            .withIssue({
+              key: 'ISSUE-1',
+              ruleKey: 'java:S1234',
+              message: 'Fix this bug',
+              component: 'com.example:my-app:src/main/java/Foo.java',
+              line: 10,
+            }),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status --project com.example:my-app --format json`,
+      );
+
+      const parsed = JSON.parse(result.stdout);
+      const condition = parsed.qualityGate.conditions.find(
+        (c: { metric: string }) => c.metric === 'violations',
+      );
+      expect(condition.breakdown.entries[0].file).toBe('src/main/java/Foo.java');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'fetches issues once and reuses the result for both members of a redundant metric pair (bugs and reliability_rating)',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              { status: 'ERROR', metricKey: 'bugs', comparator: 'GT', errorThreshold: '0' },
+              {
+                status: 'ERROR',
+                metricKey: 'reliability_rating',
+                comparator: 'GT',
+                errorThreshold: '1',
+                actualValue: '3',
+              },
+            ])
+            .withIssue({
+              key: 'BUG-1',
+              ruleKey: 'java:S2189',
+              message: 'Blocker bug',
+              component: 'my-project:src/worker.ts',
+              type: 'BUG',
+            }),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`quality-gate status --project my-project --format json`);
+
+      const parsed = JSON.parse(result.stdout);
+      const bugsCondition = parsed.qualityGate.conditions.find(
+        (c: { metric: string }) => c.metric === 'bugs',
+      );
+      const reliabilityCondition = parsed.qualityGate.conditions.find(
+        (c: { metric: string }) => c.metric === 'reliability_rating',
+      );
+      expect(bugsCondition.breakdown.entries).toHaveLength(1);
+      expect(reliabilityCondition.breakdown.entries).toHaveLength(1);
+
+      const recorded = server.getRecordedRequests();
+      const issuesRequests = recorded.filter((r) => r.path === '/api/issues/search');
+      expect(issuesRequests).toHaveLength(1);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'requests types=CODE_SMELL for a failing code_smells condition',
     async () => {
       const server = await harness

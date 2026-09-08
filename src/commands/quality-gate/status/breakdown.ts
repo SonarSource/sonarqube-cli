@@ -31,6 +31,7 @@ import type {
   QualityGateMetricBreakdown,
 } from './condition-summary.ts';
 import { fetchDuplicationsBreakdown } from './duplications-enrichment.ts';
+import type { IssuesBreakdownCache } from './issues-enrichment.ts';
 import { fetchIssuesBreakdown } from './issues-enrichment.ts';
 import { fetchWorstFileEntries } from './worst-file-entries.ts';
 
@@ -133,6 +134,7 @@ export async function attachBreakdowns(
 ): Promise<QualityGateConditionSummary[]> {
   const measuresClient = new MeasuresClient(params.client);
   const issuesClient = new IssuesClient(params.client);
+  const issuesCache: IssuesBreakdownCache = new Map();
   const metricsByKey = new Map(params.metrics.map((metric) => [metric.key, metric]));
 
   return Promise.all(
@@ -145,6 +147,7 @@ export async function attachBreakdowns(
         category,
         measuresClient,
         issuesClient,
+        issuesCache,
         params,
         condition,
         metricsByKey.get(condition.metric),
@@ -158,6 +161,7 @@ function fetchCategoryBreakdown(
   category: string,
   measuresClient: MeasuresClient,
   issuesClient: IssuesClient,
+  issuesCache: IssuesBreakdownCache,
   params: AttachBreakdownsParams,
   condition: QualityGateConditionSummary,
   metric: Metric | undefined,
@@ -168,7 +172,7 @@ function fetchCategoryBreakdown(
     case 'duplications':
       return fetchDuplicationsBreakdown(measuresClient, params, condition, metric);
     case 'issues':
-      return fetchIssuesBreakdown(issuesClient, params, condition);
+      return fetchIssuesBreakdown(issuesClient, params, condition, issuesCache);
     default:
       return Promise.resolve(undefined);
   }

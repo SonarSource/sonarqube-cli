@@ -308,7 +308,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       ),
     )
     .addOption(
-      new SonarOption('--top <top>', 'Number of files to include in the breakdown, per condition')
+      new SonarOption(
+        '--top <top>',
+        'Number of entries (files, or issues for the issues category) to include in the breakdown, per condition',
+      )
         .default(QUALITY_GATE_DEFAULT_TOP)
         .argParser(parseInteger),
     )
