@@ -39,6 +39,7 @@ export const CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID =
 
 export const VORTEX_HOOK_MARKER = 'sonar-vortex';
 export const SESSION_START_SCRIPT_REL = `${VORTEX_HOOK_MARKER}/build-scripts/session-start-vortex`;
+export const SESSION_START_SCRIPT_RESOURCE_ID = 'session-start-vortex-script';
 
 export interface ContextAugmentationFeatureOptions {
   agent: SessionStartAgent;
@@ -81,7 +82,7 @@ function createHookScriptResource(options: ContextAugmentationFeatureOptions): R
   const subcommand = `agent-session-start --agent ${options.agent}`;
 
   return wholeFile({
-    id: 'session-start-vortex-script',
+    id: SESSION_START_SCRIPT_RESOURCE_ID,
     displayName: 'Session start hook script',
     targetPath: options.scriptPath,
     content: {

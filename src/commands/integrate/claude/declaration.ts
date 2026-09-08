@@ -75,6 +75,7 @@ const POSTTOOLUSEFAILURE_SCRIPT_REL = 'sonar-posttoolusefailure/build-scripts/po
 
 export const CLAUDE_INTEGRATION_ID = 'claude-code';
 export const CONTEXT_AUGMENTATION_HOOK_FEATURE_ID = 'context-augmentation-hook';
+export const CLAUDE_HOOKS_CONFIG_RESOURCE_ID = 'claude-hooks-config';
 const CLAUDE_DISPLAY_NAME = 'Claude Code';
 
 export interface ClaudeIntegrationOptions extends IntegrateAgentOptions {
@@ -213,7 +214,7 @@ function shouldInstallCagHook(
 
 function createCagHookConfigResource(): ResourceDeclaration {
   return jsonPatch({
-    id: 'claude-hooks-config',
+    id: CLAUDE_HOOKS_CONFIG_RESOURCE_ID,
     displayName: 'Claude session start hook configuration',
     targetPath: resolveClaudeSettingsPath,
     defaultValue: { hooks: {} },
