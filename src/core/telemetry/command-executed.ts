@@ -18,11 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { type Command } from 'commander';
-
 import { TelemetryFact } from '@/core/commands/invocation-context.ts';
+import type { SonarCommand } from '@/core/commands/sonar-command.ts';
 import { DISTRIBUTION, type Distribution } from '@/core/host/distribution.ts';
-import { currentProjectUuid } from '@/core/telemetry/project-uuid.ts';
+
+import { currentProjectUuid } from './project-uuid.ts';
 
 export const CLI_COMMAND_EXECUTED = 'CliCommandExecuted';
 
@@ -35,35 +35,19 @@ export type CommandExecutedPayload = {
   project_uuid: string | null;
 };
 
-const passthroughSubcommands = new WeakMap<Command, string | null>();
-
-export function setPassthroughSubcommand(command: Command, subcommand: string | null): void {
-  passthroughSubcommands.set(command, subcommand);
-}
-
 /**
  * Build a CliCommandExecuted fact for a finished command.
  *
  * `result` is derived from `process.exitCode` (`success` when 0 or unset).
  * `project_uuid` is resolved here (async, never rejects). Identity is applied at commit.
+ * Command/subcommand come from {@link SonarCommand.commandAndSubcommand}.
  */
 export async function buildCommandExecutedFact(
-  command: Command,
+  command: SonarCommand,
 ): Promise<TelemetryFact<CommandExecutedPayload>> {
-  const commandNames: string[] = [];
-  let current: Command = command;
-  while (current.parent !== null) {
-    commandNames.unshift(current.name());
-    current = current.parent;
-  }
-  const commandPathTail = commandNames.slice(1);
-  const fallbackSubcommand = commandPathTail.length > 0 ? commandPathTail.join(' ') : null;
-  const subcommand = passthroughSubcommands.has(command)
-    ? (passthroughSubcommands.get(command) ?? null)
-    : fallbackSubcommand;
-
+  const { command: commandName, subcommand } = command.commandAndSubcommand();
   return new TelemetryFact(CLI_COMMAND_EXECUTED, {
-    command: commandNames[0],
+    command: commandName,
     subcommand,
     result: (process.exitCode ?? 0) === 0 ? 'success' : 'failure',
     distribution: DISTRIBUTION,

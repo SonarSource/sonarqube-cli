@@ -18,18 +18,52 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { type TelemetryFact } from '@/core/commands/invocation-context.ts';
+
 import { tryLoadState } from '../state/state-manager.ts';
 import { resolveTelemetryEgress } from './egress.ts';
 import { isTelemetryEnabled } from './enabled.ts';
-import { flushTelemetryEvents } from './telemetry-events.ts';
+import {
+  emitTelemetryEvent,
+  flushTelemetryEvents,
+  type IdentityEmitOptions,
+} from './telemetry-events.ts';
 
 export const TELEMETRY_FLUSH_MODE_ENV = '__SQ_CLI_TELEMETRY_FLUSH__';
 
 /**
- * Spawn the detached flush worker when consent and egress allow it.
- * Command producers call this after appending events.
+ * Drain recorded telemetry facts through the generic telemetry emit, then spawn
+ * the detached flush worker. Identity / invocation correlation are applied in
+ * core; emit failures are swallowed.
+ *
+ * No-ops when called from within a flush worker (prevents infinite recursion).
  */
-export function scheduleTelemetryFlush(): void {
+export async function commitTelemetryFacts(
+  facts: readonly TelemetryFact[],
+  options?: IdentityEmitOptions,
+): Promise<void> {
+  if (process.env[TELEMETRY_FLUSH_MODE_ENV]) return;
+
+  for (const fact of facts) {
+    try {
+      await emitTelemetryEvent(fact.name, fact.payload as object, {
+        eventTimestampMs: fact.timestamp,
+        agentSessionId: options?.agentSessionId,
+        auth: fact.auth,
+      });
+    } catch {
+      // Telemetry is strictly fire-and-forget.
+    }
+  }
+
+  scheduleTelemetryFlush();
+}
+
+/**
+ * Spawn the detached flush worker when consent and egress allow it.
+ * Called by {@link commitTelemetryFacts} after appending events.
+ */
+function scheduleTelemetryFlush(): void {
   if (process.env[TELEMETRY_FLUSH_MODE_ENV]) return;
   const state = tryLoadState();
   if (!state || !isTelemetryEnabled(state)) return;

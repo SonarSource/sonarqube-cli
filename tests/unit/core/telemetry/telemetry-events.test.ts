@@ -36,7 +36,6 @@ import { scanAndEmitSecrets } from '@/commands/analyze/secrets.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import { SQAA_ANALYZE_AGENTIC_CALLER_COMMAND } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import type { IntegrationConfiguredPayload } from '@/commands/integrate/_common/integrate-telemetry.ts';
-import { commitTelemetryFacts } from '@/commands/telemetry-facts.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { ENV_SONAR_USER_HOME, TELEMETRY_ENDPOINT } from '@/core/config-constants.ts';
@@ -49,6 +48,7 @@ import * as fetchModule from '@/core/server/fetch.ts';
 import type { TelemetryEventIdentityPayload } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
+import { commitTelemetryFacts } from '@/core/telemetry';
 import { emitTelemetryEvent, flushTelemetryEvents } from '@/core/telemetry/telemetry-events.ts';
 import * as userModule from '@/core/telemetry/user.ts';
 

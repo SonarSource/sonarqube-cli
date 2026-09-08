@@ -18,13 +18,22 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
+// Currently not supported in Antigravity or Cursor subagents
+export type SessionStartAgent = 'claude' | 'codex' | 'copilot' | 'cursor';
 
-/**
- * Condition for commands with a `--format` option: only notify for `table`,
- * since JSON (and other machine-readable formats) stdout must stay pure.
- */
-export const isTableFormatOption: UpdateNotificationCondition = (opts) => {
-  const format = typeof opts.format === 'string' ? opts.format : 'json';
-  return format.toLowerCase() === 'table';
-};
+/** Normalized payload (what the pipeline needs) */
+export interface SessionStartInput {
+  sessionId: string | undefined;
+  startDir: string | undefined;
+  eventName: string | undefined;
+}
+
+/** Normalized output (what the pipeline resolved) */
+export interface SessionStartOutput {
+  additionalContext: string;
+}
+
+export interface SessionStartAgentAdapter {
+  parse: (payload: unknown) => SessionStartInput;
+  emit: (output: SessionStartOutput, input: SessionStartInput) => unknown;
+}

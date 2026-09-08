@@ -107,6 +107,20 @@ describe('sonar admin onboard-ci gitlab', () => {
       expect(result.stderr).toContain('SonarQube Server');
     });
 
+    it('exits 1 when connected to SonarQube Cloud without prompting for a GitLab token', async () => {
+      const sqsServer = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(sqsServer.baseUrl(), 'test-token', 'my-org');
+      harness.withExtraEnv({ SONARQUBE_CLI_MOCK_TTY: '1', GITLAB_TOKEN: '' });
+
+      const result = await harness.run(`admin onboard-ci gitlab --group ${GROUP}`);
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(
+        'sonar admin onboard-ci gitlab requires a SonarQube Server connection.',
+      );
+      expect(result.stdout).not.toContain('GitLab personal access token');
+    });
+
     it('exits 2 for invalid --sonar-token-var-name', async () => {
       await startServers(harness);
       const result = await harness.run(

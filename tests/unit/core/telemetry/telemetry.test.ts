@@ -19,7 +19,7 @@
  */
 
 /**
- * Tests for telemetry/index.ts:
+ * Tests for telemetry/index.ts and command-executed.ts:
  * CliCommandExecuted event building via telemetry-events.ndjson, no-op conditions
  * flushTelemetry (drains telemetry-events.ndjson, disabled state)
  */
@@ -30,11 +30,6 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import {
-  buildCommandExecutedFact,
-  setPassthroughSubcommand,
-} from '@/commands/command-executed-telemetry.ts';
-import { commitTelemetryFacts } from '@/commands/telemetry-facts.ts';
 import * as authResolver from '@/core/auth/auth-resolver.ts';
 import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/auth/auth-resolver.ts';
 import { SonarCommand } from '@/core/commands/sonar-command.ts';
@@ -44,7 +39,8 @@ import * as agentDetector from '@/core/host/environment/agent-detector.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
-import { flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
+import { commitTelemetryFacts, flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
+import { buildCommandExecutedFact } from '@/core/telemetry/command-executed.ts';
 import { ENV_TELEMETRY_EGRESS, TELEMETRY_EGRESS_OFF } from '@/core/telemetry/egress.ts';
 import { resolveTelemetryIdentity } from '@/core/telemetry/identity-fetch.ts';
 import * as userModule from '@/core/telemetry/user.ts';
@@ -231,7 +227,7 @@ describe('CliCommandExecuted', () => {
 
     it('uses the passthrough subcommand stashed on the command, if any', async () => {
       const command = makeCommand('context');
-      setPassthroughSubcommand(command, 'get-source');
+      command.setPassthroughSubcommand('get-source');
 
       await commitCommandExecuted(command);
 
@@ -242,7 +238,7 @@ describe('CliCommandExecuted', () => {
 
     it('honors a stashed null subcommand even when the command chain has children', async () => {
       const command = makeCommand('context child');
-      setPassthroughSubcommand(command, null);
+      command.setPassthroughSubcommand(null);
 
       await commitCommandExecuted(command);
 

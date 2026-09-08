@@ -23,6 +23,7 @@
 import type { Organization } from '@/core/server/organizations.ts';
 import type { SettingsValue } from '@/core/server/settings-value.ts';
 import type {
+  DuplicationsShowFile,
   Metric,
   QualityGateCondition,
   QualityGateStatus,
@@ -71,6 +72,16 @@ interface ComponentTreeErrorConfig {
   body?: string;
 }
 
+export interface DuplicationsShowConfig {
+  blockCount: number;
+  duplicatesWith?: string[];
+}
+
+interface DuplicationsShowErrorConfig {
+  statusCode: number;
+  body?: string;
+}
+
 interface ProjectData {
   key: string;
   name: string;
@@ -86,6 +97,8 @@ interface ProjectData {
   pullRequests?: PullRequestConfig[];
   pullRequestsUnsupported: boolean;
   pullRequestsErrorStatus?: number;
+  duplicationsByFile: Map<string, DuplicationsShowConfig>;
+  duplicationsErrorsByFile: Map<string, DuplicationsShowErrorConfig>;
 }
 
 export interface DopRepositoryConfig {
@@ -112,6 +125,8 @@ export class ProjectBuilder {
   private pullRequests?: PullRequestConfig[];
   private pullRequestsUnsupported = false;
   private pullRequestsErrorStatus?: number;
+  private readonly duplicationsByFile: Map<string, DuplicationsShowConfig> = new Map();
+  private readonly duplicationsErrorsByFile: Map<string, DuplicationsShowErrorConfig> = new Map();
 
   constructor(projectKey: string) {
     this.projectKey = projectKey;
@@ -224,6 +239,27 @@ export class ProjectBuilder {
     return this;
   }
 
+  /**
+   * Configure `GET /api/duplications/show` for one file path - `blockCount` duplication
+   * groups, each containing this file plus every path in `duplicatesWith` (omit for
+   * self-duplication only). This fake server doesn't distribute peers across groups the way a
+   * real analysis would; `DuplicationsClient` only extracts the group count and the
+   * deduplicated peer set, so the distribution is irrelevant to what it's tested against.
+   */
+  withDuplications(path: string, config: DuplicationsShowConfig): this {
+    this.duplicationsByFile.set(path, config);
+    return this;
+  }
+
+  /**
+   * Force `GET /api/duplications/show` to fail with the given HTTP status code for one file
+   * path, simulating a per-file enrichment failure independent of the primary breakdown fetch.
+   */
+  withDuplicationsError(path: string, statusCode: number, body?: string): this {
+    this.duplicationsErrorsByFile.set(path, { statusCode, body });
+    return this;
+  }
+
   getData(): ProjectData {
     return {
       key: this.projectKey,
@@ -240,6 +276,8 @@ export class ProjectBuilder {
       pullRequests: this.pullRequests,
       pullRequestsUnsupported: this.pullRequestsUnsupported,
       pullRequestsErrorStatus: this.pullRequestsErrorStatus,
+      duplicationsByFile: this.duplicationsByFile,
+      duplicationsErrorsByFile: this.duplicationsErrorsByFile,
     };
   }
 }
@@ -941,6 +979,50 @@ export class FakeSonarQubeServerBuilder {
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );
+        }
+
+        if (path === '/api/duplications/show') {
+          const key = query.key ?? '';
+          const separatorIndex = key.indexOf(':');
+          const projectKey = separatorIndex === -1 ? key : key.slice(0, separatorIndex);
+          const filePath = separatorIndex === -1 ? '' : key.slice(separatorIndex + 1);
+          const projectData = projects.get(projectKey);
+
+          const error = projectData?.duplicationsErrorsByFile.get(filePath);
+          if (error) {
+            return new Response(error.body ?? '', { status: error.statusCode });
+          }
+
+          const config = projectData?.duplicationsByFile.get(filePath);
+          if (!config || config.blockCount === 0) {
+            return new Response(JSON.stringify({ duplications: [], files: {} }), {
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+
+          const toFile = (p: string): DuplicationsShowFile => ({
+            key: `${projectKey}:${p}`,
+            name: p,
+            uuid: `${projectKey}:${p}-uuid`,
+            project: projectKey,
+            projectUuid: `${projectKey}-uuid`,
+            projectName: projectKey,
+          });
+
+          const peerPaths = config.duplicatesWith ?? [];
+          const refs = ['1', ...peerPaths.map((_, i) => String(i + 2))];
+          const files: Record<string, DuplicationsShowFile> = { '1': toFile(filePath) };
+          peerPaths.forEach((peerPath, i) => {
+            files[String(i + 2)] = toFile(peerPath);
+          });
+
+          const duplications = Array.from({ length: config.blockCount }, (_, i) => ({
+            blocks: refs.map((ref) => ({ from: i * 10 + 1, size: 10, _ref: ref })),
+          }));
+
+          return new Response(JSON.stringify({ duplications, files }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
 
         // sonar-context-augmentation calls /api/project_branches/list to
