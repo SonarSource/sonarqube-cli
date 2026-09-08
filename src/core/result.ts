@@ -18,22 +18,30 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Generic Result monad. `Ok`/`Err` are capitalized because `ok` already names
-// `response.ok` / `result.ok` throughout the codebase.
+// Single import surface for `neverthrow` across the codebase. Everything that needs
+// `Result` / `ResultAsync` imports it from here rather than from `neverthrow` directly,
+// so the vocabulary (naming, the one collapse helper below) stays centralized.
 
-export type Result<T, E extends Error = Error> = { ok: true; value: T } | { ok: false; error: E };
+export { errAsync, okAsync, Result, ResultAsync } from 'neverthrow';
 
-export function Ok<T>(value: T): Result<T, never> {
-  return { ok: true, value };
-}
+import type { ResultAsync } from 'neverthrow';
 
-export function Err<E extends Error>(error: E): Result<never, E> {
-  return { ok: false, error };
-}
-
-export function unwrap<T, E extends Error>(result: Result<T, E>): T {
-  if (!result.ok) {
-    throw result.error;
-  }
-  return result.value;
+/**
+ * The one legitimate place a chain leaves the rail: the command boundary. Resolves to
+ * the success value, or re-throws the error exactly as it would have been thrown before
+ * this codebase used `Result` — callers one frame up (ultimately
+ * `SonarCommand.runCommand()`) are unchanged.
+ *
+ * A `Result`-returning method that immediately does this is almost always a smell: it
+ * means the chain never got a chance to run past this call. Prefer `.andThen()` /
+ * `.map()` to keep composing, and reserve `unwrapOrThrow` for the end of a command's
+ * pipeline.
+ */
+export function unwrapOrThrow<T, E extends Error>(result: ResultAsync<T, E>): Promise<T> {
+  return result.match(
+    (value) => value,
+    (error) => {
+      throw error;
+    },
+  );
 }

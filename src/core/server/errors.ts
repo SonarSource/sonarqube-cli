@@ -73,6 +73,30 @@ export class ServerError extends Error {
   }
 }
 
+/** Thrown by the API client on a GET HTTP 403 or 404 response. */
+export class AccessDeniedError extends Error {
+  readonly status: number;
+
+  constructor(status: number) {
+    super(
+      `Access denied (HTTP ${status}). Check that the supplied token and organization are valid.`,
+    );
+    this.name = 'AccessDeniedError';
+    this.status = status;
+  }
+}
+
+/** Thrown by the API client on any response status not classified by one of the above. */
+export class UnexpectedApiError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'UnexpectedApiError';
+    this.status = status;
+  }
+}
+
 export type RequestPayloadTooLargeCode = 'REQUEST_TOO_LARGE' | 'TOO_MANY_FILES';
 
 export interface RequestPayloadTooLargeMeta {
@@ -112,6 +136,23 @@ export class RequestPayloadTooLargeError extends Error {
     this.meta = meta;
   }
 }
+
+/**
+ * The closed set of errors a `SonarHttpClient` method can resolve to. Parameterising
+ * `Result`/`ResultAsync` with this union — instead of the base `Error` — is what makes
+ * `.mapErr()` and a `switch` on `error.name` exhaustive at the call site.
+ */
+export type HttpClientError =
+  | TransportError
+  | NetworkConfigError
+  | RateLimitError
+  | ServiceUnavailableError
+  | BadRequestError
+  | ServerError
+  | ForbiddenApiError
+  | RequestPayloadTooLargeError
+  | AccessDeniedError
+  | UnexpectedApiError;
 
 /**
  * Distinguishes a critical failure — the request could not be carried out at all, or

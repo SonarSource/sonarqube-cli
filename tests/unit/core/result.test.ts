@@ -20,34 +20,22 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { Err, Ok, unwrap } from '@/core/result.ts';
+import { errAsync, okAsync, unwrapOrThrow } from '@/core/result.ts';
 
-describe('Result', () => {
-  it('Ok wraps a value as an ok result', () => {
-    const result = Ok(42);
-    expect(result).toEqual({ ok: true, value: 42 });
+describe('unwrapOrThrow', () => {
+  it('resolves to the value of an ok result', async () => {
+    expect(await unwrapOrThrow(okAsync('value'))).toBe('value');
   });
 
-  it('Err wraps an error as a non-ok result', () => {
+  it('throws the exact error instance of an err result', async () => {
     const error = new Error('boom');
-    const result = Err(error);
-    expect(result).toEqual({ ok: false, error });
-  });
-
-  describe('unwrap', () => {
-    it('returns the value of an ok result', () => {
-      expect(unwrap(Ok('value'))).toBe('value');
-    });
-
-    it('throws the exact error instance of a non-ok result', () => {
-      const error = new Error('boom');
-      expect(() => unwrap(Err(error))).toThrow(error);
-      try {
-        unwrap(Err(error));
-        throw new Error('unwrap should have thrown');
-      } catch (thrown) {
-        expect(thrown).toBe(error);
-      }
-    });
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(unwrapOrThrow(errAsync(error))).rejects.toThrow(error);
+    try {
+      await unwrapOrThrow(errAsync(error));
+      throw new Error('unwrapOrThrow should have thrown');
+    } catch (thrown) {
+      expect(thrown).toBe(error);
+    }
   });
 });
