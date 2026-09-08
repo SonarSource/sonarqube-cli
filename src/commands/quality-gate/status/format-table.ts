@@ -23,9 +23,8 @@ import { cyan, green, red, yellow } from '@/core/ui/colors.ts';
 import { padColumns } from '@/core/ui/formatter/column-formatting.ts';
 
 import type {
-  CoverageMetricBreakdown,
+  DependencyRiskBreakdownEntry,
   DuplicationsBreakdownEntry,
-  DuplicationsMetricBreakdown,
   IssuesBreakdownEntry,
   QualityGateBreakdownEntry,
   QualityGateConditionSummary,
@@ -143,10 +142,7 @@ function formatBreakdownLines(condition: QualityGateConditionSummary): string[] 
     return [];
   }
 
-  const lines =
-    metricBreakdown.category === 'issues'
-      ? formatIssuesEntryLines(metricBreakdown.entries)
-      : formatValueEntryLines(metricBreakdown);
+  const lines = formatEntryLines(metricBreakdown);
 
   const remaining = metricBreakdown.totalCount - metricBreakdown.fetchedCount;
   if (remaining > 0) {
@@ -156,28 +152,16 @@ function formatBreakdownLines(condition: QualityGateConditionSummary): string[] 
   return lines;
 }
 
-/** Coverage/duplications entries share a single leading numeric value column. */
-function formatValueEntryLines(
-  metricBreakdown: CoverageMetricBreakdown | DuplicationsMetricBreakdown,
-): string[] {
-  const [values] = padColumns(
-    [metricBreakdown.entries.map((entry) => entry.formattedValue)],
-    [],
-    BREAKDOWN_VALUE_GAP,
-  );
-  return metricBreakdown.entries.map((_entry, i) => formatEntryLine(metricBreakdown, i, values[i]));
-}
-
-function formatEntryLine(
-  metricBreakdown: CoverageMetricBreakdown | DuplicationsMetricBreakdown,
-  index: number,
-  paddedValue: string,
-): string {
+function formatEntryLines(metricBreakdown: QualityGateMetricBreakdown): string[] {
   switch (metricBreakdown.category) {
     case 'coverage':
-      return formatCoverageEntryLine(metricBreakdown.entries[index], paddedValue);
+      return formatFileEntryLines(metricBreakdown.entries, (entry) => entry.path);
     case 'duplications':
-      return formatDuplicationsEntryLine(metricBreakdown.entries[index], paddedValue);
+      return formatFileEntryLines(metricBreakdown.entries, formatDuplicationsSuffix);
+    case 'issues':
+      return formatIssuesEntryLines(metricBreakdown.entries);
+    case 'dependency-risks':
+      return formatDependencyRiskEntryLines(metricBreakdown.entries);
   }
 }
 
@@ -198,20 +182,40 @@ function formatIssuesEntryLines(entries: IssuesBreakdownEntry[]): string[] {
   );
 }
 
-function formatCoverageEntryLine(entry: QualityGateBreakdownEntry, paddedValue: string): string {
-  return `${BREAKDOWN_INDENT}${paddedValue}${entry.path}`;
+function formatFileEntryLines<T extends QualityGateBreakdownEntry>(
+  entries: T[],
+  renderSuffix: (entry: T) => string,
+): string[] {
+  const [values] = padColumns(
+    [entries.map((entry) => entry.formattedValue)],
+    [],
+    BREAKDOWN_VALUE_GAP,
+  );
+  return entries.map((entry, i) => `${BREAKDOWN_INDENT}${values[i]}${renderSuffix(entry)}`);
 }
 
-function formatDuplicationsEntryLine(
-  entry: DuplicationsBreakdownEntry,
-  paddedValue: string,
-): string {
+function formatDuplicationsSuffix(entry: DuplicationsBreakdownEntry): string {
   if (entry.blockCount === undefined) {
-    return `${BREAKDOWN_INDENT}${paddedValue}${entry.path}`;
+    return entry.path;
   }
   const blocks = `${entry.blockCount} block${entry.blockCount === 1 ? '' : 's'}`;
   const peers = entry.duplicatesWith?.length ? `, dup: ${entry.duplicatesWith.join(', ')}` : '';
-  return `${BREAKDOWN_INDENT}${paddedValue}${entry.path} (${blocks}${peers})`;
+  return `${entry.path} (${blocks}${peers})`;
+}
+
+function formatDependencyRiskEntryLines(entries: DependencyRiskBreakdownEntry[]): string[] {
+  const [identifiers, severities, types] = padColumns(
+    [
+      entries.map((entry) => `${entry.package}@${entry.version}`),
+      entries.map((entry) => entry.severity),
+      entries.map((entry) => entry.type),
+    ],
+    [],
+    BREAKDOWN_VALUE_GAP,
+  );
+  return entries.map((entry, i) =>
+    `${BREAKDOWN_INDENT}${identifiers[i]}${severities[i]}${types[i]}${entry.vulnerabilityId ?? ''}`.trimEnd(),
+  );
 }
 
 function formatMoreEntriesLine(

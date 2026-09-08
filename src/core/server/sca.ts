@@ -20,9 +20,25 @@
 
 // Sonar Advanced Security (SCA) feature-enablement API wrapper.
 
-import type { SonarHttpClient } from './http-client.ts';
+import type { QueryParams, SonarHttpClient } from './http-client.ts';
+import type { ScaIssueRelease, ScaIssuesReleasesResponse } from './types.ts';
 
 export type ScaEnablement = 'enabled' | 'not_enabled' | 'check_failed';
+
+export interface GetWorstIssuesReleasesParams {
+  projectKey: string;
+  types: string[];
+  newlyIntroduced?: boolean;
+  top: number;
+  branch?: string;
+  pullRequest?: string;
+  orgKey?: string;
+}
+
+export interface GetWorstIssuesReleasesResult {
+  issuesReleases: ScaIssueRelease[];
+  totalCount: number;
+}
 
 export class ScaClient {
   private readonly client: SonarHttpClient;
@@ -64,5 +80,36 @@ export class ScaClient {
    */
   async checkScaEnabled(connectionType: 'cloud' | 'on-premise', orgKey?: string): Promise<boolean> {
     return (await this.getScaEnablement(connectionType, orgKey)) === 'enabled';
+  }
+
+  async getWorstIssuesReleases(
+    params: GetWorstIssuesReleasesParams,
+  ): Promise<GetWorstIssuesReleasesResult> {
+    const endpoint = this.client.isCloud ? '/sca/issues-releases' : '/api/v2/sca/issues-releases';
+    const queryParams: QueryParams = {
+      projectKey: params.projectKey,
+      types: params.types.join(','),
+      statuses: 'OPEN,CONFIRM',
+      sort: '-severity',
+      pageSize: params.top,
+    };
+    if (this.client.isCloud && params.orgKey) {
+      queryParams.organization = params.orgKey;
+    }
+    if (params.newlyIntroduced) {
+      queryParams.newlyIntroduced = true;
+    }
+    if (params.branch) {
+      queryParams.branchKey = params.branch;
+    }
+    if (params.pullRequest) {
+      queryParams.pullRequestKey = params.pullRequest;
+    }
+    const response = await this.client.get<ScaIssuesReleasesResponse>(
+      endpoint,
+      queryParams,
+      this.client.apiHostFor(endpoint),
+    );
+    return { issuesReleases: response.issuesReleases, totalCount: response.page.total };
   }
 }

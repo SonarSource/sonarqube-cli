@@ -87,6 +87,29 @@ interface DuplicationsShowErrorConfig {
   body?: string;
 }
 
+export interface DependencyRiskConfig {
+  key?: string;
+  packageName: string;
+  version: string;
+  severity: string;
+  type: 'MALWARE' | 'PROHIBITED_LICENSE' | 'VULNERABILITY';
+  status?: string;
+  vulnerabilityId?: string;
+  newlyIntroduced?: boolean;
+}
+
+const DEPENDENCY_RISK_SEVERITY_RANK: Record<string, number> = {
+  BLOCKER: 0,
+  HIGH: 1,
+  MEDIUM: 2,
+  LOW: 3,
+  INFO: 4,
+};
+
+function severityRank(severity: string): number {
+  return DEPENDENCY_RISK_SEVERITY_RANK[severity] ?? Number.MAX_SAFE_INTEGER;
+}
+
 interface ProjectData {
   key: string;
   name: string;
@@ -106,6 +129,7 @@ interface ProjectData {
   duplicationsErrorsByFile: Map<string, DuplicationsShowErrorConfig>;
   issuesSearchStatusCode?: number;
   issuesSearchStatusBody?: string;
+  dependencyRisks: DependencyRiskConfig[];
 }
 
 export interface DopRepositoryConfig {
@@ -136,6 +160,7 @@ export class ProjectBuilder {
   private readonly duplicationsErrorsByFile: Map<string, DuplicationsShowErrorConfig> = new Map();
   private issuesSearchStatusCode?: number;
   private issuesSearchStatusBody?: string;
+  private dependencyRisks: DependencyRiskConfig[] = [];
 
   constructor(projectKey: string) {
     this.projectKey = projectKey;
@@ -281,6 +306,11 @@ export class ProjectBuilder {
     return this;
   }
 
+  withDependencyRisks(risks: DependencyRiskConfig[]): this {
+    this.dependencyRisks = risks;
+    return this;
+  }
+
   getData(): ProjectData {
     return {
       key: this.projectKey,
@@ -301,6 +331,7 @@ export class ProjectBuilder {
       duplicationsErrorsByFile: this.duplicationsErrorsByFile,
       issuesSearchStatusCode: this.issuesSearchStatusCode,
       issuesSearchStatusBody: this.issuesSearchStatusBody,
+      dependencyRisks: this.dependencyRisks,
     };
   }
 }
@@ -1062,6 +1093,48 @@ export class FakeSonarQubeServerBuilder {
           return new Response(JSON.stringify({ duplications, files }), {
             headers: { 'Content-Type': 'application/json' },
           });
+        }
+
+        if (path === '/sca/issues-releases' || path === '/api/v2/sca/issues-releases') {
+          const projectKey = query.projectKey;
+          const projectData = projectKey ? projects.get(projectKey) : undefined;
+          const risks = projectData?.dependencyRisks ?? [];
+
+          const requestedTypes = new Set((query.types ?? '').split(',').filter(Boolean));
+          const requestedStatuses = new Set((query.statuses ?? '').split(',').filter(Boolean));
+          const newlyIntroducedOnly = query.newlyIntroduced === 'true';
+
+          const filtered = risks.filter((risk) => {
+            if (requestedTypes.size > 0 && !requestedTypes.has(risk.type)) {
+              return false;
+            }
+            if (requestedStatuses.size > 0 && !requestedStatuses.has(risk.status ?? 'OPEN')) {
+              return false;
+            }
+            return !newlyIntroducedOnly || (risk.newlyIntroduced ?? false);
+          });
+
+          const sorted =
+            query.sort === '-severity'
+              ? [...filtered].sort((a, b) => severityRank(a.severity) - severityRank(b.severity))
+              : filtered;
+
+          const pageSize = Number.parseInt(query.pageSize ?? '500', 10);
+          const paged = sorted.slice(0, pageSize);
+
+          return new Response(
+            JSON.stringify({
+              issuesReleases: paged.map((risk, i) => ({
+                key: risk.key ?? `RISK-${i + 1}`,
+                severity: risk.severity,
+                type: risk.type,
+                vulnerabilityId: risk.vulnerabilityId ?? null,
+                release: { packageName: risk.packageName, version: risk.version },
+              })),
+              page: { pageIndex: 1, pageSize, total: filtered.length },
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
         }
 
         // sonar-context-augmentation calls /api/project_branches/list to
