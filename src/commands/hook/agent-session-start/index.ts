@@ -40,12 +40,15 @@ import { resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 import type { HookCommandResult } from '../hook-command-result.ts';
 import { readStdinJson } from '../stdin.ts';
-import { resolveSessionStartAdapter } from './agent-adapters.ts';
-import type { SessionStartInput, SessionStartOutput } from './types.ts';
-
-function logSkip(reason: string): void {
-  logger.debug(`Session start context skipped: ${reason}`);
-}
+import { claudeCodexAdapter } from './agent-adapters/claude-codex-adapter.ts';
+import { copilotAdapter } from './agent-adapters/copilot-adapter.ts';
+import { cursorAdapter } from './agent-adapters/cursor-adapter.ts';
+import type {
+  SessionStartAgent,
+  SessionStartAgentAdapter,
+  SessionStartInput,
+  SessionStartOutput,
+} from './types.ts';
 
 export async function agentSessionStart(
   ctx: CommandInvocationContext,
@@ -53,7 +56,7 @@ export async function agentSessionStart(
 ): Promise<HookCommandResult> {
   let sessionId: string | undefined;
   try {
-    const adapter = resolveSessionStartAdapter(agent);
+    const adapter = resolveAdapter(agent);
     if (!adapter) {
       logSkip(`unknown agent '${agent}'`);
       return { agentSessionId: null };
@@ -145,4 +148,19 @@ async function resolveSessionStartContext(
 async function isScaEnabled(auth: ResolvedAuth): Promise<boolean> {
   const client = new ScaClient(new SonarHttpClient(auth.serverUrl, auth.token));
   return client.checkScaEnabled(auth.connectionType, auth.orgKey);
+}
+
+function logSkip(reason: string): void {
+  logger.debug(`Session start context skipped: ${reason}`);
+}
+
+const ADAPTERS: Record<SessionStartAgent, SessionStartAgentAdapter> = {
+  claude: claudeCodexAdapter,
+  codex: claudeCodexAdapter,
+  copilot: copilotAdapter,
+  cursor: cursorAdapter,
+};
+
+function resolveAdapter(agent: string): SessionStartAgentAdapter | undefined {
+  return ADAPTERS[agent as SessionStartAgent];
 }
