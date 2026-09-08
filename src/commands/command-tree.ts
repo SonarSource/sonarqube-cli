@@ -880,12 +880,11 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   // Emit handler facts plus CliCommandExecuted in one commit.
   COMMAND_TREE.hook('postAction', async (_thisCommand, actionCommand) => {
-    if (actionCommand instanceof SonarCommand) {
-      const handlerFacts = actionCommand.invocationContext?.telemetryFacts() ?? [];
-      await commitTelemetryFacts([...handlerFacts, await buildCommandExecutedFact(actionCommand)], {
-        agentSessionId: resolveAgentSessionId(capturedAgentSessionId),
-      });
-    }
+    const command = actionCommand as SonarCommand;
+    const handlerFacts = command.invocationContext?.telemetryFacts() ?? [];
+    await commitTelemetryFacts([...handlerFacts, await buildCommandExecutedFact(command)], {
+      agentSessionId: resolveAgentSessionId(capturedAgentSessionId),
+    });
     await COMMAND_TREE.updateNotifier.maybeNotify(actionCommand);
   });
 
