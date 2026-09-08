@@ -240,7 +240,7 @@ export class SonarHttpClient {
   }
 
   private toGetResult<T>(result: SafeGetResult<T>): ResultAsync<T, HttpClientError> {
-    return ResultAsync.fromSafePromise(this.buildStatusError(result.response, 'GET')).andThen(
+    return ResultAsync.fromPromise(this.buildStatusError(result.response, 'GET'), toError).andThen(
       (error) => {
         if (error) {
           return errAsync(error);
@@ -272,20 +272,16 @@ export class SonarHttpClient {
     baseUrl?: string,
     timeoutMs: number = GET_REQUEST_TIMEOUT_MS,
   ): ResultAsync<SafeGetResult<TValue>, HttpClientError> {
-    const url = new URL(`${baseUrl ?? this.serverURL}${endpoint}`);
-
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        url.searchParams.append(key, String(value));
-      });
-    }
-
-    const urlString = url.toString();
-
     return ResultAsync.fromPromise(
       (async (): Promise<SafeGetResult<TValue>> => {
+        const url = new URL(`${baseUrl ?? this.serverURL}${endpoint}`);
+        if (params) {
+          Object.entries(params).forEach(([key, value]) => {
+            url.searchParams.append(key, String(value));
+          });
+        }
         const response = await fetchAuthenticated(
-          urlString,
+          url.toString(),
           buildRequest('GET', this.commonHeaders(), timeoutMs, undefined),
         );
         const value = response.ok ? ((await response.json()) as TValue) : undefined;
@@ -386,16 +382,21 @@ export class SonarHttpClient {
     method: HttpMethod,
     readBody: () => Promise<T>,
   ): ResultAsync<T, HttpClientError> {
-    return ResultAsync.fromSafePromise(this.buildStatusError(response, method)).andThen((error) => {
-      if (error) {
-        return errAsync(error);
-      }
-      return ResultAsync.fromPromise(
-        readBody(),
-        (err) =>
-          new UnexpectedApiError(response.status, err instanceof Error ? err.message : String(err)),
-      );
-    });
+    return ResultAsync.fromPromise(this.buildStatusError(response, method), toError).andThen(
+      (error) => {
+        if (error) {
+          return errAsync(error);
+        }
+        return ResultAsync.fromPromise(
+          readBody(),
+          (err) =>
+            new UnexpectedApiError(
+              response.status,
+              err instanceof Error ? err.message : String(err),
+            ),
+        );
+      },
+    );
   }
 }
 

@@ -25,9 +25,9 @@ import { fetchServerVersion, isAtLeast } from '@/core/server/server-info.ts';
 export const MIN_SCA_SQS_VERSION = '2026.4';
 
 /**
- * The one call this module needs, decoupled from `ScaClient` (`ResultAsync`-returning)
- * so this helper works the same whether the caller collapsed that to a plain `Promise`
- * (e.g. `ScaScanApi`, `sca-api.ts`) or hands the domain client directly.
+ * The one call this module needs, expressed as a plain `Promise<boolean>`. `ScaClient`
+ * returns `ResultAsync`, so callers collapse it first (e.g. `ScaScanApi` in `sca-api.ts`,
+ * or an inline adapter) before handing it here.
  */
 export interface ScaAvailabilityCheck {
   checkScaEnabled(
