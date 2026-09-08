@@ -29,6 +29,7 @@ import {
   printSessionStartContext,
 } from '@/commands/integrate/_common/context-augmentation.ts';
 import { resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
@@ -46,7 +47,10 @@ function logSkip(reason: string): void {
   logger.debug(`Session start context skipped: ${reason}`);
 }
 
-export async function agentSessionStart(agent: string): Promise<HookCommandResult> {
+export async function agentSessionStart(
+  ctx: CommandInvocationContext,
+  agent: string,
+): Promise<HookCommandResult> {
   let sessionId: string | undefined;
   try {
     const adapter = resolveSessionStartAdapter(agent);
@@ -64,7 +68,7 @@ export async function agentSessionStart(agent: string): Promise<HookCommandResul
     }
     sessionId = input.sessionId;
 
-    const output = await resolveSessionStartContext(input);
+    const output = await resolveSessionStartContext(ctx, input);
     if (output !== null) {
       process.stdout.write(JSON.stringify(adapter.emit(output, input)) + '\n');
     }
@@ -75,6 +79,7 @@ export async function agentSessionStart(agent: string): Promise<HookCommandResul
 }
 
 async function resolveSessionStartContext(
+  ctx: CommandInvocationContext,
   input: SessionStartInput,
 ): Promise<SessionStartOutput | null> {
   if (isContextAugmentationSkipped()) {
@@ -91,6 +96,7 @@ async function resolveSessionStartContext(
   const discovered = await discoverProject(input.startDir ?? process.cwd(), {
     auth,
     silent: true,
+    console: ctx.console,
   });
   if (!discovered.projectKey) {
     logSkip('no project key resolved');

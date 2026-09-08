@@ -795,7 +795,9 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'Agent whose hook output envelope to emit (claude|codex|copilot|cursor)',
     )
     .anonymousAction(
-      handleHookInvocation((_ctx, options: { agent: string }) => agentSessionStart(options.agent)),
+      handleHookInvocation((ctx, options: { agent: string }) =>
+        agentSessionStart(ctx, options.agent),
+      ),
     );
 
   hookCommand
