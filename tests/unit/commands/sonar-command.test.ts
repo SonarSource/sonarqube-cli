@@ -781,6 +781,56 @@ describe('SonarCommand', () => {
     });
   });
 
+  describe('commandAndSubcommand()', () => {
+    function commandAt(path: string): SonarCommand {
+      const root = sonarCommand('sonar');
+      let current: SonarCommand = root;
+      for (const name of path.split(' ')) {
+        current = current.command(name);
+      }
+      return current;
+    }
+
+    it('returns the top-level command and a null remainder', () => {
+      expect(commandAt('auth').commandAndSubcommand()).toEqual({
+        command: 'auth',
+        subcommand: null,
+      });
+    });
+
+    it('returns the remainder of a nested command path', () => {
+      expect(commandAt('auth login').commandAndSubcommand()).toEqual({
+        command: 'auth',
+        subcommand: 'login',
+      });
+    });
+
+    it('joins multiple remainder segments with a space', () => {
+      expect(commandAt('analyze secrets check').commandAndSubcommand()).toEqual({
+        command: 'analyze',
+        subcommand: 'secrets check',
+      });
+    });
+
+    it('uses a passthrough remainder when set', () => {
+      const command = commandAt('context');
+      command.setPassthroughSubcommand('get-source');
+      expect(command.commandAndSubcommand()).toEqual({
+        command: 'context',
+        subcommand: 'get-source',
+      });
+    });
+
+    it('honors an explicit null passthrough remainder', () => {
+      const command = commandAt('context child');
+      command.setPassthroughSubcommand(null);
+      expect(command.commandAndSubcommand()).toEqual({
+        command: 'context',
+        subcommand: null,
+      });
+    });
+  });
+
   // ─── rejectUnknownSubcommands() ───────────────────────────────────────────
 
   describe('rejectUnknownSubcommands()', () => {
