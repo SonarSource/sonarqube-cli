@@ -20,6 +20,10 @@
 
 import { spyOn } from 'bun:test';
 
+import { errAsync, okAsync, type ResultAsync } from '@/core/result.ts';
+import type { HttpClientError } from '@/core/server/errors.ts';
+import { TransportError } from '@/core/server/errors.ts';
+import type { SafeGetResult } from '@/core/server/http-client.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 
 interface ApiStep {
@@ -53,20 +57,18 @@ export function mockProjectUuidGetSafe(
       endpoint: string,
       _params?: Record<string, string | number | boolean>,
       _baseUrl?: string,
-    ): Promise<{ response: Response; value: TValue | undefined }> => {
+    ): ResultAsync<SafeGetResult<TValue>, HttpClientError> => {
       if (endpoint === '/api/navigation/component') {
         const step = shiftStep(componentSteps, { ok: true });
         if (step.throws) {
-          return Promise.reject(new Error('network error'));
+          return errAsync(new TransportError('network error'));
         }
-        return Promise.resolve({
+        return okAsync({
           response: { ok: step.ok } as Response,
           value: (step.id ? { id: step.id } : {}) as TValue,
         });
       }
-      return Promise.reject(
-        new Error(`Unexpected getSafe endpoint in project-uuid test: ${endpoint}`),
-      );
+      throw new Error(`Unexpected getSafe endpoint in project-uuid test: ${endpoint}`);
     },
   );
 }

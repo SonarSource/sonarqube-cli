@@ -221,55 +221,59 @@ interface OrganizationLookupResult {
   resolved: boolean;
 }
 
-async function fetchUserUuid(client: SonarHttpClient): Promise<FieldFetchResult> {
-  try {
-    const { response, value } = await client.getSafe<{ id: string }>('/api/users/current');
-    if (!response.ok) {
-      return { value: null, resolved: false };
-    }
-    return { value: value?.id ?? null, resolved: true };
-  } catch {
-    return { value: null, resolved: false };
-  }
+function fetchUserUuid(client: SonarHttpClient): Promise<FieldFetchResult> {
+  return client.getSafe<{ id: string }>('/api/users/current').match(
+    ({ response, value }): FieldFetchResult => {
+      if (!response.ok) {
+        return { value: null, resolved: false };
+      }
+      return { value: value?.id ?? null, resolved: true };
+    },
+    (): FieldFetchResult => ({ value: null, resolved: false }),
+  );
 }
 
-async function fetchOrganizationRecord(
+function fetchOrganizationRecord(
   client: SonarHttpClient,
   orgKey: string,
 ): Promise<OrganizationLookupResult> {
-  try {
-    const { response, value } = await client.getSafe<OrganizationRecord[]>(
+  return client
+    .getSafe<OrganizationRecord[]>(
       ORGANIZATIONS_ENDPOINT,
       { organizationKey: orgKey, excludeEligibility: 'true' },
       client.apiHostFor(ORGANIZATIONS_ENDPOINT),
+    )
+    .match(
+      ({ response, value }): OrganizationLookupResult => {
+        if (!response.ok) {
+          return { uuidV4: null, id: null, resolved: false };
+        }
+        const org = value?.[0];
+        return { uuidV4: org?.uuidV4 ?? null, id: org?.id ?? null, resolved: true };
+      },
+      (): OrganizationLookupResult => ({ uuidV4: null, id: null, resolved: false }),
     );
-    if (!response.ok) {
-      return { uuidV4: null, id: null, resolved: false };
-    }
-    const org = value?.[0];
-    return { uuidV4: org?.uuidV4 ?? null, id: org?.id ?? null, resolved: true };
-  } catch {
-    return { uuidV4: null, id: null, resolved: false };
-  }
 }
 
-async function fetchEnterpriseUuid(
+function fetchEnterpriseUuid(
   client: SonarHttpClient,
   organizationId: string,
 ): Promise<FieldFetchResult> {
-  try {
-    const { response, value } = await client.getSafe<Array<{ enterpriseId?: string }>>(
+  return client
+    .getSafe<Array<{ enterpriseId?: string }>>(
       ENTERPRISE_ORGANIZATIONS_ENDPOINT,
       { organizationId },
       client.apiHostFor(ENTERPRISE_ORGANIZATIONS_ENDPOINT),
+    )
+    .match(
+      ({ response, value }): FieldFetchResult => {
+        if (!response.ok) {
+          return { value: null, resolved: false };
+        }
+        return { value: value?.[0]?.enterpriseId ?? null, resolved: true };
+      },
+      (): FieldFetchResult => ({ value: null, resolved: false }),
     );
-    if (!response.ok) {
-      return { value: null, resolved: false };
-    }
-    return { value: value?.[0]?.enterpriseId ?? null, resolved: true };
-  } catch {
-    return { value: null, resolved: false };
-  }
 }
 
 /** Unresolved stays `undefined` so the next command retries; `null` is confirmed-absent. */
@@ -290,16 +294,16 @@ async function resolveEnterpriseUuid(
   };
 }
 
-async function fetchSqsInstallationId(client: SonarHttpClient): Promise<FieldFetchResult> {
-  try {
-    const { response, value } = await client.getSafe<{ id?: string }>('/api/system/status');
-    if (!response.ok) {
-      return { value: null, resolved: false };
-    }
-    return { value: value?.id ?? null, resolved: true };
-  } catch {
-    return { value: null, resolved: false };
-  }
+function fetchSqsInstallationId(client: SonarHttpClient): Promise<FieldFetchResult> {
+  return client.getSafe<{ id?: string }>('/api/system/status').match(
+    ({ response, value }): FieldFetchResult => {
+      if (!response.ok) {
+        return { value: null, resolved: false };
+      }
+      return { value: value?.id ?? null, resolved: true };
+    },
+    (): FieldFetchResult => ({ value: null, resolved: false }),
+  );
 }
 
 interface IdentityFetchResult {

@@ -50,22 +50,18 @@ export interface BrowserAuthResult {
   tokenName?: string;
 }
 
-export async function checkTokenStatus(
-  serverURL: string,
-  token: string,
-): Promise<TokenCheckResult> {
-  try {
-    const client = new UsersClient(new SonarHttpClient(serverURL, token));
-    const status = await client.checkTokenValidity();
-    return { status };
-  } catch (err) {
+export function checkTokenStatus(serverURL: string, token: string): Promise<TokenCheckResult> {
+  const client = new UsersClient(new SonarHttpClient(serverURL, token));
+  return client.checkTokenValidity().match(
+    (status) => ({ status }),
     // checkTokenValidity() lets HTTP errors propagate — any non-200 response or
     // network failure is treated as a connectivity issue rather than an auth failure,
     // because /api/authentication/validate always returns HTTP 200 per the SonarQube API contract.
-    const errorMessage = (err as Error).message;
-    logger.debug(`Token validation failed for ${serverURL}: ${errorMessage}`);
-    return { status: 'unreachable', errorMessage };
-  }
+    (err) => {
+      logger.debug(`Token validation failed for ${serverURL}: ${err.message}`);
+      return { status: 'unreachable' as const, errorMessage: err.message };
+    },
+  );
 }
 
 /**
