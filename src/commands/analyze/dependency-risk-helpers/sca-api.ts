@@ -20,6 +20,7 @@
 
 // The two server calls a dependency-risks scan makes, as one port the orchestrator depends on.
 
+import { unwrapOrThrow } from '@/core/result.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { ScaClient } from '@/core/server/sca.ts';
@@ -34,7 +35,8 @@ export function createScaScanApi(http: SonarHttpClient): ScaScanApi {
   const sca = new ScaClient(http);
   const components = new ComponentsClient(http);
   return {
-    checkScaEnabled: (connectionType, orgKey) => sca.checkScaEnabled(connectionType, orgKey),
-    getProjectSettings: (projectKey) => components.getProjectSettings(projectKey),
+    checkScaEnabled: (connectionType, orgKey) =>
+      unwrapOrThrow(sca.checkScaEnabled(connectionType, orgKey)),
+    getProjectSettings: (projectKey) => unwrapOrThrow(components.getProjectSettings(projectKey)),
   };
 }

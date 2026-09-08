@@ -23,6 +23,7 @@
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
+import { unwrapOrThrow } from '@/core/result.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { MetricsClient } from '@/core/server/metrics.ts';
@@ -83,14 +84,16 @@ export async function qualityGateStatus(
   const { queryParams, scope } = await resolveQualityGateScope(client, projectKey, options);
 
   const qualityGatesClient = new QualityGatesClient(client);
-  const projectStatus = await qualityGatesClient.getProjectStatus({ projectKey, ...queryParams });
+  const projectStatus = await unwrapOrThrow(
+    qualityGatesClient.getProjectStatus({ projectKey, ...queryParams }),
+  );
 
   const rawConditions = projectStatus?.conditions ?? [];
   const hasFailingConditions = rawConditions.some((condition) => condition.status !== 'OK');
   const hasConditionsToRender = options.all ? rawConditions.length > 0 : hasFailingConditions;
 
   const metricsClient = new MetricsClient(client);
-  const metrics = hasConditionsToRender ? await metricsClient.searchMetrics() : [];
+  const metrics = hasConditionsToRender ? await unwrapOrThrow(metricsClient.searchMetrics()) : [];
 
   const verdict = toVerdict(projectStatus?.status);
   const summaries = selectConditions(rawConditions, metrics, options.all);
@@ -125,7 +128,7 @@ export async function qualityGateStatus(
 }
 
 async function assertProjectExists(client: SonarHttpClient, projectKey: string): Promise<void> {
-  if (!(await new ComponentsClient(client).componentExists(projectKey))) {
+  if (!(await unwrapOrThrow(new ComponentsClient(client).componentExists(projectKey)))) {
     throw new CommandFailedError(`Project '${projectKey}' does not exist or not accessible.`, {
       remediationHint: 'Check the project key and your access to the project on the server.',
     });

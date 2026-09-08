@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import type { Result } from '@/core/result.ts';
+import { errAsync, okAsync, type ResultAsync } from '@/core/result.ts';
+import type { HttpClientError } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import type { ProjectsSearchResponse } from '@/core/server/types.ts';
@@ -33,8 +34,8 @@ function makeProjectsResponse(
   pageIndex = 1,
   pageSize = 500,
   total = components.length,
-): Result<ProjectsSearchResponse> {
-  return { ok: true, value: { paging: { pageIndex, pageSize, total }, components } };
+): ResultAsync<ProjectsSearchResponse, HttpClientError> {
+  return okAsync({ paging: { pageIndex, pageSize, total }, components });
 }
 
 beforeEach(() => {
@@ -46,7 +47,7 @@ describe('projectsSearchCommand', () => {
   let getSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    getSpy = spyOn(SonarHttpClient.prototype, 'get').mockResolvedValue(makeProjectsResponse([]));
+    getSpy = spyOn(SonarHttpClient.prototype, 'get').mockReturnValue(makeProjectsResponse([]));
   });
 
   afterEach(() => {
@@ -76,7 +77,7 @@ describe('projectsSearchCommand', () => {
     });
 
     it('propagates API errors', async () => {
-      getSpy.mockRejectedValue(new Error('SonarQube API error: 401 Unauthorized'));
+      getSpy.mockReturnValue(errAsync(new Error('SonarQube API error: 401 Unauthorized')));
 
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(listProjects(DEFAULT_OPTIONS, mockCtx)).rejects.toThrow(
@@ -103,7 +104,7 @@ describe('projectsSearchCommand', () => {
     });
 
     it('prints JSON with mapped projects (key and name only)', async () => {
-      getSpy.mockResolvedValue(
+      getSpy.mockReturnValue(
         makeProjectsResponse([
           { key: 'proj-1', name: 'Project One' },
           { key: 'proj-2', name: 'Project Two' },
@@ -122,7 +123,7 @@ describe('projectsSearchCommand', () => {
     });
 
     it('includes correct paging metadata with hasNextPage=true when more pages exist', async () => {
-      getSpy.mockResolvedValue(
+      getSpy.mockReturnValue(
         makeProjectsResponse([{ key: 'proj-1', name: 'Project One' }], 1, 1, 5),
       );
 
@@ -140,7 +141,7 @@ describe('projectsSearchCommand', () => {
     });
 
     it('includes correct paging metadata with hasNextPage=false on the last page', async () => {
-      getSpy.mockResolvedValue(
+      getSpy.mockReturnValue(
         makeProjectsResponse([{ key: 'proj-1', name: 'Project One' }], 2, 1, 2),
       );
 

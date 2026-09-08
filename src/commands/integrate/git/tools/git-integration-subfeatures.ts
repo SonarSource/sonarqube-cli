@@ -26,6 +26,7 @@ import {
 } from '@/core/framework/dependencies';
 import { askUser, install, skip } from '@/core/framework/features/selection.ts';
 import type { FeaturePreview, SubfeatureDeclaration } from '@/core/framework/features/types.ts';
+import { unwrapOrThrow } from '@/core/result.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { ScaClient } from '@/core/server/sca.ts';
 import { assertScaAvailable } from '@/core/server/sca-availability.ts';
@@ -48,7 +49,10 @@ export function gitHookPreview(hook: GitHookType): FeaturePreview {
 async function scaSkipReason(auth: ResolvedAuth) {
   const client = new ScaClient(new SonarHttpClient(auth.serverUrl, auth.token));
   try {
-    await assertScaAvailable(client, auth);
+    await assertScaAvailable(
+      { checkScaEnabled: (ct, orgKey) => unwrapOrThrow(client.checkScaEnabled(ct, orgKey)) },
+      auth,
+    );
     return null;
   } catch (err) {
     if (err instanceof CommandFailedError) {

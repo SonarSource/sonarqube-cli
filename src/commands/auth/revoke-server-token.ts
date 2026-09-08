@@ -86,15 +86,14 @@ export async function revokeServerTokenIfPossible(
     };
   }
 
-  try {
-    await new UsersClient(new SonarHttpClient(connection.serverUrl, token)).revokeUserToken(
-      connection.tokenName,
+  const tokenName = connection.tokenName;
+  return new UsersClient(new SonarHttpClient(connection.serverUrl, token))
+    .revokeUserToken(tokenName)
+    .match(
+      (): RevokeServerTokenResult => ({ status: 'success' }),
+      (error): RevokeServerTokenResult => ({
+        status: 'failed',
+        message: `Failed to revoke the server-side token "${tokenName}": ${error.message}`,
+      }),
     );
-    return { status: 'success' };
-  } catch (error) {
-    return {
-      status: 'failed',
-      message: `Failed to revoke the server-side token "${connection.tokenName}": ${(error as Error).message}`,
-    };
-  }
 }

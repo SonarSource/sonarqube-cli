@@ -25,7 +25,7 @@
 // than re-declared method by method.
 
 import logger from '@/core/observability/logger.ts';
-import { unwrap } from '@/core/result.ts';
+import { unwrapOrThrow } from '@/core/result.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 
@@ -70,8 +70,8 @@ export class ImportApiClient {
     pageSize: number,
   ): Promise<{ repositories: DopRepository[]; total: number }> {
     const endpoint = '/dop-translation/dop-repositories';
-    const result = unwrap(
-      await this.client.get<{
+    const result = await unwrapOrThrow(
+      this.client.get<{
         repositories: DopRepository[];
         page: { total: number };
       }>(endpoint, { organizationId, pageIndex, pageSize }, this.client.apiHostFor(endpoint)),
@@ -87,12 +87,12 @@ export class ImportApiClient {
    * `installationKey` must already be in the ALM-specific format the server expects (e.g.
    * `<slug>|<id>` for GitHub, plain `id` for other platforms).
    */
-  async provisionProject(
+  provisionProject(
     organization: string,
     installationKey: string,
   ): Promise<{ projects: ProvisionedProject[] }> {
-    return unwrap(
-      await this.client.postFormJson<{ projects: ProvisionedProject[] }>(
+    return unwrapOrThrow(
+      this.client.postFormJson<{ projects: ProvisionedProject[] }>(
         '/api/alm_integration/provision_projects',
         { organization, installationKeys: installationKey },
       ),
@@ -103,14 +103,18 @@ export class ImportApiClient {
    * Request SonarQube Cloud Autoscan eligibility/auto-enable for a newly provisioned project.
    * Best-effort: swallows failures so a hiccup here never fails the enclosing `sonar import` run.
    */
-  async requestAutoscanEligibility(projectKey: string): Promise<void> {
-    const result = await this.client.get('/api/autoscan/eligibility', {
-      autoEnable: true,
-      ignoreCache: false,
-      projectKey,
-    });
-    if (!result.ok) {
-      logger.debug('Failed to request autoscan eligibility', result.error);
-    }
+  requestAutoscanEligibility(projectKey: string): Promise<void> {
+    return this.client
+      .get('/api/autoscan/eligibility', {
+        autoEnable: true,
+        ignoreCache: false,
+        projectKey,
+      })
+      .match(
+        () => undefined,
+        (error) => {
+          logger.debug('Failed to request autoscan eligibility', error);
+        },
+      );
   }
 }

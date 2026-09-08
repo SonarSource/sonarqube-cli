@@ -121,32 +121,35 @@ export async function attachBreakdowns(
   );
 }
 
-async function fetchMetricBreakdown(
+function fetchMetricBreakdown(
   measuresClient: MeasuresClient,
   params: AttachBreakdownsParams,
   condition: QualityGateConditionSummary,
   metricsByKey: Map<string, Metric>,
 ): Promise<QualityGateMetricBreakdown | undefined> {
-  try {
-    const { components, totalCount } = await measuresClient.getWorstComponentsByMetric({
+  return measuresClient
+    .getWorstComponentsByMetric({
       projectKey: params.projectKey,
       metricKey: condition.metric,
       ascending: condition.comparator === 'LT',
       top: params.top,
       branch: params.branch,
       pullRequest: params.pullRequest,
-    });
-
-    const entries = components.flatMap((component) =>
-      toBreakdownEntry(component, condition.metric, metricsByKey.get(condition.metric)),
+    })
+    .match(
+      ({ components, totalCount }) => {
+        const entries = components.flatMap((component) =>
+          toBreakdownEntry(component, condition.metric, metricsByKey.get(condition.metric)),
+        );
+        return entries.length > 0
+          ? { totalCount, fetchedCount: components.length, entries }
+          : undefined;
+      },
+      (err) => {
+        logger.debug(`Failed to build quality gate breakdown for '${condition.metric}'`, err);
+        return undefined;
+      },
     );
-    return entries.length > 0
-      ? { totalCount, fetchedCount: components.length, entries }
-      : undefined;
-  } catch (err) {
-    logger.debug(`Failed to build quality gate breakdown for '${condition.metric}'`, err);
-    return undefined;
-  }
 }
 
 function toBreakdownEntry(

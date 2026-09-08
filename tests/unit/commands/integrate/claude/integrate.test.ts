@@ -32,6 +32,7 @@ import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocatio
 import * as registry from '@/core/framework/features';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import * as discovery from '@/core/project-info.ts';
+import { okAsync } from '@/core/result.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 import { ScaClient } from '@/core/server/sca.ts';
@@ -105,15 +106,17 @@ describe('integrateCommand', () => {
 
     hasVortexEntitlementSpy = spyOn(VortexEntitlementClient.prototype, 'hasVortexEntitlement');
     hasVortexEntitlementSpy.mockResolvedValue({ status: 'not_entitled' });
-    getScaEnablementSpy = spyOn(ScaClient.prototype, 'getScaEnablement').mockResolvedValue(
-      'not_enabled',
+    getScaEnablementSpy = spyOn(ScaClient.prototype, 'getScaEnablement').mockReturnValue(
+      okAsync('not_enabled'),
     );
 
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
 
     checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
-    checkComponentSpy = spyOn(ComponentsClient.prototype, 'checkComponent').mockResolvedValue(true);
+    checkComponentSpy = spyOn(ComponentsClient.prototype, 'checkComponent').mockReturnValue(
+      okAsync(true),
+    );
     isOrganizationAccessibleSpy = spyOn(
       OrganizationsClient.prototype,
       'isOrganizationAccessible',
@@ -294,7 +297,7 @@ describe('integrateCommand', () => {
   it('installs Vortex through the declarative installer in a single call', async () => {
     mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
     mockVortexEntitlement(true);
-    getScaEnablementSpy.mockResolvedValue('enabled');
+    getScaEnablementSpy.mockReturnValue(okAsync('enabled'));
 
     await integrateClaude({}, CLOUD_CTX);
 
@@ -329,7 +332,7 @@ describe('integrateCommand', () => {
       projectKey: 'a-project',
     });
     mockVortexEntitlement(true);
-    getScaEnablementSpy.mockResolvedValue('enabled');
+    getScaEnablementSpy.mockReturnValue(okAsync('enabled'));
 
     await integrateClaude({}, CLOUD_CTX);
 
