@@ -20,20 +20,20 @@ export default tseslint.config(
     files: ['src/**/*.ts'],
     plugins: { headers: headersPlugin },
     rules: {
-      'headers/header-format': [
-        'error',
-        {
-          source: 'file',
-          path: 'LICENSE',
-          blockPrefix: '\n',
-        },
-      ],
+      'headers/header-format': ['error', {
+        source: 'file',
+        path: 'LICENSE',
+        blockPrefix: '\n'
+      }],
     },
   },
   // Base TypeScript config for source files
   {
     files: ['src/**/*.ts'],
-    extends: [...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked],
+    extends: [
+      ...tseslint.configs.strictTypeChecked,
+      ...tseslint.configs.stylisticTypeChecked,
+    ],
     plugins: {
       'simple-import-sort': simpleImportSort,
     },
@@ -50,24 +50,15 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-misused-promises': 'error',
-      '@typescript-eslint/no-unused-vars': [
-        'error',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
-      ],
-      '@typescript-eslint/consistent-type-imports': [
-        'error',
-        { prefer: 'type-imports', fixStyle: 'inline-type-imports' },
-      ],
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports', fixStyle: 'inline-type-imports' }],
       '@typescript-eslint/consistent-type-definitions': 'off',
       '@typescript-eslint/no-non-null-assertion': 'warn',
       '@typescript-eslint/switch-exhaustiveness-check': 'error',
       '@typescript-eslint/prefer-nullish-coalescing': 'off',
       '@typescript-eslint/array-type': 'off',
       // Allow numbers and booleans in template literals — very common in CLI output
-      '@typescript-eslint/restrict-template-expressions': [
-        'error',
-        { allowNumber: true, allowBoolean: true },
-      ],
+      '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true, allowBoolean: true }],
       // Downgrade unsafe rules to warn — CLI code often interacts with loosely typed APIs
       '@typescript-eslint/no-unsafe-assignment': 'warn',
       '@typescript-eslint/no-unsafe-member-access': 'warn',
@@ -187,10 +178,7 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-call': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-floating-promises': 'error',
-      '@typescript-eslint/no-unused-vars': [
-        'error',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
-      ],
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'no-console': 'off',
     },
   },
