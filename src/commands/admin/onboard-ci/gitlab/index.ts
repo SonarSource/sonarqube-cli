@@ -194,6 +194,22 @@ function applyReposFileFilter<T extends GitLabRepo>(
   return repos.filter((r) => entries.has(relativePath(r)));
 }
 
+/**
+ * Rejects a non-SonarQube-Server connection before any GitLab-specific work (including the
+ * token prompt) happens. Exported so the command handler can call it ahead of
+ * `resolveGitlabToken`, without duplicating the error message.
+ */
+export function assertOnPremiseConnection(auth: ResolvedAuth): void {
+  if (auth.connectionType !== 'on-premise') {
+    throw new CommandFailedError(
+      'sonar admin onboard-ci gitlab requires a SonarQube Server connection.',
+      {
+        remediationHint: "Authenticate against SonarQube Server with 'sonar auth login' and retry.",
+      },
+    );
+  }
+}
+
 async function preflight(
   auth: ResolvedAuth,
   gitlabToken: string,
@@ -205,14 +221,7 @@ async function preflight(
   dopSettingKey: string;
   gitlabUrl: string;
 }> {
-  if (auth.connectionType !== 'on-premise') {
-    throw new CommandFailedError(
-      'sonar admin onboard-ci gitlab requires a SonarQube Server connection.',
-      {
-        remediationHint: "Authenticate against SonarQube Server with 'sonar auth login' and retry.",
-      },
-    );
-  }
+  assertOnPremiseConnection(auth);
 
   const sqsClient = new OnboardCiSqsClient(new SonarHttpClient(auth.serverUrl, auth.token));
   if (!(await sqsClient.users.hasProvisionProjectsPermission())) {

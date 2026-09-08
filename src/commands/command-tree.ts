@@ -48,6 +48,7 @@ import type { UpdateNotificationCondition } from '@/core/update/notification.ts'
 
 import { version as VERSION } from '../../package.json';
 import {
+  assertOnPremiseConnection,
   collectScannerProperty,
   onboardCiGitlab,
   type OnboardCiGitlabOptions,
@@ -870,6 +871,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('--dry-run', 'Preview what would be processed without making any changes', false)
     .authenticatedAction(async (ctx, options: OnboardCiGitlabOptions) => {
       validateOnboardCiGitlabOptions(options);
+      assertOnPremiseConnection(ctx.auth);
       const gitlabToken = await resolveGitlabToken(ctx.console);
       return onboardCiGitlab(ctx.auth, gitlabToken, options, ctx.console);
     });
