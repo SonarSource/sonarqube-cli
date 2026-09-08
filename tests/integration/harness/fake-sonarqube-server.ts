@@ -110,6 +110,30 @@ function severityRank(severity: string): number {
   return DEPENDENCY_RISK_SEVERITY_RANK[severity] ?? Number.MAX_SAFE_INTEGER;
 }
 
+/**
+ * Splits a `/api/issues/search` scope value into the project key it names and, when a
+ * `--file`/`--dir` scope was composed onto it, the full component key to filter by. Project keys
+ * may themselves contain colons (Maven-style `groupId:artifactId`), so the split can't just cut
+ * at the first `:` — it matches against the server's known project keys instead, preferring the
+ * longest match in case one registered key is itself a prefix of another (mirrors
+ * `/api/components/show` below).
+ */
+function resolveIssuesSearchScope(
+  scopeValue: string | undefined,
+  projects: Map<string, ProjectData>,
+): { projectKey: string | undefined; componentFilterKey: string | undefined } {
+  if (scopeValue === undefined) {
+    return { projectKey: undefined, componentFilterKey: undefined };
+  }
+  if (projects.has(scopeValue)) {
+    return { projectKey: scopeValue, componentFilterKey: undefined };
+  }
+  const projectKey = [...projects.keys()]
+    .filter((key) => scopeValue.startsWith(`${key}:`))
+    .sort((a, b) => b.length - a.length)[0];
+  return { projectKey, componentFilterKey: projectKey ? scopeValue : undefined };
+}
+
 interface ProjectData {
   key: string;
   name: string;
@@ -918,8 +942,10 @@ export class FakeSonarQubeServerBuilder {
         if (path === '/api/issues/search') {
           // SonarQube Server uses `components`, SonarQube Cloud uses `componentKeys` — accept
           // only the spelling the current mode actually uses, so a client sending the wrong one
-          // fails the lookup instead of being silently tolerated.
-          const projectKey = treatAsCloud ? query.componentKeys : query.components;
+          // fails the lookup instead of being silently tolerated. The same param carries either
+          // the bare project key, or a `project:path` component key when --file scopes the search.
+          const scopeValue = treatAsCloud ? query.componentKeys : query.components;
+          const { projectKey, componentFilterKey } = resolveIssuesSearchScope(scopeValue, projects);
           const projectData = projectKey ? projects.get(projectKey) : undefined;
 
           if (projectData?.issuesSearchStatusCode !== undefined) {
@@ -936,6 +962,7 @@ export class FakeSonarQubeServerBuilder {
           const sinceLeakPeriodFilter = treatAsCloud
             ? query.sinceLeakPeriod === 'true'
             : query.inNewCodePeriod === 'true';
+          const componentKeysFilter = componentFilterKey ? [componentFilterKey] : null;
 
           const fixableByAgentFilter = query.fixableByAgent;
 
@@ -950,6 +977,13 @@ export class FakeSonarQubeServerBuilder {
                   (resolvedFilter === 'false') !== RESOLVED_ISSUE_STATUSES.has(issue.status),
               )
               .filter((issue) => !sinceLeakPeriodFilter || issue.isNewCode)
+              .filter(
+                (issue) =>
+                  !componentKeysFilter ||
+                  componentKeysFilter.some(
+                    (key) => issue.component === key || issue.component.startsWith(`${key}/`),
+                  ),
+              )
               .filter((issue) => fixableByAgentFilter !== 'true' || issue.fixableByAgent)
               .map((issue) => ({
                 key: issue.key,

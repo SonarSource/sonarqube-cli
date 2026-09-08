@@ -144,6 +144,168 @@ describe('list issues', () => {
   );
 
   it(
+    'sends `componentKeys` query param to SonarQube Cloud',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken('my-token')
+        .withProject('test-project')
+        .start();
+      harness.withAuth(server.baseUrl(), 'my-token');
+
+      const result = await harness.run(`list issues --project test-project`);
+
+      expect(result.exitCode).toBe(0);
+      const issuesRequest = server
+        .getRecordedRequests()
+        .find((r) => r.path === '/api/issues/search');
+
+      expect(issuesRequest).toBeDefined();
+      expect(issuesRequest!.query.componentKeys).toBe('test-project');
+      expect(issuesRequest!.query.components).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it.each([
+    ['a file path', 'src/foo.ts', 'my-project:src/foo.ts'],
+    ['a directory path', 'src/api', 'my-project:src/api'],
+    ["a leading './'", './src/foo.ts', 'my-project:src/foo.ts'],
+    ["a leading '/'", '/src/foo.ts', 'my-project:src/foo.ts'],
+  ] as const)(
+    'composes the components param from --file when given %s',
+    async (_name, file, expectedComponentKey) => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project')
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`list issues --project my-project --file ${file}`);
+
+      expect(result.exitCode).toBe(0);
+      const issuesReq = server.getRecordedRequests().find((r) => r.path === '/api/issues/search');
+      expect(issuesReq?.query.components).toBe(expectedComponentKey);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'returns only issues scoped to the given file when --file is provided',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p
+            .withIssue({
+              ruleKey: 'java:S1234',
+              message: 'Scoped issue',
+              severity: 'MAJOR',
+              component: 'my-project:src/foo.ts',
+            })
+            .withIssue({
+              ruleKey: 'java:S5678',
+              message: 'Other file issue',
+              severity: 'CRITICAL',
+              component: 'my-project:src/bar.ts',
+            }),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`list issues --project my-project --file src/foo.ts`);
+
+      expect(result.exitCode).toBe(0);
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.issues).toHaveLength(1);
+      expect(parsed.issues[0].message).toBe('Scoped issue');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'returns only issues scoped to the given file when --file is provided on SonarQube Cloud',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p
+            .withIssue({
+              ruleKey: 'java:S1234',
+              message: 'Scoped issue',
+              severity: 'MAJOR',
+              component: 'my-project:src/foo.ts',
+            })
+            .withIssue({
+              ruleKey: 'java:S5678',
+              message: 'Other file issue',
+              severity: 'CRITICAL',
+              component: 'my-project:src/bar.ts',
+            }),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`list issues --project my-project --file src/foo.ts`);
+
+      expect(result.exitCode).toBe(0);
+      const issuesReq = server.getRecordedRequests().find((r) => r.path === '/api/issues/search');
+      expect(issuesReq?.query.componentKeys).toBe('my-project:src/foo.ts');
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.issues).toHaveLength(1);
+      expect(parsed.issues[0].message).toBe('Scoped issue');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'returns issues nested under a directory when --file is a directory path',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p
+            .withIssue({
+              ruleKey: 'java:S1234',
+              message: 'Issue directly in the directory',
+              severity: 'MAJOR',
+              component: 'my-project:src/api/handler.ts',
+            })
+            .withIssue({
+              ruleKey: 'java:S4321',
+              message: 'Issue in a nested subdirectory',
+              severity: 'MAJOR',
+              component: 'my-project:src/api/internal/parser.ts',
+            })
+            .withIssue({
+              ruleKey: 'java:S5678',
+              message: 'Issue in a sibling directory',
+              severity: 'CRITICAL',
+              component: 'my-project:src/web/controller.ts',
+            }),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`list issues --project my-project --file src/api`);
+
+      expect(result.exitCode).toBe(0);
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.issues.map((i: { message: string }) => i.message)).toEqual([
+        'Issue directly in the directory',
+        'Issue in a nested subdirectory',
+      ]);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits with code 1 and prompts to authenticate when no auth is configured',
     async () => {
       // --project must be supplied so Commander passes control to authenticated()
