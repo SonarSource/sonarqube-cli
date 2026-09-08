@@ -279,6 +279,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .addOption(listIssuesFormatOption)
     .option('--branch <branch>', 'Branch name')
     .option('--pull-request <pull-request>', 'Pull request ID')
+    .option(
+      '--file <path>',
+      'Limit results to a single file or directory, relative to the project root',
+    )
     .addOption(pageSizeOption)
     .addOption(pageOption)
     .authenticatedAction((ctx, options: ListIssuesOptions) => listIssues(options, ctx));

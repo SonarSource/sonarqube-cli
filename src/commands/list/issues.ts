@@ -86,9 +86,20 @@ export interface ListIssuesOptions {
   branch?: string;
   pullRequest?: string;
   resolved?: boolean;
+  file?: string;
   format?: string;
   pageSize: number;
   page: number;
+}
+
+function stripLeadingSlashOrDotSlash(file: string): string {
+  if (file.startsWith('./')) {
+    return file.slice(2);
+  }
+  if (file.startsWith('/')) {
+    return file.slice(1);
+  }
+  return file;
 }
 
 function normalizeSeverityValues(raw: string): string[] {
@@ -166,6 +177,11 @@ export async function listIssues(
     }
   }
 
+  let componentKeys: string | undefined;
+  if (options.file) {
+    componentKeys = `${options.project}:${stripLeadingSlashOrDotSlash(options.file)}`;
+  }
+
   const client = new SonarHttpClient(auth.serverUrl, auth.token);
   const issuesClient = new IssuesClient(client);
 
@@ -178,7 +194,7 @@ export async function listIssues(
       : {};
 
   const params: IssuesSearchParams = {
-    projects: options.project,
+    projects: componentKeys ?? options.project,
     organization: auth.orgKey,
     severities: normalizedSeverities,
     impactSeverities: normalizedImpactSeverities,
