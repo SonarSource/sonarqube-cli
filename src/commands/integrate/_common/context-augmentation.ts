@@ -97,20 +97,6 @@ export interface ApplyContextAugmentationToolIntegrationParams {
   console: Console;
 }
 
-export interface PrintContextAugmentationSkillParams {
-  binaryPath: string;
-  projectRoot: string;
-  scaEnabled: boolean;
-  /**
-   * Organization key forwarded to `tool print-skill` as SONAR_CONTEXT_ORGANIZATION.
-   * CAG gates internal-only "dogfooding" tools in the rendered skill on the org
-   * (offline allowlist), so this must be set for those tools to appear in
-   * SKILL.md. Optional: when absent the skill still renders, just without the
-   * dogfooding tools section.
-   */
-  orgKey?: string;
-}
-
 export interface CagSubprocessResult {
   ok: boolean;
   failureMessage?: string;
@@ -153,43 +139,6 @@ export async function runToolIntegrateCommand(
     initEnv,
   );
   console.discreetSuccess('Vortex Context configured');
-}
-
-export async function printContextAugmentationSkill({
-  binaryPath,
-  projectRoot,
-  scaEnabled,
-  orgKey,
-}: PrintContextAugmentationSkillParams): Promise<string> {
-  const result = await runCagSubprocess(
-    binaryPath,
-    [
-      'tool',
-      'print-skill',
-      '--invocation-prefix',
-      SONAR_CONTEXT_INVOCATION,
-      `--sca-enabled=${scaEnabled ? 'true' : 'false'}`,
-    ],
-    {
-      projectRoot,
-      // Forward only the org: CAG's dogfooding-tools gating reads
-      // SONAR_CONTEXT_ORGANIZATION (offline allowlist) to decide whether to render
-      // internal-only tools into the skill. It needs no token/project/url, so this
-      // stays exempt from identity enforcement.
-      env: buildContextAugmentationEnv({ organization: orgKey }),
-    },
-  );
-  if (!result.ok) {
-    throw new CagStepFailedError(result);
-  }
-  if (result.stdout.trim().length === 0) {
-    throw new CagStepFailedError({
-      ...result,
-      ok: false,
-      failureMessage: 'sonar-context-augmentation tool print-skill produced empty output',
-    });
-  }
-  return result.stdout;
 }
 
 export interface PrintSessionStartContextParams {

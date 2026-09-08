@@ -28,11 +28,13 @@ import { expect } from 'bun:test';
 
 import {
   CONTEXT_AUGMENTATION_FEATURE_ID,
-  CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
   CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID,
 } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
 import { SQAA_HOOK_FEATURE_ID } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
-import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
+import {
+  CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
+  VORTEX_FEATURE_ID,
+} from '@/commands/integrate/_common/vortex.ts';
 import { ANTIGRAVITY_INTEGRATION_ID } from '@/commands/integrate/antigravity/declaration.ts';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import { CODEX_INTEGRATION_ID } from '@/commands/integrate/codex/declaration.ts';

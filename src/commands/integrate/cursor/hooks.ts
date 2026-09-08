@@ -38,15 +38,15 @@ export const CURSOR_HOOK_MATCHERS: Record<string, string> = {
   preToolUse: 'Read',
 };
 
-export function resolveCursorHookMatcher(eventType: string): string {
-  return CURSOR_HOOK_MATCHERS[eventType] ?? '.*';
+export function resolveCursorHookMatcher(eventType: string): string | undefined {
+  return CURSOR_HOOK_MATCHERS[eventType];
 }
 
 export interface CursorFlatHookEntry {
   command: string;
-  matcher: string;
+  matcher?: string; // omitted for events with no matcher, e.g. sessionStart
   timeout: number;
-  failClosed: boolean;
+  failClosed?: boolean;
 }
 
 export interface CursorHooksDocument {
@@ -67,18 +67,20 @@ export function buildCursorHookEntry(
   configDir: string,
   eventType: string,
   scriptPath: string,
+  marker: string = SONAR_SECRETS_MARKER,
   failClosed = false,
 ): ManagedCursorHookEntry {
-  return {
-    eventType,
-    marker: SONAR_SECRETS_MARKER,
-    entry: {
-      command: resolveAgentHookCommand(context, configDir, scriptPath),
-      matcher: resolveCursorHookMatcher(eventType),
-      timeout: HOOK_TIMEOUT_SEC,
-      failClosed,
-    },
+  const matcher = resolveCursorHookMatcher(eventType);
+  const entry: CursorFlatHookEntry = {
+    command: resolveAgentHookCommand(context, configDir, scriptPath),
+    timeout: HOOK_TIMEOUT_SEC,
+    failClosed,
   };
+  if (matcher !== undefined) {
+    entry.matcher = matcher;
+  }
+
+  return { eventType, marker, entry };
 }
 
 /**
