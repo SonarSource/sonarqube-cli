@@ -20,7 +20,8 @@
 
 // SonarQube System API wrapper — instance status and clean-code policy mode.
 
-import { unwrap } from '../result.ts';
+import { okAsync, type ResultAsync } from '../result.ts';
+import { type HttpClientError } from './errors.ts';
 import type { SonarHttpClient } from './http-client.ts';
 
 export class SystemClient {
@@ -30,11 +31,10 @@ export class SystemClient {
     this.client = client;
   }
 
-  async getServerMode(): Promise<'mqr' | 'standard'> {
-    if (this.client.isCloud) return 'mqr';
-    const result = unwrap(
-      await this.client.getOrNotFound<{ mode: string }>('/api/v2/clean-code-policy/mode'),
-    );
-    return result?.mode === 'MQR' ? 'mqr' : 'standard';
+  getServerMode(): ResultAsync<'mqr' | 'standard', HttpClientError> {
+    if (this.client.isCloud) return okAsync('mqr');
+    return this.client
+      .getOrNotFound<{ mode: string }>('/api/v2/clean-code-policy/mode')
+      .map((result) => (result?.mode === 'MQR' ? 'mqr' : 'standard'));
   }
 }

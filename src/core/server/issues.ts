@@ -20,7 +20,8 @@
 
 // SonarQube Issues API wrapper
 
-import { unwrap } from '../result.ts';
+import type { ResultAsync } from '../result.ts';
+import { type HttpClientError } from './errors.ts';
 import { type SonarHttpClient } from './http-client.ts';
 import type { IssuesSearchParams, IssuesSearchResponse } from './types.ts';
 
@@ -34,7 +35,7 @@ export class IssuesClient {
   /**
    * Search issues with filters
    */
-  async searchIssues(params: IssuesSearchParams): Promise<IssuesSearchResponse> {
+  searchIssues(params: IssuesSearchParams): ResultAsync<IssuesSearchResponse, HttpClientError> {
     const queryParams: Record<string, string | number | boolean> = {};
 
     Object.entries(params).forEach(([key, value]) => {
@@ -48,6 +49,6 @@ export class IssuesClient {
       }
     });
 
-    return unwrap(await this.client.get<IssuesSearchResponse>('/api/issues/search', queryParams));
+    return this.client.get<IssuesSearchResponse>('/api/issues/search', queryParams);
   }
 }

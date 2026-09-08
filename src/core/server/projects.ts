@@ -17,7 +17,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-import { unwrap } from '../result.ts';
+import type { ResultAsync } from '../result.ts';
+import { type HttpClientError } from './errors.ts';
 import { type SonarHttpClient } from './http-client.ts';
 import type { ProjectsSearchParams, ProjectsSearchResponse } from './types.ts';
 
@@ -40,7 +41,9 @@ export class ProjectsClient {
   /**
    * Search projects with optional query and pagination
    */
-  async searchProjects(params: ProjectsSearchParams): Promise<ProjectsSearchResponse> {
+  searchProjects(
+    params: ProjectsSearchParams,
+  ): ResultAsync<ProjectsSearchResponse, HttpClientError> {
     const queryParams: Record<string, string | number> = {};
 
     if (params.organization) {
@@ -61,8 +64,6 @@ export class ProjectsClient {
       queryParams.p = params.p;
     }
 
-    return unwrap(
-      await this.client.get<ProjectsSearchResponse>('/api/components/search', queryParams),
-    );
+    return this.client.get<ProjectsSearchResponse>('/api/components/search', queryParams);
   }
 }

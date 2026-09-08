@@ -20,6 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { unwrapOrThrow } from '@/core/result.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
 import { RateLimitError, ServiceUnavailableError } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
@@ -48,17 +49,17 @@ describe('ComponentsClient', () => {
         { key: 'sonar.sca.foo', value: 'bar', inherited: false },
       ];
       fetchSpy = mockFetch({ settings });
-      expect(await client.getProjectSettings('demo')).toEqual(settings);
+      expect(await unwrapOrThrow(client.getProjectSettings('demo'))).toEqual(settings);
     });
 
     it('returns an empty array when the API omits settings', async () => {
       fetchSpy = mockFetch({});
-      expect(await client.getProjectSettings('demo')).toEqual([]);
+      expect(await unwrapOrThrow(client.getProjectSettings('demo'))).toEqual([]);
     });
 
     it('passes the project key as the component query param', async () => {
       fetchSpy = mockFetch({ settings: [] });
-      await client.getProjectSettings('demo');
+      await unwrapOrThrow(client.getProjectSettings('demo'));
       const url = new URL(lastFetchUrl(fetchSpy));
       expect(url.pathname).toBe('/api/settings/values');
       expect(url.searchParams.get('component')).toBe('demo');
@@ -67,7 +68,7 @@ describe('ComponentsClient', () => {
     it('throws "Project ... not found" on 404', async () => {
       fetchSpy = mockFetch({ errors: [{ msg: 'Not found' }] }, { ok: false, status: 404 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(client.getProjectSettings('missing')).rejects.toThrow(
+      await expect(unwrapOrThrow(client.getProjectSettings('missing'))).rejects.toThrow(
         "Project 'missing' not found",
       );
     });
@@ -75,24 +76,26 @@ describe('ComponentsClient', () => {
     it('throws a generic API error on other non-ok statuses', async () => {
       fetchSpy = mockFetch({}, { ok: false, status: 500 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(client.getProjectSettings('demo')).rejects.toThrow('SonarQube API error: 500');
+      await expect(unwrapOrThrow(client.getProjectSettings('demo'))).rejects.toThrow(
+        'SonarQube API error: 500',
+      );
     });
   });
 
   describe('checkComponent', () => {
     it('returns true when component exists', async () => {
       fetchSpy = mockFetch({ component: { key: 'my-project' } });
-      expect(await client.checkComponent('my-project')).toBe(true);
+      expect(await unwrapOrThrow(client.checkComponent('my-project'))).toBe(true);
     });
 
     it('returns false when component is not found', async () => {
       fetchSpy = mockFetch({}, { ok: false, status: 404 });
-      expect(await client.checkComponent('missing-project')).toBe(false);
+      expect(await unwrapOrThrow(client.checkComponent('missing-project'))).toBe(false);
     });
 
     it('passes the component key as a query parameter', async () => {
       fetchSpy = mockFetch({ component: {} });
-      await client.checkComponent('my-project');
+      await unwrapOrThrow(client.checkComponent('my-project'));
       const url = new URL(lastFetchUrl(fetchSpy));
       expect(url.searchParams.get('component')).toBe('my-project');
     });
@@ -101,47 +104,53 @@ describe('ComponentsClient', () => {
   describe('componentExists', () => {
     it('returns true when component exists', async () => {
       fetchSpy = mockFetch({ component: { key: 'my-project' } });
-      expect(await client.componentExists('my-project')).toBe(true);
+      expect(await unwrapOrThrow(client.componentExists('my-project'))).toBe(true);
     });
 
     it('returns false when component is not found (404)', async () => {
       fetchSpy = mockFetch({}, { ok: false, status: 404 });
-      expect(await client.componentExists('missing-project')).toBe(false);
+      expect(await unwrapOrThrow(client.componentExists('missing-project'))).toBe(false);
     });
 
     it('propagates a rate-limit error instead of reporting the component as missing', async () => {
       fetchSpy = mockFetch({}, { ok: false, status: 429 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(client.componentExists('my-project')).rejects.toThrow(RateLimitError);
+      await expect(unwrapOrThrow(client.componentExists('my-project'))).rejects.toThrow(
+        RateLimitError,
+      );
     });
 
     it('propagates a service-unavailable error instead of reporting the component as missing', async () => {
       fetchSpy = mockFetch({}, { ok: false, status: 503 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(client.componentExists('my-project')).rejects.toThrow(ServiceUnavailableError);
+      await expect(unwrapOrThrow(client.componentExists('my-project'))).rejects.toThrow(
+        ServiceUnavailableError,
+      );
     });
 
     it('propagates a forbidden/auth failure instead of reporting the component as missing', async () => {
       fetchSpy = mockFetch({}, { ok: false, status: 403 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(client.componentExists('my-project')).rejects.toThrow('Access denied');
+      await expect(unwrapOrThrow(client.componentExists('my-project'))).rejects.toThrow(
+        'Access denied',
+      );
     });
   });
 
   describe('getComponentId', () => {
     it('returns the component id when found', async () => {
       fetchSpy = mockFetch({ id: 'AYmy-projectlegacy', key: 'my-project' });
-      expect(await client.getComponentId('my-project')).toBe('AYmy-projectlegacy');
+      expect(await unwrapOrThrow(client.getComponentId('my-project'))).toBe('AYmy-projectlegacy');
     });
 
     it('returns null when component is not found', async () => {
       fetchSpy = mockFetch({}, { ok: false, status: 404 });
-      expect(await client.getComponentId('missing-project')).toBeNull();
+      expect(await unwrapOrThrow(client.getComponentId('missing-project'))).toBeNull();
     });
 
     it('passes the component key as a query parameter to /api/navigation/component', async () => {
       fetchSpy = mockFetch({ id: 'AYlegacy' });
-      await client.getComponentId('my-project');
+      await unwrapOrThrow(client.getComponentId('my-project'));
       const url = new URL(lastFetchUrl(fetchSpy));
       expect(url.pathname).toBe('/api/navigation/component');
       expect(url.searchParams.get('component')).toBe('my-project');
@@ -151,23 +160,25 @@ describe('ComponentsClient', () => {
   describe('hasProjectBeenAnalyzed', () => {
     it('returns true when analyses array is non-empty', async () => {
       fetchSpy = mockFetch({ analyses: [{ key: 'abc' }] });
-      expect(await client.hasProjectBeenAnalyzed('my-project')).toBe(true);
+      expect(await unwrapOrThrow(client.hasProjectBeenAnalyzed('my-project'))).toBe(true);
     });
 
     it('returns false when analyses array is empty', async () => {
       fetchSpy = mockFetch({ analyses: [] });
-      expect(await client.hasProjectBeenAnalyzed('my-project')).toBe(false);
+      expect(await unwrapOrThrow(client.hasProjectBeenAnalyzed('my-project'))).toBe(false);
     });
 
     it('returns false on 404 (project has no analysis history)', async () => {
       fetchSpy = mockFetch({}, { ok: false, status: 404 });
-      expect(await client.hasProjectBeenAnalyzed('my-project')).toBe(false);
+      expect(await unwrapOrThrow(client.hasProjectBeenAnalyzed('my-project'))).toBe(false);
     });
 
     it('throws on 403 so access errors are not silently treated as unanalyzed', async () => {
       fetchSpy = mockFetch({}, { ok: false, status: 403 });
       // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(client.hasProjectBeenAnalyzed('my-project')).rejects.toThrow('403');
+      await expect(unwrapOrThrow(client.hasProjectBeenAnalyzed('my-project'))).rejects.toThrow(
+        '403',
+      );
     });
   });
 });

@@ -21,8 +21,8 @@
 // SonarQube Organizations API wrapper (SonarQube Cloud — Server has no organizations).
 
 import logger from '../observability/logger.ts';
-import { unwrap } from '../result.ts';
-import { isCriticalFailure } from './errors.ts';
+import { errAsync, okAsync, type ResultAsync } from '../result.ts';
+import { type HttpClientError, isCriticalFailure } from './errors.ts';
 import type { SonarHttpClient } from './http-client.ts';
 
 export interface Organization {
@@ -44,7 +44,10 @@ export type OrganizationAccess =
 
 export class OrganizationsClient {
   private readonly client: SonarHttpClient;
-  private readonly orgInfoCache = new Map<string, Promise<{ id: string; uuidV4: string } | null>>();
+  private readonly orgInfoCache = new Map<
+    string,
+    ResultAsync<{ id: string; uuidV4: string } | null, HttpClientError>
+  >();
 
   constructor(client: SonarHttpClient) {
     this.client = client;
@@ -54,9 +57,8 @@ export class OrganizationsClient {
    * Get an organization by key and return its server-side UUID (uuidV4).
    * Uses the region-specific Cloud API host (SonarQube Cloud only).
    */
-  async getOrganizationId(organizationKey: string): Promise<string | null> {
-    const info = await this.getOrganizationInfo(organizationKey);
-    return info?.uuidV4 ?? null;
+  getOrganizationId(organizationKey: string): ResultAsync<string | null, HttpClientError> {
+    return this.getOrganizationInfo(organizationKey).map((info) => info?.uuidV4 ?? null);
   }
 
   /**
@@ -64,14 +66,13 @@ export class OrganizationsClient {
    * uuidV4). Some APIs, like dop-translation, key off this legacy ID rather
    * than the uuidV4 (SonarQube Cloud only).
    */
-  async getOrganizationLegacyId(organizationKey: string): Promise<string | null> {
-    const info = await this.getOrganizationInfo(organizationKey);
-    return info?.id ?? null;
+  getOrganizationLegacyId(organizationKey: string): ResultAsync<string | null, HttpClientError> {
+    return this.getOrganizationInfo(organizationKey).map((info) => info?.id ?? null);
   }
 
-  private async getOrganizationInfo(
+  private getOrganizationInfo(
     organizationKey: string,
-  ): Promise<{ id: string; uuidV4: string } | null> {
+  ): ResultAsync<{ id: string; uuidV4: string } | null, HttpClientError> {
     let pending = this.orgInfoCache.get(organizationKey);
     if (!pending) {
       pending = this.fetchOrganizationInfo(organizationKey);
@@ -80,22 +81,18 @@ export class OrganizationsClient {
     return pending;
   }
 
-  private async fetchOrganizationInfo(
+  private fetchOrganizationInfo(
     organizationKey: string,
-  ): Promise<{ id: string; uuidV4: string } | null> {
+  ): ResultAsync<{ id: string; uuidV4: string } | null, HttpClientError> {
     const endpoint = '/organizations/organizations';
-    const result = await this.client.get<Array<{ id: string; uuidV4: string }>>(
-      endpoint,
-      { organizationKey, excludeEligibility: 'true' },
-      this.client.apiHostFor(endpoint),
-    );
-    if (!result.ok) {
-      if (isCriticalFailure(result.error)) {
-        throw result.error;
-      }
-      return null;
-    }
-    return result.value[0] ?? null;
+    return this.client
+      .get<Array<{ id: string; uuidV4: string }>>(
+        endpoint,
+        { organizationKey, excludeEligibility: 'true' },
+        this.client.apiHostFor(endpoint),
+      )
+      .map((result) => result[0] ?? null)
+      .orElse((error) => (isCriticalFailure(error) ? errAsync(error) : okAsync(null)));
   }
 
   /**
@@ -104,17 +101,16 @@ export class OrganizationsClient {
    * Errors are not swallowed here. An empty list sends the login flow to the manual
    * organization prompt, so a failed request must not look like an empty list.
    */
-  async listUserOrganizations(
+  listUserOrganizations(
     page = 1,
     ps = 10,
-  ): Promise<{ organizations: Organization[]; total: number }> {
-    const result = unwrap(
-      await this.client.get<{
+  ): ResultAsync<{ organizations: Organization[]; total: number }, HttpClientError> {
+    return this.client
+      .get<{
         organizations: Organization[];
         paging: { total: number };
-      }>('/api/organizations/search', { member: true, ps, p: page }),
-    );
-    return { organizations: result.organizations, total: result.paging.total };
+      }>('/api/organizations/search', { member: true, ps, p: page })
+      .map((result) => ({ organizations: result.organizations, total: result.paging.total }));
   }
 
   /**
@@ -125,14 +121,17 @@ export class OrganizationsClient {
    *
    * The `organizations` filter is not limited to the caller's memberships: it also resolves
    * public organizations. That is why a hand-typed key can be validated with it.
+   *
+   * Every outcome — accessible, not_found, or check_failed — is folded into a plain value here,
+   * so this deliberately resolves to a `Promise`, not a `ResultAsync`: there is no error left to
+   * propagate past this point.
    */
-  async resolveOrganizationAccess(organizationKey: string): Promise<OrganizationAccess> {
-    try {
-      const organization = await this.fetchOrganizationByKey(organizationKey);
-      return organization ? { status: 'accessible' } : { status: 'not_found' };
-    } catch (error) {
-      return { status: 'check_failed', reason: (error as Error).message };
-    }
+  resolveOrganizationAccess(organizationKey: string): Promise<OrganizationAccess> {
+    return this.fetchOrganizationByKey(organizationKey).match(
+      (organization): OrganizationAccess =>
+        organization ? { status: 'accessible' } : { status: 'not_found' },
+      (error): OrganizationAccess => ({ status: 'check_failed', reason: error.message }),
+    );
   }
 
   /**
@@ -140,9 +139,10 @@ export class OrganizationsClient {
    *
    * Use `resolveOrganizationAccess` to tell a missing organization from a failed lookup.
    */
-  async isOrganizationAccessible(organizationKey: string): Promise<boolean> {
-    const access = await this.resolveOrganizationAccess(organizationKey);
-    return access.status === 'accessible';
+  isOrganizationAccessible(organizationKey: string): Promise<boolean> {
+    return this.resolveOrganizationAccess(organizationKey).then(
+      (access) => access.status === 'accessible',
+    );
   }
 
   /**
@@ -156,13 +156,14 @@ export class OrganizationsClient {
    * `undefined` on a transient failure would silently disable that enforcement instead of
    * surfacing the problem. A `undefined` return only ever means "no org with this key".
    */
-  async fetchOrganizationByKey(organizationKey: string): Promise<Organization | undefined> {
-    const result = unwrap(
-      await this.client.get<{ organizations: Organization[] }>('/api/organizations/search', {
+  fetchOrganizationByKey(
+    organizationKey: string,
+  ): ResultAsync<Organization | undefined, HttpClientError> {
+    return this.client
+      .get<{ organizations: Organization[] }>('/api/organizations/search', {
         organizations: organizationKey,
-      }),
-    );
-    return result.organizations.find((org) => org.key === organizationKey);
+      })
+      .map((result) => result.organizations.find((org) => org.key === organizationKey));
   }
 
   /**
@@ -172,43 +173,46 @@ export class OrganizationsClient {
    * platform. Lookup failures are reported to the caller rather than swallowed, so callers can
    * tell them apart from an org that genuinely has no binding.
    */
-  async getOrganizationAlmKey(organizationKey: string): Promise<string | undefined> {
-    const organizationId = await this.getOrganizationLegacyId(organizationKey);
-    if (!organizationId) return undefined;
+  getOrganizationAlmKey(organizationKey: string): ResultAsync<string | undefined, HttpClientError> {
+    return this.getOrganizationLegacyId(organizationKey).andThen((organizationId) => {
+      if (!organizationId) return okAsync(undefined);
 
-    const endpoint = '/dop-translation/organization-bindings';
-    const result = unwrap(
-      await this.client.get<{
-        organizationBindings: Array<{ devOpsPlatform: string }>;
-      }>(endpoint, { organizationId }, this.client.apiHostFor(endpoint)),
-    );
-    return result.organizationBindings[0]?.devOpsPlatform;
+      const endpoint = '/dop-translation/organization-bindings';
+      return this.client
+        .get<{
+          organizationBindings: Array<{ devOpsPlatform: string }>;
+        }>(endpoint, { organizationId }, this.client.apiHostFor(endpoint))
+        .map((result) => result.organizationBindings[0]?.devOpsPlatform);
+    });
   }
 
   /**
    * Check whether an organization is entitled to a specific billing feature via
    * `GET /billing/entitlements` (SonarQube Cloud only, region-specific API host).
    */
-  async checkBillingEntitlement(organizationUuid: string, entitlement: string): Promise<boolean> {
+  checkBillingEntitlement(
+    organizationUuid: string,
+    entitlement: string,
+  ): ResultAsync<boolean, HttpClientError> {
     const endpoint = '/billing/entitlements';
-    const result = await this.client.get<{ entitlements: Array<{ allowedFeatures: string[] }> }>(
-      endpoint,
-      { resourceId: organizationUuid, resourceType: 'organization' },
-      this.client.apiHostFor(endpoint),
-    );
-    if (!result.ok) {
-      if (isCriticalFailure(result.error)) {
-        throw result.error;
-      }
-      logger.debug(`Failed to check '${entitlement}' billing entitlement`, result.error);
-      return false;
-    }
-    return result.value.entitlements.some((e) => e.allowedFeatures.includes(entitlement));
+    return this.client
+      .get<{ entitlements: Array<{ allowedFeatures: string[] }> }>(
+        endpoint,
+        { resourceId: organizationUuid, resourceType: 'organization' },
+        this.client.apiHostFor(endpoint),
+      )
+      .map((result) => result.entitlements.some((e) => e.allowedFeatures.includes(entitlement)))
+      .orElse((error) => {
+        if (isCriticalFailure(error)) return errAsync(error);
+        logger.debug(`Failed to check '${entitlement}' billing entitlement`, error);
+        return okAsync(false);
+      });
   }
 
-  async hasPrivateProjectsEntitlement(organizationKey: string): Promise<boolean> {
-    const uuid = await this.getOrganizationId(organizationKey);
-    if (!uuid) return false;
-    return this.checkBillingEntitlement(uuid, 'privateProjects');
+  hasPrivateProjectsEntitlement(organizationKey: string): ResultAsync<boolean, HttpClientError> {
+    return this.getOrganizationId(organizationKey).andThen((uuid) => {
+      if (!uuid) return okAsync(false);
+      return this.checkBillingEntitlement(uuid, 'privateProjects');
+    });
   }
 }

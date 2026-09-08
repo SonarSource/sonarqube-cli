@@ -20,6 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { unwrapOrThrow } from '@/core/result.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { MeasuresClient } from '@/core/server/measures.ts';
 import type { ComponentTreeComponent, ComponentTreeResponse } from '@/core/server/types.ts';
@@ -184,12 +185,14 @@ describe('MeasuresClient', () => {
       jsonResponse(componentTreeResponse({ components })),
     );
 
-    const result = await client.getWorstComponentsByMetric({
-      projectKey: 'my-project',
-      metricKey: 'new_coverage',
-      ascending: true,
-      top: 3,
-    });
+    const result = await unwrapOrThrow(
+      client.getWorstComponentsByMetric({
+        projectKey: 'my-project',
+        metricKey: 'new_coverage',
+        ascending: true,
+        top: 3,
+      }),
+    );
 
     expect(result.components).toEqual(components);
   });
@@ -202,12 +205,14 @@ describe('MeasuresClient', () => {
       ),
     );
 
-    const result = await client.getWorstComponentsByMetric({
-      projectKey: 'my-project',
-      metricKey: 'new_coverage',
-      ascending: true,
-      top: 1,
-    });
+    const result = await unwrapOrThrow(
+      client.getWorstComponentsByMetric({
+        projectKey: 'my-project',
+        metricKey: 'new_coverage',
+        ascending: true,
+        top: 1,
+      }),
+    );
 
     expect(result.totalCount).toBe(47);
   });

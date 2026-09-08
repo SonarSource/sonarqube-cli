@@ -20,7 +20,8 @@
 
 // SonarQube Users & tokens API wrapper.
 
-import { unwrap } from '../result.ts';
+import type { ResultAsync } from '../result.ts';
+import type { HttpClientError } from './errors.ts';
 import type { SonarHttpClient } from './http-client.ts';
 
 /** Best-effort token revocation should fail fast when the server is unreachable. */
@@ -33,19 +34,16 @@ export class UsersClient {
     this.client = client;
   }
 
-  async hasProvisionProjectsPermission(): Promise<boolean> {
-    const result = unwrap(
-      await this.client.get<{ permissions?: { global?: string[] } }>('/api/users/current'),
-    );
-
-    return result.permissions?.global?.includes('provisioning') ?? false;
+  hasProvisionProjectsPermission(): ResultAsync<boolean, HttpClientError> {
+    return this.client
+      .get<{ permissions?: { global?: string[] } }>('/api/users/current')
+      .map((result) => result.permissions?.global?.includes('provisioning') ?? false);
   }
 
-  async checkTokenValidity(): Promise<'valid' | 'invalid'> {
-    const result = unwrap(
-      await this.client.get<{ valid: boolean }>('/api/authentication/validate'),
-    );
-    return result.valid ? 'valid' : 'invalid';
+  checkTokenValidity(): ResultAsync<'valid' | 'invalid', HttpClientError> {
+    return this.client
+      .get<{ valid: boolean }>('/api/authentication/validate')
+      .map((result) => (result.valid ? 'valid' : 'invalid'));
   }
 
   /**
@@ -56,13 +54,11 @@ export class UsersClient {
    * to disambiguate from other "name" fields in the state (project name,
    * org name, etc.). The translation happens here at the wire boundary.
    */
-  async revokeUserToken(tokenName: string): Promise<void> {
-    unwrap(
-      await this.client.postForm(
-        '/api/user_tokens/revoke',
-        { name: tokenName },
-        REVOKE_USER_TOKEN_TIMEOUT_MS,
-      ),
+  revokeUserToken(tokenName: string): ResultAsync<void, HttpClientError> {
+    return this.client.postForm(
+      '/api/user_tokens/revoke',
+      { name: tokenName },
+      REVOKE_USER_TOKEN_TIMEOUT_MS,
     );
   }
 }

@@ -20,10 +20,18 @@
 
 // SonarQube Components API wrapper — project existence, identity and project-scoped settings.
 
-import { unwrap } from '../result.ts';
-import { isCriticalFailure } from './errors.ts';
+import { errAsync, okAsync, type ResultAsync } from '../result.ts';
+import { type HttpClientError, isCriticalFailure } from './errors.ts';
 import type { SonarHttpClient } from './http-client.ts';
 import type { SettingsValue } from './settings-value.ts';
+
+/** Thrown by `getProjectSettings` when the project key does not resolve to a component. */
+export class ProjectNotFoundError extends Error {
+  constructor(projectKey: string) {
+    super(`Project '${projectKey}' not found`);
+    this.name = 'ProjectNotFoundError';
+  }
+}
 
 export class ComponentsClient {
   private readonly client: SonarHttpClient;
@@ -35,12 +43,11 @@ export class ComponentsClient {
   /**
    * Check if component (project) exists
    */
-  async checkComponent(projectKey: string): Promise<boolean> {
-    const result = await this.client.get('/api/components/show', { component: projectKey });
-    if (!result.ok && isCriticalFailure(result.error)) {
-      throw result.error;
-    }
-    return result.ok;
+  checkComponent(projectKey: string): ResultAsync<boolean, HttpClientError> {
+    return this.client
+      .get('/api/components/show', { component: projectKey })
+      .map(() => true)
+      .orElse((error) => (isCriticalFailure(error) ? errAsync(error) : okAsync(false)));
   }
 
   /**
@@ -48,11 +55,10 @@ export class ComponentsClient {
    * failure (auth, rate limit, outage, network error) propagates as its
    * normal typed error instead of being reported as a missing component.
    */
-  async componentExists(projectKey: string): Promise<boolean> {
-    const component = unwrap(
-      await this.client.getOrNotFound('/api/components/show', { component: projectKey }),
-    );
-    return component !== null;
+  componentExists(projectKey: string): ResultAsync<boolean, HttpClientError> {
+    return this.client
+      .getOrNotFound('/api/components/show', { component: projectKey })
+      .map((component) => component !== null);
   }
 
   /**
@@ -60,27 +66,20 @@ export class ComponentsClient {
    * The external AI agents API expects this ID (not the human-readable key) as `projectId`.
    * Uses /api/navigation/component - same endpoint the web UI uses; `id` is always present there.
    */
-  async getComponentId(componentKey: string): Promise<string | null> {
-    const result = await this.client.get<{ id: string }>('/api/navigation/component', {
-      component: componentKey,
-    });
-    if (!result.ok) {
-      if (isCriticalFailure(result.error)) {
-        throw result.error;
-      }
-      return null;
-    }
-    return result.value.id;
+  getComponentId(componentKey: string): ResultAsync<string | null, HttpClientError> {
+    return this.client
+      .get<{ id: string }>('/api/navigation/component', { component: componentKey })
+      .map((value) => value.id)
+      .orElse((error) => (isCriticalFailure(error) ? errAsync(error) : okAsync(null)));
   }
 
-  async hasProjectBeenAnalyzed(projectKey: string): Promise<boolean> {
-    const result = unwrap(
-      await this.client.getOrNotFound<{ analyses?: unknown[] }>('/api/project_analyses/search', {
+  hasProjectBeenAnalyzed(projectKey: string): ResultAsync<boolean, HttpClientError> {
+    return this.client
+      .getOrNotFound<{ analyses?: unknown[] }>('/api/project_analyses/search', {
         project: projectKey,
         ps: 1,
-      }),
-    );
-    return (result?.analyses?.length ?? 0) > 0;
+      })
+      .map((result) => (result?.analyses?.length ?? 0) > 0);
   }
 
   /**
@@ -89,17 +88,17 @@ export class ComponentsClient {
    * returns global defaults. Callers project the raw entries into whatever
    * shape they need (e.g. `parseAnalysisProperties` for SCA).
    */
-  async getProjectSettings(projectKey: string): Promise<SettingsValue[]> {
-    const result = unwrap(
-      await this.client.getOrNotFound<{ settings?: SettingsValue[] }>('/api/settings/values', {
+  getProjectSettings(
+    projectKey: string,
+  ): ResultAsync<SettingsValue[], HttpClientError | ProjectNotFoundError> {
+    return this.client
+      .getOrNotFound<{ settings?: SettingsValue[] }>('/api/settings/values', {
         component: projectKey,
-      }),
-    );
-
-    if (result === null) {
-      throw new Error(`Project '${projectKey}' not found`);
-    }
-
-    return result.settings ?? [];
+      })
+      .andThen((result) =>
+        result === null
+          ? errAsync(new ProjectNotFoundError(projectKey))
+          : okAsync(result.settings ?? []),
+      );
   }
 }

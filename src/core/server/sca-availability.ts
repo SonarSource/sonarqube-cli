@@ -20,13 +20,24 @@
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import type { ScaClient } from '@/core/server/sca.ts';
 import { fetchServerVersion, isAtLeast } from '@/core/server/server-info.ts';
 
 export const MIN_SCA_SQS_VERSION = '2026.4';
 
+/**
+ * The one call this module needs, decoupled from `ScaClient` (`ResultAsync`-returning)
+ * so this helper works the same whether the caller collapsed that to a plain `Promise`
+ * (e.g. `ScaScanApi`, `sca-api.ts`) or hands the domain client directly.
+ */
+export interface ScaAvailabilityCheck {
+  checkScaEnabled(
+    connectionType: ResolvedAuth['connectionType'],
+    orgKey?: string,
+  ): Promise<boolean>;
+}
+
 export async function assertScaAvailable(
-  client: Pick<ScaClient, 'checkScaEnabled'>,
+  client: ScaAvailabilityCheck,
   auth: Pick<ResolvedAuth, 'connectionType' | 'serverUrl' | 'orgKey'>,
 ): Promise<void> {
   if (auth.connectionType !== 'cloud') {

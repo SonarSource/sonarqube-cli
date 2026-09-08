@@ -20,7 +20,8 @@
 
 // SonarQube Metrics API wrapper
 
-import { unwrap } from '../result.ts';
+import { okAsync, type ResultAsync } from '../result.ts';
+import { type HttpClientError } from './errors.ts';
 import { type SonarHttpClient } from './http-client.ts';
 import type { Metric, MetricsSearchResponse } from './types.ts';
 
@@ -39,20 +40,22 @@ export class MetricsClient {
    * covers every server observed so far (well under 500 metrics); pagination only kicks in for a
    * hypothetical catalog exceeding that.
    */
-  async searchMetrics(): Promise<Metric[]> {
-    const metrics: Metric[] = [];
-    let page = 1;
-    let response: MetricsSearchResponse;
-    do {
-      response = unwrap(
-        await this.client.get<MetricsSearchResponse>('/api/metrics/search', {
-          p: page,
-          ps: METRICS_PAGE_SIZE,
-        }),
-      );
-      metrics.push(...response.metrics);
-      page += 1;
-    } while (metrics.length < response.total && response.metrics.length > 0);
-    return metrics;
+  searchMetrics(): ResultAsync<Metric[], HttpClientError> {
+    return this.fetchPage(1, []);
+  }
+
+  private fetchPage(page: number, accumulated: Metric[]): ResultAsync<Metric[], HttpClientError> {
+    return this.client
+      .get<MetricsSearchResponse>('/api/metrics/search', {
+        p: page,
+        ps: METRICS_PAGE_SIZE,
+      })
+      .andThen((response) => {
+        const metrics = [...accumulated, ...response.metrics];
+        if (metrics.length < response.total && response.metrics.length > 0) {
+          return this.fetchPage(page + 1, metrics);
+        }
+        return okAsync(metrics);
+      });
   }
 }

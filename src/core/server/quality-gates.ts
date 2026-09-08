@@ -20,7 +20,8 @@
 
 // SonarQube Quality Gates API wrapper
 
-import { unwrap } from '../result.ts';
+import type { ResultAsync } from '../result.ts';
+import { type HttpClientError } from './errors.ts';
 import { type SonarHttpClient } from './http-client.ts';
 import type { ProjectStatus, ProjectStatusParams, ProjectStatusResponse } from './types.ts';
 
@@ -32,12 +33,14 @@ export class QualityGatesClient {
   }
 
   /**
-   * Fetch the quality gate status for a project. Returns `null` when the project (or the
+   * Fetch the quality gate status for a project. Resolves to `null` when the project (or the
    * requested branch/pull request) has no analysis yet — the server responds 404 for that case,
    * distinct from `status: 'NONE'` which the server returns for an analyzed project with no
    * quality gate associated. Callers treat both as "not computed".
    */
-  async getProjectStatus(params: ProjectStatusParams): Promise<ProjectStatus | null> {
+  getProjectStatus(
+    params: ProjectStatusParams,
+  ): ResultAsync<ProjectStatus | null, HttpClientError> {
     const queryParams: Record<string, string> = { projectKey: params.projectKey };
     if (params.branch) {
       queryParams.branch = params.branch;
@@ -45,12 +48,8 @@ export class QualityGatesClient {
     if (params.pullRequest) {
       queryParams.pullRequest = params.pullRequest;
     }
-    const result = unwrap(
-      await this.client.getOrNotFound<ProjectStatusResponse>(
-        '/api/qualitygates/project_status',
-        queryParams,
-      ),
-    );
-    return result?.projectStatus ?? null;
+    return this.client
+      .getOrNotFound<ProjectStatusResponse>('/api/qualitygates/project_status', queryParams)
+      .map((result) => result?.projectStatus ?? null);
   }
 }
