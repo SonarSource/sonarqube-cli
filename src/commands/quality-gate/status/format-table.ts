@@ -23,7 +23,10 @@ import { cyan, green, red, yellow } from '@/core/ui/colors.ts';
 import { padColumns } from '@/core/ui/formatter/column-formatting.ts';
 
 import type {
+  CoverageMetricBreakdown,
   DuplicationsBreakdownEntry,
+  DuplicationsMetricBreakdown,
+  IssuesBreakdownEntry,
   QualityGateBreakdownEntry,
   QualityGateConditionSummary,
   QualityGateMetricBreakdown,
@@ -140,14 +143,10 @@ function formatBreakdownLines(condition: QualityGateConditionSummary): string[] 
     return [];
   }
 
-  const [values] = padColumns(
-    [metricBreakdown.entries.map((entry) => entry.formattedValue)],
-    [],
-    BREAKDOWN_VALUE_GAP,
-  );
-  const lines = metricBreakdown.entries.map((_entry, i) =>
-    formatEntryLine(metricBreakdown, i, values[i]),
-  );
+  const lines =
+    metricBreakdown.category === 'issues'
+      ? formatIssuesEntryLines(metricBreakdown.entries)
+      : formatValueEntryLines(metricBreakdown);
 
   const remaining = metricBreakdown.totalCount - metricBreakdown.fetchedCount;
   if (remaining > 0) {
@@ -157,8 +156,20 @@ function formatBreakdownLines(condition: QualityGateConditionSummary): string[] 
   return lines;
 }
 
+/** Coverage/duplications entries share a single leading numeric value column. */
+function formatValueEntryLines(
+  metricBreakdown: CoverageMetricBreakdown | DuplicationsMetricBreakdown,
+): string[] {
+  const [values] = padColumns(
+    [metricBreakdown.entries.map((entry) => entry.formattedValue)],
+    [],
+    BREAKDOWN_VALUE_GAP,
+  );
+  return metricBreakdown.entries.map((_entry, i) => formatEntryLine(metricBreakdown, i, values[i]));
+}
+
 function formatEntryLine(
-  metricBreakdown: QualityGateMetricBreakdown,
+  metricBreakdown: CoverageMetricBreakdown | DuplicationsMetricBreakdown,
   index: number,
   paddedValue: string,
 ): string {
@@ -168,6 +179,23 @@ function formatEntryLine(
     case 'duplications':
       return formatDuplicationsEntryLine(metricBreakdown.entries[index], paddedValue);
   }
+}
+
+/** Issues have no single value to lead with - file:line/key/rule are their own aligned columns. */
+function formatIssuesEntryLines(entries: IssuesBreakdownEntry[]): string[] {
+  const [locationColumn, keyColumn, ruleColumn] = padColumns(
+    [
+      entries.map((entry) => `${entry.file}:${entry.line ?? '?'}`),
+      entries.map((entry) => entry.key),
+      entries.map((entry) => entry.rule),
+    ],
+    [],
+    BREAKDOWN_VALUE_GAP,
+  );
+  return entries.map(
+    (entry, i) =>
+      `${BREAKDOWN_INDENT}${locationColumn[i]}${keyColumn[i]}${ruleColumn[i]}${entry.message}`,
+  );
 }
 
 function formatCoverageEntryLine(entry: QualityGateBreakdownEntry, paddedValue: string): string {

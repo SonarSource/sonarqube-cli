@@ -70,7 +70,9 @@ export interface IssuesSearchParams {
   pullRequest?: string;
   resolved?: boolean;
   fixableByAgent?: boolean;
+  sinceLeakPeriod?: boolean;
   s?: string;
+  asc?: boolean;
   ps?: number;
   p?: number;
 }

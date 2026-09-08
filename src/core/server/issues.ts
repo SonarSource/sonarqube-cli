@@ -42,8 +42,8 @@ export class IssuesClient {
       if (key === 'projects' && value) {
         const projectParamKey = this.client.isCloud ? 'projects' : 'components';
         queryParams[projectParamKey] = value as string;
-      } else if (key === 'resolved' && value !== undefined) {
-        queryParams.resolved = value as boolean;
+      } else if ((key === 'resolved' || key === 'asc') && value !== undefined) {
+        queryParams[key] = value as boolean;
       } else if (value) {
         queryParams[key] = value as string | number | boolean;
       }

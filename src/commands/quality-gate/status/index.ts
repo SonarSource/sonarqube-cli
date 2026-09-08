@@ -100,6 +100,7 @@ export async function qualityGateStatus(
     ? await attachBreakdowns(summaries, {
         client,
         projectKey,
+        orgKey: auth.orgKey,
         metrics,
         category: options.category,
         top,
