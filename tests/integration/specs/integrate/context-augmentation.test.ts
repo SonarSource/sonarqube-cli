@@ -1065,6 +1065,7 @@ describe('integrate <agent> --global — Context Augmentation', () => {
     ['claude', 'integrate claude -g --non-interactive', VORTEX_GLOBAL_SKIP],
     ['copilot', 'integrate copilot -g --non-interactive', VORTEX_GLOBAL_SKIP],
     ['codex', 'integrate codex -g --non-interactive', VORTEX_GLOBAL_SKIP],
+    ['cursor', 'integrate cursor -g --non-interactive', VORTEX_GLOBAL_SKIP],
   ])(
     'skips CAG entirely on "integrate %s --global" and warns when the org is entitled',
     async (_agent, command, expectedWarning) => {
@@ -1091,6 +1092,7 @@ describe('integrate <agent> --global — Context Augmentation', () => {
       expectVortexHookAbsent(harness.cwd, 'claude');
       expectVortexHookAbsent(harness.cwd, 'copilot');
       expectVortexHookAbsent(harness.cwd, 'codex');
+      expectVortexHookAbsent(harness.cwd, 'cursor');
       expect(result.stderr).toContain(expectedWarning);
     },
     { timeout: 30000 },
@@ -1100,6 +1102,7 @@ describe('integrate <agent> --global — Context Augmentation', () => {
     ['claude', 'integrate claude -g --non-interactive', VORTEX_GLOBAL_SKIP],
     ['copilot', 'integrate copilot -g --non-interactive', VORTEX_GLOBAL_SKIP],
     ['codex', 'integrate codex -g --non-interactive', VORTEX_GLOBAL_SKIP],
+    ['cursor', 'integrate cursor -g --non-interactive', VORTEX_GLOBAL_SKIP],
   ])(
     'skips CAG entirely on "integrate %s --global" without warning when the org is not entitled',
     async (_agent, command, unexpectedWarning) => {
