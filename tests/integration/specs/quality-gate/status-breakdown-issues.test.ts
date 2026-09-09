@@ -101,7 +101,7 @@ describe('quality-gate status — issues breakdown', () => {
       const req = recorded.find((r) => r.path === '/api/issues/search');
       expect(req?.query.types).toBeUndefined();
       expect(req?.query.resolved).toBe('false');
-      expect(req?.query.sinceLeakPeriod).toBeUndefined();
+      expect(req?.query.inNewCodePeriod).toBeUndefined();
       expect(req?.query.s).toBe('SEVERITY');
       expect(req?.query.asc).toBe('false');
     },
@@ -109,7 +109,7 @@ describe('quality-gate status — issues breakdown', () => {
   );
 
   it(
-    'adds sinceLeakPeriod=true for a failing new_violations condition',
+    'adds inNewCodePeriod=true for a failing new_violations condition',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -154,7 +154,7 @@ describe('quality-gate status — issues breakdown', () => {
 
       const recorded = server.getRecordedRequests();
       const req = recorded.find((r) => r.path === '/api/issues/search');
-      expect(req?.query.sinceLeakPeriod).toBe('true');
+      expect(req?.query.inNewCodePeriod).toBe('true');
     },
     { timeout: 15000 },
   );
@@ -420,7 +420,7 @@ describe('quality-gate status — issues breakdown', () => {
       const recorded = server.getRecordedRequests();
       const requests = recorded.filter((r) => r.path === '/api/issues/search');
       expect(requests.every((r) => r.query.types === 'CODE_SMELL')).toBe(true);
-      expect(requests.some((r) => r.query.sinceLeakPeriod === 'true')).toBe(true);
+      expect(requests.some((r) => r.query.inNewCodePeriod === 'true')).toBe(true);
     },
     { timeout: 15000 },
   );

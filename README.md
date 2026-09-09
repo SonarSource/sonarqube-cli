@@ -79,7 +79,7 @@ Before installing, you need:
 
 - **SonarQube Access** (choose one):
   - [SonarQube Cloud](https://sonarcloud.io) — Free for open source projects, paid for private repositories
-  - SonarQube Server — Self-hosted instance (v9.9+)
+  - SonarQube Server — Self-hosted instance (v25.1+)
 
 - **Operating System**: Linux (x86-64, ARM64), macOS (ARM64), or Windows (x86-64)
 

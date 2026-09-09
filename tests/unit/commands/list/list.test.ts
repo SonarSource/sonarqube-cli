@@ -125,9 +125,9 @@ describe('IssuesClient', () => {
       expect(mockGet).toHaveBeenCalledTimes(1);
     });
 
-    it('should pass projects parameter', async () => {
+    it('should pass projects parameter as componentKeys on Cloud', async () => {
       const mockGet = mock((_endpoint: string, params?: MockParams) => {
-        expect(params?.projects).toBe('my-project');
+        expect(params?.componentKeys).toBe('my-project');
         return Promise.resolve(createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0));
       });
 
@@ -284,10 +284,11 @@ describe('IssuesClient', () => {
       });
     });
 
-    it('sends `projects` query param for SonarCloud (sonarcloud.io)', async () => {
+    it('sends `componentKeys` query param for SonarCloud (sonarcloud.io)', async () => {
       const mockGet = mock((_endpoint: string, params?: MockParams) => {
-        expect(params?.projects).toBe('my-project');
+        expect(params?.componentKeys).toBe('my-project');
         expect(params?.components).toBeUndefined();
+        expect(params?.projects).toBeUndefined();
         return Promise.resolve(createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0));
       });
 
@@ -297,10 +298,11 @@ describe('IssuesClient', () => {
       await issuesClient.searchIssues({ projects: 'my-project' });
     });
 
-    it('sends `projects` query param for SonarQube Cloud US (sonarqube.us)', async () => {
+    it('sends `componentKeys` query param for SonarQube Cloud US (sonarqube.us)', async () => {
       const mockGet = mock((_endpoint: string, params?: MockParams) => {
-        expect(params?.projects).toBe('my-project');
+        expect(params?.componentKeys).toBe('my-project');
         expect(params?.components).toBeUndefined();
+        expect(params?.projects).toBeUndefined();
         return Promise.resolve(createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0));
       });
 
@@ -313,6 +315,7 @@ describe('IssuesClient', () => {
     it('sends `components` query param for on-premise SonarQube', async () => {
       const mockGet = mock((_endpoint: string, params?: MockParams) => {
         expect(params?.components).toBe('my-project');
+        expect(params?.componentKeys).toBeUndefined();
         expect(params?.projects).toBeUndefined();
         return Promise.resolve(createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0));
       });
@@ -326,6 +329,7 @@ describe('IssuesClient', () => {
     it('sends no project param when projects is not provided', async () => {
       const mockGet = mock((_endpoint: string, params?: MockParams) => {
         expect(params?.projects).toBeUndefined();
+        expect(params?.componentKeys).toBeUndefined();
         expect(params?.components).toBeUndefined();
         return Promise.resolve(createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0));
       });
@@ -334,6 +338,45 @@ describe('IssuesClient', () => {
       const issuesClient = new IssuesClient(client);
 
       await issuesClient.searchIssues({});
+    });
+
+    it('sends `sinceLeakPeriod` query param for SonarCloud', async () => {
+      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+        expect(params?.sinceLeakPeriod).toBe(true);
+        expect(params?.inNewCodePeriod).toBeUndefined();
+        return Promise.resolve(createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0));
+      });
+
+      const client = createMockClient(mockGet, 'https://sonarcloud.io');
+      const issuesClient = new IssuesClient(client);
+
+      await issuesClient.searchIssues({ projects: 'my-project', sinceLeakPeriod: true });
+    });
+
+    it('sends `inNewCodePeriod` query param for on-premise SonarQube', async () => {
+      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+        expect(params?.inNewCodePeriod).toBe(true);
+        expect(params?.sinceLeakPeriod).toBeUndefined();
+        return Promise.resolve(createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0));
+      });
+
+      const client = createMockClient(mockGet, 'https://sonarqube.example.com');
+      const issuesClient = new IssuesClient(client);
+
+      await issuesClient.searchIssues({ projects: 'my-project', sinceLeakPeriod: true });
+    });
+
+    it('sends no leak-period param when sinceLeakPeriod is not provided', async () => {
+      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+        expect(params?.sinceLeakPeriod).toBeUndefined();
+        expect(params?.inNewCodePeriod).toBeUndefined();
+        return Promise.resolve(createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0));
+      });
+
+      const client = createMockClient(mockGet);
+      const issuesClient = new IssuesClient(client);
+
+      await issuesClient.searchIssues({ projects: 'my-project' });
     });
 
     it('should pass pagination parameters', async () => {
