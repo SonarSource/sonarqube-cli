@@ -57,24 +57,19 @@ describe('projectsSearchCommand', () => {
   describe('error conditions', () => {
     it('returns an error result when page size is not positive', async () => {
       const result = await listProjects({ page: 1, pageSize: 0 }, mockCtx);
-      expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().message).toBe(
+      expect(result).toBeErrWith(
         `Invalid --page-size option: '0'. Must be an integer between 1 and 500`,
       );
     });
 
     it('returns an error result when page is not positive', async () => {
       const result = await listProjects({ page: 0, pageSize: 500 }, mockCtx);
-      expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().message).toBe(
-        `Invalid --page option: '0'. Must be an integer >= 1`,
-      );
+      expect(result).toBeErrWith(`Invalid --page option: '0'. Must be an integer >= 1`);
     });
 
     it('returns an error result when page size exceeds the maximum', async () => {
       const result = await listProjects({ page: 1, pageSize: MAX_PAGE_SIZE + 1 }, mockCtx);
-      expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().message).toBe(
+      expect(result).toBeErrWith(
         `Invalid --page-size option: '${MAX_PAGE_SIZE + 1}'. Must be an integer between 1 and 500`,
       );
     });
@@ -83,14 +78,14 @@ describe('projectsSearchCommand', () => {
       getSpy.mockReturnValue(errAsync(new Error('SonarQube API error: 401 Unauthorized')));
 
       const result = await listProjects(DEFAULT_OPTIONS, mockCtx);
-      expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().message).toBe('SonarQube API error: 401 Unauthorized');
+      expect(result).toBeErrWith('SonarQube API error: 401 Unauthorized');
     });
   });
 
   describe('successful execution', () => {
     it('prints JSON with empty projects array when no results', async () => {
-      await listProjects(DEFAULT_OPTIONS, mockCtx);
+      const result = await listProjects(DEFAULT_OPTIONS, mockCtx);
+      expect(result).toBeOkWith(undefined);
 
       const prints = fake.calls
         .filter((c) => c.method === 'print')
