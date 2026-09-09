@@ -72,7 +72,8 @@ export function fetchIssuesBreakdown(
   return promise;
 }
 
-async function searchIssuesBreakdown(
+/** Shared with `security-enrichment.ts`, which resolves its own `types`/`sinceLeakPeriod`. */
+export async function searchIssuesBreakdown(
   issuesClient: IssuesClient,
   params: AttachBreakdownsParams,
   condition: QualityGateConditionSummary,
