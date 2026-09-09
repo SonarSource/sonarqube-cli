@@ -256,7 +256,13 @@ export async function importHandler(
       console,
     );
     reportSkipped(skipped, console);
-    reportOutcome(succeeded, failed, skipped.length, buildProjectListUrl(auth.serverUrl, resolution.orgKey), console);
+    reportOutcome(
+      succeeded,
+      failed,
+      skipped.length,
+      buildProjectListUrl(auth.serverUrl, resolution.orgKey),
+      console,
+    );
     return;
   }
 
@@ -280,5 +286,11 @@ export async function importHandler(
   );
 
   const { succeeded, failed } = progress.finish();
-  reportOutcome(succeeded, failed, skipped.length, buildProjectListUrl(auth.serverUrl, resolution.orgKey), console);
+  reportOutcome(
+    succeeded,
+    failed,
+    skipped.length,
+    buildProjectListUrl(auth.serverUrl, resolution.orgKey),
+    console,
+  );
 }
