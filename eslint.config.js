@@ -2,6 +2,7 @@
 import tseslint from 'typescript-eslint';
 import prettierConfig from 'eslint-config-prettier';
 import headersPlugin from 'eslint-plugin-headers';
+import neverthrowPlugin from '@ninoseki/eslint-plugin-neverthrow';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
 
 const NO_DIRECT_FETCH_MESSAGE =
@@ -69,6 +70,23 @@ export default tseslint.config(
 
       // General best practices
       'no-console': 'warn',
+    },
+  },
+
+  // CLI-1086 note: catch a Result built (via a domain client, errAsync(), etc.) but never
+  // consumed — not mapped, chained, matched, or collapsed. `eslint-plugin-neverthrow` (the
+  // package usually recommended for this) hasn't published since 2021 and hard-crashes on
+  // this repo's ESLint 10 + typescript-eslint 8 (it reads context.parserServices, an API
+  // removed since); this fork (https://github.com/ninoseki/eslint-plugin-neverthrow) is the
+  // same rule kept working for current ESLint. Scoped to the files this spike PR actually
+  // converted rather than every `src/**/*.ts` file: a repo-wide rollout surfaces ~17
+  // pre-existing unconsumed Results in files this PR doesn't touch (CLI-844's own
+  // conversion), which is its own follow-up once more commands migrate under CLI-1086.
+  {
+    files: ['src/core/result.ts', 'src/core/commands/sonar-command.ts', 'src/commands/list/projects.ts'],
+    plugins: { neverthrow: neverthrowPlugin },
+    rules: {
+      'neverthrow/must-use-result': 'error',
     },
   },
 
