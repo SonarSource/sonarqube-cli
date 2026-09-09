@@ -30,10 +30,27 @@ import type {
   QualityGateConditionSummary,
   QualityGateMetricBreakdown,
 } from './condition-summary.ts';
+import { fetchDependencyRisksBreakdown } from './dependency-risks-enrichment.ts';
 import { fetchDuplicationsBreakdown } from './duplications-enrichment.ts';
 import type { IssuesBreakdownCache } from './issues-enrichment.ts';
 import { fetchIssuesBreakdown } from './issues-enrichment.ts';
 import { fetchWorstFileEntries } from './worst-file-entries.ts';
+
+const DEPENDENCY_RISK_KINDS = [
+  'any_issue',
+  'any_security',
+  'licensing',
+  'malware',
+  'vulnerability',
+];
+const DEPENDENCY_RISK_METRICS = DEPENDENCY_RISK_KINDS.flatMap((kind) => [
+  `sca_count_${kind}`,
+  `sca_rating_${kind}`,
+  `sca_severity_${kind}`,
+  `new_sca_count_${kind}`,
+  `new_sca_rating_${kind}`,
+  `new_sca_severity_${kind}`,
+]);
 
 /** Metric keys owned by each `--category` value, both overall and new-code variants. */
 const CATEGORY_METRICS: Record<string, string[]> = {
@@ -66,6 +83,7 @@ const CATEGORY_METRICS: Record<string, string[]> = {
     'sqale_rating',
     'new_maintainability_rating',
   ],
+  'dependency-risks': DEPENDENCY_RISK_METRICS,
 };
 
 /** Reverse lookup derived from `CATEGORY_METRICS`, for O(1) access by metric key. */
@@ -173,6 +191,8 @@ function fetchCategoryBreakdown(
       return fetchDuplicationsBreakdown(measuresClient, params, condition, metric);
     case 'issues':
       return fetchIssuesBreakdown(issuesClient, params, condition, issuesCache);
+    case 'dependency-risks':
+      return fetchDependencyRisksBreakdown(params, condition);
     default:
       return Promise.resolve(undefined);
   }
