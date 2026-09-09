@@ -189,10 +189,10 @@ describe('SonarHttpClient', () => {
     });
   });
 
-  describe('getOrNotFound', () => {
+  describe('getIfFound', () => {
     it('returns an error result instead of throwing on a transport failure', async () => {
       fetchSpy = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
-      const result = await client.getOrNotFound('/api/some/endpoint');
+      const result = await client.getIfFound('/api/some/endpoint');
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().message).toBe('ECONNREFUSED');
     });

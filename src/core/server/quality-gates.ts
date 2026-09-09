@@ -49,7 +49,7 @@ export class QualityGatesClient {
       queryParams.pullRequest = params.pullRequest;
     }
     return this.client
-      .getOrNotFound<ProjectStatusResponse>('/api/qualitygates/project_status', queryParams)
+      .getIfFound<ProjectStatusResponse>('/api/qualitygates/project_status', queryParams)
       .map((result) => result?.projectStatus ?? null);
   }
 }
