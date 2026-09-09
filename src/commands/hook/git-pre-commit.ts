@@ -23,7 +23,6 @@
 // Replaces the shell logic that was previously embedded in the git hook script.
 
 import { resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 import { discoverProject } from '@/core/project-info.ts';
@@ -66,14 +65,7 @@ export async function gitPreCommit(
   ctx: CommandInvocationContext,
 ): Promise<void> {
   const auth = await resolveAuth().catch(() => null);
-
-  // Validated up front, independent of staged files, so a misconfigured hook
-  // (--dependency-risks with no way to resolve a project) always fails loudly.
   const projectKey = await resolveDepRisksProjectKey(options, auth, ctx.console);
-
-  if (options.dependencyRisks && !projectKey) {
-    throw new InvalidOptionError('--dependency-risks requires -p <projectKey>.');
-  }
 
   const stagedFiles = files.length > 0 ? files : await getStagedFiles();
   if (stagedFiles.length === 0) return;
@@ -89,7 +81,7 @@ export async function gitPreCommit(
 
   await runCommitSecretsStage(stagedFiles, auth, ctx);
 
-  if (options.dependencyRisks && projectKey) {
+  if (options.dependencyRisks) {
     await runDepRisksStage({
       project: projectKey,
       changedFiles: stagedFiles,

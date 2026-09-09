@@ -47,7 +47,8 @@ export function resolveDepRisksArgs(
   const projectKey =
     typeof context.attrs?.projectKey === 'string' ? context.attrs.projectKey : undefined;
   if (!projectKey) {
-    return '';
+    // Unbaked key resolves dynamically via discoverProject() when the hook runs.
+    return ' --dependency-risks';
   }
   assertSafeSonarProjectKeyForHookScript(projectKey);
   return ` --dependency-risks -p ${shellQuote ? shellQuoteBash(projectKey) : projectKey}`;
