@@ -22,6 +22,10 @@
 // metadata (human-readable name, type, and type-aware formatted values) looked up from the
 // server's metric catalog.
 
+import type {
+  ScaIssueType,
+  Severity,
+} from '@/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import type { Metric, QualityGateCondition } from '@/core/server/types.ts';
 
 import { formatMetricValue } from './format-metric-value.ts';
@@ -35,6 +39,15 @@ export interface QualityGateBreakdownEntry {
 export interface DuplicationsBreakdownEntry extends QualityGateBreakdownEntry {
   blockCount?: number;
   duplicatesWith?: string[];
+}
+
+export interface DependencyRiskBreakdownEntry {
+  package: string;
+  version: string;
+  severity: Severity;
+  type: ScaIssueType;
+  key: string;
+  vulnerabilityId?: string;
 }
 
 export interface CoverageMetricBreakdown {
@@ -66,8 +79,18 @@ export interface IssuesMetricBreakdown {
   entries: IssuesBreakdownEntry[];
 }
 
+export interface DependencyRisksMetricBreakdown {
+  category: 'dependency-risks';
+  totalCount: number;
+  fetchedCount: number;
+  entries: DependencyRiskBreakdownEntry[];
+}
+
 export type QualityGateMetricBreakdown =
-  CoverageMetricBreakdown | DuplicationsMetricBreakdown | IssuesMetricBreakdown;
+  | CoverageMetricBreakdown
+  | DuplicationsMetricBreakdown
+  | IssuesMetricBreakdown
+  | DependencyRisksMetricBreakdown;
 
 export interface QualityGateConditionSummary {
   metric: string;

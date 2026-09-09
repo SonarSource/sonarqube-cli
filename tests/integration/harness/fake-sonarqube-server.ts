@@ -47,7 +47,7 @@ export interface IssueConfig {
   type?: string;
   line?: number;
   fixableByAgent?: boolean;
-  /** Marks the issue as introduced in the leak period, matched by `sinceLeakPeriod=true`. */
+  /** Marks the issue as introduced in the leak period, matched by `inNewCodePeriod=true`. */
   isNewCode?: boolean;
 }
 
@@ -87,6 +87,29 @@ interface DuplicationsShowErrorConfig {
   body?: string;
 }
 
+export interface DependencyRiskConfig {
+  key?: string;
+  packageName: string;
+  version: string;
+  severity: string;
+  type: 'MALWARE' | 'PROHIBITED_LICENSE' | 'VULNERABILITY';
+  status?: string;
+  vulnerabilityId?: string;
+  newlyIntroduced?: boolean;
+}
+
+const DEPENDENCY_RISK_SEVERITY_RANK: Record<string, number> = {
+  BLOCKER: 0,
+  HIGH: 1,
+  MEDIUM: 2,
+  LOW: 3,
+  INFO: 4,
+};
+
+function severityRank(severity: string): number {
+  return DEPENDENCY_RISK_SEVERITY_RANK[severity] ?? Number.MAX_SAFE_INTEGER;
+}
+
 interface ProjectData {
   key: string;
   name: string;
@@ -106,6 +129,7 @@ interface ProjectData {
   duplicationsErrorsByFile: Map<string, DuplicationsShowErrorConfig>;
   issuesSearchStatusCode?: number;
   issuesSearchStatusBody?: string;
+  dependencyRisks: DependencyRiskConfig[];
 }
 
 export interface DopRepositoryConfig {
@@ -136,6 +160,7 @@ export class ProjectBuilder {
   private readonly duplicationsErrorsByFile: Map<string, DuplicationsShowErrorConfig> = new Map();
   private issuesSearchStatusCode?: number;
   private issuesSearchStatusBody?: string;
+  private dependencyRisks: DependencyRiskConfig[] = [];
 
   constructor(projectKey: string) {
     this.projectKey = projectKey;
@@ -281,6 +306,11 @@ export class ProjectBuilder {
     return this;
   }
 
+  withDependencyRisks(risks: DependencyRiskConfig[]): this {
+    this.dependencyRisks = risks;
+    return this;
+  }
+
   getData(): ProjectData {
     return {
       key: this.projectKey,
@@ -301,6 +331,7 @@ export class ProjectBuilder {
       duplicationsErrorsByFile: this.duplicationsErrorsByFile,
       issuesSearchStatusCode: this.issuesSearchStatusCode,
       issuesSearchStatusBody: this.issuesSearchStatusBody,
+      dependencyRisks: this.dependencyRisks,
     };
   }
 }
@@ -372,7 +403,7 @@ export class FakeSonarQubeServerBuilder {
   private readonly privateProjectsEntitlements: Map<string, boolean> = new Map();
   private validToken?: string;
   private systemStatusCode = 200;
-  private systemVersion = '9.9.0.00001';
+  private systemVersion = '25.1.0.102122';
   private memberOrganizations: Organization[] = [];
   private memberOrganizationsTotal?: number;
   private visibleOrganizations: Organization[] = [];
@@ -787,6 +818,7 @@ export class FakeSonarQubeServerBuilder {
       hasProvisionProjects,
       boundProjectsStatusCode,
       analyzedProjectKeys,
+      treatAsCloud,
     } = this;
     const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
@@ -884,8 +916,10 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/api/issues/search') {
-          // SonarQube Server uses `components`, SonarQube Cloud uses `projects`
-          const projectKey = query.components ?? query.projects;
+          // SonarQube Server uses `components`, SonarQube Cloud uses `componentKeys` — accept
+          // only the spelling the current mode actually uses, so a client sending the wrong one
+          // fails the lookup instead of being silently tolerated.
+          const projectKey = treatAsCloud ? query.componentKeys : query.components;
           const projectData = projectKey ? projects.get(projectKey) : undefined;
 
           if (projectData?.issuesSearchStatusCode !== undefined) {
@@ -898,7 +932,10 @@ export class FakeSonarQubeServerBuilder {
           const severityFilter = query.severities ? query.severities.split(',') : null;
           const typeFilter = query.types ? query.types.split(',') : null;
           const resolvedFilter = query.resolved;
-          const sinceLeakPeriodFilter = query.sinceLeakPeriod === 'true';
+          // SonarQube Server uses `inNewCodePeriod`, SonarQube Cloud uses `sinceLeakPeriod`
+          const sinceLeakPeriodFilter = treatAsCloud
+            ? query.sinceLeakPeriod === 'true'
+            : query.inNewCodePeriod === 'true';
 
           const fixableByAgentFilter = query.fixableByAgent;
 
@@ -1062,6 +1099,48 @@ export class FakeSonarQubeServerBuilder {
           return new Response(JSON.stringify({ duplications, files }), {
             headers: { 'Content-Type': 'application/json' },
           });
+        }
+
+        if (path === '/sca/issues-releases' || path === '/api/v2/sca/issues-releases') {
+          const projectKey = query.projectKey;
+          const projectData = projectKey ? projects.get(projectKey) : undefined;
+          const risks = projectData?.dependencyRisks ?? [];
+
+          const requestedTypes = new Set((query.types ?? '').split(',').filter(Boolean));
+          const requestedStatuses = new Set((query.statuses ?? '').split(',').filter(Boolean));
+          const newlyIntroducedOnly = query.newlyIntroduced === 'true';
+
+          const filtered = risks.filter((risk) => {
+            if (requestedTypes.size > 0 && !requestedTypes.has(risk.type)) {
+              return false;
+            }
+            if (requestedStatuses.size > 0 && !requestedStatuses.has(risk.status ?? 'OPEN')) {
+              return false;
+            }
+            return !newlyIntroducedOnly || (risk.newlyIntroduced ?? false);
+          });
+
+          const sorted =
+            query.sort === '-severity'
+              ? [...filtered].sort((a, b) => severityRank(a.severity) - severityRank(b.severity))
+              : filtered;
+
+          const pageSize = Number.parseInt(query.pageSize ?? '500', 10);
+          const paged = sorted.slice(0, pageSize);
+
+          return new Response(
+            JSON.stringify({
+              issuesReleases: paged.map((risk, i) => ({
+                key: risk.key ?? `RISK-${i + 1}`,
+                severity: risk.severity,
+                type: risk.type,
+                vulnerabilityId: risk.vulnerabilityId ?? null,
+                release: { packageName: risk.packageName, version: risk.version },
+              })),
+              page: { pageIndex: 1, pageSize, total: filtered.length },
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
         }
 
         // sonar-context-augmentation calls /api/project_branches/list to

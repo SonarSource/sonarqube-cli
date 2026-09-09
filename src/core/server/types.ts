@@ -234,3 +234,21 @@ export interface DuplicationsShowResponse {
   /** Keyed by block `_ref` - a ref for a peer that isn't browsable or was since removed has no entry. */
   files: Record<string, DuplicationsShowFile | undefined>;
 }
+
+export interface ScaIssueReleaseInfo {
+  packageName: string;
+  version: string;
+}
+
+export interface ScaIssueRelease {
+  key: string;
+  severity: string;
+  type: string;
+  vulnerabilityId: string | null;
+  release: ScaIssueReleaseInfo;
+}
+
+export interface ScaIssuesReleasesResponse {
+  issuesReleases: ScaIssueRelease[];
+  page: { pageIndex: number; pageSize: number; total: number };
+}

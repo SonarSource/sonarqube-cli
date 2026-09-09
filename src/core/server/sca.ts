@@ -21,9 +21,26 @@
 // Sonar Advanced Security (SCA) feature-enablement API wrapper.
 
 import { okAsync, type ResultAsync } from '../result.ts';
-import type { SonarHttpClient } from './http-client.ts';
+import type { HttpClientError } from './errors.ts';
+import type { QueryParams, SonarHttpClient } from './http-client.ts';
+import type { ScaIssueRelease, ScaIssuesReleasesResponse } from './types.ts';
 
 export type ScaEnablement = 'enabled' | 'not_enabled' | 'check_failed';
+
+export interface GetWorstIssuesReleasesParams {
+  projectKey: string;
+  types: string[];
+  newlyIntroduced?: boolean;
+  top: number;
+  branch?: string;
+  pullRequest?: string;
+  orgKey?: string;
+}
+
+export interface GetWorstIssuesReleasesResult {
+  issuesReleases: ScaIssueRelease[];
+  totalCount: number;
+}
 
 export class ScaClient {
   private readonly client: SonarHttpClient;
@@ -65,5 +82,36 @@ export class ScaClient {
     return this.getScaEnablement(connectionType, orgKey).map(
       (enablement) => enablement === 'enabled',
     );
+  }
+
+  getWorstIssuesReleases(
+    params: GetWorstIssuesReleasesParams,
+  ): ResultAsync<GetWorstIssuesReleasesResult, HttpClientError> {
+    const endpoint = this.client.isCloud ? '/sca/issues-releases' : '/api/v2/sca/issues-releases';
+    const queryParams: QueryParams = {
+      projectKey: params.projectKey,
+      types: params.types.join(','),
+      statuses: 'OPEN,CONFIRM',
+      sort: '-severity',
+      pageSize: params.top,
+    };
+    if (this.client.isCloud && params.orgKey) {
+      queryParams.organization = params.orgKey;
+    }
+    if (params.newlyIntroduced) {
+      queryParams.newlyIntroduced = true;
+    }
+    if (params.branch) {
+      queryParams.branchKey = params.branch;
+    }
+    if (params.pullRequest) {
+      queryParams.pullRequestKey = params.pullRequest;
+    }
+    return this.client
+      .get<ScaIssuesReleasesResponse>(endpoint, queryParams, this.client.apiHostFor(endpoint))
+      .map((response) => ({
+        issuesReleases: response.issuesReleases,
+        totalCount: response.page.total,
+      }));
   }
 }
