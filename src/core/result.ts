@@ -34,7 +34,9 @@ export { Err, err, errAsync, Ok, ok, okAsync, Result, ResultAsync } from 'nevert
  * Duck-types the resolved value of an awaited `ResultAsync` (an `Ok`/`Err` instance).
  * Lets a caller that accepts either a plain `Promise<void>` handler or a migrated
  * `ResultAsync<void, Error>` one (CLI-1086) tell the two shapes apart before deciding
- * whether there is anything left to collapse via `orThrow()`.
+ * whether there is anything left to collapse — via `match()`, since `orThrow()`'s
+ * `Ok`/`Err` overloads only apply once a branch is already narrowed, not on the
+ * resolved `Ok<T, Error> | Err<T, Error>` union this returns.
  */
 export function isResult(value: unknown): value is Result<unknown, Error> {
   return (
