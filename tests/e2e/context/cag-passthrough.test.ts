@@ -75,6 +75,7 @@ describe('sonar-context-augmentation passthrough behaviors (offline, real binary
     const server = await harness
       .newFakeServer()
       .withAuthToken(TEST_TOKEN)
+      .asSonarCloud()
       .withProject(SEEDED_PROJECT_KEY)
       .withVortexEntitlement(ALLOWLISTED_CAG_ORG_KEY, `${ALLOWLISTED_CAG_ORG_KEY}-uuid-v4`)
       .withVortexEntitlement(SEEDED_ORG_KEY, `${SEEDED_ORG_KEY}-uuid-v4`)
@@ -185,6 +186,7 @@ describe('sonar-context-augmentation passthrough behaviors (offline, real binary
       },
     );
     expect(result.exitCode, result.stderr).toBe(0);
+    expect(result.stdout.trim().length).toBeGreaterThan(0);
     return JSON.parse(result.stdout.trim()) as ClaudeSessionStartOutput;
   }
 
