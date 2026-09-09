@@ -49,45 +49,43 @@ function resolveRiskTypes(metricKey: string): ScaIssueType[] | undefined {
   return RISK_TYPES_BY_METRIC_SUFFIX[suffix];
 }
 
-export function fetchDependencyRisksBreakdown(
+export async function fetchDependencyRisksBreakdown(
   params: AttachBreakdownsParams,
   condition: QualityGateConditionSummary,
 ): Promise<QualityGateMetricBreakdown | undefined> {
   const types = resolveRiskTypes(condition.metric);
   if (!types) {
-    return Promise.resolve(undefined);
+    return undefined;
   }
-  const scaClient = new ScaClient(params.client);
-  return scaClient
-    .getWorstIssuesReleases({
-      projectKey: params.projectKey,
-      types,
-      newlyIntroduced: isNewCodeMetric(condition.metric),
-      top: params.top,
-      branch: params.branch,
-      pullRequest: params.pullRequest,
-      orgKey: params.orgKey,
-    })
-    .match(
-      ({ issuesReleases, totalCount }) => {
-        const entries = issuesReleases
-          .map(toBreakdownEntry)
-          .filter((entry): entry is DependencyRiskBreakdownEntry => entry !== undefined);
-        if (entries.length === 0) {
-          return undefined;
-        }
-        return {
-          category: 'dependency-risks' as const,
-          totalCount,
-          fetchedCount: entries.length,
-          entries,
-        };
-      },
-      (error) => {
-        logger.debug(`Failed to build quality gate breakdown for '${condition.metric}'`, error);
-        return undefined;
-      },
-    );
+  try {
+    const scaClient = new ScaClient(params.client);
+    const { issuesReleases, totalCount } = await scaClient
+      .getWorstIssuesReleases({
+        projectKey: params.projectKey,
+        types,
+        newlyIntroduced: isNewCodeMetric(condition.metric),
+        top: params.top,
+        branch: params.branch,
+        pullRequest: params.pullRequest,
+        orgKey: params.orgKey,
+      })
+      .orThrow();
+    const entries = issuesReleases
+      .map(toBreakdownEntry)
+      .filter((entry): entry is DependencyRiskBreakdownEntry => entry !== undefined);
+    if (entries.length === 0) {
+      return undefined;
+    }
+    return {
+      category: 'dependency-risks',
+      totalCount,
+      fetchedCount: entries.length,
+      entries,
+    };
+  } catch (error) {
+    logger.debug(`Failed to build quality gate breakdown for '${condition.metric}'`, error);
+    return undefined;
+  }
 }
 
 function toBreakdownEntry(issueRelease: ScaIssueRelease): DependencyRiskBreakdownEntry | undefined {
