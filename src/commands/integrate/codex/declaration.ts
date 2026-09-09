@@ -23,6 +23,7 @@ import { join } from 'node:path';
 import type {
   IntegrationContext,
   IntegrationDeclaration,
+  ResourceDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
 import {
@@ -44,7 +45,11 @@ import {
   SECRETS_PROMPT_FEATURE_BENEFIT,
   SECRETS_PROMPT_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
-import { createContextAugmentationSubfeature } from '../_common/features/context-augmentation-feature.ts';
+import {
+  createContextAugmentationSubfeature,
+  SESSION_START_SCRIPT_REL,
+  VORTEX_HOOK_MARKER,
+} from '../_common/features/context-augmentation-feature.ts';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
   createSqaaInstructionsSnippet,
@@ -70,8 +75,10 @@ const HOOKS_FILE = 'hooks.json';
 const AGENTS_MD_FILE = 'AGENTS.md';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 const POSTTOOL_SQAA_SCRIPT_REL = 'sonar-sqaa/build-scripts/posttool-sqaa';
+const SESSION_START_CONTEXT_LIMIT = 5_000;
 
 export const CODEX_INTEGRATION_ID = 'codex';
+export const CODEX_HOOKS_CONFIG_RESOURCE_ID = 'codex-hooks-config';
 const CODEX_DISPLAY_NAME = 'Codex';
 
 export interface CodexIntegrationOptions extends IntegrateAgentOptions {
@@ -110,13 +117,19 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
         },
       ],
     }),
-    createVortexFeature<CodexIntegrationOptions>([
-      createSqaaHookSubfeature(),
-      createSqaaInstructionsSubfeature([createSqaaInstructionsSnippet(resolveCodexAgentsMdPath)]),
-      createContextAugmentationSubfeature<CodexIntegrationOptions>({
-        targetPath: resolveCodexSkillPath,
-      }),
-    ]),
+    createVortexFeature<CodexIntegrationOptions>(
+      [
+        createSqaaHookSubfeature(),
+        createSqaaInstructionsSubfeature([createSqaaInstructionsSnippet(resolveCodexAgentsMdPath)]),
+        createContextAugmentationSubfeature<CodexIntegrationOptions>({
+          agent: 'codex',
+          scriptPath: (context) =>
+            resolveAgentHookScriptPath(context, CODEX_CONFIG_DIR, SESSION_START_SCRIPT_REL),
+          hookConfigResource: createCagHookConfigResource(),
+        }),
+      ],
+      resolveCodexSkillPath,
+    ),
     {
       id: 'secrets-instructions',
       displayName: 'secrets-on-read instructions',
@@ -162,6 +175,37 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
     },
   ],
 };
+
+function createCagHookConfigResource(): ResourceDeclaration {
+  return jsonPatch({
+    id: CODEX_HOOKS_CONFIG_RESOURCE_ID,
+    displayName: 'Codex session start hook configuration',
+    targetPath: resolveCodexHooksPath,
+    defaultValue: { hooks: {} },
+    patch: (document, context) =>
+      upsertAgentHooks(document, [
+        createSessionStartHookEntry(context, 'SessionStart', 'startup|clear'),
+        createSessionStartHookEntry(context, 'SubagentStart', undefined),
+      ]),
+    removePatch: (document) => removeAgentHooks(document, [VORTEX_HOOK_MARKER]),
+  });
+}
+
+function createSessionStartHookEntry(
+  context: IntegrationContext,
+  eventType: string,
+  matcher: string | undefined,
+) {
+  return createAgentHookEntry(
+    context,
+    CODEX_CONFIG_DIR,
+    eventType,
+    matcher,
+    VORTEX_HOOK_MARKER,
+    SESSION_START_SCRIPT_REL,
+    { additionalContextLimit: SESSION_START_CONTEXT_LIMIT },
+  );
+}
 
 function createSqaaHookSubfeature(): SubfeatureDeclaration<CodexIntegrationOptions> {
   return {

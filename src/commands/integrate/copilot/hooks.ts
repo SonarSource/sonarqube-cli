@@ -20,8 +20,9 @@
 
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 
+import type { IntegrationContext } from '@/core/framework/features';
 import type { Console } from '@/core/ui/console.ts';
 
 import { readOrInitJson, SONAR_SECRETS_MARKER } from '../_common/hooks.ts';
@@ -67,7 +68,7 @@ export async function detectGlobalSecretsHook(console: Console): Promise<string 
   const parsed = await readOrInitJson<HooksJson>(hooksJsonPath, { version: 1, hooks: {} });
   const entries = parsed.hooks?.preToolUse;
   const matchedEntry = Array.isArray(entries)
-    ? entries.find((e) => entryReferencesSonarSecrets(e))
+    ? entries.find((e) => entryReferencesMarker(e, SONAR_SECRETS_MARKER))
     : undefined;
   if (!matchedEntry) return undefined;
 
@@ -82,10 +83,66 @@ export async function detectGlobalSecretsHook(console: Console): Promise<string 
   return scriptPath;
 }
 
-export function entryReferencesSonarSecrets(entry: HookCommandEntry): boolean {
-  return Boolean(
-    entry.bash?.includes(SONAR_SECRETS_MARKER) || entry.powershell?.includes(SONAR_SECRETS_MARKER),
-  );
+function entryReferencesMarker(entry: HookCommandEntry, marker: string): boolean {
+  return Boolean(entry.bash?.includes(marker) || entry.powershell?.includes(marker));
+}
+
+/** Copilot resolves hook commands from the repository root, so project scope uses a relative path. */
+export function resolveCopilotHookCommandPath(
+  context: IntegrationContext,
+  scriptPath: string,
+): string {
+  return context.scope === 'global' ? scriptPath : relative(context.targetRoot, scriptPath);
+}
+
+export function buildCopilotHookEntry(commandPath: string): HookCommandEntry {
+  return process.platform === 'win32'
+    ? {
+        type: 'command',
+        timeoutSec: HOOK_TIMEOUT_SEC,
+        powershell: commandPath.replaceAll('\\', '/'),
+      }
+    : { type: 'command', timeoutSec: HOOK_TIMEOUT_SEC, bash: commandPath };
+}
+
+/** Idempotent: replaces any existing entries owned by the same marker. */
+export function upsertCopilotHooks(
+  document: unknown,
+  marker: string,
+  entries: Record<string, HookCommandEntry>,
+): HooksJson {
+  const hooksJson = toHooksJson(document);
+  hooksJson.hooks ??= {};
+
+  for (const [eventType, entry] of Object.entries(entries)) {
+    const existing = hooksJson.hooks[eventType] ?? [];
+    hooksJson.hooks[eventType] = [
+      ...existing.filter((candidate) => !entryReferencesMarker(candidate, marker)),
+      entry,
+    ];
+  }
+
+  return hooksJson;
+}
+
+/** Idempotent inverse of {@link upsertCopilotHooks} for the same markers. */
+export function removeCopilotHooks(document: unknown, markers: string[]): HooksJson {
+  const hooksJson = toHooksJson(document);
+  if (!hooksJson.hooks) {
+    return hooksJson;
+  }
+
+  const hooks: NonNullable<HooksJson['hooks']> = {};
+  for (const [eventType, entries] of Object.entries(hooksJson.hooks)) {
+    const filtered = (entries ?? []).filter(
+      (entry) => !markers.some((marker) => entryReferencesMarker(entry, marker)),
+    );
+    if (filtered.length > 0) {
+      hooks[eventType] = filtered;
+    }
+  }
+
+  return { ...hooksJson, hooks };
 }
 
 function toHooksJson(document: unknown): HooksJson {
@@ -98,26 +155,6 @@ function toHooksJson(document: unknown): HooksJson {
     version: typeof json.version === 'number' ? json.version : 1,
     hooks: json.hooks ? { ...json.hooks } : {},
   };
-}
-
-/** Idempotent inverse of Copilot pre-tool-use hook upsert for sonar-secrets. */
-export function removeCopilotHookConfig(document: unknown): HooksJson {
-  const hooksJson = toHooksJson(document);
-  if (!hooksJson.hooks?.preToolUse) {
-    return hooksJson;
-  }
-
-  const preToolUse = hooksJson.hooks.preToolUse.filter(
-    (entry) => !entryReferencesSonarSecrets(entry),
-  );
-  const hooks = { ...hooksJson.hooks };
-  if (preToolUse.length > 0) {
-    hooks.preToolUse = preToolUse;
-  } else {
-    delete hooks.preToolUse;
-  }
-
-  return { ...hooksJson, hooks };
 }
 
 export function hookScriptName(): string {

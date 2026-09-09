@@ -21,7 +21,11 @@
 import { join } from 'node:path';
 
 import { CURSOR_CONFIG_DIR } from '@/core/config-constants.ts';
-import type { IntegrationContext, IntegrationDeclaration } from '@/core/framework/features';
+import type {
+  IntegrationContext,
+  IntegrationDeclaration,
+  ResourceDeclaration,
+} from '@/core/framework/features';
 import {
   askUser,
   isFeatureInstalledGloballyForProject,
@@ -39,7 +43,11 @@ import {
   SECRETS_COMBINED_FEATURE_BENEFIT,
   SECRETS_COMBINED_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
-import { createContextAugmentationSubfeature } from '../_common/features/context-augmentation-feature.ts';
+import {
+  createContextAugmentationSubfeature,
+  SESSION_START_SCRIPT_REL,
+  VORTEX_HOOK_MARKER,
+} from '../_common/features/context-augmentation-feature.ts';
 import {
   resolveAgentHooksConfigPath,
   secretsScanningExample,
@@ -65,6 +73,7 @@ const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pre-tool-use-secrets';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 
 export const CURSOR_INTEGRATION_ID = 'cursor';
+export const CURSOR_HOOKS_CONFIG_RESOURCE_ID = 'cursor-hooks-config';
 
 const RULES_DIR = 'rules';
 const SQAA_RULE_FILE = 'sonar-agentic-analysis.mdc';
@@ -105,6 +114,22 @@ function resolveCursorSqaaRulePath(context: IntegrationContext): string {
 // skill Codex/Antigravity already install there.
 function resolveCursorCagSkillPath(context: IntegrationContext): string {
   return join(context.targetRoot, AGENTS_SKILLS_DIR, CAG_SKILL_NAME, 'SKILL.md');
+}
+
+function createSessionStartHookConfigResource(): ResourceDeclaration {
+  return jsonPatch({
+    id: CURSOR_HOOKS_CONFIG_RESOURCE_ID,
+    displayName: 'Cursor session start hook configuration',
+    targetPath: resolveCursorHooksJsonPath,
+    defaultValue: { version: 1, hooks: {} },
+    patch: (document, context) =>
+      upsertCursorHooks(document, [
+        buildCursorHookEntry(context, CURSOR_CONFIG_DIR, 'sessionStart', SESSION_START_SCRIPT_REL, {
+          marker: VORTEX_HOOK_MARKER,
+        }),
+      ]),
+    removePatch: (document) => removeCursorHooks(document, [VORTEX_HOOK_MARKER]),
+  });
 }
 
 function resolveCursorHooksJsonPath(context: IntegrationContext): string {
@@ -196,14 +221,20 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
         }),
       ],
     },
-    createVortexFeature<CursorIntegrationOptions>([
-      createSqaaInstructionsSubfeature([
-        createSqaaInstructionsRule(resolveCursorSqaaRulePath, buildCursorAlwaysOnRule),
-      ]),
-      createContextAugmentationSubfeature<CursorIntegrationOptions>({
-        targetPath: resolveCursorCagSkillPath,
-      }),
-    ]),
+    createVortexFeature<CursorIntegrationOptions>(
+      [
+        createSqaaInstructionsSubfeature([
+          createSqaaInstructionsRule(resolveCursorSqaaRulePath, buildCursorAlwaysOnRule),
+        ]),
+        createContextAugmentationSubfeature<CursorIntegrationOptions>({
+          agent: 'cursor',
+          scriptPath: (context) =>
+            resolveAgentHookScriptPath(context, CURSOR_CONFIG_DIR, SESSION_START_SCRIPT_REL),
+          hookConfigResource: createSessionStartHookConfigResource(),
+        }),
+      ],
+      resolveCursorCagSkillPath,
+    ),
     {
       id: 'mcp-server',
       displayName: 'MCP server',

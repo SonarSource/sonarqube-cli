@@ -18,9 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 
-import type { IntegrationContext, IntegrationDeclaration } from '@/core/framework/features';
+import type {
+  IntegrationContext,
+  IntegrationDeclaration,
+  ResourceDeclaration,
+} from '@/core/framework/features';
 import {
   askUser,
   jsonPatch,
@@ -40,27 +44,35 @@ import {
   SECRETS_PROMPT_FEATURE_BENEFIT,
   SECRETS_PROMPT_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
-import { createContextAugmentationSubfeature } from '../_common/features/context-augmentation-feature.ts';
+import {
+  createContextAugmentationSubfeature,
+  SESSION_START_SCRIPT_REL,
+  VORTEX_HOOK_MARKER,
+} from '../_common/features/context-augmentation-feature.ts';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
   createSqaaInstructionsSnippet,
   createSqaaInstructionsSubfeature,
 } from '../_common/features/sqaa-instructions-feature.ts';
-import { buildUnixHookScript, buildWindowsHookScript } from '../_common/hooks.ts';
+import {
+  buildUnixHookScript,
+  buildWindowsHookScript,
+  hookScriptExtension,
+  SONAR_SECRETS_MARKER,
+} from '../_common/hooks.ts';
 import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates.ts';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
 import {
-  entryReferencesSonarSecrets,
-  HOOK_TIMEOUT_SEC,
-  type HookCommandEntry,
+  buildCopilotHookEntry,
   HOOKS_JSON,
   hookScriptName,
-  type HooksJson,
   PROJECT_HOOKS_REL_DIR,
-  removeCopilotHookConfig,
+  removeCopilotHooks,
+  resolveCopilotHookCommandPath,
   SCRIPT_REL_DIR,
+  upsertCopilotHooks,
 } from './hooks.ts';
 import {
   globalCopilotInstructionsExist,
@@ -70,6 +82,7 @@ import {
 } from './instructions.ts';
 
 export const COPILOT_INTEGRATION_ID = 'copilot-cli';
+export const COPILOT_HOOKS_CONFIG_RESOURCE_ID = 'copilot-hooks-config';
 const COPILOT_DISPLAY_NAME = 'Copilot';
 
 export interface CopilotIntegrationOptions extends IntegrateAgentOptions {
@@ -109,8 +122,13 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
           displayName: 'Copilot hooks configuration',
           targetPath: resolveHooksJsonPath,
           defaultValue: { version: 1, hooks: {} },
-          patch: (document, context) => upsertHookConfig(document, context),
-          removePatch: (document) => removeCopilotHookConfig(document),
+          patch: (document, context) =>
+            upsertCopilotHooks(document, SONAR_SECRETS_MARKER, {
+              preToolUse: buildCopilotHookEntry(
+                resolveCopilotHookCommandPath(context, resolveCopilotHookScriptPath(context)),
+              ),
+            }),
+          removePatch: (document) => removeCopilotHooks(document, [SONAR_SECRETS_MARKER]),
         }),
       ],
     },
@@ -136,12 +154,17 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
         }),
       ],
     },
-    createVortexFeature<CopilotIntegrationOptions>([
-      createSqaaInstructionsSubfeature([createSqaaInstructionsSnippet(resolveInstructionsPath)]),
-      createContextAugmentationSubfeature<CopilotIntegrationOptions>({
-        targetPath: resolveCopilotSkillPath,
-      }),
-    ]),
+    createVortexFeature<CopilotIntegrationOptions>(
+      [
+        createSqaaInstructionsSubfeature([createSqaaInstructionsSnippet(resolveInstructionsPath)]),
+        createContextAugmentationSubfeature<CopilotIntegrationOptions>({
+          agent: 'copilot',
+          scriptPath: resolveCagHookScriptPath,
+          hookConfigResource: createCagHookConfigResource(),
+        }),
+      ],
+      resolveCopilotSkillPath,
+    ),
     {
       id: 'mcp-server',
       displayName: 'MCP server',
@@ -162,8 +185,31 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
   ],
 };
 
+function createCagHookConfigResource(): ResourceDeclaration {
+  return jsonPatch({
+    id: COPILOT_HOOKS_CONFIG_RESOURCE_ID,
+    displayName: 'Copilot session start hook configuration',
+    targetPath: resolveHooksJsonPath,
+    defaultValue: { version: 1, hooks: {} },
+    patch: (document, context) => {
+      const entry = buildCopilotHookEntry(
+        resolveCopilotHookCommandPath(context, resolveCagHookScriptPath(context)),
+      );
+      return upsertCopilotHooks(document, VORTEX_HOOK_MARKER, {
+        sessionStart: entry,
+        subagentStart: entry,
+      });
+    },
+    removePatch: (document) => removeCopilotHooks(document, [VORTEX_HOOK_MARKER]),
+  });
+}
+
 function resolveCopilotHookScriptPath(context: IntegrationContext): string {
   return join(resolveHooksDir(context), SCRIPT_REL_DIR, hookScriptName());
+}
+
+function resolveCagHookScriptPath(context: IntegrationContext): string {
+  return join(resolveHooksDir(context), `${SESSION_START_SCRIPT_REL}${hookScriptExtension()}`);
 }
 
 function resolveHooksJsonPath(context: IntegrationContext): string {
@@ -188,49 +234,6 @@ function resolveHooksDir(context: IntegrationContext): string {
   return context.scope === 'global'
     ? join(context.targetRoot, '.copilot', 'hooks')
     : join(context.targetRoot, PROJECT_HOOKS_REL_DIR);
-}
-
-function upsertHookConfig(document: unknown, context: IntegrationContext): HooksJson {
-  const hooksJson = toHooksJson(document);
-  hooksJson.hooks ??= {};
-
-  const existing = hooksJson.hooks.preToolUse ?? [];
-  hooksJson.hooks.preToolUse = [
-    ...existing.filter((entry) => !entryReferencesSonarSecrets(entry)),
-    createHookCommandEntry(context),
-  ];
-
-  return hooksJson;
-}
-
-function toHooksJson(document: unknown): HooksJson {
-  if (!document || typeof document !== 'object' || Array.isArray(document)) {
-    return { version: 1, hooks: {} };
-  }
-
-  const json = document as Partial<HooksJson>;
-  return {
-    version: typeof json.version === 'number' ? json.version : 1,
-    hooks: json.hooks ? { ...json.hooks } : {},
-  };
-}
-
-function createHookCommandEntry(context: IntegrationContext): HookCommandEntry {
-  const scriptPath = resolveCopilotHookScriptPath(context);
-  const commandPath =
-    context.scope === 'global' ? scriptPath : relative(context.targetRoot, scriptPath);
-
-  return process.platform === 'win32'
-    ? {
-        type: 'command',
-        timeoutSec: HOOK_TIMEOUT_SEC,
-        powershell: commandPath.replaceAll('\\', '/'),
-      }
-    : {
-        type: 'command',
-        timeoutSec: HOOK_TIMEOUT_SEC,
-        bash: commandPath,
-      };
 }
 
 function getDesiredCopilotMcpConfig(context: IntegrationContext) {

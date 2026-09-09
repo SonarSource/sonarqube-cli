@@ -38,15 +38,15 @@ export const CURSOR_HOOK_MATCHERS: Record<string, string> = {
   preToolUse: 'Read',
 };
 
-export function resolveCursorHookMatcher(eventType: string): string {
-  return CURSOR_HOOK_MATCHERS[eventType] ?? '.*';
+export function resolveCursorHookMatcher(eventType: string): string | undefined {
+  return CURSOR_HOOK_MATCHERS[eventType];
 }
 
 export interface CursorFlatHookEntry {
   command: string;
-  matcher: string;
+  matcher?: string; // omitted for events with no matcher, e.g. sessionStart
   timeout: number;
-  failClosed: boolean;
+  failClosed?: boolean;
 }
 
 export interface CursorHooksDocument {
@@ -61,24 +61,31 @@ export interface ManagedCursorHookEntry {
   entry: CursorFlatHookEntry;
 }
 
+export interface CursorHookEntryOptions {
+  marker?: string;
+  failClosed?: boolean;
+}
+
 /** Build a managed Cursor hook entry for a given event and script. */
 export function buildCursorHookEntry(
   context: IntegrationContext,
   configDir: string,
   eventType: string,
   scriptPath: string,
-  failClosed = false,
+  options: CursorHookEntryOptions = {},
 ): ManagedCursorHookEntry {
-  return {
-    eventType,
-    marker: SONAR_SECRETS_MARKER,
-    entry: {
-      command: resolveAgentHookCommand(context, configDir, scriptPath),
-      matcher: resolveCursorHookMatcher(eventType),
-      timeout: HOOK_TIMEOUT_SEC,
-      failClosed,
-    },
+  const { marker = SONAR_SECRETS_MARKER, failClosed = false } = options;
+  const matcher = resolveCursorHookMatcher(eventType);
+  const entry: CursorFlatHookEntry = {
+    command: resolveAgentHookCommand(context, configDir, scriptPath),
+    timeout: HOOK_TIMEOUT_SEC,
+    failClosed,
   };
+  if (matcher !== undefined) {
+    entry.matcher = matcher;
+  }
+
+  return { eventType, marker, entry };
 }
 
 /**
