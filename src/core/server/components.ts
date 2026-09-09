@@ -22,8 +22,9 @@
 
 import { errAsync, okAsync, type ResultAsync } from '../result.ts';
 import type { HttpClientError } from './errors.ts';
-import type { SonarHttpClient } from './http-client.ts';
+import type { QueryParams, SonarHttpClient } from './http-client.ts';
 import type { SettingsValue } from './settings-value.ts';
+import type { ComponentsTreeResponse } from './types.ts';
 
 /** Thrown by `getProjectSettings` when the project key does not resolve to a component. */
 export class ProjectNotFoundError extends Error {
@@ -41,13 +42,44 @@ export class ComponentsClient {
   }
 
   /**
+   * Search a project's components by name via `GET /api/components/tree`. `q` matches a
+   * component's own name (basename).
+   */
+  searchComponentsByName(
+    projectKey: string,
+    q: string,
+    qualifiers: string,
+    ps: number,
+    scope: { branch?: string; pullRequest?: string } = {},
+  ): ResultAsync<ComponentsTreeResponse, HttpClientError> {
+    const queryParams: QueryParams = { component: projectKey, q, qualifiers, ps };
+    if (scope.branch) {
+      queryParams.branch = scope.branch;
+    }
+    if (scope.pullRequest) {
+      queryParams.pullRequest = scope.pullRequest;
+    }
+    return this.client.get<ComponentsTreeResponse>('/api/components/tree', queryParams);
+  }
+
+  /**
    * Check if component (project) exists. Only a 404 is treated as "missing" - every
    * other failure (auth, rate limit, outage, network error) propagates as its normal
    * typed error instead of being reported as a missing component.
    */
-  componentExists(projectKey: string): ResultAsync<boolean, HttpClientError> {
+  componentExists(
+    componentKey: string,
+    scope: { branch?: string; pullRequest?: string } = {},
+  ): ResultAsync<boolean, HttpClientError> {
+    const queryParams: QueryParams = { component: componentKey };
+    if (scope.branch) {
+      queryParams.branch = scope.branch;
+    }
+    if (scope.pullRequest) {
+      queryParams.pullRequest = scope.pullRequest;
+    }
     return this.client
-      .getOrNotFound('/api/components/show', { component: projectKey })
+      .getOrNotFound('/api/components/show', queryParams)
       .map((component) => component !== null);
   }
 
