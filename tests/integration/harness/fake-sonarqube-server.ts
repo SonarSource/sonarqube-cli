@@ -47,7 +47,7 @@ export interface IssueConfig {
   type?: string;
   line?: number;
   fixableByAgent?: boolean;
-  /** Marks the issue as introduced in the leak period, matched by `sinceLeakPeriod=true`. */
+  /** Marks the issue as introduced in the leak period, matched by `inNewCodePeriod=true`. */
   isNewCode?: boolean;
 }
 
@@ -372,7 +372,7 @@ export class FakeSonarQubeServerBuilder {
   private readonly privateProjectsEntitlements: Map<string, boolean> = new Map();
   private validToken?: string;
   private systemStatusCode = 200;
-  private systemVersion = '9.9.0.00001';
+  private systemVersion = '25.1.0.102122';
   private memberOrganizations: Organization[] = [];
   private memberOrganizationsTotal?: number;
   private visibleOrganizations: Organization[] = [];
@@ -787,6 +787,7 @@ export class FakeSonarQubeServerBuilder {
       hasProvisionProjects,
       boundProjectsStatusCode,
       analyzedProjectKeys,
+      treatAsCloud,
     } = this;
     const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
@@ -884,8 +885,10 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/api/issues/search') {
-          // SonarQube Server uses `components`, SonarQube Cloud uses `projects`
-          const projectKey = query.components ?? query.projects;
+          // SonarQube Server uses `components`, SonarQube Cloud uses `componentKeys` — accept
+          // only the spelling the current mode actually uses, so a client sending the wrong one
+          // fails the lookup instead of being silently tolerated.
+          const projectKey = treatAsCloud ? query.componentKeys : query.components;
           const projectData = projectKey ? projects.get(projectKey) : undefined;
 
           if (projectData?.issuesSearchStatusCode !== undefined) {
@@ -898,7 +901,10 @@ export class FakeSonarQubeServerBuilder {
           const severityFilter = query.severities ? query.severities.split(',') : null;
           const typeFilter = query.types ? query.types.split(',') : null;
           const resolvedFilter = query.resolved;
-          const sinceLeakPeriodFilter = query.sinceLeakPeriod === 'true';
+          // SonarQube Server uses `inNewCodePeriod`, SonarQube Cloud uses `sinceLeakPeriod`
+          const sinceLeakPeriodFilter = treatAsCloud
+            ? query.sinceLeakPeriod === 'true'
+            : query.inNewCodePeriod === 'true';
 
           const fixableByAgentFilter = query.fixableByAgent;
 

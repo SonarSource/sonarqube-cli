@@ -20,8 +20,11 @@
 
 // SonarQube Issues API wrapper
 
-import { type SonarHttpClient } from './http-client.ts';
+import { type QueryParams, type SonarHttpClient } from './http-client.ts';
 import type { IssuesSearchParams, IssuesSearchResponse } from './types.ts';
+
+/** Booleans where `false` is a meaningful filter value, not "unset". */
+const KEYS_WHERE_FALSE_IS_MEANINGFUL = new Set(['resolved', 'asc']);
 
 export class IssuesClient {
   private readonly client: SonarHttpClient;
@@ -30,23 +33,45 @@ export class IssuesClient {
     this.client = client;
   }
 
+  /** Maps an `IssuesSearchParams` key to the wire param name for the current platform. */
+  private resolveQueryParamKey(key: string): string {
+    switch (key) {
+      case 'projects':
+        // Cloud has no `projects`/`components` param on this endpoint, only `componentKeys`.
+        return this.client.isCloud ? 'componentKeys' : 'components';
+      case 'sinceLeakPeriod':
+        // `sinceLeakPeriod` was removed on Server 10.0 in favor of `inNewCodePeriod`; Cloud
+        // never got the new name. Server 25.1 (our minimum) has had `inNewCodePeriod` since 9.4.
+        return this.client.isCloud ? 'sinceLeakPeriod' : 'inNewCodePeriod';
+      default:
+        return key;
+    }
+  }
+
+  /**
+   * Translates `IssuesSearchParams` into the query params `/api/issues/search` actually
+   * accepts, renaming the platform-specific ones (Cloud vs Server).
+   */
+  private buildSearchQueryParams(params: IssuesSearchParams): QueryParams {
+    const queryParams: QueryParams = {};
+
+    Object.entries(params).forEach(([key, value]) => {
+      const isSet = KEYS_WHERE_FALSE_IS_MEANINGFUL.has(key) ? value !== undefined : Boolean(value);
+      if (isSet) {
+        queryParams[this.resolveQueryParamKey(key)] = value as string | number | boolean;
+      }
+    });
+
+    return queryParams;
+  }
+
   /**
    * Search issues with filters
    */
   async searchIssues(params: IssuesSearchParams): Promise<IssuesSearchResponse> {
-    const queryParams: Record<string, string | number | boolean> = {};
-
-    Object.entries(params).forEach(([key, value]) => {
-      if (key === 'projects' && value) {
-        const projectParamKey = this.client.isCloud ? 'projects' : 'components';
-        queryParams[projectParamKey] = value as string;
-      } else if ((key === 'resolved' || key === 'asc') && value !== undefined) {
-        queryParams[key] = value as boolean;
-      } else if (value) {
-        queryParams[key] = value as string | number | boolean;
-      }
-    });
-
-    return await this.client.get<IssuesSearchResponse>('/api/issues/search', queryParams);
+    return await this.client.get<IssuesSearchResponse>(
+      '/api/issues/search',
+      this.buildSearchQueryParams(params),
+    );
   }
 }

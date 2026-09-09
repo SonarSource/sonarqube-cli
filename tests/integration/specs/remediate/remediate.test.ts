@@ -405,9 +405,9 @@ describe('sonar remediate', () => {
       expect(query['fixableByAgent']).toBe('true');
       expect(query['issueStatuses']).toContain('OPEN');
       expect(query['issueStatuses']).toContain('CONFIRMED');
-      // The CLI uses 'components' for on-premise and 'projects' for SonarCloud;
+      // The CLI uses 'components' for on-premise and 'componentKeys' for SonarCloud;
       // the fake server uses a 127.0.0.1 URL so isCloud is false → 'components' is sent
-      const projectParamValue = query['components'] ?? query['projects'];
+      const projectParamValue = query['components'] ?? query['componentKeys'];
       expect(projectParamValue).toBe(TEST_PROJECT);
     },
     { timeout: 15000 },
