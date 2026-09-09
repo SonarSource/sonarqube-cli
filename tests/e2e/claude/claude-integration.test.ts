@@ -174,7 +174,7 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
           seedState(harness, {
             skills: [
               {
-                agentId: 'claude-code',
+                agentId: 'claude',
                 projectRoot: harness.cwd.path,
                 serverUrl: server.baseUrl(),
                 orgKey: ALLOWLISTED_CAG_ORG_KEY,

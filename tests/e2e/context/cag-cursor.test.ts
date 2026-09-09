@@ -19,14 +19,11 @@
  */
 
 /**
- * Offline e2e proving the post-update path refreshes a recorded `cursor` CAG
- * skill. Cursor reads skills from the shared `.agents/skills` directory (like
- * Codex and Antigravity), so the rendered skill is written there verbatim —
- * one skill shared across those tools rather than a duplicate copy.
+ * Offline e2e proving the post-update path migrates a recorded `cursor` CAG
+ * install from the retired skill file to the session-start hook.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, mkdirSync } from 'node:fs';
 
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
@@ -36,12 +33,14 @@ import type { CliState } from '@/core/state/state.ts';
 
 import { TestHarness } from '../../integration/harness';
 import {
-  CURSOR_SKILL_RELATIVE_PATH,
-  expectSkillRendersWithWrapperInvocation,
+  expectSessionStartHookRefreshed,
   findRecordedCagDependency,
   findRecordedCagFeature,
   findRecordedCagSkillResource,
+  findRecordedSessionStartScriptResource,
+  seedLegacySkillFile,
   seedState,
+  sessionStartScriptPath,
   STALE_CLI_VERSION,
 } from './_helpers';
 
@@ -50,9 +49,7 @@ const POST_UPDATE_TIMEOUT_MS = 150_000;
 
 setDefaultTimeout(DEFAULT_TIMEOUT_MS);
 
-const STALE_SKILL_SENTINEL = '<<stale-cursor-skill-placeholder-cag-cursor-e2e>>';
-
-describe('sonar-context-augmentation cursor skill refresh (offline, real binary)', () => {
+describe('sonar-context-augmentation cursor hook refresh (offline, real binary)', () => {
   let harness: TestHarness;
   let cursorSkillPath: string;
 
@@ -62,12 +59,7 @@ describe('sonar-context-augmentation cursor skill refresh (offline, real binary)
     seedState(harness, {
       skills: [{ agentId: 'cursor', projectRoot: harness.cwd.path }],
     });
-    cursorSkillPath = join(harness.cwd.path, CURSOR_SKILL_RELATIVE_PATH);
-
-    // Pre-write a sentinel so the refresh has to overwrite it — proves the
-    // post-update path actually re-rendered the declarative skill.
-    mkdirSync(dirname(cursorSkillPath), { recursive: true });
-    writeFileSync(cursorSkillPath, STALE_SKILL_SENTINEL, 'utf-8');
+    cursorSkillPath = seedLegacySkillFile(harness.cwd.path, 'cursor', '# stale skill\n');
 
     const result = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
     expect(result.exitCode, result.stderr).toBe(0);
@@ -77,11 +69,9 @@ describe('sonar-context-augmentation cursor skill refresh (offline, real binary)
     await harness.dispose();
   });
 
-  it('overwrites the stale skill with refreshed content under .agents/skills/', () => {
-    expect(existsSync(cursorSkillPath)).toBe(true);
-    const content = readFileSync(cursorSkillPath, 'utf-8');
-    expect(content).not.toContain(STALE_SKILL_SENTINEL);
-    expectSkillRendersWithWrapperInvocation(content);
+  it('deletes the retired skill and installs the session-start hook', () => {
+    expect(existsSync(cursorSkillPath)).toBe(false);
+    expectSessionStartHookRefreshed(harness.cwd.path, 'cursor');
   });
 
   it('refreshes the declarative cursor CAG state and bumps cliVersion', () => {
@@ -98,9 +88,9 @@ describe('sonar-context-augmentation cursor skill refresh (offline, real binary)
     if (!feature) {
       throw new Error('Expected a recorded declarative Cursor CAG feature');
     }
-    const resource = findRecordedCagSkillResource(feature);
-    expect(resource).toBeDefined();
-    expect(resource?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
-    expect(resource?.path).toBe(cursorSkillPath);
+    expect(findRecordedSessionStartScriptResource(feature)?.path).toBe(
+      sessionStartScriptPath(harness.cwd.path, 'cursor'),
+    );
+    expect(findRecordedCagSkillResource(feature)).toBeUndefined();
   });
 });
