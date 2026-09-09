@@ -22,13 +22,27 @@
 // `Result` / `ResultAsync` imports it from here rather than from `neverthrow` directly,
 // so the vocabulary (naming, the `orThrow()` extension below) stays centralized.
 
-import { Err, Ok, ResultAsync } from 'neverthrow';
+import { Err, Ok, type Result, ResultAsync } from 'neverthrow';
 
 // The only re-export of `neverthrow` in the codebase; an eslint rule
 // (`no-restricted-imports` in eslint.config.js) blocks importing `neverthrow` directly
 // anywhere else, so nothing can build a `Result`/`ResultAsync` without also loading the
 // `orThrow()` prototype patch below.
 export { Err, err, errAsync, Ok, ok, okAsync, Result, ResultAsync } from 'neverthrow';
+
+/**
+ * Duck-types the resolved value of an awaited `ResultAsync` (an `Ok`/`Err` instance).
+ * Lets a caller that accepts either a plain `Promise<void>` handler or a migrated
+ * `ResultAsync<void, Error>` one (CLI-1086) tell the two shapes apart before deciding
+ * whether there is anything left to collapse via `orThrow()`.
+ */
+export function isResult(value: unknown): value is Result<unknown, Error> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { isOk?: unknown }).isOk === 'function'
+  );
+}
 
 /* eslint-disable @typescript-eslint/no-unused-vars -- interface merging with neverthrow's
    classes requires matching their exact type parameter names and arity, even where this

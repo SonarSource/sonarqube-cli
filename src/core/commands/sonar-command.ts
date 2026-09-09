@@ -40,6 +40,7 @@ import {
   withLifecycleTag,
 } from '@/core/commands/stage.ts';
 import logger from '@/core/observability/logger.ts';
+import { isResult, type ResultAsync } from '@/core/result.ts';
 import { loadState, saveState } from '@/core/state/state-manager.ts';
 import type { Console } from '@/core/ui/console.ts';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
@@ -474,10 +475,22 @@ export class SonarCommand extends Command {
    * `ctx.recordTelemetry(...)` — drained in `postAction`.
    *
    * Sets requiresAuth = true on this command for documentation purposes.
+   *
+   * `fn` may return a plain `Promise<void>` (today's default) or, once migrated
+   * under CLI-1086, a `ResultAsync<void, Error>` chained with `.andThen()`/`.map()`
+   * instead of throwing internally. Either shape collapses right here via a
+   * `match()` that rethrows on `Err` (`.orThrow()` can't be called directly on
+   * the resolved `Ok<T, Error> | Err<T, Error>` union — TypeScript can't unify
+   * the two branches' polymorphic `this`), so `runCommand()`'s existing
+   * try/catch stays the single place a failure becomes an exit code, unchanged
+   * for handlers of either shape.
    */
   authenticatedAction<TArgs extends CommandArgs>(
     this: this & { __commandArgs?: TArgs },
-    fn: (ctx: CommandAuthenticatedInvocationContext, ...args: TArgs) => Promise<void>,
+    fn: (
+      ctx: CommandAuthenticatedInvocationContext,
+      ...args: TArgs
+    ) => Promise<void> | ResultAsync<void, Error>,
   ): this {
     this._requiresAuth = true;
     super.action((...args: TArgs) =>
@@ -489,7 +502,15 @@ export class SonarCommand extends Command {
             remediationHint: "Run 'sonar auth login' to authenticate.",
           });
         }
-        await fn(this.createCommandAuthenticatedInvocationContext(auth), ...args);
+        const outcome = await fn(this.createCommandAuthenticatedInvocationContext(auth), ...args);
+        if (isResult(outcome)) {
+          outcome.match(
+            () => undefined,
+            (error) => {
+              throw error;
+            },
+          );
+        }
       }),
     );
     return this;
