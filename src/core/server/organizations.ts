@@ -210,7 +210,9 @@ export class OrganizationsClient {
       .map((result) => result.entitlements.some((e) => e.allowedFeatures.includes(entitlement)))
       .orElse((error) => {
         if (isCriticalFailure(error)) return errAsync(error);
-        logger.debug(`Failed to check '${entitlement}' billing entitlement`, error);
+        logger.debug(
+          `Failed to check '${entitlement}' billing entitlement: ${error.name}: ${error.message}`,
+        );
         return okAsync(false);
       });
   }

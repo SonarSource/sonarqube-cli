@@ -75,7 +75,7 @@ export class RemediateApiClient {
       .match(
         (result) => result,
         (error) => {
-          logger.warn('AI remediation entitlement check failed', error);
+          logger.warn(`AI remediation entitlement check failed: ${error.name}: ${error.message}`);
           return { status: 'unknown' as const };
         },
       );
