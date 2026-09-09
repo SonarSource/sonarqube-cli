@@ -203,16 +203,15 @@ function reportSkipped(skipped: readonly SkippedRepo[], console: Console): void 
   }
 }
 
-/** Builds the SonarQube Cloud onboarding dashboard link for an organization. */
-function buildOnboardingDashboardUrl(serverUrl: string, orgKey: string): string {
-  return `${serverUrl.replace(/\/$/, '')}/organizations/${orgKey}/onboarding-dashboard`;
+function buildProjectListUrl(serverUrl: string, orgKey: string): string {
+  return `${serverUrl.replace(/\/$/, '')}/organizations/${orgKey}/projects`;
 }
 
 function reportOutcome(
   succeeded: number,
   failed: number,
   skippedCount: number,
-  dashboardUrl: string,
+  projectListUrl: string,
   console: Console,
 ): void {
   const skippedSuffix = skippedCount > 0 ? ` (${skippedCount} skipped)` : '';
@@ -232,7 +231,7 @@ function reportOutcome(
   console.outro(
     `Imported ${succeeded} ${succeededNoun}${skippedSuffix}`,
     'success',
-    `Dashboard: ${dashboardUrl}`,
+    `Projects: ${projectListUrl}`,
   );
 }
 
@@ -261,7 +260,7 @@ export async function importHandler(
       succeeded,
       failed,
       skipped.length,
-      buildOnboardingDashboardUrl(auth.serverUrl, resolution.orgKey),
+      buildProjectListUrl(auth.serverUrl, resolution.orgKey),
       console,
     );
     return;
@@ -291,7 +290,7 @@ export async function importHandler(
     succeeded,
     failed,
     skipped.length,
-    buildOnboardingDashboardUrl(auth.serverUrl, resolution.orgKey),
+    buildProjectListUrl(auth.serverUrl, resolution.orgKey),
     console,
   );
 }
