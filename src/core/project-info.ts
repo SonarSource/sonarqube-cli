@@ -24,7 +24,6 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { findGitRoot, getGitRemote } from '@/core/host/git/discover.ts';
 import { type LookupPath, resolveLookupPaths } from '@/core/host/git/lookup-path-resolver.ts';
@@ -85,10 +84,8 @@ export interface DiscoveredProject {
 }
 
 export interface DiscoverProjectOptions {
-  /** When set, used for git-remote binding lookup instead of resolving auth again. */
-  auth?: ResolvedAuth | null;
-  /** When false, skips server lookup even if a git remote is present. Defaults to true. */
-  tryGitRemoteBinding?: boolean;
+  /** `null` skips git-remote binding entirely (no local `git remote` read either) — pass it when there's no auth to spend on it. */
+  auth: ResolvedAuth | null;
   /** Suppresses the "Found ..." stderr hints. Defaults to false. */
   silent?: boolean;
   console: Console;
@@ -101,16 +98,13 @@ export interface SonarProperties {
   organization: string;
 }
 
-/** Same nearest-first, known-root-bounded climb as discoverProject()'s local-config source — no known-mapping match, no git-remote API call, since this also runs pre-login (no token yet). */
 async function discoverLocalConfig(
   startDir: string,
   silent: boolean,
   console: Console,
 ): Promise<Pick<DiscoveredProject, 'serverUrl' | 'organization'>> {
-  const config: DiscoveredProject = { projectRoot: canonicalizePath(startDir), configSources: [] };
-  const lookupPaths = await resolveLookupPaths(startDir, collectKnownRoots(loadKnownMappings()));
-  await applyLocalConfigAcrossLookupPaths(config, lookupPaths, { silent, console });
-  return config;
+  const discovered = await discoverProject(startDir, { auth: null, silent, console });
+  return { serverUrl: discovered.serverUrl, organization: discovered.organization };
 }
 
 /** Try to find server URL from project configs. */
@@ -187,8 +181,7 @@ export async function discoverProject(
       (await applyLocalConfigAcrossLookupPaths(config, lookupPaths, options));
 
     if (!resolved) {
-      const gitRemote = repoRoot ? await getGitRemote(repoRoot) : '';
-      await applyGitRemoteBindingFromRemote(config, gitRemote, options);
+      await applyGitRemoteBinding(config, repoRoot, options);
     }
   } catch (error) {
     // No caller treats this as fallible — degrade to whatever was already resolved
@@ -457,22 +450,21 @@ function applyKnownServerProjectMapping(
   return true;
 }
 
-async function applyGitRemoteBindingFromRemote(
+async function applyGitRemoteBinding(
   config: DiscoveredProject,
-  gitRemote: string,
+  repoRoot: string | undefined,
   options: DiscoverProjectOptions,
 ): Promise<void> {
-  const tryGitRemoteBinding = options.tryGitRemoteBinding !== false;
-  if (!tryGitRemoteBinding || !gitRemote) {
+  if (options.auth === null) {
     return;
   }
 
-  const auth = options.auth === undefined ? await resolveAuth({ silent: true }) : options.auth;
-  if (!auth) {
+  const gitRemote = repoRoot ? await getGitRemote(repoRoot) : '';
+  if (!gitRemote) {
     return;
   }
 
-  const remoteBinding = await discoverProjectKeyByGitRemote(auth, gitRemote);
+  const remoteBinding = await discoverProjectKeyByGitRemote(options.auth, gitRemote);
   if (!remoteBinding) {
     return;
   }
