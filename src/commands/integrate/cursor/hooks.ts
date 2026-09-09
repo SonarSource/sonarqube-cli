@@ -61,15 +61,20 @@ export interface ManagedCursorHookEntry {
   entry: CursorFlatHookEntry;
 }
 
+export interface CursorHookEntryOptions {
+  marker?: string;
+  failClosed?: boolean;
+}
+
 /** Build a managed Cursor hook entry for a given event and script. */
 export function buildCursorHookEntry(
   context: IntegrationContext,
   configDir: string,
   eventType: string,
   scriptPath: string,
-  marker: string = SONAR_SECRETS_MARKER,
-  failClosed = false,
+  options: CursorHookEntryOptions = {},
 ): ManagedCursorHookEntry {
+  const { marker = SONAR_SECRETS_MARKER, failClosed = false } = options;
   const matcher = resolveCursorHookMatcher(eventType);
   const entry: CursorFlatHookEntry = {
     command: resolveAgentHookCommand(context, configDir, scriptPath),

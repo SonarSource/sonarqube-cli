@@ -124,13 +124,9 @@ function createSessionStartHookConfigResource(): ResourceDeclaration {
     defaultValue: { version: 1, hooks: {} },
     patch: (document, context) =>
       upsertCursorHooks(document, [
-        buildCursorHookEntry(
-          context,
-          CURSOR_CONFIG_DIR,
-          'sessionStart',
-          SESSION_START_SCRIPT_REL,
-          VORTEX_HOOK_MARKER,
-        ),
+        buildCursorHookEntry(context, CURSOR_CONFIG_DIR, 'sessionStart', SESSION_START_SCRIPT_REL, {
+          marker: VORTEX_HOOK_MARKER,
+        }),
       ]),
     removePatch: (document) => removeCursorHooks(document, [VORTEX_HOOK_MARKER]),
   });
