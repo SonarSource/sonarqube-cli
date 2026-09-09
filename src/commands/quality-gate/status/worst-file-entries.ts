@@ -55,14 +55,16 @@ export async function fetchWorstFileEntries(
   condition: QualityGateConditionSummary,
   metric: Metric | undefined,
 ): Promise<WorstFileEntriesResult> {
-  const { components, totalCount } = await measuresClient.getWorstComponentsByMetric({
-    projectKey: params.projectKey,
-    metricKey: condition.metric,
-    ascending: condition.comparator === 'LT',
-    top: params.top,
-    branch: params.branch,
-    pullRequest: params.pullRequest,
-  });
+  const { components, totalCount } = await measuresClient
+    .getWorstComponentsByMetric({
+      projectKey: params.projectKey,
+      metricKey: condition.metric,
+      ascending: condition.comparator === 'LT',
+      top: params.top,
+      branch: params.branch,
+      pullRequest: params.pullRequest,
+    })
+    .orThrow();
 
   const outcomes = components.map((component) =>
     toBreakdownEntryOutcome(component, condition, metric),

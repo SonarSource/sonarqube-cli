@@ -34,23 +34,23 @@ export interface GitRemoteBindingDiscovery {
 /**
  * Resolves a SonarQube project key from the git origin remote URL via the server project-bindings API
  */
-export async function discoverProjectKeyByGitRemote(
+export function discoverProjectKeyByGitRemote(
   auth: ResolvedAuth,
   gitRemote: string,
 ): Promise<GitRemoteBindingDiscovery | null> {
-  try {
-    const client = new ProjectBindingsClient(new SonarHttpClient(auth.serverUrl, auth.token));
-    const projectKey = await client.getProjectKeyByGitRemote(gitRemote, auth.orgKey);
-    if (!projectKey) {
+  const client = new ProjectBindingsClient(new SonarHttpClient(auth.serverUrl, auth.token));
+  return client.getProjectKeyByGitRemote(gitRemote, auth.orgKey).match(
+    (projectKey) =>
+      projectKey
+        ? {
+            projectKey,
+            serverUrl: auth.serverUrl,
+            organization: auth.orgKey,
+          }
+        : null,
+    (error) => {
+      logger.debug(`Git remote project binding lookup failed: ${error.message}`);
       return null;
-    }
-    return {
-      projectKey,
-      serverUrl: auth.serverUrl,
-      organization: auth.orgKey,
-    };
-  } catch (error) {
-    logger.debug(`Git remote project binding lookup failed: ${(error as Error).message}`);
-    return null;
-  }
+    },
+  );
 }

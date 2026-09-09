@@ -41,6 +41,7 @@ import * as tokenModule from '@/core/auth/token.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SONARCLOUD_URL } from '@/core/config-constants.ts';
 import * as projectInfo from '@/core/project-info.ts';
+import { okAsync } from '@/core/result.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 import { UsersClient } from '@/core/server/users.ts';
 
@@ -74,14 +75,13 @@ describe('authLogin organization prompt', () => {
     process.env.SONAR_USER_HOME = userHome;
     Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
     resolveAccessSpy = spyOn(OrganizationsClient.prototype, 'resolveOrganizationAccess');
-    listOrgsSpy = spyOn(OrganizationsClient.prototype, 'listUserOrganizations').mockResolvedValue({
-      organizations: [],
-      total: 0,
-    });
+    listOrgsSpy = spyOn(OrganizationsClient.prototype, 'listUserOrganizations').mockReturnValue(
+      okAsync({ organizations: [], total: 0 }),
+    );
     // This repository has its own sonar-project.properties; without these the discovered key
     // would short-circuit the prompt under test.
     discoverOrgSpy = spyOn(projectInfo, 'discoverOrganization').mockResolvedValue(null);
-    revokeSpy = spyOn(UsersClient.prototype, 'revokeUserToken').mockResolvedValue(undefined);
+    revokeSpy = spyOn(UsersClient.prototype, 'revokeUserToken').mockReturnValue(okAsync(undefined));
     spies = [
       spyOn(process.stdin, 'pause').mockReturnValue(process.stdin),
       revokeSpy,

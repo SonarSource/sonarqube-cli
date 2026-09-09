@@ -83,14 +83,16 @@ export async function qualityGateStatus(
   const { queryParams, scope } = await resolveQualityGateScope(client, projectKey, options);
 
   const qualityGatesClient = new QualityGatesClient(client);
-  const projectStatus = await qualityGatesClient.getProjectStatus({ projectKey, ...queryParams });
+  const projectStatus = await qualityGatesClient
+    .getProjectStatus({ projectKey, ...queryParams })
+    .orThrow();
 
   const rawConditions = projectStatus?.conditions ?? [];
   const hasFailingConditions = rawConditions.some((condition) => condition.status !== 'OK');
   const hasConditionsToRender = options.all ? rawConditions.length > 0 : hasFailingConditions;
 
   const metricsClient = new MetricsClient(client);
-  const metrics = hasConditionsToRender ? await metricsClient.searchMetrics() : [];
+  const metrics = hasConditionsToRender ? await metricsClient.searchMetrics().orThrow() : [];
 
   const verdict = toVerdict(projectStatus?.status);
   const summaries = selectConditions(rawConditions, metrics, options.all);
@@ -126,7 +128,7 @@ export async function qualityGateStatus(
 }
 
 async function assertProjectExists(client: SonarHttpClient, projectKey: string): Promise<void> {
-  if (!(await new ComponentsClient(client).componentExists(projectKey))) {
+  if (!(await new ComponentsClient(client).componentExists(projectKey).orThrow())) {
     throw new CommandFailedError(`Project '${projectKey}' does not exist or not accessible.`, {
       remediationHint: 'Check the project key and your access to the project on the server.',
     });

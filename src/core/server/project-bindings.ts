@@ -21,6 +21,8 @@
 // SonarQube project-bindings API wrapper: mapping DevOps platform repositories to projects.
 
 import logger from '../observability/logger.ts';
+import { okAsync, type ResultAsync } from '../result.ts';
+import type { HttpClientError } from './errors.ts';
 import { stripGitRemoteUrlUserinfo } from './git-remote-url.ts';
 import type { SonarHttpClient } from './http-client.ts';
 
@@ -36,107 +38,152 @@ export class ProjectBindingsClient {
    * SonarQube Server: GET /api/v2/dop-translation/project-bindings
    * SonarQube Cloud: GET /dop-translation/project-bindings, then search_projects by project id.
    */
-  async getProjectKeyByGitRemote(remoteUrl: string, orgKey?: string): Promise<string | null> {
+  getProjectKeyByGitRemote(
+    remoteUrl: string,
+    orgKey?: string,
+  ): ResultAsync<string | null, HttpClientError> {
     const sanitizedRemoteUrl = stripGitRemoteUrlUserinfo(remoteUrl);
     if (this.client.isCloud) {
       if (!orgKey) {
-        return null;
+        return okAsync(null);
       }
-      const projectId = await this.getSqcProjectIdByRemoteUrl(sanitizedRemoteUrl);
-      if (!projectId) {
-        return null;
-      }
-      return this.getSonarCloudProjectKeyById(projectId, orgKey);
+      return this.getSqcProjectIdByRemoteUrl(sanitizedRemoteUrl).andThen((projectId) => {
+        if (!projectId) {
+          return okAsync(null);
+        }
+        return this.getSonarCloudProjectKeyById(projectId, orgKey);
+      });
     }
-    const binding = await this.getSqsProjectBindingByRemoteUrl(sanitizedRemoteUrl);
-    return binding?.projectKey ?? null;
+    return this.getSqsProjectBindingByRemoteUrl(sanitizedRemoteUrl).map(
+      (binding) => binding?.projectKey ?? null,
+    );
   }
 
-  private async getSqsProjectBindingByRemoteUrl(
+  private getSqsProjectBindingByRemoteUrl(
     remoteUrl: string,
-  ): Promise<{ projectKey: string } | null> {
+  ): ResultAsync<{ projectKey: string } | null, HttpClientError> {
     const endpoint = `/api/v2/dop-translation/project-bindings?repositoryUrl=${encodeURIComponent(remoteUrl)}`;
-    const result = await this.client.getSafe<{
-      projectBindings: Array<{ projectId: string; projectKey: string }>;
-    }>(endpoint);
-    if (!result.response.ok) {
-      return null;
-    }
-    const binding = requireSingleBinding(
-      result.value?.projectBindings,
-      'git remote on SonarQube Server',
-    );
-    return binding?.projectKey ? { projectKey: binding.projectKey } : null;
+    return this.client
+      .getSafe<{
+        projectBindings: Array<{ projectId: string; projectKey: string }>;
+      }>(endpoint)
+      .map((result) => {
+        if (!result.response.ok) {
+          return null;
+        }
+        const binding = requireSingleBinding(
+          result.value?.projectBindings,
+          'git remote on SonarQube Server',
+        );
+        return binding?.projectKey ? { projectKey: binding.projectKey } : null;
+      });
   }
 
-  private async getSqcProjectIdByRemoteUrl(remoteUrl: string): Promise<string | null> {
+  private getSqcProjectIdByRemoteUrl(
+    remoteUrl: string,
+  ): ResultAsync<string | null, HttpClientError> {
     const endpoint = `/dop-translation/project-bindings?url=${encodeURIComponent(remoteUrl)}`;
-    const result = await this.client.getSafe<{ bindings: Array<{ projectId: string }> }>(
-      endpoint,
-      undefined,
-      this.client.apiHostFor(endpoint),
-    );
-    if (!result.response.ok) {
-      return null;
-    }
-    const binding = requireSingleBinding(result.value?.bindings, 'git remote on SonarQube Cloud');
-    return binding?.projectId ?? null;
+    return this.client
+      .getSafe<{ bindings: Array<{ projectId: string }> }>(
+        endpoint,
+        undefined,
+        this.client.apiHostFor(endpoint),
+      )
+      .map((result) => {
+        if (!result.response.ok) {
+          return null;
+        }
+        const binding = requireSingleBinding(
+          result.value?.bindings,
+          'git remote on SonarQube Cloud',
+        );
+        return binding?.projectId ?? null;
+      });
   }
 
-  private async getSonarCloudProjectKeyById(
+  private getSonarCloudProjectKeyById(
     projectId: string,
     orgKey: string,
-  ): Promise<string | null> {
-    const result = await this.client.getSafe<{ components: Array<{ key: string }> }>(
-      '/api/components/search_projects',
-      { projectIds: projectId, organization: orgKey },
-    );
-    if (!result.response.ok) {
-      return null;
-    }
-    const components = result.value?.components;
-    if (!Array.isArray(components) || components.length === 0) {
-      return null;
-    }
-    const projectKey = components[0].key;
-    return projectKey || null;
+  ): ResultAsync<string | null, HttpClientError> {
+    return this.client
+      .getSafe<{ components: Array<{ key: string }> }>('/api/components/search_projects', {
+        projectIds: projectId,
+        organization: orgKey,
+      })
+      .map((result) => {
+        if (!result.response.ok) {
+          return null;
+        }
+        const components = result.value?.components;
+        if (!Array.isArray(components) || components.length === 0) {
+          return null;
+        }
+        const projectKey = components[0].key;
+        return projectKey || null;
+      });
   }
 
   // ---------------------------------------------------------------------------
   // Admin / CI setup — SonarQube Server only (SQS v2 endpoints)
   // ---------------------------------------------------------------------------
 
-  async listGitlabDopSettings(): Promise<Array<{ id: string; key: string; url: string }>> {
-    const result = await this.client.get<{
-      dopSettings: Array<{ id: string; key: string; type: string; url: string }>;
-    }>('/api/v2/dop-translation/dop-settings');
-    return result.dopSettings.filter((s) => s.type === 'gitlab');
+  listGitlabDopSettings(): ResultAsync<
+    Array<{ id: string; key: string; url: string }>,
+    HttpClientError
+  > {
+    return this.client
+      .get<{
+        dopSettings: Array<{ id: string; key: string; type: string; url: string }>;
+      }>('/api/v2/dop-translation/dop-settings')
+      .map((result) => result.dopSettings.filter((s) => s.type === 'gitlab'));
   }
 
   // filters by dopSettingId to avoid cross-ALM collisions (GitHub, Azure also populate `repository`)
-  async getAllProjectBindings(dopSettingId: string): Promise<Map<string, string>> {
-    const bindingMap = new Map<string, string>();
-    let pageIndex = 1;
+  getAllProjectBindings(dopSettingId: string): ResultAsync<Map<string, string>, HttpClientError> {
     const pageSize = 500;
-    for (;;) {
-      const result = await this.client.get<{
-        projectBindings: Array<{ projectKey: string; repository: string }>;
-        page: { total: number; pageSize: number; pageIndex: number };
-      }>('/api/v2/dop-translation/project-bindings', {
-        pageSize,
-        pageIndex,
-        dopSettingId,
-      });
-      for (const binding of result.projectBindings) {
-        bindingMap.set(binding.repository, binding.projectKey);
-      }
-      const effectivePageSize = result.page.pageSize || pageSize;
-      if (result.projectBindings.length === 0 || pageIndex * effectivePageSize >= result.page.total)
-        break;
-      pageIndex++;
-    }
-    return bindingMap;
+
+    const fetchPage = (
+      pageIndex: number,
+      bindingMap: Map<string, string>,
+    ): ResultAsync<Map<string, string>, HttpClientError> =>
+      this.client
+        .get<ProjectBindingsPageResponse>('/api/v2/dop-translation/project-bindings', {
+          pageSize,
+          pageIndex,
+          dopSettingId,
+        })
+        .andThen((result) => {
+          mergeBindingsPage(result, bindingMap);
+          return isLastPage(result, pageIndex, pageSize)
+            ? okAsync(bindingMap)
+            : fetchPage(pageIndex + 1, bindingMap);
+        });
+
+    return fetchPage(1, new Map<string, string>());
   }
+}
+
+interface ProjectBindingsPageResponse {
+  projectBindings: Array<{ projectKey: string; repository: string }>;
+  page: { total: number; pageSize: number; pageIndex: number };
+}
+
+function mergeBindingsPage(
+  result: ProjectBindingsPageResponse,
+  bindingMap: Map<string, string>,
+): void {
+  for (const binding of result.projectBindings) {
+    bindingMap.set(binding.repository, binding.projectKey);
+  }
+}
+
+function isLastPage(
+  result: ProjectBindingsPageResponse,
+  pageIndex: number,
+  pageSize: number,
+): boolean {
+  const effectivePageSize = result.page.pageSize || pageSize;
+  return result.projectBindings.length === 0 || pageIndex * effectivePageSize >= result.page.total;
 }
 
 /** Returns the sole binding, or null when there are none or more than one (ambiguous). */

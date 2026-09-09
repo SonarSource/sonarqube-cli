@@ -309,17 +309,18 @@ async function promptForOrganizationKey(
   throw lastError;
 }
 
-async function listMemberOrganizations(
+function listMemberOrganizations(
   client: OrganizationsClient,
 ): Promise<{ organizations: Organization[]; total: number }> {
-  try {
-    return await client.listUserOrganizations();
-  } catch (error) {
-    throw new CommandFailedError(`Could not list your organizations: ${(error as Error).message}`, {
-      remediationHint:
-        "Check your network connection and the server status, then rerun 'sonar auth login', or pass -o/--org to select an organization directly.",
-    });
-  }
+  return client.listUserOrganizations().match(
+    (result) => result,
+    (error) => {
+      throw new CommandFailedError(`Could not list your organizations: ${error.message}`, {
+        remediationHint:
+          "Check your network connection and the server status, then rerun 'sonar auth login', or pass -o/--org to select an organization directly.",
+      });
+    },
+  );
 }
 
 async function getUserSelectedOrganization(

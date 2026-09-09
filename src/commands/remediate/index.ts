@@ -166,11 +166,22 @@ async function resolveProjectKey(
   return discovered.projectKey;
 }
 
-// The AI agent API requires the project's legacy component ID, not its key.
-async function resolveProjectId(client: RemediateApiClient, projectKey: string): Promise<string> {
-  const resolvedId = await client.components.getComponentId(projectKey);
-  logger.debug(`getComponentId(${projectKey}) => ${resolvedId ?? 'null (falling back to key)'}`);
-  return resolvedId ?? projectKey;
+// The AI agent API requires the project's legacy component ID, not its key. Always falls
+// back to the raw key on failure, critical or not. Resolving the legacy ID is a
+// best-effort optimization, not something worth aborting the whole command over.
+function resolveProjectId(client: RemediateApiClient, projectKey: string): Promise<string> {
+  return client.components.getComponentId(projectKey).match(
+    (resolvedId) => {
+      logger.debug(
+        `getComponentId(${projectKey}) => ${resolvedId ?? 'null (falling back to key)'}`,
+      );
+      return resolvedId ?? projectKey;
+    },
+    (error) => {
+      logger.debug(`getComponentId(${projectKey}) failed (${error.message}), falling back to key`);
+      return projectKey;
+    },
+  );
 }
 
 async function submitRemediationJob(
@@ -224,14 +235,16 @@ async function fetchEligibleIssues(
   // We intentionally fetch a single page of up to MAX_PAGE_SIZE eligible issues:
   // larger result sets are overwhelming in an interactive multi-select without
   // additional filtering. Users can re-run the command after resolving some.
-  const result = await issuesClient.searchIssues({
-    projects: projectKey,
-    organization: orgKey,
-    issueStatuses: 'OPEN,CONFIRMED',
-    fixableByAgent: true,
-    ps: MAX_PAGE_SIZE,
-    p: 1,
-  });
+  const result = await issuesClient
+    .searchIssues({
+      projects: projectKey,
+      organization: orgKey,
+      issueStatuses: 'OPEN,CONFIRMED',
+      fixableByAgent: true,
+      ps: MAX_PAGE_SIZE,
+      p: 1,
+    })
+    .orThrow();
   return result.issues;
 }
 

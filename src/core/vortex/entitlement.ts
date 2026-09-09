@@ -56,32 +56,30 @@ interface HubEntitlementResponse {
  * send `consumption`. Only the path differs. A Server 404 means that hub is not
  * installed. A Cloud 404 is a fault — those services always exist.
  */
-export async function checkHubEntitlement(
+export function checkHubEntitlement(
   client: SonarHttpClient,
   endpoint: string,
 ): Promise<VortexEntitlementResult> {
-  try {
-    const { response, value } = await client.getSafe<HubEntitlementResponse>(
-      endpoint,
-      undefined,
-      client.apiHostFor(endpoint),
+  return client
+    .getSafe<HubEntitlementResponse>(endpoint, undefined, client.apiHostFor(endpoint))
+    .match(
+      ({ response, value }): VortexEntitlementResult => {
+        if (response.status === HTTP_STATUS_NOT_FOUND && !client.isCloud) {
+          return { status: 'not_applicable' };
+        }
+        if (!response.ok || value === undefined) {
+          return { status: 'check_failed' };
+        }
+        if (value.allowed) {
+          return { status: 'enabled', consumption: value.consumption };
+        }
+        return {
+          status: value.hasEntitlement ? 'over_consumption' : 'not_entitled',
+          consumption: value.consumption,
+        };
+      },
+      (): VortexEntitlementResult => ({ status: 'check_failed' }),
     );
-    if (response.status === HTTP_STATUS_NOT_FOUND && !client.isCloud) {
-      return { status: 'not_applicable' };
-    }
-    if (!response.ok || value === undefined) {
-      return { status: 'check_failed' };
-    }
-    if (value.allowed) {
-      return { status: 'enabled', consumption: value.consumption };
-    }
-    return {
-      status: value.hasEntitlement ? 'over_consumption' : 'not_entitled',
-      consumption: value.consumption,
-    };
-  } catch {
-    return { status: 'check_failed' };
-  }
 }
 
 export class VortexEntitlementClient {
@@ -102,19 +100,15 @@ export class VortexEntitlementClient {
    * means Vortex is not available.
    */
   async hasVortexEntitlement(organizationKey?: string): Promise<VortexEntitlementResult> {
-    try {
-      const uuid = await this.resolveOrganizationId(organizationKey);
-      if (typeof uuid !== 'string') {
-        return uuid;
-      }
-      const [sqaa, cag] = await Promise.all([
-        checkHubEntitlement(this.client, this.sqaaEndpoint(uuid)),
-        checkHubEntitlement(this.client, this.cagEndpoint(uuid)),
-      ]);
-      return mergeVortexEntitlement(sqaa, cag);
-    } catch {
-      return { status: 'check_failed' };
+    const uuid = await this.resolveOrganizationId(organizationKey);
+    if (typeof uuid !== 'string') {
+      return uuid;
     }
+    const [sqaa, cag] = await Promise.all([
+      checkHubEntitlement(this.client, this.sqaaEndpoint(uuid)),
+      checkHubEntitlement(this.client, this.cagEndpoint(uuid)),
+    ]);
+    return mergeVortexEntitlement(sqaa, cag);
   }
 
   /**
@@ -122,17 +116,19 @@ export class VortexEntitlementClient {
    * when it cannot be resolved. Server has no organizations; the path still requires
    * `{id}`, so we send {@link SERVER_ORGANIZATION_ID_PLACEHOLDER}.
    */
-  private async resolveOrganizationId(
+  private resolveOrganizationId(
     organizationKey?: string,
   ): Promise<string | VortexEntitlementResult> {
     if (!this.client.isCloud) {
-      return SERVER_ORGANIZATION_ID_PLACEHOLDER;
+      return Promise.resolve(SERVER_ORGANIZATION_ID_PLACEHOLDER);
     }
     if (!organizationKey) {
-      return { status: 'not_entitled' };
+      return Promise.resolve({ status: 'not_entitled' });
     }
-    const uuid = await this.organizations.getOrganizationId(organizationKey);
-    return uuid ?? { status: 'check_failed' };
+    return this.organizations.getOrganizationId(organizationKey).match(
+      (uuid) => uuid ?? { status: 'check_failed' },
+      () => ({ status: 'check_failed' }),
+    );
   }
 
   private sqaaEndpoint(organizationUuid: string): string {

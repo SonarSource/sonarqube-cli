@@ -35,6 +35,7 @@ import { authLogin } from '@/commands/auth/login.ts';
 import * as tokenModule from '@/core/auth/token.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SONARCLOUD_URL } from '@/core/config-constants.ts';
+import { okAsync } from '@/core/result.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 import { UsersClient } from '@/core/server/users.ts';
 
@@ -60,7 +61,7 @@ describe('authLogin stdin release', () => {
     keychain.setup();
     Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
     pauseSpy = spyOn(process.stdin, 'pause').mockReturnValue(process.stdin);
-    revokeSpy = spyOn(UsersClient.prototype, 'revokeUserToken').mockResolvedValue(undefined);
+    revokeSpy = spyOn(UsersClient.prototype, 'revokeUserToken').mockReturnValue(okAsync(undefined));
     resolveAccessSpy = spyOn(OrganizationsClient.prototype, 'resolveOrganizationAccess');
     generateTokenSpy = spyOn(tokenModule, 'generateTokenViaBrowser').mockResolvedValue({
       token: 'minted-token',

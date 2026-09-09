@@ -28,6 +28,7 @@ import * as token from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import * as processLib from '@/core/process/process.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
+import { okAsync } from '@/core/result.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 import type { PhaseItem } from '@/core/ui/console.ts';
@@ -48,12 +49,14 @@ beforeEach(() => {
 
 describe('printAgentPreflightSummary', () => {
   let checkTokenStatusSpy: ReturnType<typeof spyOn>;
-  let checkComponentSpy: ReturnType<typeof spyOn>;
+  let componentExistsSpy: ReturnType<typeof spyOn>;
   let isOrganizationAccessibleSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
-    checkComponentSpy = spyOn(ComponentsClient.prototype, 'checkComponent').mockResolvedValue(true);
+    componentExistsSpy = spyOn(ComponentsClient.prototype, 'componentExists').mockReturnValue(
+      okAsync(true),
+    );
     isOrganizationAccessibleSpy = spyOn(
       OrganizationsClient.prototype,
       'isOrganizationAccessible',
@@ -62,7 +65,7 @@ describe('printAgentPreflightSummary', () => {
 
   afterEach(() => {
     checkTokenStatusSpy.mockRestore();
-    checkComponentSpy.mockRestore();
+    componentExistsSpy.mockRestore();
     isOrganizationAccessibleSpy.mockRestore();
   });
 

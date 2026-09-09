@@ -70,7 +70,7 @@ export async function resolveQualityGateScope(
   const branchesClient = new BranchesClient(client);
   const [autoDetected, branches] = await Promise.all([
     autoResolvePullRequest(client, projectKey),
-    branchesClient.listBranches(projectKey),
+    branchesClient.listBranches(projectKey).orThrow(),
   ]);
   if (autoDetected) {
     return {

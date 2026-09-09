@@ -87,11 +87,13 @@ export async function enrichDuplicationsEntries(
       if (!componentKey) {
         return;
       }
-      const info = await duplicationsClient.getDuplicationInfo({
-        componentKey,
-        branch: params.branch,
-        pullRequest: params.pullRequest,
-      });
+      const info = await duplicationsClient
+        .getDuplicationInfo({
+          componentKey,
+          branch: params.branch,
+          pullRequest: params.pullRequest,
+        })
+        .orThrow();
       entry.blockCount = info.blockCount;
       entry.duplicatesWith = info.duplicatesWith;
     },

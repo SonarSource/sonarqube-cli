@@ -20,6 +20,8 @@
 
 // SonarQube Issues API wrapper
 
+import type { ResultAsync } from '../result.ts';
+import { type HttpClientError } from './errors.ts';
 import { type QueryParams, type SonarHttpClient } from './http-client.ts';
 import type { IssuesSearchParams, IssuesSearchResponse } from './types.ts';
 
@@ -68,8 +70,8 @@ export class IssuesClient {
   /**
    * Search issues with filters
    */
-  async searchIssues(params: IssuesSearchParams): Promise<IssuesSearchResponse> {
-    return await this.client.get<IssuesSearchResponse>(
+  searchIssues(params: IssuesSearchParams): ResultAsync<IssuesSearchResponse, HttpClientError> {
+    return this.client.get<IssuesSearchResponse>(
       '/api/issues/search',
       this.buildSearchQueryParams(params),
     );

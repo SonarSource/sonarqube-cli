@@ -116,13 +116,8 @@ export async function apiCommand(
 
   const client = new SonarHttpClient(auth.serverUrl, auth.token);
 
-  const response = await client.genericRequest(
-    upperMethod,
-    endpoint,
-    console,
-    options.data,
-    contentType,
-    options.verbose,
-  );
+  const response = await client
+    .genericRequest(upperMethod, endpoint, console, options.data, contentType, options.verbose)
+    .orThrow();
   console.print(response);
 }

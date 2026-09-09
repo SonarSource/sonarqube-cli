@@ -20,6 +20,8 @@
 
 // Sonar Advanced Security (SCA) feature-enablement API wrapper.
 
+import { okAsync, type ResultAsync } from '../result.ts';
+import type { HttpClientError } from './errors.ts';
 import type { QueryParams, SonarHttpClient } from './http-client.ts';
 import type { ScaIssueRelease, ScaIssuesReleasesResponse } from './types.ts';
 
@@ -54,37 +56,37 @@ export class ScaClient {
    *
    * Returns a 3-state value so callers can distinguish "not enabled" (a definitive
    * answer from the server) from "check_failed" (network error, unreachable, etc.).
+   * Never resolves to `Err`: every failure is folded into the `'check_failed'` value.
    */
-  async getScaEnablement(
+  getScaEnablement(
     connectionType: 'cloud' | 'on-premise',
     orgKey?: string,
-  ): Promise<ScaEnablement> {
-    try {
-      const isCloud = connectionType === 'cloud';
-      const endpoint = isCloud ? '/sca/feature-enabled' : '/api/v2/sca/feature-enabled';
-      const params = isCloud && orgKey ? { organization: orgKey } : undefined;
-      const result = await this.client.get<{ enabled: boolean }>(
-        endpoint,
-        params,
-        this.client.apiHostFor(endpoint),
-      );
-      return result.enabled ? 'enabled' : 'not_enabled';
-    } catch {
-      return 'check_failed';
-    }
+  ): ResultAsync<ScaEnablement, never> {
+    const isCloud = connectionType === 'cloud';
+    const endpoint = isCloud ? '/sca/feature-enabled' : '/api/v2/sca/feature-enabled';
+    const params = isCloud && orgKey ? { organization: orgKey } : undefined;
+    return this.client
+      .get<{ enabled: boolean }>(endpoint, params, this.client.apiHostFor(endpoint))
+      .map((result): ScaEnablement => (result.enabled ? 'enabled' : 'not_enabled'))
+      .orElse(() => okAsync<ScaEnablement>('check_failed'));
   }
 
   /**
    * Boolean wrapper over getScaEnablement for callers that gate on "enabled" only.
    * Any failure (404, network, unauthorized, not enabled) is treated as "not available".
    */
-  async checkScaEnabled(connectionType: 'cloud' | 'on-premise', orgKey?: string): Promise<boolean> {
-    return (await this.getScaEnablement(connectionType, orgKey)) === 'enabled';
+  checkScaEnabled(
+    connectionType: 'cloud' | 'on-premise',
+    orgKey?: string,
+  ): ResultAsync<boolean, never> {
+    return this.getScaEnablement(connectionType, orgKey).map(
+      (enablement) => enablement === 'enabled',
+    );
   }
 
-  async getWorstIssuesReleases(
+  getWorstIssuesReleases(
     params: GetWorstIssuesReleasesParams,
-  ): Promise<GetWorstIssuesReleasesResult> {
+  ): ResultAsync<GetWorstIssuesReleasesResult, HttpClientError> {
     const endpoint = this.client.isCloud ? '/sca/issues-releases' : '/api/v2/sca/issues-releases';
     const queryParams: QueryParams = {
       projectKey: params.projectKey,
@@ -105,11 +107,11 @@ export class ScaClient {
     if (params.pullRequest) {
       queryParams.pullRequestKey = params.pullRequest;
     }
-    const response = await this.client.get<ScaIssuesReleasesResponse>(
-      endpoint,
-      queryParams,
-      this.client.apiHostFor(endpoint),
-    );
-    return { issuesReleases: response.issuesReleases, totalCount: response.page.total };
+    return this.client
+      .get<ScaIssuesReleasesResponse>(endpoint, queryParams, this.client.apiHostFor(endpoint))
+      .map((response) => ({
+        issuesReleases: response.issuesReleases,
+        totalCount: response.page.total,
+      }));
   }
 }

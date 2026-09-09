@@ -377,10 +377,9 @@ describe('noteProject() / currentProjectUuid()', () => {
   });
 
   it('never rejects when resolution fails, so CliCommandExecuted cannot be broken by it', async () => {
-    const getSafeSpy = spyOn(
-      (await import('@/core/server/http-client.ts')).SonarHttpClient.prototype,
-      'getSafe',
-    ).mockRejectedValue(new Error('network down'));
+    const getSafeSpy = mockProjectUuidGetSafe({
+      component: [{ ok: false, throws: true }],
+    });
 
     noteProject(auth(), 'proj-explodes');
 

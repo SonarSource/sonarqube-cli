@@ -18,6 +18,21 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+/**
+ * Wraps a failure that happened before a response was received at all: the request
+ * never reached the server, or never came back (DNS/TLS/proxy failure, connection
+ * refused, timeout, abort). Distinct from every other error in this file, which is
+ * built from an actual HTTP response.
+ */
+import { NetworkConfigError } from '@/core/errors.ts';
+
+export class TransportError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'TransportError';
+  }
+}
+
 /** Thrown by the API client on HTTP 429 (Too Many Requests). */
 export class RateLimitError extends Error {
   constructor() {
@@ -44,6 +59,41 @@ export class BadRequestError extends Error {
     this.name = 'BadRequestError';
     this.code = code;
     this.meta = meta;
+  }
+}
+
+/** Thrown by the API client on any 5xx response other than 503 (Service Unavailable). */
+export class ServerError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ServerError';
+    this.status = status;
+  }
+}
+
+/** Thrown by the API client on a GET HTTP 403 or 404 response. */
+export class AccessDeniedError extends Error {
+  readonly status: number;
+
+  constructor(status: number) {
+    super(
+      `Access denied (HTTP ${status}). Check that the supplied token and organization are valid.`,
+    );
+    this.name = 'AccessDeniedError';
+    this.status = status;
+  }
+}
+
+/** Thrown by the API client on any response status not classified by one of the above. */
+export class UnexpectedApiError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'UnexpectedApiError';
+    this.status = status;
   }
 }
 
@@ -85,4 +135,43 @@ export class RequestPayloadTooLargeError extends Error {
     this.code = code;
     this.meta = meta;
   }
+}
+
+/**
+ * The closed set of errors a `SonarHttpClient` method can resolve to. Parameterising
+ * `Result`/`ResultAsync` with this union, instead of the base `Error`, is what makes
+ * `.mapErr()` and a `switch` on `error.name` exhaustive at the call site.
+ */
+export type HttpClientError =
+  | TransportError
+  | NetworkConfigError
+  | RateLimitError
+  | ServiceUnavailableError
+  | BadRequestError
+  | ServerError
+  | ForbiddenApiError
+  | RequestPayloadTooLargeError
+  | AccessDeniedError
+  | UnexpectedApiError;
+
+/**
+ * Distinguishes a critical failure (the request could not be carried out at all, or
+ * the server is rejecting all traffic) from an expected one, a well-formed rejection
+ * of this particular request that a caller may reasonably treat as a normal outcome
+ * (e.g. "this organization doesn't exist").
+ *
+ * `Result`-returning `SonarHttpClient` methods don't apply this themselves: they hand
+ * back whichever error they built, critical or not, and leave the decision to the
+ * caller. Swallow-to-fallback call sites should check this before discarding an error,
+ * so an outage or a misconfigured proxy fails loudly instead of looking like the normal
+ * "not found" case it is being folded into.
+ */
+export function isCriticalFailure(error: Error): boolean {
+  return (
+    error instanceof TransportError ||
+    error instanceof NetworkConfigError ||
+    error instanceof RateLimitError ||
+    error instanceof ServiceUnavailableError ||
+    error instanceof ServerError
+  );
 }

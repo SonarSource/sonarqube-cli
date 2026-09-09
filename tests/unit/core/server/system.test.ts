@@ -45,18 +45,18 @@ describe('SystemClient', () => {
     it('returns mqr immediately for SonarQube Cloud without calling the API', async () => {
       const cloudClient = new SystemClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
       fetchSpy = spyOn(globalThis, 'fetch');
-      expect(await cloudClient.getServerMode()).toBe('mqr');
+      expect(await cloudClient.getServerMode().orThrow()).toBe('mqr');
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
     it('returns mqr when server responds with MQR mode', async () => {
       fetchSpy = mockFetch({ mode: 'MQR' });
-      expect(await client.getServerMode()).toBe('mqr');
+      expect(await client.getServerMode().orThrow()).toBe('mqr');
     });
 
     it('returns standard when server responds with STANDARD mode', async () => {
       fetchSpy = mockFetch({ mode: 'STANDARD' });
-      expect(await client.getServerMode()).toBe('standard');
+      expect(await client.getServerMode().orThrow()).toBe('standard');
     });
 
     it('returns standard when endpoint returns 404 (old server without MQR support)', async () => {
@@ -67,10 +67,10 @@ describe('SystemClient', () => {
         json: () => Promise.resolve({}),
         text: () => Promise.resolve('Not Found'),
       } as Response);
-      expect(await client.getServerMode()).toBe('standard');
+      expect(await client.getServerMode().orThrow()).toBe('standard');
     });
 
-    it('throws when endpoint returns a server error', async () => {
+    it('resolves to an error when endpoint returns a server error', async () => {
       fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue({
         ok: false,
         status: 500,
@@ -78,8 +78,8 @@ describe('SystemClient', () => {
         json: () => Promise.resolve({}),
         text: () => Promise.resolve(''),
       } as Response);
-      // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(client.getServerMode()).rejects.toThrow();
+      const result = await client.getServerMode();
+      expect(result.isErr()).toBe(true);
     });
   });
 });

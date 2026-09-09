@@ -68,7 +68,15 @@ async function resolveOrgAndRepos(
 
   const [almKey, privateProjectsAvailable] = await Promise.all([
     resolveAlmKey(client, resolvedOrgKey, resolvedAlmKey),
-    client.organizations.hasPrivateProjectsEntitlement(resolvedOrgKey),
+    client.organizations.hasPrivateProjectsEntitlement(resolvedOrgKey).match(
+      (value) => value,
+      (error) => {
+        throw new CommandFailedError(
+          `Failed to check private-projects entitlement for organization '${resolvedOrgKey}': ${error.message}`,
+          { remediationHint: 'Check your network connection and authentication, then retry.' },
+        );
+      },
+    ),
   ]);
 
   // Before any repository is listed, so an unsupported org stops here rather than after a full

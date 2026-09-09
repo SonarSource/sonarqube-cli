@@ -20,6 +20,8 @@
 
 // SonarQube Duplications API wrapper
 
+import type { ResultAsync } from '../result.ts';
+import type { HttpClientError } from './errors.ts';
 import type { QueryParams, SonarHttpClient } from './http-client.ts';
 import type { DuplicationsShowBlock, DuplicationsShowResponse } from './types.ts';
 
@@ -42,7 +44,9 @@ export class DuplicationsClient {
     this.client = client;
   }
 
-  async getDuplicationInfo(params: GetDuplicationInfoParams): Promise<DuplicationInfo> {
+  getDuplicationInfo(
+    params: GetDuplicationInfoParams,
+  ): ResultAsync<DuplicationInfo, HttpClientError> {
     const queryParams: QueryParams = { key: params.componentKey };
     if (params.branch) {
       queryParams.branch = params.branch;
@@ -50,11 +54,9 @@ export class DuplicationsClient {
     if (params.pullRequest) {
       queryParams.pullRequest = params.pullRequest;
     }
-    const response = await this.client.get<DuplicationsShowResponse>(
-      '/api/duplications/show',
-      queryParams,
-    );
-    return toDuplicationInfo(response, params.componentKey);
+    return this.client
+      .get<DuplicationsShowResponse>('/api/duplications/show', queryParams)
+      .map((response) => toDuplicationInfo(response, params.componentKey));
   }
 }
 

@@ -54,12 +54,14 @@ export async function listProjects(
   const client = new SonarHttpClient(auth.serverUrl, auth.token);
   const projectsClient = new ProjectsClient(client);
 
-  const result = await projectsClient.searchProjects({
-    q: options.query,
-    ps: pageSize,
-    p: options.page,
-    organization: auth.orgKey,
-  });
+  const result = await projectsClient
+    .searchProjects({
+      q: options.query,
+      ps: pageSize,
+      p: options.page,
+      organization: auth.orgKey,
+    })
+    .orThrow();
 
   const hasNextPage = result.paging.pageIndex * result.paging.pageSize < result.paging.total;
 

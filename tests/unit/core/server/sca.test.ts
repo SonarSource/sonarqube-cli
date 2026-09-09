@@ -66,11 +66,13 @@ describe('ScaClient.getWorstIssuesReleases', () => {
   it('requests /api/v2/sca/issues-releases on a non-cloud connection', async () => {
     fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(SAMPLE_RESPONSE));
 
-    await client.getWorstIssuesReleases({
-      projectKey: 'my-project',
-      types: ['VULNERABILITY'],
-      top: 10,
-    });
+    await client
+      .getWorstIssuesReleases({
+        projectKey: 'my-project',
+        types: ['VULNERABILITY'],
+        top: 10,
+      })
+      .orThrow();
 
     const url = (fetchSpy.mock.calls[0][0] as URL).toString();
     expect(url).toContain('/api/v2/sca/issues-releases');
@@ -84,11 +86,13 @@ describe('ScaClient.getWorstIssuesReleases', () => {
   it('joins multiple types with a comma', async () => {
     fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(SAMPLE_RESPONSE));
 
-    await client.getWorstIssuesReleases({
-      projectKey: 'my-project',
-      types: ['MALWARE', 'VULNERABILITY'],
-      top: 10,
-    });
+    await client
+      .getWorstIssuesReleases({
+        projectKey: 'my-project',
+        types: ['MALWARE', 'VULNERABILITY'],
+        top: 10,
+      })
+      .orThrow();
 
     const url = (fetchSpy.mock.calls[0][0] as URL).toString();
     expect(url).toContain('types=MALWARE%2CVULNERABILITY');
@@ -97,11 +101,13 @@ describe('ScaClient.getWorstIssuesReleases', () => {
   it('omits newlyIntroduced, branch and pull request from the query when not given', async () => {
     fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(SAMPLE_RESPONSE));
 
-    await client.getWorstIssuesReleases({
-      projectKey: 'my-project',
-      types: ['VULNERABILITY'],
-      top: 10,
-    });
+    await client
+      .getWorstIssuesReleases({
+        projectKey: 'my-project',
+        types: ['VULNERABILITY'],
+        top: 10,
+      })
+      .orThrow();
 
     const url = (fetchSpy.mock.calls[0][0] as URL).toString();
     expect(url).not.toContain('newlyIntroduced');
@@ -112,12 +118,14 @@ describe('ScaClient.getWorstIssuesReleases', () => {
   it('ignores orgKey on a non-cloud connection', async () => {
     fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(SAMPLE_RESPONSE));
 
-    await client.getWorstIssuesReleases({
-      projectKey: 'my-project',
-      types: ['VULNERABILITY'],
-      top: 10,
-      orgKey: 'my-org',
-    });
+    await client
+      .getWorstIssuesReleases({
+        projectKey: 'my-project',
+        types: ['VULNERABILITY'],
+        top: 10,
+        orgKey: 'my-org',
+      })
+      .orThrow();
 
     const url = (fetchSpy.mock.calls[0][0] as URL).toString();
     expect(url).not.toContain('organization');
@@ -127,12 +135,14 @@ describe('ScaClient.getWorstIssuesReleases', () => {
     const cloudClient = new ScaClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
     fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(SAMPLE_RESPONSE));
 
-    await cloudClient.getWorstIssuesReleases({
-      projectKey: 'my-project',
-      types: ['VULNERABILITY'],
-      top: 10,
-      orgKey: 'my-org',
-    });
+    await cloudClient
+      .getWorstIssuesReleases({
+        projectKey: 'my-project',
+        types: ['VULNERABILITY'],
+        top: 10,
+        orgKey: 'my-org',
+      })
+      .orThrow();
 
     const url = (fetchSpy.mock.calls[0][0] as URL).toString();
     expect(url).toContain('organization=my-org');
@@ -142,11 +152,13 @@ describe('ScaClient.getWorstIssuesReleases', () => {
     const cloudClient = new ScaClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
     fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(SAMPLE_RESPONSE));
 
-    await cloudClient.getWorstIssuesReleases({
-      projectKey: 'my-project',
-      types: ['VULNERABILITY'],
-      top: 10,
-    });
+    await cloudClient
+      .getWorstIssuesReleases({
+        projectKey: 'my-project',
+        types: ['VULNERABILITY'],
+        top: 10,
+      })
+      .orThrow();
 
     const url = (fetchSpy.mock.calls[0][0] as URL).toString();
     expect(url).not.toContain('organization');
@@ -155,33 +167,39 @@ describe('ScaClient.getWorstIssuesReleases', () => {
   it('forwards newlyIntroduced, branch and pull request when given', async () => {
     fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(SAMPLE_RESPONSE));
 
-    await client.getWorstIssuesReleases({
-      projectKey: 'my-project',
-      types: ['VULNERABILITY'],
-      newlyIntroduced: true,
-      top: 10,
-      branch: 'feature-x',
-    });
+    await client
+      .getWorstIssuesReleases({
+        projectKey: 'my-project',
+        types: ['VULNERABILITY'],
+        newlyIntroduced: true,
+        top: 10,
+        branch: 'feature-x',
+      })
+      .orThrow();
     expect((fetchSpy.mock.calls[0][0] as URL).toString()).toContain('newlyIntroduced=true');
     expect((fetchSpy.mock.calls[0][0] as URL).toString()).toContain('branchKey=feature-x');
 
-    await client.getWorstIssuesReleases({
-      projectKey: 'my-project',
-      types: ['VULNERABILITY'],
-      top: 10,
-      pullRequest: '42',
-    });
+    await client
+      .getWorstIssuesReleases({
+        projectKey: 'my-project',
+        types: ['VULNERABILITY'],
+        top: 10,
+        pullRequest: '42',
+      })
+      .orThrow();
     expect((fetchSpy.mock.calls[1][0] as URL).toString()).toContain('pullRequestKey=42');
   });
 
   it('returns the risks and the total count from the response paging', async () => {
     fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(SAMPLE_RESPONSE));
 
-    const result = await client.getWorstIssuesReleases({
-      projectKey: 'my-project',
-      types: ['VULNERABILITY'],
-      top: 10,
-    });
+    const result = await client
+      .getWorstIssuesReleases({
+        projectKey: 'my-project',
+        types: ['VULNERABILITY'],
+        top: 10,
+      })
+      .orThrow();
 
     expect(result).toEqual({ issuesReleases: SAMPLE_RESPONSE.issuesReleases, totalCount: 1 });
   });

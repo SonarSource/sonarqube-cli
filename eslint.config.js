@@ -73,13 +73,23 @@ export default tseslint.config(
   },
 
   // Telemetry/Sentry destinations are reachable only from the two modules that own the
-  // outbound call; the owners are exempted in the block that follows.
+  // outbound call, and `neverthrow` is reachable only from the one module that patches its
+  // prototype with `orThrow()` as a side effect of being loaded; the owners are exempted
+  // in the blocks that follow. Two separate `no-restricted-imports` config objects on the
+  // same files would silently overwrite each other in flat config, so both restrictions
+  // for `src/**/*.ts` are combined into this one block.
   {
     files: ['src/**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
         {
+          paths: [
+            {
+              name: 'neverthrow',
+              message: "Import from '@/core/result.ts' instead, so orThrow() is always loaded.",
+            },
+          ],
           // Matched as a glob against the import string, so every spelling of the path is
           // covered — alias, ./, ../ and deeper.
           patterns: [
@@ -95,9 +105,32 @@ export default tseslint.config(
     },
   },
   {
-    files: ['src/core/telemetry/telemetry-events.ts', 'src/core/observability/sentry.ts'],
+    files: [
+      'src/core/telemetry/telemetry-events.ts',
+      'src/core/observability/sentry.ts',
+      'src/core/result.ts',
+    ],
     rules: {
       'no-restricted-imports': 'off',
+    },
+  },
+
+  // Tests don't need the telemetry restriction (they legitimately mock those constants),
+  // but should still be routed through result.ts rather than importing neverthrow raw.
+  {
+    files: ['tests/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'neverthrow',
+              message: "Import from '@/core/result.ts' instead, so orThrow() is always loaded.",
+            },
+          ],
+        },
+      ],
     },
   },
 

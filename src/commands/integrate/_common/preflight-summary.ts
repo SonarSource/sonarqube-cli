@@ -110,13 +110,9 @@ async function organizationAccessStatus(
   token: string,
   organization: string,
 ): Promise<[StepStatus, string | undefined]> {
-  try {
-    const client = new OrganizationsClient(new SonarHttpClient(serverUrl, token));
-    const accessible = await client.isOrganizationAccessible(organization);
-    return accessible ? ['done', organization] : ['failed', `${organization} (not accessible)`];
-  } catch {
-    return ['failed', `${organization} (not accessible)`];
-  }
+  const client = new OrganizationsClient(new SonarHttpClient(serverUrl, token));
+  const accessible = await client.isOrganizationAccessible(organization);
+  return accessible ? ['done', organization] : ['failed', `${organization} (not accessible)`];
 }
 
 async function buildProjectItems(
@@ -167,18 +163,17 @@ async function buildProjectKeyItem(
   return phaseItem('Key', status, detail);
 }
 
-async function projectKeyAccessStatus(
+function projectKeyAccessStatus(
   serverUrl: string,
   token: string,
   projectKey: string,
 ): Promise<[StepStatus, string | undefined]> {
-  try {
-    const client = new ComponentsClient(new SonarHttpClient(serverUrl, token));
-    const accessible = await client.checkComponent(projectKey);
-    return accessible ? ['done', projectKey] : ['failed', `${projectKey} (not accessible)`];
-  } catch {
-    return ['failed', `${projectKey} (not accessible)`];
-  }
+  const client = new ComponentsClient(new SonarHttpClient(serverUrl, token));
+  return client.componentExists(projectKey).match(
+    (accessible) =>
+      accessible ? ['done', projectKey] : ['failed', `${projectKey} (not accessible)`],
+    () => ['failed', `${projectKey} (not accessible)`],
+  );
 }
 
 function tokenDisplayForStatus(tokenStatus: TokenStatus): {

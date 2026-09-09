@@ -69,10 +69,12 @@ export class ImportApiClient {
     pageSize: number,
   ): Promise<{ repositories: DopRepository[]; total: number }> {
     const endpoint = '/dop-translation/dop-repositories';
-    const result = await this.client.get<{
-      repositories: DopRepository[];
-      page: { total: number };
-    }>(endpoint, { organizationId, pageIndex, pageSize }, this.client.apiHostFor(endpoint));
+    const result = await this.client
+      .get<{
+        repositories: DopRepository[];
+        page: { total: number };
+      }>(endpoint, { organizationId, pageIndex, pageSize }, this.client.apiHostFor(endpoint))
+      .orThrow();
     return { repositories: result.repositories, total: result.page.total };
   }
 
@@ -84,30 +86,34 @@ export class ImportApiClient {
    * `installationKey` must already be in the ALM-specific format the server expects (e.g.
    * `<slug>|<id>` for GitHub, plain `id` for other platforms).
    */
-  async provisionProject(
+  provisionProject(
     organization: string,
     installationKey: string,
   ): Promise<{ projects: ProvisionedProject[] }> {
-    return await this.client.postFormJson<{ projects: ProvisionedProject[] }>(
-      '/api/alm_integration/provision_projects',
-      { organization, installationKeys: installationKey },
-    );
+    return this.client
+      .postFormJson<{ projects: ProvisionedProject[] }>('/api/alm_integration/provision_projects', {
+        organization,
+        installationKeys: installationKey,
+      })
+      .orThrow();
   }
 
   /**
    * Request SonarQube Cloud Autoscan eligibility/auto-enable for a newly provisioned project.
    * Best-effort: swallows failures so a hiccup here never fails the enclosing `sonar import` run.
    */
-  async requestAutoscanEligibility(projectKey: string): Promise<void> {
-    try {
-      await this.client.get('/api/autoscan/eligibility', {
+  requestAutoscanEligibility(projectKey: string): Promise<void> {
+    return this.client
+      .get('/api/autoscan/eligibility', {
         autoEnable: true,
         ignoreCache: false,
         projectKey,
-      });
-    } catch (err) {
-      logger.debug('Failed to request autoscan eligibility', err);
-      return undefined;
-    }
+      })
+      .match(
+        () => undefined,
+        (error) => {
+          logger.debug('Failed to request autoscan eligibility', error);
+        },
+      );
   }
 }

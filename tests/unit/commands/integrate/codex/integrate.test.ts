@@ -28,6 +28,7 @@ import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocatio
 import * as registry from '@/core/framework/features';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 import * as discovery from '@/core/project-info.ts';
+import { okAsync } from '@/core/result.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
 import { VortexEntitlementClient } from '@/core/vortex/entitlement.ts';
 
@@ -71,8 +72,8 @@ describe('integrateCodex', () => {
       (...args: never[]) => unknown
     >
   >;
-  let checkComponentSpy: Mock<
-    Extract<(typeof ComponentsClient.prototype)['checkComponent'], (...args: never[]) => unknown>
+  let componentExistsSpy: Mock<
+    Extract<(typeof ComponentsClient.prototype)['componentExists'], (...args: never[]) => unknown>
   >;
   let resolveVortexSetupSpy: Mock<
     Extract<(typeof vortex)['resolveVortexSetup'], (...args: never[]) => unknown>
@@ -86,7 +87,9 @@ describe('integrateCodex', () => {
       VortexEntitlementClient.prototype,
       'hasVortexEntitlement',
     ).mockResolvedValue({ status: 'not_entitled' });
-    checkComponentSpy = spyOn(ComponentsClient.prototype, 'checkComponent').mockResolvedValue(true);
+    componentExistsSpy = spyOn(ComponentsClient.prototype, 'componentExists').mockReturnValue(
+      okAsync(true),
+    );
     resolveVortexSetupSpy = spyOn(vortex, 'resolveVortexSetup').mockResolvedValue({
       disposition: 'preserve',
     });
@@ -97,7 +100,7 @@ describe('integrateCodex', () => {
     discoverProjectSpy.mockRestore();
     installIntegrationSpy.mockRestore();
     hasVortexEntitlementSpy.mockRestore();
-    checkComponentSpy.mockRestore();
+    componentExistsSpy.mockRestore();
     resolveVortexSetupSpy.mockRestore();
   });
 

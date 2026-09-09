@@ -102,7 +102,7 @@ export async function classifyRepo(
     };
   }
 
-  if (await ctx.sqs.components.hasProjectBeenAnalyzed(existingProjectKey)) {
+  if (await ctx.sqs.components.hasProjectBeenAnalyzed(existingProjectKey).orThrow()) {
     return {
       outcome: 'skip',
       reason: SkipReason.AlreadyConfigured,

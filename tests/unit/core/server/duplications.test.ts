@@ -118,7 +118,9 @@ describe('DuplicationsClient', () => {
       jsonResponse(SELF_DUPLICATION_RESPONSE),
     );
 
-    await client.getDuplicationInfo({ componentKey: 'my-project:src/core/gitlab/client.ts' });
+    await client
+      .getDuplicationInfo({ componentKey: 'my-project:src/core/gitlab/client.ts' })
+      .orThrow();
 
     const url = (fetchSpy.mock.calls[0][0] as URL).toString();
     expect(url).toContain('/api/duplications/show');
@@ -130,9 +132,11 @@ describe('DuplicationsClient', () => {
       jsonResponse(SELF_DUPLICATION_RESPONSE),
     );
 
-    const result = await client.getDuplicationInfo({
-      componentKey: 'my-project:src/core/gitlab/client.ts',
-    });
+    const result = await client
+      .getDuplicationInfo({
+        componentKey: 'my-project:src/core/gitlab/client.ts',
+      })
+      .orThrow();
 
     // One duplication group, but both of its blocks belong to the queried file itself.
     expect(result.blockCount).toBe(2);
@@ -143,9 +147,11 @@ describe('DuplicationsClient', () => {
       jsonResponse(SELF_DUPLICATION_RESPONSE),
     );
 
-    const result = await client.getDuplicationInfo({
-      componentKey: 'my-project:src/core/gitlab/client.ts',
-    });
+    const result = await client
+      .getDuplicationInfo({
+        componentKey: 'my-project:src/core/gitlab/client.ts',
+      })
+      .orThrow();
 
     expect(result.duplicatesWith).toEqual([]);
   });
@@ -155,9 +161,11 @@ describe('DuplicationsClient', () => {
       jsonResponse(CROSS_FILE_DUPLICATION_RESPONSE),
     );
 
-    const result = await client.getDuplicationInfo({
-      componentKey: 'my-project:ecosystem-map.html',
-    });
+    const result = await client
+      .getDuplicationInfo({
+        componentKey: 'my-project:ecosystem-map.html',
+      })
+      .orThrow();
 
     expect(result.blockCount).toBe(1);
     expect(result.duplicatesWith).toEqual(['index.html']);
@@ -168,7 +176,9 @@ describe('DuplicationsClient', () => {
       jsonResponse(CROSS_FILE_DUPLICATION_RESPONSE),
     );
 
-    const result = await client.getDuplicationInfo({ componentKey: 'my-project:index.html' });
+    const result = await client
+      .getDuplicationInfo({ componentKey: 'my-project:index.html' })
+      .orThrow();
 
     expect(result.duplicatesWith).toEqual(['ecosystem-map.html']);
   });
@@ -193,9 +203,11 @@ describe('DuplicationsClient', () => {
     };
     fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(response));
 
-    const result = await client.getDuplicationInfo({
-      componentKey: 'my-project:ecosystem-map.html',
-    });
+    const result = await client
+      .getDuplicationInfo({
+        componentKey: 'my-project:ecosystem-map.html',
+      })
+      .orThrow();
 
     expect(result.blockCount).toBe(2);
     expect(result.duplicatesWith).toEqual(['index.html']);
@@ -216,9 +228,11 @@ describe('DuplicationsClient', () => {
     };
     fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(response));
 
-    const result = await client.getDuplicationInfo({
-      componentKey: 'my-project:ecosystem-map.html',
-    });
+    const result = await client
+      .getDuplicationInfo({
+        componentKey: 'my-project:ecosystem-map.html',
+      })
+      .orThrow();
 
     expect(result.blockCount).toBe(1);
     expect(result.duplicatesWith).toEqual([]);
@@ -238,9 +252,11 @@ describe('DuplicationsClient', () => {
     };
     fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(response));
 
-    const result = await client.getDuplicationInfo({
-      componentKey: 'my-project:ecosystem-map.html',
-    });
+    const result = await client
+      .getDuplicationInfo({
+        componentKey: 'my-project:ecosystem-map.html',
+      })
+      .orThrow();
 
     expect(result.duplicatesWith).toEqual([]);
   });
@@ -250,7 +266,9 @@ describe('DuplicationsClient', () => {
       jsonResponse({ duplications: [], files: {} }),
     );
 
-    const result = await client.getDuplicationInfo({ componentKey: 'my-project:src/clean.ts' });
+    const result = await client
+      .getDuplicationInfo({ componentKey: 'my-project:src/clean.ts' })
+      .orThrow();
 
     expect(result).toEqual({ blockCount: 0, duplicatesWith: [] });
   });
@@ -260,7 +278,9 @@ describe('DuplicationsClient', () => {
       jsonResponse(SELF_DUPLICATION_RESPONSE),
     );
 
-    await client.getDuplicationInfo({ componentKey: 'my-project:src/core/gitlab/client.ts' });
+    await client
+      .getDuplicationInfo({ componentKey: 'my-project:src/core/gitlab/client.ts' })
+      .orThrow();
 
     const url = (fetchSpy.mock.calls[0][0] as URL).toString();
     expect(url).not.toContain('branch=');
@@ -272,16 +292,20 @@ describe('DuplicationsClient', () => {
       jsonResponse(SELF_DUPLICATION_RESPONSE),
     );
 
-    await client.getDuplicationInfo({
-      componentKey: 'my-project:src/core/gitlab/client.ts',
-      branch: 'feature-x',
-    });
+    await client
+      .getDuplicationInfo({
+        componentKey: 'my-project:src/core/gitlab/client.ts',
+        branch: 'feature-x',
+      })
+      .orThrow();
     expect((fetchSpy.mock.calls[0][0] as URL).toString()).toContain('branch=feature-x');
 
-    await client.getDuplicationInfo({
-      componentKey: 'my-project:src/core/gitlab/client.ts',
-      pullRequest: '42',
-    });
+    await client
+      .getDuplicationInfo({
+        componentKey: 'my-project:src/core/gitlab/client.ts',
+        pullRequest: '42',
+      })
+      .orThrow();
     expect((fetchSpy.mock.calls[1][0] as URL).toString()).toContain('pullRequest=42');
   });
 });

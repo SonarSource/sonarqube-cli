@@ -34,7 +34,8 @@ export function createScaScanApi(http: SonarHttpClient): ScaScanApi {
   const sca = new ScaClient(http);
   const components = new ComponentsClient(http);
   return {
-    checkScaEnabled: (connectionType, orgKey) => sca.checkScaEnabled(connectionType, orgKey),
-    getProjectSettings: (projectKey) => components.getProjectSettings(projectKey),
+    checkScaEnabled: (connectionType, orgKey) =>
+      sca.checkScaEnabled(connectionType, orgKey).orThrow(),
+    getProjectSettings: (projectKey) => components.getProjectSettings(projectKey).orThrow(),
   };
 }

@@ -92,7 +92,7 @@ async function searchIssuesBreakdown(
       asc: false,
       ps: params.top,
     };
-    const { issues, paging } = await issuesClient.searchIssues(searchParams);
+    const { issues, paging } = await issuesClient.searchIssues(searchParams).orThrow();
     const entries = issues.map((issue) => toIssuesEntry(issue, params.projectKey));
     if (entries.length === 0) {
       return undefined;

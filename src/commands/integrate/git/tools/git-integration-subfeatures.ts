@@ -48,7 +48,10 @@ export function gitHookPreview(hook: GitHookType): FeaturePreview {
 async function scaSkipReason(auth: ResolvedAuth) {
   const client = new ScaClient(new SonarHttpClient(auth.serverUrl, auth.token));
   try {
-    await assertScaAvailable(client, auth);
+    await assertScaAvailable(
+      { checkScaEnabled: (ct, orgKey) => client.checkScaEnabled(ct, orgKey).orThrow() },
+      auth,
+    );
     return null;
   } catch (err) {
     if (err instanceof CommandFailedError) {

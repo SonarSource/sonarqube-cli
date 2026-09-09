@@ -145,9 +145,9 @@ async function resolveSessionStartContext(
   return { additionalContext: result.stdout };
 }
 
-async function isScaEnabled(auth: ResolvedAuth): Promise<boolean> {
+function isScaEnabled(auth: ResolvedAuth): Promise<boolean> {
   const client = new ScaClient(new SonarHttpClient(auth.serverUrl, auth.token));
-  return client.checkScaEnabled(auth.connectionType, auth.orgKey);
+  return client.checkScaEnabled(auth.connectionType, auth.orgKey).orThrow();
 }
 
 function logSkip(reason: string): void {

@@ -20,6 +20,8 @@
 
 // SonarQube Project Branches API wrapper
 
+import type { ResultAsync } from '../result.ts';
+import { type HttpClientError } from './errors.ts';
 import { type SonarHttpClient } from './http-client.ts';
 import type { ProjectBranch, ProjectBranchesResponse } from './types.ts';
 
@@ -30,10 +32,9 @@ export class BranchesClient {
     this.client = client;
   }
 
-  async listBranches(projectKey: string): Promise<ProjectBranch[]> {
-    const result = await this.client.get<ProjectBranchesResponse>('/api/project_branches/list', {
-      project: projectKey,
-    });
-    return result.branches;
+  listBranches(projectKey: string): ResultAsync<ProjectBranch[], HttpClientError> {
+    return this.client
+      .get<ProjectBranchesResponse>('/api/project_branches/list', { project: projectKey })
+      .map((result) => result.branches);
   }
 }

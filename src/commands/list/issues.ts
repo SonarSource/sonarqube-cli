@@ -171,7 +171,10 @@ export async function listIssues(
 
   const { severities: normalizedSeverities, impactSeverities: normalizedImpactSeverities } =
     options.severities
-      ? parseSeverities(options.severities, await new SystemClient(client).getServerMode())
+      ? parseSeverities(
+          options.severities,
+          await new SystemClient(client).getServerMode().orThrow(),
+        )
       : {};
 
   const params: IssuesSearchParams = {
@@ -190,7 +193,7 @@ export async function listIssues(
     p: page,
   };
 
-  const result = await issuesClient.searchIssues(params);
+  const result = await issuesClient.searchIssues(params).orThrow();
 
   let output: string;
 

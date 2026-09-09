@@ -117,24 +117,26 @@ function writeDiskCache(cache: ProjectUuidCacheFile): void {
  * Deliberately does not reuse `ComponentsClient.getComponentId()`: that helper collapses both
  * outcomes to `null`, which would defeat the cache's retry semantics.
  */
-async function fetchProjectUuid(
+function fetchProjectUuid(
   client: SonarHttpClient,
   projectKey: string,
 ): Promise<{ value: string | null; ok: boolean }> {
-  try {
-    const { response, value } = await client.getSafe<{ id: string }>(
+  return client
+    .getSafe<{ id: string }>(
       '/api/navigation/component',
       { component: projectKey },
       undefined,
       RESOLVE_BUDGET_MS,
+    )
+    .match(
+      ({ response, value }): { value: string | null; ok: boolean } => {
+        if (!response.ok) {
+          return { value: null, ok: false };
+        }
+        return { value: value?.id ?? null, ok: true };
+      },
+      (): { value: string | null; ok: boolean } => ({ value: null, ok: false }),
     );
-    if (!response.ok) {
-      return { value: null, ok: false };
-    }
-    return { value: value?.id ?? null, ok: true };
-  } catch {
-    return { value: null, ok: false };
-  }
 }
 
 /**

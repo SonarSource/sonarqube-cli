@@ -184,12 +184,14 @@ describe('MeasuresClient', () => {
       jsonResponse(componentTreeResponse({ components })),
     );
 
-    const result = await client.getWorstComponentsByMetric({
-      projectKey: 'my-project',
-      metricKey: 'new_coverage',
-      ascending: true,
-      top: 3,
-    });
+    const result = await client
+      .getWorstComponentsByMetric({
+        projectKey: 'my-project',
+        metricKey: 'new_coverage',
+        ascending: true,
+        top: 3,
+      })
+      .orThrow();
 
     expect(result.components).toEqual(components);
   });
@@ -202,12 +204,14 @@ describe('MeasuresClient', () => {
       ),
     );
 
-    const result = await client.getWorstComponentsByMetric({
-      projectKey: 'my-project',
-      metricKey: 'new_coverage',
-      ascending: true,
-      top: 1,
-    });
+    const result = await client
+      .getWorstComponentsByMetric({
+        projectKey: 'my-project',
+        metricKey: 'new_coverage',
+        ascending: true,
+        top: 1,
+      })
+      .orThrow();
 
     expect(result.totalCount).toBe(47);
   });

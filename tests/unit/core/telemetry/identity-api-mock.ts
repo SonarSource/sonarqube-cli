@@ -20,6 +20,8 @@
 
 import { spyOn } from 'bun:test';
 
+import { okAsync, type ResultAsync } from '@/core/result.ts';
+import type { SafeGetResult } from '@/core/server/http-client.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 
 interface ApiStep {
@@ -59,17 +61,17 @@ export function mockIdentityGetSafe(
       endpoint: string,
       _params?: Record<string, string | number | boolean>,
       _baseUrl?: string,
-    ): Promise<{ response: Response; value: TValue | undefined }> => {
+    ): ResultAsync<SafeGetResult<TValue>, never> => {
       if (endpoint === '/api/users/current') {
         const step = shiftStep(userSteps, { ok: true });
-        return Promise.resolve({
+        return okAsync({
           response: { ok: step.ok } as Response,
           value: (step.id ? { id: step.id } : {}) as TValue,
         });
       }
       if (endpoint === '/organizations/organizations') {
         const step = shiftStep(orgSteps, { ok: true });
-        return Promise.resolve({
+        return okAsync({
           response: { ok: step.ok } as Response,
           value: (step.uuidV4
             ? [{ uuidV4: step.uuidV4, id: step.id ?? `id-${step.uuidV4}` }]
@@ -78,14 +80,14 @@ export function mockIdentityGetSafe(
       }
       if (endpoint === '/enterprises/enterprise-organizations') {
         const step = shiftStep(enterpriseSteps, { ok: true });
-        return Promise.resolve({
+        return okAsync({
           response: { ok: step.ok } as Response,
           value: (step.enterpriseId ? [{ enterpriseId: step.enterpriseId }] : []) as TValue,
         });
       }
       if (endpoint === '/api/system/status') {
         const step = shiftStep(statusSteps, { ok: true });
-        return Promise.resolve({
+        return okAsync({
           response: { ok: step.ok } as Response,
           value: {
             status: 'UP',
@@ -94,7 +96,7 @@ export function mockIdentityGetSafe(
           } as TValue,
         });
       }
-      return Promise.reject(new Error(`Unexpected getSafe endpoint in identity test: ${endpoint}`));
+      throw new Error(`Unexpected getSafe endpoint in identity test: ${endpoint}`);
     },
   );
 }

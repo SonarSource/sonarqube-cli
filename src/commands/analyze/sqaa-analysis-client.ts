@@ -37,21 +37,16 @@ export class SqaaAnalysisClient {
    * Create a Vortex analysis (single- or multi-file). On Cloud the endpoint lives on the
    * region-specific API host; on Server the A3S hub serves it from the instance itself.
    */
-  async createAnalysis(request: SqaaAnalysisRequest): Promise<SqaaAnalysisResponse> {
+  createAnalysis(request: SqaaAnalysisRequest): Promise<SqaaAnalysisResponse> {
     const endpoint = this.client.isCloud ? '/a3s-analysis/analyses' : '/api/v2/a3s/analyses';
-    try {
-      return await this.client.post<SqaaAnalysisResponse>(
-        endpoint,
-        request,
-        this.client.apiHostFor(endpoint),
-        { [SONAR_INVOCATION_ID_HEADER]: INVOCATION_ID },
-      );
-    } catch (err) {
-      // 403 on this endpoint means Agentic Pack entitlement was revoked.
-      if (err instanceof ForbiddenApiError) {
-        throw new SqaaForbiddenError();
-      }
-      throw err;
-    }
+    return (
+      this.client
+        .post<SqaaAnalysisResponse>(endpoint, request, this.client.apiHostFor(endpoint), {
+          [SONAR_INVOCATION_ID_HEADER]: INVOCATION_ID,
+        })
+        // 403 on this endpoint means Agentic Pack entitlement was revoked.
+        .mapErr((error) => (error instanceof ForbiddenApiError ? new SqaaForbiddenError() : error))
+        .orThrow()
+    );
   }
 }

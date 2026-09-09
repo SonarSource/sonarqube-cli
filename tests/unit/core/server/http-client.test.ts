@@ -95,12 +95,33 @@ describe('SonarHttpClient', () => {
       );
     });
 
-    it('throws when response is not ok', async () => {
+    it('returns an error result when response is not ok', async () => {
       fetchSpy = mockFetch({}, { ok: false, status: 401 });
-      // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(client.get('/api/authentication/validate')).rejects.toThrow(
-        'SonarQube API error: 401',
+      const result = await client.get('/api/authentication/validate');
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toBe(
+        'SonarQube API error: 401 Internal Server Error',
       );
+    });
+
+    it('returns an error result instead of throwing on a transport failure', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
+      const result = await client.get('/api/authentication/validate');
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toBe('ECONNREFUSED');
+    });
+
+    it('returns an error result instead of a rejected promise when reading the error body fails', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        headers: new Headers(),
+        text: () => Promise.reject(new Error('stream error')),
+        json: () => Promise.reject(new Error('stream error')),
+      } as unknown as Response);
+      const result = await client.get('/api/authentication/validate');
+      expect(result.isErr()).toBe(true);
     });
   });
 
@@ -142,7 +163,8 @@ describe('SonarHttpClient', () => {
         } as unknown as Response);
 
       const result = await client.get<{ valid: boolean }>('/api/v1/endpoint');
-      expect(result.valid).toBe(true);
+      expect(result.isOk()).toBe(true);
+      expect(result._unsafeUnwrap().valid).toBe(true);
       expect(fetchSpy).toHaveBeenCalledTimes(2);
       expect(fetchSpy.mock.calls[1][0] as string).toContain('/api/v2/endpoint');
     });
@@ -157,8 +179,9 @@ describe('SonarHttpClient', () => {
         json: () => Promise.resolve({}),
       } as unknown as Response);
 
-      // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(client.get('/api/endpoint')).rejects.toThrow('cross-origin redirect');
+      const result = await client.get('/api/endpoint');
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toContain('cross-origin redirect');
 
       // fetch was called exactly once — the token was never sent to attacker.com
       expect(fetchSpy).toHaveBeenCalledTimes(1);
@@ -166,20 +189,59 @@ describe('SonarHttpClient', () => {
     });
   });
 
+  describe('getOrNotFound', () => {
+    it('returns an error result instead of throwing on a transport failure', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
+      const result = await client.getOrNotFound('/api/some/endpoint');
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toBe('ECONNREFUSED');
+    });
+  });
+
   describe('getSafe', () => {
     it('returns response and parsed value on success', async () => {
       fetchSpy = mockFetch({ valid: true });
-      const result = await client.getSafe<{ valid: boolean }>('/api/authentication/validate');
+      const result = await client
+        .getSafe<{ valid: boolean }>('/api/authentication/validate')
+        .orThrow();
       expect(result.response.ok).toBe(true);
       expect(result.value).toEqual({ valid: true });
     });
 
     it('returns response with undefined value on non-ok status (does not throw)', async () => {
       fetchSpy = mockFetch({ errors: [{ msg: 'Not found' }] }, { ok: false, status: 404 });
-      const result = await client.getSafe('/api/settings/values', { component: 'missing' });
+      const result = await client
+        .getSafe('/api/settings/values', { component: 'missing' })
+        .orThrow();
       expect(result.response.ok).toBe(false);
       expect(result.response.status).toBe(404);
       expect(result.value).toBeUndefined();
+    });
+
+    it('returns an error result instead of throwing on a transport failure', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
+      const result = await client.getSafe('/api/some/endpoint');
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toBe('ECONNREFUSED');
+    });
+
+    it('reports a malformed body on an ok response as UnexpectedApiError, not TransportError', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: () => Promise.reject(new SyntaxError('Unexpected token')),
+        text: () => Promise.resolve('not json'),
+      } as unknown as Response);
+      const result = await client.getSafe('/api/some/endpoint');
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().name).toBe('UnexpectedApiError');
+    });
+
+    it('resolves to an error result instead of throwing on an unusable server URL', async () => {
+      const badClient = new SonarHttpClient('not a url', 'test-token');
+      const result = await badClient.getSafe('/api/system/status');
+      expect(result.isErr()).toBe(true);
     });
 
     it('appends query parameters to the URL', async () => {
@@ -213,10 +275,18 @@ describe('SonarHttpClient', () => {
       });
     });
 
-    it('throws with error body text when response is not ok', async () => {
+    it('returns an error result with the response body text when response is not ok', async () => {
       fetchSpy = mockFetch({ message: 'Not found' }, { ok: false, status: 404 });
-      // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(client.post('/api/some/endpoint', {})).rejects.toThrow('404');
+      const result = await client.post('/api/some/endpoint', {});
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toContain('404');
+    });
+
+    it('returns an error result instead of throwing on a transport failure', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
+      const result = await client.post('/api/some/endpoint', {});
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toBe('ECONNREFUSED');
     });
   });
 
@@ -244,19 +314,36 @@ describe('SonarHttpClient', () => {
       expect(lastFetchUrl(fetchSpy)).toBe(`${SERVER_URL}/api/some/form`);
     });
 
-    it('throws with error body text when response is not ok', async () => {
+    it('returns an error result with the response body text when response is not ok', async () => {
       fetchSpy = mockFetch({ message: 'boom' }, { ok: false, status: 500 });
-      // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(client.postForm('/api/some/form', { name: 'test' })).rejects.toThrow(
-        'SonarQube API error: 500 Internal Server Error',
+      const result = await client.postForm('/api/some/form', { name: 'test' });
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toBe(
+        'SonarQube API error: 500 Internal Server Error - {"message":"boom"}',
       );
+    });
+
+    it('returns an error result instead of throwing on a transport failure', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
+      const result = await client.postForm('/api/some/form', { name: 'test' });
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toBe('ECONNREFUSED');
+    });
+  });
+
+  describe('postFormJson', () => {
+    it('returns an error result instead of throwing on a transport failure', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
+      const result = await client.postFormJson('/api/some/form', { name: 'test' });
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toBe('ECONNREFUSED');
     });
   });
 
   describe('genericRequest', () => {
     it('makes a GET request and returns response text', async () => {
       fetchSpy = mockFetch({ status: 'UP' });
-      const result = await client.genericRequest('GET', '/api/system/status', fake);
+      const result = await client.genericRequest('GET', '/api/system/status', fake).orThrow();
       expect(result).toBe('{"status":"UP"}');
 
       const url = (fetchSpy.mock.calls[0][0] as string).toString();
@@ -338,31 +425,50 @@ describe('SonarHttpClient', () => {
       expect(messages.some((m) => m.includes('request method:'))).toBe(false);
     });
 
-    it('throws BadRequestError on non-ok POST response', async () => {
+    it('returns a BadRequestError result on non-ok POST response', async () => {
       fetchSpy = mockFetch({ message: 'Bad request' }, { ok: false, status: 400 });
-      // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(
-        client.genericRequest('POST', '/api/issues/do_transition', fake, '{"k":"v"}', 'form'),
-      ).rejects.toMatchObject({ name: 'BadRequestError', message: 'Bad request' });
+      const result = await client.genericRequest(
+        'POST',
+        '/api/issues/do_transition',
+        fake,
+        '{"k":"v"}',
+        'form',
+      );
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr()).toMatchObject({
+        name: 'BadRequestError',
+        message: 'Bad request',
+      });
     });
 
     it('preserves raw body for non-SQAA POST 400 responses', async () => {
       fetchSpy = mockFetch({ errors: [{ msg: 'Transition failed' }] }, { ok: false, status: 400 });
-      // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(
-        client.genericRequest('POST', '/api/issues/do_transition', fake, '{"k":"v"}', 'form'),
-      ).rejects.toMatchObject({
+      const result = await client.genericRequest(
+        'POST',
+        '/api/issues/do_transition',
+        fake,
+        '{"k":"v"}',
+        'form',
+      );
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr()).toMatchObject({
         name: 'BadRequestError',
         message: expect.stringContaining('Transition failed'),
       });
     });
 
-    it('throws access denied on GET 403', async () => {
+    it('returns an access-denied error result on GET 403', async () => {
       fetchSpy = mockFetch({}, { ok: false, status: 403 });
-      // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(client.genericRequest('GET', '/api/system/status', fake)).rejects.toThrow(
-        'Access denied',
-      );
+      const result = await client.genericRequest('GET', '/api/system/status', fake);
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toContain('Access denied');
+    });
+
+    it('returns an error result instead of throwing on a transport failure', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
+      const result = await client.genericRequest('GET', '/api/system/status', fake);
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toBe('ECONNREFUSED');
     });
 
     it('resolves a plain SonarCloud /api endpoint correctly', async () => {

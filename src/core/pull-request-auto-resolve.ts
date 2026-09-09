@@ -46,14 +46,15 @@ export async function autoResolvePullRequest(
   return { pullRequest: matches[0].key, branch };
 }
 
-async function tryListPullRequests(
+function tryListPullRequests(
   client: SonarHttpClient,
   projectKey: string,
 ): Promise<ProjectPullRequest[] | null> {
-  try {
-    return await new PullRequestsClient(client).listPullRequests(projectKey);
-  } catch (err) {
-    logger.debug(`Pull request auto-detection skipped for '${projectKey}'`, err);
-    return null;
-  }
+  return new PullRequestsClient(client).listPullRequests(projectKey).match(
+    (pullRequests) => pullRequests,
+    (err) => {
+      logger.debug(`Pull request auto-detection skipped for '${projectKey}'`, err);
+      return null;
+    },
+  );
 }

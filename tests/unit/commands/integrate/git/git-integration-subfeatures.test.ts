@@ -22,6 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
+import { okAsync } from '@/core/result.ts';
 import { ScaClient } from '@/core/server/sca.ts';
 
 import type { IntegrateGitOptions } from '../../../../../src/commands/integrate/git/options.ts';
@@ -108,7 +109,7 @@ describe('createDepRisksSubfeature', () => {
     });
 
     it('skips with SCA unavailability message when SCA is not enabled on the connection', async () => {
-      checkScaEnabledSpy.mockResolvedValue(false);
+      checkScaEnabledSpy.mockReturnValue(okAsync(false));
       const sub = createDepRisksSubfeature();
       expect(
         await sub.shouldInstall!(
@@ -121,7 +122,7 @@ describe('createDepRisksSubfeature', () => {
     });
 
     it('installs when --dependency-risks and project key are both set', async () => {
-      checkScaEnabledSpy.mockResolvedValue(true);
+      checkScaEnabledSpy.mockReturnValue(okAsync(true));
       const sub = createDepRisksSubfeature();
       expect(
         await sub.shouldInstall!(
@@ -134,7 +135,7 @@ describe('createDepRisksSubfeature', () => {
     });
 
     it('asks user when project key is set but --dependency-risks is not', async () => {
-      checkScaEnabledSpy.mockResolvedValue(true);
+      checkScaEnabledSpy.mockReturnValue(okAsync(true));
       const sub = createDepRisksSubfeature();
       expect(
         await sub.shouldInstall!(
@@ -144,7 +145,7 @@ describe('createDepRisksSubfeature', () => {
     });
 
     it('asks user in non-interactive mode when --dependency-risks is not set (installer converts ask+nonInteractive to install)', async () => {
-      checkScaEnabledSpy.mockResolvedValue(true);
+      checkScaEnabledSpy.mockReturnValue(okAsync(true));
       const sub = createDepRisksSubfeature();
       expect(
         await sub.shouldInstall!(

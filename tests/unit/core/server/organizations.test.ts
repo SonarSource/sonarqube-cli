@@ -50,7 +50,7 @@ describe('OrganizationsClient', () => {
     it('hits api.sonarcloud.io, not the serverURL', async () => {
       const cloudClient = new OrganizationsClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
       fetchSpy = mockFetch([{ id: 'str-id', uuidV4: 'org-uuid-v4' }]);
-      await cloudClient.getOrganizationId('my-org');
+      await cloudClient.getOrganizationId('my-org').orThrow();
       expect(lastFetchUrl(fetchSpy)).toContain(SONARCLOUD_API_URL);
       expect(lastFetchUrl(fetchSpy)).not.toContain(`${SONARCLOUD_URL}/api`);
     });
@@ -58,7 +58,7 @@ describe('OrganizationsClient', () => {
     it('calls /organizations/organizations with organizationKey param', async () => {
       const cloudClient = new OrganizationsClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
       fetchSpy = mockFetch([{ id: 'str-id', uuidV4: 'org-uuid-v4' }]);
-      await cloudClient.getOrganizationId('my-org');
+      await cloudClient.getOrganizationId('my-org').orThrow();
       const url = new URL(lastFetchUrl(fetchSpy));
       expect(url.pathname).toBe('/organizations/organizations');
       expect(url.searchParams.get('organizationKey')).toBe('my-org');
@@ -67,23 +67,23 @@ describe('OrganizationsClient', () => {
     it('hits api.sonarqube.us for US Cloud', async () => {
       const usClient = new OrganizationsClient(new SonarHttpClient(SONARCLOUD_US_URL, TOKEN));
       fetchSpy = mockFetch([{ id: 'str-id', uuidV4: 'org-uuid-v4' }]);
-      await usClient.getOrganizationId('my-org');
+      await usClient.getOrganizationId('my-org').orThrow();
       expect(lastFetchUrl(fetchSpy)).toContain(SONARCLOUD_US_API_URL);
     });
 
     it('returns the uuidV4 of the first result on success', async () => {
       fetchSpy = mockFetch([{ id: 'str-id', uuidV4: 'org-uuid-v4' }]);
-      expect(await client.getOrganizationId('my-org')).toBe('org-uuid-v4');
+      expect(await client.getOrganizationId('my-org').orThrow()).toBe('org-uuid-v4');
     });
 
     it('returns null on error', async () => {
       fetchSpy = mockFetch({}, { ok: false, status: 404 });
-      expect(await client.getOrganizationId('unknown-org')).toBeNull();
+      expect(await client.getOrganizationId('unknown-org').orThrow()).toBeNull();
     });
 
     it('returns null when result array is empty', async () => {
       fetchSpy = mockFetch([]);
-      expect(await client.getOrganizationId('my-org')).toBeNull();
+      expect(await client.getOrganizationId('my-org').orThrow()).toBeNull();
     });
   });
 

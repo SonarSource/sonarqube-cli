@@ -59,15 +59,17 @@ export async function fetchDependencyRisksBreakdown(
   }
   try {
     const scaClient = new ScaClient(params.client);
-    const { issuesReleases, totalCount } = await scaClient.getWorstIssuesReleases({
-      projectKey: params.projectKey,
-      types,
-      newlyIntroduced: isNewCodeMetric(condition.metric),
-      top: params.top,
-      branch: params.branch,
-      pullRequest: params.pullRequest,
-      orgKey: params.orgKey,
-    });
+    const { issuesReleases, totalCount } = await scaClient
+      .getWorstIssuesReleases({
+        projectKey: params.projectKey,
+        types,
+        newlyIntroduced: isNewCodeMetric(condition.metric),
+        top: params.top,
+        branch: params.branch,
+        pullRequest: params.pullRequest,
+        orgKey: params.orgKey,
+      })
+      .orThrow();
     const entries = issuesReleases
       .map(toBreakdownEntry)
       .filter((entry): entry is DependencyRiskBreakdownEntry => entry !== undefined);
@@ -80,8 +82,8 @@ export async function fetchDependencyRisksBreakdown(
       fetchedCount: entries.length,
       entries,
     };
-  } catch (err) {
-    logger.debug(`Failed to build quality gate breakdown for '${condition.metric}'`, err);
+  } catch (error) {
+    logger.debug(`Failed to build quality gate breakdown for '${condition.metric}'`, error);
     return undefined;
   }
 }

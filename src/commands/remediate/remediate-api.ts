@@ -21,7 +21,9 @@
 // Every SonarQube API call `sonar remediate` makes, in one place next to the command.
 
 import logger from '@/core/observability/logger.ts';
+import { okAsync, type ResultAsync } from '@/core/result.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
+import type { HttpClientError } from '@/core/server/errors.ts';
 import { type SonarHttpClient } from '@/core/server/http-client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
 
@@ -49,45 +51,49 @@ export class RemediateApiClient {
     this.issues = new IssuesClient(client);
   }
 
-  async checkAiRemediationEntitlement(
-    orgKey: string,
-  ): Promise<{ status: AiRemediationEntitlement }> {
-    try {
-      // Not OrganizationsClient.getOrganizationLegacyId: it maps a failed lookup to null,
-      // which would report an unreachable server as 'not_eligible' instead of 'unknown'.
-      const orgsEndpoint = '/organizations/organizations';
-      const orgs = await this.client.get<Array<{ id: string; uuidV4: string; name?: string }>>(
+  checkAiRemediationEntitlement(orgKey: string): Promise<{ status: AiRemediationEntitlement }> {
+    const orgsEndpoint = '/organizations/organizations';
+    return this.client
+      .get<Array<{ id: string; uuidV4: string; name?: string }>>(
         orgsEndpoint,
         { organizationKey: orgKey, excludeEligibility: 'true' },
         this.client.apiHostFor(orgsEndpoint),
+      )
+      .andThen((organizations) => this.resolveEntitlementForOrg(organizations.at(0)))
+      .match(
+        (result) => result,
+        (error) => {
+          logger.warn('AI remediation entitlement check failed', error);
+          return { status: 'unknown' as const };
+        },
       );
-      const org = orgs.at(0);
-      if (!org) return { status: 'not_eligible' };
+  }
 
-      const configEndpoint = `/fix-suggestions/organization-configs/${org.id}`;
-      const config = await this.client.get<{
+  private resolveEntitlementForOrg(
+    org: { id: string } | undefined,
+  ): ResultAsync<{ status: AiRemediationEntitlement }, HttpClientError> {
+    if (!org) return okAsync({ status: 'not_eligible' as const });
+
+    const configEndpoint = `/fix-suggestions/organization-configs/${org.id}`;
+    return this.client
+      .get<{
         codeReviewAgent: { organizationEligible: boolean; delegateIssuesEnabled?: boolean };
-      }>(configEndpoint, undefined, this.client.apiHostFor(configEndpoint));
-
-      if (!config.codeReviewAgent.organizationEligible) return { status: 'not_eligible' };
-      if (!config.codeReviewAgent.delegateIssuesEnabled) return { status: 'not_enabled' };
-      return { status: 'ok' };
-    } catch (err) {
-      logger.warn('AI remediation entitlement check failed', err);
-      return { status: 'unknown' };
-    }
+      }>(configEndpoint, undefined, this.client.apiHostFor(configEndpoint))
+      .map((config): { status: AiRemediationEntitlement } => {
+        if (!config.codeReviewAgent.organizationEligible) return { status: 'not_eligible' };
+        if (!config.codeReviewAgent.delegateIssuesEnabled) return { status: 'not_enabled' };
+        return { status: 'ok' };
+      });
   }
 
   /**
    * Schedule an AI agent remediation job for a set of issues.
    * SonarQube Cloud only - endpoint lives on the region-specific API host.
    */
-  async scheduleAgentJob(request: AgentJobRequest): Promise<AgentJobResponse> {
+  scheduleAgentJob(request: AgentJobRequest): Promise<AgentJobResponse> {
     const endpoint = '/fix-suggestions/ai-agent-scheduled-jobs';
-    return await this.client.post<AgentJobResponse>(
-      endpoint,
-      request,
-      this.client.apiHostFor(endpoint),
-    );
+    return this.client
+      .post<AgentJobResponse>(endpoint, request, this.client.apiHostFor(endpoint))
+      .orThrow();
   }
 }

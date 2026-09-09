@@ -119,15 +119,14 @@ export async function resolveOrg(
 }
 
 async function resolveOrgByKey(client: ImportApiClient, orgKey: string): Promise<ResolvedOrg> {
-  let org;
-  try {
-    org = await client.organizations.fetchOrganizationByKey(orgKey);
-  } catch (err) {
-    throw new CommandFailedError(
-      `Failed to look up organization '${orgKey}': ${err instanceof Error ? err.message : String(err)}`,
-      { remediationHint: 'Check your network connection and authentication, then retry.' },
-    );
-  }
+  const org = await client.organizations.fetchOrganizationByKey(orgKey).match(
+    (value) => value,
+    (err) => {
+      throw new CommandFailedError(`Failed to look up organization '${orgKey}': ${err.message}`, {
+        remediationHint: 'Check your network connection and authentication, then retry.',
+      });
+    },
+  );
 
   if (!org) {
     throw new CommandFailedError(`Organization '${orgKey}' not found.`, {
@@ -186,14 +185,15 @@ export async function resolveAlmKey(
     return normalizeAlmKey(orgRecordAlmKey);
   }
 
-  try {
-    return normalizeAlmKey(await client.organizations.getOrganizationAlmKey(orgKey));
-  } catch (err) {
-    throw new CommandFailedError(
-      `Failed to look up the DevOps platform for organization '${orgKey}': ${err instanceof Error ? err.message : String(err)}`,
-      { remediationHint: 'Check your network connection and authentication, then retry.' },
-    );
-  }
+  return client.organizations.getOrganizationAlmKey(orgKey).match(
+    (almKey) => normalizeAlmKey(almKey),
+    (err) => {
+      throw new CommandFailedError(
+        `Failed to look up the DevOps platform for organization '${orgKey}': ${err.message}`,
+        { remediationHint: 'Check your network connection and authentication, then retry.' },
+      );
+    },
+  );
 }
 
 /**
@@ -328,7 +328,14 @@ export async function resolveRepos(
     );
   }
 
-  const organizationId = await client.organizations.getOrganizationLegacyId(orgKey);
+  const organizationId = await client.organizations.getOrganizationLegacyId(orgKey).match(
+    (id) => id,
+    (error) => {
+      throw new CommandFailedError(`Failed to look up organization '${orgKey}': ${error.message}`, {
+        remediationHint: 'Check your network connection and authentication, then retry.',
+      });
+    },
+  );
   if (!organizationId) {
     throw new CommandFailedError(`Organization '${orgKey}' not found.`, {
       remediationHint: 'Check that the organization key is correct and that you have access to it.',

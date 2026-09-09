@@ -116,7 +116,7 @@ async function resolveDopSetting(
   sqs: OnboardCiSqsClient,
   bindingName?: string,
 ): Promise<{ dopSettingId: string; dopSettingKey: string; gitlabUrl: string }> {
-  const settings = await sqs.bindings.listGitlabDopSettings();
+  const settings = await sqs.bindings.listGitlabDopSettings().orThrow();
 
   if (settings.length === 0) {
     throw new CommandFailedError(
@@ -224,7 +224,7 @@ async function preflight(
   assertOnPremiseConnection(auth);
 
   const sqsClient = new OnboardCiSqsClient(new SonarHttpClient(auth.serverUrl, auth.token));
-  if (!(await sqsClient.users.hasProvisionProjectsPermission())) {
+  if (!(await sqsClient.users.hasProvisionProjectsPermission().orThrow())) {
     throw new CommandFailedError(
       'This command requires the "Provision Projects" global permission in SonarQube.',
     );
@@ -247,7 +247,7 @@ async function fetchGroupData(
   console: Console,
 ): Promise<{ repos: RepoWithBranch[]; bindingMap: Map<string, string> }> {
   const bindingMap = await console.withSpinner('Fetching SonarQube project bindings...', () =>
-    sqsClient.bindings.getAllProjectBindings(dopSettingId),
+    sqsClient.bindings.getAllProjectBindings(dopSettingId).orThrow(),
   );
   const allRepos = await console.withSpinner('Fetching GitLab repositories...', () =>
     gitlabClient.listGroupRepos(options.group),
