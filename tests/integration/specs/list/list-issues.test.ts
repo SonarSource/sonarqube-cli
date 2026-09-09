@@ -169,17 +169,53 @@ describe('list issues', () => {
   );
 
   it.each([
-    ['a file path', 'src/foo.ts', 'my-project:src/foo.ts'],
-    ['a directory path', 'src/api', 'my-project:src/api'],
-    ["a leading './'", './src/foo.ts', 'my-project:src/foo.ts'],
-    ["a leading '/'", '/src/foo.ts', 'my-project:src/foo.ts'],
+    [
+      'a file path',
+      'src/foo.ts',
+      'my-project:src/foo.ts',
+      [{ path: 'src/foo.ts', qualifier: 'FIL' }],
+    ],
+    ['a directory path', 'src/api', 'my-project:src/api', [{ path: 'src/api', qualifier: 'DIR' }]],
+    [
+      "a leading './'",
+      './src/foo.ts',
+      'my-project:src/foo.ts',
+      [{ path: 'src/foo.ts', qualifier: 'FIL' }],
+    ],
+    [
+      "a leading '/'",
+      '/src/foo.ts',
+      'my-project:src/foo.ts',
+      [{ path: 'src/foo.ts', qualifier: 'FIL' }],
+    ],
+    [
+      "a shell-completed trailing '/'",
+      'src/api/',
+      'my-project:src/api',
+      [{ path: 'src/api', qualifier: 'DIR' }],
+    ],
+    [
+      "a shell-completed trailing '/' on a root-level directory (ambiguous by name alone)",
+      'src/',
+      'my-project:src',
+      [
+        { path: 'src', qualifier: 'DIR' },
+        { path: 'src-gen', qualifier: 'DIR' },
+      ],
+    ],
+    [
+      "Windows '\\' separators",
+      'src\\foo.ts',
+      'my-project:src/foo.ts',
+      [{ path: 'src/foo.ts', qualifier: 'FIL' }],
+    ],
   ] as const)(
-    'composes the components param from --file when given %s',
-    async (_name, file, expectedComponentKey) => {
+    'resolves --file and composes the components param when given %s',
+    async (_name, file, expectedComponentKey, treeItems) => {
       const server = await harness
         .newFakeServer()
         .withAuthToken('test-token')
-        .withProject('my-project')
+        .withProject('my-project', (p) => p.withComponentsTreeItems([...treeItems]))
         .start();
       harness.withAuth(server.baseUrl(), 'test-token');
 
@@ -193,6 +229,165 @@ describe('list issues', () => {
   );
 
   it(
+    'forwards --branch to /api/components/tree when resolving --file by name alone',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withComponentsTreeItems([{ path: 'src/foo.ts', qualifier: 'FIL' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `list issues --project my-project --file foo.ts --branch feature-x`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      const treeReq = server.getRecordedRequests().find((r) => r.path === '/api/components/tree');
+      expect(treeReq?.query.branch).toBe('feature-x');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'forwards --pull-request to /api/components/show when resolving --file by full path',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withComponentsTreeItems([{ path: 'src/foo.ts', qualifier: 'FIL' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `list issues --project my-project --file src/foo.ts --pull-request 42`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      const showReq = server.getRecordedRequests().find((r) => r.path === '/api/components/show');
+      expect(showReq?.query.pullRequest).toBe('42');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'resolves --file to its full path when given just a filename with a unique match',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withComponentsTreeItems([
+            { path: 'src/commands/foo.ts', qualifier: 'FIL' },
+            { path: 'src/commands/bar.ts', qualifier: 'FIL' },
+          ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`list issues --project my-project --file foo.ts`);
+
+      expect(result.exitCode).toBe(0);
+      const issuesReq = server.getRecordedRequests().find((r) => r.path === '/api/issues/search');
+      expect(issuesReq?.query.components).toBe('my-project:src/commands/foo.ts');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'resolves --file to a test file when given just its filename (SonarQube qualifies test files as UTS, not FIL)',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withComponentsTreeItems([
+            { path: 'tests/unit/commands/foo.test.ts', qualifier: 'UTS' },
+          ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`list issues --project my-project --file foo.test.ts`);
+
+      expect(result.exitCode).toBe(0);
+      const issuesReq = server.getRecordedRequests().find((r) => r.path === '/api/issues/search');
+      expect(issuesReq?.query.components).toBe('my-project:tests/unit/commands/foo.test.ts');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 2 when --file matches multiple files or directories',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withComponentsTreeItems([
+            { path: 'src/commands/foo.ts', qualifier: 'FIL' },
+            { path: 'src/core/foo.ts', qualifier: 'FIL' },
+          ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`list issues --project my-project --file foo.ts`);
+
+      expect(result.exitCode).toBe(2);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain("'foo.ts' matches 2 files or directories");
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 2 when --file matches no file or directory',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withComponentsTreeItems([{ path: 'src/commands/foo.ts', qualifier: 'FIL' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`list issues --project my-project --file missing.ts`);
+
+      expect(result.exitCode).toBe(2);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain("No file or directory matching 'missing.ts' was found");
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 2 when --file is a full path that does not exactly match, despite a same-named file elsewhere',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withComponentsTreeItems([{ path: 'src/commands/foo.ts', qualifier: 'FIL' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`list issues --project my-project --file src/wrong/foo.ts`);
+
+      expect(result.exitCode).toBe(2);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain("No file or directory matching 'src/wrong/foo.ts' was found");
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'returns only issues scoped to the given file when --file is provided',
     async () => {
       const server = await harness
@@ -200,6 +395,7 @@ describe('list issues', () => {
         .withAuthToken('test-token')
         .withProject('my-project', (p) =>
           p
+            .withComponentsTreeItems([{ path: 'src/foo.ts', qualifier: 'FIL' }])
             .withIssue({
               ruleKey: 'java:S1234',
               message: 'Scoped issue',
@@ -235,6 +431,7 @@ describe('list issues', () => {
         .withAuthToken('test-token')
         .withProject('my-project', (p) =>
           p
+            .withComponentsTreeItems([{ path: 'src/foo.ts', qualifier: 'FIL' }])
             .withIssue({
               ruleKey: 'java:S1234',
               message: 'Scoped issue',
@@ -264,13 +461,14 @@ describe('list issues', () => {
   );
 
   it(
-    'returns issues nested under a directory when --file is a directory path',
+    'returns issues on the direct children of a directory but not its nested subdirectories',
     async () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken('test-token')
         .withProject('my-project', (p) =>
           p
+            .withComponentsTreeItems([{ path: 'src/api', qualifier: 'DIR' }])
             .withIssue({
               ruleKey: 'java:S1234',
               message: 'Issue directly in the directory',
@@ -295,11 +493,12 @@ describe('list issues', () => {
 
       const result = await harness.run(`list issues --project my-project --file src/api`);
 
+      // Known limitation: componentKeys never recurses into subdirectories , so only the direct
+      // child's issue comes back.
       expect(result.exitCode).toBe(0);
       const parsed = JSON.parse(result.stdout);
       expect(parsed.issues.map((i: { message: string }) => i.message)).toEqual([
         'Issue directly in the directory',
-        'Issue in a nested subdirectory',
       ]);
     },
     { timeout: 15000 },

@@ -67,6 +67,12 @@ export interface ComponentTreeFileConfig {
   value?: string;
 }
 
+/** An entry `GET /api/components/tree`'s name search (`q`) can match, for `--file` resolution tests. */
+export interface ComponentsTreeItemConfig {
+  path: string;
+  qualifier: 'FIL' | 'UTS' | 'DIR';
+}
+
 export interface PullRequestConfig {
   key: string;
   branch: string;
@@ -154,6 +160,7 @@ interface ProjectData {
   issuesSearchStatusCode?: number;
   issuesSearchStatusBody?: string;
   dependencyRisks: DependencyRiskConfig[];
+  componentsTreeItems: ComponentsTreeItemConfig[];
 }
 
 export interface DopRepositoryConfig {
@@ -185,6 +192,7 @@ export class ProjectBuilder {
   private issuesSearchStatusCode?: number;
   private issuesSearchStatusBody?: string;
   private dependencyRisks: DependencyRiskConfig[] = [];
+  private readonly componentsTreeItems: ComponentsTreeItemConfig[] = [];
 
   constructor(projectKey: string) {
     this.projectKey = projectKey;
@@ -335,6 +343,16 @@ export class ProjectBuilder {
     return this;
   }
 
+  /**
+   * Files/directories `GET /api/components/tree`'s name search (`q`) can match against.
+   * Independent of `withComponentTreeFiles`, which configures the unrelated
+   * `GET /api/measures/component_tree` worst-N-by-metric endpoint.
+   */
+  withComponentsTreeItems(items: ComponentsTreeItemConfig[]): this {
+    this.componentsTreeItems.push(...items);
+    return this;
+  }
+
   getData(): ProjectData {
     return {
       key: this.projectKey,
@@ -356,6 +374,7 @@ export class ProjectBuilder {
       issuesSearchStatusCode: this.issuesSearchStatusCode,
       issuesSearchStatusBody: this.issuesSearchStatusBody,
       dependencyRisks: this.dependencyRisks,
+      componentsTreeItems: this.componentsTreeItems,
     };
   }
 }
@@ -977,12 +996,20 @@ export class FakeSonarQubeServerBuilder {
                   (resolvedFilter === 'false') !== RESOLVED_ISSUE_STATUSES.has(issue.status),
               )
               .filter((issue) => !sinceLeakPeriodFilter || issue.isNewCode)
+              // componentKeys matches a file's own key exactly, or a directory key against files
+              // one level directly inside it.
               .filter(
                 (issue) =>
                   !componentKeysFilter ||
-                  componentKeysFilter.some(
-                    (key) => issue.component === key || issue.component.startsWith(`${key}/`),
-                  ),
+                  componentKeysFilter.some((key) => {
+                    if (issue.component === key) {
+                      return true;
+                    }
+                    if (!issue.component.startsWith(`${key}/`)) {
+                      return false;
+                    }
+                    return !issue.component.slice(key.length + 1).includes('/');
+                  }),
               )
               .filter((issue) => fixableByAgentFilter !== 'true' || issue.fixableByAgent)
               .map((issue) => ({
@@ -1234,18 +1261,97 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/api/components/show') {
-          const componentKey = query.component;
-          const projectData = componentKey ? projects.get(componentKey) : undefined;
+          const componentKey = query.component ?? '';
+          // A component key is either a bare project key, or `<projectKey>:<path>` for a
+          // file/directory within it. The project key itself may contain ':' (Maven-style, e.g.
+          // `com.example:my-app`), so it can't be found by splitting on the first ':' — instead,
+          // match against the registered project keys directly, preferring the longest match in
+          // case one registered key is itself a prefix of another.
+          const projectKey =
+            [...projects.keys()]
+              .filter((key) => componentKey === key || componentKey.startsWith(`${key}:`))
+              .sort((a, b) => b.length - a.length)[0] ?? componentKey;
+          const subPath =
+            componentKey === projectKey ? undefined : componentKey.slice(projectKey.length + 1);
+          const projectData = projects.get(projectKey);
+
+          const notFound = () =>
+            new Response(
+              JSON.stringify({ errors: [{ msg: `Component '${componentKey}' not found` }] }),
+              {
+                status: 404,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
+
+          if (!projectData) {
+            return notFound();
+          }
+
+          if (subPath === undefined) {
+            return new Response(
+              JSON.stringify({ component: { key: projectData.key, name: projectData.name } }),
+              { headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+
+          const match = projectData.componentsTreeItems.find((item) => item.path === subPath);
+          if (!match) {
+            return notFound();
+          }
+
+          return new Response(
+            JSON.stringify({
+              component: {
+                key: componentKey,
+                name: match.path.split('/').pop() ?? match.path,
+                qualifier: match.qualifier,
+                path: match.path,
+              },
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path === '/api/components/tree') {
+          const projectKey = query.component;
+          const projectData = projectKey ? projects.get(projectKey) : undefined;
 
           if (!projectData) {
             return new Response(
-              JSON.stringify({ errors: [{ msg: `Component '${componentKey}' not found` }] }),
+              JSON.stringify({ errors: [{ msg: `Component key '${projectKey}' not found` }] }),
               { status: 404, headers: { 'Content-Type': 'application/json' } },
             );
           }
 
+          const q = query.q?.toLowerCase();
+          const qualifiersFilter = query.qualifiers ? query.qualifiers.split(',') : null;
+
+          // Real /api/components/tree matches `q` against a component's own name (basename),
+          // never its full path — mirrored here so tests exercise the same semantics.
+          const matches = projectData.componentsTreeItems
+            .filter((item) => !qualifiersFilter || qualifiersFilter.includes(item.qualifier))
+            .filter((item) => {
+              if (!q) {
+                return true;
+              }
+              const basename = item.path.split('/').pop() ?? item.path;
+              return basename.toLowerCase().includes(q);
+            });
+
+          const ps = Number.parseInt(query.ps ?? '100', 10);
+          const components = matches.slice(0, ps).map((item) => ({
+            key: `${projectKey}:${item.path}`,
+            name: item.path.split('/').pop() ?? item.path,
+            qualifier: item.qualifier,
+            path: item.path,
+          }));
+
           return new Response(
-            JSON.stringify({ component: { key: projectData.key, name: projectData.name } }),
+            JSON.stringify({
+              paging: { pageIndex: 1, pageSize: ps, total: matches.length },
+              components,
+            }),
             { headers: { 'Content-Type': 'application/json' } },
           );
         }

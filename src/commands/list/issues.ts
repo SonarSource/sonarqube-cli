@@ -24,6 +24,7 @@ import { encode as encodeToToon } from '@toon-format/toon';
 
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import { resolveFileComponentKey } from '@/core/file-component.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
@@ -90,16 +91,6 @@ export interface ListIssuesOptions {
   format?: string;
   pageSize: number;
   page: number;
-}
-
-function stripLeadingSlashOrDotSlash(file: string): string {
-  if (file.startsWith('./')) {
-    return file.slice(2);
-  }
-  if (file.startsWith('/')) {
-    return file.slice(1);
-  }
-  return file;
 }
 
 function normalizeSeverityValues(raw: string): string[] {
@@ -177,13 +168,16 @@ export async function listIssues(
     }
   }
 
-  let componentKeys: string | undefined;
-  if (options.file) {
-    componentKeys = `${options.project}:${stripLeadingSlashOrDotSlash(options.file)}`;
-  }
-
   const client = new SonarHttpClient(auth.serverUrl, auth.token);
   const issuesClient = new IssuesClient(client);
+
+  let componentKeys: string | undefined;
+  if (options.file) {
+    componentKeys = await resolveFileComponentKey(client, options.project, options.file, {
+      branch: options.branch,
+      pullRequest: options.pullRequest,
+    });
+  }
 
   const { severities: normalizedSeverities, impactSeverities: normalizedImpactSeverities } =
     options.severities
