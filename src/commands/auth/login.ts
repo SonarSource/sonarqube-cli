@@ -19,7 +19,7 @@
  */
 
 import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
-import { isSonarQubeCloud } from '@/core/auth/auth-resolver.ts';
+import { ENV_TOKEN, isEnvBasedAuth, isSonarQubeCloud } from '@/core/auth/auth-resolver.ts';
 import { type BrowserAuthResult, generateTokenViaBrowser } from '@/core/auth/token.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -39,6 +39,7 @@ import {
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
+import { NOTE_STYLES } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import {
@@ -55,6 +56,7 @@ export async function authLogin(
 ): Promise<void> {
   const { console } = ctx;
   validateLoginOptions(options);
+  await warnIfEnvAuthPresent(console);
   const server = await resolveServer(options, console);
   await confirmServerTrust(server, console);
 
@@ -102,6 +104,11 @@ export async function authLogin(
 
     const displayServer = isCloud ? `${server} (${org})` : server;
     console.success(`Authentication successful for: ${displayServer}`);
+    if (isEnvBasedAuth()) {
+      console.warn(
+        ` Token saved, but environment variables take precedence and will be used instead.\n   → Unset ${ENV_TOKEN} to use the saved token`,
+      );
+    }
   } finally {
     // The token step leaves stdin resumed for Windows keypresses, and a resumed TTY keeps the
     // process alive. Release it on every exit path, not only on success. That step resumes stdin
@@ -109,6 +116,35 @@ export async function authLogin(
     if (process.stdin.isTTY) {
       process.stdin.pause();
     }
+  }
+}
+
+/**
+ * Environment variable authentication always wins over whatever this command saves (see
+ * `resolveAuth()` in `auth-resolver.ts`), so a login run while it is active would not change what
+ * the CLI actually uses. Warn instead of silently doing pointless work, and let the user opt out
+ * of a token they know will not be used.
+ */
+async function warnIfEnvAuthPresent(console: Console): Promise<void> {
+  if (!isEnvBasedAuth()) {
+    return;
+  }
+  console.note(
+    [
+      'You are already authenticated via environment variables.',
+      'This login will be ignored until those variables have been unset.',
+      "→ Run 'sonar auth status' to see which credentials are currently in use.",
+    ],
+    '⚠ Environment variable authentication detected',
+    NOTE_STYLES.warn,
+  );
+
+  const proceed = await console.confirmPrompt(
+    'Log in anyway and save a token to the keychain?',
+    false,
+  );
+  if (!proceed) {
+    throw new CommandFailedError('Login cancelled');
   }
 }
 
