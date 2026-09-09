@@ -325,9 +325,11 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       qualityGateStatus(options, ctx),
     );
 
-  // Import repositories from DevOps platforms into SonarQube (hidden while in development)
-  COMMAND_TREE.command('import', { hidden: true })
+  COMMAND_TREE.command('import')
     .description('Import repositories from a connected DevOps platform into SonarQube')
+    .rootHelp({
+      category: 'integrate',
+    })
     .option(
       '--repo <slug>',
       'DevOps platform repository slug (e.g. my-org/my-repo). Repeatable and/or comma-separated to import multiple repositories. Cannot be combined with --all or --regex.',
