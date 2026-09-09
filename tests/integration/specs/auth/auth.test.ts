@@ -281,6 +281,78 @@ describe('auth login', () => {
     },
     { timeout: 15000 },
   );
+
+  it(
+    'warns and prompts before logging in anyway when SQS env vars are set',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-login-token').start();
+
+      const session = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
+        browserToken: 'my-login-token',
+        extraEnv: {
+          [ENV_TOKEN]: 'env-token',
+          [ENV_SERVER]: 'http://env-sonarqube.example.com',
+        },
+      });
+      await session.waitText('Log in anyway');
+      session.write('y');
+      await session.accept('Connect to:');
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('Environment variable authentication detected');
+      expect(output).toContain('This login will be ignored');
+      expect(output).toContain("Run 'sonar auth status'");
+      expect(output).toContain('Log in anyway and save a token to the keychain?');
+      // Login runs to completion once the user opts in.
+      expect(output).toContain('Authentication successful');
+      // ... but the saved token is moot until the env vars are unset.
+      expect(output).toContain(
+        'Token saved, but environment variables take precedence and will be used instead.',
+      );
+      expect(output).toContain(`Unset ${ENV_TOKEN} to use the saved token`);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'cancels login when the user declines to continue with env vars set',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-login-token').start();
+
+      const session = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
+        browserToken: 'my-login-token',
+        extraEnv: {
+          [ENV_TOKEN]: 'env-token',
+          [ENV_SERVER]: 'http://env-sonarqube.example.com',
+        },
+      });
+      await session.decline('Log in anyway');
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('Login cancelled');
+      // Declined before the server-trust prompt was ever reached.
+      expect(result.stdout + result.stderr).not.toContain('Connect to:');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'does not warn about environment variable authentication when no env vars are set',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-login-token').start();
+
+      const result = await confirmTrust(harness, `auth login --server ${server.baseUrl()}`, {
+        browserToken: 'my-login-token',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).not.toContain('Environment variable authentication');
+    },
+    { timeout: 15000 },
+  );
 });
 
 const LARGE_ORG_TOTAL = 200;
