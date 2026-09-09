@@ -38,6 +38,16 @@ describe('toBeOkWith()', () => {
   it('fails when the Result is Err', () => {
     expect(err(new Error('boom'))).not.toBeOkWith('value');
   });
+
+  it('reports a negation-aware message when a negated assertion actually fails', () => {
+    expect(() => expect(ok('value')).not.toBeOkWith('value')).toThrow(/not to be Ok/);
+  });
+
+  it('throws when the received value is not a Result', () => {
+    expect(() => expect('not a result').toBeOkWith('value')).toThrow(
+      'toBeOkWith() expects a Result value',
+    );
+  });
 });
 
 describe('toBeErrWith()', () => {
@@ -63,5 +73,23 @@ describe('toBeErrWith()', () => {
 
   it('fails when the Result is Ok', () => {
     expect(ok('value')).not.toBeErrWith();
+  });
+
+  it('reports a negation-aware message when a negated string match actually fails', () => {
+    expect(() => expect(err(new Error('boom'))).not.toBeErrWith('boom')).toThrow(
+      /not to be "boom"/,
+    );
+  });
+
+  it('reports a negation-aware message when a negated predicate match actually fails', () => {
+    expect(() =>
+      expect(err(new Error('boom'))).not.toBeErrWith((error) => error.message.includes('boo')),
+    ).toThrow(/not to satisfy the given predicate/);
+  });
+
+  it('throws when the received value is not a Result', () => {
+    expect(() => expect('not a result').toBeErrWith('boom')).toThrow(
+      'toBeErrWith() expects a Result value',
+    );
   });
 });

@@ -26,12 +26,7 @@
 
 import { expect } from 'bun:test';
 
-interface ResultLike<T, E> {
-  isOk(): boolean;
-  isErr(): boolean;
-  _unsafeUnwrap(): T;
-  _unsafeUnwrapErr(): E;
-}
+import { isResult } from '@/core/result.ts';
 
 /* eslint-disable @typescript-eslint/no-unused-vars -- interface merging with bun:test's own
    Matchers<T = unknown> requires matching its type parameter exactly, even though neither
@@ -50,18 +45,9 @@ declare module 'bun:test' {
 }
 /* eslint-enable @typescript-eslint/no-unused-vars */
 
-function isResultLike(value: unknown): value is ResultLike<unknown, Error> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof (value as { isOk?: unknown }).isOk === 'function' &&
-    typeof (value as { isErr?: unknown }).isErr === 'function'
-  );
-}
-
 expect.extend({
   toBeOkWith(actual: unknown, expected: unknown) {
-    if (!isResultLike(actual)) {
+    if (!isResult(actual)) {
       throw new Error(
         'toBeOkWith() expects a Result value (e.g. the resolved value of a ResultAsync)',
       );
@@ -74,14 +60,17 @@ expect.extend({
       };
     }
     const value = actual._unsafeUnwrap();
+    const pass = this.equals(value, expected);
     return {
-      pass: this.equals(value, expected),
+      pass,
       message: () =>
-        `expected Ok(${this.utils.printExpected(expected)}) but got Ok(${this.utils.printReceived(value)})`,
+        this.isNot
+          ? `expected the result not to be Ok(${this.utils.printExpected(expected)})`
+          : `expected Ok(${this.utils.printExpected(expected)}) but got Ok(${this.utils.printReceived(value)})`,
     };
   },
   toBeErrWith(actual: unknown, expected?: string | ((error: Error) => boolean)) {
-    if (!isResultLike(actual)) {
+    if (!isResult(actual)) {
       throw new Error(
         'toBeErrWith() expects a Result value (e.g. the resolved value of a ResultAsync)',
       );
@@ -100,10 +89,16 @@ expect.extend({
     const pass = typeof expected === 'string' ? error.message === expected : expected(error);
     return {
       pass,
-      message: () =>
-        typeof expected === 'string'
-          ? `expected Err message ${this.utils.printExpected(expected)} but got ${this.utils.printReceived(error.message)}`
-          : `expected Err(${this.utils.printReceived(error)}) to satisfy the given predicate`,
+      message: () => {
+        if (typeof expected === 'string') {
+          return this.isNot
+            ? `expected the Err message not to be ${this.utils.printExpected(expected)}`
+            : `expected Err message ${this.utils.printExpected(expected)} but got ${this.utils.printReceived(error.message)}`;
+        }
+        return this.isNot
+          ? `expected Err(${this.utils.printReceived(error)}) not to satisfy the given predicate`
+          : `expected Err(${this.utils.printReceived(error)}) to satisfy the given predicate`;
+      },
     };
   },
 });
