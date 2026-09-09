@@ -76,6 +76,7 @@ export const VALID_FORMATS = ['json', 'toon', 'table', 'csv'];
 export const VALID_STANDARD_SEVERITIES = ['INFO', 'MINOR', 'MAJOR', 'CRITICAL', 'BLOCKER'];
 export const VALID_MQR_SEVERITIES = ['INFO', 'LOW', 'MEDIUM', 'HIGH', 'BLOCKER'];
 export const VALID_STATUSES = ['OPEN', 'CONFIRMED', 'FALSE_POSITIVE', 'ACCEPTED', 'FIXED'];
+export const DEFAULT_STATUSES = ['OPEN', 'CONFIRMED'];
 
 export interface ListIssuesOptions {
   project?: string;
@@ -151,6 +152,8 @@ export async function listIssues(
       );
     }
     normalizedStatuses = statuses.join(',');
+  } else {
+    normalizedStatuses = DEFAULT_STATUSES.join(',');
   }
 
   if (options.severities) {

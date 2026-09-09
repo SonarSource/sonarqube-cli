@@ -107,6 +107,7 @@ import { integrateCursor } from './integrate/cursor';
 import { integrateGit, type IntegrateGitOptions } from './integrate/git';
 import { integrateBare, type IntegrateBareOptions } from './integrate/integrate-bare.ts';
 import {
+  DEFAULT_STATUSES,
   listIssues,
   type ListIssuesOptions,
   VALID_FORMATS,
@@ -265,7 +266,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .requiredOption('-p, --project <project>', 'Project key')
     .option(
       '--statuses <statuses>',
-      `Filter by status (comma-separated list of: ${VALID_STATUSES.join(', ')})`,
+      `Filter by status (comma-separated list of: ${VALID_STATUSES.join(', ')}). Defaults to ${DEFAULT_STATUSES.join(', ')}.`,
     )
     .option(
       '--severities <severities>',

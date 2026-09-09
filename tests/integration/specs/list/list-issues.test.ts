@@ -850,4 +850,58 @@ describe('list issues — argument validation', () => {
     expect(issuesReq?.query.issueStatuses).toBe('OPEN');
     expect(result.stdout).toContain('"total": 1');
   });
+
+  it('defaults to OPEN,CONFIRMED statuses when --statuses is not provided', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken('test-token')
+      .withProject('my-project', (p) =>
+        p
+          .withIssue({
+            ruleKey: 'java:S1111',
+            message: 'Open issue',
+            severity: 'MAJOR',
+            status: 'OPEN',
+          })
+          .withIssue({
+            ruleKey: 'java:S2222',
+            message: 'Confirmed issue',
+            severity: 'MAJOR',
+            status: 'CONFIRMED',
+          })
+          .withIssue({
+            ruleKey: 'java:S3333',
+            message: 'Fixed issue',
+            severity: 'BLOCKER',
+            status: 'FIXED',
+          })
+          .withIssue({
+            ruleKey: 'java:S4444',
+            message: 'False positive issue',
+            severity: 'BLOCKER',
+            status: 'FALSE_POSITIVE',
+          })
+          .withIssue({
+            ruleKey: 'java:S5555',
+            message: 'Accepted issue',
+            severity: 'BLOCKER',
+            status: 'ACCEPTED',
+          }),
+      )
+      .start();
+    harness.withAuth(server.baseUrl(), 'test-token');
+
+    const result = await harness.run('list issues --project my-project');
+
+    expect(result.exitCode).toBe(0);
+    const recorded = server.getRecordedRequests();
+    const issuesReq = recorded.find((r) => r.path === '/api/issues/search');
+    expect(issuesReq?.query.issueStatuses).toBe('OPEN,CONFIRMED');
+    expect(result.stdout).toContain('"total": 2');
+    expect(result.stdout).toContain('java:S1111');
+    expect(result.stdout).toContain('java:S2222');
+    expect(result.stdout).not.toContain('java:S3333');
+    expect(result.stdout).not.toContain('java:S4444');
+    expect(result.stdout).not.toContain('java:S5555');
+  });
 });
