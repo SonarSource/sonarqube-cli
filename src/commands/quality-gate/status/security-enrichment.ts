@@ -57,6 +57,7 @@ export function fetchSecurityBreakdown(
     condition,
     'VULNERABILITY',
     sinceLeakPeriod,
+    'security',
   );
   cache.set(cacheKey, promise);
   return promise;

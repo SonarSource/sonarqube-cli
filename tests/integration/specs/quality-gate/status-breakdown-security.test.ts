@@ -80,7 +80,7 @@ describe('quality-gate status — security breakdown', () => {
         (c: { metric: string }) => c.metric === 'vulnerabilities',
       );
       expect(condition.breakdown).toEqual({
-        category: 'issues',
+        category: 'security',
         totalCount: 1,
         fetchedCount: 1,
         entries: [
@@ -346,7 +346,7 @@ describe('quality-gate status — security breakdown', () => {
       const violationsCondition = parsed.qualityGate.conditions.find(
         (c: { metric: string }) => c.metric === 'violations',
       );
-      expect(vulnerabilitiesCondition.breakdown.category).toBe('issues');
+      expect(vulnerabilitiesCondition.breakdown.category).toBe('security');
       expect(violationsCondition.breakdown).toBeUndefined();
     },
     { timeout: 15000 },
