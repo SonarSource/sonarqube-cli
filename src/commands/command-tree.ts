@@ -345,19 +345,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('--non-interactive', 'Skip all prompts; require explicit flags')
     .authenticatedAction((ctx, options: ImportOptions) => importHandler(options, ctx));
 
-  // Overwrites the single .sonar-config.json project binding (barebones; UX will change)
-  COMMAND_TREE.command('link')
-    .description('Link a project to the active connection in .sonar-config.json')
-    .rootHelp({
-      category: 'core',
-    })
-    .argument('<project>', 'SonarQube project key')
-    .option('--path <path>', 'Path to the project root, relative to the repository root', '.')
-    .addHelpText('after', linkExtraHelp)
-    .authenticatedAction((ctx, project: string, options: LinkOptions) =>
-      link(project, options, ctx),
-    );
-
   COMMAND_TREE.command('api')
     .rootHelp({
       category: 'data',
@@ -651,6 +638,19 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'Comma-separated issue keys to remediate non-interactively (max 20). Required when stdin is not a TTY.',
     )
     .authenticatedAction((ctx, options: RemediateOptions) => remediate(options, ctx));
+
+  // Overwrites the single .sonar-config.json project binding (barebones; UX will change)
+  COMMAND_TREE.command('link')
+    .description('Link a project to the active connection in .sonar-config.json')
+    .rootHelp({
+      category: 'core',
+    })
+    .argument('<projectKey>', 'SonarQube project key')
+    .option('--path <path>', 'Path to the project root, relative to the repository root', '.')
+    .addHelpText('after', linkExtraHelp)
+    .authenticatedAction((ctx, projectKey: string, options: LinkOptions) =>
+      link(projectKey, options, ctx),
+    );
 
   // Configure things related to the CLI
   const configure = COMMAND_TREE.command('config').description('Configure CLI settings');
