@@ -49,12 +49,12 @@ beforeEach(() => {
 
 describe('printAgentPreflightSummary', () => {
   let checkTokenStatusSpy: ReturnType<typeof spyOn>;
-  let checkComponentSpy: ReturnType<typeof spyOn>;
+  let componentExistsSpy: ReturnType<typeof spyOn>;
   let isOrganizationAccessibleSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
-    checkComponentSpy = spyOn(ComponentsClient.prototype, 'checkComponent').mockReturnValue(
+    componentExistsSpy = spyOn(ComponentsClient.prototype, 'componentExists').mockReturnValue(
       okAsync(true),
     );
     isOrganizationAccessibleSpy = spyOn(
@@ -65,7 +65,7 @@ describe('printAgentPreflightSummary', () => {
 
   afterEach(() => {
     checkTokenStatusSpy.mockRestore();
-    checkComponentSpy.mockRestore();
+    componentExistsSpy.mockRestore();
     isOrganizationAccessibleSpy.mockRestore();
   });
 

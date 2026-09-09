@@ -169,7 +169,7 @@ function projectKeyAccessStatus(
   projectKey: string,
 ): Promise<[StepStatus, string | undefined]> {
   const client = new ComponentsClient(new SonarHttpClient(serverUrl, token));
-  return client.checkComponent(projectKey).match(
+  return client.componentExists(projectKey).match(
     (accessible) =>
       accessible ? ['done', projectKey] : ['failed', `${projectKey} (not accessible)`],
     () => ['failed', `${projectKey} (not accessible)`],

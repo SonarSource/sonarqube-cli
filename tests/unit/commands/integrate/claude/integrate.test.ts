@@ -77,8 +77,8 @@ describe('integrateCommand', () => {
   let checkTokenStatusSpy: Mock<
     Extract<(typeof token)['checkTokenStatus'], (...args: any[]) => any>
   >;
-  let checkComponentSpy: Mock<
-    Extract<(typeof ComponentsClient.prototype)['checkComponent'], (...args: any[]) => any>
+  let componentExistsSpy: Mock<
+    Extract<(typeof ComponentsClient.prototype)['componentExists'], (...args: any[]) => any>
   >;
   let isOrganizationAccessibleSpy: Mock<
     Extract<
@@ -114,7 +114,7 @@ describe('integrateCommand', () => {
     saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
 
     checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
-    checkComponentSpy = spyOn(ComponentsClient.prototype, 'checkComponent').mockReturnValue(
+    componentExistsSpy = spyOn(ComponentsClient.prototype, 'componentExists').mockReturnValue(
       okAsync(true),
     );
     isOrganizationAccessibleSpy = spyOn(
@@ -135,7 +135,7 @@ describe('integrateCommand', () => {
     saveStateSpy.mockRestore();
     hasVortexEntitlementSpy.mockRestore();
     checkTokenStatusSpy.mockRestore();
-    checkComponentSpy.mockRestore();
+    componentExistsSpy.mockRestore();
     isOrganizationAccessibleSpy.mockRestore();
     discoverProjectSpy.mockRestore();
     installIntegrationSpy.mockRestore();

@@ -81,29 +81,17 @@ describe('ComponentsClient', () => {
     });
   });
 
-  describe('checkComponent', () => {
-    it('returns true when component exists', async () => {
-      fetchSpy = mockFetch({ component: { key: 'my-project' } });
-      expect(await client.checkComponent('my-project').orThrow()).toBe(true);
-    });
-
-    it('returns false when component is not found', async () => {
-      fetchSpy = mockFetch({}, { ok: false, status: 404 });
-      expect(await client.checkComponent('missing-project').orThrow()).toBe(false);
-    });
-
-    it('passes the component key as a query parameter', async () => {
-      fetchSpy = mockFetch({ component: {} });
-      await client.checkComponent('my-project').orThrow();
-      const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.searchParams.get('component')).toBe('my-project');
-    });
-  });
-
   describe('componentExists', () => {
     it('returns true when component exists', async () => {
       fetchSpy = mockFetch({ component: { key: 'my-project' } });
       expect(await client.componentExists('my-project').orThrow()).toBe(true);
+    });
+
+    it('passes the component key as a query parameter', async () => {
+      fetchSpy = mockFetch({ component: {} });
+      await client.componentExists('my-project').orThrow();
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.searchParams.get('component')).toBe('my-project');
     });
 
     it('returns false when component is not found (404)', async () => {
@@ -141,6 +129,12 @@ describe('ComponentsClient', () => {
     it('returns null when component is not found', async () => {
       fetchSpy = mockFetch({}, { ok: false, status: 404 });
       expect(await client.getComponentId('missing-project').orThrow()).toBeNull();
+    });
+
+    it('propagates a forbidden/auth failure instead of reporting the id as unknown', async () => {
+      fetchSpy = mockFetch({}, { ok: false, status: 403 });
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.getComponentId('my-project').orThrow()).rejects.toThrow('Access denied');
     });
 
     it('passes the component key as a query parameter to /api/navigation/component', async () => {

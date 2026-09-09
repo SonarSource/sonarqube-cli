@@ -72,8 +72,8 @@ describe('integrateCodex', () => {
       (...args: never[]) => unknown
     >
   >;
-  let checkComponentSpy: Mock<
-    Extract<(typeof ComponentsClient.prototype)['checkComponent'], (...args: never[]) => unknown>
+  let componentExistsSpy: Mock<
+    Extract<(typeof ComponentsClient.prototype)['componentExists'], (...args: never[]) => unknown>
   >;
   let resolveVortexSetupSpy: Mock<
     Extract<(typeof vortex)['resolveVortexSetup'], (...args: never[]) => unknown>
@@ -87,7 +87,7 @@ describe('integrateCodex', () => {
       VortexEntitlementClient.prototype,
       'hasVortexEntitlement',
     ).mockResolvedValue({ status: 'not_entitled' });
-    checkComponentSpy = spyOn(ComponentsClient.prototype, 'checkComponent').mockReturnValue(
+    componentExistsSpy = spyOn(ComponentsClient.prototype, 'componentExists').mockReturnValue(
       okAsync(true),
     );
     resolveVortexSetupSpy = spyOn(vortex, 'resolveVortexSetup').mockResolvedValue({
@@ -100,7 +100,7 @@ describe('integrateCodex', () => {
     discoverProjectSpy.mockRestore();
     installIntegrationSpy.mockRestore();
     hasVortexEntitlementSpy.mockRestore();
-    checkComponentSpy.mockRestore();
+    componentExistsSpy.mockRestore();
     resolveVortexSetupSpy.mockRestore();
   });
 

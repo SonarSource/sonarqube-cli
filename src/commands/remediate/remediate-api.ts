@@ -21,8 +21,9 @@
 // Every SonarQube API call `sonar remediate` makes, in one place next to the command.
 
 import logger from '@/core/observability/logger.ts';
-import { okAsync } from '@/core/result.ts';
+import { okAsync, type ResultAsync } from '@/core/result.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
+import type { HttpClientError } from '@/core/server/errors.ts';
 import { type SonarHttpClient } from '@/core/server/http-client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
 
@@ -58,21 +59,7 @@ export class RemediateApiClient {
         { organizationKey: orgKey, excludeEligibility: 'true' },
         this.client.apiHostFor(orgsEndpoint),
       )
-      .andThen((organizations) => {
-        const org = organizations.at(0);
-        if (!org) return okAsync({ status: 'not_eligible' as const });
-
-        const configEndpoint = `/fix-suggestions/organization-configs/${org.id}`;
-        return this.client
-          .get<{
-            codeReviewAgent: { organizationEligible: boolean; delegateIssuesEnabled?: boolean };
-          }>(configEndpoint, undefined, this.client.apiHostFor(configEndpoint))
-          .map((config): { status: AiRemediationEntitlement } => {
-            if (!config.codeReviewAgent.organizationEligible) return { status: 'not_eligible' };
-            if (!config.codeReviewAgent.delegateIssuesEnabled) return { status: 'not_enabled' };
-            return { status: 'ok' };
-          });
-      })
+      .andThen((organizations) => this.resolveEntitlementForOrg(organizations.at(0)))
       .match(
         (result) => result,
         (error) => {
@@ -80,6 +67,23 @@ export class RemediateApiClient {
           return { status: 'unknown' as const };
         },
       );
+  }
+
+  private resolveEntitlementForOrg(
+    org: { id: string } | undefined,
+  ): ResultAsync<{ status: AiRemediationEntitlement }, HttpClientError> {
+    if (!org) return okAsync({ status: 'not_eligible' as const });
+
+    const configEndpoint = `/fix-suggestions/organization-configs/${org.id}`;
+    return this.client
+      .get<{
+        codeReviewAgent: { organizationEligible: boolean; delegateIssuesEnabled?: boolean };
+      }>(configEndpoint, undefined, this.client.apiHostFor(configEndpoint))
+      .map((config): { status: AiRemediationEntitlement } => {
+        if (!config.codeReviewAgent.organizationEligible) return { status: 'not_eligible' };
+        if (!config.codeReviewAgent.delegateIssuesEnabled) return { status: 'not_enabled' };
+        return { status: 'ok' };
+      });
   }
 
   /**

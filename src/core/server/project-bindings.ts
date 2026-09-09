@@ -147,30 +147,43 @@ export class ProjectBindingsClient {
       bindingMap: Map<string, string>,
     ): ResultAsync<Map<string, string>, HttpClientError> =>
       this.client
-        .get<{
-          projectBindings: Array<{ projectKey: string; repository: string }>;
-          page: { total: number; pageSize: number; pageIndex: number };
-        }>('/api/v2/dop-translation/project-bindings', {
+        .get<ProjectBindingsPageResponse>('/api/v2/dop-translation/project-bindings', {
           pageSize,
           pageIndex,
           dopSettingId,
         })
         .andThen((result) => {
-          for (const binding of result.projectBindings) {
-            bindingMap.set(binding.repository, binding.projectKey);
-          }
-          const effectivePageSize = result.page.pageSize || pageSize;
-          if (
-            result.projectBindings.length === 0 ||
-            pageIndex * effectivePageSize >= result.page.total
-          ) {
-            return okAsync(bindingMap);
-          }
-          return fetchPage(pageIndex + 1, bindingMap);
+          mergeBindingsPage(result, bindingMap);
+          return isLastPage(result, pageIndex, pageSize)
+            ? okAsync(bindingMap)
+            : fetchPage(pageIndex + 1, bindingMap);
         });
 
     return fetchPage(1, new Map<string, string>());
   }
+}
+
+interface ProjectBindingsPageResponse {
+  projectBindings: Array<{ projectKey: string; repository: string }>;
+  page: { total: number; pageSize: number; pageIndex: number };
+}
+
+function mergeBindingsPage(
+  result: ProjectBindingsPageResponse,
+  bindingMap: Map<string, string>,
+): void {
+  for (const binding of result.projectBindings) {
+    bindingMap.set(binding.repository, binding.projectKey);
+  }
+}
+
+function isLastPage(
+  result: ProjectBindingsPageResponse,
+  pageIndex: number,
+  pageSize: number,
+): boolean {
+  const effectivePageSize = result.page.pageSize || pageSize;
+  return result.projectBindings.length === 0 || pageIndex * effectivePageSize >= result.page.total;
 }
 
 /** Returns the sole binding, or null when there are none or more than one (ambiguous). */

@@ -21,7 +21,7 @@
 // SonarQube Components API wrapper — project existence, identity and project-scoped settings.
 
 import { errAsync, okAsync, type ResultAsync } from '../result.ts';
-import { type HttpClientError, isCriticalFailure } from './errors.ts';
+import type { HttpClientError } from './errors.ts';
 import type { SonarHttpClient } from './http-client.ts';
 import type { SettingsValue } from './settings-value.ts';
 
@@ -41,19 +41,9 @@ export class ComponentsClient {
   }
 
   /**
-   * Check if component (project) exists
-   */
-  checkComponent(projectKey: string): ResultAsync<boolean, HttpClientError> {
-    return this.client
-      .get('/api/components/show', { component: projectKey })
-      .map(() => true)
-      .orElse((error) => (isCriticalFailure(error) ? errAsync(error) : okAsync(false)));
-  }
-
-  /**
-   * Like `checkComponent`, but only treats a 404 as "missing" - every other
-   * failure (auth, rate limit, outage, network error) propagates as its
-   * normal typed error instead of being reported as a missing component.
+   * Check if component (project) exists. Only a 404 is treated as "missing" - every
+   * other failure (auth, rate limit, outage, network error) propagates as its normal
+   * typed error instead of being reported as a missing component.
    */
   componentExists(projectKey: string): ResultAsync<boolean, HttpClientError> {
     return this.client
@@ -65,12 +55,12 @@ export class ComponentsClient {
    * Return the legacy alphanumeric ID for a project component key.
    * The external AI agents API expects this ID (not the human-readable key) as `projectId`.
    * Uses /api/navigation/component - same endpoint the web UI uses; `id` is always present there.
+   * Only a 404 resolves to `null` - every other failure propagates, matching `componentExists`.
    */
   getComponentId(componentKey: string): ResultAsync<string | null, HttpClientError> {
     return this.client
-      .get<{ id: string }>('/api/navigation/component', { component: componentKey })
-      .map((value) => value.id)
-      .orElse((error) => (isCriticalFailure(error) ? errAsync(error) : okAsync(null)));
+      .getOrNotFound<{ id: string }>('/api/navigation/component', { component: componentKey })
+      .map((value) => value?.id ?? null);
   }
 
   hasProjectBeenAnalyzed(projectKey: string): ResultAsync<boolean, HttpClientError> {
