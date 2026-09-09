@@ -20,12 +20,12 @@
 
 /**
  * Offline e2e covering the post-update edge cases for sonar-context-augmentation:
- * skills with missing project roots, multi-skill refresh, no-op when the CLI
- * version is already current, and stale-binary cleanup.
+ * recorded installs with missing project roots, multi-root refresh, no-op when
+ * the CLI version is already current, and stale-binary cleanup.
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
@@ -40,11 +40,14 @@ import { version as CURRENT_CLI_VERSION } from '../../../package.json';
 import { TestHarness } from '../../integration/harness';
 import {
   CLAUDE_SKILL_RELATIVE_PATH,
-  expectSkillRendersWithWrapperInvocation,
+  expectSessionStartHookRefreshed,
   findRecordedCagDependency,
   findRecordedCagFeature,
   findRecordedCagSkillResource,
+  findRecordedSessionStartScriptResource,
+  seedLegacySkillFile,
   seedState,
+  sessionStartScriptPath,
   STALE_CLI_VERSION,
   STALE_SKILL_VERSION,
 } from './_helpers';
@@ -68,10 +71,10 @@ describe('sonar-context-augmentation post-update edge cases (offline, real binar
     await harness.dispose();
   });
 
-  it('skips skill refresh when the recorded project root no longer exists', async () => {
+  it('skips the refresh when the recorded project root no longer exists', async () => {
     const missingRoot = join(harness.cwd.path, 'has-been-deleted');
     seedState(harness, {
-      skills: [{ agentId: 'claude-code', projectRoot: missingRoot }],
+      skills: [{ agentId: 'claude', projectRoot: missingRoot }],
     });
 
     const result = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
@@ -81,6 +84,7 @@ describe('sonar-context-augmentation post-update edge cases (offline, real binar
       false,
     );
     expect(existsSync(join(missingRoot, CLAUDE_SKILL_RELATIVE_PATH))).toBe(false);
+    expect(existsSync(sessionStartScriptPath(missingRoot, 'claude'))).toBe(false);
 
     const state = harness.stateJsonFile.asJson() as CliState;
     expect(state.config.cliVersion).not.toBe(STALE_CLI_VERSION);
@@ -99,7 +103,7 @@ describe('sonar-context-augmentation post-update edge cases (offline, real binar
     expect(resource?.version).toBe(STALE_SKILL_VERSION);
   });
 
-  it('refreshes every recorded skill across multiple project roots in one post-update', async () => {
+  it('refreshes every recorded install across multiple project roots in one post-update', async () => {
     const projectA = join(harness.userHome.path, 'project-a');
     const projectB = join(harness.userHome.path, 'project-b');
     mkdirSync(projectA, { recursive: true });
@@ -107,31 +111,21 @@ describe('sonar-context-augmentation post-update edge cases (offline, real binar
 
     seedState(harness, {
       skills: [
-        { agentId: 'claude-code', projectRoot: projectA },
-        { agentId: 'claude-code', projectRoot: projectB },
+        { agentId: 'claude', projectRoot: projectA },
+        { agentId: 'claude', projectRoot: projectB },
       ],
     });
 
-    const skillPathA = join(projectA, CLAUDE_SKILL_RELATIVE_PATH);
-    const skillPathB = join(projectB, CLAUDE_SKILL_RELATIVE_PATH);
-    const sentinelA = '<<stale-skill-A-multi-refresh-e2e>>';
-    const sentinelB = '<<stale-skill-B-multi-refresh-e2e>>';
-    mkdirSync(dirname(skillPathA), { recursive: true });
-    mkdirSync(dirname(skillPathB), { recursive: true });
-    writeFileSync(skillPathA, sentinelA, 'utf-8');
-    writeFileSync(skillPathB, sentinelB, 'utf-8');
+    const skillPathA = seedLegacySkillFile(projectA, 'claude', '# stale skill A\n');
+    const skillPathB = seedLegacySkillFile(projectB, 'claude', '# stale skill B\n');
 
     const result = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
     expect(result.exitCode, result.stderr).toBe(0);
 
-    expect(existsSync(skillPathA)).toBe(true);
-    expect(existsSync(skillPathB)).toBe(true);
-    const contentA = readFileSync(skillPathA, 'utf-8');
-    const contentB = readFileSync(skillPathB, 'utf-8');
-    expect(contentA).not.toContain(sentinelA);
-    expect(contentB).not.toContain(sentinelB);
-    expectSkillRendersWithWrapperInvocation(contentA);
-    expectSkillRendersWithWrapperInvocation(contentB);
+    expect(existsSync(skillPathA)).toBe(false);
+    expect(existsSync(skillPathB)).toBe(false);
+    expectSessionStartHookRefreshed(projectA, 'claude');
+    expectSessionStartHookRefreshed(projectB, 'claude');
 
     const state = harness.stateJsonFile.asJson() as CliState;
     expect(findRecordedCagDependency(state)?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
@@ -150,27 +144,25 @@ describe('sonar-context-augmentation post-update edge cases (offline, real binar
     if (!featureA || !featureB) {
       throw new Error('Expected both declarative Claude CAG features to remain recorded');
     }
-    const resourceA = findRecordedCagSkillResource(featureA);
-    const resourceB = findRecordedCagSkillResource(featureB);
-    expect(resourceA).toBeDefined();
-    expect(resourceB).toBeDefined();
-    expect(resourceA?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
-    expect(resourceB?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
-    expect(resourceA?.path).toBe(skillPathA);
-    expect(resourceB?.path).toBe(skillPathB);
+    expect(findRecordedSessionStartScriptResource(featureA)?.path).toBe(
+      sessionStartScriptPath(projectA, 'claude'),
+    );
+    expect(findRecordedSessionStartScriptResource(featureB)?.path).toBe(
+      sessionStartScriptPath(projectB, 'claude'),
+    );
   });
 
   it('is a no-op when state.config.cliVersion already matches the current CLI version', async () => {
     seedState(harness, {
       cliVersion: CURRENT_CLI_VERSION,
-      skills: [{ agentId: 'claude-code', projectRoot: harness.cwd.path }],
+      skills: [{ agentId: 'claude', projectRoot: harness.cwd.path }],
     });
 
     const result = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
     expect(result.exitCode, result.stderr).toBe(0);
 
     expect(existsSync(cagBinaryPath), 'no binary should be downloaded on no-op').toBe(false);
-    expect(existsSync(join(harness.cwd.path, CLAUDE_SKILL_RELATIVE_PATH))).toBe(false);
+    expect(existsSync(sessionStartScriptPath(harness.cwd.path, 'claude'))).toBe(false);
 
     const state = harness.stateJsonFile.asJson() as CliState;
     expect(state.config.cliVersion).toBe(CURRENT_CLI_VERSION);
@@ -197,7 +189,7 @@ describe('sonar-context-augmentation post-update edge cases (offline, real binar
     writeFileSync(oldBinaryPath, 'stale binary contents', 'utf-8');
 
     seedState(harness, {
-      skills: [{ agentId: 'claude-code', projectRoot: harness.cwd.path }],
+      skills: [{ agentId: 'claude', projectRoot: harness.cwd.path }],
     });
 
     const result = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });

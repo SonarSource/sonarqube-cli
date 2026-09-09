@@ -38,7 +38,7 @@ import type { CliState, InstalledIntegrationFeature } from '@/core/state/state.t
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
 import { hookScriptName, IS_WINDOWS, TestHarness } from '../../harness';
-import { readCagInvocations } from '../../harness/cag-invocations';
+import { expectVortexHookInstalled, readCagInvocations } from '../../harness/cag-helpers';
 
 const CAG_HOOK_ALLOWED_ORG_KEY = 'denis-troller-sonar';
 
@@ -120,9 +120,7 @@ describe('post-update migration', () => {
     ]);
     expect(harness.cwd.file('.claude', 'settings.json').asJson().hooks?.PostToolUse).toBeDefined();
     expect(harness.cwd.file('CLAUDE.md').asText()).toContain('# Vortex analysis protocol');
-    expect(
-      harness.cwd.file('.claude', 'skills', 'sonar-context-augmentation', 'SKILL.md').exists(),
-    ).toBe(true);
+    expectVortexHookInstalled(harness.cwd, 'claude');
     return vortex;
   }
 
@@ -224,7 +222,7 @@ describe('post-update migration', () => {
   );
 
   it(
-    'stops running CAG tools and refreshes declaratively tracked skills after a CLI upgrade',
+    'stops running CAG tools and refreshes the Vortex session-start hook after a CLI upgrade',
     async () => {
       const staleCagVersion = '0.0.0.1';
       const installedBinaryPath = harness.cliHome.file(
@@ -298,25 +296,12 @@ describe('post-update migration', () => {
       await harness.run('--version');
 
       const invocations = readCagInvocations(harness);
-      const stopIndex = invocations.findIndex(
-        (i) => i.argv[0] === 'tool' && i.argv[1] === 'stop' && i.argv[2] === '--all',
-      );
-      const printSkillIndex = invocations.findIndex(
-        (i) => i.argv[0] === 'tool' && i.argv[1] === 'print-skill',
-      );
-      expect(stopIndex).toBeGreaterThanOrEqual(0);
-      expect(invocations[printSkillIndex]?.argv).toEqual([
-        'tool',
-        'print-skill',
-        '--invocation-prefix',
-        'sonar context',
-        '--sca-enabled=false',
-      ]);
-      // Stop must precede the skill refresh.
-      expect(stopIndex).toBeLessThan(printSkillIndex);
       expect(
-        harness.cwd.file('.claude', 'skills', 'sonar-context-augmentation', 'SKILL.md').asText(),
-      ).toContain('# Generated CAG skill');
+        invocations.some(
+          (i) => i.argv[0] === 'tool' && i.argv[1] === 'stop' && i.argv[2] === '--all',
+        ),
+      ).toBe(true);
+      expectVortexHookInstalled(harness.cwd, 'claude');
     },
     { timeout: 30000 },
   );
@@ -454,9 +439,7 @@ describe('post-update migration', () => {
       expect(
         harness.cwd.file('.github', 'instructions', 'sonarqube.instructions.md').asText(),
       ).toContain('# Vortex analysis protocol');
-      expect(
-        harness.cwd.file('.github', 'skills', 'sonar-context-augmentation', 'SKILL.md').exists(),
-      ).toBe(true);
+      expectVortexHookInstalled(harness.cwd, 'copilot');
     },
     { timeout: 30000 },
   );
@@ -485,9 +468,7 @@ describe('post-update migration', () => {
       expect(harness.cwd.file('.cursor', 'rules', 'sonar-agentic-analysis.mdc').asText()).toContain(
         '# Vortex analysis protocol',
       );
-      expect(
-        harness.cwd.file('.agents', 'skills', 'sonar-context-augmentation', 'SKILL.md').exists(),
-      ).toBe(true);
+      expectVortexHookInstalled(harness.cwd, 'cursor');
     },
     { timeout: 30000 },
   );
@@ -511,15 +492,16 @@ describe('post-update migration', () => {
       expect(antigravity?.features.map((feature) => feature.featureId)).toEqual([
         VORTEX_FEATURE_ID,
       ]);
+      // Antigravity has no session start event, so its container carries no Vortex Context.
       expect(
         antigravity?.features[0].subfeatures?.map((subfeature) => subfeature.featureId),
-      ).toEqual([SQAA_INSTRUCTIONS_SUBFEATURE_ID, CONTEXT_AUGMENTATION_FEATURE_ID]);
+      ).toEqual([SQAA_INSTRUCTIONS_SUBFEATURE_ID]);
       expect(harness.cwd.file('.agents', 'rules', 'sonar-agentic-analysis.md').asText()).toContain(
         '# Vortex analysis protocol',
       );
       expect(
         harness.cwd.file('.agents', 'skills', 'sonar-context-augmentation', 'SKILL.md').exists(),
-      ).toBe(true);
+      ).toBe(false);
     },
     { timeout: 30000 },
   );
@@ -547,9 +529,7 @@ describe('post-update migration', () => {
       expect(harness.cwd.file('AGENTS.md').asText()).toContain(
         '<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->',
       );
-      expect(
-        harness.cwd.file('.agents', 'skills', 'sonar-context-augmentation', 'SKILL.md').exists(),
-      ).toBe(true);
+      expectVortexHookInstalled(harness.cwd, 'codex');
     },
     { timeout: 30000 },
   );
@@ -563,7 +543,8 @@ describe('post-update migration', () => {
         CONTEXT_AUGMENTATION_FEATURE_ID,
       ];
       seedPreUnificationFeatures('claude-code', deprecatedFeatureIds);
-      harness.state().withContextAugmentationBinaryInstalled({ printSkillEmpty: true });
+      harness.state().withContextAugmentationBinaryInstalled();
+      harness.cwd.writeFile('.claude/settings.json', '{ not json');
 
       const result = await harness.run('--version');
 

@@ -43,6 +43,7 @@ import { generateKeychainAccount } from '@/core/host/keychain.ts';
 
 import { version as CLI_VERSION } from '../../../../package.json';
 import { hookScriptName, TestHarness } from '../../harness';
+import { expectVortexHookAbsent, expectVortexHookInstalled } from '../../harness/cag-helpers';
 import { buildHomeEnv, IS_WINDOWS } from '../../harness/platform';
 import {
   PROJECT_HOOK_SCRIPT_PATH,
@@ -743,9 +744,7 @@ describe('system reset --force', () => {
       expect(
         harness.cwd.file(...CODEX_SQAA_SCRIPT_DIRS, hookScriptName('posttool-sqaa')).exists(),
       ).toBe(true);
-      expect(
-        harness.cwd.file('.agents', 'skills', 'sonar-context-augmentation', 'SKILL.md').exists(),
-      ).toBe(true);
+      expectVortexHookInstalled(harness.cwd, 'codex');
       expect(readState(harness.stateJsonFile.path).integrations.installed.length).toBeGreaterThan(
         0,
       );
@@ -763,9 +762,7 @@ describe('system reset --force', () => {
       expect(
         harness.cwd.file(...CODEX_SQAA_SCRIPT_DIRS, hookScriptName('posttool-sqaa')).exists(),
       ).toBe(false);
-      expect(
-        harness.cwd.file('.agents', 'skills', 'sonar-context-augmentation', 'SKILL.md').exists(),
-      ).toBe(false);
+      expectVortexHookAbsent(harness.cwd, 'codex');
 
       const hooks = harness.cwd.file('.codex', 'hooks.json').asJson() as {
         hooks?: {

@@ -22,19 +22,20 @@
  * Offline e2e for sonar-context-augmentation.
  *
  * Exercises the *real* CAG binary download, PGP signature verification,
- * tar extraction, and declarative skill refresh — without touching
+ * tar extraction, and declarative resource refresh — without touching
  * SonarQube/Cloud. Only network reach is `binaries.sonarsource.com` for
  * the archive and detached signature; post-update refreshes the declarative
- * skill file but does not rerun `tool integrate`.
+ * resources but does not rerun `tool integrate`.
  *
  * Trigger path: pre-seed `state.json` with a stale declarative CAG feature and
  * a stale `config.cliVersion`. The next `sonar` invocation runs
- * `runPostUpdateActions()` which reconciles declarative integrations and
- * refreshes the recorded CAG features.
+ * `runPostUpdateActions()` which reconciles declarative integrations, so an
+ * older install recorded against the retired skill resource is migrated to the
+ * session-start hook.
  */
 
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
@@ -46,12 +47,14 @@ import type { CliState } from '@/core/state/state.ts';
 
 import { TestHarness } from '../../integration/harness';
 import {
-  CLAUDE_SKILL_RELATIVE_PATH,
-  expectSkillRendersWithWrapperInvocation,
+  expectSessionStartHookRefreshed,
   findRecordedCagDependency,
   findRecordedCagFeature,
   findRecordedCagSkillResource,
+  findRecordedSessionStartScriptResource,
+  seedLegacySkillFile,
   seedState,
+  sessionStartScriptPath,
   STALE_CLI_VERSION,
 } from './_helpers';
 
@@ -61,11 +64,10 @@ const HELP_TIMEOUT_MS = 30_000;
 
 setDefaultTimeout(DEFAULT_TIMEOUT_MS);
 
-const STALE_SKILL_SENTINEL = '<<stale-claude-skill-placeholder-cag-offline-e2e>>';
-
 describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', () => {
   let harness: TestHarness;
   let cagBinaryPath: string;
+  let seededSkillPath: string;
   let postUpdateResult: { exitCode: number; stdout: string; stderr: string };
 
   beforeAll(async () => {
@@ -76,15 +78,10 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
     cagBinaryPath = join(harness.cliHome.path, 'bin', buildLocalCagBinaryName(detectPlatform()));
 
     seedState(harness, {
-      skills: [{ agentId: 'claude-code', projectRoot: harness.cwd.path }],
+      skills: [{ agentId: 'claude', projectRoot: harness.cwd.path }],
     });
 
-    // Pre-write a sentinel into the skill file so the refresh has to overwrite
-    // it — proves the post-update path actually re-rendered the declarative
-    // skill file rather than the file existing as a side effect of something else.
-    const seededSkillPath = join(harness.cwd.path, CLAUDE_SKILL_RELATIVE_PATH);
-    mkdirSync(dirname(seededSkillPath), { recursive: true });
-    writeFileSync(seededSkillPath, STALE_SKILL_SENTINEL, 'utf-8');
+    seededSkillPath = seedLegacySkillFile(harness.cwd.path, 'claude', '# stale skill\n');
 
     postUpdateResult = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
   });
@@ -120,7 +117,7 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
     expect(state.config.cliVersion).not.toBe(STALE_CLI_VERSION);
   });
 
-  it('refreshes the declarative CAG dependency and skill resource to the pinned version', () => {
+  it('refreshes the declarative CAG dependency and migrates the recorded resource', () => {
     const state = harness.stateJsonFile.asJson() as CliState;
     expect(findRecordedCagDependency(state)?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
 
@@ -133,10 +130,10 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
     if (!feature) {
       throw new Error('Expected a recorded declarative Claude CAG feature');
     }
-    const resource = findRecordedCagSkillResource(feature);
-    expect(resource).toBeDefined();
-    expect(resource?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
-    expect(resource?.path).toBe(join(harness.cwd.path, CLAUDE_SKILL_RELATIVE_PATH));
+    expect(findRecordedSessionStartScriptResource(feature)?.path).toBe(
+      sessionStartScriptPath(harness.cwd.path, 'claude'),
+    );
+    expect(findRecordedCagSkillResource(feature)).toBeUndefined();
   });
 
   it('forwards `sonar context --help` to the real binary without requiring auth', async () => {
@@ -145,22 +142,19 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
     expect(result.stdout.length + result.stderr.length).toBeGreaterThan(0);
   });
 
-  it('overwrites the stale agent SKILL.md with refreshed content', () => {
-    const skillPath = join(harness.cwd.path, CLAUDE_SKILL_RELATIVE_PATH);
-    expect(existsSync(skillPath)).toBe(true);
-    const content = readFileSync(skillPath, 'utf-8');
-    expect(content).not.toContain(STALE_SKILL_SENTINEL);
-    expectSkillRendersWithWrapperInvocation(content);
+  it('deletes the retired agent SKILL.md and installs the session-start hook', () => {
+    expect(existsSync(seededSkillPath)).toBe(false);
+    expectSessionStartHookRefreshed(harness.cwd.path, 'claude');
   });
 
-  describe('a second self-update (rewound state) reinstalls the skill', () => {
+  describe('a second self-update (rewound state) reinstalls the hook script', () => {
     let refreshResult: { exitCode: number; stdout: string; stderr: string };
-    let skillPath: string;
+    let scriptPath: string;
     let preMutationContent: string;
 
     beforeAll(async () => {
-      skillPath = join(harness.cwd.path, CLAUDE_SKILL_RELATIVE_PATH);
-      preMutationContent = readFileSync(skillPath, 'utf-8');
+      scriptPath = sessionStartScriptPath(harness.cwd.path, 'claude');
+      preMutationContent = readFileSync(scriptPath, 'utf-8');
 
       // Simulate a fresh CLI upgrade landing on the same machine: rewind the
       // persisted CLI version so `runPostUpdateActions()` fires again.
@@ -168,10 +162,10 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
       state.config.cliVersion = STALE_CLI_VERSION;
       writeFileSync(harness.stateJsonFile.path, JSON.stringify(state, null, 2), 'utf-8');
 
-      // Delete the rendered skill so the rerun has to write it again — proves
+      // Delete the hook script so the rerun has to write it again — proves
       // the refresh re-applied the declarative resource rather than only
       // bumping state.
-      rmSync(skillPath);
+      rmSync(scriptPath);
 
       refreshResult = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
     });
@@ -180,9 +174,9 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
       expect(refreshResult.exitCode, refreshResult.stderr).toBe(0);
     });
 
-    it('recreates the SKILL.md that was deleted before the rerun', () => {
-      expect(existsSync(skillPath)).toBe(true);
-      const restored = readFileSync(skillPath, 'utf-8');
+    it('recreates the hook script that was deleted before the rerun', () => {
+      expect(existsSync(scriptPath)).toBe(true);
+      const restored = readFileSync(scriptPath, 'utf-8');
       expect(restored).toEqual(preMutationContent);
     });
 

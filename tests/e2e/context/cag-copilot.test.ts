@@ -19,12 +19,11 @@
  */
 
 /**
- * Offline e2e proving the post-update path refreshes a recorded `copilot-cli`
- * skill (writes `.github/skills/...` rather than `.claude/skills/...`).
+ * Offline e2e proving the post-update path migrates a recorded `copilot` CAG
+ * install from the retired skill file to the session-start hook.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, mkdirSync } from 'node:fs';
 
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
@@ -34,12 +33,14 @@ import type { CliState } from '@/core/state/state.ts';
 
 import { TestHarness } from '../../integration/harness';
 import {
-  COPILOT_SKILL_RELATIVE_PATH,
-  expectSkillRendersWithWrapperInvocation,
+  expectSessionStartHookRefreshed,
   findRecordedCagDependency,
   findRecordedCagFeature,
   findRecordedCagSkillResource,
+  findRecordedSessionStartScriptResource,
+  seedLegacySkillFile,
   seedState,
+  sessionStartScriptPath,
   STALE_CLI_VERSION,
 } from './_helpers';
 
@@ -48,9 +49,7 @@ const POST_UPDATE_TIMEOUT_MS = 150_000;
 
 setDefaultTimeout(DEFAULT_TIMEOUT_MS);
 
-const STALE_SKILL_SENTINEL = '<<stale-copilot-skill-placeholder-cag-copilot-e2e>>';
-
-describe('sonar-context-augmentation copilot skill refresh (offline, real binary)', () => {
+describe('sonar-context-augmentation copilot hook refresh (offline, real binary)', () => {
   let harness: TestHarness;
   let copilotSkillPath: string;
 
@@ -58,15 +57,9 @@ describe('sonar-context-augmentation copilot skill refresh (offline, real binary
     harness = await TestHarness.create();
     mkdirSync(harness.cwd.path, { recursive: true });
     seedState(harness, {
-      skills: [{ agentId: 'copilot-cli', projectRoot: harness.cwd.path }],
+      skills: [{ agentId: 'copilot', projectRoot: harness.cwd.path }],
     });
-    copilotSkillPath = join(harness.cwd.path, COPILOT_SKILL_RELATIVE_PATH);
-
-    // Pre-write a sentinel into the skill file so the refresh has to overwrite
-    // it — proves the post-update path actually re-rendered the declarative
-    // skill file rather than the file existing as a side effect of something else.
-    mkdirSync(dirname(copilotSkillPath), { recursive: true });
-    writeFileSync(copilotSkillPath, STALE_SKILL_SENTINEL, 'utf-8');
+    copilotSkillPath = seedLegacySkillFile(harness.cwd.path, 'copilot', '# stale skill\n');
 
     const result = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
     expect(result.exitCode, result.stderr).toBe(0);
@@ -76,11 +69,9 @@ describe('sonar-context-augmentation copilot skill refresh (offline, real binary
     await harness.dispose();
   });
 
-  it('overwrites the stale copilot SKILL.md with refreshed content under .github/skills/...', () => {
-    expect(existsSync(copilotSkillPath)).toBe(true);
-    const content = readFileSync(copilotSkillPath, 'utf-8');
-    expect(content).not.toContain(STALE_SKILL_SENTINEL);
-    expectSkillRendersWithWrapperInvocation(content);
+  it('deletes the retired skill and installs the session-start hook', () => {
+    expect(existsSync(copilotSkillPath)).toBe(false);
+    expectSessionStartHookRefreshed(harness.cwd.path, 'copilot');
   });
 
   it('refreshes the declarative copilot CAG state and bumps cliVersion', () => {
@@ -98,9 +89,9 @@ describe('sonar-context-augmentation copilot skill refresh (offline, real binary
     if (!feature) {
       throw new Error('Expected a recorded declarative Copilot CAG feature');
     }
-    const resource = findRecordedCagSkillResource(feature);
-    expect(resource).toBeDefined();
-    expect(resource?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
-    expect(resource?.path).toBe(copilotSkillPath);
+    expect(findRecordedSessionStartScriptResource(feature)?.path).toBe(
+      sessionStartScriptPath(harness.cwd.path, 'copilot'),
+    );
+    expect(findRecordedCagSkillResource(feature)).toBeUndefined();
   });
 });

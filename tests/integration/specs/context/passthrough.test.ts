@@ -32,7 +32,7 @@ import { TestHarness } from '../../harness';
 import {
   type CagInvocation,
   readCagInvocations as readInvocations,
-} from '../../harness/cag-invocations';
+} from '../../harness/cag-helpers';
 import { commitFile, git, initGitRepo } from '../hook/git-test-helpers';
 
 // CAG stub spawn + temp-dir teardown on Windows can exceed Bun's default hook timeout.

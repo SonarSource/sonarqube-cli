@@ -21,7 +21,8 @@
 /**
  * Offline e2e for `sonar context` passthrough behaviors against the real
  * CAG binary: unauthenticated-action error path, bare-invocation falls
- * through to CAG's help, and child exit-code propagation.
+ * through to CAG's help, and child exit-code propagation. Also covers the
+ * session-start hook, whose context only the real binary can render.
  */
 
 import { mkdirSync } from 'node:fs';
@@ -32,6 +33,7 @@ import { TestHarness } from '../../integration/harness';
 import {
   ALLOWLISTED_CAG_ORG_KEY,
   buildCompressibleGradleStdout,
+  SEEDED_ORG_KEY,
   SEEDED_PROJECT_KEY,
   seedState,
 } from './_helpers';
@@ -54,6 +56,13 @@ interface ClaudeHookCompressionOutput {
   };
 }
 
+interface ClaudeSessionStartOutput {
+  hookSpecificOutput: {
+    hookEventName: string;
+    additionalContext: string;
+  };
+}
+
 setDefaultTimeout(DEFAULT_TIMEOUT_MS);
 
 describe('sonar-context-augmentation passthrough behaviors (offline, real binary)', () => {
@@ -67,12 +76,13 @@ describe('sonar-context-augmentation passthrough behaviors (offline, real binary
       .newFakeServer()
       .withAuthToken(TEST_TOKEN)
       .withProject(SEEDED_PROJECT_KEY)
-      .withCagEntitlement(ALLOWLISTED_CAG_ORG_KEY, `${ALLOWLISTED_CAG_ORG_KEY}-uuid-v4`)
+      .withVortexEntitlement(ALLOWLISTED_CAG_ORG_KEY, `${ALLOWLISTED_CAG_ORG_KEY}-uuid-v4`)
+      .withVortexEntitlement(SEEDED_ORG_KEY, `${SEEDED_ORG_KEY}-uuid-v4`)
       .start();
     seedState(harness, {
       skills: [
         {
-          agentId: 'claude-code',
+          agentId: 'claude',
           projectRoot: harness.cwd.path,
           orgKey: ALLOWLISTED_CAG_ORG_KEY,
           serverUrl: server.baseUrl(),
@@ -156,6 +166,45 @@ describe('sonar-context-augmentation passthrough behaviors (offline, real binary
     expect(output.hookSpecificOutput.updatedToolOutput.interrupted).toBe(false);
     expect(output.hookSpecificOutput.updatedToolOutput.isImage).toBe(false);
     expect(output.hookSpecificOutput.updatedToolOutput.noOutputExpected).toBe(false);
+  });
+
+  async function runSessionStartHook(
+    event: string,
+    orgKey = ALLOWLISTED_CAG_ORG_KEY,
+  ): Promise<ClaudeSessionStartOutput> {
+    const result = await harness.runWithStdin(
+      'hook agent-session-start --agent claude',
+      JSON.stringify({
+        session_id: 'sess-1',
+        cwd: harness.cwd.path,
+        hook_event_name: event,
+      }),
+      {
+        timeoutMs: PASSTHROUGH_TIMEOUT_MS,
+        extraEnv: { ...authEnv, SONARQUBE_CLI_ORG: orgKey },
+      },
+    );
+    expect(result.exitCode, result.stderr).toBe(0);
+    return JSON.parse(result.stdout.trim()) as ClaudeSessionStartOutput;
+  }
+
+  for (const event of ['SessionStart', 'SubagentStart']) {
+    it(`prints ${event} context from the real binary`, async () => {
+      const output = await runSessionStartHook(event);
+
+      expect(output.hookSpecificOutput.hookEventName).toBe(event);
+      expect(output.hookSpecificOutput.additionalContext.trim().length).toBeGreaterThan(0);
+    });
+  }
+
+  // CAG gates its internal Compass tool on the forwarded organization, so the
+  // rendered context is org-dependent.
+  it('includes the Compass tool only for an allowlisted organization', async () => {
+    const allowlisted = await runSessionStartHook('SessionStart', ALLOWLISTED_CAG_ORG_KEY);
+    const other = await runSessionStartHook('SessionStart', SEEDED_ORG_KEY);
+
+    expect(allowlisted.hookSpecificOutput.additionalContext).toContain('compass get');
+    expect(other.hookSpecificOutput.additionalContext).not.toContain('compass get');
   });
 
   it("propagates the real binary's non-zero exit code to the parent process", async () => {
