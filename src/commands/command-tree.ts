@@ -323,7 +323,9 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     );
 
   COMMAND_TREE.command('import')
-    .description('Import repositories from a connected DevOps platform into SonarQube')
+    .description(
+      'Import repositories from a connected DevOps platform into SonarQube (SonarQube Cloud only)',
+    )
     .rootHelp({
       category: 'integrate',
     })
