@@ -404,7 +404,7 @@ describe('sonar import', () => {
         expect(result.stdout).not.toContain('← Back');
         expect(result.stdout).toContain('Imported 2 repositories');
         expect(result.stdout).toContain(
-          `Dashboard: ${serverUrl}/organizations/my-org/onboarding-dashboard`,
+          `Projects: ${serverUrl}/projects`,
         );
         const recorded = server.getRecordedRequests();
         const provisionRequests = recorded.filter(
