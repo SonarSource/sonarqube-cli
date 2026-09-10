@@ -24,7 +24,18 @@ import type { ResultAsync } from '@/core/result.ts';
 
 import { type HttpClientError } from './errors.ts';
 import { type QueryParams, type SonarHttpClient } from './http-client.ts';
-import type { ComponentTreeComponent, ComponentTreeResponse } from './types.ts';
+import type {
+  ComponentMeasuresResponse,
+  ComponentTreeComponent,
+  ComponentTreeResponse,
+} from './types.ts';
+
+export interface ComponentMeasuresParams {
+  componentKey: string;
+  metricKeys: string[];
+  branch?: string;
+  pullRequest?: string;
+}
 
 export interface WorstComponentsByMetricParams {
   projectKey: string;
@@ -96,5 +107,26 @@ export class MeasuresClient {
         components: response.components,
         totalCount: response.paging.total,
       }));
+  }
+
+  /**
+   * A single component's own measures.
+   */
+  getComponentMeasures(
+    params: ComponentMeasuresParams,
+  ): ResultAsync<ComponentTreeComponent, HttpClientError> {
+    const queryParams: QueryParams = {
+      component: params.componentKey,
+      metricKeys: params.metricKeys.join(','),
+    };
+    if (params.branch) {
+      queryParams.branch = params.branch;
+    }
+    if (params.pullRequest) {
+      queryParams.pullRequest = params.pullRequest;
+    }
+    return this.client
+      .get<ComponentMeasuresResponse>('/api/measures/component', queryParams)
+      .map((response) => response.component);
   }
 }
