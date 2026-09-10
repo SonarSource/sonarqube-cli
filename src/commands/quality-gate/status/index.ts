@@ -22,6 +22,7 @@
 
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import { resolveFileComponentKey } from '@/core/file-component.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
@@ -55,6 +56,7 @@ export interface QualityGateStatusOptions {
   all?: boolean;
   category?: string;
   top?: number;
+  file?: string;
 }
 
 export async function qualityGateStatus(
@@ -81,6 +83,17 @@ export async function qualityGateStatus(
   await assertProjectExists(client, projectKey);
 
   const { queryParams, scope } = await resolveQualityGateScope(client, projectKey, options);
+
+  if (options.file) {
+    const componentKey = await resolveFileComponentKey(
+      client,
+      projectKey,
+      options.file,
+      queryParams,
+    );
+    console.print(`Resolved '${options.file}' to component '${componentKey}'.`);
+    return;
+  }
 
   const qualityGatesClient = new QualityGatesClient(client);
   const projectStatus = await qualityGatesClient

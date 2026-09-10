@@ -67,7 +67,6 @@ export interface ComponentTreeFileConfig {
   value?: string;
 }
 
-/** One metric's value for a file/directory, for `GET /api/measures/component` (`withComponentMeasures`). */
 export interface ComponentMeasureConfig {
   metric: string;
   value: string;
@@ -123,13 +122,10 @@ function severityRank(severity: string): number {
 }
 
 /**
- * Resolves a `<projectKey>` or `<projectKey>:<path>` component key against the server's
- * registered project keys, preferring the longest match. Project keys may themselves contain
- * `:` (Maven-style, e.g. `com.example:my-app`), so the split can't just cut at the first `:` —
- * an exact match against a registered key wins outright (so a colon-bearing project key is never
- * mistaken for `<shorter-key>:<path>`), otherwise the longest registered key that's a `<key>:`
- * prefix of the input wins. `projectKey: undefined` means no registered project matches at all.
- * Shared by `/api/components/show`, `/api/measures/component`, and `resolveIssuesSearchScope`.
+ * Registered project keys may themselves contain `:` (Maven-style, e.g. `com.example:my-app`),
+ * so a `<projectKey>:<path>` component key can't just be split at the first `:` - an exact match
+ * against a registered key wins outright, otherwise the longest registered key that's a `<key>:`
+ * prefix of the input wins.
  */
 function resolveProjectKeyFromComponent(
   componentKey: string,
@@ -377,11 +373,7 @@ export class ProjectBuilder {
     return this;
   }
 
-  /**
-   * Measures `GET /api/measures/component` returns for one file/directory path - independent
-   * of `withComponentTreeFiles` (the unrelated worst-N-by-metric endpoint). The path must also
-   * be registered via `withComponentsTreeItems` so the fake server can resolve its qualifier.
-   */
+  /** Independent of `withComponentTreeFiles`. The path must also be registered via `withComponentsTreeItems`. */
   withComponentMeasures(path: string, measures: ComponentMeasureConfig[]): this {
     this.componentMeasuresByPath.set(path, measures);
     return this;
@@ -1153,8 +1145,7 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
-        // Only resolves a file/directory component (never a bare project key) - CLI-963's
-        // file-scoped quality-gate view is this fake server's only caller of this endpoint.
+        // Deliberately scoped to file/directory components only - a bare project key 404s here.
         if (path === '/api/measures/component') {
           const componentKey = query.component ?? '';
           const { projectKey, subPath } = resolveProjectKeyFromComponent(componentKey, projects);
