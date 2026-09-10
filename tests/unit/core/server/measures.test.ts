@@ -215,4 +215,58 @@ describe('MeasuresClient', () => {
 
     expect(result.totalCount).toBe(47);
   });
+
+  it('getComponentMeasures joins metric keys and omits branch/pull request when not given', async () => {
+    fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({ component: component() }),
+    );
+
+    await client.getComponentMeasures({
+      componentKey: 'my-project:src/foo.ts',
+      metricKeys: ['coverage', 'new_coverage'],
+    });
+
+    const url = (fetchSpy.mock.calls[0][0] as URL).toString();
+    expect(url).toContain('component=my-project%3Asrc%2Ffoo.ts');
+    expect(url).toContain('metricKeys=coverage%2Cnew_coverage');
+    expect(url).not.toContain('branch=');
+    expect(url).not.toContain('pullRequest=');
+  });
+
+  it('getComponentMeasures forwards branch or pull request when given', async () => {
+    fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({ component: component() }),
+    );
+
+    await client.getComponentMeasures({
+      componentKey: 'my-project:src/foo.ts',
+      metricKeys: ['coverage'],
+      branch: 'feature-x',
+    });
+    expect((fetchSpy.mock.calls[0][0] as URL).toString()).toContain('branch=feature-x');
+
+    await client.getComponentMeasures({
+      componentKey: 'my-project:src/foo.ts',
+      metricKeys: ['coverage'],
+      pullRequest: '42',
+    });
+    expect((fetchSpy.mock.calls[1][0] as URL).toString()).toContain('pullRequest=42');
+  });
+
+  it('getComponentMeasures returns the component from the response, for a file or a directory alike', async () => {
+    const directory = component({
+      key: 'my-project:src',
+      name: 'src',
+      qualifier: 'DIR',
+      path: 'src',
+      measures: [{ metric: 'coverage', value: '93.5' }],
+    });
+    fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ component: directory }));
+
+    const result = await client
+      .getComponentMeasures({ componentKey: 'my-project:src', metricKeys: ['coverage'] })
+      .orThrow();
+
+    expect(result).toEqual(directory);
+  });
 });
