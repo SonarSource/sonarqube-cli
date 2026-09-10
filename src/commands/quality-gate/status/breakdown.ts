@@ -107,6 +107,7 @@ export interface AttachBreakdownsParams {
   top: number;
   branch?: string;
   pullRequest?: string;
+  componentKey?: string;
 }
 
 /** True when failing and in an implemented category, filtered to `category` if given. */
