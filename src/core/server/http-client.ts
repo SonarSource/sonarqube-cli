@@ -223,10 +223,12 @@ export class SonarHttpClient {
   }
 
   /**
-   * Like `get`, but resolves to `Ok(null)` instead of an error when the server responds
-   * 404. Every other non-2xx status still yields its normal typed error.
+   * Like `get`, but treats a 404 as a meaningful, expected answer instead of a failure:
+   * resolves to `Ok(null)` when the server responds 404. Every other non-2xx status
+   * (403, 429, 503, network error, ...) still yields the normal typed error, exactly
+   * as `get` would.
    */
-  getOrNotFound<T>(
+  getOrNullIf404<T>(
     endpoint: string,
     params?: QueryParams,
     baseUrl?: string,
@@ -261,7 +263,7 @@ export class SonarHttpClient {
   /**
    * Resolves to `{ response, value }` and never rejects. Only the *status* is left
    * uninterpreted (`value` is `undefined` on a non-2xx response) for the handful of
-   * callers (`getOrNotFound`, telemetry identity/project-uuid lookups) that need to branch
+   * callers (`getOrNullIf404`, telemetry identity/project-uuid lookups) that need to branch
    * on the status themselves instead of getting a single typed error for "not 2xx". A
    * transport failure (DNS/TLS failure, connection refused, timeout) becomes
    * `TransportError`; a body-parse failure on an otherwise-2xx response becomes
