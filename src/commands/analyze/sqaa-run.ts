@@ -19,6 +19,10 @@
  */
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import {
+  normalizePath,
+  toRelativePosixPath as toRelativePosixPathOrNull,
+} from '@/core/io/fs-utils.ts';
 import { timed } from '@/core/observability/timed.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -340,7 +344,9 @@ export async function runSqaaAnalysisOnFiles(
     return;
   }
 
-  const ignoredPaths = ignored.map((f) => toRelativePosixPath(f.path, repoRoot));
+  const ignoredPaths = ignored.map(
+    (f) => toRelativePosixPathOrNull(f.path, repoRoot) ?? normalizePath(f.path),
+  );
   const progress = new SqaaProgress({
     files: allPaths,
     ignoredFiles: ignoredPaths,

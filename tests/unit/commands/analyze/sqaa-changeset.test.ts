@@ -18,16 +18,23 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import * as processLib from '@/core/process/process.ts';
 
 import {
+  resolveChangeSet,
   resolveSqaaBranch,
   resolveSqaaBranchAtRepoRoot,
 } from '../../../../src/commands/analyze/sqaa-changeset.ts';
+import { clearGitStdoutCache } from '../../../../src/core/host/git/worktree.ts';
 
 let spawnProcessSpy: ReturnType<typeof spyOn>;
+let tempDir: string | undefined;
 
 function mockGitResponses(responses: Record<string, string | null>) {
   spawnProcessSpy.mockImplementation((_cmd: string, args: string[]) => {
@@ -49,6 +56,11 @@ beforeEach(() => {
 
 afterEach(() => {
   spawnProcessSpy.mockRestore();
+  clearGitStdoutCache();
+  if (tempDir !== undefined) {
+    rmSync(tempDir, { force: true, recursive: true });
+    tempDir = undefined;
+  }
 });
 
 describe('resolveSqaaBranch', () => {
@@ -101,4 +113,32 @@ describe('resolveSqaaBranch', () => {
       spawnProcessSpy.mock.calls.some(([, args]: [string, string[]]) => args[0] === 'branch'),
     ).toBe(false);
   });
+});
+
+describe('resolveChangeSet', () => {
+  it.skipIf(process.platform === 'win32')(
+    'excludes changed symlinks that resolve outside the repository',
+    async () => {
+      tempDir = realpathSync(mkdtempSync(join(tmpdir(), 'sqaa-changeset-')));
+      const repoRoot = join(tempDir, 'repo');
+      const outsideFile = join(tempDir, 'outside.ts');
+      const symlinkPath = join(repoRoot, 'external.ts');
+      const insideFile = join(repoRoot, 'inside.ts');
+      mkdirSync(repoRoot);
+      writeFileSync(outsideFile, 'outside content');
+      writeFileSync(insideFile, 'inside content');
+      symlinkSync(outsideFile, symlinkPath);
+
+      mockGitResponses({
+        'rev-parse --show-toplevel': `${repoRoot}\n`,
+        'diff --name-only --diff-filter=ACMR -z HEAD': 'external.ts\0inside.ts\0',
+        'ls-files -z --others --exclude-standard': '',
+      });
+
+      const result = await resolveChangeSet(repoRoot);
+
+      expect(result.files).toEqual([insideFile]);
+      expect(result.ignored).toEqual([{ path: symlinkPath, reason: 'outside-repository' }]);
+    },
+  );
 });
