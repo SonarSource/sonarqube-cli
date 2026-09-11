@@ -23,11 +23,21 @@ import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { getActiveConnection } from '@/core/state/state-manager.ts';
+import { loadState } from '@/core/state/state-repository.ts';
 import { NOTE_STYLES } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 function connectionLines(serverUrl: string, orgKey: string | undefined): string[] {
   return [`Server  ${serverUrl}`, ...(orgKey ? [`Org     ${orgKey}`] : [])];
+}
+
+function displayTokenMissing(
+  console: Console,
+  serverUrl: string,
+  orgKey: string | undefined,
+): void {
+  console.note(connectionLines(serverUrl, orgKey), '✗ Token missing', NOTE_STYLES.error);
 }
 
 function displayTokenStatus(
@@ -72,9 +82,18 @@ export async function authStatus(ctx: CommandInvocationContext): Promise<void> {
   }
 
   if (!auth) {
-    console.print('No saved connection');
+    const state = loadState();
+    if (state.auth.connections.length === 0) {
+      console.print('No saved connection');
+      throw new CommandFailedError('Authentication check failed.', {
+        remediationHint: "Run 'sonar auth login' to authenticate.",
+      });
+    }
+
+    const conn = getActiveConnection(state) ?? state.auth.connections[0];
+    displayTokenMissing(console, conn.serverUrl, conn.orgKey);
     throw new CommandFailedError('Authentication check failed.', {
-      remediationHint: "Run 'sonar auth login' to authenticate.",
+      remediationHint: "Run 'sonar auth login' to restore the token.",
     });
   }
 

@@ -53,11 +53,12 @@ import { createFakeFsTestHandle } from './fake-fs-test-handle.ts';
 
 const fakeFs = createFakeFsTestHandle();
 
-const MOCK_AUTH: ResolvedAuth = {
+const MOCK_AUTH = new ResolvedAuth({
   token: 't',
   serverUrl: 'https://sonarcloud.io',
   connectionType: 'cloud',
-};
+  source: 'state',
+});
 
 function withCwd<T>(
   cwdSpy: Mock<typeof process.cwd>,

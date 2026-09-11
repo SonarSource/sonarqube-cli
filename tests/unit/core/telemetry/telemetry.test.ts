@@ -90,6 +90,19 @@ async function commitCommandExecuted(
   await commitTelemetryFacts([await buildCommandExecutedFact(command)], { agentSessionId });
 }
 
+async function commitCommandExecutedWithEnvAuth(
+  command: SonarCommand,
+  agentSessionId: string | null = null,
+): Promise<void> {
+  const authResolver = new AuthResolver({ silent: true });
+  const authResult = await authResolver.resolveAuth();
+  const auth = authResult.isOk() ? authResult.value : null;
+  await commitTelemetryFacts([await buildCommandExecutedFact(command)], {
+    agentSessionId,
+    auth,
+  });
+}
+
 function mockFetch(ok = true, status = 200): ReturnType<typeof spyOn> {
   return spyOn(globalThis, 'fetch').mockResolvedValue({
     ok,
@@ -487,7 +500,7 @@ describe('CliCommandExecuted', () => {
         org: [{ ok: true, uuidV4: 'org-from-api' }],
       });
 
-      await commitCommandExecuted(makeCommand('context'));
+      await commitCommandExecutedWithEnvAuth(makeCommand('context'));
 
       const event = readCommandEvents(testDir)[0];
       expect(event.event_payload.user_uuid).toBe('user-from-api');
@@ -508,8 +521,8 @@ describe('CliCommandExecuted', () => {
         org: [{ ok: true }],
       });
 
-      await commitCommandExecuted(makeCommand('context'));
-      await commitCommandExecuted(makeCommand('analyze'));
+      await commitCommandExecutedWithEnvAuth(makeCommand('context'));
+      await commitCommandExecutedWithEnvAuth(makeCommand('analyze'));
 
       expect(
         getSafeSpy.mock.calls.filter((call: [string]) => call[0] === '/api/users/current'),
@@ -566,7 +579,7 @@ describe('CliCommandExecuted', () => {
         status: [{ ok: true, id: 'sqs-from-api' }],
       });
 
-      await commitCommandExecuted(makeCommand('context'));
+      await commitCommandExecutedWithEnvAuth(makeCommand('context'));
 
       const event = readCommandEvents(testDir)[0];
       expect(event.event_payload.connection_type).toBe('sqs');
@@ -585,8 +598,8 @@ describe('CliCommandExecuted', () => {
         org: [{ ok: true, uuidV4: 'cached-org' }],
       });
 
-      await commitCommandExecuted(makeCommand('context'));
-      await commitCommandExecuted(makeCommand('analyze'));
+      await commitCommandExecutedWithEnvAuth(makeCommand('context'));
+      await commitCommandExecutedWithEnvAuth(makeCommand('analyze'));
 
       expect(
         getSafeSpy.mock.calls.filter((call: [string]) => call[0] === '/api/users/current'),

@@ -184,17 +184,22 @@ describe('gitPreCommit', () => {
 
   it('throws CommandFailedError when scan throws with env-based auth (CI mode)', async () => {
     runSecretsBinarySpy.mockRejectedValue(new Error('binary crashed'));
-    process.env.SONARQUBE_CLI_TOKEN = 'tok';
-    process.env.SONARQUBE_CLI_SERVER = 'https://sonar.example.com';
+    resolveAuthSpy.mockReturnValue(
+      okAsync(
+        new ResolvedAuth({
+          token: 'tok',
+          serverUrl: 'https://sonar.example.com',
+          connectionType: 'on-premise',
+          source: 'env',
+        }),
+      ),
+    );
 
     let thrown: unknown;
     try {
       await gitPreCommit({}, [], makeCtx());
     } catch (e) {
       thrown = e;
-    } finally {
-      delete process.env.SONARQUBE_CLI_TOKEN;
-      delete process.env.SONARQUBE_CLI_SERVER;
     }
     expect(thrown).toBeInstanceOf(CommandFailedError);
     expect((thrown as CommandFailedError).message).toBe('Secrets scan failed.');
@@ -361,17 +366,22 @@ describe('gitPrePush', () => {
 
   it('throws CommandFailedError when scan throws with env-based auth (CI mode)', async () => {
     runSecretsBinarySpy.mockRejectedValue(new Error('binary crashed'));
-    process.env.SONARQUBE_CLI_TOKEN = 'tok';
-    process.env.SONARQUBE_CLI_SERVER = 'https://sonar.example.com';
+    resolveAuthSpy.mockReturnValue(
+      okAsync(
+        new ResolvedAuth({
+          token: 'tok',
+          serverUrl: 'https://sonar.example.com',
+          connectionType: 'on-premise',
+          source: 'env',
+        }),
+      ),
+    );
 
     let thrown: unknown;
     try {
       await gitPrePush([], makeCtx());
     } catch (e) {
       thrown = e;
-    } finally {
-      delete process.env.SONARQUBE_CLI_TOKEN;
-      delete process.env.SONARQUBE_CLI_SERVER;
     }
     expect(thrown).toBeInstanceOf(CommandFailedError);
     expect((thrown as CommandFailedError).message).toBe('Secrets scan failed.');
