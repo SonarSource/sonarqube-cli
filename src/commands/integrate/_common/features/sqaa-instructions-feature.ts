@@ -23,7 +23,8 @@ import type {
   ResourceDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { textSnippet, wholeFile } from '@/core/framework/features';
+import { skip, textSnippet, wholeFile } from '@/core/framework/features';
+import type { IntegrationScope } from '@/core/state/state.ts';
 
 import { sonarBeginMarker, sonarEndMarker } from '../instructions-templates.ts';
 import type { IntegrateAgentOptions } from '../types.ts';
@@ -31,6 +32,7 @@ import { vortexInstallDecision } from '../vortex.ts';
 
 export const SQAA_HOOK_FEATURE_ID = 'sonar-sqaa-hook';
 export const SQAA_INSTRUCTIONS_SUBFEATURE_ID = 'sqaa-instructions';
+export const SQAA_INSTRUCTIONS_GLOBAL_SUBFEATURE_ID = 'sqaa-instructions-global';
 const SQAA_INSTRUCTIONS_MARKER = 'sonarqube-agentic-analysis-protocol';
 
 export const SQAA_INSTRUCTIONS_BODY = `# Vortex analysis protocol
@@ -67,11 +69,18 @@ Non-negotiable rules:
 /** End-of-turn SQAA instructions, written by each agent into its own rules format. */
 export function createSqaaInstructionsSubfeature<TOptions extends IntegrateAgentOptions>(
   resources: ResourceDeclaration[],
+  onlyScope?: IntegrationScope,
 ): SubfeatureDeclaration<TOptions> {
+  const globalOnly = onlyScope === 'global';
+
   return {
-    id: SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+    id: globalOnly ? SQAA_INSTRUCTIONS_GLOBAL_SUBFEATURE_ID : SQAA_INSTRUCTIONS_SUBFEATURE_ID,
     displayName: 'Vortex analysis instructions',
-    shouldInstall: ({ options }) => vortexInstallDecision(options.vortexDisposition),
+    shouldInstall: ({ options, scope }) =>
+      onlyScope !== undefined && scope !== onlyScope
+        ? skip()
+        : vortexInstallDecision(options.vortexDisposition),
+    migrationEligible: () => !globalOnly,
     resources,
   };
 }
