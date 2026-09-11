@@ -23,7 +23,7 @@ import { describe, expect, it, mock, spyOn } from 'bun:test';
 import type { ScaScanApi } from '@/commands/analyze/dependency-risk-helpers/sca-api.ts';
 import * as scaTelemetry from '@/commands/analyze/sca-analysis-telemetry.ts';
 import { SCA_CALLER_COMMANDS } from '@/commands/analyze/sca-analysis-telemetry.ts';
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import type { SecretsInstaller } from '@/core/host/install/secrets.ts';
@@ -33,12 +33,13 @@ import { ScaScanOrchestrator } from '../../../../../src/commands/analyze/depende
 import { FakeConsole } from '../../../../_common/fake-console.ts';
 import { okScaInstaller as okInstaller } from './_helpers.ts';
 
-const CLOUD_AUTH: ResolvedAuth = {
+const CLOUD_AUTH = new ResolvedAuth({
   connectionType: 'cloud',
+  source: 'state' as const,
   serverUrl: 'https://sonarcloud.io',
   token: 'test-token',
   orgKey: 'my-org',
-};
+});
 
 const EMPTY_RESPONSE = { releases: [], parsedFiles: [], errors: [] };
 

@@ -29,18 +29,28 @@ import {
   SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
   SQAA_HOOK_TELEMETRY_EXIT_CODE,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
-import * as authResolver from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as processLib from '@/core/process/process.ts';
 import * as projectInfo from '@/core/project-info.ts';
+import { errAsync, okAsync } from '@/core/result.ts';
 
 import { agentPostToolUse } from '../../../../src/commands/hook/agent-post-tool-use.ts';
 import * as cagSubscriber from '../../../../src/commands/hook/context-augmentation-hook-subscriber.ts';
 import * as hookOutput from '../../../../src/commands/hook/format-sqaa-hook-context.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
+import { mockAuthResolver } from '../../../_common/mock-auth-resolver.ts';
 // Real path inside cwd so realpathSync resolves consistently for file and cwd.
 const TEST_FILE = join(process.cwd(), 'src/index.ts');
+
+const FAKE_AUTH = new ResolvedAuth({
+  token: 'tok',
+  serverUrl: 'https://sonarcloud.io',
+  connectionType: 'cloud',
+  source: 'state' as const,
+  orgKey: 'myorg',
+});
 
 describe('agentPostToolUse', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;
@@ -69,12 +79,9 @@ describe('agentPostToolUse', () => {
       },
     );
     stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
-    resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue({
-      token: 'tok',
-      serverUrl: 'https://sonarcloud.io',
-      connectionType: 'cloud',
-      orgKey: 'myorg',
-    });
+    const mocked = mockAuthResolver(FAKE_AUTH);
+    resolveAuthSpy = mocked.resolveAuthSpy;
+    ctx = new CommandInvocationContext(new FakeConsole(), undefined, mocked.runtime);
     readStdinJsonSpy = spyOn(stdinModule, 'readStdinJsonWithRaw').mockResolvedValue({
       raw: '{}',
       parsed: { tool_name: 'Edit', tool_input: { file_path: TEST_FILE } },
@@ -103,7 +110,6 @@ describe('agentPostToolUse', () => {
       sqaaTelemetry,
       'recordSqaaAnalysisTelemetry',
     ).mockImplementation(() => {});
-    ctx = new CommandInvocationContext(new FakeConsole());
   });
 
   afterEach(() => {
@@ -242,11 +248,16 @@ describe('agentPostToolUse', () => {
   });
 
   it('runs analysis on a Server connection without an organization', async () => {
-    resolveAuthSpy.mockResolvedValue({
-      token: 'tok',
-      serverUrl: 'https://sonar.example.com',
-      connectionType: 'on-premise',
-    });
+    resolveAuthSpy.mockReturnValue(
+      okAsync(
+        new ResolvedAuth({
+          token: 'tok',
+          serverUrl: 'https://sonar.example.com',
+          connectionType: 'on-premise',
+          source: 'state' as const,
+        }),
+      ),
+    );
 
     await agentPostToolUse(ctx);
 
@@ -272,15 +283,15 @@ describe('agentPostToolUse', () => {
   });
 
   it('returns without output when auth is unavailable', async () => {
-    resolveAuthSpy.mockResolvedValue(null);
+    resolveAuthSpy.mockReturnValue(okAsync(null));
 
     await agentPostToolUse(ctx);
 
     expect(createAnalysisSpy).not.toHaveBeenCalled();
   });
 
-  it('returns without output when auth rejects', async () => {
-    resolveAuthSpy.mockRejectedValue(new Error('keychain error'));
+  it('returns without output when auth resolution fails', async () => {
+    resolveAuthSpy.mockReturnValue(errAsync(new Error('keychain error')));
 
     await agentPostToolUse(ctx);
 
@@ -398,12 +409,17 @@ describe('agentPostToolUse', () => {
   });
 
   it('returns without output when cloud auth has no orgKey', async () => {
-    resolveAuthSpy.mockResolvedValue({
-      token: 'tok',
-      serverUrl: 'https://sonarcloud.io',
-      connectionType: 'cloud',
-      orgKey: undefined,
-    });
+    resolveAuthSpy.mockReturnValue(
+      okAsync(
+        new ResolvedAuth({
+          token: 'tok',
+          serverUrl: 'https://sonarcloud.io',
+          connectionType: 'cloud',
+          source: 'state' as const,
+          orgKey: undefined,
+        }),
+      ),
+    );
 
     await agentPostToolUse(ctx);
 

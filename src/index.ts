@@ -26,7 +26,6 @@ import { createCommandTree } from '@/commands/command-tree.ts';
 import { supportedIntegrations } from '@/commands/integrate';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import { installHooks } from '@/commands/integrate/claude/hooks.ts';
-import { loadPrivateBetaContext } from '@/core/launch-darkly/startup.ts';
 import { flushSentry } from '@/core/observability/sentry.ts';
 import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 import * as postUpdate from '@/core/update/post-update.ts';
@@ -56,10 +55,10 @@ await postUpdate.runPostUpdateActions({
   console,
 });
 
-const tree = await createCommandTree({
-  loadPrivateBetaContext,
-  console,
-});
+const tree = createCommandTree({ console });
+
+await tree.runtime.flagsResolver.resolveFlags();
+tree.refreshStagedVisibility();
 
 await tree.parseAsync(process.argv);
 await flushSentry();

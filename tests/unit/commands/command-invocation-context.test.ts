@@ -18,23 +18,36 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 
+import { AuthResolver, ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { type CliRuntime, createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import {
+  CommandAuthenticatedInvocationContext,
   CommandInvocationContext,
-  type CommandInvocationContextRuntime,
   TelemetryFact,
 } from '@/core/commands/invocation-context.ts';
 import type { LifecycleState } from '@/core/commands/sonar-command.ts';
 
 import { FakeConsole } from '../../_common/fake-console.ts';
 
+const FAKE_AUTH = new ResolvedAuth({
+  token: 'fake-token',
+  serverUrl: 'https://sonar.example.com',
+  connectionType: 'on-premise',
+  source: 'state' as const,
+});
+
+function runtime(overrides: Partial<CliRuntime> = {}): CliRuntime {
+  return createCliRuntime(overrides);
+}
+
 function ctx(
   lifecycle?: LifecycleState,
-  runtime?: CommandInvocationContextRuntime,
+  runtimeOverrides?: Partial<CliRuntime>,
   console: FakeConsole = new FakeConsole(),
 ): CommandInvocationContext {
-  return new CommandInvocationContext(console, lifecycle, runtime);
+  return new CommandInvocationContext(console, lifecycle, runtime(runtimeOverrides));
 }
 
 describe('CommandInvocationContext stage accessors', () => {
@@ -48,22 +61,17 @@ describe('CommandInvocationContext stage accessors', () => {
     expect(
       ctx(stage, {
         isAlphaEnabled: false,
-        isPrivateBetaEnabled: () => false,
       }).isAlphaEligible(),
     ).toBe(false);
     expect(
       ctx(stage, {
         isAlphaEnabled: true,
-        isPrivateBetaEnabled: () => false,
       }).isAlphaEligible(),
     ).toBe(true);
   });
 
   it('isBetaEligible is true for Open Beta without consulting entitlement', () => {
-    const context = ctx(
-      { stage: 'beta' },
-      { isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
-    );
+    const context = ctx({ stage: 'beta' });
     expect(context.isBetaEligible()).toBe(true);
   });
 
@@ -71,13 +79,11 @@ describe('CommandInvocationContext stage accessors', () => {
     const stage: LifecycleState = { stage: 'beta', betaFlagKey: 'cli.beta.demo' };
     expect(
       ctx(stage, {
-        isAlphaEnabled: false,
         isPrivateBetaEnabled: () => false,
       }).isBetaEligible(),
     ).toBe(false);
     expect(
       ctx(stage, {
-        isAlphaEnabled: false,
         isPrivateBetaEnabled: (key) => key === 'cli.beta.demo',
       }).isBetaEligible(),
     ).toBe(true);
@@ -118,6 +124,64 @@ describe('CommandInvocationContext stage accessors', () => {
   });
 });
 
+type AuthResolverInternals = AuthResolver & {
+  resolveFromState: () => Promise<ResolvedAuth | null>;
+};
+
+function spyResolveFromState(): ReturnType<typeof spyOn> {
+  return spyOn(AuthResolver.prototype as AuthResolverInternals, 'resolveFromState');
+}
+
+describe('CommandInvocationContext.resolveAuth', () => {
+  it('reuses a warmed AuthResolver without calling the resolver again', async () => {
+    const resolveFromStateSpy = spyResolveFromState().mockResolvedValue(FAKE_AUTH);
+    const sharedRuntime = createCliRuntime({
+      authResolver: new AuthResolver({ silent: true }),
+    });
+    await sharedRuntime.authResolver.resolveAuth();
+
+    const context = new CommandInvocationContext(new FakeConsole(), undefined, sharedRuntime);
+    const result = await context.resolveAuth();
+
+    expect(result.isOk()).toBe(true);
+    expect(result._unsafeUnwrap()).toEqual(FAKE_AUTH);
+    expect(resolveFromStateSpy).toHaveBeenCalledTimes(1);
+    resolveFromStateSpy.mockRestore();
+  });
+
+  it('memoizes auth resolution on the shared runtime', async () => {
+    const resolveFromStateSpy = spyResolveFromState().mockResolvedValue(null);
+    const sharedRuntime = createCliRuntime({
+      authResolver: new AuthResolver({ silent: true }),
+    });
+    const contextA = new CommandInvocationContext(new FakeConsole(), undefined, sharedRuntime);
+    const contextB = new CommandInvocationContext(new FakeConsole(), undefined, sharedRuntime);
+
+    await contextA.resolveAuth();
+    await contextB.resolveAuth();
+
+    expect(resolveFromStateSpy).toHaveBeenCalledTimes(1);
+    resolveFromStateSpy.mockRestore();
+  });
+
+  it('returns authenticated auth from the constructor without re-resolving', async () => {
+    const authResolver = new AuthResolver();
+    const resolveAuthSpy = spyOn(authResolver, 'resolveAuth');
+    const context = new CommandAuthenticatedInvocationContext(
+      FAKE_AUTH,
+      new FakeConsole(),
+      undefined,
+      createCliRuntime({ authResolver }),
+    );
+
+    const result = await context.resolveAuth();
+
+    expect(result.isOk()).toBe(true);
+    expect(result._unsafeUnwrap()).toEqual(FAKE_AUTH);
+    expect(resolveAuthSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe('TelemetryFact', () => {
   it('stamps timestamp on construction', () => {
     const before = Date.now();
@@ -133,12 +197,13 @@ describe('TelemetryFact', () => {
   });
 
   it('accepts auth via options', () => {
-    const auth = {
-      connectionType: 'cloud' as const,
+    const auth = new ResolvedAuth({
+      connectionType: 'cloud',
+      source: 'state',
       serverUrl: 'https://sonarcloud.io',
       token: 't',
       orgKey: 'org',
-    };
+    });
     const fact = new TelemetryFact('CliAnalysisCompleted', { ok: true }, { auth });
     expect(fact.auth).toBe(auth);
     expect(fact.timestamp).toBeGreaterThan(0);

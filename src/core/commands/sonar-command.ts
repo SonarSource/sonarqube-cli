@@ -24,11 +24,10 @@ import type { CommandOptions } from 'commander';
 import { Command, Help, Option } from 'commander';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { resolveAuth } from '@/core/auth/auth-resolver.ts';
+import { type CliRuntime, createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CliError, CommandFailedError, remediationHintFor } from '@/core/commands/command-error.ts';
 import { commandPathSegments, qualifiedCommandPath } from '@/core/commands/path.ts';
 import {
-  ALPHA_ENV_VAR,
   ALPHA_HELP_GROUP,
   deprecationWarning,
   isSameLifecycle,
@@ -53,6 +52,11 @@ import {
 } from './invocation-context.ts';
 
 export {
+  type CliRuntime,
+  createCliRuntime,
+  isAlphaEnabledFromEnv,
+} from '@/core/commands/cli-runtime.ts';
+export {
   ALPHA_ENV_VAR,
   type DeprecatedStageOptions,
   deprecationDetails,
@@ -68,28 +72,18 @@ const betaWarningsShownWithoutState = new Set<string>();
 export const COMMAND_CATEGORIES = ['core', 'data', 'integrate', 'cli-management'] as const;
 export type CommandCategory = (typeof COMMAND_CATEGORIES)[number];
 
-/** Shared per-invocation context for command-tree construction and execution. */
-export interface CliRuntime {
-  /** Auth resolved once at startup; `null` when unauthenticated. */
-  auth: ResolvedAuth | null;
-  /** Whether Alpha commands are visible for this invocation. */
-  isAlphaEnabled: boolean;
-  /** Private Beta registration gate; Open Beta ignores this. */
-  isPrivateBetaEnabled: (flagKey: string) => boolean;
+/** @deprecated Use {@link createCliRuntime} instead. */
+export { createCliRuntime as createDefaultCliRuntime } from '@/core/commands/cli-runtime.ts';
+
+function isPrivateBetaGated(lifecycle: LifecycleState): boolean {
+  return lifecycle.stage === 'beta' && lifecycle.betaFlagKey !== undefined;
 }
 
-/** Reads {@link ALPHA_ENV_VAR} (`true` / `1` enable Alpha commands). */
-export function isAlphaEnabledFromEnv(env: NodeJS.ProcessEnv = process.env): boolean {
-  const value = env[ALPHA_ENV_VAR];
-  return value === 'true' || value === '1';
-}
-
-export function createDefaultCliRuntime(): CliRuntime {
-  return {
-    auth: null,
-    isAlphaEnabled: isAlphaEnabledFromEnv(),
-    isPrivateBetaEnabled: () => false,
-  };
+function recordPrivateBetaFlagKey(runtime: CliRuntime, lifecycle: LifecycleState): void {
+  if (lifecycle.stage !== 'beta' || lifecycle.betaFlagKey === undefined) {
+    return;
+  }
+  runtime.privateBetaFlags.record(lifecycle.betaFlagKey);
 }
 
 /**
@@ -222,6 +216,8 @@ export class SonarCommand extends Command {
   private readonly _console: Console;
   private _invocationContext: CommandInvocationContext | undefined;
   private _passthroughSubcommand?: string | null;
+  private readonly deferredPrivateBetaOptions: SonarOption[] = [];
+  private readonly deferredPrivateBetaCommands: SonarCommand[] = [];
 
   /**
    * `updateNotifier` / `runtime` default so the root command owns the
@@ -240,7 +236,7 @@ export class SonarCommand extends Command {
     super(name);
     this._console = options.console;
     this._updateNotifier = options.updateNotifier ?? new UpdateNotifier(this._console);
-    this._runtime = options.runtime ?? createDefaultCliRuntime();
+    this._runtime = options.runtime ?? createCliRuntime({ console: options.console });
     this.hook('preAction', () => {
       if (this._lifecycle.stage === 'alpha') {
         this._console.info(
@@ -276,7 +272,11 @@ export class SonarCommand extends Command {
     if (option.mandatory && (stage === 'alpha' || stage === 'beta')) {
       throw new Error(`Cannot stage a required option as Alpha or Beta: '${option.flags}'`);
     }
+    recordPrivateBetaFlagKey(this._runtime, option.lifecycle);
     if (!isStageVisible(option.lifecycle, this._runtime)) {
+      if (isPrivateBetaGated(option.lifecycle)) {
+        this.deferredPrivateBetaOptions.push(option);
+      }
       return this;
     }
     return super.addOption(option);
@@ -373,13 +373,25 @@ export class SonarCommand extends Command {
       this.helpGroup('');
     }
 
+    recordPrivateBetaFlagKey(this._runtime, next);
+
     // Commander already attached this command via .command(); keep or detach.
     if (this.isStageVisible()) {
       this.attachToParent();
     } else {
       this.detachFromParent();
+      if (isPrivateBetaGated(next)) {
+        (this.parent as SonarCommand | undefined)?.deferPrivateBetaChild(this);
+      }
     }
     return this;
+  }
+
+  /** Tracks Private Beta subcommands detached at build time until flags resolve. */
+  deferPrivateBetaChild(child: SonarCommand): void {
+    if (!this.deferredPrivateBetaCommands.includes(child)) {
+      this.deferredPrivateBetaCommands.push(child);
+    }
   }
 
   private isStageVisible(): boolean {
@@ -404,6 +416,48 @@ export class SonarCommand extends Command {
     const commandIndex = siblings?.indexOf(this) ?? -1;
     if (commandIndex >= 0) {
       siblings?.splice(commandIndex, 1);
+    }
+  }
+
+  /** Re-evaluate Private Beta (and other staged) visibility after LaunchDarkly resolves flags. */
+  refreshStagedVisibility(): void {
+    const stillDeferredCommands: SonarCommand[] = [];
+    for (const command of this.deferredPrivateBetaCommands) {
+      if (isStageVisible(command.lifecycle, this._runtime)) {
+        command.attachToParent();
+      } else {
+        stillDeferredCommands.push(command);
+      }
+    }
+    this.deferredPrivateBetaCommands.length = 0;
+    this.deferredPrivateBetaCommands.push(...stillDeferredCommands);
+
+    if (this.isStageVisible()) {
+      this.attachToParent();
+    } else {
+      this.detachFromParent();
+      if (isPrivateBetaGated(this._lifecycle)) {
+        (this.parent as SonarCommand | undefined)?.deferPrivateBetaChild(this);
+      }
+    }
+
+    const stillDeferredOptions: SonarOption[] = [];
+    for (const option of this.deferredPrivateBetaOptions) {
+      if (isStageVisible(option.lifecycle, this._runtime)) {
+        super.addOption(option);
+      } else {
+        stillDeferredOptions.push(option);
+      }
+    }
+    this.deferredPrivateBetaOptions.length = 0;
+    this.deferredPrivateBetaOptions.push(...stillDeferredOptions);
+
+    const children = new Set<SonarCommand>([
+      ...(this.commands as SonarCommand[]),
+      ...stillDeferredCommands,
+    ]);
+    for (const child of children) {
+      child.refreshStagedVisibility();
     }
   }
 
@@ -488,14 +542,20 @@ export class SonarCommand extends Command {
     this._requiresAuth = true;
     super.action((...args: TArgs) =>
       this.runCommand(async () => {
-        // Prefer auth resolved once at startup; fall back for isolated unit tests.
-        const auth = this._runtime.auth ?? (await resolveAuth({ console: this._console }));
-        if (!auth) {
+        const ctx = this.createCommandInvocationContext();
+        const authResult = await ctx.resolveAuth();
+        if (authResult.isErr()) {
+          throw authResult.error;
+        }
+        if (!authResult.value) {
           throw new CommandFailedError('Not authenticated.', {
             remediationHint: "Run 'sonar auth login' to authenticate.",
           });
         }
-        const outcome = await fn(this.createCommandAuthenticatedInvocationContext(auth), ...args);
+        const outcome = await fn(
+          this.createCommandAuthenticatedInvocationContext(authResult.value),
+          ...args,
+        );
         if (isResult(outcome) && outcome.isErr()) {
           throw outcome.error;
         }
@@ -671,8 +731,13 @@ function collectPrivateBetaFlagKey(keys: Set<string>, lifecycle: LifecycleState)
   }
 }
 
-/** Collects unique LaunchDarkly flag keys from Private Beta commands and options in the tree. */
+/** Returns Private Beta flag keys recorded while building `root`. */
 export function collectPrivateBetaFlagKeys(root: SonarCommand): string[] {
+  return [...root.runtime.privateBetaFlags.flagKeys()];
+}
+
+/** @deprecated Walks the tree; prefer {@link SonarCommand.runtime}.privateBetaFlags. */
+export function walkPrivateBetaFlagKeys(root: SonarCommand): string[] {
   const keys = new Set<string>();
 
   const visit = (command: SonarCommand): void => {

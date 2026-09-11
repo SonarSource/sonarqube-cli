@@ -24,6 +24,7 @@
  *   flushTelemetryEvents  — atomic rename, retention cap, send, re-queue, concurrent safety
  */
 
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -36,9 +37,13 @@ import { scanAndEmitSecrets } from '@/commands/analyze/secrets.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import { SQAA_ANALYZE_AGENTIC_CALLER_COMMAND } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import type { IntegrationConfiguredPayload } from '@/commands/integrate/_common/integrate-telemetry.ts';
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { ENV_SONAR_USER_HOME, TELEMETRY_ENDPOINT } from '@/core/config-constants.ts';
+import {
+  ENV_SONAR_USER_HOME,
+  getTelemetryDir,
+  TELEMETRY_ENDPOINT,
+} from '@/core/config-constants.ts';
 import { NetworkConfigError } from '@/core/errors.ts';
 import * as networkConfig from '@/core/host/connectivity/network-config.ts';
 import { DISTRIBUTION } from '@/core/host/distribution.ts';
@@ -156,12 +161,13 @@ function mockFetch(ok = true): ReturnType<typeof spyOn> {
   } as Response);
 }
 
-const AUTH: ResolvedAuth = {
+const AUTH = new ResolvedAuth({
   connectionType: 'cloud',
+  source: 'state' as const,
   serverUrl: 'https://sonarcloud.io',
   token: 'test-token',
   orgKey: 'my-org',
-};
+});
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -200,11 +206,12 @@ beforeEach(async () => {
   getConnectionSpy = spyOn(stateManager, 'getActiveConnection').mockReturnValue(undefined);
   getUserIdSpy = spyOn(userModule, 'getOrCreateUserId').mockReturnValue('machine-id');
   detectAgentSpy = spyOn(agentDetector, 'detectCallerAgent').mockReturnValue(null);
-  // Emitting an event with a cloud/server auth but no seeded connection triggers
-  // identity enrichment, which otherwise hits the real network. Stub fetch by
-  // default so no test in this file depends on network reachability (a real call
-  // fails fast locally but hangs to a 5s timeout in CI). Tests that assert on the
-  // telemetry HTTP flush install their own fetch spy, which shadows this one.
+  // Emitting an event with invocation auth may seed from a matching active
+  // connection, then the disk cache / API (`resolveTelemetryIdentity`). Stub
+  // fetch by default so no test in this file depends on network reachability
+  // (a real call fails fast locally but hangs to a 5s timeout in CI). Tests
+  // that assert on the telemetry HTTP flush install their own fetch spy, which
+  // shadows this one.
   defaultFetchSpy = mockFetch();
 });
 
@@ -271,7 +278,7 @@ describe('emitAnalysisCompleted()', () => {
 
   it('sets connection_type to sqc for cloud connections', async () => {
     await emitAnalysisCompleted(
-      { ...AUTH, connectionType: 'cloud' },
+      new ResolvedAuth({ ...AUTH, connectionType: 'cloud' }),
       makeAnalysisCompletedPayload(),
     );
 
@@ -281,7 +288,7 @@ describe('emitAnalysisCompleted()', () => {
 
   it('sets connection_type to sqs for server connections', async () => {
     await emitAnalysisCompleted(
-      { ...AUTH, connectionType: 'on-premise' },
+      new ResolvedAuth({ ...AUTH, connectionType: 'on-premise' }),
       makeAnalysisCompletedPayload(),
     );
 
@@ -289,17 +296,24 @@ describe('emitAnalysisCompleted()', () => {
     expect(event.event_payload.connection_type).toBe('sqs');
   });
 
-  it('includes connection identity fields from the active connection', async () => {
-    getConnectionSpy.mockReturnValue({
-      id: 'conn-id',
-      type: 'cloud',
-      serverUrl: 'https://sonarcloud.io',
-      orgKey: 'my-org',
-      authenticatedAt: '2026-01-01T00:00:00.000Z',
-      userUuid: 'user-uuid-abc',
-      organizationUuidV4: 'org-uuid-xyz',
-      sqsInstallationId: 'sqs-install-id-123',
-    });
+  it('includes identity fields from the invocation-auth disk cache when no matching connection is seeded', async () => {
+    mkdirSync(getTelemetryDir(), { recursive: true });
+    const fingerprint = createHash('sha256').update(AUTH.token).digest('hex').slice(0, 16);
+    const cacheKey = [AUTH.connectionType, AUTH.serverUrl, AUTH.orgKey ?? '', fingerprint].join(
+      '|',
+    );
+    writeFileSync(
+      join(getTelemetryDir(), 'identity-cache.json'),
+      JSON.stringify({
+        entries: {
+          [cacheKey]: {
+            userUuid: 'user-uuid-abc',
+            organizationUuidV4: 'org-uuid-xyz',
+            sqsInstallationId: 'sqs-install-id-123',
+          },
+        },
+      }),
+    );
 
     await emitAnalysisCompleted(AUTH, makeAnalysisCompletedPayload());
 
@@ -307,6 +321,7 @@ describe('emitAnalysisCompleted()', () => {
     expect(payload.user_uuid).toBe('user-uuid-abc');
     expect(payload.organization_uuid_v4).toBe('org-uuid-xyz');
     expect(payload.sqs_installation_id).toBe('sqs-install-id-123');
+    expect(getConnectionSpy).toHaveBeenCalled();
   });
 
   it('sets caller_agent from detectCallerAgent', async () => {

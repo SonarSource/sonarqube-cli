@@ -31,20 +31,11 @@ import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
 
 import { version as VERSION } from '../../../package.json';
 import { getTelemetryDir, TELEMETRY_API_KEY, TELEMETRY_ENDPOINT } from '../config-constants.ts';
-import type {
-  AuthConnection,
-  StoredTelemetryEvent,
-  TelemetryConnectionType,
-  TelemetryEventIdentityPayload,
-} from '../state/state.ts';
+import type { StoredTelemetryEvent, TelemetryEventIdentityPayload } from '../state/state.ts';
 import { getActiveConnection, tryLoadState } from '../state/state-manager.ts';
 import { resolveAgentSessionIdFromHookOrEnv } from './agent-session.ts';
 import { isTelemetryEnabled } from './enabled.ts';
-import {
-  resolveCommandTelemetryIdentity,
-  resolveStoreEventTelemetryIdentitySafely,
-  type TelemetryIdentity,
-} from './identity.ts';
+import { resolveCommandTelemetryIdentity, resolveStoreEventTelemetryIdentity } from './identity.ts';
 import { getOrCreateUserId } from './user.ts';
 
 const TELEMETRY_EVENTS_FILENAME = 'telemetry-events.ndjson';
@@ -71,16 +62,11 @@ export function appendTelemetryEvent(event: StoredTelemetryEvent): void {
   }
 }
 
-type IdentityResolver = (
-  conn: AuthConnection | undefined,
-) => Promise<{ connectionType: TelemetryConnectionType; identity: TelemetryIdentity }>;
-
 /**
  * Resolves shared identity fields for telemetry events.
  * Returns null when telemetry is disabled or installationId is absent.
  */
 async function buildIdentityBase(
-  resolve: IdentityResolver,
   identityOptions?: IdentityEmitOptions,
 ): Promise<TelemetryEventIdentityPayload | null> {
   const state = tryLoadState();
@@ -88,8 +74,10 @@ async function buildIdentityBase(
   const installationId = state.telemetry.installationId;
   if (!installationId) return null;
 
-  const conn = getActiveConnection(state);
-  const { connectionType, identity } = await resolve(conn);
+  const { connectionType, identity } =
+    identityOptions?.auth !== undefined
+      ? await resolveCommandTelemetryIdentity(identityOptions.auth)
+      : resolveStoreEventTelemetryIdentity(getActiveConnection(state));
 
   return {
     cli_installation_id: installationId,
@@ -115,12 +103,18 @@ export type IdentityEmitOptions = {
    * otherwise `buildIdentityBase` falls back to agent-native env vars.
    */
   agentSessionId?: string | null;
+  /**
+   * Invocation auth from the process AuthResolver memo. `undefined` uses the
+   * active connection (store-event / flush path). `null` means this invocation
+   * was unauthenticated. A `ResolvedAuth` is the sole identity source — command
+   * events must not re-read the active connection, which may have changed
+   * during the command (e.g. `sonar auth login`).
+   */
+  auth?: ResolvedAuth | null;
 };
 
 export type TelemetryEmitOptions = IdentityEmitOptions & {
   eventTimestampMs?: number;
-  /** When set, identity is resolved from this auth; otherwise the active connection. */
-  auth?: ResolvedAuth;
 };
 
 /**
@@ -132,12 +126,7 @@ export async function emitTelemetryEvent(
   fields: object,
   options?: TelemetryEmitOptions,
 ): Promise<void> {
-  const auth = options?.auth;
-  const resolve: IdentityResolver =
-    auth === undefined
-      ? resolveStoreEventTelemetryIdentitySafely
-      : (conn) => resolveCommandTelemetryIdentity(conn, auth);
-  const base = await buildIdentityBase(resolve, options);
+  const base = await buildIdentityBase(options);
   if (!base) return;
   appendTelemetryEvent({
     metadata: {

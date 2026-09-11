@@ -18,17 +18,21 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { spyOn } from 'bun:test';
 
-import { runContextPassthrough } from '../context/index.ts';
-import { readRawStdin } from './stdin.ts';
+import { AuthResolver, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { type CliRuntime, createCliRuntime } from '@/core/commands/cli-runtime.ts';
+import { okAsync } from '@/core/result.ts';
 
-export async function claudePostToolUseFailure(ctx: CommandInvocationContext): Promise<void> {
-  let raw: string;
-  try {
-    raw = await readRawStdin();
-  } catch {
-    return; // timeout or read error — non-blocking
-  }
-  await runContextPassthrough('__hook', ['Claude'], { stdinPayload: raw, ctx });
+export type MockAuthResolver = {
+  runtime: CliRuntime;
+  authResolver: AuthResolver;
+  resolveAuthSpy: ReturnType<typeof spyOn>;
+};
+
+export function mockAuthResolver(auth: ResolvedAuth | null): MockAuthResolver {
+  const authResolver = new AuthResolver();
+  const resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockReturnValue(okAsync(auth));
+  const runtime = createCliRuntime({ authResolver });
+  return { runtime, authResolver, resolveAuthSpy };
 }

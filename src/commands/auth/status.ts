@@ -18,12 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { ENV_ORG, ENV_SERVER, ENV_TOKEN, resolveFromEnv } from '@/core/auth/auth-resolver.ts';
+import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/auth/auth-resolver.ts';
 import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { getToken as getKeystoreToken } from '@/core/host/keychain.ts';
+import { getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState } from '@/core/state/state-repository.ts';
 import { NOTE_STYLES } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -62,33 +62,35 @@ function displayTokenStatus(
 
 export async function authStatus(ctx: CommandInvocationContext): Promise<void> {
   const { console } = ctx;
-  const envAuth = resolveFromEnv();
-  if (envAuth) {
+  const authResult = await ctx.resolveAuth();
+  if (authResult.isErr()) {
+    throw authResult.error;
+  }
+  const auth = authResult.value;
+
+  if (auth?.comesFromEnv()) {
     let source: string;
-    if (envAuth.connectionType === 'cloud') {
+    if (auth.connectionType === 'cloud') {
       source = process.env[ENV_SERVER]
         ? `env vars:  ${ENV_TOKEN}, ${ENV_ORG}, ${ENV_SERVER}`
         : `env vars:  ${ENV_TOKEN}, ${ENV_ORG}`;
     } else {
       source = `env vars:  ${ENV_TOKEN}, ${ENV_SERVER}`;
     }
-    printConnected(console, envAuth.serverUrl, source, envAuth.orgKey);
+    printConnected(console, auth.serverUrl, source, auth.orgKey);
     return;
   }
 
-  const state = loadState();
+  if (!auth) {
+    const state = loadState();
+    if (state.auth.connections.length === 0) {
+      console.print('No saved connection');
+      throw new CommandFailedError('Authentication check failed.', {
+        remediationHint: "Run 'sonar auth login' to authenticate.",
+      });
+    }
 
-  if (state.auth.connections.length === 0) {
-    console.print('No saved connection');
-    throw new CommandFailedError('Authentication check failed.', {
-      remediationHint: "Run 'sonar auth login' to authenticate.",
-    });
-  }
-
-  const conn = state.auth.connections[0];
-  const token = await getKeystoreToken(conn.serverUrl, conn.orgKey);
-
-  if (token === null) {
+    const conn = getActiveConnection(state) ?? state.auth.connections[0];
     displayTokenMissing(console, conn.serverUrl, conn.orgKey);
     throw new CommandFailedError('Authentication check failed.', {
       remediationHint: "Run 'sonar auth login' to restore the token.",
@@ -96,11 +98,11 @@ export async function authStatus(ctx: CommandInvocationContext): Promise<void> {
   }
 
   const status = await console.withSpinner('Verifying token...', () =>
-    checkTokenStatus(conn.serverUrl, token),
+    checkTokenStatus(auth.serverUrl, auth.token),
   );
   console.blank();
 
-  displayTokenStatus(console, conn.serverUrl, conn.orgKey, status);
+  displayTokenStatus(console, auth.serverUrl, auth.orgKey, status);
 
   if (status.status === 'unreachable') {
     const message = status.errorMessage

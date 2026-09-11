@@ -20,7 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { TelemetryFact } from '@/core/commands/invocation-context.ts';
 import { commitTelemetryFacts, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import * as telemetryEvents from '@/core/telemetry/telemetry-events.ts';
@@ -88,12 +88,13 @@ describe('commitTelemetryFacts', () => {
 
   it('forwards fact.auth to emitTelemetryEvent', async () => {
     const emitSpy = spyOn(telemetryEvents, 'emitTelemetryEvent').mockResolvedValue();
-    const auth: ResolvedAuth = {
+    const auth = new ResolvedAuth({
       connectionType: 'cloud',
+      source: 'state' as const,
       serverUrl: 'https://sonarcloud.io',
       token: 'test-token',
       orgKey: 'my-org',
-    };
+    });
     const analysis = fact('CliAnalysisCompleted', ANALYSIS_PAYLOAD, auth);
 
     await commitTelemetryFacts([analysis]);

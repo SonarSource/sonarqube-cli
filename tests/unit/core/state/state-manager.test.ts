@@ -30,7 +30,7 @@ import { join } from 'node:path';
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { AuthConnection } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import {
@@ -64,11 +64,22 @@ function cleanup(): void {
 }
 
 function cloudAuth(token: string, orgKey = 'my-org'): ResolvedAuth {
-  return { token, serverUrl: 'https://sonarcloud.io', orgKey, connectionType: 'cloud' };
+  return new ResolvedAuth({
+    token,
+    serverUrl: 'https://sonarcloud.io',
+    orgKey,
+    connectionType: 'cloud',
+    source: 'state',
+  });
 }
 
 function serverAuth(token: string): ResolvedAuth {
-  return { token, serverUrl: 'https://sq.example.com', connectionType: 'on-premise' };
+  return new ResolvedAuth({
+    token,
+    serverUrl: 'https://sq.example.com',
+    connectionType: 'on-premise',
+    source: 'state',
+  });
 }
 
 function cloudConn(overrides: Partial<AuthConnection> = {}): AuthConnection {

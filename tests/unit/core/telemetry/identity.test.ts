@@ -32,15 +32,15 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import * as authResolver from '@/core/auth/auth-resolver.ts';
+import { AuthResolver, ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { ENV_SONAR_USER_HOME, getTelemetryDir } from '@/core/config-constants.ts';
 import type { AuthConnection } from '@/core/state/state.ts';
+import { addOrUpdateConnection, loadState, saveState } from '@/core/state/state-manager.ts';
 import {
   identityFromConnection,
   isIdentityCompleteForConnection,
   resolveCommandTelemetryIdentity,
-  resolveStoreEventTelemetryIdentitySafely,
+  resolveStoreEventTelemetryIdentity,
 } from '@/core/telemetry/identity.ts';
 import {
   needsIdentityEnrichment,
@@ -52,11 +52,22 @@ import { mockIdentityGetSafe } from './identity-api-mock.ts';
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function cloudAuth(token: string, orgKey = 'my-org'): ResolvedAuth {
-  return { token, serverUrl: 'https://sonarcloud.io', orgKey, connectionType: 'cloud' };
+  return new ResolvedAuth({
+    token,
+    serverUrl: 'https://sonarcloud.io',
+    orgKey,
+    connectionType: 'cloud',
+    source: 'state',
+  });
 }
 
 function serverAuth(token: string): ResolvedAuth {
-  return { token, serverUrl: 'https://sq.example.com', connectionType: 'on-premise' };
+  return new ResolvedAuth({
+    token,
+    serverUrl: 'https://sq.example.com',
+    connectionType: 'on-premise',
+    source: 'state',
+  });
 }
 
 function cloudConn(overrides: Partial<AuthConnection> = {}): AuthConnection {
@@ -225,17 +236,21 @@ describe('needsIdentityEnrichment()', () => {
   });
 });
 
-describe('resolveStoreEventTelemetryIdentitySafely()', () => {
-  it('falls back to the connection identity when enrichment throws', async () => {
+describe('resolveStoreEventTelemetryIdentity()', () => {
+  it('returns the connection identity without re-resolving auth when no auth is supplied', () => {
     const conn = cloudConn({ userUuid: 'u' });
-    const resolveFromStateSpy = spyOn(authResolver, 'resolveFromState').mockRejectedValue(
-      new Error('keychain locked'),
+    const resolveFromStateSpy = spyOn(
+      AuthResolver.prototype as AuthResolver & {
+        resolveFromState: () => Promise<ResolvedAuth | null>;
+      },
+      'resolveFromState',
     );
 
-    const result = await resolveStoreEventTelemetryIdentitySafely(conn);
+    const result = resolveStoreEventTelemetryIdentity(conn);
 
     expect(result.connectionType).toBe('sqc');
     expect(result.identity.user_uuid).toBe('u');
+    expect(resolveFromStateSpy).not.toHaveBeenCalled();
     resolveFromStateSpy.mockRestore();
   });
 });
@@ -243,33 +258,33 @@ describe('resolveStoreEventTelemetryIdentitySafely()', () => {
 // ─── resolveCommandTelemetryIdentity ───────────────────────────────────────────
 
 describe('resolveCommandTelemetryIdentity()', () => {
-  it('uses the connection identity without enrichment when auth is null', async () => {
-    const conn = cloudConn({ userUuid: 'u', organizationUuidV4: 'o' });
+  it('returns empty identity when auth is null', async () => {
+    const state = loadState();
+    const conn = addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
+      orgKey: 'my-org',
+    });
+    conn.userUuid = 'post-login-user';
+    saveState(state);
     const getSafeSpy = mockIdentityGetSafe();
 
-    const { connectionType, identity } = await resolveCommandTelemetryIdentity(conn, null);
+    const { connectionType, identity } = await resolveCommandTelemetryIdentity(null);
 
-    expect(connectionType).toBe('sqc');
-    expect(identity.user_uuid).toBe('u');
+    expect(connectionType).toBeNull();
+    expect(identity).toEqual({
+      user_uuid: null,
+      organization_uuid_v4: null,
+      sqs_installation_id: null,
+    });
     expect(getSafeSpy).not.toHaveBeenCalled();
     getSafeSpy.mockRestore();
   });
 
-  it('maps on-premise auth to sqs and skips enrichment when the connection is complete', async () => {
-    const conn: AuthConnection = {
-      id: 'c',
-      type: 'on-premise',
-      serverUrl: 'https://sq.example.com',
-      authenticatedAt: '2026-01-01T00:00:00.000Z',
-      sqsInstallationId: 's',
-      userUuid: 'server-user',
-    };
+  it('maps on-premise auth to sqs and serves identity from the disk cache', async () => {
+    const auth = serverAuth('sqs-complete-token');
+    seedDiskCache(auth, { sqsInstallationId: 's', userUuid: 'server-user' });
     const getSafeSpy = mockIdentityGetSafe();
 
-    const { connectionType, identity } = await resolveCommandTelemetryIdentity(
-      conn,
-      serverAuth('sqs-complete-token'),
-    );
+    const { connectionType, identity } = await resolveCommandTelemetryIdentity(auth);
 
     expect(connectionType).toBe('sqs');
     expect(identity.sqs_installation_id).toBe('s');
@@ -278,16 +293,18 @@ describe('resolveCommandTelemetryIdentity()', () => {
     getSafeSpy.mockRestore();
   });
 
-  it('skips enrichment when cloud connection has user, org, and resolved enterprise', async () => {
-    const conn = cloudConn({
+  it('maps cloud auth to sqc and serves identity from the disk cache', async () => {
+    const auth = cloudAuth('cloud-complete');
+    seedDiskCache(auth, {
       userUuid: 'u',
       organizationUuidV4: 'o',
       enterpriseUuid: null,
     });
     const getSafeSpy = mockIdentityGetSafe();
 
-    const { identity } = await resolveCommandTelemetryIdentity(conn, cloudAuth('cloud-complete'));
+    const { identity, connectionType } = await resolveCommandTelemetryIdentity(auth);
 
+    expect(connectionType).toBe('sqc');
     expect(identity.user_uuid).toBe('u');
     expect(identity.organization_uuid_v4).toBe('o');
     expect(identity.enterprise_uuid).toBeNull();
@@ -295,41 +312,55 @@ describe('resolveCommandTelemetryIdentity()', () => {
     getSafeSpy.mockRestore();
   });
 
-  it('fetches enterprise when cloud connection has user and org but enterpriseUuid is unset', async () => {
-    const conn = cloudConn({ userUuid: 'u', organizationUuidV4: 'o' });
-    const getSafeSpy = mockIdentityGetSafe({
-      org: [{ ok: true, uuidV4: 'o', id: 'legacy-org' }],
-      enterprise: [{ ok: true, enterpriseId: 'ent-1' }],
-    });
-
-    const { identity } = await resolveCommandTelemetryIdentity(
-      conn,
-      cloudAuth('cloud-missing-enterprise'),
-    );
-
-    expect(identity.user_uuid).toBe('u');
-    expect(identity.enterprise_uuid).toBe('ent-1');
-    expect(
-      getSafeSpy.mock.calls.filter(
-        (call: [string]) => call[0] === '/enterprises/enterprise-organizations',
-      ),
-    ).toHaveLength(1);
-    getSafeSpy.mockRestore();
-  });
-
-  it('ignores a connection that does not match the resolved auth', async () => {
-    const conn = cloudConn({ userUuid: 'stale-user', serverUrl: 'https://other.io' });
+  it('enriches identity from the API when the disk cache is empty', async () => {
     const getSafeSpy = mockIdentityGetSafe({
       user: [{ ok: true, id: 'fresh-user' }],
       org: [{ ok: true, uuidV4: 'fresh-org' }],
     });
 
-    const { identity } = await resolveCommandTelemetryIdentity(
-      conn,
-      cloudAuth('cmd-mismatch-token'),
-    );
+    const { identity } = await resolveCommandTelemetryIdentity(cloudAuth('cmd-api-token'));
 
     expect(identity.user_uuid).toBe('fresh-user');
+    expect(identity.organization_uuid_v4).toBe('fresh-org');
+    getSafeSpy.mockRestore();
+  });
+
+  it('skips the identity API when a matching on-premise connection already resolved userUuid', async () => {
+    const auth = serverAuth('sqs-project-analysis-token');
+    const state = loadState();
+    const conn = addOrUpdateConnection(state, auth.serverUrl, 'on-premise');
+    conn.userUuid = null;
+    conn.sqsInstallationId = 'sqs-abc';
+    saveState(state);
+    const getSafeSpy = mockIdentityGetSafe();
+
+    const { identity } = await resolveCommandTelemetryIdentity(auth);
+
+    expect(identity.user_uuid).toBeNull();
+    expect(identity.sqs_installation_id).toBe('sqs-abc');
+    expect(getSafeSpy).not.toHaveBeenCalled();
+    getSafeSpy.mockRestore();
+  });
+
+  it('does not seed identity from a mismatched active connection', async () => {
+    const auth = serverAuth('sqs-unmatched-token');
+    const state = loadState();
+    const conn = addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
+      orgKey: 'my-org',
+    });
+    conn.userUuid = 'post-login-user';
+    conn.organizationUuidV4 = 'post-login-org';
+    saveState(state);
+    const getSafeSpy = mockIdentityGetSafe({
+      status: [{ ok: true, id: 'sqs-from-api' }],
+      user: [{ ok: false }],
+    });
+
+    const { identity } = await resolveCommandTelemetryIdentity(auth);
+
+    expect(identity.user_uuid).toBeNull();
+    expect(identity.organization_uuid_v4).toBeNull();
+    expect(identity.sqs_installation_id).toBe('sqs-from-api');
     getSafeSpy.mockRestore();
   });
 });
@@ -641,44 +672,26 @@ describe('resolveTelemetryIdentity()', () => {
   });
 
   it('treats on-premise identity as complete with only sqs_installation_id when login confirmed user absence', async () => {
-    const conn: AuthConnection = {
-      id: 'c',
-      type: 'on-premise',
-      serverUrl: 'https://sq.example.com',
-      authenticatedAt: '2026-01-01T00:00:00.000Z',
-      sqsInstallationId: 'sqs-old-server',
-      userUuid: null,
-    };
+    const auth = serverAuth('sqs-old-token');
+    seedDiskCache(auth, { sqsInstallationId: 'sqs-old-server', userUuid: null });
     const getSafeSpy = mockIdentityGetSafe();
 
-    const { connectionType, identity } = await resolveCommandTelemetryIdentity(
-      conn,
-      serverAuth('sqs-old-token'),
-    );
+    const identity = await resolveTelemetryIdentity(auth);
 
-    expect(connectionType).toBe('sqs');
     expect(identity.user_uuid).toBeNull();
     expect(identity.sqs_installation_id).toBe('sqs-old-server');
     expect(getSafeSpy).not.toHaveBeenCalled();
     getSafeSpy.mockRestore();
   });
 
-  it('fetches user_uuid for on-premise when the connection has sqs but login never resolved user', async () => {
-    const conn: AuthConnection = {
-      id: 'c',
-      type: 'on-premise',
-      serverUrl: 'https://sq.example.com',
-      authenticatedAt: '2026-01-01T00:00:00.000Z',
-      sqsInstallationId: 'sqs-old-server',
-    };
+  it('fetches user_uuid for on-premise when the cache has sqs but login never resolved user', async () => {
+    const auth = serverAuth('sqs-legacy-token');
+    seedDiskCache(auth, { sqsInstallationId: 'sqs-old-server' });
     const getSafeSpy = mockIdentityGetSafe({
       user: [{ ok: true, id: 'legacy-conn-user' }],
     });
 
-    const { identity } = await resolveCommandTelemetryIdentity(
-      conn,
-      serverAuth('sqs-legacy-token'),
-    );
+    const identity = await resolveTelemetryIdentity(auth);
 
     expect(identity.user_uuid).toBe('legacy-conn-user');
     expect(identity.sqs_installation_id).toBe('sqs-old-server');

@@ -20,6 +20,8 @@
 
 import { describe, expect, it, mock } from 'bun:test';
 
+import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
 describe('matchesContextAugmentationTool', () => {
@@ -50,7 +52,8 @@ describe('contextAugmentationPostToolUseSubscriber', () => {
       await import('@/commands/hook/context-augmentation-hook-subscriber.ts');
 
     const fake = new FakeConsole();
-    const result = await createContextAugmentationPostToolUseSubscriber(fake).handle(
+    const ctx = new CommandInvocationContext(fake);
+    const result = await createContextAugmentationPostToolUseSubscriber(ctx).handle(
       { tool_name: 'Bash' },
       '{"tool_name":"Bash"}',
     );
@@ -58,7 +61,7 @@ describe('contextAugmentationPostToolUseSubscriber', () => {
     expect(result).toEqual({ decision: 'handled' });
     expect(runContextPassthroughMock).toHaveBeenCalledWith('__hook', ['Claude'], {
       stdinPayload: '{"tool_name":"Bash"}',
-      console: fake,
+      ctx,
     });
   });
 
@@ -71,10 +74,9 @@ describe('contextAugmentationPostToolUseSubscriber', () => {
     const { createContextAugmentationPostToolUseSubscriber } =
       await import('@/commands/hook/context-augmentation-hook-subscriber.ts');
 
-    const result = await createContextAugmentationPostToolUseSubscriber(new FakeConsole()).handle(
-      { tool_name: 'Bash' },
-      '{"tool_name":"Bash"}',
-    );
+    const result = await createContextAugmentationPostToolUseSubscriber(
+      new CommandInvocationContext(new FakeConsole()),
+    ).handle({ tool_name: 'Bash' }, '{"tool_name":"Bash"}');
 
     expect(result).toEqual({ decision: 'none' });
   });

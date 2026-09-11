@@ -22,9 +22,11 @@ import * as fs from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import * as authResolver from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { type CliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
+import { okAsync } from '@/core/result.ts';
 
 import * as analyzeSecrets from '../../../../src/commands/analyze/secrets.ts';
 import { claudePreToolUse } from '../../../../src/commands/hook/claude-pre-tool-use.ts';
@@ -34,12 +36,23 @@ import {
 } from '../../../../src/commands/hook/hook-dependencies.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
+import { mockAuthResolver } from '../../../_common/mock-auth-resolver.ts';
 
 const TEST_FILE = '/sonar-test/test.ts';
 const { EXIT_CODE_SECRETS_FOUND } = analyzeSecrets;
 
+const FAKE_AUTH = new ResolvedAuth({
+  token: 'tok',
+  serverUrl: 'https://sonarcloud.io',
+  connectionType: 'cloud',
+  source: 'state' as const,
+  orgKey: 'myorg',
+});
+
+let runtime: CliRuntime;
+
 function makeCtx() {
-  return new CommandInvocationContext(new FakeConsole());
+  return new CommandInvocationContext(new FakeConsole(), undefined, runtime);
 }
 
 describe('claudePreToolUse', () => {
@@ -52,12 +65,9 @@ describe('claudePreToolUse', () => {
 
   beforeEach(() => {
     stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
-    resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue({
-      token: 'tok',
-      serverUrl: 'https://sonarcloud.io',
-      connectionType: 'cloud',
-      orgKey: 'myorg',
-    });
+    const mocked = mockAuthResolver(FAKE_AUTH);
+    runtime = mocked.runtime;
+    resolveAuthSpy = mocked.resolveAuthSpy;
     readStdinJsonSpy = spyOn(stdinModule, 'readStdinJson').mockResolvedValue({
       tool_name: 'Read',
       tool_input: { file_path: TEST_FILE },
@@ -117,7 +127,7 @@ describe('claudePreToolUse', () => {
   });
 
   it('denies with the unauthenticated message when auth is unavailable', async () => {
-    resolveAuthSpy.mockResolvedValue(null);
+    resolveAuthSpy.mockReturnValue(okAsync(null));
 
     await claudePreToolUse(makeCtx());
 

@@ -24,12 +24,13 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import * as authConnectionRecorder from '@/core/auth/auth-connection-recorder.ts';
 import {
+  AuthResolver,
   cloudRegionFromUrl,
   ENV_SERVER,
   ENV_TOKEN,
   normalizeCloudV2Endpoint,
-  resetEnvAuthRecordGuard,
-  resolveAuth,
+  type ResolveAuthOptions,
+  ResolvedAuth,
   resolveFromEndpoint,
 } from '@/core/auth/auth-resolver.ts';
 import { getDefaultState } from '@/core/state/state.ts';
@@ -50,15 +51,21 @@ beforeEach(() => {
   fake = new FakeConsole();
 });
 
-describe('resolveAuth', () => {
+describe('AuthResolver', () => {
   let recordConnectionSpy: ReturnType<typeof spyOn>;
+
+  async function resolveViaInstance(
+    options: ResolveAuthOptions = {},
+  ): Promise<ResolvedAuth | null> {
+    const authResolver = new AuthResolver(options);
+    return await authResolver.resolveAuth().orThrow();
+  }
 
   beforeEach(() => {
     handle.setup(); // Ensure env vars are clean
     delete process.env[ENV_TOKEN];
     delete process.env[ENV_SERVER];
-    resetEnvAuthRecordGuard();
-    // These tests exercise resolveAuth()'s env-vs-state priority, not the state-sync
+    // These tests exercise AuthResolver's env-vs-state priority, not the state-sync
     // side effect (covered by auth-connection-recorder.test.ts) — stub it out so env-auth
     // tests never touch the real state.json or make a real network call.
     recordConnectionSpy = spyOn(
@@ -83,17 +90,19 @@ describe('resolveAuth', () => {
     });
 
     it('returns env token and server immediately', async () => {
-      const result = await resolveAuth();
+      const result = await resolveViaInstance();
 
       expect(result).not.toBeNull();
       expect(result!.token).toBe(FAKE_TOKEN_ENV);
       expect(result!.serverUrl).toBe(SONARCLOUD_URL);
+      expect(result!.source).toBe('env');
+      expect(result!.comesFromEnv()).toBe(true);
     });
 
     it('skips keychain lookup entirely', async () => {
       const loadStateSpy = spyOn(stateRepository, 'loadState');
       try {
-        await resolveAuth();
+        await resolveViaInstance();
         expect(loadStateSpy).not.toHaveBeenCalled();
       } finally {
         loadStateSpy.mockRestore();
@@ -101,7 +110,7 @@ describe('resolveAuth', () => {
     });
 
     it('records the connection as envOnly', async () => {
-      await resolveAuth();
+      await new AuthResolver().resolveAuth();
 
       expect(recordConnectionSpy).toHaveBeenCalledWith(
         expect.objectContaining({ token: FAKE_TOKEN_ENV }),
@@ -109,18 +118,18 @@ describe('resolveAuth', () => {
       );
     });
 
-    it('only attempts recordConnectionFromAuth once across repeated calls in the same process', async () => {
-      await resolveAuth();
-      await resolveAuth();
-      await resolveAuth({ silent: true });
+    it('only attempts recordConnectionFromAuth once across repeated calls on the same resolver', async () => {
+      const authResolver = new AuthResolver();
+      await authResolver.resolveAuth();
+      await authResolver.resolveAuth();
+      await authResolver.resolveAuth({ silent: true });
 
       expect(recordConnectionSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('attempts recordConnectionFromAuth again after resetEnvAuthRecordGuard (fresh process)', async () => {
-      await resolveAuth();
-      resetEnvAuthRecordGuard();
-      await resolveAuth();
+    it('attempts recordConnectionFromAuth again on a fresh AuthResolver', async () => {
+      await new AuthResolver().resolveAuth();
+      await new AuthResolver().resolveAuth();
 
       expect(recordConnectionSpy).toHaveBeenCalledTimes(2);
     });
@@ -148,10 +157,11 @@ describe('resolveAuth', () => {
       await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
 
       try {
-        const result = await resolveAuth({ console: fake });
+        const result = await resolveViaInstance({ console: fake });
         expect(result).toMatchObject({
           token: FAKE_TOKEN,
           serverUrl: SONARCLOUD_URL,
+          source: 'state' as const,
         });
         const warnings = fake.calls.filter((c) => c.method === 'warn');
         expect(warnings.some((c) => String(c.args[0]).includes(ENV_TOKEN))).toBe(true);
@@ -179,10 +189,11 @@ describe('resolveAuth', () => {
       await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
 
       try {
-        const result = await resolveAuth({ console: fake });
+        const result = await resolveViaInstance({ console: fake });
         expect(result).toMatchObject({
           token: FAKE_TOKEN,
           serverUrl: SONARCLOUD_URL,
+          source: 'state' as const,
         });
         const warnings = fake.calls.filter((c) => c.method === 'warn');
         expect(warnings.some((c) => String(c.args[0]).includes(ENV_SERVER))).toBe(true);
@@ -214,11 +225,13 @@ describe('resolveAuth', () => {
       await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
 
       try {
-        const result = await resolveAuth();
+        const result = await resolveViaInstance();
         expect(result).not.toBeNull();
         expect(result!.token).toBe(FAKE_TOKEN);
         expect(result!.serverUrl).toBe(SONARCLOUD_URL);
         expect(result!.orgKey).toBe('my-org');
+        expect(result!.source).toBe('state');
+        expect(result!.comesFromEnv()).toBe(false);
       } finally {
         loadStateSpy.mockRestore();
       }
@@ -234,8 +247,24 @@ describe('resolveAuth', () => {
       );
 
       try {
-        const result = await resolveAuth();
+        const result = await resolveViaInstance();
         expect(result).toBeNull();
+      } finally {
+        loadStateSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('resolveAuth ResultAsync errors', () => {
+    it('returns Err when state cannot be read', async () => {
+      const loadStateSpy = spyOn(stateRepository, 'loadState').mockImplementation(() => {
+        throw new Error('corrupt state');
+      });
+
+      try {
+        const result = await new AuthResolver().resolveAuth();
+        expect(result.isErr()).toBe(true);
+        expect(result._unsafeUnwrapErr().message).toBe('corrupt state');
       } finally {
         loadStateSpy.mockRestore();
       }

@@ -20,15 +20,13 @@
 
 import { type Command, Help, InvalidArgumentError } from 'commander';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { CliRuntime } from '@/core/commands/cli-runtime.ts';
+import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { parseInteger } from '@/core/commands/parsing.ts';
 import { getBanner, getCustomRootHelp } from '@/core/commands/root-help.ts';
 import {
-  type CliRuntime,
-  collectPrivateBetaFlagKeys,
-  createDefaultCliRuntime,
   isAlphaEnabledFromEnv,
   SonarCommand,
   SonarOption,
@@ -43,6 +41,7 @@ import { tryLoadState } from '@/core/state/state-repository.ts';
 import { commitTelemetryFacts, flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
 import { buildCommandExecutedFact } from '@/core/telemetry/command-executed.ts';
+import { resolveInvocationAuthForTelemetry } from '@/core/telemetry/identity.ts';
 import type { Console } from '@/core/ui/console.ts';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
 
@@ -154,20 +153,12 @@ const linkExtraHelp = `
 Supports one project per repository; monorepo support is coming soon.
 `;
 
-/**
- * Loads auth + Private Beta flag decisions. Invoked at most once, only when the
- * tree declares at least one Private Beta command.
- */
-export type LoadPrivateBetaContext = (flagKeys: readonly string[]) => Promise<{
-  auth: ResolvedAuth | null;
-  flags: Record<string, boolean>;
-}>;
-
 export interface CreateCommandTreeOptions {
   isAlphaEnabled?: boolean;
-  loadPrivateBetaContext?: LoadPrivateBetaContext;
   /** Shared tree console. Construct once at the process entry and pass it in. */
   console: Console;
+  /** Optional pre-built runtime (tests may seed Private Beta flag keys before resolveFlags). */
+  runtime?: CliRuntime;
 }
 
 /** Registers the full command tree for the given runtime (sync). */
@@ -467,7 +458,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       args: string[],
     ) {
       this.setPassthroughSubcommand(derivePassthroughSubcommand(action, args));
-      return runContextPassthrough(action, args, { console: _ctx.console });
+      return runContextPassthrough(action, args, { ctx: _ctx });
     });
 
   integrateCommand
@@ -923,6 +914,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     const handlerFacts = command.invocationContext?.telemetryFacts() ?? [];
     await commitTelemetryFacts([...handlerFacts, await buildCommandExecutedFact(command)], {
       agentSessionId: resolveAgentSessionId(capturedAgentSessionId),
+      auth: await resolveInvocationAuthForTelemetry(command.invocationContext),
     });
     await COMMAND_TREE.updateNotifier.maybeNotify(actionCommand);
   });
@@ -933,48 +925,18 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 /**
  * Build the CLI command tree for this invocation.
  *
- * Probes for Private Beta flag keys first. Only when at least one exists does it
- * call `loadPrivateBetaContext` (auth + LaunchDarkly). Otherwise the probe tree
- * is returned and LaunchDarkly is never contacted.
+ * Does not resolve auth or LaunchDarkly flags. Call
+ * `runtime.flagsResolver.resolveFlags()` before `parseAsync` when Private Beta
+ * visibility must match entitlement.
  */
-export async function createCommandTree(options: CreateCommandTreeOptions): Promise<SonarCommand> {
-  const isAlphaEnabled = options.isAlphaEnabled ?? isAlphaEnabledFromEnv();
+export function createCommandTree(options: CreateCommandTreeOptions): SonarCommand {
   const { console } = options;
-
-  const probe = buildCommandTree(
-    {
-      auth: null,
-      isAlphaEnabled,
-      // Allow all Private Beta commands so Stage.Beta('…') keys are discoverable.
-      isPrivateBetaEnabled: () => true,
-    },
-    console,
-  );
-
-  const flagKeys = collectPrivateBetaFlagKeys(probe);
-  if (flagKeys.length === 0) {
-    return probe;
-  }
-
-  if (options.loadPrivateBetaContext) {
-    const { auth, flags } = await options.loadPrivateBetaContext(flagKeys);
-    return buildCommandTree(
-      {
-        auth,
-        isAlphaEnabled,
-        isPrivateBetaEnabled: (flagKey) => flags[flagKey] ?? false,
-      },
+  const runtime =
+    options.runtime ??
+    createCliRuntime({
+      isAlphaEnabled: options.isAlphaEnabled ?? isAlphaEnabledFromEnv(),
       console,
-    );
-  }
+    });
 
-  // Keys exist but no loader (e.g. docs generation): omit Private Beta commands.
-  return buildCommandTree(
-    {
-      ...createDefaultCliRuntime(),
-      isAlphaEnabled,
-      isPrivateBetaEnabled: () => false,
-    },
-    console,
-  );
+  return buildCommandTree(runtime, console);
 }

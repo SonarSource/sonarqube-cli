@@ -25,6 +25,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import {
   type DependencyDeclaration,
@@ -404,12 +405,13 @@ describe('generic integration installer', () => {
       targetRoot: tempDir,
       scope: 'project',
       console: fake,
-      auth: {
+      auth: new ResolvedAuth({
         token: 'test-token',
         serverUrl: 'https://sonarcloud.io',
         connectionType: 'cloud',
+        source: 'state',
         orgKey: 'test-org',
-      },
+      }),
     });
 
     expect(seenExecutionMode).toBe('install');
