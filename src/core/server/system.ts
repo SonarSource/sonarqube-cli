@@ -34,7 +34,7 @@ export class SystemClient {
   getServerMode(): ResultAsync<'mqr' | 'standard', HttpClientError> {
     if (this.client.isCloud) return okAsync('mqr');
     return this.client
-      .getIfFound<{ mode: string }>('/api/v2/clean-code-policy/mode')
+      .getOrNullIf404<{ mode: string }>('/api/v2/clean-code-policy/mode')
       .map((result) => (result?.mode === 'MQR' ? 'mqr' : 'standard'));
   }
 }

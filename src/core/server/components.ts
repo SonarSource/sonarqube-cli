@@ -79,7 +79,7 @@ export class ComponentsClient {
       queryParams.pullRequest = scope.pullRequest;
     }
     return this.client
-      .getIfFound('/api/components/show', queryParams)
+      .getOrNullIf404('/api/components/show', queryParams)
       .map((component) => component !== null);
   }
 
@@ -91,13 +91,13 @@ export class ComponentsClient {
    */
   getComponentId(componentKey: string): ResultAsync<string | null, HttpClientError> {
     return this.client
-      .getIfFound<{ id: string }>('/api/navigation/component', { component: componentKey })
+      .getOrNullIf404<{ id: string }>('/api/navigation/component', { component: componentKey })
       .map((value) => value?.id ?? null);
   }
 
   hasProjectBeenAnalyzed(projectKey: string): ResultAsync<boolean, HttpClientError> {
     return this.client
-      .getIfFound<{ analyses?: unknown[] }>('/api/project_analyses/search', {
+      .getOrNullIf404<{ analyses?: unknown[] }>('/api/project_analyses/search', {
         project: projectKey,
         ps: 1,
       })
@@ -114,7 +114,7 @@ export class ComponentsClient {
     projectKey: string,
   ): ResultAsync<SettingsValue[], HttpClientError | ProjectNotFoundError> {
     return this.client
-      .getIfFound<{ settings?: SettingsValue[] }>('/api/settings/values', {
+      .getOrNullIf404<{ settings?: SettingsValue[] }>('/api/settings/values', {
         component: projectKey,
       })
       .andThen((result) =>

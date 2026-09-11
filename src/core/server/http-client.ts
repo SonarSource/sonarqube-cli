@@ -228,7 +228,7 @@ export class SonarHttpClient {
    * (403, 429, 503, network error, ...) still yields the normal typed error, exactly
    * as `get` would.
    */
-  getIfFound<T>(
+  getOrNullIf404<T>(
     endpoint: string,
     params?: QueryParams,
     baseUrl?: string,
@@ -263,7 +263,7 @@ export class SonarHttpClient {
   /**
    * Resolves to `{ response, value }` and never rejects. Only the *status* is left
    * uninterpreted (`value` is `undefined` on a non-2xx response) for the handful of
-   * callers (`getIfFound`, telemetry identity/project-uuid lookups) that need to branch
+   * callers (`getOrNullIf404`, telemetry identity/project-uuid lookups) that need to branch
    * on the status themselves instead of getting a single typed error for "not 2xx". A
    * transport failure (DNS/TLS failure, connection refused, timeout) becomes
    * `TransportError`; a body-parse failure on an otherwise-2xx response becomes
