@@ -97,7 +97,7 @@ import { gitPreCommit, type GitPreCommitOptions } from './hook/git-pre-commit.ts
 import { gitPrePush } from './hook/git-pre-push.ts';
 import type { HookCommandResult } from './hook/hook-command-result.ts';
 import { importHandler, type ImportOptions } from './import';
-import { collectRepoOption } from './import/_common/repo-option.ts';
+import { collectRepoOption } from './import/repo-option.ts';
 import type { IntegrateAgentOptions } from './integrate/_common/types.ts';
 import { integrateAntigravity } from './integrate/antigravity';
 import { integrateClaude } from './integrate/claude';

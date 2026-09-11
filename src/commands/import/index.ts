@@ -24,16 +24,13 @@ import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts'
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import {
-  type DopRepository,
-  ImportApiClient,
-  type ProvisionedProject,
-} from './_common/import-api.ts';
+import { type DopRepository, ImportApiClient, type ProvisionedProject } from './import-api.ts';
+import { ImportProgress } from './import-progress.ts';
 import type {
   OnlyPrivateProjects,
   RepositoryCollection,
   SkippedRepo,
-} from './_common/repository-collection';
+} from './repository-collection';
 import {
   assertSupportedAlm,
   computeInstallationKey,
@@ -42,11 +39,10 @@ import {
   type ResolvedRepo,
   resolveOrg,
   resolveRepos,
-} from './_common/resolve-options';
-import type { ImportOptions } from './_common/types';
-import { ImportProgress } from './import-progress.ts';
+} from './resolve-options';
+import type { ImportOptions } from './types';
 
-export { type ImportOptions } from './_common/types';
+export { type ImportOptions } from './types';
 
 /** Max number of `provision_projects` calls run concurrently. */
 const IMPORT_PROVISION_CONCURRENCY_LIMIT = 10;
