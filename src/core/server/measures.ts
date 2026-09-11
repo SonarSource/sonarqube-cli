@@ -38,7 +38,7 @@ export interface ComponentMeasuresParams {
 }
 
 export interface WorstComponentsByMetricParams {
-  projectKey: string;
+  component: string;
   metricKey: string;
   ascending: boolean;
   top: number;
@@ -59,12 +59,22 @@ export function isNewCodeMetric(metricKey: string): boolean {
   return metricKey.startsWith('new_');
 }
 
+export function extractMeasureValue(
+  measures: ComponentTreeComponent['measures'],
+  metricKey: string,
+): string | undefined {
+  const measure = measures.find((m) => m.metric === metricKey);
+  return isNewCodeMetric(metricKey)
+    ? measure?.periods?.[0]?.value
+    : (measure?.value ?? measure?.periods?.[0]?.value);
+}
+
 /**
  * Uses a different params sets for a new code metric.
  */
 function buildComponentTreeQueryParams(params: WorstComponentsByMetricParams): QueryParams {
   const queryParams: QueryParams = {
-    component: params.projectKey,
+    component: params.component,
     metricKeys: params.metricKey,
     metricSort: params.metricKey,
     metricSortFilter: 'withMeasuresOnly',

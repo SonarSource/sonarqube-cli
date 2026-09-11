@@ -93,7 +93,7 @@ describe('MeasuresClient', () => {
     fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(componentTreeResponse()));
 
     await client.getWorstComponentsByMetric({
-      projectKey: 'my-project',
+      component: 'my-project',
       metricKey: 'new_coverage',
       ascending: true,
       top: 3,
@@ -111,7 +111,7 @@ describe('MeasuresClient', () => {
     fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(componentTreeResponse()));
 
     await client.getWorstComponentsByMetric({
-      projectKey: 'my-project',
+      component: 'my-project',
       metricKey: 'coverage',
       ascending: true,
       top: 3,
@@ -127,7 +127,7 @@ describe('MeasuresClient', () => {
     fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(componentTreeResponse()));
 
     await client.getWorstComponentsByMetric({
-      projectKey: 'my-project',
+      component: 'my-project',
       metricKey: 'new_coverage',
       ascending: false,
       top: 5,
@@ -145,7 +145,7 @@ describe('MeasuresClient', () => {
     fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(componentTreeResponse()));
 
     await client.getWorstComponentsByMetric({
-      projectKey: 'my-project',
+      component: 'my-project',
       metricKey: 'new_coverage',
       ascending: true,
       top: 3,
@@ -160,7 +160,7 @@ describe('MeasuresClient', () => {
     fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(componentTreeResponse()));
 
     await client.getWorstComponentsByMetric({
-      projectKey: 'my-project',
+      component: 'my-project',
       metricKey: 'new_coverage',
       ascending: true,
       top: 3,
@@ -169,7 +169,7 @@ describe('MeasuresClient', () => {
     expect((fetchSpy.mock.calls[0][0] as URL).toString()).toContain('branch=feature-x');
 
     await client.getWorstComponentsByMetric({
-      projectKey: 'my-project',
+      component: 'my-project',
       metricKey: 'new_coverage',
       ascending: true,
       top: 3,
@@ -186,7 +186,7 @@ describe('MeasuresClient', () => {
 
     const result = await client
       .getWorstComponentsByMetric({
-        projectKey: 'my-project',
+        component: 'my-project',
         metricKey: 'new_coverage',
         ascending: true,
         top: 3,
@@ -206,7 +206,7 @@ describe('MeasuresClient', () => {
 
     const result = await client
       .getWorstComponentsByMetric({
-        projectKey: 'my-project',
+        component: 'my-project',
         metricKey: 'new_coverage',
         ascending: true,
         top: 1,
