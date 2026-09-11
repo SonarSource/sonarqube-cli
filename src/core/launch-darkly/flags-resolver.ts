@@ -45,9 +45,7 @@ export class FlagsResolver {
       return;
     }
 
-    if (!this.memo) {
-      this.memo = this.load(flagKeys);
-    }
+    this.memo ??= this.load(flagKeys);
     this.decisions = await this.memo;
   }
 

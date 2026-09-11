@@ -98,12 +98,10 @@ export class AuthResolver {
   resolveAuth(
     options?: Pick<ResolveAuthOptions, 'silent'>,
   ): ResultAsync<ResolvedAuth | null, Error> {
-    if (!this.memo) {
-      this.memo = ResultAsync.fromPromise(
-        this.resolveOnce({ ...this.defaults, ...options }),
-        (error) => (error instanceof Error ? error : new Error(String(error))),
-      );
-    }
+    this.memo ??= ResultAsync.fromPromise(
+      this.resolveOnce({ ...this.defaults, ...options }),
+      (error) => (error instanceof Error ? error : new Error(String(error))),
+    );
     return this.memo;
   }
 
