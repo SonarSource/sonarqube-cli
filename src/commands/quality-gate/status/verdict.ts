@@ -26,6 +26,8 @@ export const EXIT_CODE_QUALITY_GATE_FAILED = 51;
 
 export type QualityGateVerdict = 'OK' | 'ERROR' | 'NOT_COMPUTED';
 
+export type FileQualityGateVerdict = QualityGateVerdict | 'NOT_APPLICABLE';
+
 /**
  * `WARN` is a legacy status; it and `ERROR` both bucket to "failed" since the CLI only
  * surfaces the three-way pass/fail/not-computed verdict at this stage.
@@ -42,16 +44,20 @@ export function toVerdict(
 export function toFileVerdict(
   projectVerdict: QualityGateVerdict,
   fileConditions: QualityGateConditionSummary[],
-): QualityGateVerdict {
+): FileQualityGateVerdict {
   if (projectVerdict === 'NOT_COMPUTED') {
     return 'NOT_COMPUTED';
+  }
+  if (fileConditions.length === 0) {
+    return 'NOT_APPLICABLE';
   }
   return fileConditions.some((c) => c.status === 'ERROR') ? 'ERROR' : 'OK';
 }
 
-export function exitCodeFor(verdict: QualityGateVerdict): number {
+export function exitCodeFor(verdict: FileQualityGateVerdict): number {
   switch (verdict) {
     case 'OK':
+    case 'NOT_APPLICABLE':
       return 0;
     case 'ERROR':
       return EXIT_CODE_QUALITY_GATE_FAILED;
