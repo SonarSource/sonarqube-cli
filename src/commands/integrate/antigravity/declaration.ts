@@ -49,7 +49,6 @@ import {
   SECRETS_PROMPT_FEATURE_BENEFIT,
   SECRETS_PROMPT_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
-import { createContextAugmentationSubfeature } from '../_common/features/context-augmentation-feature.ts';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
   createSqaaInstructionsRule,
@@ -81,6 +80,16 @@ const ANTIGRAVITY_DISPLAY_NAME = 'Antigravity';
 export interface AntigravityIntegrationOptions extends IntegrateAgentOptions {
   globalSecretsHookExists?: boolean;
 }
+
+// Antigravity has no session start event, so it doesn't deliver Vortex Context atm.
+const antigravityVortexFeature = createVortexFeature<AntigravityIntegrationOptions>(
+  [
+    createSqaaInstructionsSubfeature<AntigravityIntegrationOptions>([
+      createSqaaInstructionsRule(resolveSqaaRulePath, buildAntigravityAlwaysOnRule),
+    ]),
+  ],
+  resolveAntigravitySkillPath,
+);
 
 export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrationOptions> = {
   id: ANTIGRAVITY_INTEGRATION_ID,
@@ -121,15 +130,9 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
       ],
     },
     {
-      ...createVortexFeature<AntigravityIntegrationOptions>([
-        createSqaaInstructionsSubfeature<AntigravityIntegrationOptions>([
-          createSqaaInstructionsRule(resolveSqaaRulePath, buildAntigravityAlwaysOnRule),
-        ]),
-        createContextAugmentationSubfeature<AntigravityIntegrationOptions>({
-          targetPath: resolveAntigravitySkillPath,
-        }),
-      ]),
+      ...antigravityVortexFeature,
       legacyCleanups: [
+        ...(antigravityVortexFeature.legacyCleanups ?? []),
         textSnippetRemover({
           id: 'legacy-sqaa-instructions-snippet',
           targetPath: (context) => resolveLegacyProjectInstructionsPath(context.targetRoot),

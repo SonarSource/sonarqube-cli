@@ -22,17 +22,19 @@
 
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
-import { expect } from 'bun:test';
-
+import type { SessionStartAgent } from '@/commands/hook/agent-session-start/types.ts';
 import {
   CONTEXT_AUGMENTATION_FEATURE_ID,
-  CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
   CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID,
+  SESSION_START_SCRIPT_RESOURCE_ID,
 } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
 import { SQAA_HOOK_FEATURE_ID } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
-import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
+import {
+  CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
+  VORTEX_FEATURE_ID,
+} from '@/commands/integrate/_common/vortex.ts';
 import { ANTIGRAVITY_INTEGRATION_ID } from '@/commands/integrate/antigravity/declaration.ts';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import { CODEX_INTEGRATION_ID } from '@/commands/integrate/codex/declaration.ts';
@@ -49,6 +51,11 @@ import type {
 import { getDefaultState } from '@/core/state/state.ts';
 
 import type { TestHarness } from '../../integration/harness';
+import {
+  expectVortexHookInstalled,
+  sessionStartScript,
+} from '../../integration/harness/cag-helpers';
+import { Dir } from '../../integration/harness/dir';
 
 export const STALE_CLI_VERSION = '0.0.1';
 export const STALE_SKILL_VERSION = '0.0.0';
@@ -93,7 +100,7 @@ export const ANTIGRAVITY_SKILL_RELATIVE_PATH = join(
 );
 
 export interface SeedSkillOptions {
-  agentId: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor' | 'antigravity';
+  agentId: 'claude' | 'copilot' | 'codex' | 'cursor' | 'antigravity';
   projectRoot: string;
   global?: boolean;
   version?: string;
@@ -188,7 +195,7 @@ function seedDeclarativeContextAugmentationFeature(state: CliState, skill: SeedS
   };
   integration.features.push(feature);
 
-  if (skill.installCagPostToolUseHook && skill.agentId === 'claude-code') {
+  if (skill.installCagPostToolUseHook && skill.agentId === 'claude') {
     integration.features.push({
       featureId: SQAA_HOOK_FEATURE_ID,
       scope: 'project',
@@ -215,9 +222,9 @@ function seedDeclarativeContextAugmentationFeature(state: CliState, skill: SeedS
 
 function resolveIntegrationId(agentId: SeedSkillOptions['agentId']): string {
   switch (agentId) {
-    case 'claude-code':
+    case 'claude':
       return CLAUDE_INTEGRATION_ID;
-    case 'copilot-cli':
+    case 'copilot':
       return COPILOT_INTEGRATION_ID;
     case 'codex':
       return CODEX_INTEGRATION_ID;
@@ -230,9 +237,9 @@ function resolveIntegrationId(agentId: SeedSkillOptions['agentId']): string {
 
 function resolveSkillRelativePath(agentId: SeedSkillOptions['agentId']): string {
   switch (agentId) {
-    case 'claude-code':
+    case 'claude':
       return CLAUDE_SKILL_RELATIVE_PATH;
-    case 'copilot-cli':
+    case 'copilot':
       return COPILOT_SKILL_RELATIVE_PATH;
     case 'codex':
       return CODEX_SKILL_RELATIVE_PATH;
@@ -284,33 +291,43 @@ export function findRecordedCagSkillResource(
   );
 }
 
+export function findRecordedSessionStartScriptResource(
+  entry: RecordedCagFeature,
+): InstalledIntegrationResource | undefined {
+  return findCagSubfeature(entry.feature)?.resources?.find(
+    (resource) => resource.id === SESSION_START_SCRIPT_RESOURCE_ID,
+  );
+}
+
+export function seedLegacySkillFile(
+  projectRoot: string,
+  agentId: SeedSkillOptions['agentId'],
+  content: string,
+): string {
+  const skillPath = join(projectRoot, resolveSkillRelativePath(agentId));
+  mkdirSync(dirname(skillPath), { recursive: true });
+  writeFileSync(skillPath, content, 'utf-8');
+  return skillPath;
+}
+
+// Antigravity is absent from SessionStartAgent: it has no session start event.
+export function expectSessionStartHookRefreshed(
+  projectRoot: string,
+  agent: SessionStartAgent,
+): void {
+  expectVortexHookInstalled(new Dir(projectRoot), agent);
+}
+
+export function sessionStartScriptPath(projectRoot: string, agent: SessionStartAgent): string {
+  return sessionStartScript(new Dir(projectRoot), agent).path;
+}
+
 export function findRecordedCagDependency(
   state: CliState,
 ): InstalledIntegrationDependency | undefined {
   return state.dependencies.installed.find(
     (dependency) => dependency.id === CONTEXT_AUGMENTATION_BINARY_NAME,
   );
-}
-
-const MIN_WRAPPER_INVOCATIONS_IN_SKILL = 5;
-
-/**
- * The rendered SKILL.md must reference the wrapper command (`sonar context …`)
- * everywhere, with the raw `sonar-context-augmentation` binary name appearing
- * only once — in the YAML frontmatter `name:` field. Catches regressions where
- * `tool print-skill` is invoked without `--invocation-prefix "sonar context"`.
- */
-export function expectSkillRendersWithWrapperInvocation(content: string): void {
-  const matches = [...content.matchAll(new RegExp(CONTEXT_AUGMENTATION_BINARY_NAME, 'g'))];
-  expect(
-    matches.length,
-    `expected exactly one '${CONTEXT_AUGMENTATION_BINARY_NAME}' mention (the skill name in frontmatter) in SKILL.md`,
-  ).toBe(1);
-  const wrapperInvocations = [...content.matchAll(/\bsonar context\b/g)];
-  expect(
-    wrapperInvocations.length,
-    `expected more than ${MIN_WRAPPER_INVOCATIONS_IN_SKILL} \`sonar context\` command examples in SKILL.md`,
-  ).toBeGreaterThan(MIN_WRAPPER_INVOCATIONS_IN_SKILL);
 }
 
 export function buildCompressibleGradleStdout(): string {

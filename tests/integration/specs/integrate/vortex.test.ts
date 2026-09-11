@@ -38,13 +38,13 @@ import {
 } from '@/core/vortex/entitlement.ts';
 
 import { TestHarness } from '../../harness';
+import { expectVortexHookAbsent, isVortexHookInstalled } from '../../harness/cag-helpers.ts';
 import { hookScriptName } from '../../harness/platform.ts';
 
 const PROJECT_KEY = 'my-project';
 const ORG_KEY = 'my-org';
 const ORG_UUID = `${ORG_KEY}-uuid-v4`;
 const TOKEN = 'cloud-token';
-const CLAUDE_SKILL_PATH = '.claude/skills/sonar-context-augmentation/SKILL.md';
 
 describe('integrate claude — Vortex entitlement', () => {
   let harness: TestHarness;
@@ -74,7 +74,7 @@ describe('integrate claude — Vortex entitlement', () => {
           ),
       ),
     );
-    return sqaaHook && recordedCag && harness.cwd.file(CLAUDE_SKILL_PATH).exists();
+    return sqaaHook && recordedCag && isVortexHookInstalled(harness.cwd, 'claude');
   }
 
   /** Hook entries are owned by the marker appearing in their command (see `ownsHookEntry`). */
@@ -304,7 +304,7 @@ describe('integrate claude — Vortex entitlement', () => {
 
       expect(result.exitCode).toBe(0);
       expect(isVortexInstalled()).toBe(false);
-      expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
+      expectVortexHookAbsent(harness.cwd, 'claude');
       expect(harness.cwd.file('CLAUDE.md').exists()).toBe(false);
       expect(postToolUseHooks()).not.toContain('sonar-sqaa');
       expect(sqaaHookScriptExists()).toBe(false);
@@ -333,7 +333,7 @@ describe('integrate claude — Vortex entitlement', () => {
       expect(postToolUseHooks()).not.toContain('sonar-sqaa');
       expect(sqaaHookScriptExists()).toBe(false);
       expect(harness.cwd.file('CLAUDE.md').exists()).toBe(false);
-      expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
+      expectVortexHookAbsent(harness.cwd, 'claude');
       expect(`${repointed.stdout}\n${repointed.stderr}`).toContain(VORTEX_UNINSTALL_MESSAGE);
     },
     { timeout: 30000 },
@@ -372,7 +372,7 @@ describe('integrate claude — Vortex entitlement', () => {
           (dependency) => dependency.id === CONTEXT_AUGMENTATION_BINARY_NAME,
         ),
       ).toBe(true);
-      expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
+      expectVortexHookAbsent(harness.cwd, 'claude');
       expect(
         harness.cwd.file('.claude', 'settings.json').asJson().hooks?.PostToolUse,
       ).toBeUndefined();

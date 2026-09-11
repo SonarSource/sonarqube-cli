@@ -24,12 +24,14 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
+import { VORTEX_HOOK_MARKER } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
 import { SQAA_INSTRUCTIONS_SUBFEATURE_ID } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
 import {
   VORTEX_FEATURE_ID,
   VORTEX_GLOBAL_SKIP_MESSAGE,
 } from '@/commands/integrate/_common/vortex.ts';
+import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
+import type { CliState } from '@/core/state/state.ts';
 
 import {
   expectAgentPromptHint,
@@ -483,11 +485,12 @@ describe('integrate antigravity', () => {
     );
   });
 
-  describe('Vortex (SQAA rules + Context Augmentation)', () => {
+  describe('Vortex (SQAA rules)', () => {
     it(
-      'writes SQAA workspace rules and enables Context Augmentation when the org is entitled and a project key is present',
+      'writes SQAA workspace rules and nothing for Context Augmentation when the org is entitled and a project key is present',
       async () => {
-        harness.state().withContextAugmentationBinaryInstalled();
+        const legacySkillPath = ['.agents', 'skills', 'sonar-context-augmentation', 'SKILL.md'];
+        harness.cwd.writeFile(join(...legacySkillPath), '# stale skill\n');
         const server = await harness
           .newFakeServer()
           .withAuthToken('cloud-token')
@@ -519,8 +522,15 @@ describe('integrate antigravity', () => {
         const vortexFeature = findAntigravityFeature(harness, VORTEX_FEATURE_ID);
         expect(vortexFeature?.scope).toBe('project');
         const subfeatureIds = vortexFeature?.subfeatures?.map((subfeature) => subfeature.featureId);
-        expect(subfeatureIds).toContain(SQAA_INSTRUCTIONS_SUBFEATURE_ID);
-        expect(subfeatureIds).toContain(CONTEXT_AUGMENTATION_FEATURE_ID);
+        expect(subfeatureIds).toEqual([SQAA_INSTRUCTIONS_SUBFEATURE_ID]);
+
+        expect(harness.cwd.exists(...legacySkillPath)).toBe(false);
+        expect(harness.cwd.file(...PROJECT_HOOKS_JSON_PATH).asText()).not.toContain(
+          VORTEX_HOOK_MARKER,
+        );
+        const state = harness.stateJsonFile.asJson() as CliState;
+        const dependencyIds = state.dependencies.installed.map((dependency) => dependency.id);
+        expect(dependencyIds).not.toContain(CONTEXT_AUGMENTATION_BINARY_NAME);
       },
       { timeout: 30000 },
     );

@@ -72,12 +72,14 @@ export function fetchIssuesBreakdown(
   return promise;
 }
 
-async function searchIssuesBreakdown(
+/** Shared with `security-enrichment.ts`, which resolves its own `types`/`sinceLeakPeriod` and passes `category: 'security'`. */
+export async function searchIssuesBreakdown(
   issuesClient: IssuesClient,
   params: AttachBreakdownsParams,
   condition: QualityGateConditionSummary,
   types: string | undefined,
   sinceLeakPeriod: boolean,
+  category: 'issues' | 'security' = 'issues',
 ): Promise<QualityGateMetricBreakdown | undefined> {
   try {
     const searchParams: IssuesSearchParams = {
@@ -97,7 +99,7 @@ async function searchIssuesBreakdown(
     if (entries.length === 0) {
       return undefined;
     }
-    return { category: 'issues', totalCount: paging.total, fetchedCount: issues.length, entries };
+    return { category, totalCount: paging.total, fetchedCount: issues.length, entries };
   } catch (err) {
     logger.debug(`Failed to build quality gate breakdown for '${condition.metric}'`, err);
     return undefined;

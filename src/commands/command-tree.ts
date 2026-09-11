@@ -106,7 +106,9 @@ import { integrateCopilot } from './integrate/copilot';
 import { integrateCursor } from './integrate/cursor';
 import { integrateGit, type IntegrateGitOptions } from './integrate/git';
 import { integrateBare, type IntegrateBareOptions } from './integrate/integrate-bare.ts';
+import { link, type LinkOptions } from './link';
 import {
+  DEFAULT_STATUSES,
   listIssues,
   type ListIssuesOptions,
   VALID_FORMATS,
@@ -147,6 +149,10 @@ const dependencyRisksExtraHelp = `
 Dependency manifest files (e.g. package-lock.json, pom.xml) will be uploaded to SonarQube for analysis.
 Learn more: https://docs.sonarsource.com/sonarqube-server/advanced-security/analyzing-projects-for-dependencies#supported-languages-and-package-managers
 ${projectKeyExtraHelp}`;
+
+const linkExtraHelp = `
+Supports one project per repository; monorepo support is coming soon.
+`;
 
 /**
  * Loads auth + Private Beta flag decisions. Invoked at most once, only when the
@@ -265,7 +271,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .requiredOption('-p, --project <project>', 'Project key')
     .option(
       '--statuses <statuses>',
-      `Filter by status (comma-separated list of: ${VALID_STATUSES.join(', ')})`,
+      `Filter by status (comma-separated list of: ${VALID_STATUSES.join(', ')}). Defaults to ${DEFAULT_STATUSES.join(', ')}.`,
     )
     .option(
       '--severities <severities>',
@@ -274,6 +280,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .addOption(listIssuesFormatOption)
     .option('--branch <branch>', 'Branch name')
     .option('--pull-request <pull-request>', 'Pull request ID')
+    .option(
+      '--file <path>',
+      "Limit results to one file, or to a directory's own files (not its subdirectories): a full path from the project root, or just a name if it matches only one",
+    )
     .addOption(pageSizeOption)
     .addOption(pageOption)
     .authenticatedAction((ctx, options: ListIssuesOptions) => listIssues(options, ctx));
@@ -640,6 +650,19 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'Comma-separated issue keys to remediate non-interactively (max 20). Required when stdin is not a TTY.',
     )
     .authenticatedAction((ctx, options: RemediateOptions) => remediate(options, ctx));
+
+  // Overwrites the single .sonar-config.json project binding (barebones; UX will change)
+  COMMAND_TREE.command('link')
+    .description('Link a project to the active connection in .sonar-config.json')
+    .rootHelp({
+      category: 'core',
+    })
+    .argument('<projectKey>', 'SonarQube project key')
+    .option('--path <path>', 'Path to the project root, relative to the repository root', '.')
+    .addHelpText('after', linkExtraHelp)
+    .authenticatedAction((ctx, projectKey: string, options: LinkOptions) =>
+      link(projectKey, options, ctx),
+    );
 
   // Configure things related to the CLI
   const configure = COMMAND_TREE.command('config').description('Configure CLI settings');

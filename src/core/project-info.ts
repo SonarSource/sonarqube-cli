@@ -24,7 +24,6 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { findGitRoot, getGitRemote } from '@/core/host/git/discover.ts';
 import { type LookupPath, resolveLookupPaths } from '@/core/host/git/lookup-path-resolver.ts';
@@ -42,6 +41,10 @@ import {
   discoverProjectKeyByGitRemote,
   GIT_REMOTE_BINDING_SOURCE,
 } from '@/core/server/discover-project-by-remote.ts';
+import {
+  type SharedProjectConfigMapping,
+  sharedProjectConfigRepository,
+} from '@/core/shared-project-config.ts';
 import type { CliState, KnownServerProjectMapping } from '@/core/state/state.ts';
 import { getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState } from '@/core/state/state-repository.ts';
@@ -52,6 +55,7 @@ import { canonicalizePath } from './io/fs-utils.ts';
 import logger from './observability/logger.ts';
 
 export const KNOWN_SERVER_PROJECT_MAPPING_SOURCE = 'known project mapping';
+export const SHARED_PROJECT_CONFIG_SOURCE = 'shared project config';
 
 /** Local config files found at exactly one directory — no git, no root resolution. */
 interface LocalProjectConfig {
@@ -80,10 +84,8 @@ export interface DiscoveredProject {
 }
 
 export interface DiscoverProjectOptions {
-  /** When set, used for git-remote binding lookup instead of resolving auth again. */
-  auth?: ResolvedAuth | null;
-  /** When false, skips server lookup even if a git remote is present. Defaults to true. */
-  tryGitRemoteBinding?: boolean;
+  /** `null` skips git-remote binding entirely (no local `git remote` read either) — pass it when there's no auth to spend on it. */
+  auth: ResolvedAuth | null;
   /** Suppresses the "Found ..." stderr hints. Defaults to false. */
   silent?: boolean;
   console: Console;
@@ -96,16 +98,13 @@ export interface SonarProperties {
   organization: string;
 }
 
-/** Same nearest-first, known-root-bounded climb as discoverProject()'s local-config source — no known-mapping match, no git-remote API call, since this also runs pre-login (no token yet). */
 async function discoverLocalConfig(
   startDir: string,
   silent: boolean,
   console: Console,
 ): Promise<Pick<DiscoveredProject, 'serverUrl' | 'organization'>> {
-  const config: DiscoveredProject = { projectRoot: canonicalizePath(startDir), configSources: [] };
-  const lookupPaths = await resolveLookupPaths(startDir, collectKnownRoots(loadKnownMappings()));
-  await applyLocalConfigAcrossLookupPaths(config, lookupPaths, { silent, console });
-  return config;
+  const discovered = await discoverProject(startDir, { auth: null, silent, console });
+  return { serverUrl: discovered.serverUrl, organization: discovered.organization };
 }
 
 /** Try to find server URL from project configs. */
@@ -144,9 +143,10 @@ async function loadLocalProjectConfig(dir: string): Promise<LocalProjectConfig> 
 }
 
 /**
- * Tries each source in turn — known-server-project-mapping, then local config files, then
- * git-remote binding (a single repo-level last resort) — with the first two walking the
- * same nearest-first `resolveLookupPaths` list, so "closer wins" uniformly.
+ * Tries each source in turn — shared project config, then known-server-project-mapping,
+ * then local config files, then git-remote binding (a single repo-level last resort) — the
+ * first three walking the same nearest-first `resolveLookupPaths` list, so "closer wins"
+ * uniformly.
  */
 export async function discoverProject(
   startDir: string,
@@ -175,13 +175,13 @@ export async function discoverProject(
       : undefined;
 
     const resolved =
+      (await applySharedProjectConfig(config, lookupPaths, options)) ||
       (knownMappings !== undefined &&
         applyKnownServerProjectMapping(config, lookupPaths, knownMappings, options)) ||
       (await applyLocalConfigAcrossLookupPaths(config, lookupPaths, options));
 
     if (!resolved) {
-      const gitRemote = repoRoot ? await getGitRemote(repoRoot) : '';
-      await applyGitRemoteBindingFromRemote(config, gitRemote, options);
+      await applyGitRemoteBinding(config, repoRoot, options);
     }
   } catch (error) {
     // No caller treats this as fallible — degrade to whatever was already resolved
@@ -189,6 +189,7 @@ export async function discoverProject(
     logger.debug(`Project discovery failed, returning partial result: ${(error as Error).message}`);
   }
 
+  logger.debug(`Discovered project: ${JSON.stringify(config)}`);
   return config;
 }
 
@@ -307,6 +308,53 @@ async function applyLocalConfigAcrossLookupPaths(
   return false;
 }
 
+function applySharedProjectConfigEntry(
+  config: DiscoveredProject,
+  mapping: SharedProjectConfigMapping,
+  options: DiscoverProjectOptions,
+): void {
+  config.configSources.push(SHARED_PROJECT_CONFIG_SOURCE);
+  config.projectKey = mapping.projectKey;
+  config.serverUrl = mapping.serverUrl;
+  config.organization = mapping.organization;
+  config.projectRoot = mapping.projectRoot;
+
+  if (options.silent) {
+    return;
+  }
+  const fields = formatConfigFields(config.serverUrl, config.projectKey, config.organization);
+  if (fields) {
+    options.console.print(`Found ${SHARED_PROJECT_CONFIG_SOURCE}: ${fields}`);
+  }
+}
+
+/** Walks lookupPaths nearest-first for the first `.sonar-config.json` found; it always applies — one file holds exactly one mapping, so there's no "found but doesn't match" case. */
+async function applySharedProjectConfig(
+  config: DiscoveredProject,
+  lookupPaths: LookupPath[],
+  options: DiscoverProjectOptions,
+): Promise<boolean> {
+  for (const { checkPath } of lookupPaths) {
+    let mapping: SharedProjectConfigMapping | null;
+    try {
+      mapping = await sharedProjectConfigRepository.load(checkPath);
+    } catch (error) {
+      logger.debug(
+        `Shared project config lookup skipped for ${checkPath}: ${(error as Error).message}`,
+      );
+      continue;
+    }
+    if (mapping === null) {
+      continue;
+    }
+
+    applySharedProjectConfigEntry(config, mapping, options);
+    return true;
+  }
+
+  return false;
+}
+
 function matchKnownServerProjectMapping(
   lookupPaths: LookupPath[],
   mappings: KnownServerProjectMapping[],
@@ -403,22 +451,21 @@ function applyKnownServerProjectMapping(
   return true;
 }
 
-async function applyGitRemoteBindingFromRemote(
+async function applyGitRemoteBinding(
   config: DiscoveredProject,
-  gitRemote: string,
+  repoRoot: string | undefined,
   options: DiscoverProjectOptions,
 ): Promise<void> {
-  const tryGitRemoteBinding = options.tryGitRemoteBinding !== false;
-  if (!tryGitRemoteBinding || !gitRemote) {
+  if (options.auth === null) {
     return;
   }
 
-  const auth = options.auth === undefined ? await resolveAuth({ silent: true }) : options.auth;
-  if (!auth) {
+  const gitRemote = repoRoot ? await getGitRemote(repoRoot) : '';
+  if (!gitRemote) {
     return;
   }
 
-  const remoteBinding = await discoverProjectKeyByGitRemote(auth, gitRemote);
+  const remoteBinding = await discoverProjectKeyByGitRemote(options.auth, gitRemote);
   if (!remoteBinding) {
     return;
   }

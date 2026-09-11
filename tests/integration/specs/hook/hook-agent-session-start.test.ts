@@ -24,7 +24,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import type { CliResult } from '../../harness';
 import { TestHarness } from '../../harness';
-import { type CagInvocation, readCagInvocations } from '../../harness/cag-invocations';
+import { type CagInvocation, readCagInvocations } from '../../harness/cag-helpers';
 
 const VALID_TOKEN = 'integration-test-token';
 const TEST_ORG = 'my-org';
@@ -86,8 +86,8 @@ describe('sonar hook agent-session-start', () => {
     }
     if (isCagInstalled) {
       harness.state().withContextAugmentationBinaryInstalled({
-        stdoutLine: cagStdout,
-        initExitCode: cagExitCode,
+        sessionContextStdout: cagStdout,
+        sessionContextExitCode: cagExitCode,
       });
     }
   }
