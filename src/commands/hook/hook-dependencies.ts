@@ -73,18 +73,15 @@ export function handleScanError(
 export async function resolveAuthAndSecrets(
   ctx: CommandInvocationContext,
 ): Promise<HookDependencies> {
-  const authResult = await ctx.resolveAuth();
-  if (authResult.isErr()) {
-    throw authResult.error;
-  }
-  if (!authResult.value) {
+  const auth = await ctx.resolveAuthOrNull();
+  if (!auth) {
     throw new MissingDependenciesError(SECRETS_INACTIVE_UNAUTHENTICATED);
   }
 
   const binaryPath = resolveSecretsBinaryPath();
   if (!binaryPath) throw new MissingDependenciesError(SECRETS_INACTIVE_BINARY_MISSING);
 
-  return { auth: authResult.value, binaryPath };
+  return { auth, binaryPath };
 }
 
 export async function runAndEmitFileSecretsScan(

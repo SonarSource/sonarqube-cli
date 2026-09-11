@@ -65,11 +65,7 @@ export async function gitPreCommit(
   files: string[],
   ctx: CommandInvocationContext,
 ): Promise<void> {
-  const authResult = await ctx.resolveAuth();
-  if (authResult.isErr()) {
-    throw authResult.error;
-  }
-  const auth = authResult.value;
+  const auth = await ctx.resolveAuthOrNull();
 
   // Validated up front, independent of staged files, so a misconfigured hook
   // (--dependency-risks with no way to resolve a project) always fails loudly.

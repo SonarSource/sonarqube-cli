@@ -35,11 +35,7 @@ export async function gitPrePush(files: string[], ctx: CommandInvocationContext)
   const fileGroups = await getFileGroupsToScan(files);
   if (fileGroups === null) return;
 
-  const authResult = await ctx.resolveAuth();
-  if (authResult.isErr()) {
-    throw authResult.error;
-  }
-  const auth = authResult.value;
+  const auth = await ctx.resolveAuthOrNull();
   if (!auth) {
     throw new MissingDependenciesError(SECRETS_INACTIVE_UNAUTHENTICATED);
   }

@@ -1159,7 +1159,7 @@ describe('discoverOrganization', () => {
     }
   });
 
-  it('reads organization from a known-server-project-mapping before login too', async () => {
+  it('ignores known-server-project-mapping during pre-login discovery', async () => {
     const testDir = join(tmpdir(), 'sonarqube-cli-test-discover-org-known-mapping-' + Date.now());
     fakeFs.mkdir(testDir);
     const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue({
@@ -1176,7 +1176,7 @@ describe('discoverOrganization', () => {
 
     try {
       await withCwd(cwdSpy, testDir, async () => {
-        expect(await discoverOrganization(new FakeConsole())).toBe('known-org');
+        expect(await discoverOrganization(new FakeConsole())).toBeNull();
       });
     } finally {
       loadStateSpy.mockRestore();
@@ -1300,7 +1300,7 @@ describe('discoverServer', () => {
     }
   });
 
-  it('reads server URL from a known-server-project-mapping before login too', async () => {
+  it('ignores known-server-project-mapping during pre-login discovery', async () => {
     const testDir = join(
       tmpdir(),
       'sonarqube-cli-test-discover-server-known-mapping-' + Date.now(),
@@ -1319,7 +1319,7 @@ describe('discoverServer', () => {
 
     try {
       await withCwd(cwdSpy, testDir, async () => {
-        expect(await discoverServer(new FakeConsole())).toBe('https://known.example.com');
+        expect(await discoverServer(new FakeConsole())).toBeNull();
       });
     } finally {
       loadStateSpy.mockRestore();

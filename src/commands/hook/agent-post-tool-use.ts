@@ -60,8 +60,7 @@ async function handleSqaaPostToolUse(
     return { decision: 'none' };
   }
 
-  const authResult = await ctx.resolveAuth();
-  const auth = authResult.isOk() ? authResult.value : null;
+  const auth = await ctx.resolveAuthOrNull();
   if (!auth) {
     return { decision: 'none' };
   }

@@ -414,11 +414,7 @@ export async function systemStatus(
     integration.features.some(isProjectVortexFeature),
   );
 
-  const [authResult, updateResult] = await Promise.all([ctx.resolveAuth(), getCliUpdateInfo()]);
-  if (authResult.isErr()) {
-    throw authResult.error;
-  }
-  const auth = authResult.value;
+  const [auth, updateResult] = await Promise.all([ctx.resolveAuthOrNull(), getCliUpdateInfo()]);
 
   const { tokenStatus, vortex } = await resolveAuthenticatedChecks(auth);
 
