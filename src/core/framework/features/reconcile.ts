@@ -19,6 +19,7 @@
  */
 
 import * as fs from 'node:fs';
+import { homedir } from 'node:os';
 
 import logger from '@/core/observability/logger.ts';
 import type {
@@ -30,6 +31,7 @@ import type {
 } from '@/core/state/state.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import { resolveFeatureTargetRoot } from './feature-target.ts';
 import { findInstalledIntegration } from './installation-recorder.ts';
 import { integrationInstaller } from './installer.ts';
 import type { IntegrationRegistry } from './registry.ts';
@@ -61,9 +63,8 @@ export async function reconcileInstalledIntegrations(
     }
   }
 
-  // Last step, once every entry above is current: collapse any project-scope installs of a
-  // feature (or one of its `replacedIds`) that coexist with an already-installed global one for
-  // the same integration into that single global record.
+  // Last step, once every entry above is current: fold every project-scope install of a
+  // feature into a single global record, producing one if none exists yet.
   for (const integration of registry.list()) {
     if (await collapseGlobalScopeCoexistence(state, integration, console)) {
       stateChanged = true;
@@ -334,10 +335,11 @@ function createFeatureApplication(
 }
 
 /**
- * Collapses project-scope installs of a feature that coexist with an already-installed global one
- * into that single global record, then tears down the stale project installs. Matches only
+ * Folds every project-scope install of a feature into a single global record, then tears down
+ * the stale project installs — merging into an already-installed global one when there is one,
+ * otherwise producing a fresh one at the feature's own global target root. Matches only
  * `successor.id`, never `replacedIds` — an entry still under a retired predecessor id failed its
- * own rename migration and is pending retry, not ready to collapse.
+ * own rename migration and is pending retry, not ready to fold.
  */
 async function collapseGlobalScopeCoexistence(
   state: CliState,
@@ -352,7 +354,7 @@ async function collapseGlobalScopeCoexistence(
 
   let stateChanged = false;
   for (const successor of integration.features) {
-    const collapsed = await collapseFeatureCoexistence(
+    const folded = await foldProjectEntriesIntoGlobal(
       state,
       integration,
       installedIntegration,
@@ -360,7 +362,7 @@ async function collapseGlobalScopeCoexistence(
       successor,
       console,
     );
-    if (collapsed) {
+    if (folded) {
       stateChanged = true;
     }
   }
@@ -375,7 +377,7 @@ function isGlobalScopeEligible(feature: FeatureDeclaration): boolean {
   return feature.scope !== 'project';
 }
 
-async function collapseFeatureCoexistence(
+async function foldProjectEntriesIntoGlobal(
   state: CliState,
   integration: IntegrationDeclaration,
   installedIntegration: InstalledIntegration,
@@ -392,9 +394,19 @@ async function collapseFeatureCoexistence(
   );
   const globalEntry = coexisting.find((feature) => feature.scope === 'global');
   const projectEntries = coexisting.filter((feature) => feature.scope === 'project');
-  if (!globalEntry || projectEntries.length === 0) {
+  if (projectEntries.length === 0) {
     return false;
   }
+
+  const globalTargetRoot = globalEntry
+    ? globalEntry.targetRoot
+    : await resolveFeatureTargetRoot(
+        { options: {}, targetRoot: homedir(), scope: 'global', state },
+        successor,
+      );
+  const mergedAttrs = mergeFeatureAttrs(
+    globalEntry ? [...projectEntries, globalEntry] : projectEntries,
+  );
 
   const subfeatureIds = isFeatureContainer(successor)
     ? unionActiveSubfeatureIds(successor, coexisting, 'global')
@@ -403,9 +415,9 @@ async function collapseFeatureCoexistence(
     featuresById,
     successor.id,
     subfeatureIds,
-    globalEntry.targetRoot,
+    globalTargetRoot,
     'global',
-    mergeFeatureAttrs([...projectEntries, globalEntry]),
+    mergedAttrs,
   );
   if (!application) {
     return false;
@@ -422,7 +434,7 @@ async function collapseFeatureCoexistence(
     succeeded = installedFeatures.length > 0;
   } catch (err) {
     logger.debug(
-      `Global-scope coexistence collapse failed for ${integration.id}.${successor.id}: ${(err as Error).message}`,
+      `Global-scope fold failed for ${integration.id}.${successor.id}: ${(err as Error).message}`,
     );
   }
   if (!succeeded) {

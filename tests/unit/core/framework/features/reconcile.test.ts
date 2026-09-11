@@ -50,13 +50,20 @@ function makeState(): CliState {
 
 describe('reconcileInstalledIntegrations', () => {
   let tempDir: string;
+  const originalHome = process.env.HOME;
+  const originalUserProfile = process.env.USERPROFILE;
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(join(tmpdir(), 'sonar-cli-reconcile-'));
+    // Sandbox os.homedir() — folding a lone project entry into global falls back to it.
+    process.env.HOME = tempDir;
+    process.env.USERPROFILE = tempDir;
   });
 
   afterEach(() => {
     fs.rmSync(tempDir, { recursive: true, force: true });
+    process.env.HOME = originalHome;
+    process.env.USERPROFILE = originalUserProfile;
   });
 
   it('reapplies only installed declarative features and prunes unknown feature state', async () => {
@@ -120,6 +127,7 @@ describe('reconcileInstalledIntegrations', () => {
         {
           id: 'managed-feature',
           displayName: 'Managed feature',
+          scope: 'project',
           resources: [
             wholeFile({
               id: 'managed-file',
@@ -141,6 +149,7 @@ describe('reconcileInstalledIntegrations', () => {
         {
           id: 'new-feature',
           displayName: 'New feature',
+          scope: 'project',
           resources: [
             wholeFile({
               id: 'new-managed-file',
@@ -260,6 +269,7 @@ describe('reconcileInstalledIntegrations', () => {
         {
           id: 'feature-a',
           displayName: 'Feature A',
+          scope: 'project',
           dependencies: [sharedDependency],
           resources: [
             wholeFile({
@@ -274,6 +284,7 @@ describe('reconcileInstalledIntegrations', () => {
         {
           id: 'feature-b',
           displayName: 'Feature B',
+          scope: 'project',
           dependencies: [sharedDependency],
           resources: [
             wholeFile({
@@ -329,6 +340,7 @@ describe('reconcileInstalledIntegrations', () => {
     const container: FeatureContainer = {
       id: 'container-feature',
       displayName: 'Container feature',
+      scope: 'project',
       defaultInstallSubfeatureIds: ['sub-a'],
       subfeatures: [
         { id: 'sub-a', displayName: 'Sub A' },
@@ -395,6 +407,7 @@ describe('reconcileInstalledIntegrations', () => {
     const container: FeatureContainer = {
       id: 'container-feature',
       displayName: 'Container feature',
+      scope: 'project',
       subfeatures: [
         { id: 'sub-a', displayName: 'Sub A' },
         { id: 'sub-b', displayName: 'Sub B' },
@@ -462,6 +475,7 @@ describe('reconcileInstalledIntegrations', () => {
     const container: FeatureContainer = {
       id: 'container-feature',
       displayName: 'Container feature',
+      scope: 'project',
       subfeatures: [
         {
           id: 'sub-a',
@@ -530,6 +544,7 @@ describe('reconcileInstalledIntegrations', () => {
         {
           id: 'plain-feature',
           displayName: 'Plain feature',
+          scope: 'project',
           operations: [
             {
               id: 'test-op',
@@ -594,6 +609,7 @@ describe('reconcileInstalledIntegrations', () => {
         {
           id: 'vortex',
           displayName: 'Vortex',
+          scope: 'project',
           replacedIds: ['old-sqaa', 'old-context'],
           operations: [
             {
@@ -644,6 +660,7 @@ describe('reconcileInstalledIntegrations', () => {
         {
           id: 'vortex',
           displayName: 'Vortex',
+          scope: 'project',
           replacedIds: ['old-sqaa', 'old-context'],
           operations: [
             {
@@ -687,6 +704,7 @@ describe('reconcileInstalledIntegrations', () => {
         {
           id: 'vortex',
           displayName: 'Vortex',
+          scope: 'project',
           replacedIds: ['old-context'],
           operations: [
             {
@@ -926,7 +944,7 @@ describe('reconcileInstalledIntegrations', () => {
       });
     });
 
-    it('leaves project installs alone when no global install of the same feature exists', async () => {
+    it('produces a fresh global record from a lone project install when no global one exists', async () => {
       const projectDir = join(tempDir, 'project');
       fs.mkdirSync(projectDir, { recursive: true });
 
@@ -967,9 +985,152 @@ describe('reconcileInstalledIntegrations', () => {
 
       await reconcileInstalledIntegrations(state, registry, fake);
 
+      expect(fs.existsSync(join(projectDir, 'managed.txt'))).toBe(false);
+      expect(fs.readFileSync(join(tempDir, 'managed.txt'), 'utf-8')).toBe('content');
+
+      expect(state.integrations.installed[0].features).toHaveLength(1);
+      expect(state.integrations.installed[0].features[0]).toMatchObject({
+        featureId: 'managed-feature',
+        scope: 'global',
+        targetRoot: tempDir,
+        attrs: { projectKey: 'proj' },
+      });
+    });
+
+    it('never produces a global record for a feature declared project-scope only, even with no coexisting global', async () => {
+      const projectDir = join(tempDir, 'project');
+      fs.mkdirSync(projectDir, { recursive: true });
+
+      const state = makeState();
+      state.integrations.installed.push({
+        id: 'integration-id',
+        integrationId: 'test-integration',
+        installedByCliVersion: '0.9.0',
+        installedAt: '2026-01-01T00:00:00.000Z',
+        updatedByCliVersion: '0.9.0',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        features: [
+          recordedCoexistingFeature('project-only-feature', 'project', projectDir, {
+            projectKey: 'proj',
+          }),
+        ],
+      });
+
+      const registry = new IntegrationRegistry();
+      registry.register({
+        id: 'test-integration',
+        displayName: 'Test integration',
+        features: [
+          {
+            id: 'project-only-feature',
+            displayName: 'Project-only feature',
+            scope: 'project',
+          },
+        ],
+      });
+
+      await reconcileInstalledIntegrations(state, registry, fake);
+
       expect(state.integrations.installed[0].features).toHaveLength(1);
       expect(state.integrations.installed[0].features[0].scope).toBe('project');
-      expect(fs.existsSync(join(projectDir, 'managed.txt'))).toBe(true);
+    });
+
+    it('merges attrs from every lone project install into one fresh global record', async () => {
+      const projectDirA = join(tempDir, 'project-a');
+      const projectDirB = join(tempDir, 'project-b');
+      fs.mkdirSync(projectDirA, { recursive: true });
+      fs.mkdirSync(projectDirB, { recursive: true });
+
+      const state = makeState();
+      state.integrations.installed.push({
+        id: 'integration-id',
+        integrationId: 'test-integration',
+        installedByCliVersion: '0.9.0',
+        installedAt: '2026-01-01T00:00:00.000Z',
+        updatedByCliVersion: '0.9.0',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        features: [
+          recordedCoexistingFeature('managed-feature', 'project', projectDirA, {
+            projectKey: 'proj-a',
+          }),
+          recordedCoexistingFeature('managed-feature', 'project', projectDirB, {
+            projectKey: 'proj-b',
+          }),
+        ],
+      });
+
+      const registry = new IntegrationRegistry();
+      registry.register({
+        id: 'test-integration',
+        displayName: 'Test integration',
+        features: [
+          {
+            id: 'managed-feature',
+            displayName: 'Managed feature',
+            resources: [
+              wholeFile({
+                id: 'managed-file',
+                version: '1',
+                targetPath: (ctx) => join(ctx.targetRoot, 'managed.txt'),
+                content: (ctx) => JSON.stringify(ctx.attrs),
+              }),
+            ],
+          },
+        ],
+      });
+
+      await reconcileInstalledIntegrations(state, registry, fake);
+
+      expect(fs.existsSync(join(projectDirA, 'managed.txt'))).toBe(false);
+      expect(fs.existsSync(join(projectDirB, 'managed.txt'))).toBe(false);
+      expect(JSON.parse(fs.readFileSync(join(tempDir, 'managed.txt'), 'utf-8'))).toEqual({
+        projectKey: 'proj-b',
+      });
+      expect(state.integrations.installed[0].features).toHaveLength(1);
+      expect(state.integrations.installed[0].features[0].scope).toBe('global');
+    });
+
+    it('drops a project-pinned subfeature when promoting a lone project install with no coexisting global', async () => {
+      const projectDir = join(tempDir, 'project');
+      fs.mkdirSync(projectDir, { recursive: true });
+
+      const state = makeState();
+      state.integrations.installed.push({
+        id: 'integration-id',
+        integrationId: 'test-integration',
+        installedByCliVersion: '0.9.0',
+        installedAt: '2026-01-01T00:00:00.000Z',
+        updatedByCliVersion: '0.9.0',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        features: [
+          recordedCoexistingFeature('container-feature', 'project', projectDir, undefined, [
+            { featureId: 'sub-a', dependencies: [] },
+            { featureId: 'project-only-sub', dependencies: [] },
+          ]),
+        ],
+      });
+
+      const container: FeatureContainer = {
+        id: 'container-feature',
+        displayName: 'Container feature',
+        subfeatures: [
+          { id: 'sub-a', displayName: 'Sub A' },
+          { id: 'project-only-sub', displayName: 'Project-only sub', scope: 'project' },
+        ],
+        defaultInstallSubfeatureIds: [],
+      };
+      const registry = new IntegrationRegistry();
+      registry.register({
+        id: 'test-integration',
+        displayName: 'Test integration',
+        features: [container],
+      });
+
+      await reconcileInstalledIntegrations(state, registry, fake);
+
+      const promoted = state.integrations.installed[0].features[0];
+      expect(promoted.scope).toBe('global');
+      expect((promoted.subfeatures ?? []).map((s) => s.featureId)).toEqual(['sub-a']);
     });
 
     it('never collapses a feature declared project-scope only, even when a global record coexists', async () => {
