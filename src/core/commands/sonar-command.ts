@@ -73,7 +73,7 @@ export const COMMAND_CATEGORIES = ['core', 'data', 'integrate', 'cli-management'
 export type CommandCategory = (typeof COMMAND_CATEGORIES)[number];
 
 /** @deprecated Use {@link createCliRuntime} instead. */
-export const createDefaultCliRuntime = createCliRuntime;
+export { createCliRuntime as createDefaultCliRuntime } from '@/core/commands/cli-runtime.ts';
 
 function isPrivateBetaGated(lifecycle: LifecycleState): boolean {
   return lifecycle.stage === 'beta' && lifecycle.betaFlagKey !== undefined;
