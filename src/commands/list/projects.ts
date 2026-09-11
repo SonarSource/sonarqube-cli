@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Issues command - search for SonarQube issues
+// Projects command - search for SonarQube projects
 
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -33,14 +33,7 @@ export interface ListProjectsOptions {
 }
 
 /**
- * Projects search command handler.
- *
- * The error channel is `Error`, matching what `authenticatedAction()` accepts, rather
- * than the narrower union this chain actually produces: no caller discriminates the
- * members, and `runCommand()` maps any error to a message, an exit code, and a
- * remediation hint uniformly. Wrap a domain failure in a `CliError` only where there is
- * real context or a hint to add (see `import/index.ts`); a contentless wrap would change
- * nothing at runtime and cost a line in every converted handler.
+ * Projects search command handler
  */
 export function listProjects(
   options: ListProjectsOptions,
