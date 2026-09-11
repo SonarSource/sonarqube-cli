@@ -62,7 +62,7 @@ import {
 
 import { version as VERSION } from '../../../package.json';
 import { supportedIntegrations } from '../integrate';
-import { isProjectVortexFeature } from '../integrate/_common/vortex.ts';
+import { isVortexFeature } from '../integrate/_common/vortex.ts';
 import { checkAntigravitySecretsHookFile } from '../integrate/antigravity/health.ts';
 import { resolveAntigravityHooksJsonPathForScope } from '../integrate/antigravity/hooks.ts';
 import { checkForUpdate, type UpdateCheckResult } from '../update/update-check.ts';
@@ -411,7 +411,7 @@ export async function systemStatus(
   const state = loadState();
   const integrations = getInstalledIntegrations(state);
   const vortexInstalled = state.integrations.installed.some((integration) =>
-    integration.features.some(isProjectVortexFeature),
+    integration.features.some(isVortexFeature),
   );
 
   const [auth, updateResult] = await Promise.all([

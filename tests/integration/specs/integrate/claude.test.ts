@@ -920,7 +920,7 @@ describe('integrate claude — Vortex entitlement guard', () => {
   });
 
   it(
-    'skips Vortex on a -g install even when the org is entitled, and warns',
+    'installs Vortex under the home directory on a -g install when the org is entitled',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -940,9 +940,19 @@ describe('integrate claude — Vortex entitlement guard', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(`${result.stdout}\n${result.stderr}`).toContain('not supported with --global');
+      const instructions = harness.userHome.file('.claude', 'CLAUDE.md').asText();
+      expect(instructions).toContain('# Vortex analysis protocol');
+      expect(harness.cwd.exists('CLAUDE.md')).toBe(false);
 
-      expect(findClaudeFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
+      expect(
+        harness.userHome
+          .file('.claude', 'hooks', 'sonar-sqaa', 'build-scripts', hookScriptName('posttool-sqaa'))
+          .asText(),
+      ).toContain('sonar hook claude-post-tool-use');
+      const settings = harness.userHome.file('.claude', 'settings.json').asJson();
+      expect(settings.hooks?.PostToolUse).toBeDefined();
+
+      expect(findClaudeFeature(harness, VORTEX_FEATURE_ID)?.scope).toBe('global');
     },
     { timeout: 30000 },
   );
@@ -1416,7 +1426,7 @@ describe('integrate claude — file placement (local vs global)', () => {
         // The global secrets-hooks feature is also recorded.
         expect(findClaudeFeature(harness, 'sonar-secrets-hooks', 'global')).toBeDefined();
 
-        // Vortex is never installed on a -g install (it is project-scoped only)
+        // This connection has no Vortex entitlement, so nothing Vortex is recorded.
         expect(findClaudeFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
       },
       { timeout: 30000 },

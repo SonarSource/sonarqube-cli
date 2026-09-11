@@ -697,7 +697,7 @@ describe('integrate claude — Context Augmentation', () => {
   );
 
   it(
-    'skips CAG with a warning on SonarQube Cloud when no project key is configured',
+    'installs CAG on SonarQube Cloud with no project key',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -717,12 +717,11 @@ describe('integrate claude — Context Augmentation', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
-      expect(nonProbe).toEqual([]);
+      const invoked = readInvocations(harness).filter((i) => i.argv[1] === 'integrate');
+      expect(invoked).toEqual([]);
       const state = loadState(harness);
-      expect(findRecordedCagFeature(state)).toBeUndefined();
-      expectVortexHookAbsent(harness.cwd, 'claude');
-      expect(result.stderr).toContain('a project key and organization are required');
+      expect(findRecordedCagFeature(state)).toBeDefined();
+      expectVortexHookInstalled(harness.cwd, 'claude');
     },
     { timeout: 30000 },
   );
@@ -957,7 +956,7 @@ describe('integrate codex — Context Augmentation', () => {
   );
 
   it(
-    'skips CAG with a warning on SonarQube Cloud when no project key is configured',
+    'installs CAG on SonarQube Cloud with no project key',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -977,10 +976,10 @@ describe('integrate codex — Context Augmentation', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
-      expect(nonProbe).toEqual([]);
-      expectVortexHookAbsent(harness.cwd, 'codex');
-      expect(result.stderr).toContain('a project key and organization are required');
+      const invoked = readInvocations(harness).filter((i) => i.argv[1] === 'integrate');
+      expect(invoked).toEqual([]);
+      expect(findRecordedCagFeature(loadState(harness))).toBeDefined();
+      expectVortexHookInstalled(harness.cwd, 'codex');
     },
     { timeout: 30000 },
   );
@@ -1058,17 +1057,16 @@ describe('integrate <agent> --global — Context Augmentation', () => {
     await harness.dispose();
   });
 
-  // Unified agents skip CAG as part of the whole Vortex feature.
-  const VORTEX_GLOBAL_SKIP = 'Skipping Vortex: not supported with --global';
+  const GLOBAL_AGENTS = [
+    ['claude', 'integrate claude -g --non-interactive'],
+    ['copilot', 'integrate copilot -g --non-interactive'],
+    ['codex', 'integrate codex -g --non-interactive'],
+    ['cursor', 'integrate cursor -g --non-interactive'],
+  ] as const;
 
-  it.each([
-    ['claude', 'integrate claude -g --non-interactive', VORTEX_GLOBAL_SKIP],
-    ['copilot', 'integrate copilot -g --non-interactive', VORTEX_GLOBAL_SKIP],
-    ['codex', 'integrate codex -g --non-interactive', VORTEX_GLOBAL_SKIP],
-    ['cursor', 'integrate cursor -g --non-interactive', VORTEX_GLOBAL_SKIP],
-  ])(
-    'skips CAG entirely on "integrate %s --global" and warns when the org is entitled',
-    async (_agent, command, expectedWarning) => {
+  it.each(GLOBAL_AGENTS)(
+    'installs CAG under the global root on "integrate %s --global" when the org is entitled',
+    async (agent, command) => {
       const server = await harness
         .newFakeServer()
         .withAuthToken(TOKEN)
@@ -1085,27 +1083,20 @@ describe('integrate <agent> --global — Context Augmentation', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
-      expect(nonProbe).toEqual([]);
-      const state = loadState(harness);
-      expect(findRecordedCagFeature(state)).toBeUndefined();
-      expectVortexHookAbsent(harness.cwd, 'claude');
-      expectVortexHookAbsent(harness.cwd, 'copilot');
-      expectVortexHookAbsent(harness.cwd, 'codex');
-      expectVortexHookAbsent(harness.cwd, 'cursor');
-      expect(result.stderr).toContain(expectedWarning);
+      // `tool integrate` needs a project key, so a global install ships the hook
+      // without binding the binary to one.
+      const invoked = readInvocations(harness).filter((i) => i.argv[1] === 'integrate');
+      expect(invoked).toEqual([]);
+      expect(findRecordedCagFeature(loadState(harness))?.feature.scope).toBe('global');
+      expectVortexHookInstalled(harness.userHome, agent, 'global');
+      expectVortexHookAbsent(harness.cwd, agent);
     },
     { timeout: 30000 },
   );
 
-  it.each([
-    ['claude', 'integrate claude -g --non-interactive', VORTEX_GLOBAL_SKIP],
-    ['copilot', 'integrate copilot -g --non-interactive', VORTEX_GLOBAL_SKIP],
-    ['codex', 'integrate codex -g --non-interactive', VORTEX_GLOBAL_SKIP],
-    ['cursor', 'integrate cursor -g --non-interactive', VORTEX_GLOBAL_SKIP],
-  ])(
-    'skips CAG entirely on "integrate %s --global" without warning when the org is not entitled',
-    async (_agent, command, unexpectedWarning) => {
+  it.each(GLOBAL_AGENTS)(
+    'skips CAG entirely on "integrate %s --global" when the org is not entitled',
+    async (agent, command) => {
       // No CAG entitlement configured on the server.
       const server = await harness.newFakeServer().withAuthToken(TOKEN).start();
       const serverUrl = server.baseUrl();
@@ -1123,7 +1114,7 @@ describe('integrate <agent> --global — Context Augmentation', () => {
       expect(nonProbe).toEqual([]);
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeUndefined();
-      expect(`${result.stdout}\n${result.stderr}`).not.toContain(unexpectedWarning);
+      expectVortexHookAbsent(harness.userHome, agent, 'global');
     },
     { timeout: 30000 },
   );

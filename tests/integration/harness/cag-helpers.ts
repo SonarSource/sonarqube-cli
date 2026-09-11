@@ -32,6 +32,7 @@ import {
   VORTEX_HOOK_MARKER,
 } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
 import { HOOKS_DIR } from '@/commands/integrate/_common/hooks.ts';
+import type { IntegrationScope } from '@/core/state/state.ts';
 
 import type { Dir } from './dir';
 import type { File } from './file';
@@ -73,6 +74,9 @@ const SESSION_START_SCRIPT_NAME = basename(SESSION_START_SCRIPT_REL);
 interface VortexHookInstallShape {
   configDir: string;
   hookConfigPath: string[];
+  /** Only for agents whose global layout differs from their project one. */
+  globalConfigDir?: string;
+  globalHookConfigPath?: string[];
   expectHookEntries: (config: any) => void;
 }
 
@@ -106,6 +110,8 @@ const VORTEX_HOOK_INSTALL_SHAPES: Record<SessionStartAgent, VortexHookInstallSha
   copilot: {
     configDir: '.github',
     hookConfigPath: ['.github', 'hooks', 'hooks.json'],
+    globalConfigDir: '.copilot',
+    globalHookConfigPath: ['.copilot', 'hooks', 'hooks.json'],
     expectHookEntries: ({ hooks }) => {
       const commandKey = IS_WINDOWS ? 'powershell' : 'bash';
       expect(hooks.sessionStart).toHaveLength(1);
@@ -130,13 +136,25 @@ const VORTEX_HOOK_INSTALL_SHAPES: Record<SessionStartAgent, VortexHookInstallSha
   },
 };
 
-export function sessionStartScript(root: Dir, agent: SessionStartAgent): File {
-  const { configDir } = VORTEX_HOOK_INSTALL_SHAPES[agent];
+export function sessionStartScript(
+  root: Dir,
+  agent: SessionStartAgent,
+  scope: IntegrationScope = 'project',
+): File {
+  const shape = VORTEX_HOOK_INSTALL_SHAPES[agent];
+  const configDir = (scope === 'global' ? shape.globalConfigDir : undefined) ?? shape.configDir;
   return root.file(join(configDir, HOOKS_DIR, `${SESSION_START_SCRIPT_REL}${SCRIPT_EXT}`));
 }
 
-function hookConfigText(root: Dir, agent: SessionStartAgent): string {
-  const config = root.file(...VORTEX_HOOK_INSTALL_SHAPES[agent].hookConfigPath);
+function hookConfigText(
+  root: Dir,
+  agent: SessionStartAgent,
+  scope: IntegrationScope = 'project',
+): string {
+  const shape = VORTEX_HOOK_INSTALL_SHAPES[agent];
+  const path =
+    (scope === 'global' ? shape.globalHookConfigPath : undefined) ?? shape.hookConfigPath;
+  const config = root.file(...path);
   return config.exists() ? config.asText() : '';
 }
 
@@ -147,18 +165,26 @@ export function isVortexHookInstalled(root: Dir, agent: SessionStartAgent): bool
   );
 }
 
-export function expectVortexHookInstalled(root: Dir, agent: SessionStartAgent): void {
-  const script = sessionStartScript(root, agent);
+export function expectVortexHookInstalled(
+  root: Dir,
+  agent: SessionStartAgent,
+  scope: IntegrationScope = 'project',
+): void {
+  const script = sessionStartScript(root, agent, scope);
   expect(script.exists()).toBe(true);
   expect(script.isExecutable).toBe(true);
   expect(script.asText()).toContain(`sonar hook agent-session-start --agent ${agent}`);
 
-  const config = hookConfigText(root, agent);
+  const config = hookConfigText(root, agent, scope);
   expect(config).not.toBe('');
   VORTEX_HOOK_INSTALL_SHAPES[agent].expectHookEntries(JSON.parse(config));
 }
 
-export function expectVortexHookAbsent(root: Dir, agent: SessionStartAgent): void {
-  expect(sessionStartScript(root, agent).exists()).toBe(false);
-  expect(hookConfigText(root, agent)).not.toContain(VORTEX_HOOK_MARKER);
+export function expectVortexHookAbsent(
+  root: Dir,
+  agent: SessionStartAgent,
+  scope: IntegrationScope = 'project',
+): void {
+  expect(sessionStartScript(root, agent, scope).exists()).toBe(false);
+  expect(hookConfigText(root, agent, scope)).not.toContain(VORTEX_HOOK_MARKER);
 }

@@ -54,14 +54,7 @@ export async function integrateAntigravity(
     console,
   );
 
-  const vortex = await resolveVortexSetup(
-    {
-      auth,
-      projectKey: integrateCtx.projectKey,
-      isGlobal: integrateCtx.isGlobal,
-    },
-    console,
-  );
+  const vortex = await resolveVortexSetup(auth, console);
 
   const { installRoot: targetRoot, installScope: scope } = resolveAntigravityInstallTarget(
     integrateCtx.isGlobal,
