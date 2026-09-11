@@ -18,10 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Issues command - search for SonarQube issues
+// Projects command - search for SonarQube projects
 
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import { errAsync, type ResultAsync } from '@/core/result.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { MAX_PAGE_SIZE, ProjectsClient } from '@/core/server/projects.ts';
 
@@ -34,46 +35,50 @@ export interface ListProjectsOptions {
 /**
  * Projects search command handler
  */
-export async function listProjects(
+export function listProjects(
   options: ListProjectsOptions,
   ctx: CommandAuthenticatedInvocationContext,
-): Promise<void> {
+): ResultAsync<void, Error> {
   const { auth, console } = ctx;
   const pageSize = options.pageSize;
   if (pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
-    throw new InvalidOptionError(
-      `Invalid --page-size option: '${pageSize}'. Must be an integer between 1 and 500`,
+    return errAsync(
+      new InvalidOptionError(
+        `Invalid --page-size option: '${pageSize}'. Must be an integer between 1 and 500`,
+      ),
     );
   }
 
   const page = options.page;
   if (page < 1) {
-    throw new InvalidOptionError(`Invalid --page option: '${page}'. Must be an integer >= 1`);
+    return errAsync(
+      new InvalidOptionError(`Invalid --page option: '${page}'. Must be an integer >= 1`),
+    );
   }
 
   const client = new SonarHttpClient(auth.serverUrl, auth.token);
   const projectsClient = new ProjectsClient(client);
 
-  const result = await projectsClient
+  return projectsClient
     .searchProjects({
       q: options.query,
       ps: pageSize,
       p: options.page,
       organization: auth.orgKey,
     })
-    .orThrow();
+    .map((result) => {
+      const hasNextPage = result.paging.pageIndex * result.paging.pageSize < result.paging.total;
 
-  const hasNextPage = result.paging.pageIndex * result.paging.pageSize < result.paging.total;
-
-  console.print(
-    JSON.stringify({
-      projects: result.components.map((c) => ({ key: c.key, name: c.name })),
-      paging: {
-        pageIndex: result.paging.pageIndex,
-        pageSize: result.paging.pageSize,
-        total: result.paging.total,
-        hasNextPage,
-      },
-    }),
-  );
+      console.print(
+        JSON.stringify({
+          projects: result.components.map((c) => ({ key: c.key, name: c.name })),
+          paging: {
+            pageIndex: result.paging.pageIndex,
+            pageSize: result.paging.pageSize,
+            total: result.paging.total,
+            hasNextPage,
+          },
+        }),
+      );
+    });
 }

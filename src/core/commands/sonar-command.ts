@@ -40,6 +40,7 @@ import {
   withLifecycleTag,
 } from '@/core/commands/stage.ts';
 import logger from '@/core/observability/logger.ts';
+import { isResult, type ResultAsync } from '@/core/result.ts';
 import { loadState, saveState } from '@/core/state/state-manager.ts';
 import type { Console } from '@/core/ui/console.ts';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
@@ -151,6 +152,8 @@ export interface SonarCommandOptions {
 
 type CommandArgs = unknown[];
 type CommandResult = void | Promise<void>;
+/** {@link CommandResult} plus the Result rail, which only `authenticatedAction` collapses. */
+type AuthenticatedCommandResult = Promise<void> | ResultAsync<void, Error>;
 
 class SonarHelp extends Help {
   override visibleCommands(command: Command): Command[] {
@@ -474,10 +477,13 @@ export class SonarCommand extends Command {
    * `ctx.recordTelemetry(...)` — drained in `postAction`.
    *
    * Sets requiresAuth = true on this command for documentation purposes.
+   *
+   * A handler that fails on the Result rail has its error rethrown here rather than
+   * handled, so `runCommand()` stays the one place a failure becomes an exit code.
    */
   authenticatedAction<TArgs extends CommandArgs>(
     this: this & { __commandArgs?: TArgs },
-    fn: (ctx: CommandAuthenticatedInvocationContext, ...args: TArgs) => Promise<void>,
+    fn: (ctx: CommandAuthenticatedInvocationContext, ...args: TArgs) => AuthenticatedCommandResult,
   ): this {
     this._requiresAuth = true;
     super.action((...args: TArgs) =>
@@ -489,7 +495,10 @@ export class SonarCommand extends Command {
             remediationHint: "Run 'sonar auth login' to authenticate.",
           });
         }
-        await fn(this.createCommandAuthenticatedInvocationContext(auth), ...args);
+        const outcome = await fn(this.createCommandAuthenticatedInvocationContext(auth), ...args);
+        if (isResult(outcome) && outcome.isErr()) {
+          throw outcome.error;
+        }
       }),
     );
     return this;

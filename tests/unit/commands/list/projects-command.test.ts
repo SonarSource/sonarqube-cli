@@ -55,23 +55,20 @@ describe('projectsSearchCommand', () => {
   });
 
   describe('error conditions', () => {
-    it('throws when page size is not positive', async () => {
-      // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(listProjects({ page: 1, pageSize: 0 }, mockCtx)).rejects.toThrow(
+    it('returns an error result when page size is not positive', async () => {
+      expect(await listProjects({ page: 1, pageSize: 0 }, mockCtx)).toBeErrWith(
         `Invalid --page-size option: '0'. Must be an integer between 1 and 500`,
       );
     });
 
-    it('throws when page is not positive', async () => {
-      // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(listProjects({ page: 0, pageSize: 500 }, mockCtx)).rejects.toThrow(
+    it('returns an error result when page is not positive', async () => {
+      expect(await listProjects({ page: 0, pageSize: 500 }, mockCtx)).toBeErrWith(
         `Invalid --page option: '0'. Must be an integer >= 1`,
       );
     });
 
-    it('throws when page size exceeds the maximum', async () => {
-      // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(listProjects({ page: 1, pageSize: MAX_PAGE_SIZE + 1 }, mockCtx)).rejects.toThrow(
+    it('returns an error result when page size exceeds the maximum', async () => {
+      expect(await listProjects({ page: 1, pageSize: MAX_PAGE_SIZE + 1 }, mockCtx)).toBeErrWith(
         `Invalid --page-size option: '${MAX_PAGE_SIZE + 1}'. Must be an integer between 1 and 500`,
       );
     });
@@ -79,8 +76,7 @@ describe('projectsSearchCommand', () => {
     it('propagates API errors', async () => {
       getSpy.mockReturnValue(errAsync(new Error('SonarQube API error: 401 Unauthorized')));
 
-      // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(listProjects(DEFAULT_OPTIONS, mockCtx)).rejects.toThrow(
+      expect(await listProjects(DEFAULT_OPTIONS, mockCtx)).toBeErrWith(
         'SonarQube API error: 401 Unauthorized',
       );
     });
@@ -88,7 +84,7 @@ describe('projectsSearchCommand', () => {
 
   describe('successful execution', () => {
     it('prints JSON with empty projects array when no results', async () => {
-      await listProjects(DEFAULT_OPTIONS, mockCtx);
+      expect(await listProjects(DEFAULT_OPTIONS, mockCtx)).toBeOkWith(undefined);
 
       const prints = fake.calls
         .filter((c) => c.method === 'print')

@@ -39,6 +39,7 @@ import {
   SonarOption,
   Stage,
 } from '@/core/commands/sonar-command.ts';
+import { errAsync, okAsync } from '@/core/result.ts';
 import { RateLimitError, ServiceUnavailableError } from '@/core/server/errors.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
@@ -1018,6 +1019,26 @@ describe('SonarCommand', () => {
       });
       await cmd.parseAsync([], { from: 'user' });
       expect(process.exitCode).toBe(5);
+    });
+
+    it('does not touch process.exitCode when a Result-returning handler resolves Ok', async () => {
+      resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
+      const cmd = sonarCommand();
+      cmd.authenticatedAction(() => okAsync(undefined));
+      await cmd.parseAsync([], { from: 'user' });
+      expect(process.exitCode).toBe(0);
+    });
+
+    it('collapses a Result-returning handler that resolves Err, same as a thrown error', async () => {
+      resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
+      const cmd = sonarCommand();
+      cmd.authenticatedAction(() =>
+        errAsync(new CommandFailedError('handler failed', { exitCode: 5 })),
+      );
+      await cmd.parseAsync([], { from: 'user' });
+      expect(process.exitCode).toBe(5);
+      const errCall = ui.calls.find((c) => c.method === 'error');
+      expect(errCall?.args[0]).toBe('handler failed');
     });
 
     it('sets isAlphaEligible() when command has Stage.Alpha and alpha is enabled', async () => {
