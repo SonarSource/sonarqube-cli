@@ -41,6 +41,10 @@ export function cloudRegionFromUrl(serverUrl: string): CloudRegion | undefined {
   }
 }
 
+export function cloudRegionToUrl(region: CloudRegion): string {
+  return region === 'us' ? SONARCLOUD_US_URL : SONARCLOUD_URL;
+}
+
 export function isSonarQubeCloud(serverUrl: string): boolean {
   return cloudRegionFromUrl(serverUrl) !== undefined;
 }
