@@ -50,20 +50,13 @@ function makeState(): CliState {
 
 describe('reconcileInstalledIntegrations', () => {
   let tempDir: string;
-  const originalHome = process.env.HOME;
-  const originalUserProfile = process.env.USERPROFILE;
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(join(tmpdir(), 'sonar-cli-reconcile-'));
-    // Sandbox os.homedir() — folding a lone project entry into global falls back to it.
-    process.env.HOME = tempDir;
-    process.env.USERPROFILE = tempDir;
   });
 
   afterEach(() => {
     fs.rmSync(tempDir, { recursive: true, force: true });
-    process.env.HOME = originalHome;
-    process.env.USERPROFILE = originalUserProfile;
   });
 
   it('reapplies only installed declarative features and prunes unknown feature state', async () => {
@@ -1043,6 +1036,8 @@ describe('reconcileInstalledIntegrations', () => {
           {
             id: 'managed-feature',
             displayName: 'Managed feature',
+            // Fixed, so a fresh-global creation never falls back to the real homedir().
+            targetRoot: tempDir,
             resources: [
               wholeFile({
                 id: 'managed-file',
@@ -1139,6 +1134,8 @@ describe('reconcileInstalledIntegrations', () => {
           {
             id: 'managed-feature',
             displayName: 'Managed feature',
+            // Fixed, so a fresh-global creation never falls back to the real homedir().
+            targetRoot: tempDir,
             resources: [
               wholeFile({
                 id: 'managed-file',
@@ -1185,6 +1182,8 @@ describe('reconcileInstalledIntegrations', () => {
       const container: FeatureContainer = {
         id: 'container-feature',
         displayName: 'Container feature',
+        // Fixed, so a fresh-global creation never falls back to the real homedir().
+        targetRoot: tempDir,
         subfeatures: [
           { id: 'sub-a', displayName: 'Sub A' },
           { id: 'project-only-sub', displayName: 'Project-only sub', scope: 'project' },
@@ -1228,6 +1227,8 @@ describe('reconcileInstalledIntegrations', () => {
       const container: FeatureContainer = {
         id: 'container-feature',
         displayName: 'Container feature',
+        // Fixed, so a fresh-global creation never falls back to the real homedir().
+        targetRoot: tempDir,
         subfeatures: [
           {
             id: 'global-only-sub',
