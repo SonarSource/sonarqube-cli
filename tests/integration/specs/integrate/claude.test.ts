@@ -1421,6 +1421,39 @@ describe('integrate claude — file placement (local vs global)', () => {
       },
       { timeout: 30000 },
     );
+
+    it(
+      'writes the sonarqube MCP server entry to $HOME/.claude.json for global installs',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('tok')
+          .withProject('proj')
+          .start();
+        harness.withAuth(server.baseUrl(), 'tok');
+        harness.cwd.writeFile(
+          'sonar-project.properties',
+          [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
+        );
+
+        const result = await harness.run('integrate claude -g --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        expect(harness.userHome.exists('.claude.json')).toBe(true);
+        const mcp = harness.userHome.file('.claude.json').asJson() as {
+          mcpServers?: { sonarqube?: { command?: string; args?: string[] } };
+        };
+        expect(mcp.mcpServers?.sonarqube?.command).toBe('sonar');
+        expect(mcp.mcpServers?.sonarqube?.args?.slice(0, 2)).toEqual(['run', 'mcp']);
+        expect(mcp.mcpServers?.sonarqube?.args ?? []).not.toContain('--project');
+
+        // Project directory must not receive the MCP config on a global install.
+        expect(harness.cwd.exists('.mcp.json')).toBe(false);
+
+        expect(findClaudeFeature(harness, 'mcp-server', 'global')).toBeDefined();
+      },
+      { timeout: 30000 },
+    );
   });
 });
 
