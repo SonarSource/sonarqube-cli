@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { NullAuthResolver, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { type CliRuntime, createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { type LifecycleState, STABLE_LIFECYCLE } from '@/core/commands/stage.ts';
 import { okAsync, type ResultAsync } from '@/core/result.ts';
@@ -62,7 +62,7 @@ export class TelemetryFact<TPayload = unknown> {
   }
 }
 
-const DISABLED_RUNTIME: CliRuntime = createCliRuntime();
+const DISABLED_RUNTIME: CliRuntime = createCliRuntime({ authResolver: new NullAuthResolver() });
 
 /**
  * Per-command invocation context for handlers that do not require auth.

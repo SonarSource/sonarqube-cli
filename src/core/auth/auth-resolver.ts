@@ -22,7 +22,7 @@
 
 import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
 import { getToken } from '@/core/host/keychain.ts';
-import { ResultAsync } from '@/core/result.ts';
+import { okAsync, ResultAsync } from '@/core/result.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { SONARCLOUD_URL } from '../config-constants.ts';
@@ -190,5 +190,12 @@ export class AuthResolver {
       return new ResolvedAuth({ token, serverUrl, orgKey, connectionType, source: 'state' });
     }
     return null;
+  }
+}
+
+/** No-op resolver for disabled invocation contexts (never reads env, state, or keychain). */
+export class NullAuthResolver extends AuthResolver {
+  override resolveAuth(): ResultAsync<ResolvedAuth | null, Error> {
+    return okAsync(null);
   }
 }

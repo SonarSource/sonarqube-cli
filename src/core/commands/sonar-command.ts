@@ -217,6 +217,7 @@ export class SonarCommand extends Command {
   private _invocationContext: CommandInvocationContext | undefined;
   private _passthroughSubcommand?: string | null;
   private readonly deferredPrivateBetaOptions: SonarOption[] = [];
+  private readonly deferredPrivateBetaCommands: SonarCommand[] = [];
 
   /**
    * `updateNotifier` / `runtime` default so the root command owns the
@@ -379,8 +380,18 @@ export class SonarCommand extends Command {
       this.attachToParent();
     } else {
       this.detachFromParent();
+      if (isPrivateBetaGated(next)) {
+        (this.parent as SonarCommand | undefined)?.deferPrivateBetaChild(this);
+      }
     }
     return this;
+  }
+
+  /** Tracks Private Beta subcommands detached at build time until flags resolve. */
+  deferPrivateBetaChild(child: SonarCommand): void {
+    if (!this.deferredPrivateBetaCommands.includes(child)) {
+      this.deferredPrivateBetaCommands.push(child);
+    }
   }
 
   private isStageVisible(): boolean {
@@ -410,24 +421,42 @@ export class SonarCommand extends Command {
 
   /** Re-evaluate Private Beta (and other staged) visibility after LaunchDarkly resolves flags. */
   refreshStagedVisibility(): void {
+    const stillDeferredCommands: SonarCommand[] = [];
+    for (const command of this.deferredPrivateBetaCommands) {
+      if (isStageVisible(command.lifecycle, this._runtime)) {
+        command.attachToParent();
+      } else {
+        stillDeferredCommands.push(command);
+      }
+    }
+    this.deferredPrivateBetaCommands.length = 0;
+    this.deferredPrivateBetaCommands.push(...stillDeferredCommands);
+
     if (this.isStageVisible()) {
       this.attachToParent();
     } else {
       this.detachFromParent();
+      if (isPrivateBetaGated(this._lifecycle)) {
+        (this.parent as SonarCommand | undefined)?.deferPrivateBetaChild(this);
+      }
     }
 
-    const stillDeferred: SonarOption[] = [];
+    const stillDeferredOptions: SonarOption[] = [];
     for (const option of this.deferredPrivateBetaOptions) {
       if (isStageVisible(option.lifecycle, this._runtime)) {
         super.addOption(option);
       } else {
-        stillDeferred.push(option);
+        stillDeferredOptions.push(option);
       }
     }
     this.deferredPrivateBetaOptions.length = 0;
-    this.deferredPrivateBetaOptions.push(...stillDeferred);
+    this.deferredPrivateBetaOptions.push(...stillDeferredOptions);
 
-    for (const child of this.commands as SonarCommand[]) {
+    const children = new Set<SonarCommand>([
+      ...(this.commands as SonarCommand[]),
+      ...stillDeferredCommands,
+    ]);
+    for (const child of children) {
       child.refreshStagedVisibility();
     }
   }

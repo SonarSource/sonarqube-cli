@@ -133,7 +133,7 @@ export async function emitTelemetryEvent(
   options?: TelemetryEmitOptions,
 ): Promise<void> {
   const resolve: IdentityResolver =
-    options && 'auth' in options
+    options?.auth !== undefined
       ? (conn) => resolveCommandTelemetryIdentity(conn, options.auth ?? null)
       : resolveStoreEventTelemetryIdentitySafely;
   const base = await buildIdentityBase(resolve, options);

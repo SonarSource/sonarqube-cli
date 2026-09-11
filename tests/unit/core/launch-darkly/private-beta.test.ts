@@ -415,6 +415,26 @@ describe('Private Beta command registration', () => {
     expect(denied.commands.map((c) => c.name())).toEqual(['stable', 'open-beta']);
   });
 
+  it('re-attaches deferred Private Beta commands after refreshStagedVisibility', () => {
+    const privateBetaFlags = new PrivateBetaFlagRegistry();
+    privateBetaFlags.record('cli.beta.private');
+    let entitled = false;
+    const runtime = createCliRuntime({
+      privateBetaFlags,
+      isPrivateBetaEnabled: (flagKey) => entitled && flagKey === 'cli.beta.private',
+    });
+    const root = new SonarCommand('sonar', { runtime, console: new FakeConsole() });
+    root.command('stable').description('Stable command');
+    root.command('private-beta').description('Private beta').stage(Stage.Beta('cli.beta.private'));
+
+    expect(root.commands.map((c) => c.name())).toEqual(['stable']);
+
+    entitled = true;
+    root.refreshStagedVisibility();
+
+    expect(root.commands.map((c) => c.name())).toEqual(['stable', 'private-beta']);
+  });
+
   it('omits Private Beta commands from createCommandTree by default', () => {
     const tree = createCommandTree({ console: new FakeConsole() });
     const names = tree.commands.map((c) => c.name());
