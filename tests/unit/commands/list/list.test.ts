@@ -41,8 +41,6 @@ import type {
 import { listIssues } from '../../../../src/commands/list/issues.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
-/* eslint-disable @typescript-eslint/no-unsafe-return -- ResultAsync mock helpers lose type precision through bun mock() */
-
 // Test constants
 const DEFAULT_PAGE_SIZE = 500;
 const CUSTOM_PAGE_SIZE = 100;
@@ -52,13 +50,8 @@ type MockParams = Record<string, MockParamValue>;
 type MockGetFn = (endpoint: string, params?: MockParams) => ResultAsync<unknown, HttpClientError>;
 
 function mockGetFn(fn: MockGetFn): MockGetFn {
-  return mock(fn) as MockGetFn;
+  return mock(fn);
 }
-
-type IssuesGetImpl = (
-  endpoint: string,
-  params?: MockParams,
-) => ResultAsync<IssuesSearchResponse, HttpClientError>;
 
 // Helper to create a mock SonarHttpClient
 function createMockClient(
@@ -66,6 +59,8 @@ function createMockClient(
   serverUrl = 'https://sonarcloud.io',
 ): SonarHttpClient {
   const client = new SonarHttpClient(serverUrl, 'test-token');
+  // MockGetFn is intentionally narrower than SonarHttpClient.get's generic signature.
+   
   client.get = mockGet as SonarHttpClient['get'];
   return client;
 }
@@ -521,7 +516,7 @@ describe('issuesSearchCommand', () => {
     ): ResultAsync<IssuesSearchResponse, HttpClientError> => {
       capturedParams = params as Record<string, string>;
       return okAsync(emptyApiResponse);
-    }) as IssuesGetImpl);
+    }) as SonarHttpClient['get']);
 
     try {
       await listIssues(
@@ -555,7 +550,7 @@ describe('issuesSearchCommand', () => {
     ): ResultAsync<IssuesSearchResponse, HttpClientError> => {
       capturedParams = params as Record<string, string>;
       return okAsync(emptyApiResponse);
-    }) as IssuesGetImpl);
+    }) as SonarHttpClient['get']);
     try {
       await listIssues(
         { project: 'my-project', severities: 'HIGH,MEDIUM', page: 1, pageSize: 500 },
@@ -576,7 +571,7 @@ describe('issuesSearchCommand', () => {
     ): ResultAsync<IssuesSearchResponse, HttpClientError> => {
       capturedParams = params as Record<string, string>;
       return okAsync(emptyApiResponse);
-    }) as IssuesGetImpl);
+    }) as SonarHttpClient['get']);
     try {
       await listIssues(
         { project: 'my-project', severities: 'BLOCKER,INFO', page: 1, pageSize: 500 },
@@ -604,7 +599,7 @@ describe('issuesSearchCommand', () => {
     ): ResultAsync<IssuesSearchResponse, HttpClientError> => {
       capturedParams = params as Record<string, string>;
       return okAsync(emptyApiResponse);
-    }) as IssuesGetImpl);
+    }) as SonarHttpClient['get']);
     const modeSpy = spyOn(SystemClient.prototype, 'getServerMode').mockReturnValue(
       okAsync('standard'),
     );

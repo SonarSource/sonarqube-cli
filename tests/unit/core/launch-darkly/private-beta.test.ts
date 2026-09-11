@@ -34,7 +34,6 @@ import {
   SonarOption,
   Stage,
 } from '@/core/commands/sonar-command.ts';
-import * as launchDarkly from '@/core/launch-darkly';
 import {
   FEATURE_FLAG_CACHE_TTL_MS,
   type FeatureFlagFetcher,
@@ -42,6 +41,7 @@ import {
   resolvePrivateBetaFlags,
 } from '@/core/launch-darkly';
 import * as featureFlagCache from '@/core/launch-darkly/cache.ts';
+import { FlagsResolver } from '@/core/launch-darkly/flags-resolver.ts';
 import { okAsync } from '@/core/result.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
@@ -52,7 +52,7 @@ import { FakeConsole } from '../../../_common/fake-console.ts';
 
 const cloudAuth = new ResolvedAuth({
   connectionType: 'cloud',
-  source: 'state' as const,
+  source: 'state',
   serverUrl: 'https://sonarcloud.io',
   orgKey: 'my-org',
   token: 'token',
@@ -441,13 +441,11 @@ describe('Private Beta command registration', () => {
     const privateBetaFlags = new PrivateBetaFlagRegistry();
     privateBetaFlags.record('cli.beta.lazy');
     const authResolver = new AuthResolver({ silent: true });
-    const runtime = createCliRuntime({ privateBetaFlags, authResolver });
+    const loadFlagsSpy = mock(resolvePrivateBetaFlags).mockResolvedValue({ 'cli.beta.lazy': true });
+    const flagsResolver = new FlagsResolver(authResolver, privateBetaFlags, loadFlagsSpy);
+    const runtime = createCliRuntime({ privateBetaFlags, authResolver, flagsResolver });
     const tree = createCommandTree({ console: new FakeConsole(), runtime });
     const resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockReturnValue(okAsync(cloudAuth));
-    const resolvePrivateBetaFlagsSpy = spyOn(
-      launchDarkly,
-      'resolvePrivateBetaFlags',
-    ).mockResolvedValue({ 'cli.beta.lazy': true });
 
     try {
       expect(resolveAuthSpy).not.toHaveBeenCalled();
@@ -456,7 +454,7 @@ describe('Private Beta command registration', () => {
       tree.refreshStagedVisibility();
 
       expect(resolveAuthSpy).toHaveBeenCalledTimes(1);
-      expect(resolvePrivateBetaFlagsSpy).toHaveBeenCalledWith(cloudAuth, {
+      expect(loadFlagsSpy).toHaveBeenCalledWith(cloudAuth, {
         flagKeys: ['cli.beta.lazy'],
       });
       expect(tree.runtime.isPrivateBetaEnabled('cli.beta.lazy')).toBe(true);
@@ -466,7 +464,6 @@ describe('Private Beta command registration', () => {
       expect(resolveAuthSpy).toHaveBeenCalledTimes(1);
     } finally {
       resolveAuthSpy.mockRestore();
-      resolvePrivateBetaFlagsSpy.mockRestore();
     }
   });
 

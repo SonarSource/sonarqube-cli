@@ -110,7 +110,7 @@ export class CommandInvocationContext {
    * `Err` means credentials could not be read (for example corrupt state).
    * Memoized for the lifetime of this context.
    */
-  resolveAuth(options?: { silent?: boolean }): ResultAsync<ResolvedAuth | null> {
+  resolveAuth(options?: { silent?: boolean }): ResultAsync<ResolvedAuth | null, Error> {
     return this.runtime.authResolver.resolveAuth(options);
   }
 
@@ -144,7 +144,7 @@ export class CommandAuthenticatedInvocationContext extends CommandInvocationCont
     super(console, lifecycle, runtime);
   }
 
-  override resolveAuth(): ResultAsync<ResolvedAuth> {
+  override resolveAuth(): ResultAsync<ResolvedAuth, never> {
     return okAsync(this.auth);
   }
 }

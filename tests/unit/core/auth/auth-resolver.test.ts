@@ -58,7 +58,7 @@ describe('AuthResolver', () => {
     options: ResolveAuthOptions = {},
   ): Promise<ResolvedAuth | null> {
     const authResolver = new AuthResolver(options);
-    return (await authResolver.resolveAuth().orThrow()) as ResolvedAuth | null;
+    return await authResolver.resolveAuth().orThrow();
   }
 
   beforeEach(() => {

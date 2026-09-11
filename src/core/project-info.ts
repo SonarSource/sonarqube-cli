@@ -92,7 +92,7 @@ export interface DiscoverProjectOptions {
    * Pass the invocation context resolver (for example `() => ctx.resolveAuth({ silent: true })`)
    * so env-var auth is recorded and memoized through the shared AuthResolver.
    */
-  resolveAuth?: () => ResultAsync<ResolvedAuth | null>;
+  resolveAuth?: () => ResultAsync<ResolvedAuth | null, Error>;
   /** When false, skips server lookup even if a git remote is present. Defaults to true. */
   tryGitRemoteBinding?: boolean;
   /** Suppresses the "Found ..." stderr hints. Defaults to false. */

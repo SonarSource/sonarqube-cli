@@ -26,6 +26,8 @@ import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { okAsync } from '@/core/result.ts';
+import { getDefaultState } from '@/core/state/state.ts';
+import * as stateRepository from '@/core/state/state-repository.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
@@ -33,6 +35,9 @@ describe('authStatus with FakeConsole', () => {
   it('prints "No saved connection" through ctx.console when nothing is stored', async () => {
     const authResolver = new AuthResolver();
     spyOn(authResolver, 'resolveAuth').mockReturnValue(okAsync(null));
+    const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(
+      getDefaultState('1.0.0'),
+    );
 
     const fake = new FakeConsole();
     const ctx = new CommandInvocationContext(fake, undefined, createCliRuntime({ authResolver }));
@@ -44,5 +49,6 @@ describe('authStatus with FakeConsole', () => {
       expect(err).toBeInstanceOf(CommandFailedError);
     }
     expect(fake.findCall('print', 'No saved connection')).toBeDefined();
+    loadStateSpy.mockRestore();
   });
 });

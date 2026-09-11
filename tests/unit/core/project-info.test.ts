@@ -372,7 +372,7 @@ describe('discoverProject', () => {
 
     const result = await discoverProject(testDir, {
       console: new FakeConsole(),
-      resolveAuth: (): ResultAsync<ResolvedAuth | null> =>
+      resolveAuth: (): ResultAsync<ResolvedAuth | null, Error> =>
         okAsync(
           new ResolvedAuth({
             token: 'token',
