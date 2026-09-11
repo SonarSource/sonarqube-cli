@@ -41,7 +41,7 @@ import {
 import { ResolveOnlySecretsInstaller } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
+import { type SonarHttpClient } from '@/core/server/http-client.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -69,6 +69,7 @@ export interface DepRisksStageOptions {
   project?: string;
   changedFiles: string[];
   auth: ResolvedAuth;
+  client: SonarHttpClient;
   ctx: CommandInvocationContext;
 }
 
@@ -121,9 +122,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
   let scan: ScaScanResult;
   let viewModel: DependencyRisksViewModel;
   try {
-    const client = createScaScanApi(
-      new SonarHttpClient(options.auth.serverUrl, options.auth.token),
-    );
+    const client = createScaScanApi(options.client);
     scan = await new ScaScanOrchestrator(
       client,
       new ScaScannerNoopInstaller(binaryPath),

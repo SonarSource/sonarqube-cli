@@ -24,6 +24,7 @@
 
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { spawnProcess } from '@/core/process/process.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
 import { runDepRisksStage } from './git-pre-commit-dependency-risks.ts';
@@ -58,6 +59,7 @@ export async function gitPreCommit(
       project: options.project,
       changedFiles: stagedFiles,
       auth,
+      client: new SonarHttpClient(auth.serverUrl, auth.token),
       ctx,
     });
   }
