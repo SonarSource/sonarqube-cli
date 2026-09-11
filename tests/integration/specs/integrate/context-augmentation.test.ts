@@ -717,8 +717,8 @@ describe('integrate claude — Context Augmentation', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      const integrate = findToolInvocation(readInvocations(harness), 'integrate');
-      expect(integrate?.argv[1]).toBe('integrate');
+      const invoked = readInvocations(harness).filter((i) => i.argv[1] === 'integrate');
+      expect(invoked).toEqual([]);
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeDefined();
       expectVortexHookInstalled(harness.cwd, 'claude');
@@ -976,8 +976,9 @@ describe('integrate codex — Context Augmentation', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      const integrate = findToolInvocation(readInvocations(harness), 'integrate');
-      expect(integrate?.argv[1]).toBe('integrate');
+      const invoked = readInvocations(harness).filter((i) => i.argv[1] === 'integrate');
+      expect(invoked).toEqual([]);
+      expect(findRecordedCagFeature(loadState(harness))).toBeDefined();
       expectVortexHookInstalled(harness.cwd, 'codex');
     },
     { timeout: 30000 },
