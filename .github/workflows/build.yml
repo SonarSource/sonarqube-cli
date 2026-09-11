@@ -23,7 +23,7 @@ permissions:
 jobs:
   prepare:
     name: Prepare Build
-    runs-on: github-ubuntu-latest-s
+    runs-on: sonar-xs
     outputs:
       BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
       PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
@@ -49,7 +49,7 @@ jobs:
 
   build-binaries:
     name: Build All Binaries
-    runs-on: github-ubuntu-latest-m
+    runs-on: warp-custom-ubuntu-24-04
     needs: prepare
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -245,7 +245,7 @@ jobs:
 
   publish-binaries:
     name: Publish Binaries to Artifactory
-    runs-on: github-ubuntu-latest-s
+    runs-on: sonar-xs
     needs:
       - prepare
       - build-binaries
@@ -335,7 +335,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: github-ubuntu-latest-s
+    runs-on: sonar-xs
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -364,7 +364,7 @@ jobs:
 
   unit-tests-linux:
     name: Unit Tests - linux
-    runs-on: github-ubuntu-latest-m
+    runs-on: sonar-m
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -419,7 +419,7 @@ jobs:
 
   integration-and-e2e-linux:
     name: Integration and E2E Tests - linux
-    runs-on: github-ubuntu-latest-m
+    runs-on: sonar-m
     needs: [prepare, build-binaries]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -473,7 +473,7 @@ jobs:
 
   scan:
     name: SonarQube Analysis
-    runs-on: github-ubuntu-latest-s
+    runs-on: sonar-xs
     # Coverage artifacts are Linux-only; Windows tests still gate publish and promote.
     needs: [prepare, lint, unit-tests-linux, integration-and-e2e-linux]
     steps:
@@ -521,7 +521,7 @@ jobs:
           .github/scripts/sonarqube-analysis.sh
 
   promote:
-    runs-on: github-ubuntu-latest-s
+    runs-on: sonar-xs
     name: Promote
     needs:
       - prepare

@@ -12,7 +12,7 @@ on:
 jobs:
   prepare-release-notes:
     name: Generate notes and create draft release
-    runs-on: github-ubuntu-latest-s
+    runs-on: sonar-xs
     permissions:
       id-token: write # required for Vault OIDC auth
       contents: write # required to create the draft GitHub release
