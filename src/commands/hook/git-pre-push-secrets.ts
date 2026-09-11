@@ -57,7 +57,7 @@ export async function runSecretsStage(
       ctx,
     );
   } catch (err) {
-    handleScanError('Push', err as Error, ctx.console);
+    handleScanError('Push', err as Error, auth, ctx.console);
     return;
   }
 

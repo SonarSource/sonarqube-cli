@@ -25,7 +25,7 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CLI_TMP_DIR, SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '@/core/config-constants.ts';
 import type { ClientCertConfig, ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
 import * as pkcs12Module from '@/core/host/crypto/pkcs12.ts';
@@ -37,23 +37,26 @@ import {
 } from '@/core/host/mcp/mcp-helper.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 
-const ON_PREMISE_AUTH: ResolvedAuth = {
+const ON_PREMISE_AUTH = new ResolvedAuth({
   token: 'squ_test',
   serverUrl: 'https://sonarqube.example.com',
   connectionType: 'on-premise',
-};
+  source: 'state' as const,
+});
 
-const CLOUD_AUTH: ResolvedAuth = {
+const CLOUD_AUTH = new ResolvedAuth({
   token: 'squ_test',
   serverUrl: 'https://sonarcloud.io',
   connectionType: 'cloud',
-};
+  source: 'state' as const,
+});
 
-const CLOUD_US_AUTH: ResolvedAuth = {
+const CLOUD_US_AUTH = new ResolvedAuth({
   token: 'squ_test',
   serverUrl: 'https://sonarqube.us',
   connectionType: 'cloud',
-};
+  source: 'state' as const,
+});
 
 const NO_NETWORK: ResolvedNetworkConfig = { proxy: null, caCert: null, clientCert: null };
 
@@ -123,7 +126,7 @@ describe('getMcpContainerConfig', () => {
   });
 
   it('returns a docker command with SONARQUBE_ORG for cloud (sonarcloud.io)', () => {
-    const auth: ResolvedAuth = { ...CLOUD_AUTH, orgKey: 'my-org' };
+    const auth = new ResolvedAuth({ ...CLOUD_AUTH, orgKey: 'my-org' });
     const config = getMcpContainerCommand(auth, 'docker', { withFsMount: false }, {}, NO_NETWORK);
     expect(config).toEqual({
       command: 'docker',
@@ -153,7 +156,7 @@ describe('getMcpContainerConfig', () => {
   });
 
   it('returns a docker command with SONARQUBE_ORG for cloud US (sonarqube.us)', () => {
-    const auth: ResolvedAuth = { ...CLOUD_US_AUTH, orgKey: 'my-org' };
+    const auth = new ResolvedAuth({ ...CLOUD_US_AUTH, orgKey: 'my-org' });
     const config = getMcpContainerCommand(auth, 'docker', { withFsMount: false }, {}, NO_NETWORK);
     expect(config).toEqual({
       command: 'docker',
@@ -343,7 +346,7 @@ describe('resolveMcpContainerCommand (via WSL)', () => {
   });
 
   it('includes SONARQUBE_ORG for cloud, forwarded via WSLENV', () => {
-    const auth: ResolvedAuth = { ...CLOUD_AUTH, orgKey: 'my-org' };
+    const auth = new ResolvedAuth({ ...CLOUD_AUTH, orgKey: 'my-org' });
     const config = resolveMcpContainerCommand(
       auth,
       { runtime: 'docker', viaWsl: true },

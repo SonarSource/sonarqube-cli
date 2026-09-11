@@ -26,10 +26,12 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import * as authResolver from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { type CliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { CURSOR_IGNORE_FILE } from '@/core/config-constants.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
+import { okAsync } from '@/core/result.ts';
 
 import * as analyzeSecrets from '../../../../src/commands/analyze/secrets.ts';
 import { cursorPreFileRead } from '../../../../src/commands/hook/cursor-pre-file-read.ts';
@@ -39,13 +41,24 @@ import {
 } from '../../../../src/commands/hook/hook-dependencies.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
+import { mockAuthResolver } from '../../../_common/mock-auth-resolver.ts';
 
 const TEST_FILE = '/sonar-test/secret.ts';
 const SECRET_CONTENT = 'const secret = "ghp_test";';
 const { EXIT_CODE_SECRETS_FOUND } = analyzeSecrets;
 
+const FAKE_AUTH = new ResolvedAuth({
+  token: 'tok',
+  serverUrl: 'https://sonarcloud.io',
+  connectionType: 'cloud',
+  source: 'state' as const,
+  orgKey: 'myorg',
+});
+
+let runtime: CliRuntime;
+
 function makeCtx() {
-  return new CommandInvocationContext(new FakeConsole());
+  return new CommandInvocationContext(new FakeConsole(), undefined, runtime);
 }
 
 describe('cursorPreFileRead', () => {
@@ -66,12 +79,9 @@ describe('cursorPreFileRead', () => {
       },
     );
     exitSpy = spyOn(process, 'exit').mockImplementation(() => undefined as never);
-    resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue({
-      token: 'tok',
-      serverUrl: 'https://sonarcloud.io',
-      connectionType: 'cloud',
-      orgKey: 'myorg',
-    });
+    const mocked = mockAuthResolver(FAKE_AUTH);
+    runtime = mocked.runtime;
+    resolveAuthSpy = mocked.resolveAuthSpy;
     readStdinJsonSpy = spyOn(stdinModule, 'readStdinJson').mockResolvedValue({
       file_path: TEST_FILE,
       content: SECRET_CONTENT,
@@ -145,7 +155,7 @@ describe('cursorPreFileRead', () => {
   });
 
   it('denies with the unauthenticated message and exits 2 when auth is unavailable', async () => {
-    resolveAuthSpy.mockResolvedValue(null);
+    resolveAuthSpy.mockReturnValue(okAsync(null));
 
     await cursorPreFileRead(makeCtx());
 
@@ -190,12 +200,9 @@ describe('cursorPreFileRead — .cursorignore side effect', () => {
       },
     );
     exitSpy = spyOn(process, 'exit').mockImplementation(() => undefined as never);
-    resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue({
-      token: 'tok',
-      serverUrl: 'https://sonarcloud.io',
-      connectionType: 'cloud',
-      orgKey: 'myorg',
-    });
+    const mocked = mockAuthResolver(FAKE_AUTH);
+    runtime = mocked.runtime;
+    resolveAuthSpy = mocked.resolveAuthSpy;
     readStdinJsonSpy = spyOn(stdinModule, 'readStdinJson');
     resolveSecretsBinaryPathSpy = spyOn(installSecrets, 'resolveSecretsBinaryPath').mockReturnValue(
       '/usr/bin/sonar-secrets',

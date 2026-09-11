@@ -18,32 +18,24 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { afterEach, describe, expect, it, spyOn } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 
 import { authStatus } from '@/commands/auth/status.ts';
-import * as authResolver from '@/core/auth/auth-resolver.ts';
+import { AuthResolver } from '@/core/auth/auth-resolver.ts';
+import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { getDefaultState } from '@/core/state/state.ts';
-import * as stateRepository from '@/core/state/state-repository.ts';
+import { okAsync } from '@/core/result.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
 describe('authStatus with FakeConsole', () => {
-  let resolveFromEnvSpy: ReturnType<typeof spyOn>;
-  let loadStateSpy: ReturnType<typeof spyOn>;
-
-  afterEach(() => {
-    resolveFromEnvSpy?.mockRestore();
-    loadStateSpy?.mockRestore();
-  });
-
   it('prints "No saved connection" through ctx.console when nothing is stored', async () => {
-    resolveFromEnvSpy = spyOn(authResolver, 'resolveFromEnv').mockReturnValue(null);
-    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
+    const authResolver = new AuthResolver();
+    spyOn(authResolver, 'resolveAuth').mockReturnValue(okAsync(null));
 
     const fake = new FakeConsole();
-    const ctx = new CommandInvocationContext(fake);
+    const ctx = new CommandInvocationContext(fake, undefined, createCliRuntime({ authResolver }));
 
     try {
       await authStatus(ctx);

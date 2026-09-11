@@ -31,7 +31,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
@@ -39,11 +39,17 @@ import { loadState, saveState } from '@/core/state/state-repository.ts';
 import { mockIdentityGetSafe } from '../telemetry/identity-api-mock.ts';
 
 function serverAuth(token: string, serverUrl = 'https://sq.example.com'): ResolvedAuth {
-  return { token, serverUrl, connectionType: 'on-premise' };
+  return new ResolvedAuth({ token, serverUrl, connectionType: 'on-premise', source: 'state' });
 }
 
 function cloudAuth(token: string, orgKey = 'my-org'): ResolvedAuth {
-  return { token, serverUrl: 'https://sonarcloud.io', orgKey, connectionType: 'cloud' };
+  return new ResolvedAuth({
+    token,
+    serverUrl: 'https://sonarcloud.io',
+    orgKey,
+    connectionType: 'cloud',
+    source: 'state',
+  });
 }
 
 let testDir: string;

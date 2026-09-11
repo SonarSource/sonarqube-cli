@@ -19,7 +19,7 @@
  */
 
 import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
-import { ENV_TOKEN, isEnvBasedAuth, isSonarQubeCloud } from '@/core/auth/auth-resolver.ts';
+import { ENV_TOKEN, isSonarQubeCloud, ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { type BrowserAuthResult, generateTokenViaBrowser } from '@/core/auth/token.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -56,7 +56,7 @@ export async function authLogin(
 ): Promise<void> {
   const { console } = ctx;
   validateLoginOptions(options);
-  await warnIfEnvAuthPresent(console);
+  await warnIfEnvAuthPresent(ctx);
   const server = await resolveServer(options, console);
   await confirmServerTrust(server, console);
 
@@ -85,12 +85,13 @@ export async function authLogin(
     const actualToken = token || (await getKeystoreToken(server, org));
     if (actualToken) {
       await recordConnectionFromAuth(
-        {
+        new ResolvedAuth({
           token: actualToken,
           serverUrl: server,
           orgKey: org,
           connectionType: isCloud ? 'cloud' : 'on-premise',
-        },
+          source: 'state',
+        }),
         { tokenName: connectionTokenName, force: true },
       );
     } else {
@@ -104,7 +105,8 @@ export async function authLogin(
 
     const displayServer = isCloud ? `${server} (${org})` : server;
     console.success(`Authentication successful for: ${displayServer}`);
-    if (isEnvBasedAuth()) {
+    const activeAuth = await resolveInvocationAuth(ctx);
+    if (activeAuth?.comesFromEnv()) {
       console.warn(
         ` Token saved, but environment variables take precedence and will be used instead.\n   → Unset ${ENV_TOKEN} to use the saved token`,
       );
@@ -119,16 +121,26 @@ export async function authLogin(
   }
 }
 
+async function resolveInvocationAuth(ctx: CommandInvocationContext) {
+  const authResult = await ctx.resolveAuth({ silent: true });
+  if (authResult.isErr()) {
+    throw authResult.error;
+  }
+  return authResult.value;
+}
+
 /**
  * Environment variable authentication always wins over whatever this command saves (see
- * `resolveAuth()` in `auth-resolver.ts`), so a login run while it is active would not change what
+ * `AuthResolver` in `auth-resolver.ts`), so a login run while it is active would not change what
  * the CLI actually uses. Warn instead of silently doing pointless work, and let the user opt out
  * of a token they know will not be used.
  */
-async function warnIfEnvAuthPresent(console: Console): Promise<void> {
-  if (!isEnvBasedAuth()) {
+async function warnIfEnvAuthPresent(ctx: CommandInvocationContext): Promise<void> {
+  const auth = await resolveInvocationAuth(ctx);
+  if (!auth?.comesFromEnv()) {
     return;
   }
+  const { console } = ctx;
   console.note(
     [
       'You are already authenticated via environment variables.',

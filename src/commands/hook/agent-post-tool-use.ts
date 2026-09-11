@@ -28,7 +28,7 @@ import {
   SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
   SQAA_HOOK_TELEMETRY_EXIT_CODE,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
-import { isSonarQubeCloud, resolveAuth } from '@/core/auth/auth-resolver.ts';
+import { isSonarQubeCloud } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { canonicalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
@@ -60,7 +60,11 @@ async function handleSqaaPostToolUse(
     return { decision: 'none' };
   }
 
-  const auth = await resolveAuth().catch(() => null);
+  const authResult = await ctx.resolveAuth();
+  if (authResult.isErr()) {
+    throw authResult.error;
+  }
+  const auth = authResult.value;
   if (!auth) {
     return { decision: 'none' };
   }
@@ -177,7 +181,7 @@ export async function agentPostToolUse(ctx: CommandInvocationContext): Promise<H
 
   await runClaudePostToolUseDispatch(payload, raw, [
     createSqaaPostToolUseSubscriber(ctx),
-    createContextAugmentationPostToolUseSubscriber(ctx.console),
+    createContextAugmentationPostToolUseSubscriber(ctx),
   ]);
 
   return { agentSessionId: fromHook };

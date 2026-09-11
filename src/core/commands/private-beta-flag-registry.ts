@@ -18,17 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+/** LaunchDarkly flag keys declared on Private Beta commands and options during tree build. */
+export class PrivateBetaFlagRegistry {
+  private readonly keys = new Set<string>();
 
-import { runContextPassthrough } from '../context/index.ts';
-import { readRawStdin } from './stdin.ts';
-
-export async function claudePostToolUseFailure(ctx: CommandInvocationContext): Promise<void> {
-  let raw: string;
-  try {
-    raw = await readRawStdin();
-  } catch {
-    return; // timeout or read error — non-blocking
+  record(flagKey: string): void {
+    this.keys.add(flagKey);
   }
-  await runContextPassthrough('__hook', ['Claude'], { stdinPayload: raw, ctx });
+
+  flagKeys(): readonly string[] {
+    return [...this.keys];
+  }
 }

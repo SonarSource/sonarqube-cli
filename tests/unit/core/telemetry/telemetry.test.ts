@@ -30,8 +30,13 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import * as authResolver from '@/core/auth/auth-resolver.ts';
-import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/auth/auth-resolver.ts';
+import {
+  AuthResolver,
+  ENV_ORG,
+  ENV_SERVER,
+  ENV_TOKEN,
+  ResolvedAuth,
+} from '@/core/auth/auth-resolver.ts';
 import { SonarCommand } from '@/core/commands/sonar-command.ts';
 import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import { DISTRIBUTION } from '@/core/host/distribution.ts';
@@ -56,6 +61,14 @@ import {
 import { mockIdentityGetSafe } from './identity-api-mock.ts';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+type AuthResolverInternals = AuthResolver & {
+  resolveFromState: () => Promise<ResolvedAuth | null>;
+};
+
+function spyResolveFromState(): ReturnType<typeof spyOn> {
+  return spyOn(AuthResolver.prototype as AuthResolverInternals, 'resolveFromState');
+}
 
 /**
  * Build a SonarCommand chain from a space-separated command path.
@@ -389,7 +402,7 @@ describe('CliCommandExecuted', () => {
     });
 
     it('does not resolve auth from state when the active connection already has UUIDs', async () => {
-      const resolveFromStateSpy = spyOn(authResolver, 'resolveFromState');
+      const resolveFromStateSpy = spyResolveFromState();
       const state = getDefaultState('1.0.0');
       const conn = stateManager.addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
         orgKey: 'my-org',
@@ -406,7 +419,7 @@ describe('CliCommandExecuted', () => {
     });
 
     it('still stores an event when identity enrichment throws', async () => {
-      const resolveFromStateSpy = spyOn(authResolver, 'resolveFromState').mockRejectedValue(
+      const resolveFromStateSpy = spyResolveFromState().mockRejectedValue(
         new Error('keychain locked'),
       );
       const state = getDefaultState('1.0.0');
@@ -446,13 +459,21 @@ describe('CliCommandExecuted', () => {
   });
 
   describe('environment-variable authentication identity', () => {
-    it('does not warn about partial env vars during identity resolution', async () => {
-      const resolveAuthSpy = spyOn(authResolver, 'resolveAuth');
+    it('does not re-resolve auth during telemetry emit when invocation auth is threaded', async () => {
+      const resolveAuthSpy = spyOn(AuthResolver.prototype, 'resolveAuth');
       process.env[ENV_TOKEN] = 'partial-env-token';
 
-      await commitCommandExecuted(makeCommand('auth login'));
+      await commitTelemetryFacts([await buildCommandExecutedFact(makeCommand('auth login'))], {
+        auth: new ResolvedAuth({
+          token: 'partial-env-token',
+          serverUrl: 'https://sonarcloud.io',
+          orgKey: undefined,
+          connectionType: 'cloud',
+          source: 'state',
+        }),
+      });
 
-      expect(resolveAuthSpy).toHaveBeenCalledWith({ silent: true });
+      expect(resolveAuthSpy).not.toHaveBeenCalled();
       expect(readCommandEvents(testDir)).toHaveLength(1);
       resolveAuthSpy.mockRestore();
     });
@@ -507,12 +528,13 @@ describe('CliCommandExecuted', () => {
     });
 
     it('retries user_uuid fetch after a transient API failure', async () => {
-      const auth = {
+      const auth = new ResolvedAuth({
         token: 'env-auth-token-retry-user',
         serverUrl: 'https://sonarcloud.io',
         orgKey: 'my-org',
-        connectionType: 'cloud' as const,
-      };
+        connectionType: 'cloud',
+        source: 'state',
+      });
       const getSafeSpy = mockIdentityGetSafe({
         user: [{ ok: false }, { ok: true, id: 'user-after-retry' }],
         org: [{ ok: true, uuidV4: 'cached-org' }],

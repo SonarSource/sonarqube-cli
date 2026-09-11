@@ -23,7 +23,6 @@
 
 import type { SecretsCallerCommand } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { isEnvBasedAuth, resolveAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
@@ -54,8 +53,13 @@ export class MissingDependenciesError extends Error {
   }
 }
 
-export function handleScanError(context: 'Commit' | 'Push', err: Error, console: Console): void {
-  if (isEnvBasedAuth()) {
+export function handleScanError(
+  context: 'Commit' | 'Push',
+  err: Error,
+  auth: ResolvedAuth,
+  console: Console,
+): void {
+  if (auth.comesFromEnv()) {
     throw new CommandFailedError('Secrets scan failed.', {
       remediationHint:
         "Run 'sonar integrate' again or run 'sonar analyze secrets -- <files>' manually to debug the analyzer.",
@@ -66,14 +70,21 @@ export function handleScanError(context: 'Commit' | 'Push', err: Error, console:
   );
 }
 
-export async function resolveAuthAndSecrets(): Promise<HookDependencies> {
-  const auth = await resolveAuth().catch(() => null);
-  if (!auth) throw new MissingDependenciesError(SECRETS_INACTIVE_UNAUTHENTICATED);
+export async function resolveAuthAndSecrets(
+  ctx: CommandInvocationContext,
+): Promise<HookDependencies> {
+  const authResult = await ctx.resolveAuth();
+  if (authResult.isErr()) {
+    throw authResult.error;
+  }
+  if (!authResult.value) {
+    throw new MissingDependenciesError(SECRETS_INACTIVE_UNAUTHENTICATED);
+  }
 
   const binaryPath = resolveSecretsBinaryPath();
   if (!binaryPath) throw new MissingDependenciesError(SECRETS_INACTIVE_BINARY_MISSING);
 
-  return { auth, binaryPath };
+  return { auth: authResult.value, binaryPath };
 }
 
 export async function runAndEmitFileSecretsScan(

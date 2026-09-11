@@ -20,11 +20,13 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import * as authResolver from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { type CliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 import * as processLib from '@/core/process/process.ts';
+import { okAsync } from '@/core/result.ts';
 
 import * as analyzeSecrets from '../../../../src/commands/analyze/secrets.ts';
 import { gitPreCommit } from '../../../../src/commands/hook/git-pre-commit.ts';
@@ -37,23 +39,26 @@ import {
 } from '../../../../src/commands/hook/hook-dependencies.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
+import { mockAuthResolver } from '../../../_common/mock-auth-resolver.ts';
 
 const { EXIT_CODE_SECRETS_FOUND } = analyzeSecrets;
 
 let fake: FakeConsole;
+let runtime: CliRuntime;
 
-const FAKE_AUTH = {
+const FAKE_AUTH = new ResolvedAuth({
   token: 'tok',
   serverUrl: 'https://sonarcloud.io',
   connectionType: 'cloud' as const,
+  source: 'state' as const,
   orgKey: 'myorg',
-};
+});
 
 const OK_RESULT = { exitCode: 0, stdout: '', stderr: '' };
 const SECRETS_RESULT = { exitCode: EXIT_CODE_SECRETS_FOUND, stdout: '', stderr: '' };
 
 function makeCtx() {
-  return new CommandInvocationContext(fake);
+  return new CommandInvocationContext(fake, undefined, runtime);
 }
 
 const SECRETS_RESULT_WITH_ISSUES = {
@@ -80,7 +85,9 @@ describe('gitPreCommit', () => {
 
   beforeEach(() => {
     fake = new FakeConsole();
-    resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
+    const mocked = mockAuthResolver(FAKE_AUTH);
+    runtime = mocked.runtime;
+    resolveAuthSpy = mocked.resolveAuthSpy;
     spawnProcessSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
       exitCode: 0,
       stdout: 'src/foo.ts\nsrc/bar.ts',
@@ -148,7 +155,7 @@ describe('gitPreCommit', () => {
   });
 
   it('throws MissingDependenciesError when auth is unavailable', async () => {
-    resolveAuthSpy.mockResolvedValue(null);
+    resolveAuthSpy.mockReturnValue(okAsync(null));
 
     let thrown: unknown;
     try {
@@ -235,7 +242,9 @@ describe('gitPrePush', () => {
 
   beforeEach(() => {
     fake = new FakeConsole();
-    resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
+    const mocked = mockAuthResolver(FAKE_AUTH);
+    runtime = mocked.runtime;
+    resolveAuthSpy = mocked.resolveAuthSpy;
     spawnProcessSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
       exitCode: 0,
       stdout: 'src/foo.ts\nsrc/bar.ts',
@@ -305,7 +314,7 @@ describe('gitPrePush', () => {
   });
 
   it('throws MissingDependenciesError when auth is unavailable', async () => {
-    resolveAuthSpy.mockResolvedValue(null);
+    resolveAuthSpy.mockReturnValue(okAsync(null));
 
     let thrown: unknown;
     try {

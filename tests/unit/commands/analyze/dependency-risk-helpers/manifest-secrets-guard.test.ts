@@ -23,7 +23,7 @@ import { join } from 'node:path';
 
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import type { SecretsInstaller } from '@/core/host/install/secrets.ts';
@@ -59,12 +59,13 @@ void mock.module('../../../../../src/commands/analyze/secrets.ts', () => ({
 const { preScanManifestsForSecrets } =
   await import('../../../../../src/commands/analyze/dependency-risk-helpers/manifest-secrets-guard.ts');
 
-const AUTH: ResolvedAuth = {
+const AUTH = new ResolvedAuth({
   connectionType: 'cloud',
+  source: 'state' as const,
   serverUrl: 'https://sonarcloud.io',
   token: 'test-token',
   orgKey: 'my-org',
-};
+});
 
 const BASE_DIR = join(tmpdir(), 'manifest-guard-repo');
 

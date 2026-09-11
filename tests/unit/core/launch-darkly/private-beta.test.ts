@@ -25,15 +25,16 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import { createCommandTree } from '@/commands/command-tree.ts';
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { type CliRuntime, createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import * as sonarCommandModule from '@/core/commands/sonar-command.ts';
 import {
-  type CliRuntime,
   collectPrivateBetaFlagKeys,
   SonarCommand,
   SonarOption,
   Stage,
 } from '@/core/commands/sonar-command.ts';
+import * as launchDarkly from '@/core/launch-darkly';
 import {
   FEATURE_FLAG_CACHE_TTL_MS,
   type FeatureFlagFetcher,
@@ -41,6 +42,7 @@ import {
   resolvePrivateBetaFlags,
 } from '@/core/launch-darkly';
 import * as featureFlagCache from '@/core/launch-darkly/cache.ts';
+import { okAsync } from '@/core/result.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as identityFetch from '@/core/telemetry/identity-fetch.ts';
@@ -48,12 +50,13 @@ import * as identityFetch from '@/core/telemetry/identity-fetch.ts';
 import { version as VERSION } from '../../../../package.json';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
-const cloudAuth: ResolvedAuth = {
+const cloudAuth = new ResolvedAuth({
   connectionType: 'cloud',
+  source: 'state' as const,
   serverUrl: 'https://sonarcloud.io',
   orgKey: 'my-org',
   token: 'token',
-};
+});
 
 const FLAG_KEYS = ['cli.beta.private'] as const;
 
@@ -379,11 +382,9 @@ describe('resolvePrivateBetaFlags', () => {
 
 describe('Private Beta command registration', () => {
   function runtimeWithFlags(flags: Record<string, boolean>): CliRuntime {
-    return {
-      auth: cloudAuth,
-      isAlphaEnabled: false,
+    return createCliRuntime({
       isPrivateBetaEnabled: (flagKey) => flags[flagKey] === true,
-    };
+    });
   }
 
   it('registers Private Beta commands only when the flag is enabled', () => {
@@ -414,8 +415,8 @@ describe('Private Beta command registration', () => {
     expect(denied.commands.map((c) => c.name())).toEqual(['stable', 'open-beta']);
   });
 
-  it('omits Private Beta commands from createCommandTree by default', async () => {
-    const tree = await createCommandTree({ console: new FakeConsole() });
+  it('omits Private Beta commands from createCommandTree by default', () => {
+    const tree = createCommandTree({ console: new FakeConsole() });
     const names = tree.commands.map((c) => c.name());
     expect(names).toContain('context');
     // No Private Beta commands exist yet; default runtime omits gated ones.
@@ -426,53 +427,54 @@ describe('Private Beta command registration', () => {
     }
   });
 
-  it('does not call loadPrivateBetaContext when no Private Beta keys exist', async () => {
-    const loadPrivateBetaContext = mock(() =>
-      Promise.resolve({
-        auth: null,
-        flags: {},
-      }),
-    );
+  it('does not resolve auth when no Private Beta keys exist', async () => {
+    const tree = createCommandTree({ console: new FakeConsole() });
+    const resolveAuthSpy = spyOn(tree.runtime.authResolver, 'resolveAuth');
 
-    await createCommandTree({ loadPrivateBetaContext, console: new FakeConsole() });
+    await tree.runtime.flagsResolver.resolveFlags();
 
-    expect(loadPrivateBetaContext).not.toHaveBeenCalled();
+    expect(resolveAuthSpy).not.toHaveBeenCalled();
+    resolveAuthSpy.mockRestore();
   });
 
-  it('calls loadPrivateBetaContext with discovered keys then rebuilds', async () => {
+  it('resolves flags lazily via AuthResolver when keys exist', async () => {
     const collectSpy = spyOn(sonarCommandModule, 'collectPrivateBetaFlagKeys').mockReturnValue([
       'cli.beta.lazy',
     ]);
-
-    const loadPrivateBetaContext = mock((flagKeys: readonly string[]) => {
-      expect([...flagKeys]).toEqual(['cli.beta.lazy']);
-      return Promise.resolve({
-        auth: cloudAuth,
-        flags: { 'cli.beta.lazy': true },
-      });
-    });
+    const tree = createCommandTree({ console: new FakeConsole() });
+    const resolveAuthSpy = spyOn(tree.runtime.authResolver, 'resolveAuth').mockReturnValue(
+      okAsync(cloudAuth),
+    );
+    const resolvePrivateBetaFlagsSpy = spyOn(
+      launchDarkly,
+      'resolvePrivateBetaFlags',
+    ).mockResolvedValue({ 'cli.beta.lazy': true });
 
     try {
-      const tree = await createCommandTree({
-        loadPrivateBetaContext,
-        console: new FakeConsole(),
+      expect(resolveAuthSpy).not.toHaveBeenCalled();
+
+      await tree.runtime.flagsResolver.resolveFlags();
+      tree.refreshStagedVisibility();
+
+      expect(resolveAuthSpy).toHaveBeenCalledTimes(1);
+      expect(resolvePrivateBetaFlagsSpy).toHaveBeenCalledWith(cloudAuth, {
+        flagKeys: ['cli.beta.lazy'],
       });
-      expect(loadPrivateBetaContext).toHaveBeenCalledTimes(1);
-      expect(tree.runtime.auth).toEqual(cloudAuth);
       expect(tree.runtime.isPrivateBetaEnabled('cli.beta.lazy')).toBe(true);
       expect(tree.runtime.isPrivateBetaEnabled('cli.beta.other')).toBe(false);
+
+      await tree.runtime.flagsResolver.resolveFlags();
+      expect(resolveAuthSpy).toHaveBeenCalledTimes(1);
     } finally {
       collectSpy.mockRestore();
+      resolveAuthSpy.mockRestore();
+      resolvePrivateBetaFlagsSpy.mockRestore();
     }
   });
 
   it('collects Private Beta flag keys from Stage.Beta declarations', () => {
     const root = new SonarCommand('sonar', {
-      runtime: {
-        auth: null,
-        isAlphaEnabled: false,
-        isPrivateBetaEnabled: () => true,
-      },
+      runtime: createCliRuntime({ isPrivateBetaEnabled: () => true }),
       console: new FakeConsole(),
     });
     root.command('stable');

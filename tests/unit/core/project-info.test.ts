@@ -23,7 +23,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 import * as gitDiscover from '@/core/host/git/discover.ts';
 import * as lookupPathResolver from '@/core/host/git/lookup-path-resolver.ts';
@@ -37,6 +37,7 @@ import {
   KNOWN_SERVER_PROJECT_MAPPING_SOURCE,
   SHARED_PROJECT_CONFIG_SOURCE,
 } from '@/core/project-info.ts';
+import { okAsync, type ResultAsync } from '@/core/result.ts';
 import * as discoverByRemote from '@/core/server/discover-project-by-remote.ts';
 import { GIT_REMOTE_BINDING_SOURCE } from '@/core/server/discover-project-by-remote.ts';
 import {
@@ -342,12 +343,13 @@ describe('discoverProject', () => {
 
     const result = await discoverProject(testDir, {
       console: new FakeConsole(),
-      auth: {
+      auth: new ResolvedAuth({
         token: 'token',
         serverUrl: 'https://sonarcloud.io',
         orgKey: 'my-org',
         connectionType: 'cloud',
-      },
+        source: 'state',
+      }),
     });
     expect(result.projectKey).toBe('from-remote');
     expect(result.organization).toBe('my-org');
@@ -356,6 +358,33 @@ describe('discoverProject', () => {
       expect.objectContaining({ orgKey: 'my-org' }),
       'https://github.com/example/remote-bound.git',
     );
+  });
+
+  it('resolves projectKey from git remote via resolveAuth when auth is omitted', async () => {
+    fakeFs.mkdir(join(testDir, '.git'));
+    getGitRemoteSpy.mockResolvedValue('https://github.com/example/remote-bound.git');
+    remoteSpy.mockResolvedValue({
+      projectKey: 'from-remote',
+      serverUrl: 'https://sonarcloud.io',
+      organization: 'my-org',
+    });
+
+    const result = await discoverProject(testDir, {
+      console: new FakeConsole(),
+      resolveAuth: (): ResultAsync<ResolvedAuth | null> =>
+        okAsync(
+          new ResolvedAuth({
+            token: 'token',
+            serverUrl: 'https://sonarcloud.io',
+            orgKey: 'my-org',
+            connectionType: 'cloud',
+            source: 'state',
+          }),
+        ),
+    });
+
+    expect(result.projectKey).toBe('from-remote');
+    expect(remoteSpy).toHaveBeenCalled();
   });
 
   it('does not call git remote lookup when projectKey is already in local config', async () => {
@@ -371,7 +400,12 @@ describe('discoverProject', () => {
 
     const result = await discoverProject(testDir, {
       console: new FakeConsole(),
-      auth: { token: 't', serverUrl: 'https://sonarcloud.io', connectionType: 'cloud' },
+      auth: new ResolvedAuth({
+        token: 't',
+        serverUrl: 'https://sonarcloud.io',
+        connectionType: 'cloud',
+        source: 'state',
+      }),
     });
     expect(result.projectKey).toBe('local_key');
     expect(remoteSpy).not.toHaveBeenCalled();
@@ -708,7 +742,12 @@ describe('discoverProject', () => {
 
       const result = await discoverProject(testDir, {
         console: new FakeConsole(),
-        auth: { token: 't', serverUrl: 'https://sonarcloud.io', connectionType: 'cloud' },
+        auth: new ResolvedAuth({
+          token: 't',
+          serverUrl: 'https://sonarcloud.io',
+          connectionType: 'cloud',
+          source: 'state',
+        }),
       });
 
       expect(result.projectKey).toBe('known-project');
@@ -725,7 +764,12 @@ describe('discoverProject', () => {
 
       const result = await discoverProject(testDir, {
         console: new FakeConsole(),
-        auth: { token: 't', serverUrl: 'https://sonarcloud.io', connectionType: 'cloud' },
+        auth: new ResolvedAuth({
+          token: 't',
+          serverUrl: 'https://sonarcloud.io',
+          connectionType: 'cloud',
+          source: 'state',
+        }),
       });
 
       expect(result.projectKey).toBe('from-remote');
@@ -945,12 +989,13 @@ describe('discoverProject', () => {
 
         const result = await discoverProject(testDir, {
           console: new FakeConsole(),
-          auth: {
+          auth: new ResolvedAuth({
             token: 't',
             serverUrl: 'https://env-auth.example.com',
             orgKey: 'env-org',
             connectionType: 'cloud',
-          },
+            source: 'state',
+          }),
         });
 
         expect(result.serverUrl).toBe('https://env-auth.example.com');

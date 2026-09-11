@@ -60,7 +60,7 @@ export async function agentPromptSubmit(ctx: CommandInvocationContext): Promise<
 
   let deps: HookDependencies;
   try {
-    deps = await resolveAuthAndSecrets();
+    deps = await resolveAuthAndSecrets(ctx);
   } catch (err) {
     if (err instanceof MissingDependenciesError) {
       denyPrompt(err.message);
