@@ -1021,7 +1021,7 @@ describe('SonarCommand', () => {
       expect(process.exitCode).toBe(5);
     });
 
-    it('does not touch process.exitCode when a Result-returning handler resolves Ok (CLI-1086)', async () => {
+    it('does not touch process.exitCode when a Result-returning handler resolves Ok', async () => {
       resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
       const cmd = sonarCommand();
       cmd.authenticatedAction(() => okAsync(undefined));
@@ -1029,7 +1029,7 @@ describe('SonarCommand', () => {
       expect(process.exitCode).toBe(0);
     });
 
-    it('collapses a Result-returning handler that resolves Err, same as a thrown error (CLI-1086)', async () => {
+    it('collapses a Result-returning handler that resolves Err, same as a thrown error', async () => {
       resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
       const cmd = sonarCommand();
       cmd.authenticatedAction(() =>

@@ -73,16 +73,19 @@ export default tseslint.config(
     },
   },
 
-  // Catches a Result built (domain client, errAsync(), ...) but never consumed. Upstream
-  // `eslint-plugin-neverthrow` hard-crashes on ESLint 10 + typescript-eslint 8 (it reads the
-  // removed context.parserServices), so this fork carries the same rule. Scoped rather than
-  // repo-wide because the rule's handled-method list is hardcoded to match/unwrapOr/
-  // _unsafeUnwrap with no options (schema: []), so every chain ending in this repo's
-  // orThrow() outside a return position is reported even though it is correctly collapsed;
-  // widening the scope needs that gap closed first. Until then this list is maintained by
-  // hand: add each handler as it moves off orThrow() onto a Result rail.
+  // Catches a Result that is built but never consumed. Two constraints shape this block.
+  // Upstream `eslint-plugin-neverthrow` hard-crashes on ESLint 10 + typescript-eslint 8
+  // (it reads the removed context.parserServices), hence the fork. And its handled-method
+  // list is hardcoded to match/unwrapOr/_unsafeUnwrap with no options (schema: []), so a
+  // chain ending in this repo's own orThrow() is reported despite being correctly collapsed.
+  // Hence a hand-maintained file list rather than `src/**`: extend it as each handler moves
+  // onto a Result rail, and widen the scope only once that orThrow() gap is closed.
   {
-    files: ['src/core/result.ts', 'src/core/commands/sonar-command.ts', 'src/commands/list/projects.ts'],
+    files: [
+      'src/core/result.ts',
+      'src/core/commands/sonar-command.ts',
+      'src/commands/list/projects.ts',
+    ],
     plugins: { neverthrow: neverthrowPlugin },
     rules: {
       'neverthrow/must-use-result': 'error',

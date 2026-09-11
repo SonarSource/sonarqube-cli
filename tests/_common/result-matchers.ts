@@ -18,19 +18,17 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Bun test preload: `toBeOkWith()` / `toBeErrWith()` (CLI-1086) assert directly on an
-// already-resolved `Result<T, Error>` (the value of an awaited `ResultAsync`, or a plain
-// `Ok`/`Err`) instead of unwrapping it by hand first. Unwrapping with `.orThrow()` inside
-// a test throws, so a failure reports as an uncaught exception rather than a clear
-// expected/received diff; these read the Ok value or Err error off the Result themselves.
+// Bun test preload asserting on an already-resolved `Result` without unwrapping it first:
+// `.orThrow()` inside a test throws, so a failure surfaces as an uncaught exception instead
+// of an expected/received diff.
 
 import { expect } from 'bun:test';
 
-import { isResult } from '@/core/result.ts';
+import { isResult, type Result } from '@/core/result.ts';
 
-/* eslint-disable @typescript-eslint/no-unused-vars -- interface merging with bun:test's own
-   Matchers<T = unknown> requires matching its type parameter exactly, even though neither
-   custom matcher below references it. */
+/* eslint-disable @typescript-eslint/no-unused-vars -- merging into bun:test's own
+   `Matchers<T = unknown>` requires its exact type parameter, unreferenced here or not;
+   renaming it to `_T` fails as TS2428. */
 declare module 'bun:test' {
   interface Matchers<T = unknown> {
     /** Asserts the received value is an `Ok` whose value deep-equals `expected`. */
@@ -45,13 +43,18 @@ declare module 'bun:test' {
 }
 /* eslint-enable @typescript-eslint/no-unused-vars */
 
+/** Rejects a non-`Result` as a mistake in the test itself, not as a failed assertion. */
+function assertResult(value: unknown, matcher: string): asserts value is Result<unknown, Error> {
+  if (!isResult(value)) {
+    throw new Error(
+      `${matcher}() expects a Result value (e.g. the resolved value of a ResultAsync)`,
+    );
+  }
+}
+
 expect.extend({
   toBeOkWith(actual: unknown, expected: unknown) {
-    if (!isResult(actual)) {
-      throw new Error(
-        'toBeOkWith() expects a Result value (e.g. the resolved value of a ResultAsync)',
-      );
-    }
+    assertResult(actual, 'toBeOkWith');
     if (actual.isErr()) {
       return {
         pass: false,
@@ -70,11 +73,7 @@ expect.extend({
     };
   },
   toBeErrWith(actual: unknown, expected?: string | ((error: Error) => boolean)) {
-    if (!isResult(actual)) {
-      throw new Error(
-        'toBeErrWith() expects a Result value (e.g. the resolved value of a ResultAsync)',
-      );
-    }
+    assertResult(actual, 'toBeErrWith');
     if (actual.isOk()) {
       return {
         pass: false,
