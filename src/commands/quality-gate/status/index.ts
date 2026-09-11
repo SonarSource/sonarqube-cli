@@ -37,6 +37,7 @@ import {
   attachBreakdowns,
   hasFailingConditionInCategory,
   IMPLEMENTED_CATEGORIES,
+  resolveEnrichableCategory,
 } from './breakdown.ts';
 import { selectConditions } from './condition-summary.ts';
 import { fetchFileScopedConditions } from './file-scope-conditions.ts';
@@ -84,8 +85,10 @@ interface FileScopedResultParams {
   branch?: string;
   pullRequest?: string;
   top: number;
+  category?: string;
   all?: boolean;
   format: string;
+  console: Console;
 }
 
 interface QualityGateResult {
@@ -129,8 +132,10 @@ export async function qualityGateStatus(
       branch: queryParams.branch,
       pullRequest: queryParams.pullRequest,
       top,
+      category: options.category,
       all: options.all,
       format,
+      console,
     });
   } else {
     result = await buildProjectResult({
@@ -242,6 +247,7 @@ async function buildFileScopedResult(
     componentKey,
     orgKey: params.orgKey,
     metrics,
+    category: params.category,
     top: params.top,
     branch: params.branch,
     pullRequest: params.pullRequest,
@@ -250,6 +256,14 @@ async function buildFileScopedResult(
     ? fileConditions
     : fileConditions.filter((c) => c.status === 'ERROR');
   const verdict = toFileVerdict(projectVerdict, fileConditions);
+
+  if (
+    params.category &&
+    fileConditions.some((c) => c.status === 'ERROR') &&
+    !fileConditions.some((c) => resolveEnrichableCategory(c, params.category))
+  ) {
+    params.console.warn(`No failing conditions match category '${params.category}'.`);
+  }
 
   const viewModel = { file, verdict, scope: params.scope, conditions };
   const message =
