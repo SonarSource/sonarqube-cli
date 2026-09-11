@@ -29,6 +29,8 @@ import type {
 import type { Metric, QualityGateCondition } from '@/core/server/types.ts';
 
 import { formatMetricValue } from './format-metric-value.ts';
+import type { QualityGateScope } from './scope.ts';
+import type { QualityGateVerdict } from './verdict.ts';
 
 export interface QualityGateBreakdownEntry {
   path: string;
@@ -114,6 +116,19 @@ export interface QualityGateConditionSummary {
   breakdown?: QualityGateMetricBreakdown;
 }
 
+export interface QualityGateViewModel {
+  verdict: QualityGateVerdict;
+  project: string;
+  scope: QualityGateScope;
+  conditions: QualityGateConditionSummary[];
+}
+
+export interface FileQualityGateViewModel {
+  file: string;
+  verdict: QualityGateVerdict;
+  conditions: QualityGateConditionSummary[];
+}
+
 function isFailing(condition: QualityGateConditionSummary): boolean {
   return condition.status !== 'OK';
 }
@@ -123,7 +138,7 @@ function isFailing(condition: QualityGateConditionSummary): boolean {
  * happen since both come from the same server, but the join degrades gracefully rather than
  * throwing on a lookup miss.
  */
-function formatOptionalValue(
+export function formatOptionalValue(
   rawValue: string | undefined,
   metric: Metric | undefined,
 ): string | undefined {

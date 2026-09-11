@@ -90,7 +90,7 @@ const CATEGORY_METRICS: Record<string, string[]> = {
 };
 
 /** Reverse lookup derived from `CATEGORY_METRICS`, for O(1) access by metric key. */
-const METRIC_CATEGORIES: ReadonlyMap<string, string> = new Map(
+export const METRIC_CATEGORIES: ReadonlyMap<string, string> = new Map(
   Object.entries(CATEGORY_METRICS).flatMap(([category, metrics]) =>
     metrics.map((metric) => [metric, category] as const),
   ),
@@ -209,7 +209,7 @@ function fetchCategoryBreakdown(
   }
 }
 
-async function fetchMetricBreakdown(
+export async function fetchMetricBreakdown(
   measuresClient: MeasuresClient,
   params: AttachBreakdownsParams,
   condition: QualityGateConditionSummary,

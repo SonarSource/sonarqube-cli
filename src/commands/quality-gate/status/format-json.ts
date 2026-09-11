@@ -18,18 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { QualityGateConditionSummary } from './condition-summary.ts';
-import type { QualityGateScope } from './scope.ts';
-import type { QualityGateVerdict } from './verdict.ts';
+import type { FileQualityGateViewModel, QualityGateViewModel } from './condition-summary.ts';
 
-export interface QualityGateJsonViewModel {
-  verdict: QualityGateVerdict;
-  project: string;
-  scope: QualityGateScope;
-  conditions: QualityGateConditionSummary[];
-}
-
-export function formatQualityGateJson(vm: QualityGateJsonViewModel): string {
+export function formatQualityGateJson(vm: QualityGateViewModel): string {
   const isPullRequest = vm.scope.kind === 'pullRequest' || vm.scope.kind === 'pullRequestAuto';
   return JSON.stringify(
     {
@@ -41,6 +32,14 @@ export function formatQualityGateJson(vm: QualityGateJsonViewModel): string {
         conditions: vm.conditions,
       },
     },
+    null,
+    2,
+  );
+}
+
+export function formatFileQualityGateJson(vm: FileQualityGateViewModel): string {
+  return JSON.stringify(
+    { qualityGate: { status: vm.verdict, file: vm.file, conditions: vm.conditions } },
     null,
     2,
   );

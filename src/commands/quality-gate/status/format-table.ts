@@ -25,10 +25,12 @@ import { padColumns } from '@/core/ui/formatter/column-formatting.ts';
 import type {
   DependencyRiskBreakdownEntry,
   DuplicationsBreakdownEntry,
+  FileQualityGateViewModel,
   IssuesBreakdownEntry,
   QualityGateBreakdownEntry,
   QualityGateConditionSummary,
   QualityGateMetricBreakdown,
+  QualityGateViewModel,
 } from './condition-summary.ts';
 import type { QualityGateScope } from './scope.ts';
 import type { QualityGateVerdict } from './verdict.ts';
@@ -59,14 +61,7 @@ const INVERSE_COMPARATOR_SYMBOLS: Record<string, string> = {
   NE: '=',
 };
 
-export interface QualityGateTableViewModel {
-  verdict: QualityGateVerdict;
-  project: string;
-  scope: QualityGateScope;
-  conditions: QualityGateConditionSummary[];
-}
-
-export function formatQualityGateTable(vm: QualityGateTableViewModel): string {
+export function formatQualityGateTable(vm: QualityGateViewModel): string {
   const lines: string[] = [
     `=== Quality Gate: ${formatVerdictBracket(vm.verdict)} ===`,
     `Project:      ${vm.project}`,
@@ -78,26 +73,36 @@ export function formatQualityGateTable(vm: QualityGateTableViewModel): string {
   }
 
   if (vm.conditions.length > 0) {
-    const [values] = padColumns(
-      [vm.conditions.map((condition) => condition.formattedActualValue ?? '—')],
-      [],
-      CONDITION_VALUE_GAP,
-    );
-    const [labels] = padColumns(
-      [vm.conditions.map((condition) => condition.metricName)],
-      [MIN_CONDITION_LABEL_WIDTH],
-      CONDITION_LABEL_GAP,
-    );
-    lines.push(
-      '',
-      'Conditions:',
-      ...vm.conditions.flatMap((condition, i) => [
-        formatConditionLine(condition, values[i], labels[i]),
-        ...formatBreakdownLines(condition),
-      ]),
-    );
+    lines.push('', 'Conditions:', ...formatConditionsBlock(vm.conditions));
   }
 
+  return lines.join('\n');
+}
+
+export function formatConditionsBlock(conditions: QualityGateConditionSummary[]): string[] {
+  const [values] = padColumns(
+    [conditions.map((condition) => condition.formattedActualValue ?? '—')],
+    [],
+    CONDITION_VALUE_GAP,
+  );
+  const [labels] = padColumns(
+    [conditions.map((condition) => condition.metricName)],
+    [MIN_CONDITION_LABEL_WIDTH],
+    CONDITION_LABEL_GAP,
+  );
+  return conditions.flatMap((condition, i) => [
+    formatConditionLine(condition, values[i], labels[i]),
+    ...formatBreakdownLines(condition),
+  ]);
+}
+
+export function formatFileQualityGateTable(vm: FileQualityGateViewModel): string {
+  const lines: string[] = [`Quality Gate · ${vm.file} ${formatVerdictBracket(vm.verdict)}`];
+  if (vm.conditions.length === 0) {
+    lines.push('', 'No conditions apply to this file.');
+  } else {
+    lines.push(...formatConditionsBlock(vm.conditions));
+  }
   return lines.join('\n');
 }
 

@@ -1101,7 +1101,8 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/api/measures/component_tree') {
-          const projectKey = query.component;
+          const componentKey = query.component ?? '';
+          const { projectKey } = resolveProjectKeyFromComponent(componentKey, projects);
           const projectData = projectKey ? projects.get(projectKey) : undefined;
           const metricKey = query.metricKeys;
 
@@ -1125,7 +1126,12 @@ export class FakeSonarQubeServerBuilder {
           return new Response(
             JSON.stringify({
               paging: { pageIndex: 1, pageSize, total: configuredFiles.length },
-              baseComponent: { key: projectKey, name: projectKey, qualifier: 'TRK', measures: [] },
+              baseComponent: {
+                key: componentKey,
+                name: componentKey,
+                qualifier: 'TRK',
+                measures: [],
+              },
               components: pagedFiles.map((file) => ({
                 key: `${projectKey}:${file.path}`,
                 name: file.path.split('/').pop() ?? file.path,
