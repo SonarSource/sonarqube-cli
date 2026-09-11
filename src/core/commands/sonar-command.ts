@@ -152,6 +152,8 @@ export interface SonarCommandOptions {
 
 type CommandArgs = unknown[];
 type CommandResult = void | Promise<void>;
+/** {@link CommandResult} plus the Result rail, which only `authenticatedAction` collapses. */
+type AuthenticatedCommandResult = Promise<void> | ResultAsync<void, Error>;
 
 class SonarHelp extends Help {
   override visibleCommands(command: Command): Command[] {
@@ -476,21 +478,12 @@ export class SonarCommand extends Command {
    *
    * Sets requiresAuth = true on this command for documentation purposes.
    *
-   * `fn` may return a plain `Promise<void>` (today's default) or, once migrated
-   * under CLI-1086, a `ResultAsync<void, Error>` chained with `.andThen()`/`.map()`
-   * instead of throwing internally. Either shape collapses right here via a
-   * `match()` that rethrows on `Err` (`.orThrow()` can't be called directly on
-   * the resolved `Ok<T, Error> | Err<T, Error>` union — TypeScript can't unify
-   * the two branches' polymorphic `this`), so `runCommand()`'s existing
-   * try/catch stays the single place a failure becomes an exit code, unchanged
-   * for handlers of either shape.
+   * A handler that fails on the Result rail has its error rethrown here rather than
+   * handled, so `runCommand()` stays the one place a failure becomes an exit code.
    */
   authenticatedAction<TArgs extends CommandArgs>(
     this: this & { __commandArgs?: TArgs },
-    fn: (
-      ctx: CommandAuthenticatedInvocationContext,
-      ...args: TArgs
-    ) => Promise<void> | ResultAsync<void, Error>,
+    fn: (ctx: CommandAuthenticatedInvocationContext, ...args: TArgs) => AuthenticatedCommandResult,
   ): this {
     this._requiresAuth = true;
     super.action((...args: TArgs) =>
@@ -503,13 +496,8 @@ export class SonarCommand extends Command {
           });
         }
         const outcome = await fn(this.createCommandAuthenticatedInvocationContext(auth), ...args);
-        if (isResult(outcome)) {
-          outcome.match(
-            () => undefined,
-            (error) => {
-              throw error;
-            },
-          );
+        if (isResult(outcome) && outcome.isErr()) {
+          throw outcome.error;
         }
       }),
     );

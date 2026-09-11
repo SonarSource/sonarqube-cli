@@ -31,12 +31,8 @@ import { Err, Ok, type Result, ResultAsync } from 'neverthrow';
 export { Err, err, errAsync, Ok, ok, okAsync, Result, ResultAsync } from 'neverthrow';
 
 /**
- * Duck-types the resolved value of an awaited `ResultAsync` (an `Ok`/`Err` instance).
- * Lets a caller that accepts either a plain `Promise<void>` handler or a migrated
- * `ResultAsync<void, Error>` one (CLI-1086) tell the two shapes apart before deciding
- * whether there is anything left to collapse — via `match()`, since `orThrow()`'s
- * `Ok`/`Err` overloads only apply once a branch is already narrowed, not on the
- * resolved `Ok<T, Error> | Err<T, Error>` union this returns.
+ * Duck-types the value an awaited `ResultAsync` resolves to (an `Ok`/`Err` instance), so
+ * a caller accepting both a plain `Promise` and a `Result` can tell the two shapes apart.
  */
 export function isResult(value: unknown): value is Result<unknown, Error> {
   return (
