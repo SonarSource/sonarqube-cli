@@ -90,7 +90,7 @@ const CATEGORY_METRICS: Record<string, string[]> = {
 };
 
 /** Reverse lookup derived from `CATEGORY_METRICS`, for O(1) access by metric key. */
-const METRIC_CATEGORIES: ReadonlyMap<string, string> = new Map(
+export const METRIC_CATEGORIES: ReadonlyMap<string, string> = new Map(
   Object.entries(CATEGORY_METRICS).flatMap(([category, metrics]) =>
     metrics.map((metric) => [metric, category] as const),
   ),
@@ -107,6 +107,7 @@ export interface AttachBreakdownsParams {
   top: number;
   branch?: string;
   pullRequest?: string;
+  componentKey?: string;
 }
 
 /** True when failing and in an implemented category, filtered to `category` if given. */
@@ -130,7 +131,7 @@ export function hasFailingConditionInCategory(
 }
 
 /** The condition's category when enrichable, or undefined when there's nothing to build. */
-function resolveEnrichableCategory(
+export function resolveEnrichableCategory(
   condition: QualityGateConditionSummary,
   filterCategory: string | undefined,
 ): string | undefined {
@@ -144,7 +145,7 @@ function resolveEnrichableCategory(
   return conditionCategory;
 }
 
-interface CategoryBreakdownCaches {
+export interface CategoryBreakdownCaches {
   issues: IssuesBreakdownCache;
   security: SecurityBreakdownCache;
 }
@@ -183,7 +184,7 @@ export async function attachBreakdowns(
   );
 }
 
-function fetchCategoryBreakdown(
+export function fetchCategoryBreakdown(
   category: string,
   measuresClient: MeasuresClient,
   issuesClient: IssuesClient,
@@ -208,7 +209,7 @@ function fetchCategoryBreakdown(
   }
 }
 
-async function fetchMetricBreakdown(
+export async function fetchMetricBreakdown(
   measuresClient: MeasuresClient,
   params: AttachBreakdownsParams,
   condition: QualityGateConditionSummary,

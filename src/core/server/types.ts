@@ -210,6 +210,10 @@ export interface ComponentTreeResponse {
   components: ComponentTreeComponent[];
 }
 
+export interface ComponentMeasuresResponse {
+  component: ComponentTreeComponent;
+}
+
 export interface ComponentsTreeItem {
   path: string;
   qualifier: string;

@@ -307,6 +307,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   qualityGate
     .command('status')
     .description('Show the quality gate verdict for a project')
+    .argument(
+      '[file]',
+      'File or directory path to show conditions for, instead of the whole project',
+    )
     .showUpdateNotification(isTableFormatOption)
     .option('-p, --project <project>', 'Project key')
     .addOption(
@@ -328,8 +332,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
         .default(QUALITY_GATE_DEFAULT_TOP)
         .argParser(parseInteger),
     )
-    .authenticatedAction((ctx, options: QualityGateStatusOptions) =>
-      qualityGateStatus(options, ctx),
+    .authenticatedAction((ctx, file: string | undefined, options: QualityGateStatusOptions) =>
+      qualityGateStatus({ ...options, file }, ctx),
     );
 
   // Import repositories from DevOps platforms into SonarQube (hidden while in development)

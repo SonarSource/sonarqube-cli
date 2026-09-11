@@ -22,24 +22,29 @@
 
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import { resolveFileComponentKey } from '@/core/file-component.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { MetricsClient } from '@/core/server/metrics.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { QualityGatesClient } from '@/core/server/quality-gates.ts';
+import type { ProjectStatus } from '@/core/server/types.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import {
   attachBreakdowns,
   hasFailingConditionInCategory,
   IMPLEMENTED_CATEGORIES,
+  resolveEnrichableCategory,
 } from './breakdown.ts';
 import { selectConditions } from './condition-summary.ts';
-import { formatQualityGateJson } from './format-json.ts';
-import { formatQualityGateTable } from './format-table.ts';
-import { resolveQualityGateScope } from './scope.ts';
-import { exitCodeFor, toVerdict } from './verdict.ts';
+import { fetchFileScopedConditions } from './file-scope-conditions.ts';
+import { formatFileQualityGateJson, formatQualityGateJson } from './format-json.ts';
+import { formatFileQualityGateTable, formatQualityGateTable } from './format-table.ts';
+import { type QualityGateScope, resolveQualityGateScope } from './scope.ts';
+import { exitCodeFor, type FileQualityGateVerdict, toFileVerdict, toVerdict } from './verdict.ts';
 
 export const VALID_FORMATS = ['json', 'table'];
 
@@ -55,6 +60,40 @@ export interface QualityGateStatusOptions {
   all?: boolean;
   category?: string;
   top?: number;
+  file?: string;
+}
+
+interface ProjectResultParams {
+  client: SonarHttpClient;
+  projectKey: string;
+  orgKey?: string;
+  scope: QualityGateScope;
+  branch?: string;
+  pullRequest?: string;
+  top: number;
+  category?: string;
+  all?: boolean;
+  format: string;
+  console: Console;
+}
+
+interface FileScopedResultParams {
+  client: SonarHttpClient;
+  projectKey: string;
+  orgKey?: string;
+  scope: QualityGateScope;
+  branch?: string;
+  pullRequest?: string;
+  top: number;
+  category?: string;
+  all?: boolean;
+  format: string;
+  console: Console;
+}
+
+interface QualityGateResult {
+  message: string;
+  verdict: FileQualityGateVerdict;
 }
 
 export async function qualityGateStatus(
@@ -63,6 +102,7 @@ export async function qualityGateStatus(
 ): Promise<void> {
   const { auth, console } = ctx;
   const top = options.top ?? DEFAULT_TOP;
+  const format = options.format ?? 'table';
   if (top < 1 || top > MAX_PAGE_SIZE) {
     throw new InvalidOptionError(
       `Invalid --top option: '${top}'. Must be an integer between 1 and ${MAX_PAGE_SIZE}`,
@@ -82,49 +122,39 @@ export async function qualityGateStatus(
 
   const { queryParams, scope } = await resolveQualityGateScope(client, projectKey, options);
 
-  const qualityGatesClient = new QualityGatesClient(client);
-  const projectStatus = await qualityGatesClient
-    .getProjectStatus({ projectKey, ...queryParams })
-    .orThrow();
-
-  const rawConditions = projectStatus?.conditions ?? [];
-  const hasFailingConditions = rawConditions.some((condition) => condition.status !== 'OK');
-  const hasConditionsToRender = options.all ? rawConditions.length > 0 : hasFailingConditions;
-
-  const metricsClient = new MetricsClient(client);
-  const metrics = hasConditionsToRender ? await metricsClient.searchMetrics().orThrow() : [];
-
-  const verdict = toVerdict(projectStatus?.status);
-  const summaries = selectConditions(rawConditions, metrics, options.all);
-  const conditions = hasFailingConditions
-    ? await attachBreakdowns(summaries, {
-        client,
-        projectKey,
-        orgKey: auth.orgKey,
-        metrics,
-        category: options.category,
-        top,
-        branch: queryParams.branch,
-        pullRequest: queryParams.pullRequest,
-      })
-    : summaries;
-
-  if (
-    options.category &&
-    hasFailingConditions &&
-    !hasFailingConditionInCategory(rawConditions, options.category)
-  ) {
-    console.warn(`No failing conditions match category '${options.category}'.`);
+  let result: QualityGateResult;
+  if (options.file) {
+    result = await buildFileScopedResult(options.file, {
+      client,
+      projectKey,
+      orgKey: auth.orgKey,
+      scope,
+      branch: queryParams.branch,
+      pullRequest: queryParams.pullRequest,
+      top,
+      category: options.category,
+      all: options.all,
+      format,
+      console,
+    });
+  } else {
+    result = await buildProjectResult({
+      client,
+      projectKey,
+      orgKey: auth.orgKey,
+      scope,
+      branch: queryParams.branch,
+      pullRequest: queryParams.pullRequest,
+      top,
+      category: options.category,
+      all: options.all,
+      format,
+      console,
+    });
   }
 
-  const format = options.format ?? 'table';
-  const message =
-    format === 'table'
-      ? formatQualityGateTable({ verdict, project: projectKey, scope, conditions })
-      : formatQualityGateJson({ verdict, project: projectKey, scope, conditions });
-  console.print(message);
-
-  process.exitCode = exitCodeFor(verdict);
+  console.print(result.message);
+  process.exitCode = exitCodeFor(result.verdict);
 }
 
 async function assertProjectExists(client: SonarHttpClient, projectKey: string): Promise<void> {
@@ -133,4 +163,124 @@ async function assertProjectExists(client: SonarHttpClient, projectKey: string):
       remediationHint: 'Check the project key and your access to the project on the server.',
     });
   }
+}
+
+async function buildProjectResult(params: ProjectResultParams): Promise<QualityGateResult> {
+  const projectStatus = await fetchProjectStatus(
+    params.client,
+    params.projectKey,
+    params.branch,
+    params.pullRequest,
+  );
+  const rawConditions = projectStatus?.conditions ?? [];
+  const hasFailingConditions = rawConditions.some((condition) => condition.status !== 'OK');
+  const hasConditionsToRender = params.all ? rawConditions.length > 0 : hasFailingConditions;
+
+  const metricsClient = new MetricsClient(params.client);
+  const metrics = hasConditionsToRender ? await metricsClient.searchMetrics().orThrow() : [];
+
+  const verdict = toVerdict(projectStatus?.status);
+  const summaries = selectConditions(rawConditions, metrics, params.all);
+  const conditions = hasFailingConditions
+    ? await attachBreakdowns(summaries, {
+        client: params.client,
+        projectKey: params.projectKey,
+        orgKey: params.orgKey,
+        metrics,
+        category: params.category,
+        top: params.top,
+        branch: params.branch,
+        pullRequest: params.pullRequest,
+      })
+    : summaries;
+
+  if (
+    params.category &&
+    hasFailingConditions &&
+    !hasFailingConditionInCategory(rawConditions, params.category)
+  ) {
+    params.console.warn(`No failing conditions match category '${params.category}'.`);
+  }
+
+  const message =
+    params.format === 'table'
+      ? formatQualityGateTable({
+          verdict,
+          project: params.projectKey,
+          scope: params.scope,
+          conditions,
+        })
+      : formatQualityGateJson({
+          verdict,
+          project: params.projectKey,
+          scope: params.scope,
+          conditions,
+        });
+
+  return { message, verdict };
+}
+
+async function buildFileScopedResult(
+  file: string,
+  params: FileScopedResultParams,
+): Promise<QualityGateResult> {
+  const componentKey = await resolveFileComponentKey(params.client, params.projectKey, file, {
+    branch: params.branch,
+    pullRequest: params.pullRequest,
+  });
+
+  const projectStatus = await fetchProjectStatus(
+    params.client,
+    params.projectKey,
+    params.branch,
+    params.pullRequest,
+  );
+  const projectVerdict = toVerdict(projectStatus?.status);
+  const rawConditions = projectStatus?.conditions ?? [];
+
+  const metricsClient = new MetricsClient(params.client);
+  const metrics = rawConditions.length > 0 ? await metricsClient.searchMetrics().orThrow() : [];
+
+  const fileConditions = await fetchFileScopedConditions(rawConditions, {
+    client: params.client,
+    projectKey: params.projectKey,
+    componentKey,
+    orgKey: params.orgKey,
+    metrics,
+    category: params.category,
+    top: params.top,
+    branch: params.branch,
+    pullRequest: params.pullRequest,
+  });
+  const conditions = params.all
+    ? fileConditions
+    : fileConditions.filter((c) => c.status === 'ERROR');
+  const verdict = toFileVerdict(projectVerdict, fileConditions);
+
+  if (
+    params.category &&
+    fileConditions.some((c) => c.status === 'ERROR') &&
+    !fileConditions.some((c) => resolveEnrichableCategory(c, params.category))
+  ) {
+    params.console.warn(`No failing conditions match category '${params.category}'.`);
+  }
+
+  const viewModel = { file, verdict, scope: params.scope, conditions };
+  const message =
+    params.format === 'table'
+      ? formatFileQualityGateTable(viewModel)
+      : formatFileQualityGateJson(viewModel);
+
+  return { message, verdict };
+}
+
+async function fetchProjectStatus(
+  client: SonarHttpClient,
+  projectKey: string,
+  branch: string | undefined,
+  pullRequest: string | undefined,
+): Promise<ProjectStatus | null> {
+  return new QualityGatesClient(client)
+    .getProjectStatus({ projectKey, branch, pullRequest })
+    .orThrow();
 }

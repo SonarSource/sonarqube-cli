@@ -61,7 +61,7 @@ export function fetchIssuesBreakdown(
 ): Promise<QualityGateMetricBreakdown | undefined> {
   const types = ISSUE_TYPE_FILTER[condition.metric];
   const sinceLeakPeriod = isNewCodeMetric(condition.metric);
-  const cacheKey = `${types ?? ''}::${sinceLeakPeriod}`;
+  const cacheKey = `${types ?? ''}::${sinceLeakPeriod}::${params.componentKey ?? ''}`;
 
   const cached = cache.get(cacheKey);
   if (cached !== undefined) {
@@ -83,7 +83,7 @@ export async function searchIssuesBreakdown(
 ): Promise<QualityGateMetricBreakdown | undefined> {
   try {
     const searchParams: IssuesSearchParams = {
-      projects: params.projectKey,
+      projects: params.componentKey ?? params.projectKey,
       organization: params.orgKey,
       types,
       resolved: false,
