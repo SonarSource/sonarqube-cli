@@ -189,6 +189,7 @@ export async function discoverProject(
     logger.debug(`Project discovery failed, returning partial result: ${(error as Error).message}`);
   }
 
+  logger.debug(`Discovered project: ${JSON.stringify(config)}`);
   return config;
 }
 
