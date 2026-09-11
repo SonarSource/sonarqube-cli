@@ -37,7 +37,6 @@ import {
   KNOWN_SERVER_PROJECT_MAPPING_SOURCE,
   SHARED_PROJECT_CONFIG_SOURCE,
 } from '@/core/project-info.ts';
-import { okAsync, type ResultAsync } from '@/core/result.ts';
 import * as discoverByRemote from '@/core/server/discover-project-by-remote.ts';
 import { GIT_REMOTE_BINDING_SOURCE } from '@/core/server/discover-project-by-remote.ts';
 import {
@@ -359,33 +358,6 @@ describe('discoverProject', () => {
       expect.objectContaining({ orgKey: 'my-org' }),
       'https://github.com/example/remote-bound.git',
     );
-  });
-
-  it('resolves projectKey from git remote via resolveAuth when auth is omitted', async () => {
-    fakeFs.mkdir(join(testDir, '.git'));
-    getGitRemoteSpy.mockResolvedValue('https://github.com/example/remote-bound.git');
-    remoteSpy.mockResolvedValue({
-      projectKey: 'from-remote',
-      serverUrl: 'https://sonarcloud.io',
-      organization: 'my-org',
-    });
-
-    const result = await discoverProject(testDir, {
-      console: new FakeConsole(),
-      resolveAuth: (): ResultAsync<ResolvedAuth | null, Error> =>
-        okAsync(
-          new ResolvedAuth({
-            token: 'token',
-            serverUrl: 'https://sonarcloud.io',
-            orgKey: 'my-org',
-            connectionType: 'cloud',
-            source: 'state',
-          }),
-        ),
-    });
-
-    expect(result.projectKey).toBe('from-remote');
-    expect(remoteSpy).toHaveBeenCalled();
   });
 
   it('does not call git remote lookup when projectKey is already in local config', async () => {

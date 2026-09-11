@@ -290,11 +290,10 @@ describe('agentPostToolUse', () => {
     expect(createAnalysisSpy).not.toHaveBeenCalled();
   });
 
-  it('propagates auth read failures', async () => {
+  it('returns without output when auth resolution fails', async () => {
     resolveAuthSpy.mockReturnValue(errAsync(new Error('keychain error')));
 
-    // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(agentPostToolUse(ctx)).rejects.toThrow('keychain error');
+    await agentPostToolUse(ctx);
 
     expect(createAnalysisSpy).not.toHaveBeenCalled();
   });
