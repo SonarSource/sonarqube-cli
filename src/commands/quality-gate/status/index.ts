@@ -79,6 +79,7 @@ interface ProjectResultParams {
 interface FileScopedResultParams {
   client: SonarHttpClient;
   projectKey: string;
+  orgKey?: string;
   branch?: string;
   pullRequest?: string;
   top: number;
@@ -122,6 +123,7 @@ export async function qualityGateStatus(
     result = await buildFileScopedResult(options.file, {
       client,
       projectKey,
+      orgKey: auth.orgKey,
       branch: queryParams.branch,
       pullRequest: queryParams.pullRequest,
       top,
@@ -235,6 +237,7 @@ async function buildFileScopedResult(
     client: params.client,
     projectKey: params.projectKey,
     componentKey,
+    orgKey: params.orgKey,
     metrics,
     top: params.top,
     branch: params.branch,

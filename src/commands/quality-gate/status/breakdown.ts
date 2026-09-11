@@ -145,7 +145,7 @@ function resolveEnrichableCategory(
   return conditionCategory;
 }
 
-interface CategoryBreakdownCaches {
+export interface CategoryBreakdownCaches {
   issues: IssuesBreakdownCache;
   security: SecurityBreakdownCache;
 }
@@ -184,7 +184,7 @@ export async function attachBreakdowns(
   );
 }
 
-function fetchCategoryBreakdown(
+export function fetchCategoryBreakdown(
   category: string,
   measuresClient: MeasuresClient,
   issuesClient: IssuesClient,
