@@ -46,6 +46,13 @@ export class UsersClient {
       .map((result) => (result.valid ? 'valid' : 'invalid'));
   }
 
+  /** `null` when the response carries no `id`: older SonarQube Server versions omit it. */
+  getCurrentUserId(): ResultAsync<string | null, HttpClientError> {
+    return this.client
+      .get<{ id?: string }>('/api/users/current')
+      .map((result) => result.id ?? null);
+  }
+
   /**
    * Revoke a user token on the server by its name.
    *

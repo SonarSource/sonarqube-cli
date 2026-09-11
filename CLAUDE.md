@@ -152,7 +152,7 @@ The two inputs are separate because the single boolean made _collect but do not 
 
 1. **Connection seed** — `identityFromConnection()` maps `AuthConnection.userUuid`, `organizationUuidV4`, `enterpriseUuid`, and `sqsInstallationId` — kept in sync for both keychain and env-var auth by `recordConnectionFromAuth()` (see CLI-866 below), not just at `sonar auth login`.
 2. **Disk cache** — `{SONAR_USER_HOME}/sonarqube-cli/telemetry/identity-cache.json`, one entry per auth fingerprint (`src/core/telemetry/identity-fetch.ts`). Avoids repeat API calls across CLI invocations, independently of the connection seed.
-3. **API enrichment** — `SonarHttpClient.getSafe()` fetches only missing fields: `/api/users/current` (cloud and server), `/organizations/organizations` (cloud only, when `orgKey` is set), `/enterprises/enterprise-organizations` (cloud only, keyed by the org's legacy `id` from that lookup), `/api/system/status` (server only).
+3. **API enrichment**: only missing fields are fetched, each through its domain client rather than the transport class (CLI-1073). `UsersClient.getCurrentUserId()` (`/api/users/current`, cloud and server), `OrganizationsClient.getOrganizationRecord()` (`/organizations/organizations`, cloud only, when `orgKey` is set), `EnterprisesClient.getEnterpriseIdForOrganization()` (`/enterprises/enterprise-organizations`, cloud only, keyed by the org's legacy `id` from that lookup), `SystemClient.getInstallationId()` (`/api/system/status`, server only). All four return `Ok(null)` only for a field the server answered without, and `Err` for any failure. That is what lets `fetchMissingFromApi` set `resolved` per field and cache only confirmed-absent values. `OrganizationsClient`'s two single-id getters collapse that distinction, so telemetry uses `getOrganizationRecord`.
 
 **Fast path** (skip resolving auth entirely, in `resolveStoreEventTelemetryIdentity`): when `conn` (the currently active `AuthConnection`, read fresh from state) already satisfies `needsIdentityEnrichment() === false`. This check is source-agnostic — it is not gated on `isEnvBasedAuth()` — because `resolveAuth()`'s env branch keeps `state.auth.connections` synced before this ever runs (see CLI-866 below), so a fully-populated `conn` is trustworthy regardless of which auth source produced it. When the fast path doesn't apply, telemetry calls `resolveAuth({ silent: true })` — `silent` suppresses the "partial env vars" warning so this best-effort, source-agnostic shadow resolution never prints a diagnostic the command's own `resolveAuth()` call would already have shown (or wouldn't have shown at all, for a non-authenticated command).
 
@@ -199,8 +199,10 @@ result as `baseUrl` instead of reaching for `resolveFromEndpoint` themselves.
 
 Everything above transport is a small per-domain wrapper taking a `SonarHttpClient`, living next to
 whoever uses it. Shared domains stay in `src/core/server/`: `OrganizationsClient`
-(`organizations.ts`, also home to `Organization` / `OrganizationAccess`), `ComponentsClient`
-(`components.ts`), `UsersClient` (`users.ts`), `SystemClient` (`system.ts`), `ProjectBindingsClient`
+(`organizations.ts`, also home to `Organization` / `OrganizationRecord` / `OrganizationAccess`),
+`ComponentsClient`
+(`components.ts`), `UsersClient` (`users.ts`), `SystemClient` (`system.ts`), `EnterprisesClient`
+(`enterprises.ts`, Cloud only), `ProjectBindingsClient`
 (`project-bindings.ts`) and `ScaClient` (`sca.ts`), alongside the pre-existing `BranchesClient`,
 `IssuesClient`, `MeasuresClient`, `MetricsClient`, `ProjectsClient` and `QualityGatesClient`.
 Command-specific surfaces sit with their command: `ImportApiClient`
@@ -212,7 +214,7 @@ Command-specific surfaces sit with their command: `ImportApiClient`
 `VortexEntitlementClient` (`src/core/vortex/entitlement.ts`, owning `VortexEntitlementResult` /
 `VortexEntitlementStatus` and `SERVER_ORGANIZATION_ID_PLACEHOLDER`).
 
-Three rules hold across all seventeen of them, with no exception — keep it that way when adding one.
+Three rules hold across all eighteen of them, with no exception — keep it that way when adding one.
 
 **Every API client is constructed from a `SonarHttpClient`**, never from a `(serverUrl, token)` pair
 it turns into one itself. The command handler builds the transport client once and passes it in, so
