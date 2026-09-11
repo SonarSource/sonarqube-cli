@@ -27,6 +27,7 @@ import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 import { discoverProject } from '@/core/project-info.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -94,6 +95,7 @@ export async function gitPreCommit(
       project: projectKey,
       changedFiles: stagedFiles,
       auth,
+      client: new SonarHttpClient(auth.serverUrl, auth.token),
       ctx,
     });
   }

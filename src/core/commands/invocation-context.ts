@@ -20,6 +20,7 @@
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { type LifecycleState, STABLE_LIFECYCLE } from '@/core/commands/stage.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 /**
@@ -134,6 +135,8 @@ export class CommandInvocationContext {
  * resolved auth for this invocation.
  */
 export class CommandAuthenticatedInvocationContext extends CommandInvocationContext {
+  private client?: SonarHttpClient;
+
   constructor(
     readonly auth: ResolvedAuth,
     console: Console,
@@ -141,5 +144,15 @@ export class CommandAuthenticatedInvocationContext extends CommandInvocationCont
     runtime?: CommandInvocationContextRuntime,
   ) {
     super(console, lifecycle, runtime);
+  }
+
+  /**
+   * Shared `SonarHttpClient` for this invocation, built lazily from {@link auth} and
+   * memoised for its lifetime. Every domain client constructed during the invocation
+   * should share this instance, so caches such as `OrganizationsClient`'s stay effective.
+   */
+  get httpClient(): SonarHttpClient {
+    this.client ??= new SonarHttpClient(this.auth.serverUrl, this.auth.token);
+    return this.client;
   }
 }

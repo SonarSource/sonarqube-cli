@@ -24,6 +24,7 @@ import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.t
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
+import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -36,13 +37,16 @@ const LARGE_CHANGESET_HINT =
   '  --depth STANDARD  faster analysis (change-set / multi-file default is DEEP)';
 
 /**
- * Authentication context required for SQAA API calls. `orgKey` is Cloud-only: Server has
- * no organizations and its A3S hub forces the request onto the instance's default one.
+ * Where a Vortex analysis request goes, once auth has been validated: the organization to
+ * address and the client to send on. `orgKey` is Cloud-only, since Server has no
+ * organizations and its A3S hub forces the request onto the instance's default one.
+ *
+ * Holds no credentials: `client` already carries them, so keeping a second copy here would
+ * be a competing source of truth for the same request.
  */
 export interface SqaaAuth {
-  serverUrl: string;
-  token: string;
   orgKey?: string;
+  client: SonarHttpClient;
 }
 
 /**
@@ -69,12 +73,13 @@ export type SqaaAuthResolution =
  * all of them instead of at each of the five downstream call sites.
  */
 export async function resolveSqaaAuthAndProject(
+  client: SonarHttpClient,
   auth: ResolvedAuth,
   explicitProject: string | undefined,
   console: Console,
   projectRoot?: string,
 ): Promise<SqaaAuthResolution> {
-  const sqaaAuth = resolveSqaaAuth(auth, explicitProject, console);
+  const sqaaAuth = resolveSqaaAuth(client, auth, explicitProject, console);
   if (!sqaaAuth) return { kind: 'no-org' };
 
   const projectKey = explicitProject ?? (await resolveSqaaProjectKey(auth, console, projectRoot));
@@ -92,6 +97,7 @@ export async function resolveSqaaAuthAndProject(
  * Throws CommandFailedError when --project is set, since the caller asked explicitly.
  */
 export function resolveSqaaAuth(
+  client: SonarHttpClient,
   auth: ResolvedAuth,
   explicitProject: string | undefined,
   console: Console,
@@ -109,9 +115,8 @@ export function resolveSqaaAuth(
   }
 
   return {
-    serverUrl: auth.serverUrl,
-    token: auth.token,
     ...(auth.orgKey ? { orgKey: auth.orgKey } : {}),
+    client,
   };
 }
 

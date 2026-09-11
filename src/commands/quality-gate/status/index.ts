@@ -24,7 +24,7 @@ import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
+import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { MetricsClient } from '@/core/server/metrics.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { QualityGatesClient } from '@/core/server/quality-gates.ts';
@@ -77,7 +77,7 @@ export async function qualityGateStatus(
   const projectKey = await resolveProjectKey(options.project, auth, console, true);
   noteProject(auth, projectKey);
 
-  const client = new SonarHttpClient(auth.serverUrl, auth.token);
+  const client = ctx.httpClient;
   await assertProjectExists(client, projectKey);
 
   const { queryParams, scope } = await resolveQualityGateScope(client, projectKey, options);

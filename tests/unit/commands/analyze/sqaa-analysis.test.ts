@@ -23,6 +23,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { SqaaProgress } from '@/commands/analyze/sqaa-progress.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { RequestPayloadTooLargeError } from '@/core/server/errors.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 
 import {
   distributeChunkResponse,
@@ -141,7 +142,10 @@ describe('runAnalyses partial 413', () => {
     return { absolutePath: `/repo/${path}`, relativePath: path, content: 'x' };
   }
 
-  const AUTH: SqaaAuth = { serverUrl: 'https://sonarcloud.io', token: 't', orgKey: 'org' };
+  const AUTH: SqaaAuth = {
+    orgKey: 'org',
+    client: new SonarHttpClient('https://sonarcloud.io', 't'),
+  };
 
   it('sends all readable files in one request and records partial 413 failures', async () => {
     const a = chunkFile('a.ts');

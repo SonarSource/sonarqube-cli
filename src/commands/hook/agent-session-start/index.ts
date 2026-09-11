@@ -107,9 +107,10 @@ async function resolveSessionStartContext(
   }
   noteProject(auth, discovered.projectKey);
 
+  const client = new SonarHttpClient(auth.serverUrl, auth.token);
   const [vortexEntitlement, scaEnabled] = await Promise.all([
     resolveVortexEntitlement(auth),
-    isScaEnabled(auth),
+    isScaEnabled(client, auth),
   ]);
   if (vortexEntitlement.status !== 'enabled') {
     logSkip(`Vortex entitlement is '${vortexEntitlement.status}'`);
@@ -145,8 +146,8 @@ async function resolveSessionStartContext(
   return { additionalContext: result.stdout };
 }
 
-function isScaEnabled(auth: ResolvedAuth): Promise<boolean> {
-  const client = new ScaClient(new SonarHttpClient(auth.serverUrl, auth.token));
+function isScaEnabled(httpClient: SonarHttpClient, auth: ResolvedAuth): Promise<boolean> {
+  const client = new ScaClient(httpClient);
   return client.checkScaEnabled(auth.connectionType, auth.orgKey).orThrow();
 }
 

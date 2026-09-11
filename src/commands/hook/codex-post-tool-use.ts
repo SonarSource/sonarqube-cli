@@ -31,6 +31,7 @@ import { isSonarQubeCloud, resolveAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
 import {
@@ -79,6 +80,7 @@ export async function codexPostToolUse(ctx: CommandInvocationContext): Promise<H
   try {
     report = await buildSqaaJsonReport(
       { project: projectKey, force: true, format: 'json', forcedDepth: 'STANDARD' },
+      new SonarHttpClient(auth.serverUrl, auth.token),
       auth,
       {
         telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,

@@ -35,6 +35,7 @@ import logger from '@/core/observability/logger.ts';
 import { timed } from '@/core/observability/timed.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
 import { resolveSqaaBranch } from '../analyze/sqaa-changeset.ts';
@@ -93,9 +94,8 @@ async function handleSqaaPostToolUse(
   try {
     const fileContent = readFileSync(canonicalPath, 'utf-8');
     const sqaaAuth = {
-      serverUrl: auth.serverUrl,
-      token: auth.token,
       ...(auth.orgKey ? { orgKey: auth.orgKey } : {}),
+      client: new SonarHttpClient(auth.serverUrl, auth.token),
     };
     const branch = await resolveSqaaBranch(undefined, canonicalPath);
 

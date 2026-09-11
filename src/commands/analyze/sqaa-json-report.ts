@@ -21,6 +21,7 @@
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { timed } from '@/core/observability/timed.ts';
+import type { SonarHttpClient } from '@/core/server/http-client.ts';
 
 import { readSqaaFileContent, toRelativePosixPath } from './sqaa-api.ts';
 import { resolveSqaaAuthAndProject } from './sqaa-auth.ts';
@@ -101,6 +102,7 @@ async function buildSqaaJsonReportFromEntries(
 
 async function buildSqaaJsonReportFromChangeSet(
   options: AnalyzeSqaaOptions,
+  client: SonarHttpClient,
   auth: ResolvedAuth,
   rawDepth: string | undefined,
   forcedDepth: SqaaAnalysisDepth | undefined,
@@ -120,7 +122,13 @@ async function buildSqaaJsonReportFromChangeSet(
   }
 
   const { console } = runOptions.telemetryCtx;
-  const resolution = await resolveSqaaAuthAndProject(auth, project, console, changeSet.repoRoot);
+  const resolution = await resolveSqaaAuthAndProject(
+    client,
+    auth,
+    project,
+    console,
+    changeSet.repoRoot,
+  );
   const resolved = resolveSqaaContext(resolution, { requireProject: false }, console);
   if (!resolved) return null;
 
@@ -160,6 +168,7 @@ async function buildSqaaJsonReportFromChangeSet(
  */
 export async function buildSqaaJsonReport(
   options: AnalyzeSqaaOptions,
+  client: SonarHttpClient,
   auth: ResolvedAuth,
   runOptions: JsonReportRunOptions,
 ): Promise<SqaaJsonReport | null> {
@@ -170,7 +179,7 @@ export async function buildSqaaJsonReport(
     const entries = resolveSqaaFileArgs(rawFiles);
     const resolvedBranch = await resolveSqaaBranch(branch, entries[0].absolutePath);
     const { console } = runOptions.telemetryCtx;
-    const resolution = await resolveSqaaAuthAndProject(auth, project, console);
+    const resolution = await resolveSqaaAuthAndProject(client, auth, project, console);
     const resolved = resolveSqaaContext(resolution, { requireProject: false }, console);
     if (!resolved) return null;
 
@@ -205,5 +214,12 @@ export async function buildSqaaJsonReport(
     );
   }
 
-  return buildSqaaJsonReportFromChangeSet(options, auth, rawDepth, forcedDepth, telemetryOptions);
+  return buildSqaaJsonReportFromChangeSet(
+    options,
+    client,
+    auth,
+    rawDepth,
+    forcedDepth,
+    telemetryOptions,
+  );
 }

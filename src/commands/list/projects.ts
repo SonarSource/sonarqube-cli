@@ -22,7 +22,6 @@
 
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { MAX_PAGE_SIZE, ProjectsClient } from '@/core/server/projects.ts';
 
 export interface ListProjectsOptions {
@@ -51,8 +50,7 @@ export async function listProjects(
     throw new InvalidOptionError(`Invalid --page option: '${page}'. Must be an integer >= 1`);
   }
 
-  const client = new SonarHttpClient(auth.serverUrl, auth.token);
-  const projectsClient = new ProjectsClient(client);
+  const projectsClient = new ProjectsClient(ctx.httpClient);
 
   const result = await projectsClient
     .searchProjects({

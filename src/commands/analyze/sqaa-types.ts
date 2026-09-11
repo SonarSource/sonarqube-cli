@@ -20,6 +20,7 @@
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import type { SqaaTelemetryCallerCommand } from './sqaa-analysis-telemetry.ts';
@@ -72,6 +73,7 @@ export interface SqaaBatchRunOptions {
 }
 
 export interface SingleFileRunOptions {
+  client: SonarHttpClient;
   console: Console;
   branch?: string;
   explicitProject?: string;
