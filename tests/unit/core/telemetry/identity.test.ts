@@ -35,11 +35,12 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { AuthResolver, ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { ENV_SONAR_USER_HOME, getTelemetryDir } from '@/core/config-constants.ts';
 import type { AuthConnection } from '@/core/state/state.ts';
+import { addOrUpdateConnection, loadState, saveState } from '@/core/state/state-manager.ts';
 import {
   identityFromConnection,
   isIdentityCompleteForConnection,
   resolveCommandTelemetryIdentity,
-  resolveStoreEventTelemetryIdentitySafely,
+  resolveStoreEventTelemetryIdentity,
 } from '@/core/telemetry/identity.ts';
 import {
   needsIdentityEnrichment,
@@ -235,8 +236,8 @@ describe('needsIdentityEnrichment()', () => {
   });
 });
 
-describe('resolveStoreEventTelemetryIdentitySafely()', () => {
-  it('returns the connection identity without re-resolving auth when no auth is supplied', async () => {
+describe('resolveStoreEventTelemetryIdentity()', () => {
+  it('returns the connection identity without re-resolving auth when no auth is supplied', () => {
     const conn = cloudConn({ userUuid: 'u' });
     const resolveFromStateSpy = spyOn(
       AuthResolver.prototype as AuthResolver & {
@@ -245,7 +246,7 @@ describe('resolveStoreEventTelemetryIdentitySafely()', () => {
       'resolveFromState',
     );
 
-    const result = await resolveStoreEventTelemetryIdentitySafely(conn);
+    const result = resolveStoreEventTelemetryIdentity(conn);
 
     expect(result.connectionType).toBe('sqc');
     expect(result.identity.user_uuid).toBe('u');
@@ -258,6 +259,12 @@ describe('resolveStoreEventTelemetryIdentitySafely()', () => {
 
 describe('resolveCommandTelemetryIdentity()', () => {
   it('returns empty identity when auth is null', async () => {
+    const state = loadState();
+    const conn = addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
+      orgKey: 'my-org',
+    });
+    conn.userUuid = 'post-login-user';
+    saveState(state);
     const getSafeSpy = mockIdentityGetSafe();
 
     const { connectionType, identity } = await resolveCommandTelemetryIdentity(null);
@@ -315,6 +322,45 @@ describe('resolveCommandTelemetryIdentity()', () => {
 
     expect(identity.user_uuid).toBe('fresh-user');
     expect(identity.organization_uuid_v4).toBe('fresh-org');
+    getSafeSpy.mockRestore();
+  });
+
+  it('skips the identity API when a matching on-premise connection already resolved userUuid', async () => {
+    const auth = serverAuth('sqs-project-analysis-token');
+    const state = loadState();
+    const conn = addOrUpdateConnection(state, auth.serverUrl, 'on-premise');
+    conn.userUuid = null;
+    conn.sqsInstallationId = 'sqs-abc';
+    saveState(state);
+    const getSafeSpy = mockIdentityGetSafe();
+
+    const { identity } = await resolveCommandTelemetryIdentity(auth);
+
+    expect(identity.user_uuid).toBeNull();
+    expect(identity.sqs_installation_id).toBe('sqs-abc');
+    expect(getSafeSpy).not.toHaveBeenCalled();
+    getSafeSpy.mockRestore();
+  });
+
+  it('does not seed identity from a mismatched active connection', async () => {
+    const auth = serverAuth('sqs-unmatched-token');
+    const state = loadState();
+    const conn = addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
+      orgKey: 'my-org',
+    });
+    conn.userUuid = 'post-login-user';
+    conn.organizationUuidV4 = 'post-login-org';
+    saveState(state);
+    const getSafeSpy = mockIdentityGetSafe({
+      status: [{ ok: true, id: 'sqs-from-api' }],
+      user: [{ ok: false }],
+    });
+
+    const { identity } = await resolveCommandTelemetryIdentity(auth);
+
+    expect(identity.user_uuid).toBeNull();
+    expect(identity.organization_uuid_v4).toBeNull();
+    expect(identity.sqs_installation_id).toBe('sqs-from-api');
     getSafeSpy.mockRestore();
   });
 });

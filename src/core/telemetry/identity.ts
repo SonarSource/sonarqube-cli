@@ -24,8 +24,14 @@ import {
   type CommandInvocationContext,
 } from '@/core/commands/invocation-context.ts';
 import {
+  authMatchesConnection,
+  getActiveConnection,
+  tryLoadState,
+} from '@/core/state/state-manager.ts';
+import {
   EMPTY_IDENTITY,
   identityFromConnection,
+  needsIdentityEnrichment,
   resolveTelemetryIdentity,
   type TelemetryIdentity,
 } from '@/core/telemetry/identity-fetch.ts';
@@ -42,8 +48,11 @@ function toTelemetryConnectionType(type: ServerType): Exclude<TelemetryConnectio
   return type === 'cloud' ? 'sqc' : 'sqs';
 }
 
-/** Store events have no invocation auth; identity is whatever the active connection already holds. */
-function resolveStoreEventTelemetryIdentity(conn: AuthConnection | undefined): {
+/**
+ * Store events have no invocation auth (flush worker, unthreaded emits), so identity
+ * is whatever the active connection already holds. Pure — no I/O, nothing to fail.
+ */
+export function resolveStoreEventTelemetryIdentity(conn: AuthConnection | undefined): {
   connectionType: TelemetryConnectionType;
   identity: TelemetryIdentity;
 } {
@@ -53,16 +62,6 @@ function resolveStoreEventTelemetryIdentity(conn: AuthConnection | undefined): {
   };
 }
 
-/**
- * Like {@link resolveStoreEventTelemetryIdentity}, but never throws — telemetry
- * must not fail an otherwise-successful command.
- */
-export function resolveStoreEventTelemetryIdentitySafely(
-  conn: AuthConnection | undefined,
-): Promise<{ connectionType: TelemetryConnectionType; identity: TelemetryIdentity }> {
-  return Promise.resolve(resolveStoreEventTelemetryIdentity(conn));
-}
-
 export async function resolveCommandTelemetryIdentity(
   auth: ResolvedAuth | null,
 ): Promise<{ connectionType: TelemetryConnectionType; identity: TelemetryIdentity }> {
@@ -70,9 +69,19 @@ export async function resolveCommandTelemetryIdentity(
     return { connectionType: null, identity: EMPTY_IDENTITY };
   }
 
+  const connectionType = toTelemetryConnectionType(auth.connectionType);
+  const state = tryLoadState();
+  const active = state ? getActiveConnection(state) : undefined;
+  const seedConn = active && authMatchesConnection(auth, active) ? active : undefined;
+  const seed = identityFromConnection(seedConn);
+
+  if (seedConn && !needsIdentityEnrichment(seed, auth.connectionType, seedConn)) {
+    return { connectionType, identity: seed };
+  }
+
   return {
-    connectionType: toTelemetryConnectionType(auth.connectionType),
-    identity: await resolveTelemetryIdentity(auth),
+    connectionType,
+    identity: await resolveTelemetryIdentity(auth, seed),
   };
 }
 
