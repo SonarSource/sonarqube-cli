@@ -91,11 +91,13 @@ export interface ResolveAuthOptions {
 
 /** Memoizing auth resolver shared by the command tree and invocation contexts. */
 export class AuthResolver {
-  private memo?: ResultAsync<ResolvedAuth | null>;
+  private memo?: ResultAsync<ResolvedAuth | null, Error>;
 
   constructor(private readonly defaults: ResolveAuthOptions = {}) {}
 
-  resolveAuth(options?: Pick<ResolveAuthOptions, 'silent'>): ResultAsync<ResolvedAuth | null> {
+  resolveAuth(
+    options?: Pick<ResolveAuthOptions, 'silent'>,
+  ): ResultAsync<ResolvedAuth | null, Error> {
     if (!this.memo) {
       this.memo = ResultAsync.fromPromise(
         this.resolveOnce({ ...this.defaults, ...options }),

@@ -22,8 +22,6 @@ import { describe, expect, it } from 'bun:test';
 
 import { err, errAsync, ok, okAsync } from '@/core/result.ts';
 
-/* eslint-disable @typescript-eslint/no-unsafe-return -- exercises neverthrow wrappers directly in unit tests */
-
 describe('ResultAsync.orThrow', () => {
   it('resolves to the value of an ok result', async () => {
     expect(await okAsync('value').orThrow()).toBe('value');
