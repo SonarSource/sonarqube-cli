@@ -20,6 +20,8 @@
 
 // Three-way pass/fail/not-computed verdict and its exit code
 
+import type { QualityGateConditionSummary } from './condition-summary.ts';
+
 export const EXIT_CODE_QUALITY_GATE_FAILED = 51;
 
 export type QualityGateVerdict = 'OK' | 'ERROR' | 'NOT_COMPUTED';
@@ -35,6 +37,16 @@ export function toVerdict(
     return 'NOT_COMPUTED';
   }
   return status === 'OK' ? 'OK' : 'ERROR';
+}
+
+export function toFileVerdict(
+  projectVerdict: QualityGateVerdict,
+  fileConditions: QualityGateConditionSummary[],
+): QualityGateVerdict {
+  if (projectVerdict === 'NOT_COMPUTED') {
+    return 'NOT_COMPUTED';
+  }
+  return fileConditions.some((c) => c.status === 'ERROR') ? 'ERROR' : 'OK';
 }
 
 export function exitCodeFor(verdict: QualityGateVerdict): number {

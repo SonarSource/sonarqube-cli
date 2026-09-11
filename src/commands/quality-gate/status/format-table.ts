@@ -98,7 +98,9 @@ export function formatConditionsBlock(conditions: QualityGateConditionSummary[])
 
 export function formatFileQualityGateTable(vm: FileQualityGateViewModel): string {
   const lines: string[] = [`Quality Gate · ${vm.file} ${formatVerdictBracket(vm.verdict)}`];
-  if (vm.conditions.length === 0) {
+  if (vm.verdict === 'NOT_COMPUTED') {
+    lines.push('', `${cyan('ℹ')}  ${notComputedHint(vm.scope)}`);
+  } else if (vm.conditions.length === 0) {
     lines.push('', 'No conditions apply to this file.');
   } else {
     lines.push(...formatConditionsBlock(vm.conditions));

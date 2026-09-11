@@ -43,7 +43,7 @@ import { fetchFileScopedConditions } from './file-scope-conditions.ts';
 import { formatFileQualityGateJson, formatQualityGateJson } from './format-json.ts';
 import { formatFileQualityGateTable, formatQualityGateTable } from './format-table.ts';
 import { type QualityGateScope, resolveQualityGateScope } from './scope.ts';
-import { exitCodeFor, type QualityGateVerdict, toVerdict } from './verdict.ts';
+import { exitCodeFor, type QualityGateVerdict, toFileVerdict, toVerdict } from './verdict.ts';
 
 export const VALID_FORMATS = ['json', 'table'];
 
@@ -80,6 +80,7 @@ interface FileScopedResultParams {
   client: SonarHttpClient;
   projectKey: string;
   orgKey?: string;
+  scope: QualityGateScope;
   branch?: string;
   pullRequest?: string;
   top: number;
@@ -124,6 +125,7 @@ export async function qualityGateStatus(
       client,
       projectKey,
       orgKey: auth.orgKey,
+      scope,
       branch: queryParams.branch,
       pullRequest: queryParams.pullRequest,
       top,
@@ -228,10 +230,11 @@ async function buildFileScopedResult(
     params.branch,
     params.pullRequest,
   );
+  const projectVerdict = toVerdict(projectStatus?.status);
   const rawConditions = projectStatus?.conditions ?? [];
 
   const metricsClient = new MetricsClient(params.client);
-  const metrics = await metricsClient.searchMetrics().orThrow();
+  const metrics = rawConditions.length > 0 ? await metricsClient.searchMetrics().orThrow() : [];
 
   const fileConditions = await fetchFileScopedConditions(rawConditions, {
     client: params.client,
@@ -246,12 +249,12 @@ async function buildFileScopedResult(
   const conditions = params.all
     ? fileConditions
     : fileConditions.filter((c) => c.status === 'ERROR');
-  const verdict = fileConditions.some((c) => c.status === 'ERROR') ? 'ERROR' : 'OK';
+  const verdict = toFileVerdict(projectVerdict, fileConditions);
 
   const message =
     params.format === 'table'
-      ? formatFileQualityGateTable({ file, verdict, conditions })
-      : formatFileQualityGateJson({ file, verdict, conditions });
+      ? formatFileQualityGateTable({ file, verdict, scope: params.scope, conditions })
+      : formatFileQualityGateJson({ file, verdict, scope: params.scope, conditions });
 
   return { message, verdict };
 }

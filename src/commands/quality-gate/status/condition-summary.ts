@@ -126,6 +126,7 @@ export interface QualityGateViewModel {
 export interface FileQualityGateViewModel {
   file: string;
   verdict: QualityGateVerdict;
+  scope: QualityGateScope;
   conditions: QualityGateConditionSummary[];
 }
 

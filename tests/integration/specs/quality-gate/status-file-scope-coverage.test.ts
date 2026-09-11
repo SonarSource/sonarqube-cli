@@ -264,4 +264,56 @@ describe('quality-gate status <file> — coverage/duplications', () => {
     },
     { timeout: 15000 },
   );
+
+  it(
+    'reports NOT_COMPUTED and exits 1 for a resolvable file when the project has no quality gate status yet',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withComponentsTreeItems([{ path: 'src/checkout.ts', qualifier: 'FIL' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status src/checkout.ts --project my-project --format json`,
+      );
+
+      expect(result.exitCode).toBe(1);
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate).toEqual({
+        status: 'NOT_COMPUTED',
+        file: 'src/checkout.ts',
+        conditions: [],
+      });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows the not-computed table verdict and hint for a file when the project has no quality gate status yet',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withComponentsTreeItems([{ path: 'src/checkout.ts', qualifier: 'FIL' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status src/checkout.ts --project my-project --format table`,
+      );
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toContain('Quality Gate · src/checkout.ts [⚠ Not computed]');
+      expect(result.stdout).toContain(
+        "This branch either doesn't exist, hasn't been analyzed yet, or analysis ran but the quality gate status is not updated yet. You can run `sonar analyze` for local analysis.",
+      );
+    },
+    { timeout: 15000 },
+  );
 });
