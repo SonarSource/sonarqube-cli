@@ -401,15 +401,7 @@ describe('integrateCommand', () => {
 
     await integrateClaude({ global: true }, CLOUD_CTX);
 
-    // Vortex is project-scoped, so a global install never enables it even when
-    // the org is entitled.
-    assertMigrationAndHookInstallationRan(
-      'a-project',
-      '/project/root',
-      homedir(),
-      true,
-      'preserve',
-    );
+    assertMigrationAndHookInstallationRan('a-project', '/project/root', homedir(), true, 'install');
   });
 
   it('still installs when organization access check fails in the summary', async () => {
@@ -533,13 +525,12 @@ describe('integrateCommand', () => {
       expect(skipNotice).toBeUndefined();
     });
 
-    it('skips Vortex (and warns) even when the org is entitled', async () => {
+    it('installs Vortex when the org is entitled', async () => {
       mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
       mockVortexEntitlement(true);
 
       await integrateClaude({ global: true }, CLOUD_CTX);
 
-      // Vortex is project-scoped, so a global run never installs it.
       expectClaudeInstallCall({
         targetRoot: homedir(),
         scope: 'global',
@@ -547,13 +538,8 @@ describe('integrateCommand', () => {
         projectRoot: '/project/root',
         projectKey: 'a-project',
         globalSecretsHookExists: false,
-        vortexDisposition: 'preserve',
+        vortexDisposition: 'install',
       });
-
-      const warnNotice = fake.calls.find(
-        (c) => c.method === 'warn' && String(c.args[0]).includes('not supported with --global'),
-      );
-      expect(warnNotice).toBeDefined();
     });
 
     it('requests Vortex removal when a global run finds the org is not entitled', async () => {

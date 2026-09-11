@@ -63,7 +63,10 @@ export function createContextAugmentationSubfeature<TOptions extends IntegrateAg
       {
         id: CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID,
         displayName: 'Vortex Context tool integration',
-        shouldApply: (context) => context.executionMode === 'install',
+        shouldApply: (context) =>
+          context.executionMode === 'install' &&
+          context.scope === 'project' &&
+          getOptionalStringAttr(context, 'projectKey') !== undefined,
         apply: async (context) =>
           runToolIntegrateCommand({
             auth: getRequiredAuth(context),

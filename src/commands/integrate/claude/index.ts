@@ -79,14 +79,7 @@ export async function integrateClaude(
     : await detectGlobalSecretsHook(homedir(), console);
   const skipSecretsHooks = !!existingGlobalHookPath;
 
-  const vortex = await resolveVortexSetup(
-    {
-      auth,
-      projectKey: integrateCtx.projectKey,
-      isGlobal: integrateCtx.isGlobal,
-    },
-    console,
-  );
+  const vortex = await resolveVortexSetup(auth, console);
   const featureAttrs = buildRecordedIntegrationAttrs({
     baseAttrs: buildIntegrationAttrs(config),
     projectRoot: integrateCtx.project.projectRoot,
