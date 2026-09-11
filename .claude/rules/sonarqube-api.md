@@ -21,7 +21,7 @@ Everything above transport is a small per-domain wrapper taking a `SonarHttpClie
 whoever uses it. Shared domains stay in `src/core/server/`, one file per client named for its
 domain — e.g. `OrganizationsClient` (`organizations.ts`, also home to `Organization` /
 `OrganizationRecord` / `OrganizationAccess`). Command-specific surfaces sit with their command: `ImportApiClient`
-(`src/commands/import/_common/import-api.ts`, owning `DopRepository` / `ProvisionedProject`),
+(`src/commands/import/import-api.ts`, owning `DopRepository` / `ProvisionedProject`),
 `RemediateApiClient` (`src/commands/remediate/remediate-api.ts`, owning the agent-job types),
 `OnboardCiSqsClient` (`src/commands/admin/onboard-ci/gitlab/sqs-api.ts`), `SqaaAnalysisClient`
 (`src/commands/analyze/sqaa-analysis-client.ts`, with the wire shapes in `sqaa-wire-types.ts`), the
@@ -32,9 +32,14 @@ domain — e.g. `OrganizationsClient` (`organizations.ts`, also home to `Organiz
 Three rules hold across every one of these clients, with no exception — keep it that way when adding one.
 
 **Every API client is constructed from a `SonarHttpClient`**, never from a `(serverUrl, token)` pair
-it turns into one itself. The command handler builds the transport client once and passes it in, so
-a single instance can be shared by every domain client in a run — which is what keeps
-`OrganizationsClient`'s organization cache effective instead of one cache per caller.
+it turns into one itself. An authenticated handler takes that transport from `ctx.httpClient`
+(`CommandAuthenticatedInvocationContext`, built lazily from `ctx.auth` and memoised for the
+invocation) rather than constructing one, so there is a single way to obtain a client and a unit
+test can inject a fake instead of stubbing the transport class prototype. Only code with no
+authenticated context (hook handlers that resolve auth themselves and fail open) builds one inline
+and threads it down as a parameter. Sharing that instance buys uniformity, not caching: the
+transport holds no per-request state, and the cache that matters lives on `OrganizationsClient`,
+so it is the next rule, not this one, that keeps a lookup from being repeated.
 
 **A command-level client that needs a shared domain client exposes it as a `readonly` field**
 (`ImportApiClient.organizations`, `RemediateApiClient.issues` / `.components`) rather than
