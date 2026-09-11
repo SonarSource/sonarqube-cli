@@ -334,11 +334,10 @@ function createFeatureApplication(
 }
 
 /**
- * Collapses project-scope installs of a feature (or one of its `replacedIds`) that coexist with
- * an already-installed global one for the same integration into that single global record —
- * merging attrs and unioning active subfeatures — then tears down the stale project installs.
- * Several agents merge global and project config rather than one overriding the other, so leaving
- * both around keeps the old per-repo install firing side-by-side with the new global one.
+ * Collapses project-scope installs of a feature that coexist with an already-installed global one
+ * into that single global record, then tears down the stale project installs. Matches only
+ * `successor.id`, never `replacedIds` — an entry still under a retired predecessor id failed its
+ * own rename migration and is pending retry, not ready to collapse.
  */
 async function collapseGlobalScopeCoexistence(
   state: CliState,
@@ -388,9 +387,8 @@ async function collapseFeatureCoexistence(
     return false;
   }
 
-  const matchingIds = new Set([successor.id, ...(successor.replacedIds ?? [])]);
-  const coexisting = installedIntegration.features.filter((feature) =>
-    matchingIds.has(feature.featureId),
+  const coexisting = installedIntegration.features.filter(
+    (feature) => feature.featureId === successor.id,
   );
   const globalEntry = coexisting.find((feature) => feature.scope === 'global');
   const projectEntries = coexisting.filter((feature) => feature.scope === 'project');
@@ -480,14 +478,7 @@ function effectiveActiveSubfeatureIds(
   return defaultEligibleSubfeatureIds(container, entry.attrs);
 }
 
-/**
- * Real teardown for *same-id* stale project entries (no rename involved), using the current
- * declaration's own resource/operation templates at each entry's own recorded targetRoot/attrs.
- * An entry reached via `replacedIds` (a rename alongside the scope promotion) has no declaration
- * left under its own id to resolve its resources with — the caller prunes its state entry
- * regardless, and `legacyCleanups` is the existing mechanism for real cleanup in that case, same
- * limitation as the `replacedIds` migration above.
- */
+/** Real teardown for the stale (always same-id) project entries being folded into the global record. */
 async function teardownStaleProjectEntries(
   state: CliState,
   integration: IntegrationDeclaration,

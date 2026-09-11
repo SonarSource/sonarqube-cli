@@ -856,6 +856,76 @@ describe('reconcileInstalledIntegrations', () => {
       });
     });
 
+    it('leaves a stale project install alone when it is still recorded under a replacedIds predecessor id (its rename migration failed and is pending retry)', async () => {
+      const globalDir = join(tempDir, 'global');
+      const projectDir = join(tempDir, 'project');
+      fs.mkdirSync(globalDir, { recursive: true });
+      fs.mkdirSync(projectDir, { recursive: true });
+      fs.writeFileSync(join(projectDir, 'managed.txt'), 'stale-legacy-content');
+
+      const state = makeState();
+      state.integrations.installed.push({
+        id: 'integration-id',
+        integrationId: 'test-integration',
+        installedByCliVersion: '0.9.0',
+        installedAt: '2026-01-01T00:00:00.000Z',
+        updatedByCliVersion: '0.9.0',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        features: [
+          recordedCoexistingFeature('managed-feature', 'global', globalDir, { orgKey: 'org' }),
+          recordedCoexistingFeature('legacy-feature', 'project', projectDir, {
+            projectKey: 'proj',
+          }),
+        ],
+      });
+
+      const registry = new IntegrationRegistry();
+      registry.register({
+        id: 'test-integration',
+        displayName: 'Test integration',
+        features: [
+          {
+            id: 'managed-feature',
+            displayName: 'Managed feature',
+            replacedIds: ['legacy-feature'],
+            resources: [
+              wholeFile({
+                id: 'managed-file',
+                version: '1',
+                targetPath: (ctx) => join(ctx.targetRoot, 'managed.txt'),
+                // Fail the project-scope rename so it rolls back under the predecessor id.
+                content: (ctx) => {
+                  if (ctx.scope === 'project') {
+                    throw new Error('simulated rename-in-place failure');
+                  }
+                  return JSON.stringify(ctx.attrs);
+                },
+              }),
+            ],
+          },
+        ],
+      });
+
+      await reconcileInstalledIntegrations(state, registry, fake);
+
+      expect(fs.readFileSync(join(projectDir, 'managed.txt'), 'utf-8')).toBe(
+        'stale-legacy-content',
+      );
+      expect(JSON.parse(fs.readFileSync(join(globalDir, 'managed.txt'), 'utf-8'))).toEqual({
+        orgKey: 'org',
+      });
+
+      expect(state.integrations.installed[0].features).toHaveLength(2);
+      const legacyEntry = state.integrations.installed[0].features.find(
+        (feature) => feature.featureId === 'legacy-feature',
+      );
+      expect(legacyEntry).toMatchObject({
+        scope: 'project',
+        targetRoot: projectDir,
+        attrs: { projectKey: 'proj' },
+      });
+    });
+
     it('leaves project installs alone when no global install of the same feature exists', async () => {
       const projectDir = join(tempDir, 'project');
       fs.mkdirSync(projectDir, { recursive: true });
