@@ -21,8 +21,9 @@
 // Every SonarQube API call `sonar remediate` makes, in one place next to the command.
 
 import logger from '@/core/observability/logger.ts';
-import { okAsync } from '@/core/result.ts';
+import { okAsync, type ResultAsync } from '@/core/result.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
+import type { HttpClientError } from '@/core/server/errors.ts';
 import { type SonarHttpClient } from '@/core/server/http-client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
@@ -56,22 +57,7 @@ export class RemediateApiClient {
   checkAiRemediationEntitlement(orgKey: string): Promise<{ status: AiRemediationEntitlement }> {
     return this.organizations
       .getOrganizationLegacyId(orgKey)
-      .andThen((orgId) => {
-        // A non-critical failure (e.g. a 403 on the organization) is treated the same as "not
-        // found": the caller is not eligible either way.
-        if (!orgId) return okAsync({ status: 'not_eligible' as const });
-
-        const configEndpoint = `/fix-suggestions/organization-configs/${orgId}`;
-        return this.client
-          .get<{
-            codeReviewAgent: { organizationEligible: boolean; delegateIssuesEnabled?: boolean };
-          }>(configEndpoint, undefined, this.client.apiHostFor(configEndpoint))
-          .map((config): { status: AiRemediationEntitlement } => {
-            if (!config.codeReviewAgent.organizationEligible) return { status: 'not_eligible' };
-            if (!config.codeReviewAgent.delegateIssuesEnabled) return { status: 'not_enabled' };
-            return { status: 'ok' };
-          });
-      })
+      .andThen((orgId) => this.resolveEntitlementForOrgId(orgId))
       .match(
         (result) => result,
         (error) => {
@@ -79,6 +65,25 @@ export class RemediateApiClient {
           return { status: 'unknown' as const };
         },
       );
+  }
+
+  // A non-critical org-lookup failure (e.g. a 403) reaches here as a null orgId: it is
+  // treated the same as "not found" — the caller is not eligible either way.
+  private resolveEntitlementForOrgId(
+    orgId: string | null,
+  ): ResultAsync<{ status: AiRemediationEntitlement }, HttpClientError> {
+    if (!orgId) return okAsync({ status: 'not_eligible' as const });
+
+    const configEndpoint = `/fix-suggestions/organization-configs/${orgId}`;
+    return this.client
+      .get<{
+        codeReviewAgent: { organizationEligible: boolean; delegateIssuesEnabled?: boolean };
+      }>(configEndpoint, undefined, this.client.apiHostFor(configEndpoint))
+      .map((config): { status: AiRemediationEntitlement } => {
+        if (!config.codeReviewAgent.organizationEligible) return { status: 'not_eligible' };
+        if (!config.codeReviewAgent.delegateIssuesEnabled) return { status: 'not_enabled' };
+        return { status: 'ok' };
+      });
   }
 
   /**
