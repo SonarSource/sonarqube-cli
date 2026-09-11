@@ -94,8 +94,6 @@ async function handleSqaaPostToolUse(
   try {
     const fileContent = readFileSync(canonicalPath, 'utf-8');
     const sqaaAuth = {
-      serverUrl: auth.serverUrl,
-      token: auth.token,
       ...(auth.orgKey ? { orgKey: auth.orgKey } : {}),
       client: new SonarHttpClient(auth.serverUrl, auth.token),
     };

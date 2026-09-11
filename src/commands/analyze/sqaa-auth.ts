@@ -37,17 +37,14 @@ const LARGE_CHANGESET_HINT =
   '  --depth STANDARD  faster analysis (change-set / multi-file default is DEEP)';
 
 /**
- * Authentication context required for SQAA API calls. `orgKey` is Cloud-only: Server has
- * no organizations and its A3S hub forces the request onto the instance's default one.
+ * Where a Vortex analysis request goes, once auth has been validated: the organization to
+ * address and the client to send on. `orgKey` is Cloud-only, since Server has no
+ * organizations and its A3S hub forces the request onto the instance's default one.
  *
- * `client` is the transport built once per invocation by whichever entry point resolved
- * this auth (`resolveSqaaAuth`, or a hook handler building it inline) — every retry and
- * chunk split downstream of that resolution reuses this same instance instead of building
- * a fresh one per HTTP call.
+ * Holds no credentials: `client` already carries them, so keeping a second copy here would
+ * be a competing source of truth for the same request.
  */
 export interface SqaaAuth {
-  serverUrl: string;
-  token: string;
   orgKey?: string;
   client: SonarHttpClient;
 }
@@ -118,8 +115,6 @@ export function resolveSqaaAuth(
   }
 
   return {
-    serverUrl: auth.serverUrl,
-    token: auth.token,
     ...(auth.orgKey ? { orgKey: auth.orgKey } : {}),
     client,
   };
