@@ -896,7 +896,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       validateOnboardCiGitlabOptions(options);
       assertOnPremiseConnection(ctx.auth);
       const gitlabToken = await resolveGitlabToken(ctx.console);
-      return onboardCiGitlab(ctx.auth, gitlabToken, options, ctx.console);
+      return onboardCiGitlab(ctx.httpClient, ctx.auth, gitlabToken, options, ctx.console);
     });
 
   // Hidden flush command — only registered when running as a telemetry worker.
