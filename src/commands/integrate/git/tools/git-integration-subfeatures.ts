@@ -75,6 +75,7 @@ export function createDepRisksSubfeature(): SubfeatureDeclaration<IntegrateGitOp
   return {
     id: PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID,
     displayName: 'pre-commit dependency-risks scan',
+    scope: 'project',
     shouldInstall: async ({ options, scope, auth }) => {
       if (scope === 'global') {
         return skip('Dependency-risks scanning is not available for global hooks');

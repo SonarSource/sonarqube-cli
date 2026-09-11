@@ -30,7 +30,6 @@ import { normalizeDecision } from '@/core/framework/features/selection.ts';
 import type {
   FeatureContainer,
   FeaturePreview,
-  FeatureScope,
   FeatureTargetRoot,
   IntegrationContext,
   IntegrationInvocation,
@@ -43,6 +42,7 @@ import type {
   ResourceIdentity,
   WholeFileContent,
 } from '@/core/framework/resources';
+import type { IntegrationScope } from '@/core/state/state.ts';
 
 import {
   createAgentHookEntry,
@@ -73,7 +73,7 @@ export interface ClaudeHookEventContainerConfig<TOptions = Record<string, unknow
   subfeatures: ClaudeHookSubfeature<TOptions>[];
   defaultInstallSubfeatureIds: string[];
   targetRoot?: FeatureTargetRoot<TOptions>;
-  scope?: FeatureScope<TOptions>;
+  scope?: IntegrationScope;
   legacyCleanups?: (ResourceIdentity & RemovableResource)[];
 }
 

@@ -65,10 +65,6 @@ export interface IntegrationInvocation<TOptions = Record<string, unknown>> {
 export type FeatureTargetRoot<TOptions = Record<string, unknown>> =
   string | ((invocation: IntegrationInvocation<TOptions>) => MaybePromise<string>);
 
-export type FeatureScope<TOptions = Record<string, unknown>> =
-  | IntegrationScope
-  | ((invocation: IntegrationInvocation<TOptions>) => MaybePromise<IntegrationScope>);
-
 export interface IntegrationDeclaration<TOptions = Record<string, unknown>> {
   id: string;
   displayName: string;
@@ -119,7 +115,7 @@ export interface FeatureDeclaration<TOptions = Record<string, unknown>> {
     invocation: IntegrationInvocation<TOptions>,
   ) => MaybePromise<boolean | InstallDecision>;
   targetRoot?: FeatureTargetRoot<TOptions>;
-  scope?: FeatureScope<TOptions>;
+  scope?: IntegrationScope;
   dependencies?: DependencyDeclaration[];
   resources?: ResourceDeclaration[];
   operations?: FeatureOperation[];
@@ -138,12 +134,15 @@ export interface FeatureDeclaration<TOptions = Record<string, unknown>> {
 
 /**
  * Subfeature declaration — metadata, install condition, and the dependencies,
- * resources, and operations owned by that subfeature. Scope, target root, and
- * attrs always come from the owning {@link FeatureContainer}.
+ * resources, and operations owned by that subfeature. Target root and attrs
+ * always come from the owning {@link FeatureContainer}. Scope also defaults to
+ * the container's, but may be pinned here for a subfeature that must stay at
+ * one scope independent of its siblings (e.g. a subfeature whose own
+ * `shouldInstall` already refuses global scope).
  */
 export type SubfeatureDeclaration<TOptions = Record<string, unknown>> = Pick<
   FeatureDeclaration<TOptions>,
-  'id' | 'displayName' | 'shouldInstall' | 'dependencies' | 'resources' | 'operations'
+  'id' | 'displayName' | 'shouldInstall' | 'dependencies' | 'resources' | 'operations' | 'scope'
 > & {
   /** Gates inclusion in `defaultInstallSubfeatureIds` during reconcile migration, where `shouldInstall`'s `options` don't exist yet. Defaults to eligible. */
   migrationEligible?: (attrs: Record<string, IntegrationStateAttribute> | undefined) => boolean;
