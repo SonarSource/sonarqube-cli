@@ -20,7 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import { okAsync } from '@/core/result.ts';
 import { ScaClient } from '@/core/server/sca.ts';
@@ -54,12 +54,13 @@ function makeInvocation({
   };
 }
 
-const CLOUD_AUTH: ResolvedAuth = {
+const CLOUD_AUTH = new ResolvedAuth({
   serverUrl: 'https://sonarcloud.io',
   token: 'test-token',
   connectionType: 'cloud',
+  source: 'state' as const,
   orgKey: 'my-org',
-};
+});
 
 describe('createSecretsSubfeature', () => {
   it('always installs with an explanatory message', () => {

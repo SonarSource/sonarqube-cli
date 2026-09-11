@@ -25,15 +25,25 @@ import {
   SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
   SQAA_HOOK_TELEMETRY_EXIT_CODE,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
-import * as authResolver from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as projectInfo from '@/core/project-info.ts';
+import { okAsync } from '@/core/result.ts';
 
 import * as sqaaModule from '../../../../src/commands/analyze/sqaa.ts';
 import { codexPostToolUse } from '../../../../src/commands/hook/codex-post-tool-use.ts';
 import * as hookOutput from '../../../../src/commands/hook/format-sqaa-hook-context.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
+import { mockAuthResolver } from '../../../_common/mock-auth-resolver.ts';
+
+const FAKE_AUTH = new ResolvedAuth({
+  token: 'tok',
+  serverUrl: 'https://sonarcloud.io',
+  connectionType: 'cloud',
+  source: 'state' as const,
+  orgKey: 'myorg',
+});
 
 describe('codexPostToolUse', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;
@@ -46,18 +56,14 @@ describe('codexPostToolUse', () => {
   const originalStdinIsTTY = process.stdin.isTTY;
 
   beforeEach(() => {
-    ctx = new CommandInvocationContext(new FakeConsole());
+    const mocked = mockAuthResolver(FAKE_AUTH);
+    resolveAuthSpy = mocked.resolveAuthSpy;
+    ctx = new CommandInvocationContext(new FakeConsole(), undefined, mocked.runtime);
     Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: false });
     stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
     readStdinJsonSpy = spyOn(stdinModule, 'readStdinJson').mockRejectedValue(
       new Error('no stdin in unit test'),
     );
-    resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue({
-      token: 'tok',
-      serverUrl: 'https://sonarcloud.io',
-      connectionType: 'cloud',
-      orgKey: 'myorg',
-    });
     buildSqaaJsonReportSpy = spyOn(sqaaModule, 'buildSqaaJsonReport').mockResolvedValue({
       files: [{ path: 'src/foo.ts', issues: [], errors: null }],
       ignored: [],
@@ -195,11 +201,16 @@ describe('codexPostToolUse', () => {
   });
 
   it('runs analysis on a Server connection without an organization', async () => {
-    resolveAuthSpy.mockResolvedValue({
-      token: 'tok',
-      serverUrl: 'https://sonar.example.com',
-      connectionType: 'on-premise',
-    });
+    resolveAuthSpy.mockReturnValue(
+      okAsync(
+        new ResolvedAuth({
+          token: 'tok',
+          serverUrl: 'https://sonar.example.com',
+          connectionType: 'on-premise',
+          source: 'state' as const,
+        }),
+      ),
+    );
 
     await codexPostToolUse(ctx);
 
@@ -214,12 +225,17 @@ describe('codexPostToolUse', () => {
   });
 
   it('skips output when cloud auth has no orgKey', async () => {
-    resolveAuthSpy.mockResolvedValue({
-      token: 'tok',
-      serverUrl: 'https://sonarcloud.io',
-      connectionType: 'cloud',
-      orgKey: undefined,
-    });
+    resolveAuthSpy.mockReturnValue(
+      okAsync(
+        new ResolvedAuth({
+          token: 'tok',
+          serverUrl: 'https://sonarcloud.io',
+          connectionType: 'cloud',
+          source: 'state' as const,
+          orgKey: undefined,
+        }),
+      ),
+    );
 
     await codexPostToolUse(ctx);
 

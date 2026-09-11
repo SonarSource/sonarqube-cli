@@ -32,8 +32,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import * as authResolver from '@/core/auth/auth-resolver.ts';
+import { AuthResolver, ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { ENV_SONAR_USER_HOME, getTelemetryDir } from '@/core/config-constants.ts';
 import type { AuthConnection } from '@/core/state/state.ts';
 import {
@@ -52,11 +51,22 @@ import { mockIdentityGetSafe } from './identity-api-mock.ts';
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function cloudAuth(token: string, orgKey = 'my-org'): ResolvedAuth {
-  return { token, serverUrl: 'https://sonarcloud.io', orgKey, connectionType: 'cloud' };
+  return new ResolvedAuth({
+    token,
+    serverUrl: 'https://sonarcloud.io',
+    orgKey,
+    connectionType: 'cloud',
+    source: 'state',
+  });
 }
 
 function serverAuth(token: string): ResolvedAuth {
-  return { token, serverUrl: 'https://sq.example.com', connectionType: 'on-premise' };
+  return new ResolvedAuth({
+    token,
+    serverUrl: 'https://sq.example.com',
+    connectionType: 'on-premise',
+    source: 'state',
+  });
 }
 
 function cloudConn(overrides: Partial<AuthConnection> = {}): AuthConnection {
@@ -226,16 +236,20 @@ describe('needsIdentityEnrichment()', () => {
 });
 
 describe('resolveStoreEventTelemetryIdentitySafely()', () => {
-  it('falls back to the connection identity when enrichment throws', async () => {
+  it('returns the connection identity without re-resolving auth when no auth is supplied', async () => {
     const conn = cloudConn({ userUuid: 'u' });
-    const resolveFromStateSpy = spyOn(authResolver, 'resolveFromState').mockRejectedValue(
-      new Error('keychain locked'),
+    const resolveFromStateSpy = spyOn(
+      AuthResolver.prototype as AuthResolver & {
+        resolveFromState: () => Promise<ResolvedAuth | null>;
+      },
+      'resolveFromState',
     );
 
     const result = await resolveStoreEventTelemetryIdentitySafely(conn);
 
     expect(result.connectionType).toBe('sqc');
     expect(result.identity.user_uuid).toBe('u');
+    expect(resolveFromStateSpy).not.toHaveBeenCalled();
     resolveFromStateSpy.mockRestore();
   });
 });

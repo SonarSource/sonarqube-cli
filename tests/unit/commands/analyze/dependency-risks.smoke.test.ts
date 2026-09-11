@@ -20,7 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 
 import { ScaScanOrchestrator } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
@@ -28,12 +28,13 @@ import type { AnalyzeProjectResponse } from '../../../../src/commands/analyze/de
 import { analyzeDependencyRisks } from '../../../../src/commands/analyze/dependency-risks.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
-const FAKE_AUTH: ResolvedAuth = {
+const FAKE_AUTH = new ResolvedAuth({
   token: 'test-token',
   serverUrl: 'https://sonarcloud.io',
   orgKey: 'my-org',
   connectionType: 'cloud',
-};
+  source: 'state' as const,
+});
 
 let fake: FakeConsole;
 let FAKE_AUTHENTICATED_CONTEXT: CommandAuthenticatedInvocationContext;

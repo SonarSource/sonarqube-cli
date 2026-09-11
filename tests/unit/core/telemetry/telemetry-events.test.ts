@@ -36,7 +36,7 @@ import { scanAndEmitSecrets } from '@/commands/analyze/secrets.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import { SQAA_ANALYZE_AGENTIC_CALLER_COMMAND } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import type { IntegrationConfiguredPayload } from '@/commands/integrate/_common/integrate-telemetry.ts';
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { ENV_SONAR_USER_HOME, TELEMETRY_ENDPOINT } from '@/core/config-constants.ts';
 import { NetworkConfigError } from '@/core/errors.ts';
@@ -156,12 +156,13 @@ function mockFetch(ok = true): ReturnType<typeof spyOn> {
   } as Response);
 }
 
-const AUTH: ResolvedAuth = {
+const AUTH = new ResolvedAuth({
   connectionType: 'cloud',
+  source: 'state' as const,
   serverUrl: 'https://sonarcloud.io',
   token: 'test-token',
   orgKey: 'my-org',
-};
+});
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -271,7 +272,7 @@ describe('emitAnalysisCompleted()', () => {
 
   it('sets connection_type to sqc for cloud connections', async () => {
     await emitAnalysisCompleted(
-      { ...AUTH, connectionType: 'cloud' },
+      new ResolvedAuth({ ...AUTH, connectionType: 'cloud' }),
       makeAnalysisCompletedPayload(),
     );
 
@@ -281,7 +282,7 @@ describe('emitAnalysisCompleted()', () => {
 
   it('sets connection_type to sqs for server connections', async () => {
     await emitAnalysisCompleted(
-      { ...AUTH, connectionType: 'on-premise' },
+      new ResolvedAuth({ ...AUTH, connectionType: 'on-premise' }),
       makeAnalysisCompletedPayload(),
     );
 

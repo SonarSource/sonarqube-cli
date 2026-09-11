@@ -78,7 +78,7 @@ export async function copilotPreToolUse(ctx: CommandInvocationContext): Promise<
 
   let deps: HookDependencies;
   try {
-    deps = await resolveAuthAndSecrets();
+    deps = await resolveAuthAndSecrets(ctx);
   } catch (err) {
     if (err instanceof MissingDependenciesError) {
       denyToolUse(err.message);

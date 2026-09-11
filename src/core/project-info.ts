@@ -37,6 +37,7 @@ import {
   buildKnownServerProjectMappings,
   mergeKnownServerProjectMappings,
 } from '@/core/known-server-project-mappings.ts';
+import type { ResultAsync } from '@/core/result.ts';
 import {
   discoverProjectKeyByGitRemote,
   GIT_REMOTE_BINDING_SOURCE,
@@ -84,8 +85,16 @@ export interface DiscoveredProject {
 }
 
 export interface DiscoverProjectOptions {
-  /** `null` skips git-remote binding entirely (no local `git remote` read either) — pass it when there's no auth to spend on it. */
-  auth: ResolvedAuth | null;
+  /** When set, used for git-remote binding lookup instead of resolving auth again. `null` skips git-remote binding entirely (no local `git remote` read either). */
+  auth?: ResolvedAuth | null;
+  /**
+   * When `auth` is omitted, called to resolve credentials for git-remote binding.
+   * Pass the invocation context resolver (for example `() => ctx.resolveAuth({ silent: true })`)
+   * so env-var auth is recorded and memoized through the shared AuthResolver.
+   */
+  resolveAuth?: () => ResultAsync<ResolvedAuth | null>;
+  /** When false, skips server lookup even if a git remote is present. Defaults to true. */
+  tryGitRemoteBinding?: boolean;
   /** Suppresses the "Found ..." stderr hints. Defaults to false. */
   silent?: boolean;
   console: Console;
@@ -451,12 +460,24 @@ function applyKnownServerProjectMapping(
   return true;
 }
 
+async function resolveDiscoverProjectAuth(
+  options: DiscoverProjectOptions,
+): Promise<ResolvedAuth | null> {
+  if (options.auth !== undefined) {
+    return options.auth;
+  }
+  if (!options.resolveAuth) {
+    return null;
+  }
+  return await options.resolveAuth().orThrow();
+}
+
 async function applyGitRemoteBinding(
   config: DiscoveredProject,
   repoRoot: string | undefined,
   options: DiscoverProjectOptions,
 ): Promise<void> {
-  if (options.auth === null) {
+  if (options.auth === null || options.tryGitRemoteBinding === false) {
     return;
   }
 
@@ -465,7 +486,12 @@ async function applyGitRemoteBinding(
     return;
   }
 
-  const remoteBinding = await discoverProjectKeyByGitRemote(options.auth, gitRemote);
+  const auth = await resolveDiscoverProjectAuth(options);
+  if (!auth) {
+    return;
+  }
+
+  const remoteBinding = await discoverProjectKeyByGitRemote(auth, gitRemote);
   if (!remoteBinding) {
     return;
   }

@@ -19,18 +19,13 @@
  */
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { type CliRuntime, createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { type LifecycleState, STABLE_LIFECYCLE } from '@/core/commands/stage.ts';
+import { okAsync, type ResultAsync } from '@/core/result.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-/**
- * Runtime gates consulted when answering whether this execution should be
- * treated as alpha / beta (mirrors {@link CliRuntime} fields used by stage
- * visibility, without importing `SonarCommand`).
- */
-export type CommandInvocationContextRuntime = {
-  isAlphaEnabled: boolean;
-  isPrivateBetaEnabled: (flagKey: string) => boolean;
-};
+/** @deprecated Use {@link CliRuntime} from `@/core/commands/cli-runtime.ts`. */
+export type CommandInvocationContextRuntime = CliRuntime;
 
 /**
  * Named domain observation recorded by a command handler.
@@ -67,10 +62,7 @@ export class TelemetryFact<TPayload = unknown> {
   }
 }
 
-const DISABLED_RUNTIME: CommandInvocationContextRuntime = {
-  isAlphaEnabled: false,
-  isPrivateBetaEnabled: () => false,
-};
+const DISABLED_RUNTIME: CliRuntime = createCliRuntime();
 
 /**
  * Per-command invocation context for handlers that do not require auth.
@@ -91,7 +83,7 @@ export class CommandInvocationContext {
   constructor(
     readonly console: Console,
     private readonly lifecycle: LifecycleState = STABLE_LIFECYCLE,
-    private readonly runtime: CommandInvocationContextRuntime = DISABLED_RUNTIME,
+    private readonly runtime: CliRuntime = DISABLED_RUNTIME,
   ) {}
 
   /** True when this command is Alpha and alpha is enabled for this run. */
@@ -111,6 +103,15 @@ export class CommandInvocationContext {
       return true;
     }
     return this.runtime.isPrivateBetaEnabled(this.lifecycle.betaFlagKey);
+  }
+
+  /**
+   * Resolve auth for this invocation. `Ok(null)` means not authenticated;
+   * `Err` means credentials could not be read (for example corrupt state).
+   * Memoized for the lifetime of this context.
+   */
+  resolveAuth(options?: { silent?: boolean }): ResultAsync<ResolvedAuth | null> {
+    return this.runtime.authResolver.resolveAuth(options);
   }
 
   /** Record telemetry facts for `postAction` drain. */
@@ -138,8 +139,12 @@ export class CommandAuthenticatedInvocationContext extends CommandInvocationCont
     readonly auth: ResolvedAuth,
     console: Console,
     lifecycle?: LifecycleState,
-    runtime?: CommandInvocationContextRuntime,
+    runtime?: CliRuntime,
   ) {
     super(console, lifecycle, runtime);
+  }
+
+  override resolveAuth(): ResultAsync<ResolvedAuth> {
+    return okAsync(this.auth);
   }
 }

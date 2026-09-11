@@ -115,12 +115,12 @@ export type IdentityEmitOptions = {
    * otherwise `buildIdentityBase` falls back to agent-native env vars.
    */
   agentSessionId?: string | null;
+  /** When set, identity is resolved from this auth instead of the active connection alone. */
+  auth?: ResolvedAuth | null;
 };
 
 export type TelemetryEmitOptions = IdentityEmitOptions & {
   eventTimestampMs?: number;
-  /** When set, identity is resolved from this auth; otherwise the active connection. */
-  auth?: ResolvedAuth;
 };
 
 /**
@@ -132,11 +132,10 @@ export async function emitTelemetryEvent(
   fields: object,
   options?: TelemetryEmitOptions,
 ): Promise<void> {
-  const auth = options?.auth;
   const resolve: IdentityResolver =
-    auth === undefined
-      ? resolveStoreEventTelemetryIdentitySafely
-      : (conn) => resolveCommandTelemetryIdentity(conn, auth);
+    options && 'auth' in options
+      ? (conn) => resolveCommandTelemetryIdentity(conn, options.auth ?? null)
+      : resolveStoreEventTelemetryIdentitySafely;
   const base = await buildIdentityBase(resolve, options);
   if (!base) return;
   appendTelemetryEvent({

@@ -22,8 +22,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import * as authResolver from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import {
   CommandAuthenticatedInvocationContext,
@@ -46,12 +46,14 @@ import * as stateManager from '@/core/state/state-manager.ts';
 
 import { version as VERSION } from '../../../package.json';
 import { FakeConsole } from '../../_common/fake-console.ts';
+import { mockAuthResolver } from '../../_common/mock-auth-resolver.ts';
 
-const FAKE_AUTH: ResolvedAuth = {
+const FAKE_AUTH = new ResolvedAuth({
   token: 'fake-token',
   serverUrl: 'https://sonar.example.com',
   connectionType: 'on-premise',
-};
+  source: 'state' as const,
+});
 
 let ui = new FakeConsole();
 
@@ -101,7 +103,7 @@ describe('SonarCommand', () => {
         () =>
           // @ts-expect-error console is intentionally omitted to test the runtime guard
           new SonarCommand({
-            runtime: { auth: null, isAlphaEnabled: false, isPrivateBetaEnabled: () => false },
+            runtime: createCliRuntime(),
           }),
       ).toThrow('SonarCommand requires a console');
     });
@@ -118,9 +120,12 @@ describe('SonarCommand', () => {
   });
 
   describe('createDefaultCliRuntime()', () => {
-    it('returns a runtime with private beta disabled', () => {
+    it('returns a runtime with resolvers and private beta disabled by default', () => {
       const runtime = createDefaultCliRuntime();
       expect(runtime.isPrivateBetaEnabled('cli.beta.demo')).toBe(false);
+      expect(runtime.authResolver).toBeDefined();
+      expect(runtime.flagsResolver).toBeDefined();
+      expect(runtime.privateBetaFlags).toBeDefined();
     });
   });
 
@@ -613,11 +618,7 @@ describe('SonarCommand', () => {
     it('stores an optional LaunchDarkly flag key for Private Beta', () => {
       const open = sonarCommand('open').stage(Stage.Beta());
       const gated = sonarCommand('gated', {
-        runtime: {
-          auth: null,
-          isAlphaEnabled: false,
-          isPrivateBetaEnabled: () => true,
-        },
+        runtime: createCliRuntime({ isPrivateBetaEnabled: () => true }),
       }).stage(Stage.Beta('cli.beta.preview'));
 
       expect(open.lifecycle).toEqual({ stage: 'beta' });
@@ -626,21 +627,15 @@ describe('SonarCommand', () => {
 
     it('registers Private Beta only when the runtime gate allows it', () => {
       const enabled = sonarCommand('root', {
-        runtime: {
-          auth: null,
-          isAlphaEnabled: false,
+        runtime: createCliRuntime({
           isPrivateBetaEnabled: (key) => key === 'cli.beta.preview',
-        },
+        }),
       });
       enabled.command('gated').stage(Stage.Beta('cli.beta.preview'));
       expect(enabled.commands.map((c) => c.name())).toContain('gated');
 
       const denied = sonarCommand('root', {
-        runtime: {
-          auth: null,
-          isAlphaEnabled: false,
-          isPrivateBetaEnabled: () => false,
-        },
+        runtime: createCliRuntime({ isPrivateBetaEnabled: () => false }),
       });
       denied.command('gated').stage(Stage.Beta('cli.beta.preview'));
       expect(denied.commands.map((c) => c.name())).not.toContain('gated');
@@ -890,7 +885,7 @@ describe('SonarCommand', () => {
       process.env[ALPHA_ENV_VAR] = 'true';
       const handler = mock((_ctx: CommandInvocationContext) => {});
       const cmd = sonarCommand({
-        runtime: { auth: null, isAlphaEnabled: true, isPrivateBetaEnabled: () => false },
+        runtime: createCliRuntime({ isAlphaEnabled: true }),
       });
       cmd.stage(Stage.Alpha).anonymousAction(handler);
       await cmd.parseAsync([], { from: 'user' });
@@ -912,11 +907,9 @@ describe('SonarCommand', () => {
     it('sets isBetaEligible() for Private Beta when the user is entitled', async () => {
       const handler = mock((_ctx: CommandInvocationContext) => {});
       const cmd = sonarCommand({
-        runtime: {
-          auth: null,
-          isAlphaEnabled: false,
+        runtime: createCliRuntime({
           isPrivateBetaEnabled: (key) => key === 'cli.beta.demo',
-        },
+        }),
       });
       cmd.stage(Stage.Beta('cli.beta.demo')).anonymousAction(handler);
       await cmd.parseAsync([], { from: 'user' });
@@ -971,9 +964,10 @@ describe('SonarCommand', () => {
 
   describe('authenticatedAction()', () => {
     it('calls handler with CommandAuthenticatedInvocationContext as first argument', async () => {
-      resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
+      const mocked = mockAuthResolver(FAKE_AUTH);
+      resolveAuthSpy = mocked.resolveAuthSpy;
       const handler = mock((_ctx: CommandAuthenticatedInvocationContext) => Promise.resolve());
-      const cmd = sonarCommand();
+      const cmd = sonarCommand({ runtime: mocked.runtime });
       cmd.authenticatedAction(handler);
       await cmd.parseAsync([], { from: 'user' });
       expect(handler).toHaveBeenCalledTimes(1);
@@ -984,25 +978,28 @@ describe('SonarCommand', () => {
     });
 
     it('does not call handler when not authenticated', async () => {
-      resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(null);
+      const mocked = mockAuthResolver(null);
+      resolveAuthSpy = mocked.resolveAuthSpy;
       const handler = mock(() => Promise.resolve());
-      const cmd = sonarCommand();
+      const cmd = sonarCommand({ runtime: mocked.runtime });
       cmd.authenticatedAction(handler);
       await cmd.parseAsync([], { from: 'user' });
       expect(handler).not.toHaveBeenCalled();
     });
 
     it('sets process.exitCode to 1 when not authenticated', async () => {
-      resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(null);
-      const cmd = sonarCommand();
+      const mocked = mockAuthResolver(null);
+      resolveAuthSpy = mocked.resolveAuthSpy;
+      const cmd = sonarCommand({ runtime: mocked.runtime });
       cmd.authenticatedAction(() => Promise.resolve());
       await cmd.parseAsync([], { from: 'user' });
       expect(process.exitCode).toBe(1);
     });
 
     it('outputs a descriptive error message when not authenticated', async () => {
-      resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(null);
-      const cmd = sonarCommand();
+      const mocked = mockAuthResolver(null);
+      resolveAuthSpy = mocked.resolveAuthSpy;
+      const cmd = sonarCommand({ runtime: mocked.runtime });
       cmd.authenticatedAction(() => Promise.resolve());
       await cmd.parseAsync([], { from: 'user' });
       const errCall = ui.calls.find((c) => c.method === 'error');
@@ -1012,8 +1009,9 @@ describe('SonarCommand', () => {
     });
 
     it('catches handler errors and sets process.exitCode', async () => {
-      resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
-      const cmd = sonarCommand();
+      const mocked = mockAuthResolver(FAKE_AUTH);
+      resolveAuthSpy = mocked.resolveAuthSpy;
+      const cmd = sonarCommand({ runtime: mocked.runtime });
       cmd.authenticatedAction(() => {
         throw new CommandFailedError('handler failed', { exitCode: 5 });
       });
@@ -1043,10 +1041,11 @@ describe('SonarCommand', () => {
 
     it('sets isAlphaEligible() when command has Stage.Alpha and alpha is enabled', async () => {
       process.env[ALPHA_ENV_VAR] = 'true';
-      resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
+      const mocked = mockAuthResolver(FAKE_AUTH);
+      resolveAuthSpy = mocked.resolveAuthSpy;
       const handler = mock((_ctx: CommandAuthenticatedInvocationContext) => Promise.resolve());
       const cmd = sonarCommand({
-        runtime: { auth: null, isAlphaEnabled: true, isPrivateBetaEnabled: () => false },
+        runtime: createCliRuntime({ authResolver: mocked.authResolver, isAlphaEnabled: true }),
       });
       cmd.stage(Stage.Alpha).authenticatedAction(handler);
       await cmd.parseAsync([], { from: 'user' });
@@ -1057,9 +1056,10 @@ describe('SonarCommand', () => {
     });
 
     it('sets isBetaEligible() for Open Beta', async () => {
-      resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
+      const mocked = mockAuthResolver(FAKE_AUTH);
+      resolveAuthSpy = mocked.resolveAuthSpy;
       const handler = mock((_ctx: CommandAuthenticatedInvocationContext) => Promise.resolve());
-      const cmd = sonarCommand();
+      const cmd = sonarCommand({ runtime: mocked.runtime });
       cmd.stage(Stage.Beta()).authenticatedAction(handler);
       await cmd.parseAsync([], { from: 'user' });
       expect(handler).toHaveBeenCalledTimes(1);
@@ -1077,11 +1077,10 @@ describe('SonarCommand', () => {
       runtime?: { isAlphaEnabled?: boolean; isPrivateBetaEnabled?: (flagKey: string) => boolean },
     ): SonarCommand {
       const cmd = sonarCommand('cmd', {
-        runtime: {
-          auth: null,
-          isAlphaEnabled: runtime?.isAlphaEnabled ?? false,
-          isPrivateBetaEnabled: runtime?.isPrivateBetaEnabled ?? (() => false),
-        },
+        runtime: createCliRuntime({
+          isAlphaEnabled: runtime?.isAlphaEnabled,
+          isPrivateBetaEnabled: runtime?.isPrivateBetaEnabled,
+        }),
       });
       cmd.addOption(option).anonymousAction(() => {});
       cmd.exitOverride().configureOutput({ writeErr: () => {}, writeOut: () => {} });
@@ -1116,7 +1115,7 @@ describe('SonarCommand', () => {
       const option = new SonarOption('--need', 'Required').stage(Stage.Alpha).makeOptionMandatory();
       expect(() =>
         sonarCommand('cmd', {
-          runtime: { auth: null, isAlphaEnabled: true, isPrivateBetaEnabled: () => false },
+          runtime: createCliRuntime({ isAlphaEnabled: true }),
         }).addOption(option),
       ).toThrow("Cannot stage a required option as Alpha or Beta: '--need'");
     });
@@ -1144,7 +1143,7 @@ describe('SonarCommand', () => {
     it('registers an Alpha option with an [ALPHA] tag when alpha is enabled', async () => {
       const handler = mock(() => {});
       const cmd = sonarCommand('cmd', {
-        runtime: { auth: null, isAlphaEnabled: true, isPrivateBetaEnabled: () => false },
+        runtime: createCliRuntime({ isAlphaEnabled: true }),
       });
       cmd
         .addOption(new SonarOption('--preview', 'Preview the plan').stage(Stage.Alpha))
@@ -1164,7 +1163,7 @@ describe('SonarCommand', () => {
 
     it('lists Alpha options in a separate group at the bottom of help', () => {
       const cmd = sonarCommand('cmd', {
-        runtime: { auth: null, isAlphaEnabled: true, isPrivateBetaEnabled: () => false },
+        runtime: createCliRuntime({ isAlphaEnabled: true }),
       });
       cmd.option('--stable', 'A stable option');
       cmd.addOption(new SonarOption('--preview', 'Preview the plan').stage(Stage.Alpha));

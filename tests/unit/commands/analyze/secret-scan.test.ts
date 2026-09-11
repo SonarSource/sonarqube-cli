@@ -28,7 +28,7 @@ import * as fs from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { analyzeSecrets, runSecretsBinaryOnText } from '@/commands/analyze/secrets.ts';
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
@@ -42,12 +42,13 @@ const SONARCLOUD_URL = 'https://sonarcloud.io';
 const TEST_ORG = 'test-org';
 const TEST_TOKEN = 'squ_test_token';
 
-const FAKE_AUTH: ResolvedAuth = {
+const FAKE_AUTH = new ResolvedAuth({
   token: TEST_TOKEN,
   serverUrl: SONARCLOUD_URL,
   orgKey: TEST_ORG,
   connectionType: 'cloud',
-};
+  source: 'state' as const,
+});
 
 let fake: FakeConsole;
 let FAKE_AUTHENTICATED_CONTEXT: CommandAuthenticatedInvocationContext;

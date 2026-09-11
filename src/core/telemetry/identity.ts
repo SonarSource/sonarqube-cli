@@ -18,7 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import {
+  CommandAuthenticatedInvocationContext,
+  type CommandInvocationContext,
+} from '@/core/commands/invocation-context.ts';
 import { authMatchesConnection } from '@/core/state/state-manager.ts';
 import {
   identityFromConnection,
@@ -48,7 +52,7 @@ function matchingConnection(
   return conn;
 }
 
-/** Trusts an already-complete `conn` to skip a redundant `resolveAuth()`. */
+/** Trusts an already-complete `conn` to skip redundant identity enrichment. */
 async function resolveStoreEventTelemetryIdentity(
   conn: AuthConnection | undefined,
 ): Promise<{ connectionType: TelemetryConnectionType; identity: TelemetryIdentity }> {
@@ -58,8 +62,7 @@ async function resolveStoreEventTelemetryIdentity(
       identity: identityFromConnection(conn),
     };
   }
-  const auth = await resolveAuth({ silent: true });
-  return resolveCommandTelemetryIdentity(conn, auth);
+  return resolveCommandTelemetryIdentity(conn, null);
 }
 
 /**
@@ -97,4 +100,24 @@ export async function resolveCommandTelemetryIdentity(
   }
 
   return { connectionType, identity };
+}
+
+/**
+ * Auth for telemetry when draining handler facts: authenticated handlers expose
+ * `ctx.auth`; anonymous handlers resolve once via the invocation context.
+ */
+export async function resolveInvocationAuthForTelemetry(
+  ctx: CommandInvocationContext | undefined,
+): Promise<ResolvedAuth | null | undefined> {
+  if (!ctx) {
+    return undefined;
+  }
+  if (ctx instanceof CommandAuthenticatedInvocationContext) {
+    return ctx.auth;
+  }
+  const result = await ctx.resolveAuth({ silent: true });
+  if (result.isErr()) {
+    return null;
+  }
+  return result.value;
 }

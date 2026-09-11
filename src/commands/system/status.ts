@@ -24,7 +24,7 @@ import { join } from 'node:path';
 
 import { parse as parseToml } from 'smol-toml';
 
-import { isSonarQubeCloud, resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
 import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -414,10 +414,11 @@ export async function systemStatus(
     integration.features.some(isProjectVortexFeature),
   );
 
-  const [auth, updateResult] = await Promise.all([
-    resolveAuth().catch(() => null),
-    getCliUpdateInfo(),
-  ]);
+  const [authResult, updateResult] = await Promise.all([ctx.resolveAuth(), getCliUpdateInfo()]);
+  if (authResult.isErr()) {
+    throw authResult.error;
+  }
+  const auth = authResult.value;
 
   const { tokenStatus, vortex } = await resolveAuthenticatedChecks(auth);
 

@@ -20,13 +20,19 @@
 
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { VortexEntitlementStatus } from '@/core/vortex/entitlement.ts';
 import { VortexEntitlementClient } from '@/core/vortex/entitlement.ts';
 import { recheckVortexEntitlement, resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 function cloudAuth(orgKey = 'my-org'): ResolvedAuth {
-  return { token: 'tok', serverUrl: 'https://sonarcloud.io', orgKey, connectionType: 'cloud' };
+  return new ResolvedAuth({
+    token: 'tok',
+    serverUrl: 'https://sonarcloud.io',
+    orgKey,
+    connectionType: 'cloud',
+    source: 'state',
+  });
 }
 
 describe('recheckVortexEntitlement', () => {
@@ -66,11 +72,12 @@ describe('recheckVortexEntitlement', () => {
 });
 
 function serverAuth(): ResolvedAuth {
-  return {
+  return new ResolvedAuth({
     token: 'tok',
     serverUrl: 'https://sonarqube.example.com',
     connectionType: 'on-premise',
-  };
+    source: 'state' as const,
+  });
 }
 
 describe('resolveVortexEntitlement', () => {
@@ -88,7 +95,9 @@ describe('resolveVortexEntitlement', () => {
 
   it('returns not_applicable without calling the API for Cloud without an org', async () => {
     entitlementSpy = spyOn(VortexEntitlementClient.prototype, 'hasVortexEntitlement');
-    expect(await resolveVortexEntitlement({ ...cloudAuth(), orgKey: undefined })).toEqual({
+    expect(
+      await resolveVortexEntitlement(new ResolvedAuth({ ...cloudAuth(), orgKey: undefined })),
+    ).toEqual({
       status: 'not_applicable',
     });
     expect(entitlementSpy).not.toHaveBeenCalled();

@@ -20,7 +20,7 @@
 
 import { beforeEach, describe, expect, it } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
 
 import {
@@ -30,12 +30,13 @@ import {
 } from '../../../../../src/commands/integrate/_common/agent-integrate-prelude.ts';
 import { FakeConsole } from '../../../../_common/fake-console.ts';
 
-const AUTH: ResolvedAuth = {
+const AUTH = new ResolvedAuth({
   token: 'token',
   serverUrl: 'https://sonarcloud.io',
   orgKey: 'my-org',
   connectionType: 'cloud',
-};
+  source: 'state' as const,
+});
 
 const PROJECT: DiscoveredProject = {
   repoRoot: undefined,

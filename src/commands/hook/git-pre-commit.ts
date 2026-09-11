@@ -22,7 +22,7 @@
 // when --dependency-risks is set, runs a dependency-risks scan as a follow-up stage.
 // Replaces the shell logic that was previously embedded in the git hook script.
 
-import { resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { spawnProcess } from '@/core/process/process.ts';
@@ -65,7 +65,11 @@ export async function gitPreCommit(
   files: string[],
   ctx: CommandInvocationContext,
 ): Promise<void> {
-  const auth = await resolveAuth().catch(() => null);
+  const authResult = await ctx.resolveAuth();
+  if (authResult.isErr()) {
+    throw authResult.error;
+  }
+  const auth = authResult.value;
 
   // Validated up front, independent of staged files, so a misconfigured hook
   // (--dependency-risks with no way to resolve a project) always fails loudly.
