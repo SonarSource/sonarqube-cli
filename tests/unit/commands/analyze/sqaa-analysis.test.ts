@@ -143,8 +143,6 @@ describe('runAnalyses partial 413', () => {
   }
 
   const AUTH: SqaaAuth = {
-    serverUrl: 'https://sonarcloud.io',
-    token: 't',
     orgKey: 'org',
     client: new SonarHttpClient('https://sonarcloud.io', 't'),
   };
