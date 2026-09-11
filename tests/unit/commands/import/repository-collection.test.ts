@@ -20,10 +20,10 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import type { DopRepository } from '@/commands/import/_common/import-api.ts';
-import { ImportApiClient } from '@/commands/import/_common/import-api.ts';
+import type { DopRepository } from '@/commands/import/import-api.ts';
+import { ImportApiClient } from '@/commands/import/import-api.ts';
 
-import { RepositoryCollection } from '../../../../../src/commands/import/_common/repository-collection.ts';
+import { RepositoryCollection } from '../../../../src/commands/import/repository-collection.ts';
 
 const ONLY_PRIVATE_PROJECTS = { enabled: false, available: false };
 
