@@ -22,8 +22,9 @@ Known gap: **Sentry** (`src/core/observability/sentry.ts`) transmits through the
 
 HTTP is split in two (CLI-842). `SonarHttpClient` (`src/core/server/http-client.ts`) is the **only**
 class that knows about transport: headers, timeouts, request bodies, and how a non-2xx response
-becomes a typed error (`get` / `getOrNullIf404` / `getSafe` / `post` / `postForm` / `postFormJson`,
-plus `genericRequest` for `sonar api` only); every one of them issues its request through
+becomes an `HttpClientError` on the error side of a `ResultAsync` (CLI-844 — the convention and the
+`orThrow()` boundary are documented in `src/core/result.ts`, the only module allowed to import
+`neverthrow`). Every one of its methods issues its request through
 `fetchAuthenticated`, since they all carry the bearer token. It also exposes `apiHostFor(endpoint)`,
 which resolves the region-specific Cloud API host for an endpoint family — call sites pass its
 result as `baseUrl` instead of reaching for `resolveFromEndpoint` themselves.
