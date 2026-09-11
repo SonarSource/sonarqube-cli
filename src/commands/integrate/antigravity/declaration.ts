@@ -29,7 +29,11 @@ import {
   ANTIGRAVITY_PROMPT_SECRETS_RULE_FILE,
   ANTIGRAVITY_SQAA_RULE_FILE,
 } from '@/core/config-constants.ts';
-import type { IntegrationContext, IntegrationDeclaration } from '@/core/framework/features';
+import type {
+  IntegrationContext,
+  IntegrationDeclaration,
+  ResourceDeclaration,
+} from '@/core/framework/features';
 import {
   askUser,
   jsonPatch,
@@ -40,6 +44,7 @@ import {
   wholeFile,
 } from '@/core/framework/features';
 import { getMcpConfig } from '@/core/host/mcp/mcp-helper.ts';
+import type { IntegrationScope } from '@/core/state/state.ts';
 
 import {
   MCP_SERVER_FEATURE_BENEFIT,
@@ -52,6 +57,7 @@ import {
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
   createSqaaInstructionsRule,
+  createSqaaInstructionsSnippet,
   createSqaaInstructionsSubfeature,
 } from '../_common/features/sqaa-instructions-feature.ts';
 import { buildUnixHookScript, buildWindowsHookScript } from '../_common/hooks.ts';
@@ -85,7 +91,14 @@ export interface AntigravityIntegrationOptions extends IntegrateAgentOptions {
 const antigravityVortexFeature = createVortexFeature<AntigravityIntegrationOptions>(
   [
     createSqaaInstructionsSubfeature<AntigravityIntegrationOptions>([
-      createSqaaInstructionsRule(resolveSqaaRulePath, buildAntigravityAlwaysOnRule),
+      onlyAtScope(
+        'project',
+        createSqaaInstructionsRule(resolveSqaaRulePath, buildAntigravityAlwaysOnRule),
+      ),
+      onlyAtScope(
+        'global',
+        createSqaaInstructionsSnippet(() => ANTIGRAVITY_GLOBAL_GEMINI_MD),
+      ),
     ]),
   ],
   resolveAntigravitySkillPath,
@@ -228,6 +241,31 @@ function resolvePromptSecretsRulePath(context: IntegrationContext): string {
 
 function resolveSqaaRulePath(context: IntegrationContext): string {
   return join(context.targetRoot, ANTIGRAVITY_PROJECT_RULES_DIR, ANTIGRAVITY_SQAA_RULE_FILE);
+}
+
+/**
+ * Antigravity has no global rules directory, so project scope gets an always-on rule file while
+ * global scope gets a marker-fenced snippet inside the user's shared `~/.gemini/GEMINI.md`.
+ *
+ * @see https://antigravity.google/docs/rules-workflows/#global-rules
+ *
+ * This method is a temporary workaround until we kill the project scope.
+ */
+function onlyAtScope(scope: IntegrationScope, resource: ResourceDeclaration): ResourceDeclaration {
+  const applies = (context: IntegrationContext) => context.scope === scope;
+
+  return {
+    id: resource.id,
+    displayName: resource.displayName,
+    resourceType: resource.resourceType,
+    version: resource.version,
+    apply: (context) =>
+      applies(context)
+        ? resource.apply(context)
+        : { id: resource.id, resourceType: resource.resourceType, version: resource.version },
+    isApplied: (context) => (applies(context) ? resource.isApplied(context) : false),
+    remove: (context) => (applies(context) ? resource.remove(context) : undefined),
+  };
 }
 
 function resolveAntigravitySkillPath(context: IntegrationContext): string {
