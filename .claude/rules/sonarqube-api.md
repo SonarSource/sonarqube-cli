@@ -17,14 +17,9 @@ which resolves the region-specific Cloud API host for an endpoint family — cal
 result as `baseUrl` instead of reaching for `resolveFromEndpoint` themselves.
 
 Everything above transport is a small per-domain wrapper taking a `SonarHttpClient`, living next to
-whoever uses it. Shared domains stay in `src/core/server/`: `OrganizationsClient`
-(`organizations.ts`, also home to `Organization` / `OrganizationRecord` / `OrganizationAccess`),
-`ComponentsClient`
-(`components.ts`), `UsersClient` (`users.ts`), `SystemClient` (`system.ts`), `EnterprisesClient`
-(`enterprises.ts`, Cloud only), `ProjectBindingsClient`
-(`project-bindings.ts`) and `ScaClient` (`sca.ts`), alongside the pre-existing `BranchesClient`,
-`IssuesClient`, `MeasuresClient`, `MetricsClient`, `ProjectsClient` and `QualityGatesClient`.
-Command-specific surfaces sit with their command: `ImportApiClient`
+whoever uses it. Shared domains stay in `src/core/server/`, one file per client named for its
+domain — e.g. `OrganizationsClient` (`organizations.ts`, also home to `Organization` /
+`OrganizationRecord` / `OrganizationAccess`). Command-specific surfaces sit with their command: `ImportApiClient`
 (`src/commands/import/_common/import-api.ts`, owning `DopRepository` / `ProvisionedProject`),
 `RemediateApiClient` (`src/commands/remediate/remediate-api.ts`, owning the agent-job types),
 `OnboardCiSqsClient` (`src/commands/admin/onboard-ci/gitlab/sqs-api.ts`), `SqaaAnalysisClient`
@@ -33,7 +28,7 @@ Command-specific surfaces sit with their command: `ImportApiClient`
 `VortexEntitlementClient` (`src/core/vortex/entitlement.ts`, owning `VortexEntitlementResult` /
 `VortexEntitlementStatus` and `SERVER_ORGANIZATION_ID_PLACEHOLDER`).
 
-Three rules hold across all eighteen of them, with no exception — keep it that way when adding one.
+Three rules hold across every one of these clients, with no exception — keep it that way when adding one.
 
 **Every API client is constructed from a `SonarHttpClient`**, never from a `(serverUrl, token)` pair
 it turns into one itself. The command handler builds the transport client once and passes it in, so
