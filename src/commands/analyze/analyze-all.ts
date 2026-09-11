@@ -178,7 +178,7 @@ async function runSecretsAndAgentic(
   const secretsFailed = secrets !== null && secrets.exitCode !== 0;
   const agentic = secretsFailed
     ? null
-    : await buildSqaaJsonReport(options, auth, {
+    : await buildSqaaJsonReport(options, ctx.httpClient, auth, {
         telemetryCallerCommand: SQAA_ANALYZE_CALLER_COMMAND,
         telemetryCtx: ctx,
       });

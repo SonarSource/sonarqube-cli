@@ -114,6 +114,7 @@ describe('codexPostToolUse', () => {
 
     expect(buildSqaaJsonReportSpy).toHaveBeenCalledWith(
       { project: 'my-project', force: true, format: 'json', forcedDepth: 'STANDARD' },
+      expect.anything(),
       expect.objectContaining({ connectionType: 'cloud' }),
       {
         telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
@@ -205,6 +206,7 @@ describe('codexPostToolUse', () => {
 
     expect(buildSqaaJsonReportSpy).toHaveBeenCalledWith(
       { project: 'my-project', force: true, format: 'json', forcedDepth: 'STANDARD' },
+      expect.anything(),
       expect.objectContaining({ connectionType: 'on-premise' }),
       expect.objectContaining({
         telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,

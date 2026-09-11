@@ -24,6 +24,7 @@ import type {
   CommandAuthenticatedInvocationContext,
   CommandInvocationContext,
 } from '@/core/commands/invocation-context.ts';
+import type { SonarHttpClient } from '@/core/server/http-client.ts';
 
 import { resolveSqaaAuthAndProject } from './sqaa-auth.ts';
 import {
@@ -63,7 +64,7 @@ export async function analyzeSqaa(
   ctx: CommandAuthenticatedInvocationContext,
   runOptions: AnalyzeSqaaRunOptions = {},
 ): Promise<void> {
-  const { auth } = ctx;
+  const { auth, httpClient: client } = ctx;
   const { requireProject = true, telemetryCallerCommand } = runOptions;
   const telemetryCtx = runOptions.telemetryCtx ?? ctx;
   const {
@@ -84,6 +85,7 @@ export async function analyzeSqaa(
 
   if (rawFiles?.length) {
     await analyzeSqaaExplicitFiles(rawFiles, {
+      client,
       auth,
       branch,
       project,
@@ -99,6 +101,7 @@ export async function analyzeSqaa(
   }
 
   await analyzeSqaaChangeSet({
+    client,
     auth,
     staged,
     base,
@@ -117,6 +120,7 @@ export async function analyzeSqaa(
 async function analyzeSqaaExplicitFiles(
   rawFiles: string[],
   params: {
+    client: SonarHttpClient;
     auth: ResolvedAuth;
     branch?: string;
     project?: string;
@@ -131,6 +135,7 @@ async function analyzeSqaaExplicitFiles(
 ): Promise<void> {
   const entries = resolveSqaaFileArgs(rawFiles);
   const {
+    client,
     auth,
     branch,
     project,
@@ -148,6 +153,7 @@ async function analyzeSqaaExplicitFiles(
   if (entries.length === 1) {
     const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'single-file', forcedDepth);
     await runSqaaAnalysis(entries[0].absolutePath, auth, {
+      client,
       branch: resolvedBranch,
       explicitProject: project,
       format,
@@ -162,7 +168,7 @@ async function analyzeSqaaExplicitFiles(
   }
 
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'multi-file', forcedDepth);
-  const resolution = await resolveSqaaAuthAndProject(auth, project, console);
+  const resolution = await resolveSqaaAuthAndProject(client, auth, project, console);
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
 
@@ -182,6 +188,7 @@ async function analyzeSqaaExplicitFiles(
 }
 
 async function analyzeSqaaChangeSet(params: {
+  client: SonarHttpClient;
   auth: ResolvedAuth;
   staged?: boolean;
   base?: string;
@@ -196,6 +203,7 @@ async function analyzeSqaaChangeSet(params: {
   telemetryCtx: CommandInvocationContext;
 }): Promise<void> {
   const {
+    client,
     auth,
     staged,
     base,
@@ -227,7 +235,13 @@ async function analyzeSqaaChangeSet(params: {
     return;
   }
 
-  const resolution = await resolveSqaaAuthAndProject(auth, project, console, changeSet.repoRoot);
+  const resolution = await resolveSqaaAuthAndProject(
+    client,
+    auth,
+    project,
+    console,
+    changeSet.repoRoot,
+  );
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
 

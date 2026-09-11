@@ -25,6 +25,7 @@ import type { SqaaAnalysisRequest } from '@/commands/analyze/sqaa-wire-types.ts'
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { ENV_SQAA_RETRY_BASE_DELAY_MS } from '@/core/config-constants.ts';
 import { RequestPayloadTooLargeError, ServiceUnavailableError } from '@/core/server/errors.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 
 import { fetchChunkWith413Split } from '../../../../src/commands/analyze/sqaa-api.ts';
 import type { SqaaAuth } from '../../../../src/commands/analyze/sqaa-auth.ts';
@@ -35,6 +36,7 @@ const AUTH: SqaaAuth = {
   serverUrl: 'https://sonarcloud.io',
   token: 'token',
   orgKey: 'org',
+  client: new SonarHttpClient('https://sonarcloud.io', 'token'),
 };
 
 function makeFile(relativePath: string): SqaaChunkFile {
