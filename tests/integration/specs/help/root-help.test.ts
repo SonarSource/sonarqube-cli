@@ -58,6 +58,7 @@ function getExpectedRootHelp(): string {
     '    api <method> <endpoint>                                  Make authenticated API requests to SonarQube',
     '    context [action] [args...]                               Augment AI agents with context from your codebase',
     '',
+    '    import                                                   Import repositories from a connected DevOps platform into SonarQube (SonarQube Cloud only)',
     '    integrate <git|claude|copilot|codex|antigravity|cursor>  Setup SonarQube integration for AI coding agents, git and others.',
     '',
     '    auth <login|logout|status>                               Manage authentication tokens and credentials',
