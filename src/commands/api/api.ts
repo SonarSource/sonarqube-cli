@@ -25,7 +25,6 @@ import {
   GENERIC_HTTP_METHODS,
   type HttpMethod,
   METHODS_WITH_BODY,
-  SonarHttpClient,
 } from '@/core/server/http-client.ts';
 
 const VALID_METHODS = new Set<string>(GENERIC_HTTP_METHODS);
@@ -74,7 +73,7 @@ export async function apiCommand(
   endpoint: string,
   options: ApiCommandOptions,
 ): Promise<void> {
-  const { auth, console } = ctx;
+  const { console } = ctx;
   if (!VALID_METHODS.has(method.toUpperCase())) {
     const validMethods = Array.from(VALID_METHODS)
       .map((m) => m.toLowerCase())
@@ -114,9 +113,7 @@ export async function apiCommand(
     contentType = 'form';
   }
 
-  const client = new SonarHttpClient(auth.serverUrl, auth.token);
-
-  const response = await client
+  const response = await ctx.httpClient
     .genericRequest(upperMethod, endpoint, console, options.data, contentType, options.verbose)
     .orThrow();
   console.print(response);

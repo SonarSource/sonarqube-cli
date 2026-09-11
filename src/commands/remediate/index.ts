@@ -30,7 +30,6 @@ import {
 } from '@/core/config-constants.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { type IssuesClient } from '@/core/server/issues.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import type { SonarQubeIssue } from '@/core/server/types.ts';
@@ -79,7 +78,7 @@ export async function remediate(
   assertCloudConnection(auth);
   assertInteractiveOrIssuesSupplied(suppliedIssueKeys);
 
-  const client = new RemediateApiClient(new SonarHttpClient(auth.serverUrl, auth.token));
+  const client = new RemediateApiClient(ctx.httpClient);
   // resolveAuth guarantees orgKey is set for cloud connections (see auth-resolver.ts);
   // narrow once and reuse throughout this function.
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion

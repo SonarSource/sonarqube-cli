@@ -27,7 +27,6 @@ import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invo
 import { DefaultScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import { DefaultSecretsInstaller } from '@/core/host/install/secrets.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -74,7 +73,7 @@ export async function analyzeDependencyRisks(
   const projectKey = await resolveProjectKey(options.project, auth, ctx.console);
   noteProject(auth, projectKey);
 
-  const client = createScaScanApi(new SonarHttpClient(auth.serverUrl, auth.token));
+  const client = createScaScanApi(ctx.httpClient);
   const orchestrator = new ScaScanOrchestrator(
     client,
     new DefaultScaScannerInstaller(ctx.console),

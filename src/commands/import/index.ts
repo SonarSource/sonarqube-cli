@@ -21,7 +21,6 @@
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { type DopRepository, ImportApiClient, type ProvisionedProject } from './import-api.ts';
@@ -244,7 +243,7 @@ export async function importHandler(
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   const { auth, console } = ctx;
-  const client = new ImportApiClient(new SonarHttpClient(auth.serverUrl, auth.token));
+  const client = new ImportApiClient(ctx.httpClient);
 
   console.intro('Import repositories', 'SonarQube');
 
