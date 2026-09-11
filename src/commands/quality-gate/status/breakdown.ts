@@ -34,6 +34,8 @@ import { fetchDependencyRisksBreakdown } from './dependency-risks-enrichment.ts'
 import { fetchDuplicationsBreakdown } from './duplications-enrichment.ts';
 import type { IssuesBreakdownCache } from './issues-enrichment.ts';
 import { fetchIssuesBreakdown } from './issues-enrichment.ts';
+import type { SecurityBreakdownCache } from './security-enrichment.ts';
+import { fetchSecurityBreakdown } from './security-enrichment.ts';
 import { fetchWorstFileEntries } from './worst-file-entries.ts';
 
 const DEPENDENCY_RISK_KINDS = [
@@ -83,6 +85,7 @@ const CATEGORY_METRICS: Record<string, string[]> = {
     'sqale_rating',
     'new_maintainability_rating',
   ],
+  security: ['vulnerabilities', 'new_vulnerabilities', 'security_rating', 'new_security_rating'],
   'dependency-risks': DEPENDENCY_RISK_METRICS,
 };
 
@@ -141,6 +144,11 @@ function resolveEnrichableCategory(
   return conditionCategory;
 }
 
+interface CategoryBreakdownCaches {
+  issues: IssuesBreakdownCache;
+  security: SecurityBreakdownCache;
+}
+
 /**
  * Returns each condition with its own `breakdown` attached when applicable, preserving order and
  * count 1:1 with the input. Worst-first sort direction comes from the condition's own
@@ -152,7 +160,7 @@ export async function attachBreakdowns(
 ): Promise<QualityGateConditionSummary[]> {
   const measuresClient = new MeasuresClient(params.client);
   const issuesClient = new IssuesClient(params.client);
-  const issuesCache: IssuesBreakdownCache = new Map();
+  const caches: CategoryBreakdownCaches = { issues: new Map(), security: new Map() };
   const metricsByKey = new Map(params.metrics.map((metric) => [metric.key, metric]));
 
   return Promise.all(
@@ -165,7 +173,7 @@ export async function attachBreakdowns(
         category,
         measuresClient,
         issuesClient,
-        issuesCache,
+        caches,
         params,
         condition,
         metricsByKey.get(condition.metric),
@@ -179,7 +187,7 @@ function fetchCategoryBreakdown(
   category: string,
   measuresClient: MeasuresClient,
   issuesClient: IssuesClient,
-  issuesCache: IssuesBreakdownCache,
+  caches: CategoryBreakdownCaches,
   params: AttachBreakdownsParams,
   condition: QualityGateConditionSummary,
   metric: Metric | undefined,
@@ -190,7 +198,9 @@ function fetchCategoryBreakdown(
     case 'duplications':
       return fetchDuplicationsBreakdown(measuresClient, params, condition, metric);
     case 'issues':
-      return fetchIssuesBreakdown(issuesClient, params, condition, issuesCache);
+      return fetchIssuesBreakdown(issuesClient, params, condition, caches.issues);
+    case 'security':
+      return fetchSecurityBreakdown(issuesClient, params, condition, caches.security);
     case 'dependency-risks':
       return fetchDependencyRisksBreakdown(params, condition);
     default:

@@ -28,7 +28,7 @@ import { join } from 'node:path';
 
 import type { IntegrationContext } from '@/core/framework/features';
 
-import type { HookConfig, HooksDocument, ManagedHookEntry } from './types.ts';
+import type { HookCommand, HookConfig, HooksDocument, ManagedHookEntry } from './types.ts';
 
 export const SONAR_SECRETS_MARKER = 'sonar-secrets';
 
@@ -153,14 +153,17 @@ export function quoteWindowsHookScriptPath(path: string): string {
   return `"${path}"`;
 }
 
+export function hookScriptExtension(): string {
+  return process.platform === 'win32' ? '.ps1' : '.sh';
+}
+
 /** Absolute path to the platform-specific hook script under `<targetRoot>/<configDir>/hooks/`. */
 export function resolveAgentHookScriptPath(
   context: IntegrationContext,
   configDir: string,
   scriptPath: string,
 ): string {
-  const extension = process.platform === 'win32' ? '.ps1' : '.sh';
-  return join(context.targetRoot, configDir, HOOKS_DIR, `${scriptPath}${extension}`);
+  return join(context.targetRoot, configDir, HOOKS_DIR, `${scriptPath}${hookScriptExtension()}`);
 }
 
 function resolveHookCommandPath(
@@ -216,32 +219,35 @@ export interface AgentHookEntryOptions {
   /** e.g. Claude Code's `${CLAUDE_PROJECT_DIR}`; see {@link resolveAgentHookCommand}. */
   projectDirPlaceholder?: string;
   timeoutSec?: number;
+  additionalContextLimit?: number;
 }
 
 export function createAgentHookEntry(
   context: IntegrationContext,
   configDir: string,
   eventType: string,
-  matcher: string,
+  matcher: string | undefined,
   marker: string,
   scriptPath: string,
   options: AgentHookEntryOptions = {},
 ): ManagedHookEntry {
-  const { projectDirPlaceholder, timeoutSec = HOOK_TIMEOUT_SEC } = options;
-  return {
-    eventType,
-    marker,
-    hookConfig: {
-      matcher,
-      hooks: [
-        {
-          type: 'command',
-          command: resolveAgentHookCommand(context, configDir, scriptPath, projectDirPlaceholder),
-          timeout: timeoutSec,
-        },
-      ],
-    },
+  const { projectDirPlaceholder, timeoutSec = HOOK_TIMEOUT_SEC, additionalContextLimit } = options;
+
+  const hookCommand: HookCommand = {
+    type: 'command',
+    command: resolveAgentHookCommand(context, configDir, scriptPath, projectDirPlaceholder),
+    timeout: timeoutSec,
   };
+  if (additionalContextLimit !== undefined) {
+    hookCommand.additionalContextLimit = additionalContextLimit;
+  }
+
+  const hookConfig: HookConfig = { hooks: [hookCommand] };
+  if (matcher !== undefined) {
+    hookConfig.matcher = matcher;
+  }
+
+  return { eventType, marker, hookConfig };
 }
 
 /**

@@ -210,6 +210,16 @@ export interface ComponentTreeResponse {
   components: ComponentTreeComponent[];
 }
 
+export interface ComponentsTreeItem {
+  path: string;
+  qualifier: string;
+}
+
+export interface ComponentsTreeResponse {
+  paging: { pageIndex: number; pageSize: number; total: number };
+  components: ComponentsTreeItem[];
+}
+
 export interface DuplicationsShowBlock {
   from: number;
   size: number;

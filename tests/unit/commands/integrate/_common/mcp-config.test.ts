@@ -33,7 +33,7 @@ import {
   removeJsonMcpServer,
   upsertJsonMcpServer,
 } from '../../../../../src/commands/integrate/_common/mcp-config.ts';
-import { removeCopilotHookConfig } from '../../../../../src/commands/integrate/copilot/hooks.ts';
+import { removeCopilotHooks } from '../../../../../src/commands/integrate/copilot/hooks.ts';
 import {
   normalizePreCommitConfig,
   removeSonarHooksFromPreCommitConfig,
@@ -146,16 +146,19 @@ describe('integration remove helpers', () => {
     expect(result.mcp_servers).toEqual({ other: {} });
   });
 
-  it('removeCopilotHookConfig strips sonar-secrets preToolUse entry', () => {
-    const result = removeCopilotHookConfig({
-      version: 1,
-      hooks: {
-        preToolUse: [
-          { type: 'command', bash: 'sonar-secrets/build-scripts/pretool-secrets.sh' },
-          { type: 'command', bash: '/usr/bin/other' },
-        ],
+  it('removeCopilotHooks strips sonar-secrets preToolUse entry', () => {
+    const result = removeCopilotHooks(
+      {
+        version: 1,
+        hooks: {
+          preToolUse: [
+            { type: 'command', bash: 'sonar-secrets/build-scripts/pretool-secrets.sh' },
+            { type: 'command', bash: '/usr/bin/other' },
+          ],
+        },
       },
-    });
+      ['sonar-secrets'],
+    );
 
     expect(result.hooks?.preToolUse).toEqual([{ type: 'command', bash: '/usr/bin/other' }]);
   });

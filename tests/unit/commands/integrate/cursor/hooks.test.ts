@@ -43,7 +43,7 @@ describe('resolveCursorHookMatcher', () => {
     expect(resolveCursorHookMatcher('beforeReadFile')).toBe('Read|TabRead');
     expect(resolveCursorHookMatcher('preToolUse')).toBe('Read');
     expect(resolveCursorHookMatcher('beforeSubmitPrompt')).toBe('UserPromptSubmit');
-    expect(resolveCursorHookMatcher('unknown')).toBe('.*');
+    expect(resolveCursorHookMatcher('unknown')).toBeUndefined();
   });
 });
 

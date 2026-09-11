@@ -51,6 +51,7 @@ function getExpectedRootHelp(): string {
     '    analyze dependency-risks                                 Analyze project dependencies for security and license risks',
     '    analyze agentic                                          Run server-side Vortex analysis. Limitations apply.',
     '    remediate                                                Trigger AI agent remediation for eligible issues (SonarQube Cloud only)',
+    '    link                                                     Link a project to the active connection in .sonar-config.json',
     '',
     '    list <issues|projects>                                   List issues and projects from SonarQube Cloud or Server',
     '    quality-gate|qg <status>                                 Fetch quality gate status from SonarQube Cloud or Server',

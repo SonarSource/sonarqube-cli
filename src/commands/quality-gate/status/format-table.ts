@@ -159,6 +159,7 @@ function formatEntryLines(metricBreakdown: QualityGateMetricBreakdown): string[]
     case 'duplications':
       return formatFileEntryLines(metricBreakdown.entries, formatDuplicationsSuffix);
     case 'issues':
+    case 'security':
       return formatIssuesEntryLines(metricBreakdown.entries);
     case 'dependency-risks':
       return formatDependencyRiskEntryLines(metricBreakdown.entries);
