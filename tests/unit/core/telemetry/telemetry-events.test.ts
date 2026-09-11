@@ -206,11 +206,12 @@ beforeEach(async () => {
   getConnectionSpy = spyOn(stateManager, 'getActiveConnection').mockReturnValue(undefined);
   getUserIdSpy = spyOn(userModule, 'getOrCreateUserId').mockReturnValue('machine-id');
   detectAgentSpy = spyOn(agentDetector, 'detectCallerAgent').mockReturnValue(null);
-  // Emitting an event with invocation auth resolves identity from the disk cache /
-  // API (`resolveTelemetryIdentity`), not the active connection. Stub fetch by
-  // default so no test in this file depends on network reachability (a real call
-  // fails fast locally but hangs to a 5s timeout in CI). Tests that assert on the
-  // telemetry HTTP flush install their own fetch spy, which shadows this one.
+  // Emitting an event with invocation auth may seed from a matching active
+  // connection, then the disk cache / API (`resolveTelemetryIdentity`). Stub
+  // fetch by default so no test in this file depends on network reachability
+  // (a real call fails fast locally but hangs to a 5s timeout in CI). Tests
+  // that assert on the telemetry HTTP flush install their own fetch spy, which
+  // shadows this one.
   defaultFetchSpy = mockFetch();
 });
 
@@ -295,7 +296,7 @@ describe('emitAnalysisCompleted()', () => {
     expect(event.event_payload.connection_type).toBe('sqs');
   });
 
-  it('includes identity fields from the invocation-auth disk cache, not the active connection', async () => {
+  it('includes identity fields from the invocation-auth disk cache when no matching connection is seeded', async () => {
     mkdirSync(getTelemetryDir(), { recursive: true });
     const fingerprint = createHash('sha256').update(AUTH.token).digest('hex').slice(0, 16);
     const cacheKey = [AUTH.connectionType, AUTH.serverUrl, AUTH.orgKey ?? '', fingerprint].join(
@@ -320,7 +321,7 @@ describe('emitAnalysisCompleted()', () => {
     expect(payload.user_uuid).toBe('user-uuid-abc');
     expect(payload.organization_uuid_v4).toBe('org-uuid-xyz');
     expect(payload.sqs_installation_id).toBe('sqs-install-id-123');
-    expect(getConnectionSpy).not.toHaveBeenCalled();
+    expect(getConnectionSpy).toHaveBeenCalled();
   });
 
   it('sets caller_agent from detectCallerAgent', async () => {

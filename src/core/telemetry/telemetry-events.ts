@@ -35,10 +35,7 @@ import type { StoredTelemetryEvent, TelemetryEventIdentityPayload } from '../sta
 import { getActiveConnection, tryLoadState } from '../state/state-manager.ts';
 import { resolveAgentSessionIdFromHookOrEnv } from './agent-session.ts';
 import { isTelemetryEnabled } from './enabled.ts';
-import {
-  resolveCommandTelemetryIdentity,
-  resolveStoreEventTelemetryIdentitySafely,
-} from './identity.ts';
+import { resolveCommandTelemetryIdentity, resolveStoreEventTelemetryIdentity } from './identity.ts';
 import { getOrCreateUserId } from './user.ts';
 
 const TELEMETRY_EVENTS_FILENAME = 'telemetry-events.ndjson';
@@ -80,7 +77,7 @@ async function buildIdentityBase(
   const { connectionType, identity } =
     identityOptions?.auth !== undefined
       ? await resolveCommandTelemetryIdentity(identityOptions.auth)
-      : await resolveStoreEventTelemetryIdentitySafely(getActiveConnection(state));
+      : resolveStoreEventTelemetryIdentity(getActiveConnection(state));
 
   return {
     cli_installation_id: installationId,
