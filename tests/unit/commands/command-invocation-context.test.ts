@@ -28,7 +28,6 @@ import {
   TelemetryFact,
 } from '@/core/commands/invocation-context.ts';
 import type { LifecycleState } from '@/core/commands/sonar-command.ts';
-import { okAsync } from '@/core/result.ts';
 
 import { FakeConsole } from '../../_common/fake-console.ts';
 
@@ -125,11 +124,20 @@ describe('CommandInvocationContext stage accessors', () => {
   });
 });
 
+type AuthResolverInternals = AuthResolver & {
+  resolveFromState: () => Promise<ResolvedAuth | null>;
+};
+
+function spyResolveFromState(): ReturnType<typeof spyOn> {
+  return spyOn(AuthResolver.prototype as AuthResolverInternals, 'resolveFromState');
+}
+
 describe('CommandInvocationContext.resolveAuth', () => {
   it('reuses a warmed AuthResolver without calling the resolver again', async () => {
-    const authResolver = new AuthResolver();
-    const resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockReturnValue(okAsync(FAKE_AUTH));
-    const sharedRuntime = createCliRuntime({ authResolver });
+    const resolveFromStateSpy = spyResolveFromState().mockResolvedValue(FAKE_AUTH);
+    const sharedRuntime = createCliRuntime({
+      authResolver: new AuthResolver({ silent: true }),
+    });
     await sharedRuntime.authResolver.resolveAuth();
 
     const context = new CommandInvocationContext(new FakeConsole(), undefined, sharedRuntime);
@@ -137,20 +145,23 @@ describe('CommandInvocationContext.resolveAuth', () => {
 
     expect(result.isOk()).toBe(true);
     expect(result._unsafeUnwrap()).toEqual(FAKE_AUTH);
-    expect(resolveAuthSpy).toHaveBeenCalledTimes(1);
+    expect(resolveFromStateSpy).toHaveBeenCalledTimes(1);
+    resolveFromStateSpy.mockRestore();
   });
 
   it('memoizes auth resolution on the shared runtime', async () => {
-    const authResolver = new AuthResolver();
-    const resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockReturnValue(okAsync(null));
-    const sharedRuntime = createCliRuntime({ authResolver });
+    const resolveFromStateSpy = spyResolveFromState().mockResolvedValue(null);
+    const sharedRuntime = createCliRuntime({
+      authResolver: new AuthResolver({ silent: true }),
+    });
     const contextA = new CommandInvocationContext(new FakeConsole(), undefined, sharedRuntime);
     const contextB = new CommandInvocationContext(new FakeConsole(), undefined, sharedRuntime);
 
     await contextA.resolveAuth();
     await contextB.resolveAuth();
 
-    expect(resolveAuthSpy).toHaveBeenCalledTimes(1);
+    expect(resolveFromStateSpy).toHaveBeenCalledTimes(1);
+    resolveFromStateSpy.mockRestore();
   });
 
   it('returns authenticated auth from the constructor without re-resolving', async () => {

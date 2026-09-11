@@ -185,7 +185,7 @@ export async function resolveAlmKey(
     return normalizeAlmKey(orgRecordAlmKey);
   }
 
-  return client.organizations.getOrganizationAlmKey(orgKey).match(
+  return await client.organizations.getOrganizationAlmKey(orgKey).match(
     (almKey) => normalizeAlmKey(almKey),
     (err) => {
       throw new CommandFailedError(

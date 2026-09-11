@@ -25,9 +25,9 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import { createCommandTree } from '@/commands/command-tree.ts';
-import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { AuthResolver, ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { type CliRuntime, createCliRuntime } from '@/core/commands/cli-runtime.ts';
-import * as sonarCommandModule from '@/core/commands/sonar-command.ts';
+import { PrivateBetaFlagRegistry } from '@/core/commands/private-beta-flag-registry.ts';
 import {
   collectPrivateBetaFlagKeys,
   SonarCommand,
@@ -438,13 +438,12 @@ describe('Private Beta command registration', () => {
   });
 
   it('resolves flags lazily via AuthResolver when keys exist', async () => {
-    const collectSpy = spyOn(sonarCommandModule, 'collectPrivateBetaFlagKeys').mockReturnValue([
-      'cli.beta.lazy',
-    ]);
-    const tree = createCommandTree({ console: new FakeConsole() });
-    const resolveAuthSpy = spyOn(tree.runtime.authResolver, 'resolveAuth').mockReturnValue(
-      okAsync(cloudAuth),
-    );
+    const privateBetaFlags = new PrivateBetaFlagRegistry();
+    privateBetaFlags.record('cli.beta.lazy');
+    const authResolver = new AuthResolver({ silent: true });
+    const runtime = createCliRuntime({ privateBetaFlags, authResolver });
+    const tree = createCommandTree({ console: new FakeConsole(), runtime });
+    const resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockReturnValue(okAsync(cloudAuth));
     const resolvePrivateBetaFlagsSpy = spyOn(
       launchDarkly,
       'resolvePrivateBetaFlags',
@@ -466,7 +465,6 @@ describe('Private Beta command registration', () => {
       await tree.runtime.flagsResolver.resolveFlags();
       expect(resolveAuthSpy).toHaveBeenCalledTimes(1);
     } finally {
-      collectSpy.mockRestore();
       resolveAuthSpy.mockRestore();
       resolvePrivateBetaFlagsSpy.mockRestore();
     }

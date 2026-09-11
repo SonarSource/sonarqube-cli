@@ -54,8 +54,7 @@ export function createCliRuntime(options?: {
   isPrivateBetaEnabled?: (flagKey: string) => boolean;
 }): CliRuntime {
   const privateBetaFlags = options?.privateBetaFlags ?? new PrivateBetaFlagRegistry();
-  const authResolver =
-    options?.authResolver ?? new AuthResolver({ silent: true, console: options?.console });
+  const authResolver = options?.authResolver ?? new AuthResolver({ console: options?.console });
   const flagsResolver = options?.flagsResolver ?? new FlagsResolver(authResolver, privateBetaFlags);
 
   return {

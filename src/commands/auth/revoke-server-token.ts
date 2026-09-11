@@ -87,7 +87,7 @@ export async function revokeServerTokenIfPossible(
   }
 
   const tokenName = connection.tokenName;
-  return new UsersClient(new SonarHttpClient(connection.serverUrl, token))
+  return await new UsersClient(new SonarHttpClient(connection.serverUrl, token))
     .revokeUserToken(tokenName)
     .match(
       (): RevokeServerTokenResult => ({ status: 'success' }),

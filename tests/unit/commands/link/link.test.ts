@@ -28,7 +28,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import * as gitWorktree from '@/core/host/git/worktree.ts';
@@ -38,18 +38,20 @@ import { sharedProjectConfigRepository } from '@/core/shared-project-config.ts';
 import { link, type LinkOptions } from '../../../../src/commands/link/index.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
-const onPremAuth: ResolvedAuth = {
+const onPremAuth = new ResolvedAuth({
   token: 'test-token',
   serverUrl: 'https://sonarqube.example.com',
   connectionType: 'on-premise',
-};
+  source: 'state',
+});
 
-const cloudAuth: ResolvedAuth = {
+const cloudAuth = new ResolvedAuth({
   token: 'test-token',
   serverUrl: 'https://sonarcloud.io',
   orgKey: 'my-org',
   connectionType: 'cloud',
-};
+  source: 'state',
+});
 
 describe('link', () => {
   let fake: FakeConsole;
@@ -95,7 +97,13 @@ describe('link', () => {
   });
 
   it('fails without writing when the Cloud connection has no resolvable region', async () => {
-    const auth: ResolvedAuth = { ...cloudAuth, serverUrl: 'https://custom-cloud.example.com' };
+    const auth = new ResolvedAuth({
+      token: cloudAuth.token,
+      serverUrl: 'https://custom-cloud.example.com',
+      orgKey: cloudAuth.orgKey,
+      connectionType: 'cloud',
+      source: 'state',
+    });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(link('my_project', { path: '.' }, ctxFor(auth))).rejects.toThrow('region');

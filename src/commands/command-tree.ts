@@ -157,6 +157,8 @@ export interface CreateCommandTreeOptions {
   isAlphaEnabled?: boolean;
   /** Shared tree console. Construct once at the process entry and pass it in. */
   console: Console;
+  /** Optional pre-built runtime (tests may seed Private Beta flag keys before resolveFlags). */
+  runtime?: CliRuntime;
 }
 
 /** Registers the full command tree for the given runtime (sync). */
@@ -928,8 +930,13 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
  * visibility must match entitlement.
  */
 export function createCommandTree(options: CreateCommandTreeOptions): SonarCommand {
-  const isAlphaEnabled = options.isAlphaEnabled ?? isAlphaEnabledFromEnv();
   const { console } = options;
+  const runtime =
+    options.runtime ??
+    createCliRuntime({
+      isAlphaEnabled: options.isAlphaEnabled ?? isAlphaEnabledFromEnv(),
+      console,
+    });
 
-  return buildCommandTree(createCliRuntime({ isAlphaEnabled, console }), console);
+  return buildCommandTree(runtime, console);
 }
