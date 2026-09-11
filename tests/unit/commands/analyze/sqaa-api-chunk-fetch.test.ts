@@ -33,8 +33,6 @@ import type { SqaaChunkFile } from '../../../../src/commands/analyze/sqaa-chunki
 import * as sqaaChunking from '../../../../src/commands/analyze/sqaa-chunking.ts';
 
 const AUTH: SqaaAuth = {
-  serverUrl: 'https://sonarcloud.io',
-  token: 'token',
   orgKey: 'org',
   client: new SonarHttpClient('https://sonarcloud.io', 'token'),
 };
