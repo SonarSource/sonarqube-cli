@@ -37,6 +37,11 @@ function roundPercent(rawValue: string, decimalScale: number): string {
   return decimals.length > decimalScale ? Number(rawValue).toFixed(decimalScale) : rawValue;
 }
 
+function formatRating(rawValue: string): string {
+  const rounded = Math.round(Number(rawValue));
+  return RATING_LETTERS[String(rounded)] ?? rawValue;
+}
+
 /**
  * Only RATING, PERCENT, and WORK_DUR get a real transformation. Every other type - including
  * INT, and any type this doesn't recognize - is returned unchanged, and `create_condition` never
@@ -46,7 +51,7 @@ function roundPercent(rawValue: string, decimalScale: number): string {
 export function formatMetricValue(type: string, rawValue: string, decimalScale = 1): string {
   switch (type) {
     case 'RATING':
-      return RATING_LETTERS[rawValue] ?? rawValue;
+      return formatRating(rawValue);
     case 'PERCENT':
       return `${roundPercent(rawValue, decimalScale)}%`;
     case 'WORK_DUR':

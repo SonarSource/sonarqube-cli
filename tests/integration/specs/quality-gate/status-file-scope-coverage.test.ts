@@ -318,6 +318,52 @@ describe('quality-gate status <file> — coverage/duplications', () => {
   );
 
   it(
+    '--top caps the directory worst-N breakdown for a file-scoped condition',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('OK')
+            .withConditions([
+              {
+                status: 'OK',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '94.4',
+              },
+            ])
+            .withComponentsTreeItems([{ path: 'src/checkout', qualifier: 'DIR' }])
+            .withComponentMeasures('src/checkout', [{ metric: 'new_coverage', value: '62.2' }])
+            .withComponentTreeFiles('new_coverage', [
+              { path: 'src/checkout/cart.ts', value: '45.2' },
+              { path: 'src/checkout/payment.ts', value: '58.6' },
+            ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status src/checkout --project my-project --top 1 --format json`,
+      );
+
+      expect(result.exitCode).toBe(51);
+      const parsed = JSON.parse(result.stdout);
+      const condition = parsed.qualityGate.conditions[0];
+      expect(condition.breakdown).toEqual({
+        category: 'coverage',
+        totalCount: 2,
+        fetchedCount: 1,
+        entries: [{ path: 'src/checkout/cart.ts', value: '45.2', formattedValue: '45.2%' }],
+      });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'renders the file-scoped table with the "Quality Gate · <file>" header and no project-level worst-N section',
     async () => {
       const server = await harness
@@ -350,6 +396,49 @@ describe('quality-gate status <file> — coverage/duplications', () => {
       expect(lines[0]).toContain('Quality Gate · src/checkout.ts');
       expect(lines.some((l) => l.includes('Project:'))).toBe(false);
       expect(lines.some((l) => l.includes('31.0%'))).toBe(true);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'forwards --branch to file resolution, the project status lookup, and the measures fetch alike',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('OK')
+            .withConditions([
+              {
+                status: 'OK',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+              },
+            ])
+            .withComponentsTreeItems([{ path: 'src/checkout.ts', qualifier: 'FIL' }])
+            .withComponentMeasures('src/checkout.ts', [{ metric: 'new_coverage', value: '31.0' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      await harness.run(
+        `quality-gate status src/checkout.ts --project my-project --branch feature-x --format json`,
+      );
+
+      const recorded = server.getRecordedRequests();
+      // /api/components/show is also hit once for the project-existence preflight (no file
+      // path, no branch) - narrow to the file-resolution call specifically.
+      const componentShow = recorded.find(
+        (r) => r.path === '/api/components/show' && String(r.query.component).includes(':'),
+      );
+      const projectStatus = recorded.find((r) => r.path === '/api/qualitygates/project_status');
+      const measures = recorded.find((r) => r.path === '/api/measures/component');
+      expect(componentShow?.query.branch).toBe('feature-x');
+      expect(projectStatus?.query.branch).toBe('feature-x');
+      expect(measures?.query.branch).toBe('feature-x');
     },
     { timeout: 15000 },
   );

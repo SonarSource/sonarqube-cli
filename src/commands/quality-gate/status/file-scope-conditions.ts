@@ -24,7 +24,11 @@ import { extractMeasureValue, MeasuresClient } from '@/core/server/measures.ts';
 import type { ComponentTreeMeasure, Metric, QualityGateCondition } from '@/core/server/types.ts';
 
 import type { AttachBreakdownsParams, CategoryBreakdownCaches } from './breakdown.ts';
-import { fetchCategoryBreakdown, METRIC_CATEGORIES } from './breakdown.ts';
+import {
+  fetchCategoryBreakdown,
+  METRIC_CATEGORIES,
+  resolveEnrichableCategory,
+} from './breakdown.ts';
 import {
   formatOptionalValue,
   type QualityGateConditionSummary,
@@ -37,6 +41,7 @@ export interface FetchFileScopedConditionsParams {
   componentKey: string;
   orgKey?: string;
   metrics: Metric[];
+  category?: string;
   top: number;
   branch?: string;
   pullRequest?: string;
@@ -127,7 +132,8 @@ async function buildFileConditionSummary(
     formattedActualValue: formatOptionalValue(rawValue, metric),
   };
 
-  if (status !== 'ERROR') {
+  const category = resolveEnrichableCategory(summary, params.category);
+  if (!category) {
     return summary;
   }
 
@@ -142,7 +148,7 @@ async function buildFileConditionSummary(
     pullRequest: params.pullRequest,
   };
   const breakdown = await fetchBreakdownForCategory(
-    METRIC_CATEGORIES.get(condition.metricKey) ?? '',
+    category,
     context,
     breakdownParams,
     summary,

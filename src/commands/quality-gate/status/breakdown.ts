@@ -131,7 +131,7 @@ export function hasFailingConditionInCategory(
 }
 
 /** The condition's category when enrichable, or undefined when there's nothing to build. */
-function resolveEnrichableCategory(
+export function resolveEnrichableCategory(
   condition: QualityGateConditionSummary,
   filterCategory: string | undefined,
 ): string | undefined {

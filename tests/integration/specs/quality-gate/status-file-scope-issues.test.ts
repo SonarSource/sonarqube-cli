@@ -151,6 +151,41 @@ describe('quality-gate status <file> — issues/security', () => {
   );
 
   it(
+    'formats a RATING condition value as a letter grade, not the raw decimal measures/component sends',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'security_rating', type: 'RATING', name: 'Security Rating' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('OK')
+            .withConditions([
+              { status: 'OK', metricKey: 'security_rating', comparator: 'GT', errorThreshold: '1' },
+            ])
+            .withComponentsTreeItems([{ path: 'src/exec.ts', qualifier: 'FIL' }])
+            // measures/component sends ratings as "1.0", unlike project_status's bare "1"
+            .withComponentMeasures('src/exec.ts', [{ metric: 'security_rating', value: '1.0' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status src/exec.ts --project my-project --all --format json`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      const parsed = JSON.parse(result.stdout);
+      const condition = parsed.qualityGate.conditions.find(
+        (c: { metric: string }) => c.metric === 'security_rating',
+      );
+      expect(condition.actualValue).toBe('1.0');
+      expect(condition.formattedActualValue).toBe('A');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'a passing issues condition under --all has no breakdown attached',
     async () => {
       const server = await harness

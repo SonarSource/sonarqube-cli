@@ -37,6 +37,17 @@ describe('formatMetricValue', () => {
     expect(formatMetricValue('RATING', '6')).toBe('6');
   });
 
+  it.each([
+    ['1.0', 'A'],
+    ['2.0', 'B'],
+    ['5.0', 'E'],
+  ])(
+    'maps a decimal-formatted RATING %s to letter grade %s - measures/component sends ratings this way, unlike project_status',
+    (raw, expected) => {
+      expect(formatMetricValue('RATING', raw)).toBe(expected);
+    },
+  );
+
   it('appends a % suffix for PERCENT, already at one decimal place', () => {
     expect(formatMetricValue('PERCENT', '95.4')).toBe('95.4%');
     expect(formatMetricValue('PERCENT', '100.0')).toBe('100.0%');
