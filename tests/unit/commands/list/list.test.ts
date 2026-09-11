@@ -60,7 +60,7 @@ function createMockClient(
 ): SonarHttpClient {
   const client = new SonarHttpClient(serverUrl, 'test-token');
   // MockGetFn is intentionally narrower than SonarHttpClient.get's generic signature.
-   
+
   client.get = mockGet as SonarHttpClient['get'];
   return client;
 }

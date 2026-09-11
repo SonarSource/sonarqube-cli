@@ -15,8 +15,6 @@ import type { ProjectsSearchResponse } from '@/core/server/types.ts';
 import { listProjects, ListProjectsOptions } from '../../../../src/commands/list/projects.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
-/* eslint-disable @typescript-eslint/no-unsafe-return -- ResultAsync mock helpers lose type precision through bun mock() */
-
 const DEFAULT_OPTIONS: ListProjectsOptions = {
   page: 1,
   pageSize: 500,
