@@ -79,6 +79,14 @@ export interface IssuesMetricBreakdown {
   entries: IssuesBreakdownEntry[];
 }
 
+/** Same entry shape as issues - a vulnerability/security_rating breakdown is a flat issue list too. */
+export interface SecurityMetricBreakdown {
+  category: 'security';
+  totalCount: number;
+  fetchedCount: number;
+  entries: IssuesBreakdownEntry[];
+}
+
 export interface DependencyRisksMetricBreakdown {
   category: 'dependency-risks';
   totalCount: number;
@@ -90,6 +98,7 @@ export type QualityGateMetricBreakdown =
   | CoverageMetricBreakdown
   | DuplicationsMetricBreakdown
   | IssuesMetricBreakdown
+  | SecurityMetricBreakdown
   | DependencyRisksMetricBreakdown;
 
 export interface QualityGateConditionSummary {

@@ -907,12 +907,12 @@ describe('quality-gate status — breakdown', () => {
       harness.withAuth(server.baseUrl(), 'test-token');
 
       const result = await harness.run(
-        `quality-gate status --project my-project --category security`,
+        `quality-gate status --project my-project --category hotspots`,
       );
 
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain(
-        "Invalid --category option: 'security'. Must be one of: coverage, duplications",
+        "Invalid --category option: 'hotspots'. Must be one of: coverage, duplications",
       );
       const statusRequests = server
         .getRecordedRequests()
