@@ -120,6 +120,116 @@ describe('quality-gate status <file> — coverage/duplications', () => {
   );
 
   it(
+    'reports a NOT_APPLICABLE verdict in table format when no conditions apply to the file',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('OK')
+            .withConditions([
+              {
+                status: 'OK',
+                metricKey: 'sca_count_vulnerability',
+                comparator: 'GT',
+                errorThreshold: '0',
+                actualValue: '0',
+              },
+            ])
+            .withComponentsTreeItems([{ path: 'src/checkout.ts', qualifier: 'FIL' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status src/checkout.ts --project my-project --format table`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('[· Not applicable]');
+      expect(result.stdout).toContain('No quality gate conditions apply to this file.');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports a NOT_APPLICABLE status in JSON when no conditions apply to the file, distinct from OK',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('OK')
+            .withConditions([
+              {
+                status: 'OK',
+                metricKey: 'sca_count_vulnerability',
+                comparator: 'GT',
+                errorThreshold: '0',
+                actualValue: '0',
+              },
+            ])
+            .withComponentsTreeItems([{ path: 'src/checkout.ts', qualifier: 'FIL' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status src/checkout.ts --project my-project --format json`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate).toEqual({
+        status: 'NOT_APPLICABLE',
+        file: 'src/checkout.ts',
+        conditions: [],
+      });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows an "all applicable conditions are passing" hint for a clean file in table format',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('OK')
+            .withConditions([
+              {
+                status: 'OK',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '94.4',
+              },
+            ])
+            .withComponentsTreeItems([{ path: 'src/checkout.ts', qualifier: 'FIL' }])
+            .withComponentMeasures('src/checkout.ts', [{ metric: 'new_coverage', value: '96.0' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status src/checkout.ts --project my-project --format table`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(
+        'All applicable conditions are passing (use --all to show them).',
+      );
+      expect(result.stdout).not.toContain('No quality gate conditions apply to this file.');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     '--all includes the passing condition for a clean file',
     async () => {
       const server = await harness

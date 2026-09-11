@@ -33,7 +33,7 @@ import type {
   QualityGateViewModel,
 } from './condition-summary.ts';
 import type { QualityGateScope } from './scope.ts';
-import type { QualityGateVerdict } from './verdict.ts';
+import type { FileQualityGateVerdict } from './verdict.ts';
 
 /** Fits "Coverage on New Code" without padding. */
 const MIN_CONDITION_LABEL_WIDTH = 20;
@@ -44,10 +44,11 @@ const BREAKDOWN_VALUE_GAP = 2;
 /** One indent level deeper than a condition line. */
 const BREAKDOWN_INDENT = '        ';
 
-const VERDICT_BRACKETS: Record<QualityGateVerdict, string> = {
+const VERDICT_BRACKETS: Record<FileQualityGateVerdict, string> = {
   OK: '[✓ Passed]',
   ERROR: '[✗ Failed]',
   NOT_COMPUTED: '[⚠ Not computed]',
+  NOT_APPLICABLE: '[· Not applicable]',
 };
 
 /**
@@ -100,8 +101,10 @@ export function formatFileQualityGateTable(vm: FileQualityGateViewModel): string
   const lines: string[] = [`Quality Gate · ${vm.file} ${formatVerdictBracket(vm.verdict)}`];
   if (vm.verdict === 'NOT_COMPUTED') {
     lines.push('', `${cyan('ℹ')}  ${notComputedHint(vm.scope)}`);
+  } else if (vm.verdict === 'NOT_APPLICABLE') {
+    lines.push('', 'No quality gate conditions apply to this file.');
   } else if (vm.conditions.length === 0) {
-    lines.push('', 'No conditions apply to this file.');
+    lines.push('', 'All applicable conditions are passing (use --all to show them).');
   } else {
     lines.push(...formatConditionsBlock(vm.conditions));
   }
@@ -118,7 +121,7 @@ function formatScopeLine(scope: QualityGateScope): string {
   return `Branch:       ${scope.value}${scope.kind === 'default' ? ' (default)' : ''}`;
 }
 
-function formatVerdictBracket(verdict: QualityGateVerdict): string {
+function formatVerdictBracket(verdict: FileQualityGateVerdict): string {
   const bracket = VERDICT_BRACKETS[verdict];
   switch (verdict) {
     case 'OK':
@@ -127,6 +130,8 @@ function formatVerdictBracket(verdict: QualityGateVerdict): string {
       return red(bracket);
     case 'NOT_COMPUTED':
       return yellow(bracket);
+    case 'NOT_APPLICABLE':
+      return cyan(bracket);
   }
 }
 

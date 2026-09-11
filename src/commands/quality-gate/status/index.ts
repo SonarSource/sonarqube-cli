@@ -43,7 +43,7 @@ import { fetchFileScopedConditions } from './file-scope-conditions.ts';
 import { formatFileQualityGateJson, formatQualityGateJson } from './format-json.ts';
 import { formatFileQualityGateTable, formatQualityGateTable } from './format-table.ts';
 import { type QualityGateScope, resolveQualityGateScope } from './scope.ts';
-import { exitCodeFor, type QualityGateVerdict, toFileVerdict, toVerdict } from './verdict.ts';
+import { exitCodeFor, type FileQualityGateVerdict, toFileVerdict, toVerdict } from './verdict.ts';
 
 export const VALID_FORMATS = ['json', 'table'];
 
@@ -90,7 +90,7 @@ interface FileScopedResultParams {
 
 interface QualityGateResult {
   message: string;
-  verdict: QualityGateVerdict;
+  verdict: FileQualityGateVerdict;
 }
 
 export async function qualityGateStatus(
@@ -251,10 +251,11 @@ async function buildFileScopedResult(
     : fileConditions.filter((c) => c.status === 'ERROR');
   const verdict = toFileVerdict(projectVerdict, fileConditions);
 
+  const viewModel = { file, verdict, scope: params.scope, conditions };
   const message =
     params.format === 'table'
-      ? formatFileQualityGateTable({ file, verdict, scope: params.scope, conditions })
-      : formatFileQualityGateJson({ file, verdict, scope: params.scope, conditions });
+      ? formatFileQualityGateTable(viewModel)
+      : formatFileQualityGateJson(viewModel);
 
   return { message, verdict };
 }
