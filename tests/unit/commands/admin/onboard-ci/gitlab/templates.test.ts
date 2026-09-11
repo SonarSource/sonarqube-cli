@@ -19,6 +19,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import * as yaml from 'js-yaml';
 
 import {
   buildUpdatedCiYml,
@@ -26,6 +27,21 @@ import {
   generateMrDescription,
 } from '@/commands/admin/onboard-ci/gitlab/templates.ts';
 import { TriggerOn } from '@/commands/admin/onboard-ci/gitlab/types.ts';
+
+interface GeneratedCiConfig {
+  stages?: string[];
+  'sonarqube-analysis': {
+    script: string[];
+    stage?: string;
+    variables: {
+      SONAR_HOST_URL: string;
+    };
+  };
+}
+
+function parseGeneratedCiYml(yml: string): GeneratedCiConfig {
+  return yaml.load(yml) as GeneratedCiConfig;
+}
 
 describe('generateCiYml', () => {
   const base = {
@@ -45,7 +61,7 @@ describe('generateCiYml', () => {
       ...base,
       stage: 'quality',
     });
-    expect(yml).toContain('  stage: quality');
+    expect(yml).toContain("  stage: 'quality'");
   });
 
   it('emits a stages block for a custom stage when creating a new file', () => {
@@ -55,8 +71,8 @@ describe('generateCiYml', () => {
       { ...base, stage: 'security' },
       true,
     );
-    expect(yml).toMatch(/^stages:\n  - security\n/);
-    expect(yml).toContain('  stage: security');
+    expect(yml).toMatch(/^stages:\n  - 'security'\n/);
+    expect(yml).toContain("  stage: 'security'");
   });
 
   it('does not emit a stages block for a GitLab default stage even when creating a new file', () => {
@@ -79,7 +95,7 @@ describe('generateCiYml', () => {
       false,
     );
     expect(yml).not.toContain('stages:');
-    expect(yml).toContain('  stage: security');
+    expect(yml).toContain("  stage: 'security'");
   });
 
   it('includes both MR and main branch rules for trigger-on both', () => {
@@ -123,8 +139,30 @@ describe('generateCiYml', () => {
 
   it('injects project key and server URL', () => {
     const yml = generateCiYml('mygroup_myrepo', 'https://sonar.example.com', base);
-    expect(yml).toContain('-Dsonar.projectKey="mygroup_myrepo"');
-    expect(yml).toContain('SONAR_HOST_URL: "https://sonar.example.com"');
+    const config = parseGeneratedCiYml(yml)['sonarqube-analysis'];
+    expect(config.script[0]).toBe("sonar-scanner -Dsonar.projectKey='mygroup_myrepo'");
+    expect(config.variables.SONAR_HOST_URL).toBe('https://sonar.example.com');
+  });
+
+  it('keeps special characters in generated CI values inside their fields', () => {
+    const projectKey = `project'; echo unexpected`;
+    const serverUrl = `https://sonar.example.com/'$(echo unexpected)`;
+
+    const config = parseGeneratedCiYml(generateCiYml(projectKey, serverUrl, base))[
+      'sonarqube-analysis'
+    ];
+
+    expect(config.script[0]).toContain(`-Dsonar.projectKey='project'\\''; echo unexpected'`);
+    expect(config.variables.SONAR_HOST_URL).toBe(serverUrl);
+  });
+
+  it('rejects line breaks in generated CI values', () => {
+    expect(() => generateCiYml('project\nkey', 'https://sonar.example.com', base)).toThrow(
+      'project key must be a single line',
+    );
+    expect(() => generateCiYml('project', 'https://sonar.example.com\n', base)).toThrow(
+      'server URL must be a single line',
+    );
   });
 
   it('uses custom sonar token variable name', () => {
@@ -142,38 +180,69 @@ describe('generateCiYml', () => {
 
   it('appends no extra properties when scannerProperty is empty', () => {
     const yml = generateCiYml('my_project', 'https://sonar.example.com', base);
-    expect(yml).toContain('- sonar-scanner -Dsonar.projectKey="my_project"\n');
+    expect(parseGeneratedCiYml(yml)['sonarqube-analysis'].script).toEqual([
+      "sonar-scanner -Dsonar.projectKey='my_project'",
+    ]);
   });
 
   it('appends a single scanner property after the project key, shell-quoted', () => {
-    const yml = generateCiYml('my_project', 'https://sonar.example.com', {
-      ...base,
-      scannerProperty: ['sonar.scanner.engineJarPath=/path/to/engine.jar'],
-    });
-    expect(yml).toContain(
-      `-Dsonar.projectKey="my_project" -Dsonar.scanner.engineJarPath='/path/to/engine.jar'`,
+    const config = parseGeneratedCiYml(
+      generateCiYml('my_project', 'https://sonar.example.com', {
+        ...base,
+        scannerProperty: ['sonar.scanner.engineJarPath=/path/to/engine.jar'],
+      }),
+    )['sonarqube-analysis'];
+    expect(config.script[0]).toBe(
+      "sonar-scanner -Dsonar.projectKey='my_project' -Dsonar.scanner.engineJarPath='/path/to/engine.jar'",
     );
   });
 
   it('appends multiple scanner properties in order, each shell-quoted', () => {
-    const yml = generateCiYml('my_project', 'https://sonar.example.com', {
-      ...base,
-      scannerProperty: [
-        'sonar.scanner.engineJarPath=/path/to/engine.jar',
-        'sonar.buildsystem.autoconfig.disabled=false',
-      ],
-    });
-    expect(yml).toContain(
-      `-Dsonar.projectKey="my_project" -Dsonar.scanner.engineJarPath='/path/to/engine.jar' -Dsonar.buildsystem.autoconfig.disabled='false'`,
+    const config = parseGeneratedCiYml(
+      generateCiYml('my_project', 'https://sonar.example.com', {
+        ...base,
+        scannerProperty: [
+          'sonar.scanner.engineJarPath=/path/to/engine.jar',
+          'sonar.buildsystem.autoconfig.disabled=false',
+        ],
+      }),
+    )['sonarqube-analysis'];
+    expect(config.script[0]).toBe(
+      "sonar-scanner -Dsonar.projectKey='my_project' -Dsonar.scanner.engineJarPath='/path/to/engine.jar' -Dsonar.buildsystem.autoconfig.disabled='false'",
     );
   });
 
   it('escapes single quotes inside a property value', () => {
-    const yml = generateCiYml('my_project', 'https://sonar.example.com', {
-      ...base,
-      scannerProperty: [`sonar.projectName=It's a test`],
-    });
-    expect(yml).toContain(`-Dsonar.projectName='It'\\''s a test'`);
+    const config = parseGeneratedCiYml(
+      generateCiYml('my_project', 'https://sonar.example.com', {
+        ...base,
+        scannerProperty: [`sonar.projectName=It's a test`],
+      }),
+    )['sonarqube-analysis'];
+    expect(config.script[0]).toContain(String.raw`-Dsonar.projectName='It'\''s a test'`);
+  });
+
+  it('rejects invalid scanner property keys', () => {
+    expect(() =>
+      generateCiYml('my_project', 'https://sonar.example.com', {
+        ...base,
+        scannerProperty: ['sonar.foo; rm -rf /=x'],
+      }),
+    ).toThrow("invalid scanner property key 'sonar.foo; rm -rf /'");
+  });
+
+  it('yaml-quotes stage names that would otherwise be parsed as booleans', () => {
+    const yml = generateCiYml(
+      'my_project',
+      'https://sonar.example.com',
+      { ...base, stage: 'no' },
+      true,
+    );
+    const config = parseGeneratedCiYml(yml);
+    expect(yml).toContain("stage: 'no'");
+    expect(yml).toMatch(/^stages:\n  - 'no'\n/);
+    expect(config.stages).toEqual(['no']);
+    expect(config['sonarqube-analysis'].stage).toBe('no');
   });
 });
 
