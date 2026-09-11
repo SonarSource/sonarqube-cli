@@ -83,7 +83,11 @@ expect.extend({
       };
     }
     if (expected === undefined) {
-      return { pass: true, message: () => 'expected an Ok result but got Err' };
+      return {
+        pass: true,
+        message: () =>
+          this.isNot ? 'expected the result not to be Err' : 'expected an Err result',
+      };
     }
     const error = actual._unsafeUnwrapErr();
     const pass = typeof expected === 'string' ? error.message === expected : expected(error);

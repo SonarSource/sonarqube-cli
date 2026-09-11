@@ -20,10 +20,13 @@
 
 // Issues command - search for SonarQube issues
 
-import { InvalidOptionError } from '@/core/commands/command-error.ts';
+import {
+  type CliError,
+  CommandFailedError,
+  InvalidOptionError,
+} from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { errAsync, type ResultAsync } from '@/core/result.ts';
-import type { HttpClientError } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { MAX_PAGE_SIZE, ProjectsClient } from '@/core/server/projects.ts';
 
@@ -39,7 +42,7 @@ export interface ListProjectsOptions {
 export function listProjects(
   options: ListProjectsOptions,
   ctx: CommandAuthenticatedInvocationContext,
-): ResultAsync<void, InvalidOptionError | HttpClientError> {
+): ResultAsync<void, CliError> {
   const { auth, console } = ctx;
   const pageSize = options.pageSize;
   if (pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
@@ -81,5 +84,6 @@ export function listProjects(
           },
         }),
       );
-    });
+    })
+    .mapErr((error) => new CommandFailedError(error.message, { cause: error }));
 }
