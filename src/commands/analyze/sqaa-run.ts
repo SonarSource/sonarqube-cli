@@ -218,6 +218,7 @@ export async function runSqaaAnalysis(
   options: SingleFileRunOptions,
 ): Promise<void> {
   const {
+    client,
     branch,
     explicitProject,
     format = 'text',
@@ -229,7 +230,7 @@ export async function runSqaaAnalysis(
     console,
   } = options;
 
-  const resolution = await resolveSqaaAuthAndProject(auth, explicitProject, console);
+  const resolution = await resolveSqaaAuthAndProject(client, auth, explicitProject, console);
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
 
