@@ -56,7 +56,12 @@ export async function authLogin(
 ): Promise<void> {
   const { console } = ctx;
   validateLoginOptions(options);
-  await warnIfEnvAuthPresent(ctx);
+  const authResult = await ctx.resolveAuth({ silent: true });
+  if (authResult.isErr()) {
+    throw authResult.error;
+  }
+  const invocationAuth = authResult.value;
+  await warnIfEnvAuthPresent(ctx, invocationAuth);
   const server = await resolveServer(options, console);
   await confirmServerTrust(server, console);
 
@@ -105,8 +110,7 @@ export async function authLogin(
 
     const displayServer = isCloud ? `${server} (${org})` : server;
     console.success(`Authentication successful for: ${displayServer}`);
-    const activeAuth = await resolveInvocationAuth(ctx);
-    if (activeAuth?.comesFromEnv()) {
+    if (invocationAuth?.comesFromEnv()) {
       console.warn(
         ` Token saved, but environment variables take precedence and will be used instead.\n   → Unset ${ENV_TOKEN} to use the saved token`,
       );
@@ -121,22 +125,16 @@ export async function authLogin(
   }
 }
 
-async function resolveInvocationAuth(ctx: CommandInvocationContext) {
-  const authResult = await ctx.resolveAuth({ silent: true });
-  if (authResult.isErr()) {
-    throw authResult.error;
-  }
-  return authResult.value;
-}
-
 /**
  * Environment variable authentication always wins over whatever this command saves (see
  * `AuthResolver` in `auth-resolver.ts`), so a login run while it is active would not change what
  * the CLI actually uses. Warn instead of silently doing pointless work, and let the user opt out
  * of a token they know will not be used.
  */
-async function warnIfEnvAuthPresent(ctx: CommandInvocationContext): Promise<void> {
-  const auth = await resolveInvocationAuth(ctx);
+async function warnIfEnvAuthPresent(
+  ctx: CommandInvocationContext,
+  auth: ResolvedAuth | null,
+): Promise<void> {
   if (!auth?.comesFromEnv()) {
     return;
   }
