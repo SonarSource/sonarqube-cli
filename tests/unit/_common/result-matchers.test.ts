@@ -75,6 +75,10 @@ describe('toBeErrWith()', () => {
     expect(ok('value')).not.toBeErrWith();
   });
 
+  it('reports a negation-aware message when a negated bare Err assertion actually fails', () => {
+    expect(() => expect(err(new Error('boom'))).not.toBeErrWith()).toThrow(/not to be Err/);
+  });
+
   it('reports a negation-aware message when a negated string match actually fails', () => {
     expect(() => expect(err(new Error('boom'))).not.toBeErrWith('boom')).toThrow(
       /not to be "boom"/,

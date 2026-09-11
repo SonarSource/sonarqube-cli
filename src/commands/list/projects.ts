@@ -20,11 +20,7 @@
 
 // Issues command - search for SonarQube issues
 
-import {
-  type CliError,
-  CommandFailedError,
-  InvalidOptionError,
-} from '@/core/commands/command-error.ts';
+import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { errAsync, type ResultAsync } from '@/core/result.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
@@ -37,12 +33,19 @@ export interface ListProjectsOptions {
 }
 
 /**
- * Projects search command handler
+ * Projects search command handler.
+ *
+ * The error channel is `Error`, matching what `authenticatedAction()` accepts, rather
+ * than the narrower union this chain actually produces: no caller discriminates the
+ * members, and `runCommand()` maps any error to a message, an exit code, and a
+ * remediation hint uniformly. Wrap a domain failure in a `CliError` only where there is
+ * real context or a hint to add (see `import/index.ts`); a contentless wrap would change
+ * nothing at runtime and cost a line in every converted handler.
  */
 export function listProjects(
   options: ListProjectsOptions,
   ctx: CommandAuthenticatedInvocationContext,
-): ResultAsync<void, CliError> {
+): ResultAsync<void, Error> {
   const { auth, console } = ctx;
   const pageSize = options.pageSize;
   if (pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
@@ -84,6 +87,5 @@ export function listProjects(
           },
         }),
       );
-    })
-    .mapErr((error) => new CommandFailedError(error.message, { cause: error }));
+    });
 }

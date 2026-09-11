@@ -79,7 +79,8 @@ export default tseslint.config(
   // repo-wide because the rule's handled-method list is hardcoded to match/unwrapOr/
   // _unsafeUnwrap with no options (schema: []), so every chain ending in this repo's
   // orThrow() outside a return position is reported even though it is correctly collapsed;
-  // widening the scope needs that gap closed first.
+  // widening the scope needs that gap closed first. Until then this list is maintained by
+  // hand: add each handler as it moves off orThrow() onto a Result rail.
   {
     files: ['src/core/result.ts', 'src/core/commands/sonar-command.ts', 'src/commands/list/projects.ts'],
     plugins: { neverthrow: neverthrowPlugin },
