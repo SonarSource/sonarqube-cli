@@ -24,6 +24,7 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as scaInstall from '@/core/host/install/sca-scanner.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 
 import { ScaScanOrchestrator } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
 import type {
@@ -46,6 +47,8 @@ const FAKE_AUTH: ResolvedAuth = {
   orgKey: 'my-org',
   connectionType: 'cloud',
 };
+
+const FAKE_CLIENT = new SonarHttpClient(FAKE_AUTH.serverUrl, FAKE_AUTH.token);
 
 // issue.status null + newlyIntroduced true → effectiveStatus returns 'NEW', passing the hook's 'new' filter
 const SCAN_RESULT_WITH_RISK: AnalyzeProjectResponse = {
@@ -209,6 +212,7 @@ describe('runDepRisksStage', () => {
         project: 'demo',
         changedFiles: ['package.json'],
         auth: FAKE_AUTH,
+        client: FAKE_CLIENT,
         ctx: makeCtx(),
       });
     } catch (e) {
@@ -232,6 +236,7 @@ describe('runDepRisksStage', () => {
         project: 'demo',
         changedFiles: ['package.json'],
         auth: FAKE_AUTH,
+        client: FAKE_CLIENT,
         ctx: makeCtx(),
       });
     } catch (e) {
@@ -251,6 +256,7 @@ describe('runDepRisksStage', () => {
       project: 'demo',
       changedFiles: ['package.json'],
       auth: FAKE_AUTH,
+      client: FAKE_CLIENT,
       ctx: makeCtx(),
     });
 
@@ -267,6 +273,7 @@ describe('runDepRisksStage', () => {
         project: 'demo',
         changedFiles: ['package.json'],
         auth: FAKE_AUTH,
+        client: FAKE_CLIENT,
         ctx: makeCtx(),
       });
     } catch (e) {
@@ -286,6 +293,7 @@ describe('runDepRisksStage', () => {
       project: 'demo',
       changedFiles: ['package.json'],
       auth: FAKE_AUTH,
+      client: FAKE_CLIENT,
       ctx: makeCtx(),
     });
 
@@ -299,6 +307,7 @@ describe('runDepRisksStage', () => {
       project: 'demo',
       changedFiles: ['index.ts'],
       auth: FAKE_AUTH,
+      client: FAKE_CLIENT,
       ctx: makeCtx(),
     });
 
