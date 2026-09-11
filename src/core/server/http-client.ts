@@ -223,8 +223,10 @@ export class SonarHttpClient {
   }
 
   /**
-   * Like `get`, but resolves to `Ok(null)` instead of an error when the server responds
-   * 404. Every other non-2xx status still yields its normal typed error.
+   * Like `get`, but treats a 404 as a meaningful, expected answer instead of a failure:
+   * resolves to `Ok(null)` when the server responds 404. Every other non-2xx status
+   * (403, 429, 503, network error, ...) still yields the normal typed error, exactly
+   * as `get` would.
    */
   getIfFound<T>(
     endpoint: string,
