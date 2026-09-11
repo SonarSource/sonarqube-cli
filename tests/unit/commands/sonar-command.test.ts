@@ -1020,16 +1020,18 @@ describe('SonarCommand', () => {
     });
 
     it('does not touch process.exitCode when a Result-returning handler resolves Ok', async () => {
-      resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
-      const cmd = sonarCommand();
+      const mocked = mockAuthResolver(FAKE_AUTH);
+      resolveAuthSpy = mocked.resolveAuthSpy;
+      const cmd = sonarCommand({ runtime: mocked.runtime });
       cmd.authenticatedAction(() => okAsync(undefined));
       await cmd.parseAsync([], { from: 'user' });
       expect(process.exitCode).toBe(0);
     });
 
     it('collapses a Result-returning handler that resolves Err, same as a thrown error', async () => {
-      resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
-      const cmd = sonarCommand();
+      const mocked = mockAuthResolver(FAKE_AUTH);
+      resolveAuthSpy = mocked.resolveAuthSpy;
+      const cmd = sonarCommand({ runtime: mocked.runtime });
       cmd.authenticatedAction(() =>
         errAsync(new CommandFailedError('handler failed', { exitCode: 5 })),
       );
