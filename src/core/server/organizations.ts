@@ -33,6 +33,12 @@ export interface Organization {
   onlyPrivateProjects?: { enabled: boolean };
 }
 
+/** The two server-side identifiers `/organizations/organizations` returns for an organization. */
+export interface OrganizationRecord {
+  id: string;
+  uuidV4: string;
+}
+
 /**
  * Result of an organization lookup: found, absent, or not checkable.
  *
@@ -46,7 +52,7 @@ export class OrganizationsClient {
   private readonly client: SonarHttpClient;
   private readonly orgInfoCache = new Map<
     string,
-    ResultAsync<{ id: string; uuidV4: string } | null, HttpClientError>
+    ResultAsync<OrganizationRecord | null, HttpClientError>
   >();
 
   constructor(client: SonarHttpClient) {
@@ -58,7 +64,7 @@ export class OrganizationsClient {
    * Uses the region-specific Cloud API host (SonarQube Cloud only).
    */
   getOrganizationId(organizationKey: string): ResultAsync<string | null, HttpClientError> {
-    return this.getOrganizationInfo(organizationKey).map((info) => info?.uuidV4 ?? null);
+    return this.organizationRecordOrNull(organizationKey).map((info) => info?.uuidV4 ?? null);
   }
 
   /**
@@ -67,37 +73,54 @@ export class OrganizationsClient {
    * than the uuidV4 (SonarQube Cloud only).
    */
   getOrganizationLegacyId(organizationKey: string): ResultAsync<string | null, HttpClientError> {
-    return this.getOrganizationInfo(organizationKey).map((info) => info?.id ?? null);
+    return this.organizationRecordOrNull(organizationKey).map((info) => info?.id ?? null);
   }
 
-  private getOrganizationInfo(
+  /**
+   * Both identifiers in one cached lookup. `null` means the server resolved no organization;
+   * a failed lookup stays an `Err`. The two getters above collapse that distinction, so a
+   * caller that needs it comes here.
+   */
+  getOrganizationRecord(
     organizationKey: string,
-  ): ResultAsync<{ id: string; uuidV4: string } | null, HttpClientError> {
+  ): ResultAsync<OrganizationRecord | null, HttpClientError> {
     let pending = this.orgInfoCache.get(organizationKey);
     if (!pending) {
-      pending = this.fetchOrganizationInfo(organizationKey);
+      pending = this.fetchOrganizationRecord(organizationKey);
       this.orgInfoCache.set(organizationKey, pending);
     }
     return pending;
   }
 
-  private fetchOrganizationInfo(
+  /**
+   * For the single-id getters: an unresolvable key and a refused one are both dead ends to
+   * their callers. A critical failure still propagates, so an outage stays retryable.
+   */
+  private organizationRecordOrNull(
     organizationKey: string,
-  ): ResultAsync<{ id: string; uuidV4: string } | null, HttpClientError> {
+  ): ResultAsync<OrganizationRecord | null, HttpClientError> {
+    return this.getOrganizationRecord(organizationKey).orElse((error) =>
+      isCriticalFailure(error) ? errAsync(error) : okAsync(null),
+    );
+  }
+
+  private fetchOrganizationRecord(
+    organizationKey: string,
+  ): ResultAsync<OrganizationRecord | null, HttpClientError> {
     const endpoint = '/organizations/organizations';
+    // Logging inside the cached chain: one failed lookup logs once, however many getters read it.
     return this.client
-      .get<Array<{ id: string; uuidV4: string }>>(
+      .get<OrganizationRecord[]>(
         endpoint,
         { organizationKey, excludeEligibility: 'true' },
         this.client.apiHostFor(endpoint),
       )
       .map((result) => result[0] ?? null)
-      .orElse((error) => {
-        if (isCriticalFailure(error)) return errAsync(error);
+      .mapErr((error) => {
         logger.debug(
           `Organization lookup for '${organizationKey}' failed: ${error.name}: ${error.message}`,
         );
-        return okAsync(null);
+        return error;
       });
   }
 

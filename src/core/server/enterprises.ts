@@ -18,30 +18,33 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// SonarQube System API wrapper — instance status and clean-code policy mode.
+// SonarQube Cloud Enterprises API wrapper (SonarQube Server has no enterprises).
 
-import { okAsync, type ResultAsync } from '../result.ts';
+import type { ResultAsync } from '../result.ts';
 import type { HttpClientError } from './errors.ts';
 import type { SonarHttpClient } from './http-client.ts';
 
-export class SystemClient {
+export class EnterprisesClient {
   private readonly client: SonarHttpClient;
 
   constructor(client: SonarHttpClient) {
     this.client = client;
   }
 
-  getServerMode(): ResultAsync<'mqr' | 'standard', HttpClientError> {
-    if (this.client.isCloud) return okAsync('mqr');
+  /**
+   * Keyed by the organization's **legacy** `id`, not its `uuidV4`.
+   * `null` when the organization belongs to no enterprise.
+   */
+  getEnterpriseIdForOrganization(
+    organizationId: string,
+  ): ResultAsync<string | null, HttpClientError> {
+    const endpoint = '/enterprises/enterprise-organizations';
     return this.client
-      .getOrNullIf404<{ mode: string }>('/api/v2/clean-code-policy/mode')
-      .map((result) => (result?.mode === 'MQR' ? 'mqr' : 'standard'));
-  }
-
-  /** SonarQube Server only: Cloud has no installation id, and answers without one. */
-  getInstallationId(): ResultAsync<string | null, HttpClientError> {
-    return this.client
-      .get<{ id?: string }>('/api/system/status')
-      .map((result) => result.id ?? null);
+      .get<Array<{ enterpriseId?: string }>>(
+        endpoint,
+        { organizationId },
+        this.client.apiHostFor(endpoint),
+      )
+      .map((result) => result[0]?.enterpriseId ?? null);
   }
 }
