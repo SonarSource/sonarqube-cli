@@ -491,6 +491,25 @@ describe('CliCommandExecuted', () => {
       resolveAuthSpy.mockRestore();
     });
 
+    it('does not seed identity from a connection written during the command when auth is null', async () => {
+      const state = getDefaultState('1.0.0');
+      const conn = stateManager.addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
+        orgKey: 'my-org',
+      });
+      conn.userUuid = 'post-login-user';
+      conn.organizationUuidV4 = 'post-login-org';
+      loadStateSpy.mockReturnValue(state);
+
+      await commitTelemetryFacts([await buildCommandExecutedFact(makeCommand('auth login'))], {
+        auth: null,
+      });
+
+      const event = readCommandEvents(testDir)[0];
+      expect(event.event_payload.connection_type).toBeNull();
+      expect(event.event_payload.user_uuid).toBeNull();
+      expect(event.event_payload.organization_uuid_v4).toBeNull();
+    });
+
     it('resolves user_uuid and organization_uuid_v4 via API on first env-auth invocation', async () => {
       process.env[ENV_TOKEN] = 'env-auth-token-2';
       process.env[ENV_ORG] = 'my-org';

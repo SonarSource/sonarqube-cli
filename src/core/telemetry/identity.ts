@@ -23,10 +23,9 @@ import {
   CommandAuthenticatedInvocationContext,
   type CommandInvocationContext,
 } from '@/core/commands/invocation-context.ts';
-import { authMatchesConnection } from '@/core/state/state-manager.ts';
 import {
+  EMPTY_IDENTITY,
   identityFromConnection,
-  needsIdentityEnrichment,
   resolveTelemetryIdentity,
   type TelemetryIdentity,
 } from '@/core/telemetry/identity-fetch.ts';
@@ -43,63 +42,38 @@ function toTelemetryConnectionType(type: ServerType): Exclude<TelemetryConnectio
   return type === 'cloud' ? 'sqc' : 'sqs';
 }
 
-function matchingConnection(
-  conn: AuthConnection | undefined,
-  auth: ResolvedAuth | null,
-): AuthConnection | undefined {
-  if (conn === undefined) return undefined;
-  if (auth && !authMatchesConnection(auth, conn)) return undefined;
-  return conn;
-}
-
-/** Trusts an already-complete `conn` to skip redundant identity enrichment. */
-async function resolveStoreEventTelemetryIdentity(
-  conn: AuthConnection | undefined,
-): Promise<{ connectionType: TelemetryConnectionType; identity: TelemetryIdentity }> {
-  if (conn && !needsIdentityEnrichment(identityFromConnection(conn), conn.type, conn)) {
-    return {
-      connectionType: toTelemetryConnectionType(conn.type),
-      identity: identityFromConnection(conn),
-    };
-  }
-  return resolveCommandTelemetryIdentity(conn, null);
+/** Store events have no invocation auth; identity is whatever the active connection already holds. */
+function resolveStoreEventTelemetryIdentity(conn: AuthConnection | undefined): {
+  connectionType: TelemetryConnectionType;
+  identity: TelemetryIdentity;
+} {
+  return {
+    connectionType: conn ? toTelemetryConnectionType(conn.type) : null,
+    identity: identityFromConnection(conn),
+  };
 }
 
 /**
  * Like {@link resolveStoreEventTelemetryIdentity}, but never throws — telemetry
  * must not fail an otherwise-successful command.
  */
-export async function resolveStoreEventTelemetryIdentitySafely(
+export function resolveStoreEventTelemetryIdentitySafely(
   conn: AuthConnection | undefined,
 ): Promise<{ connectionType: TelemetryConnectionType; identity: TelemetryIdentity }> {
-  try {
-    return await resolveStoreEventTelemetryIdentity(conn);
-  } catch {
-    return {
-      connectionType: conn ? toTelemetryConnectionType(conn.type) : null,
-      identity: identityFromConnection(conn),
-    };
-  }
+  return Promise.resolve(resolveStoreEventTelemetryIdentity(conn));
 }
 
 export async function resolveCommandTelemetryIdentity(
-  conn: AuthConnection | undefined,
   auth: ResolvedAuth | null,
 ): Promise<{ connectionType: TelemetryConnectionType; identity: TelemetryIdentity }> {
-  const seedConn = matchingConnection(conn, auth);
-  let identity = identityFromConnection(seedConn);
-  let connectionType: TelemetryConnectionType = seedConn
-    ? toTelemetryConnectionType(seedConn.type)
-    : null;
-
-  if (auth) {
-    connectionType = toTelemetryConnectionType(auth.connectionType);
-    if (needsIdentityEnrichment(identity, auth.connectionType, seedConn)) {
-      identity = await resolveTelemetryIdentity(auth, identity);
-    }
+  if (!auth) {
+    return { connectionType: null, identity: EMPTY_IDENTITY };
   }
 
-  return { connectionType, identity };
+  return {
+    connectionType: toTelemetryConnectionType(auth.connectionType),
+    identity: await resolveTelemetryIdentity(auth),
+  };
 }
 
 /**
