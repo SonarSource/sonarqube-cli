@@ -19,22 +19,39 @@
  */
 
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
+import { IssuesClient } from '@/core/server/issues.ts';
 import { extractMeasureValue, MeasuresClient } from '@/core/server/measures.ts';
 import type { ComponentTreeMeasure, Metric, QualityGateCondition } from '@/core/server/types.ts';
 
-import { fetchMetricBreakdown, METRIC_CATEGORIES } from './breakdown.ts';
-import { formatOptionalValue, type QualityGateConditionSummary } from './condition-summary.ts';
-import { fetchDuplicationsBreakdown } from './duplications-enrichment.ts';
+import type { AttachBreakdownsParams, CategoryBreakdownCaches } from './breakdown.ts';
+import { fetchCategoryBreakdown, METRIC_CATEGORIES } from './breakdown.ts';
+import {
+  formatOptionalValue,
+  type QualityGateConditionSummary,
+  type QualityGateMetricBreakdown,
+} from './condition-summary.ts';
 
 export interface FetchFileScopedConditionsParams {
   client: SonarHttpClient;
   projectKey: string;
   componentKey: string;
+  orgKey?: string;
   metrics: Metric[];
   top: number;
   branch?: string;
   pullRequest?: string;
 }
+
+interface FileScopeContext {
+  measuresClient: MeasuresClient;
+  issuesClient: IssuesClient;
+  caches: CategoryBreakdownCaches;
+  isDirectory: boolean;
+}
+
+const DIRECTORY_ONLY_CATEGORIES = new Set(['coverage', 'duplications']);
+
+const FILE_SCOPED_CATEGORIES = new Set(['coverage', 'duplications', 'issues', 'security']);
 
 const COMPARATOR_FAILS: Partial<Record<string, (actual: number, threshold: number) => boolean>> = {
   LT: (actual, threshold) => actual < threshold,
@@ -43,23 +60,20 @@ const COMPARATOR_FAILS: Partial<Record<string, (actual: number, threshold: numbe
   NE: (actual, threshold) => actual !== threshold,
 };
 
-/**
- * Coverage/duplications conditions for a single resolved file or directory, evaluated against
- * that component's own value rather than the project's.
- */
 export async function fetchFileScopedConditions(
   rawConditions: QualityGateCondition[],
   params: FetchFileScopedConditionsParams,
 ): Promise<QualityGateConditionSummary[]> {
   const applicable = rawConditions.filter((condition) => {
     const category = METRIC_CATEGORIES.get(condition.metricKey);
-    return category === 'coverage' || category === 'duplications';
+    return !!category && FILE_SCOPED_CATEGORIES.has(category);
   });
   if (applicable.length === 0) {
     return [];
   }
 
   const measuresClient = new MeasuresClient(params.client);
+  const issuesClient = new IssuesClient(params.client);
   const component = await measuresClient
     .getComponentMeasures({
       componentKey: params.componentKey,
@@ -71,6 +85,12 @@ export async function fetchFileScopedConditions(
   const isDirectory = component.qualifier === 'DIR';
 
   const metricsByKey = new Map(params.metrics.map((metric) => [metric.key, metric]));
+  const context: FileScopeContext = {
+    measuresClient,
+    issuesClient,
+    caches: { issues: new Map(), security: new Map() },
+    isDirectory,
+  };
 
   return Promise.all(
     applicable.map((condition) =>
@@ -78,8 +98,7 @@ export async function fetchFileScopedConditions(
         condition,
         component.measures,
         metricsByKey.get(condition.metricKey),
-        isDirectory,
-        measuresClient,
+        context,
         params,
       ),
     ),
@@ -90,8 +109,7 @@ async function buildFileConditionSummary(
   condition: QualityGateCondition,
   measures: ComponentTreeMeasure[],
   metric: Metric | undefined,
-  isDirectory: boolean,
-  measuresClient: MeasuresClient,
+  context: FileScopeContext,
   params: FetchFileScopedConditionsParams,
 ): Promise<QualityGateConditionSummary> {
   const rawValue = extractMeasureValue(measures, condition.metricKey);
@@ -109,26 +127,50 @@ async function buildFileConditionSummary(
     formattedActualValue: formatOptionalValue(rawValue, metric),
   };
 
-  if (!isDirectory || status !== 'ERROR') {
+  if (status !== 'ERROR') {
     return summary;
   }
 
-  const breakdownParams = {
+  const breakdownParams: AttachBreakdownsParams = {
     client: params.client,
     projectKey: params.projectKey,
     componentKey: params.componentKey,
+    orgKey: params.orgKey,
     metrics: params.metrics,
     top: params.top,
     branch: params.branch,
     pullRequest: params.pullRequest,
   };
-  const category = METRIC_CATEGORIES.get(condition.metricKey);
-  const breakdown =
-    category === 'coverage'
-      ? await fetchMetricBreakdown(measuresClient, breakdownParams, summary, metric)
-      : await fetchDuplicationsBreakdown(measuresClient, breakdownParams, summary, metric);
+  const breakdown = await fetchBreakdownForCategory(
+    METRIC_CATEGORIES.get(condition.metricKey) ?? '',
+    context,
+    breakdownParams,
+    summary,
+    metric,
+  );
 
   return breakdown ? { ...summary, breakdown } : summary;
+}
+
+function fetchBreakdownForCategory(
+  category: string,
+  context: FileScopeContext,
+  params: AttachBreakdownsParams,
+  condition: QualityGateConditionSummary,
+  metric: Metric | undefined,
+): Promise<QualityGateMetricBreakdown | undefined> {
+  if (DIRECTORY_ONLY_CATEGORIES.has(category) && !context.isDirectory) {
+    return Promise.resolve(undefined);
+  }
+  return fetchCategoryBreakdown(
+    category,
+    context.measuresClient,
+    context.issuesClient,
+    context.caches,
+    params,
+    condition,
+    metric,
+  );
 }
 
 function resolveConditionStatus(
