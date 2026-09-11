@@ -288,10 +288,12 @@ function defaultEligibleSubfeatureIds<TOptions>(
   });
 }
 
+/** Drops any subfeature whose own pinned scope disagrees with the application's, so a scope change in a later release is enforced on every reapply, not just during fold. */
 function getFeature(
   featuresById: Map<string, FeatureDeclaration>,
   featureId: string,
   subfeatureIds: string[] | undefined,
+  scope: InstalledIntegrationFeature['scope'],
   attrs: InstalledIntegrationFeature['attrs'],
 ): FeatureDeclaration | undefined {
   const feature = featuresById.get(featureId);
@@ -305,7 +307,9 @@ function getFeature(
     const activeIds = new Set(defaultIds);
     const filteredContainer = {
       ...feature,
-      subfeatures: feature.subfeatures.filter((s) => activeIds.has(s.id)),
+      subfeatures: feature.subfeatures.filter(
+        (s) => activeIds.has(s.id) && (s.scope === undefined || s.scope === scope),
+      ),
     };
     applicationFeature = filteredContainer;
   }
@@ -320,7 +324,7 @@ function createFeatureApplication(
   scope: InstalledIntegrationFeature['scope'],
   attrs: InstalledIntegrationFeature['attrs'],
 ): FeatureApplication | undefined {
-  const feature = getFeature(featuresById, featureId, subfeatureIds, attrs);
+  const feature = getFeature(featuresById, featureId, subfeatureIds, scope, attrs);
   if (!feature) {
     return undefined;
   }

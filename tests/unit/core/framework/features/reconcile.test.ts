@@ -725,6 +725,78 @@ describe('reconcileInstalledIntegrations', () => {
     expect(state.integrations.installed[0].features[0].featureId).toBe('vortex');
   });
 
+  it('drops and cleans up a subfeature whose declared scope no longer matches the installed feature, outside any fold', async () => {
+    const now = '2026-01-01T00:00:00.000Z';
+    const subPath = join(tempDir, 'sub.txt');
+    fs.writeFileSync(subPath, 'stale sub content', 'utf-8');
+
+    const state = makeState();
+    state.integrations.installed.push({
+      id: 'integration-id',
+      integrationId: 'test-integration',
+      installedByCliVersion: '0.9.0',
+      installedAt: now,
+      updatedByCliVersion: '0.9.0',
+      updatedAt: now,
+      features: [
+        {
+          featureId: 'container-feature',
+          scope: 'project',
+          targetRoot: tempDir,
+          installedByCliVersion: '0.9.0',
+          installedAt: now,
+          updatedByCliVersion: '0.9.0',
+          updatedAt: now,
+          dependencies: [],
+          resources: [],
+          operations: [],
+          subfeatures: [
+            {
+              featureId: 'now-global-only-sub',
+              dependencies: [],
+              resources: [
+                {
+                  id: 'sub-file',
+                  resourceType: 'whole-file',
+                  path: subPath,
+                  updatedByCliVersion: '0.9.0',
+                  updatedAt: now,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    const container: FeatureContainer = {
+      id: 'container-feature',
+      displayName: 'Container feature',
+      scope: 'project',
+      subfeatures: [
+        {
+          id: 'now-global-only-sub',
+          displayName: 'Now global-only sub',
+          scope: 'global',
+          resources: [wholeFile({ id: 'sub-file', targetPath: subPath, content: 'fresh content' })],
+        },
+      ],
+      defaultInstallSubfeatureIds: [],
+    };
+    const registry = new IntegrationRegistry();
+    registry.register({
+      id: 'test-integration',
+      displayName: 'Test integration',
+      features: [container],
+    });
+
+    await reconcileInstalledIntegrations(state, registry, fake);
+
+    expect(fs.existsSync(subPath)).toBe(false);
+    const savedFeature = state.integrations.installed[0].features[0];
+    expect(savedFeature.subfeatures ?? []).toEqual([]);
+  });
+
   describe('global-scope coexistence collapsing', () => {
     function recordedCoexistingFeature(
       featureId: string,
