@@ -86,6 +86,11 @@ export interface DiscoveredProject {
 export interface DiscoverProjectOptions {
   /** When set, used for git-remote binding lookup. `null` skips git-remote binding entirely (no local `git remote` read either). */
   auth?: ResolvedAuth | null;
+  /**
+   * When false, skips known-server-project-mapping (pre-login discovery uses false so active
+   * connection state cannot masquerade as project config during `sonar auth login`).
+   */
+  useKnownMappings?: boolean;
   /** Suppresses the "Found ..." stderr hints. Defaults to false. */
   silent?: boolean;
   console: Console;
@@ -103,7 +108,12 @@ async function discoverLocalConfig(
   silent: boolean,
   console: Console,
 ): Promise<Pick<DiscoveredProject, 'serverUrl' | 'organization'>> {
-  const discovered = await discoverProject(startDir, { auth: null, silent, console });
+  const discovered = await discoverProject(startDir, {
+    auth: null,
+    silent,
+    console,
+    useKnownMappings: false,
+  });
   return { serverUrl: discovered.serverUrl, organization: discovered.organization };
 }
 
@@ -176,7 +186,8 @@ export async function discoverProject(
 
     const resolved =
       (await applySharedProjectConfig(config, lookupPaths, options)) ||
-      (knownMappings !== undefined &&
+      (options.useKnownMappings !== false &&
+        knownMappings !== undefined &&
         applyKnownServerProjectMapping(config, lookupPaths, knownMappings, options)) ||
       (await applyLocalConfigAcrossLookupPaths(config, lookupPaths, options));
 

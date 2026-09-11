@@ -21,6 +21,7 @@
 import { NullAuthResolver, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { type CliRuntime, createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { type LifecycleState, STABLE_LIFECYCLE } from '@/core/commands/stage.ts';
+import logger from '@/core/observability/logger.ts';
 import { okAsync, type ResultAsync } from '@/core/result.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -114,6 +115,19 @@ export class CommandInvocationContext {
     return this.runtime.authResolver.resolveAuth(options);
   }
 
+  /**
+   * Like {@link resolveAuth}, but treats resolution failures as unauthenticated instead of
+   * propagating `Err` — matches the old `resolveAuth().catch(() => null)` hook/status paths.
+   */
+  async resolveAuthOrNull(options?: { silent?: boolean }): Promise<ResolvedAuth | null> {
+    const authResult = await this.resolveAuth(options);
+    if (authResult.isErr()) {
+      logger.debug(`auth resolution failed: ${authResult.error.message}`);
+      return null;
+    }
+    return authResult.value;
+  }
+
   /** Record telemetry facts for `postAction` drain. */
   recordTelemetry(...facts: TelemetryFact[]): void {
     if (facts.length === 0) {
@@ -146,5 +160,9 @@ export class CommandAuthenticatedInvocationContext extends CommandInvocationCont
 
   override resolveAuth(): ResultAsync<ResolvedAuth, never> {
     return okAsync(this.auth);
+  }
+
+  override resolveAuthOrNull(): Promise<ResolvedAuth> {
+    return Promise.resolve(this.auth);
   }
 }

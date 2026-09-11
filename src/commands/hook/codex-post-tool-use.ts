@@ -59,8 +59,7 @@ export async function codexPostToolUse(ctx: CommandInvocationContext): Promise<H
     }
   }
 
-  const authResult = await ctx.resolveAuth();
-  const auth = authResult.isOk() ? authResult.value : null;
+  const auth = await ctx.resolveAuthOrNull();
   // Cloud addresses an organization; Server has none and resolves it from the instance.
   if (!auth || (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey)) {
     return { agentSessionId: fromHook };
