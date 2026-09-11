@@ -26,7 +26,6 @@ import type {
   CliState,
   InstalledIntegration,
   InstalledIntegrationFeature,
-  IntegrationScope,
   IntegrationStateAttribute,
 } from '@/core/state/state.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -35,11 +34,13 @@ import { resolveFeatureTargetRoot } from './feature-target.ts';
 import { findInstalledIntegration } from './installation-recorder.ts';
 import { integrationInstaller } from './installer.ts';
 import type { IntegrationRegistry } from './registry.ts';
+import { normalizeDecision } from './selection.ts';
 import type {
   FeatureApplication,
   FeatureContainer,
   FeatureDeclaration,
   IntegrationDeclaration,
+  SubfeatureDeclaration,
 } from './types.ts';
 import { isFeatureContainer } from './types.ts';
 
@@ -334,13 +335,7 @@ function createFeatureApplication(
   return { feature, targetRoot, scope, attrs };
 }
 
-/**
- * Folds every project-scope install of a feature into a single global record, then tears down
- * the stale project installs — merging into an already-installed global one when there is one,
- * otherwise producing a fresh one at the feature's own global target root. Matches only
- * `successor.id`, never `replacedIds` — an entry still under a retired predecessor id failed its
- * own rename migration and is pending retry, not ready to fold.
- */
+/** Folds project-scope installs into one global record, producing one if none exists. Matches only successor.id, never replacedIds (a predecessor entry is pending retry). */
 async function collapseGlobalScopeCoexistence(
   state: CliState,
   integration: IntegrationDeclaration,
@@ -398,27 +393,15 @@ async function foldProjectEntriesIntoGlobal(
     return false;
   }
 
-  const globalTargetRoot = globalEntry
-    ? globalEntry.targetRoot
-    : await resolveFeatureTargetRoot(
-        { options: {}, targetRoot: homedir(), scope: 'global', state },
+  const application = globalEntry
+    ? buildUpdateExistingGlobalApplication(
+        featuresById,
         successor,
-      );
-  const mergedAttrs = mergeFeatureAttrs(
-    globalEntry ? [...projectEntries, globalEntry] : projectEntries,
-  );
-
-  const subfeatureIds = isFeatureContainer(successor)
-    ? unionActiveSubfeatureIds(successor, coexisting, 'global')
-    : undefined;
-  const application = createFeatureApplication(
-    featuresById,
-    successor.id,
-    subfeatureIds,
-    globalTargetRoot,
-    'global',
-    mergedAttrs,
-  );
+        coexisting,
+        globalEntry,
+        projectEntries,
+      )
+    : await buildNewGlobalApplication(state, featuresById, successor, projectEntries);
   if (!application) {
     return false;
   }
@@ -448,31 +431,119 @@ async function foldProjectEntriesIntoGlobal(
   return true;
 }
 
-/**
- * Union, across every coexisting entry, of the subfeature ids still declared on the container and
- * eligible for `targetScope` — a subfeature pinned to another scope (e.g. `pre-commit-dependency-risks`
- * refusing `'global'`) is dropped even when it was active on a project entry being merged in, since
- * it must never end up active on the resulting record.
- */
+/** Builds the merge application for a feature that already has a global record. */
+function buildUpdateExistingGlobalApplication(
+  featuresById: Map<string, FeatureDeclaration>,
+  successor: FeatureDeclaration,
+  coexisting: InstalledIntegrationFeature[],
+  globalEntry: InstalledIntegrationFeature,
+  projectEntries: InstalledIntegrationFeature[],
+): FeatureApplication | undefined {
+  const subfeatureIds = isFeatureContainer(successor)
+    ? unionActiveSubfeatureIds(successor, coexisting)
+    : undefined;
+  return createFeatureApplication(
+    featuresById,
+    successor.id,
+    subfeatureIds,
+    globalEntry.targetRoot,
+    'global',
+    mergeFeatureAttrs([...projectEntries, globalEntry]),
+  );
+}
+
+/** Builds the application for a feature with no global record yet — a genuinely new install. */
+async function buildNewGlobalApplication(
+  state: CliState,
+  featuresById: Map<string, FeatureDeclaration>,
+  successor: FeatureDeclaration,
+  projectEntries: InstalledIntegrationFeature[],
+): Promise<FeatureApplication | undefined> {
+  const targetRoot = await resolveFeatureTargetRoot(
+    { options: {}, targetRoot: homedir(), scope: 'global', state },
+    successor,
+  );
+  const attrs = mergeFeatureAttrs(projectEntries);
+  const subfeatureIds = isFeatureContainer(successor)
+    ? await resolveNewGlobalSubfeatureIds(successor, projectEntries, state, targetRoot, attrs)
+    : undefined;
+  return createFeatureApplication(
+    featuresById,
+    successor.id,
+    subfeatureIds,
+    targetRoot,
+    'global',
+    attrs,
+  );
+}
+
+/** Subfeature ids to carry onto an already-existing global record: union of what's active anywhere, dropping any pinned to project scope. */
 function unionActiveSubfeatureIds(
   container: FeatureContainer,
   entries: InstalledIntegrationFeature[],
-  targetScope: IntegrationScope,
 ): string[] {
-  const eligibleIds = new Set(
-    container.subfeatures
-      .filter((subfeature) => subfeature.scope === undefined || subfeature.scope === targetScope)
-      .map((subfeature) => subfeature.id),
-  );
   const active = new Set<string>();
   for (const entry of entries) {
     for (const id of effectiveActiveSubfeatureIds(entry, container)) {
-      if (eligibleIds.has(id)) {
-        active.add(id);
-      }
+      active.add(id);
     }
   }
-  return [...active];
+  return container.subfeatures
+    .filter((subfeature) => subfeature.scope !== 'project' && active.has(subfeature.id))
+    .map((subfeature) => subfeature.id);
+}
+
+/** Subfeature ids for a brand-new global record: 'project' dropped, 'global' decided via shouldInstall, undefined carried if active on a project entry being promoted. */
+async function resolveNewGlobalSubfeatureIds(
+  container: FeatureContainer,
+  projectEntries: InstalledIntegrationFeature[],
+  state: CliState,
+  targetRoot: string,
+  attrs: InstalledIntegrationFeature['attrs'],
+): Promise<string[]> {
+  const activeOnProject = new Set<string>();
+  for (const entry of projectEntries) {
+    for (const id of effectiveActiveSubfeatureIds(entry, container)) {
+      activeOnProject.add(id);
+    }
+  }
+
+  const resolved: string[] = [];
+  for (const subfeature of container.subfeatures) {
+    if (subfeature.scope === 'project') {
+      continue;
+    }
+    if (subfeature.scope === 'global') {
+      if (await shouldInstallGlobalSubfeature(subfeature, state, targetRoot, attrs)) {
+        resolved.push(subfeature.id);
+      }
+      continue;
+    }
+    if (activeOnProject.has(subfeature.id)) {
+      resolved.push(subfeature.id);
+    }
+  }
+  return resolved;
+}
+
+/** Non-interactive shouldInstall check; nonInteractive: true resolves an 'ask' decision to install. */
+async function shouldInstallGlobalSubfeature(
+  subfeature: SubfeatureDeclaration,
+  state: CliState,
+  targetRoot: string,
+  attrs: InstalledIntegrationFeature['attrs'],
+): Promise<boolean> {
+  const decision = normalizeDecision(
+    await subfeature.shouldInstall?.({
+      options: {},
+      targetRoot,
+      scope: 'global',
+      attrs,
+      nonInteractive: true,
+      state,
+    }),
+  );
+  return decision.action !== 'skip' && decision.action !== 'uninstall';
 }
 
 /**
