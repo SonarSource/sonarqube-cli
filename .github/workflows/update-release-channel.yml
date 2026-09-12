@@ -25,7 +25,7 @@ jobs:
       id-token: write # OIDC → Vault
       contents: read
     steps:
-      - uses: SonarSource/ci-github-actions/update-release-channel@d41706a4180f70b6c0d0479795309a6c99726022 # master
+      - uses: SonarSource/ci-github-actions/update-release-channel@a72f1189a25231c73f6e3e94c2c3776172cf18ff # master
         with:
           version: ${{ inputs.version }}
           channel: ${{ inputs.channel }}
