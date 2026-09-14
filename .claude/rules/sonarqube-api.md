@@ -29,7 +29,7 @@ domain — e.g. `OrganizationsClient` (`organizations.ts`, also home to `Organiz
 `VortexEntitlementClient` (`src/core/vortex/entitlement.ts`, owning `VortexEntitlementResult` /
 `VortexEntitlementStatus` and `SERVER_ORGANIZATION_ID_PLACEHOLDER`).
 
-Three rules hold across every one of these clients, with no exception — keep it that way when adding one.
+Four rules hold across every one of these clients, with no exception — keep it that way when adding one.
 
 **Every API client is constructed from a `SonarHttpClient`**, never from a `(serverUrl, token)` pair
 it turns into one itself. An authenticated handler takes that transport from `ctx.httpClient`
@@ -67,8 +67,6 @@ helpers whose parameters are command-specific (`fetchEligibleIssues` in
 `src/commands/remediate/index.ts`, the measures helpers in `src/commands/quality-gate/status/`)
 also stay functions — the filters they hardcode are that command's policy, not the client's.
 
-New API calls belong in the domain wrapper for their area, never back in the transport class.
-
 **A domain method only exposes `timeoutMs` when a real caller needs a budget tighter than the
 default**, threaded through from that one call site, not added speculatively to keep sibling
 methods "consistent". `ComponentsClient.getComponentId()` takes one because
@@ -76,3 +74,5 @@ methods "consistent". `ComponentsClient.getComponentId()` takes one because
 siblings on the same client (`getComponent`, `hasProjectBeenAnalyzed`, `getProjectSettings`) do
 not have that need, so they do not have the parameter, even though all three also go through
 `getOrNullIf404`. Do not copy `timeoutMs` onto a method that has no caller asking for it yet.
+
+New API calls belong in the domain wrapper for their area, never back in the transport class.
