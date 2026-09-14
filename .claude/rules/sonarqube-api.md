@@ -59,6 +59,6 @@ New API calls belong in the domain wrapper for their area, never back in the tra
 default**, threaded through from that one call site, not added speculatively to keep sibling
 methods "consistent". `ComponentsClient.getComponentId()` takes one because
 `telemetry/project-uuid.ts` must not stall the `postAction` hook past `RESOLVE_BUDGET_MS`; its
-siblings on the same client (`componentExists`, `hasProjectBeenAnalyzed`, `getProjectSettings`)
-do not have that need, so they do not have the parameter, even though all four go through
+siblings on the same client (`getComponent`, `hasProjectBeenAnalyzed`, `getProjectSettings`) do
+not have that need, so they do not have the parameter, even though all three also go through
 `getOrNullIf404`. Do not copy `timeoutMs` onto a method that has no caller asking for it yet.

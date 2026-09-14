@@ -140,7 +140,10 @@ describe('resolveProjectUuid()', () => {
 
   it('does not cache a 404 (project not created yet) and retries on the next call', async () => {
     const getSafeSpy = mockProjectUuidGetSafe({
-      component: [{ ok: true }, { ok: true, id: 'AV-after-provisioning' }],
+      component: [
+        { ok: false, status: 404 },
+        { ok: true, id: 'AV-after-provisioning' },
+      ],
     });
 
     const first = await resolveProjectUuid(auth(), 'proj-not-yet-provisioned');
@@ -149,6 +152,9 @@ describe('resolveProjectUuid()', () => {
     expect(first).toBeNull();
     expect(second).toBe('AV-after-provisioning');
     expect(getSafeSpy).toHaveBeenCalledTimes(2);
+    // RESOLVE_BUDGET_MS, forwarded through ComponentsClient.getComponentId() to getSafe's 4th
+    // argument, so this call keeps its tight budget instead of the default 30s GET timeout.
+    expect(getSafeSpy.mock.calls[0]?.[3]).toBe(3_000);
     getSafeSpy.mockRestore();
   });
 
