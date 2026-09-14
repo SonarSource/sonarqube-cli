@@ -34,18 +34,21 @@ Three rules hold across every one of these clients, with no exception — keep i
 **Every API client is constructed from a `SonarHttpClient`**, never from a `(serverUrl, token)` pair
 it turns into one itself. An authenticated handler takes that transport from `ctx.httpClient`
 (`CommandAuthenticatedInvocationContext`, built lazily from `ctx.auth` and memoised for the
-invocation) rather than constructing one, so there is a single way to obtain a client. Hook
-handlers with no authenticated context (they resolve auth themselves and fail open) build one
-inline and thread it down as a parameter, and so do framework/integrate helpers that take `auth`
-rather than a context (`integrate/_common/preflight-summary.ts`, `integrate/_common/vortex.ts`,
-`integrate/git/tools/git-integration-subfeatures.ts`, `core/vortex/entitlement.ts`) — threading a
-context through those call chains is a separate, larger change, tracked as out of scope on
-CLI-1072. Sharing that instance buys uniformity, not caching:
-the transport holds no per-request state, and the cache that matters lives on `OrganizationsClient`,
-so it is the next rule, not this one, that keeps a lookup from being repeated. It also does not yet
-buy test injection: the getter memoises into a private field with no constructor parameter or
-setter, so unit tests still stub `SonarHttpClient.prototype`; the natural seam is the `CliRuntime`
-CLI-1098 introduces.
+invocation) rather than constructing one, so there is a single way to obtain a client. Code with no
+invocation context to read `ctx.httpClient` from — hook handlers that resolve auth themselves and
+fail open, framework/integrate helpers that take `auth` rather than a context, and telemetry/auth
+code that runs before a connection exists or outside any command — builds one inline from
+`(serverUrl, token)` instead: for example `integrate/_common/preflight-summary.ts`,
+`integrate/_common/vortex.ts`, `integrate/git/tools/git-integration-subfeatures.ts`,
+`core/vortex/entitlement.ts`, `core/server/discover-project-by-remote.ts`,
+`core/telemetry/project-uuid.ts`, `core/telemetry/identity-fetch.ts`, and `core/auth/token.ts`. This
+list is illustrative, not exhaustive — do not read a file's absence from it as a rule violation.
+Threading a context through those call chains is a separate, larger change, tracked as out of scope
+on CLI-1072. Sharing that instance buys uniformity, not caching: the transport holds no per-request
+state, and the cache that matters lives on `OrganizationsClient`, so it is the next rule, not this
+one, that keeps a lookup from being repeated. It also does not yet buy test injection: the getter
+memoises into a private field with no constructor parameter or setter, so unit tests still stub
+`SonarHttpClient.prototype`; the natural seam is the `CliRuntime` CLI-1098 introduced.
 
 **A command-level client that needs a shared domain client exposes it as a `readonly` field**
 (`ImportApiClient.organizations`, `RemediateApiClient.issues` / `.components`) rather than
