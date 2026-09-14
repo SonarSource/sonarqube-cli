@@ -24,7 +24,7 @@ import { join } from 'node:path';
 
 import { parse as parseToml } from 'smol-toml';
 
-import { isSonarQubeCloud, resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
 import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -62,7 +62,7 @@ import {
 
 import { version as VERSION } from '../../../package.json';
 import { supportedIntegrations } from '../integrate';
-import { isProjectVortexFeature } from '../integrate/_common/vortex.ts';
+import { isVortexFeature } from '../integrate/_common/vortex.ts';
 import { checkAntigravitySecretsHookFile } from '../integrate/antigravity/health.ts';
 import { resolveAntigravityHooksJsonPathForScope } from '../integrate/antigravity/hooks.ts';
 import { checkForUpdate, type UpdateCheckResult } from '../update/update-check.ts';
@@ -411,13 +411,10 @@ export async function systemStatus(
   const state = loadState();
   const integrations = getInstalledIntegrations(state);
   const vortexInstalled = state.integrations.installed.some((integration) =>
-    integration.features.some(isProjectVortexFeature),
+    integration.features.some(isVortexFeature),
   );
 
-  const [auth, updateResult] = await Promise.all([
-    resolveAuth().catch(() => null),
-    getCliUpdateInfo(),
-  ]);
+  const [auth, updateResult] = await Promise.all([ctx.resolveAuthOrNull(), getCliUpdateInfo()]);
 
   const { tokenStatus, vortex } = await resolveAuthenticatedChecks(auth);
 

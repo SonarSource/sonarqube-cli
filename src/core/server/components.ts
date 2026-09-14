@@ -24,7 +24,7 @@ import { errAsync, okAsync, type ResultAsync } from '../result.ts';
 import type { HttpClientError } from './errors.ts';
 import type { QueryParams, SonarHttpClient } from './http-client.ts';
 import type { SettingsValue } from './settings-value.ts';
-import type { ComponentsTreeResponse } from './types.ts';
+import type { ComponentShowResponse, ComponentsTreeResponse, ComponentSummary } from './types.ts';
 
 /** Thrown by `getProjectSettings` when the project key does not resolve to a component. */
 export class ProjectNotFoundError extends Error {
@@ -63,14 +63,14 @@ export class ComponentsClient {
   }
 
   /**
-   * Check if component (project) exists. Only a 404 is treated as "missing" - every
-   * other failure (auth, rate limit, outage, network error) propagates as its normal
-   * typed error instead of being reported as a missing component.
+   * Look up a single component (file, directory or project) by key via
+   * `/api/components/show`. Only a 404 resolves to `null` - every other failure (auth,
+   * rate limit, outage, network error) propagates as its normal typed error.
    */
-  componentExists(
+  getComponent(
     componentKey: string,
     scope: { branch?: string; pullRequest?: string } = {},
-  ): ResultAsync<boolean, HttpClientError> {
+  ): ResultAsync<ComponentSummary | null, HttpClientError> {
     const queryParams: QueryParams = { component: componentKey };
     if (scope.branch) {
       queryParams.branch = scope.branch;
@@ -79,8 +79,16 @@ export class ComponentsClient {
       queryParams.pullRequest = scope.pullRequest;
     }
     return this.client
-      .getOrNullIf404('/api/components/show', queryParams)
-      .map((component) => component !== null);
+      .getOrNullIf404<ComponentShowResponse>('/api/components/show', queryParams)
+      .map((result) => result?.component ?? null);
+  }
+
+  /** Check if component (project) exists. */
+  componentExists(
+    componentKey: string,
+    scope: { branch?: string; pullRequest?: string } = {},
+  ): ResultAsync<boolean, HttpClientError> {
+    return this.getComponent(componentKey, scope).map((component) => component !== null);
   }
 
   /**

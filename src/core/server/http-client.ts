@@ -263,10 +263,10 @@ export class SonarHttpClient {
   /**
    * Resolves to `{ response, value }` and never rejects. Only the *status* is left
    * uninterpreted (`value` is `undefined` on a non-2xx response) for the handful of
-   * callers (`getOrNullIf404`, telemetry identity/project-uuid lookups) that need to branch
-   * on the status themselves instead of getting a single typed error for "not 2xx". A
-   * transport failure (DNS/TLS failure, connection refused, timeout) becomes
-   * `TransportError`; a body-parse failure on an otherwise-2xx response becomes
+   * callers (`getOrNullIf404`, `ProjectBindingsClient`, `checkHubEntitlement`, telemetry
+   * project-uuid lookups) that need to branch on the status themselves instead of getting a
+   * single typed error for "not 2xx". A transport failure (DNS/TLS, connection refused,
+   * timeout) becomes `TransportError`; a body-parse failure on an otherwise-2xx response becomes
    * `UnexpectedApiError` instead, since the server did answer. Same split as
    * `toStatusCheckedResult` below, so a malformed body classifies the same way regardless
    * of which method reads it.

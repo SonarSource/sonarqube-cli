@@ -25,7 +25,7 @@ import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:te
 import type { VortexDisposition } from '@/commands/integrate/_common/types.ts';
 import { integrateClaude } from '@/commands/integrate/claude';
 import * as hooks from '@/commands/integrate/claude/hooks.ts';
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import * as token from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -43,18 +43,20 @@ import { VortexEntitlementClient } from '@/core/vortex/entitlement.ts';
 
 import { FakeConsole } from '../../../../_common/fake-console.ts';
 
-const SERVER_AUTH: ResolvedAuth = {
+const SERVER_AUTH = new ResolvedAuth({
   token: 'test-token',
   serverUrl: 'https://sonar.example.com',
   connectionType: 'on-premise',
-};
+  source: 'state' as const,
+});
 
-const CLOUD_AUTH: ResolvedAuth = {
+const CLOUD_AUTH = new ResolvedAuth({
   token: 'test-token',
   orgKey: 'cloud-org',
   serverUrl: 'https://sonarcloud.io',
   connectionType: 'cloud',
-};
+  source: 'state' as const,
+});
 
 let fake: FakeConsole;
 let SERVER_CTX: CommandAuthenticatedInvocationContext;
@@ -204,11 +206,12 @@ describe('integrateCommand', () => {
 
   it('validates organization is provided when server is SonarQube Cloud', async () => {
     mockDiscoveredProject({});
-    const cloudAuthNoOrg: ResolvedAuth = {
+    const cloudAuthNoOrg = new ResolvedAuth({
       token: 'test-token',
       serverUrl: 'https://sonarcloud.io',
       connectionType: 'cloud',
-    };
+      source: 'state' as const,
+    });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
@@ -401,15 +404,7 @@ describe('integrateCommand', () => {
 
     await integrateClaude({ global: true }, CLOUD_CTX);
 
-    // Vortex is project-scoped, so a global install never enables it even when
-    // the org is entitled.
-    assertMigrationAndHookInstallationRan(
-      'a-project',
-      '/project/root',
-      homedir(),
-      true,
-      'preserve',
-    );
+    assertMigrationAndHookInstallationRan('a-project', '/project/root', homedir(), true, 'install');
   });
 
   it('still installs when organization access check fails in the summary', async () => {
@@ -533,13 +528,12 @@ describe('integrateCommand', () => {
       expect(skipNotice).toBeUndefined();
     });
 
-    it('skips Vortex (and warns) even when the org is entitled', async () => {
+    it('installs Vortex when the org is entitled', async () => {
       mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
       mockVortexEntitlement(true);
 
       await integrateClaude({ global: true }, CLOUD_CTX);
 
-      // Vortex is project-scoped, so a global run never installs it.
       expectClaudeInstallCall({
         targetRoot: homedir(),
         scope: 'global',
@@ -547,13 +541,8 @@ describe('integrateCommand', () => {
         projectRoot: '/project/root',
         projectKey: 'a-project',
         globalSecretsHookExists: false,
-        vortexDisposition: 'preserve',
+        vortexDisposition: 'install',
       });
-
-      const warnNotice = fake.calls.find(
-        (c) => c.method === 'warn' && String(c.args[0]).includes('not supported with --global'),
-      );
-      expect(warnNotice).toBeDefined();
     });
 
     it('requests Vortex removal when a global run finds the org is not entitled', async () => {

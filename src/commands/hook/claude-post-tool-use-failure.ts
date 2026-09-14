@@ -30,5 +30,5 @@ export async function claudePostToolUseFailure(ctx: CommandInvocationContext): P
   } catch {
     return; // timeout or read error — non-blocking
   }
-  await runContextPassthrough('__hook', ['Claude'], { stdinPayload: raw, console: ctx.console });
+  await runContextPassthrough('__hook', ['Claude'], { stdinPayload: raw, ctx });
 }

@@ -52,6 +52,7 @@ import {
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
   createSqaaInstructionsRule,
+  createSqaaInstructionsSnippet,
   createSqaaInstructionsSubfeature,
 } from '../_common/features/sqaa-instructions-feature.ts';
 import { buildUnixHookScript, buildWindowsHookScript } from '../_common/hooks.ts';
@@ -82,11 +83,19 @@ export interface AntigravityIntegrationOptions extends IntegrateAgentOptions {
 }
 
 // Antigravity has no session start event, so it doesn't deliver Vortex Context atm.
+// It also has no global rules directory, so project scope gets an always-on rule file
+// while global scope gets a snippet in the user's shared `~/.gemini/GEMINI.md`.
+// @see https://antigravity.google/docs/rules-workflows/#global-rules
 const antigravityVortexFeature = createVortexFeature<AntigravityIntegrationOptions>(
   [
-    createSqaaInstructionsSubfeature<AntigravityIntegrationOptions>([
-      createSqaaInstructionsRule(resolveSqaaRulePath, buildAntigravityAlwaysOnRule),
-    ]),
+    createSqaaInstructionsSubfeature<AntigravityIntegrationOptions>(
+      [createSqaaInstructionsRule(resolveSqaaRulePath, buildAntigravityAlwaysOnRule)],
+      'project',
+    ),
+    createSqaaInstructionsSubfeature<AntigravityIntegrationOptions>(
+      [createSqaaInstructionsSnippet(() => ANTIGRAVITY_GLOBAL_GEMINI_MD)],
+      'global',
+    ),
   ],
   resolveAntigravitySkillPath,
 );

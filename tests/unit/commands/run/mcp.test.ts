@@ -29,7 +29,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { runMcp } from '@/commands/run/mcp.ts';
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '@/core/config-constants.ts';
@@ -50,11 +50,12 @@ import * as projectInfo from '@/core/project-info.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
-const FAKE_AUTH: ResolvedAuth = {
+const FAKE_AUTH = new ResolvedAuth({
   token: 'test-token',
   serverUrl: 'http://localhost:9000',
   connectionType: 'on-premise',
-};
+  source: 'state' as const,
+});
 
 const FAKE_CTX = new CommandAuthenticatedInvocationContext(FAKE_AUTH, new FakeConsole());
 

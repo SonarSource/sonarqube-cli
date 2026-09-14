@@ -21,7 +21,6 @@
 // git pre-push callback handler — scans files in new commits for secrets.
 // Replaces the shell logic that was previously embedded in the git hook script.
 
-import { resolveAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 
@@ -36,7 +35,7 @@ export async function gitPrePush(files: string[], ctx: CommandInvocationContext)
   const fileGroups = await getFileGroupsToScan(files);
   if (fileGroups === null) return;
 
-  const auth = await resolveAuth().catch(() => null);
+  const auth = await ctx.resolveAuthOrNull();
   if (!auth) {
     throw new MissingDependenciesError(SECRETS_INACTIVE_UNAUTHENTICATED);
   }

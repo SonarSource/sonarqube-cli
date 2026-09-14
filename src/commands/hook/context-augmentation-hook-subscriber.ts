@@ -20,8 +20,8 @@
 
 // CAG owns a richer response shape than additionalContext, so it's forwarded untouched.
 
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
-import type { Console } from '@/core/ui/console.ts';
 
 import { runContextPassthrough } from '../context/index.ts';
 import type { ClaudePostToolUseSubscriber } from './claude-hook-dispatch.ts';
@@ -35,14 +35,14 @@ export function matchesContextAugmentationTool(toolName: string): boolean {
 }
 
 export function createContextAugmentationPostToolUseSubscriber(
-  console: Console,
+  ctx: CommandInvocationContext,
 ): ClaudePostToolUseSubscriber {
   return {
     id: 'context-augmentation',
     matches: matchesContextAugmentationTool,
     handle: async (_payload, rawStdin) => {
       try {
-        await runContextPassthrough('__hook', ['Claude'], { stdinPayload: rawStdin, console });
+        await runContextPassthrough('__hook', ['Claude'], { stdinPayload: rawStdin, ctx });
         return { decision: 'handled' };
       } catch (err) {
         logger.debug(`CAG PostToolUse forward failed: ${(err as Error).message}`);

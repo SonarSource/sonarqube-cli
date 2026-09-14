@@ -20,8 +20,7 @@
 
 // Fetches the worst-N files for a metric and builds their base breakdown entries
 
-import type { MeasuresClient } from '@/core/server/measures.ts';
-import { isNewCodeMetric } from '@/core/server/measures.ts';
+import { extractMeasureValue, type MeasuresClient } from '@/core/server/measures.ts';
 import type { ComponentTreeComponent, Metric } from '@/core/server/types.ts';
 
 import type { AttachBreakdownsParams } from './breakdown.ts';
@@ -57,7 +56,7 @@ export async function fetchWorstFileEntries(
 ): Promise<WorstFileEntriesResult> {
   const { components, totalCount } = await measuresClient
     .getWorstComponentsByMetric({
-      projectKey: params.projectKey,
+      component: params.componentKey ?? params.projectKey,
       metricKey: condition.metric,
       ascending: condition.comparator === 'LT',
       top: params.top,
@@ -86,10 +85,7 @@ function toBreakdownEntryOutcome(
   if (!component.path) {
     return { kind: 'missing-value' };
   }
-  const measure = component.measures.find((m) => m.metric === condition.metric);
-  const rawValue = isNewCodeMetric(condition.metric)
-    ? measure?.periods?.[0]?.value
-    : (measure?.value ?? measure?.periods?.[0]?.value);
+  const rawValue = extractMeasureValue(component.measures, condition.metric);
   if (rawValue === undefined) {
     return { kind: 'missing-value' };
   }

@@ -24,7 +24,7 @@
 
 import { beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { okAsync, type ResultAsync } from '@/core/result.ts';
 import type { HttpClientError } from '@/core/server/errors.ts';
@@ -49,12 +49,18 @@ type MockParamValue = string | number | boolean;
 type MockParams = Record<string, MockParamValue>;
 type MockGetFn = (endpoint: string, params?: MockParams) => ResultAsync<unknown, HttpClientError>;
 
+function mockGetFn(fn: MockGetFn): MockGetFn {
+  return mock(fn);
+}
+
 // Helper to create a mock SonarHttpClient
 function createMockClient(
   mockGet: MockGetFn,
   serverUrl = 'https://sonarcloud.io',
 ): SonarHttpClient {
   const client = new SonarHttpClient(serverUrl, 'test-token');
+  // MockGetFn is intentionally narrower than SonarHttpClient.get's generic signature.
+
   client.get = mockGet as SonarHttpClient['get'];
   return client;
 }
@@ -114,7 +120,7 @@ function createMockProjectsResponse(
 describe('IssuesClient', () => {
   describe('searchIssues', () => {
     it('should call client.get with correct endpoint', async () => {
-      const mockGet = mock((endpoint: string) => {
+      const mockGet = mockGetFn((endpoint: string) => {
         expect(endpoint).toBe('/api/issues/search');
         return createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
@@ -128,7 +134,7 @@ describe('IssuesClient', () => {
     });
 
     it('should pass projects parameter as componentKeys on Cloud', async () => {
-      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+      const mockGet = mockGetFn((_endpoint: string, params?: MockParams) => {
         expect(params?.componentKeys).toBe('my-project');
         return createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
@@ -140,7 +146,7 @@ describe('IssuesClient', () => {
     });
 
     it('should pass severities parameter', async () => {
-      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+      const mockGet = mockGetFn((_endpoint: string, params?: MockParams) => {
         expect(params?.severities).toBe('CRITICAL,BLOCKER');
         return createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
@@ -155,7 +161,7 @@ describe('IssuesClient', () => {
     });
 
     it('should pass types parameter', async () => {
-      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+      const mockGet = mockGetFn((_endpoint: string, params?: MockParams) => {
         expect(params?.types).toBe('BUG,VULNERABILITY');
         return createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
@@ -170,7 +176,7 @@ describe('IssuesClient', () => {
     });
 
     it('should pass issueStatuses parameter', async () => {
-      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+      const mockGet = mockGetFn((_endpoint: string, params?: MockParams) => {
         expect(params?.issueStatuses).toBe('OPEN,ACCEPTED');
         return createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
@@ -185,7 +191,7 @@ describe('IssuesClient', () => {
     });
 
     it('should pass resolved=false parameter', async () => {
-      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+      const mockGet = mockGetFn((_endpoint: string, params?: MockParams) => {
         expect(params?.resolved).toBe(false);
         return createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
@@ -200,7 +206,7 @@ describe('IssuesClient', () => {
     });
 
     it('should pass resolved=true parameter', async () => {
-      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+      const mockGet = mockGetFn((_endpoint: string, params?: MockParams) => {
         expect(params?.resolved).toBe(true);
         return createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
@@ -215,7 +221,7 @@ describe('IssuesClient', () => {
     });
 
     it('should not pass resolved parameter when undefined', async () => {
-      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+      const mockGet = mockGetFn((_endpoint: string, params?: MockParams) => {
         expect(params?.resolved).toBeUndefined();
         return createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
@@ -227,7 +233,7 @@ describe('IssuesClient', () => {
     });
 
     it('should pass branch parameter', async () => {
-      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+      const mockGet = mockGetFn((_endpoint: string, params?: MockParams) => {
         expect(params?.branch).toBe('feature/test');
         return createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
@@ -242,7 +248,7 @@ describe('IssuesClient', () => {
     });
 
     it('should pass pullRequest parameter', async () => {
-      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+      const mockGet = mockGetFn((_endpoint: string, params?: MockParams) => {
         expect(params?.pullRequest).toBe('123');
         return createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
@@ -257,7 +263,7 @@ describe('IssuesClient', () => {
     });
 
     it('should pass rules parameter', async () => {
-      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+      const mockGet = mockGetFn((_endpoint: string, params?: MockParams) => {
         expect(params?.rules).toBe('typescript:S1234');
         return createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
@@ -272,7 +278,7 @@ describe('IssuesClient', () => {
     });
 
     it('should pass tags parameter', async () => {
-      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+      const mockGet = mockGetFn((_endpoint: string, params?: MockParams) => {
         expect(params?.tags).toBe('security,performance');
         return createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
@@ -287,7 +293,7 @@ describe('IssuesClient', () => {
     });
 
     it('sends `componentKeys` query param for SonarCloud (sonarcloud.io)', async () => {
-      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+      const mockGet = mockGetFn((_endpoint: string, params?: MockParams) => {
         expect(params?.componentKeys).toBe('my-project');
         expect(params?.components).toBeUndefined();
         expect(params?.projects).toBeUndefined();
@@ -301,7 +307,7 @@ describe('IssuesClient', () => {
     });
 
     it('sends `componentKeys` query param for SonarQube Cloud US (sonarqube.us)', async () => {
-      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+      const mockGet = mockGetFn((_endpoint: string, params?: MockParams) => {
         expect(params?.componentKeys).toBe('my-project');
         expect(params?.components).toBeUndefined();
         expect(params?.projects).toBeUndefined();
@@ -315,7 +321,7 @@ describe('IssuesClient', () => {
     });
 
     it('sends `components` query param for on-premise SonarQube', async () => {
-      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+      const mockGet = mockGetFn((_endpoint: string, params?: MockParams) => {
         expect(params?.components).toBe('my-project');
         expect(params?.componentKeys).toBeUndefined();
         expect(params?.projects).toBeUndefined();
@@ -329,7 +335,7 @@ describe('IssuesClient', () => {
     });
 
     it('sends no project param when projects is not provided', async () => {
-      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+      const mockGet = mockGetFn((_endpoint: string, params?: MockParams) => {
         expect(params?.projects).toBeUndefined();
         expect(params?.componentKeys).toBeUndefined();
         expect(params?.components).toBeUndefined();
@@ -343,7 +349,7 @@ describe('IssuesClient', () => {
     });
 
     it('sends `sinceLeakPeriod` query param for SonarCloud', async () => {
-      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+      const mockGet = mockGetFn((_endpoint: string, params?: MockParams) => {
         expect(params?.sinceLeakPeriod).toBe(true);
         expect(params?.inNewCodePeriod).toBeUndefined();
         return createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0);
@@ -356,7 +362,7 @@ describe('IssuesClient', () => {
     });
 
     it('sends `inNewCodePeriod` query param for on-premise SonarQube', async () => {
-      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+      const mockGet = mockGetFn((_endpoint: string, params?: MockParams) => {
         expect(params?.inNewCodePeriod).toBe(true);
         expect(params?.sinceLeakPeriod).toBeUndefined();
         return createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0);
@@ -369,7 +375,7 @@ describe('IssuesClient', () => {
     });
 
     it('sends no leak-period param when sinceLeakPeriod is not provided', async () => {
-      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+      const mockGet = mockGetFn((_endpoint: string, params?: MockParams) => {
         expect(params?.sinceLeakPeriod).toBeUndefined();
         expect(params?.inNewCodePeriod).toBeUndefined();
         return createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0);
@@ -384,7 +390,7 @@ describe('IssuesClient', () => {
     it('should pass pagination parameters', async () => {
       const pageNum = 2;
       const pageSize = CUSTOM_PAGE_SIZE;
-      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+      const mockGet = mockGetFn((_endpoint: string, params?: MockParams) => {
         expect(params?.p).toBe(pageNum);
         expect(params?.ps).toBe(pageSize);
         return createMockIssuesResponse([], pageNum, pageSize, 0);
@@ -401,7 +407,7 @@ describe('IssuesClient', () => {
     });
 
     it('should pass sort parameter', async () => {
-      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+      const mockGet = mockGetFn((_endpoint: string, params?: MockParams) => {
         expect(params?.s).toBe('SEVERITY');
         return createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
@@ -418,7 +424,7 @@ describe('IssuesClient', () => {
     it('should return response with issues', async () => {
       const twoIssues = 2;
       const mockIssues = [createMockIssue('issue-1'), createMockIssue('issue-2')];
-      const mockGet = mock(() => {
+      const mockGet = mockGetFn(() => {
         return createMockIssuesResponse(mockIssues, 1, DEFAULT_PAGE_SIZE, twoIssues);
       });
 
@@ -436,12 +442,13 @@ describe('IssuesClient', () => {
 });
 
 describe('issuesSearchCommand', () => {
-  const mockAuth: ResolvedAuth = {
+  const mockAuth = new ResolvedAuth({
     token: 'test-token',
     serverUrl: 'https://sonarcloud.io',
     orgKey: 'test-org',
     connectionType: 'cloud',
-  };
+    source: 'state' as const,
+  });
 
   let fake: FakeConsole;
   let mockCtx: CommandAuthenticatedInvocationContext;
@@ -503,12 +510,13 @@ describe('issuesSearchCommand', () => {
 
   it('normalizes severities to uppercase before passing to API', async () => {
     let capturedParams: Record<string, string> | undefined;
-    const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockImplementation(
-      <T>(_endpoint: string, params?: Record<string, string | number | boolean>) => {
-        capturedParams = params as Record<string, string>;
-        return okAsync(emptyApiResponse as unknown as T);
-      },
-    );
+    const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockImplementation(((
+      _endpoint: string,
+      params?: MockParams,
+    ): ResultAsync<IssuesSearchResponse, HttpClientError> => {
+      capturedParams = params as Record<string, string>;
+      return okAsync(emptyApiResponse);
+    }) as SonarHttpClient['get']);
 
     try {
       await listIssues(
@@ -536,12 +544,13 @@ describe('issuesSearchCommand', () => {
 
   it('routes MQR severities to impactSeverities param on MQR server (SonarQube Cloud)', async () => {
     let capturedParams: Record<string, string> | undefined;
-    const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockImplementation(
-      <T>(_endpoint: string, params?: Record<string, string | number | boolean>) => {
-        capturedParams = params as Record<string, string>;
-        return okAsync(emptyApiResponse as unknown as T);
-      },
-    );
+    const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockImplementation(((
+      _endpoint: string,
+      params?: MockParams,
+    ): ResultAsync<IssuesSearchResponse, HttpClientError> => {
+      capturedParams = params as Record<string, string>;
+      return okAsync(emptyApiResponse);
+    }) as SonarHttpClient['get']);
     try {
       await listIssues(
         { project: 'my-project', severities: 'HIGH,MEDIUM', page: 1, pageSize: 500 },
@@ -556,12 +565,13 @@ describe('issuesSearchCommand', () => {
 
   it('routes BLOCKER and INFO to impactSeverities on MQR server', async () => {
     let capturedParams: Record<string, string> | undefined;
-    const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockImplementation(
-      <T>(_endpoint: string, params?: Record<string, string | number | boolean>) => {
-        capturedParams = params as Record<string, string>;
-        return okAsync(emptyApiResponse as unknown as T);
-      },
-    );
+    const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockImplementation(((
+      _endpoint: string,
+      params?: MockParams,
+    ): ResultAsync<IssuesSearchResponse, HttpClientError> => {
+      capturedParams = params as Record<string, string>;
+      return okAsync(emptyApiResponse);
+    }) as SonarHttpClient['get']);
     try {
       await listIssues(
         { project: 'my-project', severities: 'BLOCKER,INFO', page: 1, pageSize: 500 },
@@ -583,12 +593,13 @@ describe('issuesSearchCommand', () => {
 
   it('routes Standard severities to severities param on Standard server', async () => {
     let capturedParams: Record<string, string> | undefined;
-    const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockImplementation(
-      <T>(_endpoint: string, params?: Record<string, string | number | boolean>) => {
-        capturedParams = params as Record<string, string>;
-        return okAsync(emptyApiResponse as unknown as T);
-      },
-    );
+    const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockImplementation(((
+      _endpoint: string,
+      params?: MockParams,
+    ): ResultAsync<IssuesSearchResponse, HttpClientError> => {
+      capturedParams = params as Record<string, string>;
+      return okAsync(emptyApiResponse);
+    }) as SonarHttpClient['get']);
     const modeSpy = spyOn(SystemClient.prototype, 'getServerMode').mockReturnValue(
       okAsync('standard'),
     );
@@ -702,7 +713,7 @@ describe('issuesSearchCommand', () => {
 describe('ProjectsClient', () => {
   describe('searchProjects', () => {
     it('should call client.get with correct endpoint', async () => {
-      const mockGet = mock((endpoint: string) => {
+      const mockGet = mockGetFn((endpoint: string) => {
         expect(endpoint).toBe('/api/components/search');
         return createMockProjectsResponse([], 1, 500, 0);
       });
@@ -716,7 +727,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should send qualifiers=TRK when no organization is provided', async () => {
-      const mockGet = mock((_endpoint: string, params: any) => {
+      const mockGet = mockGetFn((_endpoint: string, params: any) => {
         expect(params.qualifiers).toBe('TRK');
         expect(params.organization).toBeUndefined();
         return createMockProjectsResponse([], 1, 500, 0);
@@ -729,7 +740,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should send qualifiers=TRK when organization is undefined', async () => {
-      const mockGet = mock((_endpoint: string, params: any) => {
+      const mockGet = mockGetFn((_endpoint: string, params: any) => {
         expect(params.qualifiers).toBe('TRK');
         expect(params.organization).toBeUndefined();
         return createMockProjectsResponse([], 1, 500, 0);
@@ -742,7 +753,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should send organization param and omit qualifiers for SonarCloud', async () => {
-      const mockGet = mock((_endpoint: string, params: any) => {
+      const mockGet = mockGetFn((_endpoint: string, params: any) => {
         expect(params.organization).toBe('my-org');
         expect(params.qualifiers).toBeUndefined();
         return createMockProjectsResponse([], 1, 500, 0);
@@ -755,7 +766,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should pass search query parameter', async () => {
-      const mockGet = mock((_endpoint: string, params: any) => {
+      const mockGet = mockGetFn((_endpoint: string, params: any) => {
         expect(params.q).toBe('my-project');
         return createMockProjectsResponse([], 1, 500, 0);
       });
@@ -767,7 +778,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should not send query param when not specified', async () => {
-      const mockGet = mock((_endpoint: string, params: any) => {
+      const mockGet = mockGetFn((_endpoint: string, params: any) => {
         expect(params.q).toBeUndefined();
         return createMockProjectsResponse([], 1, 500, 0);
       });
@@ -779,7 +790,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should pass page number', async () => {
-      const mockGet = mock((_endpoint: string, params: any) => {
+      const mockGet = mockGetFn((_endpoint: string, params: any) => {
         expect(params.p).toBe(3);
         return createMockProjectsResponse([], 3, 500, 0);
       });
@@ -791,7 +802,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should pass page size', async () => {
-      const mockGet = mock((_endpoint: string, params: any) => {
+      const mockGet = mockGetFn((_endpoint: string, params: any) => {
         expect(params.ps).toBe(50);
         return createMockProjectsResponse([], 1, 50, 0);
       });
@@ -803,7 +814,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should not send page params when not specified', async () => {
-      const mockGet = mock((_endpoint: string, params: any) => {
+      const mockGet = mockGetFn((_endpoint: string, params: any) => {
         expect(params.p).toBeUndefined();
         expect(params.ps).toBeUndefined();
         return createMockProjectsResponse([], 1, 500, 0);
@@ -820,7 +831,7 @@ describe('ProjectsClient', () => {
         createMockProject('proj-1', 'Project One'),
         createMockProject('proj-2', 'Project Two'),
       ];
-      const mockGet = mock(() => createMockProjectsResponse(mockProjects, 1, 500, 2));
+      const mockGet = mockGetFn(() => createMockProjectsResponse(mockProjects, 1, 500, 2));
 
       const client = createMockClient(mockGet);
       const projectsClient = new ProjectsClient(client);
@@ -835,7 +846,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should return paging metadata', async () => {
-      const mockGet = mock(() => createMockProjectsResponse([], 2, 50, 200));
+      const mockGet = mockGetFn(() => createMockProjectsResponse([], 2, 50, 200));
 
       const client = createMockClient(mockGet);
       const projectsClient = new ProjectsClient(client);
@@ -848,7 +859,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should return empty list when no projects found', async () => {
-      const mockGet = mock(() => createMockProjectsResponse([], 1, 500, 0));
+      const mockGet = mockGetFn(() => createMockProjectsResponse([], 1, 500, 0));
 
       const client = createMockClient(mockGet);
       const projectsClient = new ProjectsClient(client);
@@ -860,7 +871,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should propagate API errors', async () => {
-      const mockGet = mock(() => {
+      const mockGet = mockGetFn(() => {
         throw new Error('SonarQube API error: 401 Unauthorized');
       });
 
@@ -876,7 +887,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should pass all params together', async () => {
-      const mockGet = mock((_endpoint: string, params: any) => {
+      const mockGet = mockGetFn((_endpoint: string, params: any) => {
         expect(params.organization).toBe('my-org');
         expect(params.q).toBe('frontend');
         expect(params.p).toBe(2);

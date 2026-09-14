@@ -38,6 +38,7 @@ import {
 } from '@/commands/integrate/git/tools/native';
 import { PRE_COMMIT_CONFIG_FILE } from '@/commands/integrate/git/tools/pre-commit';
 import { LEGACY_HOOK_MARKER } from '@/commands/integrate/git/tools/shared.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { GLOBAL_HOOKS_DIR } from '@/core/config-constants.ts';
@@ -335,11 +336,12 @@ describe('detectHookInstallation', () => {
   });
 });
 
-const MOCK_AUTH = {
+const MOCK_AUTH = new ResolvedAuth({
   serverUrl: 'https://sonarqube.example.com',
   token: 'test-token',
-  connectionType: 'on-premise' as const,
-};
+  connectionType: 'on-premise',
+  source: 'state',
+});
 
 let fake: FakeConsole;
 let MOCK_AUTH_CTX: CommandAuthenticatedInvocationContext;

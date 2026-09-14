@@ -667,7 +667,7 @@ describe('integrate codex', () => {
     );
 
     it(
-      'on global install, does not write SQAA project-side but warns it is not supported with --global when the org is entitled',
+      'on global install, writes SQAA into the global AGENTS.md and nothing project-side when the org is entitled',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -692,11 +692,22 @@ describe('integrate codex', () => {
 
         const globalBody = harness.userHome.file(...GLOBAL_AGENTS_MD_DIRS).asText();
         expect(globalBody).toContain(SECRETS_HEADING);
-        expect(globalBody).not.toContain(SQAA_HEADING);
+        expect(globalBody).toContain(SQAA_HEADING);
 
-        const output = `${result.stdout}\n${result.stderr}`;
-        expect(output).toContain('Skipping Vortex');
-        expect(output).toContain('not supported with --global');
+        // The post-tool-use hook lands under the global root too.
+        const sqaaScript = harness.userHome.file(
+          ...SQAA_SCRIPT_DIRS,
+          hookScriptName('posttool-sqaa'),
+        );
+        expect(sqaaScript.exists()).toBe(true);
+        expect(sqaaScript.asText()).toContain('sonar hook codex-post-tool-use');
+        const hooks: CodexHooksFile = harness.userHome.file(...HOOKS_JSON_DIRS).asJson();
+        expect(
+          hooks.hooks?.PostToolUse?.find((e) =>
+            e.hooks?.some((h) => h.command?.includes('sonar-sqaa')),
+          )?.matcher,
+        ).toBe('apply_patch');
+        expect(harness.cwd.exists(...SQAA_SCRIPT_DIRS)).toBe(false);
       },
       { timeout: 30000 },
     );

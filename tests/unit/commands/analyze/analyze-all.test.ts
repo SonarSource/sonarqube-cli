@@ -24,7 +24,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 import * as processLib from '@/core/process/process.ts';
@@ -34,12 +34,13 @@ import * as sqaaModule from '../../../../src/commands/analyze/sqaa.ts';
 import * as sqaaFileArg from '../../../../src/commands/analyze/sqaa-file-arg.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
-const FAKE_AUTH: ResolvedAuth = {
+const FAKE_AUTH = new ResolvedAuth({
   token: 'tok',
   serverUrl: 'https://sonarcloud.io',
   orgKey: 'myorg',
   connectionType: 'cloud',
-};
+  source: 'state' as const,
+});
 
 let fake: FakeConsole;
 let FAKE_AUTHENTICATED_CONTEXT: CommandAuthenticatedInvocationContext;

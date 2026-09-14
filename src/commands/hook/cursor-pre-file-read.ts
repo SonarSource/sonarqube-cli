@@ -70,7 +70,7 @@ export async function cursorPreFileRead(ctx: CommandInvocationContext): Promise<
 
   let deps: HookDependencies;
   try {
-    deps = await resolveAuthAndSecrets();
+    deps = await resolveAuthAndSecrets(ctx);
   } catch (err) {
     if (err instanceof MissingDependenciesError) {
       await denyCursor(err.message);

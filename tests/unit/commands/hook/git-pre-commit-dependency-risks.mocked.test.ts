@@ -20,7 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as scaInstall from '@/core/host/install/sca-scanner.ts';
@@ -41,12 +41,13 @@ function makeCtx() {
   return new CommandInvocationContext(fake);
 }
 
-const FAKE_AUTH: ResolvedAuth = {
+const FAKE_AUTH = new ResolvedAuth({
   token: 'test-token',
   serverUrl: 'https://sonarcloud.io',
   orgKey: 'my-org',
   connectionType: 'cloud',
-};
+  source: 'state',
+});
 
 const FAKE_CLIENT = new SonarHttpClient(FAKE_AUTH.serverUrl, FAKE_AUTH.token);
 

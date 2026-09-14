@@ -56,7 +56,7 @@ export async function runCommitSecretsStage(
       ctx,
     );
   } catch (err) {
-    handleScanError('Commit', err as Error, ctx.console);
+    handleScanError('Commit', err as Error, auth, ctx.console);
     return;
   }
 

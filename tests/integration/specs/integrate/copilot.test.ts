@@ -698,7 +698,7 @@ describe('integrate copilot', () => {
     );
 
     it(
-      'skips the SQAA section under -g even when org is entitled and a project key is discoverable, and warns',
+      'writes the SQAA section into the global instructions under -g when the org is entitled',
       async () => {
         // `--global` and `--project` are mutually exclusive on the CLI, so the
         // project key must be discovered from disk in the global flow.
@@ -708,25 +708,23 @@ describe('integrate copilot', () => {
         const result = await harness.run('integrate copilot -g --non-interactive', { extraEnv });
 
         expect(result.exitCode).toBe(0);
-        expect(`${result.stdout}\n${result.stderr}`).toContain('not supported with --global');
 
-        // Global file holds prompt-secrets, NOT SQAA.
+        // Global file holds both prompt-secrets and SQAA.
         const globalBody = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
         expect(globalBody).toContain('# SonarQube secrets scanning for prompts protocol');
-        expect(globalBody).not.toContain('# Vortex analysis');
+        expect(globalBody).toContain('# Vortex analysis');
 
-        // SQAA is never written project-side on a global install.
+        // Nothing is written project-side on a global install.
         expect(harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).exists()).toBe(false);
 
-        // Declarative state: prompt-secrets is global, Vortex is not recorded.
         expect(findCopilotFeature(harness, 'prompt-secrets-instructions')?.scope).toBe('global');
-        expect(findCopilotFeature(harness, 'vortex')).toBeUndefined();
+        expect(findCopilotFeature(harness, 'vortex')?.scope).toBe('global');
       },
       { timeout: 30000 },
     );
 
     it(
-      'omits the SQAA section when --project is not provided and no sonar-project.properties exists',
+      'writes the SQAA section when --project is not provided and no sonar-project.properties exists',
       async () => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
@@ -735,7 +733,7 @@ describe('integrate copilot', () => {
         expect(result.exitCode).toBe(0);
         const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
         expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
-        expect(body).not.toContain('# Vortex analysis');
+        expect(body).toContain('# Vortex analysis');
       },
       { timeout: 30000 },
     );
@@ -764,27 +762,18 @@ describe('integrate copilot', () => {
     );
 
     it(
-      'omits the SQAA section under -g when no project key is provided, even with an entitled org',
+      'writes the SQAA section under -g with no project key on disk',
       async () => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
         const result = await harness.run('integrate copilot -g --non-interactive', { extraEnv });
 
         expect(result.exitCode).toBe(0);
-        // Without a project key the SQAA section cannot bake one in, so the
-        // section is skipped entirely — global file gets prompt-secrets only,
-        // and no project-level file is written.
         const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
         expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
-        expect(body).not.toContain('# Vortex analysis');
+        expect(body).toContain('# Vortex analysis');
         expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(false);
-        expect(findCopilotFeature(harness, 'vortex')).toBeUndefined();
-        // Vortex is project-scoped, so a --global install skips it with the central
-        // "not supported with --global" notice. It is never the missing-key
-        // message, which is reserved for project installs that lack a key.
-        const output = result.stdout + result.stderr;
-        expect(output).toContain('not supported with --global');
-        expect(output).not.toContain('a project key and organization are required');
+        expect(findCopilotFeature(harness, 'vortex')?.scope).toBe('global');
       },
       { timeout: 30000 },
     );

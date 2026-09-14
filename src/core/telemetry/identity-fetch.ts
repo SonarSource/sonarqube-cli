@@ -25,13 +25,16 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { errAsync, okAsync, type Result, type ResultAsync } from '@/core/result.ts';
+import { EnterprisesClient } from '@/core/server/enterprises.ts';
+import type { HttpClientError } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
+import { type OrganizationRecord, OrganizationsClient } from '@/core/server/organizations.ts';
+import { SystemClient } from '@/core/server/system.ts';
+import { UsersClient } from '@/core/server/users.ts';
 
 import { getTelemetryDir } from '../config-constants.ts';
 import type { AuthConnection, ServerType } from '../state/state.ts';
-
-const ORGANIZATIONS_ENDPOINT = '/organizations/organizations';
-const ENTERPRISE_ORGANIZATIONS_ENDPOINT = '/enterprises/enterprise-organizations';
 
 export interface TelemetryIdentity {
   user_uuid: string | null;
@@ -205,105 +208,15 @@ function writeDiskCache(cache: IdentityCacheFile): void {
   }
 }
 
-interface FieldFetchResult {
-  value: string | null;
-  resolved: boolean;
-}
-
-interface OrganizationRecord {
-  id?: string;
-  uuidV4?: string;
-}
-
-interface OrganizationLookupResult {
-  uuidV4: string | null;
-  id: string | null;
-  resolved: boolean;
-}
-
-function fetchUserUuid(client: SonarHttpClient): Promise<FieldFetchResult> {
-  return client.getSafe<{ id: string }>('/api/users/current').match(
-    ({ response, value }): FieldFetchResult => {
-      if (!response.ok) {
-        return { value: null, resolved: false };
-      }
-      return { value: value?.id ?? null, resolved: true };
-    },
-    (): FieldFetchResult => ({ value: null, resolved: false }),
-  );
-}
-
-function fetchOrganizationRecord(
+/** No organization id means nothing left to ask: confirmed-absent, not a failed lookup. */
+function resolveEnterpriseUuid(
   client: SonarHttpClient,
-  orgKey: string,
-): Promise<OrganizationLookupResult> {
-  return client
-    .getSafe<OrganizationRecord[]>(
-      ORGANIZATIONS_ENDPOINT,
-      { organizationKey: orgKey, excludeEligibility: 'true' },
-      client.apiHostFor(ORGANIZATIONS_ENDPOINT),
-    )
-    .match(
-      ({ response, value }): OrganizationLookupResult => {
-        if (!response.ok) {
-          return { uuidV4: null, id: null, resolved: false };
-        }
-        const org = value?.[0];
-        return { uuidV4: org?.uuidV4 ?? null, id: org?.id ?? null, resolved: true };
-      },
-      (): OrganizationLookupResult => ({ uuidV4: null, id: null, resolved: false }),
-    );
-}
-
-function fetchEnterpriseUuid(
-  client: SonarHttpClient,
-  organizationId: string,
-): Promise<FieldFetchResult> {
-  return client
-    .getSafe<Array<{ enterpriseId?: string }>>(
-      ENTERPRISE_ORGANIZATIONS_ENDPOINT,
-      { organizationId },
-      client.apiHostFor(ENTERPRISE_ORGANIZATIONS_ENDPOINT),
-    )
-    .match(
-      ({ response, value }): FieldFetchResult => {
-        if (!response.ok) {
-          return { value: null, resolved: false };
-        }
-        return { value: value?.[0]?.enterpriseId ?? null, resolved: true };
-      },
-      (): FieldFetchResult => ({ value: null, resolved: false }),
-    );
-}
-
-/** Unresolved stays `undefined` so the next command retries; `null` is confirmed-absent. */
-async function resolveEnterpriseUuid(
-  client: SonarHttpClient,
-  org: OrganizationLookupResult,
-): Promise<{ value: string | null | undefined; resolved: boolean }> {
-  if (!org.resolved) {
-    return { value: undefined, resolved: false };
-  }
-  if (!org.id) {
-    return { value: null, resolved: true };
-  }
-  const enterprise = await fetchEnterpriseUuid(client, org.id);
-  return {
-    value: enterprise.resolved ? enterprise.value : undefined,
-    resolved: enterprise.resolved,
-  };
-}
-
-function fetchSqsInstallationId(client: SonarHttpClient): Promise<FieldFetchResult> {
-  return client.getSafe<{ id?: string }>('/api/system/status').match(
-    ({ response, value }): FieldFetchResult => {
-      if (!response.ok) {
-        return { value: null, resolved: false };
-      }
-      return { value: value?.id ?? null, resolved: true };
-    },
-    (): FieldFetchResult => ({ value: null, resolved: false }),
-  );
+  org: Result<OrganizationRecord | null, HttpClientError>,
+): ResultAsync<string | null, HttpClientError> {
+  if (org.isErr()) return errAsync(org.error);
+  const organizationId = org.value?.id;
+  if (!organizationId) return okAsync(null);
+  return new EnterprisesClient(client).getEnterpriseIdForOrganization(organizationId);
 }
 
 interface IdentityFetchResult {
@@ -321,26 +234,27 @@ async function fetchMissingFromApi(
   const resolved: IdentityFetchPlan = { user: false, org: false, enterprise: false, sqs: false };
 
   if (fetchPlan.user) {
-    const user = await fetchUserUuid(client);
-    user_uuid = user.value;
-    resolved.user = user.resolved;
+    const user = await new UsersClient(client).getCurrentUserId();
+    user_uuid = user.unwrapOr(null);
+    resolved.user = user.isOk();
   }
   if ((fetchPlan.org || fetchPlan.enterprise) && auth.orgKey) {
-    const org = await fetchOrganizationRecord(client, auth.orgKey);
+    const org = await new OrganizationsClient(client).getOrganizationRecord(auth.orgKey);
     if (fetchPlan.org) {
-      organization_uuid_v4 = org.uuidV4;
-      resolved.org = org.resolved;
+      organization_uuid_v4 = org.unwrapOr(null)?.uuidV4 ?? null;
+      resolved.org = org.isOk();
     }
     if (fetchPlan.enterprise) {
       const enterprise = await resolveEnterpriseUuid(client, org);
-      enterprise_uuid = enterprise.value;
-      resolved.enterprise = enterprise.resolved;
+      // `undefined` keeps the field unresolved so the next command retries it.
+      enterprise_uuid = enterprise.unwrapOr(undefined);
+      resolved.enterprise = enterprise.isOk();
     }
   }
   if (fetchPlan.sqs) {
-    const sqs = await fetchSqsInstallationId(client);
-    sqs_installation_id = sqs.value;
-    resolved.sqs = sqs.resolved;
+    const sqs = await new SystemClient(client).getInstallationId();
+    sqs_installation_id = sqs.unwrapOr(null);
+    resolved.sqs = sqs.isOk();
   }
 
   return {

@@ -104,6 +104,7 @@ function getDesiredCursorMcpConfig(context: IntegrationContext) {
 }
 
 function resolveCursorSqaaRulePath(context: IntegrationContext): string {
+  // targetRoot is the project root for project scope and the home directory for global scope.
   return join(context.targetRoot, CURSOR_CONFIG_DIR, RULES_DIR, SQAA_RULE_FILE);
 }
 

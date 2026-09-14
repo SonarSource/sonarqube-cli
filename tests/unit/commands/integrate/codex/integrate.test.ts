@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'b
 
 import * as vortex from '@/commands/integrate/_common/vortex.ts';
 import { integrateCodex } from '@/commands/integrate/codex';
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import * as token from '@/core/auth/token.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as registry from '@/core/framework/features';
@@ -34,11 +34,12 @@ import { VortexEntitlementClient } from '@/core/vortex/entitlement.ts';
 
 import { FakeConsole } from '../../../../_common/fake-console.ts';
 
-const SERVER_AUTH: ResolvedAuth = {
+const SERVER_AUTH = new ResolvedAuth({
   token: 'test-token',
   serverUrl: 'https://sonar.example.com',
   connectionType: 'on-premise',
-};
+  source: 'state' as const,
+});
 
 let SERVER_CTX: CommandAuthenticatedInvocationContext;
 

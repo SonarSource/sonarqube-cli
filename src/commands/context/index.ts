@@ -20,8 +20,9 @@
 
 import { spawn } from 'node:child_process';
 
-import { resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
@@ -133,7 +134,7 @@ async function resolveContextToken(
 
 export interface RunContextPassthroughOptions {
   stdinPayload?: string;
-  console: Console;
+  ctx: CommandInvocationContext;
 }
 
 export async function runContextPassthrough(
@@ -148,7 +149,11 @@ export async function runContextPassthrough(
   if (isHelp) {
     env = buildContextAugmentationEnv();
   } else {
-    const auth = await resolveAuth();
+    const authResult = await options.ctx.resolveAuth();
+    if (authResult.isErr()) {
+      throw authResult.error;
+    }
+    const auth = authResult.value;
     if (!auth) {
       throw new CommandFailedError('Not authenticated.', {
         remediationHint: 'Run: sonar auth login',
@@ -157,7 +162,7 @@ export async function runContextPassthrough(
     const recordedConfig = await resolveRecordedContextAugmentationConfig(
       process.cwd(),
       auth,
-      options.console,
+      options.ctx.console,
     );
     const serverUrl = recordedConfig.serverUrl ?? auth.serverUrl;
     const organization = recordedConfig.organization ?? auth.orgKey;

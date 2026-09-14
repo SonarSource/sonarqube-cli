@@ -20,7 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { okAsync } from '@/core/result.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
@@ -31,12 +31,13 @@ import { FakeConsole } from '../../../_common/fake-console.ts';
 const TEST_SERVER = 'https://sonar.example.com';
 const TEST_ORG = 'test-org';
 
-const FAKE_AUTH: ResolvedAuth = {
+const FAKE_AUTH = new ResolvedAuth({
   token: 'squ_test_token',
   serverUrl: TEST_SERVER,
   orgKey: TEST_ORG,
   connectionType: 'on-premise',
-};
+  source: 'state' as const,
+});
 
 let fake: FakeConsole;
 let FAKE_CTX: CommandAuthenticatedInvocationContext;

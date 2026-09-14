@@ -26,9 +26,27 @@ import { SonarHttpClient } from '@/core/server/http-client.ts';
 
 interface ApiStep {
   ok: boolean;
+  /** HTTP status for a failing step. Defaults to 500 (a critical, retryable failure). */
+  status?: number;
   id?: string;
   uuidV4?: string;
   enterpriseId?: string;
+}
+
+/**
+ * Builds a `Response`-shaped stub realistic enough for `SonarHttpClient.get()`'s error
+ * classification (`buildStatusError`) to run without throwing: it reads `status` and, for
+ * non-403/404 statuses, calls `.text()`.
+ */
+function fakeStepResponse(step: ApiStep): Response {
+  const status = step.ok ? 200 : (step.status ?? 500);
+  return {
+    ok: step.ok,
+    status,
+    statusText: step.ok ? 'OK' : 'Error',
+    url: '',
+    text: () => Promise.resolve(''),
+  } as Response;
 }
 
 interface IdentityApiMockOptions {
@@ -65,14 +83,14 @@ export function mockIdentityGetSafe(
       if (endpoint === '/api/users/current') {
         const step = shiftStep(userSteps, { ok: true });
         return okAsync({
-          response: { ok: step.ok } as Response,
+          response: fakeStepResponse(step),
           value: (step.id ? { id: step.id } : {}) as TValue,
         });
       }
       if (endpoint === '/organizations/organizations') {
         const step = shiftStep(orgSteps, { ok: true });
         return okAsync({
-          response: { ok: step.ok } as Response,
+          response: fakeStepResponse(step),
           value: (step.uuidV4
             ? [{ uuidV4: step.uuidV4, id: step.id ?? `id-${step.uuidV4}` }]
             : []) as TValue,
@@ -81,14 +99,14 @@ export function mockIdentityGetSafe(
       if (endpoint === '/enterprises/enterprise-organizations') {
         const step = shiftStep(enterpriseSteps, { ok: true });
         return okAsync({
-          response: { ok: step.ok } as Response,
+          response: fakeStepResponse(step),
           value: (step.enterpriseId ? [{ enterpriseId: step.enterpriseId }] : []) as TValue,
         });
       }
       if (endpoint === '/api/system/status') {
         const step = shiftStep(statusSteps, { ok: true });
         return okAsync({
-          response: { ok: step.ok } as Response,
+          response: fakeStepResponse(step),
           value: {
             status: 'UP',
             version: '1',

@@ -2,6 +2,7 @@
 import tseslint from 'typescript-eslint';
 import prettierConfig from 'eslint-config-prettier';
 import headersPlugin from 'eslint-plugin-headers';
+import neverthrowPlugin from '@ninoseki/eslint-plugin-neverthrow';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
 
 const NO_DIRECT_FETCH_MESSAGE =
@@ -69,6 +70,25 @@ export default tseslint.config(
 
       // General best practices
       'no-console': 'warn',
+    },
+  },
+
+  // Catches a Result that is built but never consumed. Two constraints shape this block.
+  // Upstream `eslint-plugin-neverthrow` hard-crashes on ESLint 10 + typescript-eslint 8
+  // (it reads the removed context.parserServices), hence the fork. And its handled-method
+  // list is hardcoded to match/unwrapOr/_unsafeUnwrap with no options (schema: []), so a
+  // chain ending in this repo's own orThrow() is reported despite being correctly collapsed.
+  // Hence a hand-maintained file list rather than `src/**`: extend it as each handler moves
+  // onto a Result rail, and widen the scope only once that orThrow() gap is closed.
+  {
+    files: [
+      'src/core/result.ts',
+      'src/core/commands/sonar-command.ts',
+      'src/commands/list/projects.ts',
+    ],
+    plugins: { neverthrow: neverthrowPlugin },
+    rules: {
+      'neverthrow/must-use-result': 'error',
     },
   },
 

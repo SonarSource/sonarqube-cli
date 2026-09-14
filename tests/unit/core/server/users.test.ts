@@ -23,7 +23,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { UsersClient } from '@/core/server/users.ts';
 
-import { lastFetchInit, lastFetchUrl, mockFetch } from '../../helpers/mock-fetch.ts';
+import { fakeResponse, lastFetchInit, lastFetchUrl, mockFetch } from '../../helpers/mock-fetch.ts';
 
 const SERVER_URL = 'https://sonarqube.example.com';
 const TOKEN = 'squ_test_token';
@@ -86,6 +86,34 @@ describe('UsersClient', () => {
       const result = await client.checkTokenValidity();
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().message).toContain('Network error');
+    });
+  });
+
+  describe('getCurrentUserId', () => {
+    it('returns the user id on success', async () => {
+      fetchSpy = mockFetch({ id: 'user-uuid' });
+      expect(await client.getCurrentUserId().orThrow()).toBe('user-uuid');
+    });
+
+    it('returns null when the field is absent from a successful response', async () => {
+      fetchSpy = mockFetch({});
+      expect(await client.getCurrentUserId().orThrow()).toBeNull();
+    });
+
+    it('throws on a non-critical failure (e.g. 403) instead of caching it as absent', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(
+        fakeResponse('Access denied', { ok: false, status: 403 }),
+      );
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.getCurrentUserId().orThrow()).rejects.toThrow();
+    });
+
+    it('throws on a critical failure (e.g. 500)', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(
+        fakeResponse('boom', { ok: false, status: 500 }),
+      );
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.getCurrentUserId().orThrow()).rejects.toThrow();
     });
   });
 

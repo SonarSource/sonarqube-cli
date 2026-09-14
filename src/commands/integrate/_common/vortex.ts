@@ -42,9 +42,8 @@ import type { IntegrateAgentOptions, VortexDisposition } from './types.ts';
 export const VORTEX_FEATURE_ID = 'vortex';
 export const CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID = 'context-augmentation-skill-file'; // retired, removal only
 
-/** Vortex is project-scoped, so only these records carry usable project metadata. */
-export function isProjectVortexFeature(feature: InstalledIntegrationFeature): boolean {
-  return feature.featureId === VORTEX_FEATURE_ID && feature.scope === 'project';
+export function isVortexFeature(feature: InstalledIntegrationFeature): boolean {
+  return feature.featureId === VORTEX_FEATURE_ID;
 }
 
 /**
@@ -64,8 +63,6 @@ export function createVortexFeature<TOptions extends IntegrateAgentOptions>(
     benefitDescription: VORTEX_FEATURE_BENEFIT,
     previewDescription: VORTEX_FEATURE_PREVIEW,
     shouldInstall: vortexShouldInstall,
-    targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
-    scope: 'project',
     replacedIds: subfeatureIds,
     defaultInstallSubfeatureIds: subfeatureIds,
     legacyCleanups: [
@@ -103,26 +100,11 @@ export const VORTEX_UNINSTALL_MESSAGE =
 
 export const VORTEX_CHECK_FAILED_MESSAGE = 'Could not determine Vortex entitlement — skipping.';
 
-export const VORTEX_GLOBAL_SKIP_MESSAGE =
-  'Skipping Vortex: not supported with --global. Re-run without --global from a project directory to install it there.';
-
-export const VORTEX_MISSING_PROJECT_MESSAGE =
-  'Skipping Vortex: a project key is required (configure your project or pass --project).';
-
-export const VORTEX_MISSING_CLOUD_CONTEXT_MESSAGE =
-  'Skipping Vortex: a project key and organization are required (configure your project or pass --project).';
-
 export const VORTEX_OVER_CONSUMPTION_MESSAGE =
   'The Vortex usage limit has been reached. Installing it anyway — Vortex will resume once usage resets.';
 
 export const VORTEX_SCA_CHECK_FAILED_MESSAGE =
   'Could not verify SCA availability on the connected server. Proceeding with SCA disabled in the generated skill content.';
-
-export interface ResolveVortexSetupParams {
-  auth: ResolvedAuth;
-  projectKey: string | undefined;
-  isGlobal: boolean;
-}
 
 export interface ResolvedVortexSetup {
   disposition: VortexDisposition;
@@ -160,11 +142,11 @@ async function resolveScaEnabled(
  * Vortex feature can be installed and the SCA flag its content depends on.
  */
 export async function resolveVortexSetup(
-  params: ResolveVortexSetupParams,
+  auth: ResolvedAuth,
   console: Console,
 ): Promise<ResolvedVortexSetup> {
-  const { status } = await resolveVortexEntitlement(params.auth);
-  const isServer = !isSonarQubeCloud(params.auth.serverUrl);
+  const { status } = await resolveVortexEntitlement(auth);
+  const isServer = !isSonarQubeCloud(auth.serverUrl);
   const settled = (disposition: VortexDisposition): ResolvedVortexSetup => ({ disposition });
 
   if (status === 'not_applicable') {
@@ -180,14 +162,6 @@ export async function resolveVortexSetup(
     console.info(isServer ? VORTEX_SERVER_NOT_ENTITLED_MESSAGE : VORTEX_PROMOTION_MESSAGE);
     return settled('remove');
   }
-  if (params.isGlobal) {
-    console.warn(VORTEX_GLOBAL_SKIP_MESSAGE);
-    return settled('preserve');
-  }
-  if (!params.projectKey || (!isServer && !params.auth.orgKey)) {
-    console.warn(isServer ? VORTEX_MISSING_PROJECT_MESSAGE : VORTEX_MISSING_CLOUD_CONTEXT_MESSAGE);
-    return settled('preserve');
-  }
   if (status === 'over_consumption') {
     console.warn(VORTEX_OVER_CONSUMPTION_MESSAGE);
   }
@@ -200,6 +174,6 @@ export async function resolveVortexSetup(
   // SCA tools only when SCA is available on the connection.
   return {
     ...settled('install'),
-    scaEnabled: await resolveScaEnabled(params.auth, isServer, console),
+    scaEnabled: await resolveScaEnabled(auth, isServer, console),
   };
 }

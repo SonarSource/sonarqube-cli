@@ -175,10 +175,12 @@ export async function listIssues(
 
   let componentKeys: string | undefined;
   if (options.file) {
-    componentKeys = await resolveFileComponentKey(client, options.project, options.file, {
-      branch: options.branch,
-      pullRequest: options.pullRequest,
-    });
+    ({ componentKey: componentKeys } = await resolveFileComponentKey(
+      client,
+      options.project,
+      options.file,
+      { branch: options.branch, pullRequest: options.pullRequest },
+    ));
   }
 
   const { severities: normalizedSeverities, impactSeverities: normalizedImpactSeverities } =

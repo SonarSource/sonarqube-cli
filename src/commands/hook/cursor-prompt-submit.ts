@@ -67,7 +67,7 @@ export async function cursorPromptSubmit(
 
   let deps: HookDependencies;
   try {
-    deps = await resolveAuthAndSecrets();
+    deps = await resolveAuthAndSecrets(ctx);
   } catch (err) {
     if (err instanceof MissingDependenciesError) {
       denyPrompt(err.message);

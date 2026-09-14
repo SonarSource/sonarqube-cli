@@ -26,6 +26,7 @@ import {
   SONARCLOUD_US_API_URL,
   SONARCLOUD_US_URL,
 } from '@/core/config-constants.ts';
+import logger from '@/core/observability/logger.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 
@@ -81,9 +82,59 @@ describe('OrganizationsClient', () => {
       expect(await client.getOrganizationId('unknown-org').orThrow()).toBeNull();
     });
 
+    it('returns null on a non-critical failure (e.g. 403)', async () => {
+      fetchSpy = mockFetch({}, { ok: false, status: 403 });
+      expect(await client.getOrganizationId('my-org').orThrow()).toBeNull();
+    });
+
+    it('propagates a critical failure (e.g. 500) rather than reporting the org as missing', async () => {
+      fetchSpy = mockFetch({}, { ok: false, status: 500 });
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.getOrganizationId('my-org').orThrow()).rejects.toThrow();
+    });
+
     it('returns null when result array is empty', async () => {
       fetchSpy = mockFetch([]);
       expect(await client.getOrganizationId('my-org').orThrow()).toBeNull();
+    });
+  });
+
+  describe('getOrganizationRecord', () => {
+    it('returns the id and uuidV4 of the first result on success', async () => {
+      fetchSpy = mockFetch([{ id: 'legacy-id', uuidV4: 'org-uuid-v4' }]);
+      expect(await client.getOrganizationRecord('my-org').orThrow()).toEqual({
+        id: 'legacy-id',
+        uuidV4: 'org-uuid-v4',
+      });
+    });
+
+    it('returns null when result array is empty', async () => {
+      fetchSpy = mockFetch([]);
+      expect(await client.getOrganizationRecord('my-org').orThrow()).toBeNull();
+    });
+
+    it('throws on a non-critical failure (e.g. 403), unlike the single-id getters', async () => {
+      fetchSpy = mockFetch({}, { ok: false, status: 403 });
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.getOrganizationRecord('my-org').orThrow()).rejects.toThrow();
+    });
+
+    it('throws on a critical failure (e.g. 500)', async () => {
+      fetchSpy = mockFetch({}, { ok: false, status: 500 });
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.getOrganizationRecord('my-org').orThrow()).rejects.toThrow();
+    });
+
+    it('fetches and logs a failed lookup once however many getters read it', async () => {
+      fetchSpy = mockFetch({}, { ok: false, status: 403 });
+      const debugSpy = spyOn(logger, 'debug');
+
+      expect(await client.getOrganizationId('my-org').orThrow()).toBeNull();
+      expect(await client.getOrganizationLegacyId('my-org').orThrow()).toBeNull();
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(debugSpy).toHaveBeenCalledTimes(1);
+      debugSpy.mockRestore();
     });
   });
 

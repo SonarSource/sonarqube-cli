@@ -18,9 +18,18 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { authMatchesConnection } from '@/core/state/state-manager.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import {
+  CommandAuthenticatedInvocationContext,
+  type CommandInvocationContext,
+} from '@/core/commands/invocation-context.ts';
+import {
+  authMatchesConnection,
+  getActiveConnection,
+  tryLoadState,
+} from '@/core/state/state-manager.ts';
+import {
+  EMPTY_IDENTITY,
   identityFromConnection,
   needsIdentityEnrichment,
   resolveTelemetryIdentity,
@@ -39,62 +48,59 @@ function toTelemetryConnectionType(type: ServerType): Exclude<TelemetryConnectio
   return type === 'cloud' ? 'sqc' : 'sqs';
 }
 
-function matchingConnection(
-  conn: AuthConnection | undefined,
-  auth: ResolvedAuth | null,
-): AuthConnection | undefined {
-  if (conn === undefined) return undefined;
-  if (auth && !authMatchesConnection(auth, conn)) return undefined;
-  return conn;
-}
-
-/** Trusts an already-complete `conn` to skip a redundant `resolveAuth()`. */
-async function resolveStoreEventTelemetryIdentity(
-  conn: AuthConnection | undefined,
-): Promise<{ connectionType: TelemetryConnectionType; identity: TelemetryIdentity }> {
-  if (conn && !needsIdentityEnrichment(identityFromConnection(conn), conn.type, conn)) {
-    return {
-      connectionType: toTelemetryConnectionType(conn.type),
-      identity: identityFromConnection(conn),
-    };
-  }
-  const auth = await resolveAuth({ silent: true });
-  return resolveCommandTelemetryIdentity(conn, auth);
-}
-
 /**
- * Like {@link resolveStoreEventTelemetryIdentity}, but never throws — telemetry
- * must not fail an otherwise-successful command.
+ * Store events have no invocation auth (flush worker, unthreaded emits), so identity
+ * is whatever the active connection already holds. Pure — no I/O, nothing to fail.
  */
-export async function resolveStoreEventTelemetryIdentitySafely(
-  conn: AuthConnection | undefined,
-): Promise<{ connectionType: TelemetryConnectionType; identity: TelemetryIdentity }> {
-  try {
-    return await resolveStoreEventTelemetryIdentity(conn);
-  } catch {
-    return {
-      connectionType: conn ? toTelemetryConnectionType(conn.type) : null,
-      identity: identityFromConnection(conn),
-    };
-  }
+export function resolveStoreEventTelemetryIdentity(conn: AuthConnection | undefined): {
+  connectionType: TelemetryConnectionType;
+  identity: TelemetryIdentity;
+} {
+  return {
+    connectionType: conn ? toTelemetryConnectionType(conn.type) : null,
+    identity: identityFromConnection(conn),
+  };
 }
 
 export async function resolveCommandTelemetryIdentity(
-  conn: AuthConnection | undefined,
   auth: ResolvedAuth | null,
 ): Promise<{ connectionType: TelemetryConnectionType; identity: TelemetryIdentity }> {
-  const seedConn = matchingConnection(conn, auth);
-  let identity = identityFromConnection(seedConn);
-  let connectionType: TelemetryConnectionType = seedConn
-    ? toTelemetryConnectionType(seedConn.type)
-    : null;
-
-  if (auth) {
-    connectionType = toTelemetryConnectionType(auth.connectionType);
-    if (needsIdentityEnrichment(identity, auth.connectionType, seedConn)) {
-      identity = await resolveTelemetryIdentity(auth, identity);
-    }
+  if (!auth) {
+    return { connectionType: null, identity: EMPTY_IDENTITY };
   }
 
-  return { connectionType, identity };
+  const connectionType = toTelemetryConnectionType(auth.connectionType);
+  const state = tryLoadState();
+  const active = state ? getActiveConnection(state) : undefined;
+  const seedConn = active && authMatchesConnection(auth, active) ? active : undefined;
+  const seed = identityFromConnection(seedConn);
+
+  if (seedConn && !needsIdentityEnrichment(seed, auth.connectionType, seedConn)) {
+    return { connectionType, identity: seed };
+  }
+
+  return {
+    connectionType,
+    identity: await resolveTelemetryIdentity(auth, seed),
+  };
+}
+
+/**
+ * Auth for telemetry when draining handler facts: authenticated handlers expose
+ * `ctx.auth`; anonymous handlers resolve once via the invocation context.
+ */
+export async function resolveInvocationAuthForTelemetry(
+  ctx: CommandInvocationContext | undefined,
+): Promise<ResolvedAuth | null | undefined> {
+  if (!ctx) {
+    return undefined;
+  }
+  if (ctx instanceof CommandAuthenticatedInvocationContext) {
+    return ctx.auth;
+  }
+  const result = await ctx.resolveAuth({ silent: true });
+  if (result.isErr()) {
+    return null;
+  }
+  return result.value;
 }

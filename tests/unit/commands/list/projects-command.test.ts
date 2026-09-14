@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { errAsync, okAsync, type ResultAsync } from '@/core/result.ts';
 import type { HttpClientError } from '@/core/server/errors.ts';
@@ -20,11 +20,12 @@ const DEFAULT_OPTIONS: ListProjectsOptions = {
   pageSize: 500,
 };
 
-const mockAuth: ResolvedAuth = {
+const mockAuth = new ResolvedAuth({
   token: 'test-token',
   serverUrl: 'https://sonar.example.com',
   connectionType: 'on-premise',
-};
+  source: 'state' as const,
+});
 
 let fake: FakeConsole;
 let mockCtx: CommandAuthenticatedInvocationContext;
@@ -55,23 +56,20 @@ describe('projectsSearchCommand', () => {
   });
 
   describe('error conditions', () => {
-    it('throws when page size is not positive', async () => {
-      // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(listProjects({ page: 1, pageSize: 0 }, mockCtx)).rejects.toThrow(
+    it('returns an error result when page size is not positive', async () => {
+      expect(await listProjects({ page: 1, pageSize: 0 }, mockCtx)).toBeErrWith(
         `Invalid --page-size option: '0'. Must be an integer between 1 and 500`,
       );
     });
 
-    it('throws when page is not positive', async () => {
-      // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(listProjects({ page: 0, pageSize: 500 }, mockCtx)).rejects.toThrow(
+    it('returns an error result when page is not positive', async () => {
+      expect(await listProjects({ page: 0, pageSize: 500 }, mockCtx)).toBeErrWith(
         `Invalid --page option: '0'. Must be an integer >= 1`,
       );
     });
 
-    it('throws when page size exceeds the maximum', async () => {
-      // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(listProjects({ page: 1, pageSize: MAX_PAGE_SIZE + 1 }, mockCtx)).rejects.toThrow(
+    it('returns an error result when page size exceeds the maximum', async () => {
+      expect(await listProjects({ page: 1, pageSize: MAX_PAGE_SIZE + 1 }, mockCtx)).toBeErrWith(
         `Invalid --page-size option: '${MAX_PAGE_SIZE + 1}'. Must be an integer between 1 and 500`,
       );
     });
@@ -79,8 +77,7 @@ describe('projectsSearchCommand', () => {
     it('propagates API errors', async () => {
       getSpy.mockReturnValue(errAsync(new Error('SonarQube API error: 401 Unauthorized')));
 
-      // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(listProjects(DEFAULT_OPTIONS, mockCtx)).rejects.toThrow(
+      expect(await listProjects(DEFAULT_OPTIONS, mockCtx)).toBeErrWith(
         'SonarQube API error: 401 Unauthorized',
       );
     });
@@ -88,7 +85,7 @@ describe('projectsSearchCommand', () => {
 
   describe('successful execution', () => {
     it('prints JSON with empty projects array when no results', async () => {
-      await listProjects(DEFAULT_OPTIONS, mockCtx);
+      expect(await listProjects(DEFAULT_OPTIONS, mockCtx)).toBeOkWith(undefined);
 
       const prints = fake.calls
         .filter((c) => c.method === 'print')
@@ -155,10 +152,15 @@ describe('projectsSearchCommand', () => {
 
     it('passes query option to the API', async () => {
       let capturedParams: Record<string, unknown> | undefined;
-      getSpy.mockImplementation((_endpoint: string, params?: Record<string, unknown>) => {
-        capturedParams = params;
-        return makeProjectsResponse([]);
-      });
+      getSpy.mockImplementation(
+        (
+          _endpoint: string,
+          params?: Record<string, unknown>,
+        ): ResultAsync<ProjectsSearchResponse, HttpClientError> => {
+          capturedParams = params;
+          return makeProjectsResponse([]);
+        },
+      );
 
       await listProjects({ query: 'my-project', ...DEFAULT_OPTIONS }, mockCtx);
 
@@ -167,10 +169,15 @@ describe('projectsSearchCommand', () => {
 
     it('passes page option to the API', async () => {
       let capturedParams: Record<string, unknown> | undefined;
-      getSpy.mockImplementation((_endpoint: string, params?: Record<string, unknown>) => {
-        capturedParams = params;
-        return makeProjectsResponse([]);
-      });
+      getSpy.mockImplementation(
+        (
+          _endpoint: string,
+          params?: Record<string, unknown>,
+        ): ResultAsync<ProjectsSearchResponse, HttpClientError> => {
+          capturedParams = params;
+          return makeProjectsResponse([]);
+        },
+      );
 
       await listProjects({ page: 3, pageSize: 500 }, mockCtx);
 
@@ -179,10 +186,15 @@ describe('projectsSearchCommand', () => {
 
     it('passes page size option to the API', async () => {
       let capturedParams: Record<string, unknown> | undefined;
-      getSpy.mockImplementation((_endpoint: string, params?: Record<string, unknown>) => {
-        capturedParams = params;
-        return makeProjectsResponse([]);
-      });
+      getSpy.mockImplementation(
+        (
+          _endpoint: string,
+          params?: Record<string, unknown>,
+        ): ResultAsync<ProjectsSearchResponse, HttpClientError> => {
+          capturedParams = params;
+          return makeProjectsResponse([]);
+        },
+      );
 
       await listProjects({ page: 1, pageSize: 50 }, mockCtx);
 
@@ -190,18 +202,24 @@ describe('projectsSearchCommand', () => {
     });
 
     it('passes organization key for SonarCloud connections', async () => {
-      const cloudAuth: ResolvedAuth = {
+      const cloudAuth = new ResolvedAuth({
         token: 'cloud-token',
         serverUrl: 'https://sonarcloud.io',
         orgKey: 'my-org',
         connectionType: 'cloud',
-      };
+        source: 'state' as const,
+      });
 
       let capturedParams: Record<string, unknown> | undefined;
-      getSpy.mockImplementation((_endpoint: string, params?: Record<string, unknown>) => {
-        capturedParams = params;
-        return makeProjectsResponse([]);
-      });
+      getSpy.mockImplementation(
+        (
+          _endpoint: string,
+          params?: Record<string, unknown>,
+        ): ResultAsync<ProjectsSearchResponse, HttpClientError> => {
+          capturedParams = params;
+          return makeProjectsResponse([]);
+        },
+      );
 
       await listProjects(
         DEFAULT_OPTIONS,
@@ -212,17 +230,23 @@ describe('projectsSearchCommand', () => {
     });
 
     it('does not pass organization key for on-premise connections', async () => {
-      const onPremAuth: ResolvedAuth = {
+      const onPremAuth = new ResolvedAuth({
         token: 'test-token',
         serverUrl: 'https://sonar.example.com',
         connectionType: 'on-premise',
-      };
+        source: 'state' as const,
+      });
 
       let capturedParams: Record<string, unknown> | undefined;
-      getSpy.mockImplementation((_endpoint: string, params?: Record<string, unknown>) => {
-        capturedParams = params;
-        return makeProjectsResponse([]);
-      });
+      getSpy.mockImplementation(
+        (
+          _endpoint: string,
+          params?: Record<string, unknown>,
+        ): ResultAsync<ProjectsSearchResponse, HttpClientError> => {
+          capturedParams = params;
+          return makeProjectsResponse([]);
+        },
+      );
 
       await listProjects(
         DEFAULT_OPTIONS,

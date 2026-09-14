@@ -638,7 +638,7 @@ describe('integrate cursor', () => {
     );
 
     it(
-      'skips the SQAA rule under -g even when entitled, and warns',
+      'writes the SQAA rule under the home directory on a -g install when entitled',
       async () => {
         // `--global` and `--project` are mutually exclusive, so the project key
         // is discovered from disk in the global flow.
@@ -648,24 +648,28 @@ describe('integrate cursor', () => {
         const result = await harness.run('integrate cursor -g --non-interactive', { extraEnv });
 
         expect(result.exitCode).toBe(0);
-        expect(`${result.stdout}\n${result.stderr}`).toContain('not supported with --global');
+        expect(harness.userHome.file(...SQAA_RULE_DIRS).asText()).toContain(
+          '# Vortex analysis protocol',
+        );
         // Never written project-side on a global install.
         expect(harness.cwd.file(...SQAA_RULE_DIRS).exists()).toBe(false);
-        expect(findInstalledFeature(harness, 'cursor', 'vortex')).toBeUndefined();
+        expect(findInstalledFeature(harness, 'cursor', 'vortex')?.scope).toBe('global');
       },
       { timeout: 30000 },
     );
 
     it(
-      'omits the SQAA rule when no project key is provided or discoverable',
+      'writes the SQAA rule when no project key is provided or discoverable',
       async () => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
         const result = await harness.run('integrate cursor --non-interactive', { extraEnv });
 
         expect(result.exitCode).toBe(0);
-        expect(harness.cwd.file(...SQAA_RULE_DIRS).exists()).toBe(false);
-        expect(findInstalledFeature(harness, 'cursor', 'vortex')).toBeUndefined();
+        expect(harness.cwd.file(...SQAA_RULE_DIRS).asText()).toContain(
+          '# Vortex analysis protocol',
+        );
+        expect(findInstalledFeature(harness, 'cursor', 'vortex')?.scope).toBe('project');
       },
       { timeout: 30000 },
     );

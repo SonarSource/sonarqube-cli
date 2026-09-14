@@ -21,12 +21,16 @@
 // Unit tests for analyzeSqaa command
 
 import * as fs from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { SqaaAnalysisClient } from '@/commands/analyze/sqaa-analysis-client.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import { normalizePath } from '@/core/io/fs-utils.ts';
 import * as processLib from '@/core/process/process.ts';
 import * as projectInfo from '@/core/project-info.ts';
 import { getDefaultState } from '@/core/state/state.ts';
@@ -44,12 +48,13 @@ const TEST_TOKEN = 'squ_test_token';
 const FILE_CONTENT = 'const x = 1;\n';
 
 /** Fake auth for a cloud connection */
-const FAKE_AUTH: import('@/core/auth/auth-resolver.ts').ResolvedAuth = {
+const FAKE_AUTH = new ResolvedAuth({
   token: TEST_TOKEN,
   serverUrl: SONARCLOUD_URL,
   orgKey: TEST_ORG,
   connectionType: 'cloud',
-};
+  source: 'state',
+});
 
 let fake: FakeConsole;
 let FAKE_AUTHENTICATED_CONTEXT: CommandAuthenticatedInvocationContext;
@@ -289,11 +294,12 @@ describe('analyzeSqaa: path normalization', () => {
 
 describe('analyzeSqaa: explicit --project option', () => {
   it('runs Vortex analysis on SonarQube Server when --project is given', async () => {
-    const onPremiseAuth = {
+    const onPremiseAuth = new ResolvedAuth({
       token: TEST_TOKEN,
       serverUrl: 'https://mysonar.company.com',
-      connectionType: 'on-premise' as const,
-    };
+      connectionType: 'on-premise',
+      source: 'state',
+    });
 
     const onPremiseContext = new CommandAuthenticatedInvocationContext(
       onPremiseAuth,
@@ -336,11 +342,12 @@ describe('buildSqaaJsonReport', () => {
   });
 
   it('runs Vortex analysis on SonarQube Server', async () => {
-    const onPremiseAuth = {
+    const onPremiseAuth = new ResolvedAuth({
       token: TEST_TOKEN,
       serverUrl: 'https://mysonar.company.com',
-      connectionType: 'on-premise' as const,
-    };
+      connectionType: 'on-premise',
+      source: 'state',
+    });
 
     const report = await buildSqaaJsonReport(
       { file: ['src/index.ts'] },
@@ -451,5 +458,31 @@ describe('analyzeSqaa: change-set mode', () => {
 
     expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
     expect(createAnalysisSpy.mock.calls[0][0].analysisDepth).toBe('DEEP');
+  });
+
+  it('does not abort when an ignored change-set file is outside the repository', async () => {
+    const filePath = `${process.cwd()}/src/index.ts`;
+    const outside = join(tmpdir(), 'outside-repo.ts');
+    resolveChangeSetSpy.mockResolvedValue({
+      files: [filePath],
+      ignored: [{ path: outside, reason: 'outside-repository' as const }],
+      repoRoot: process.cwd(),
+    });
+
+    await analyzeSqaa({ staged: true }, FAKE_AUTHENTICATED_CONTEXT);
+
+    expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
+    const output = fake.calls.map((c) => String(c.args[0])).join('\n');
+    expect(output).toContain(normalizePath(outside));
+
+    const report = await buildSqaaJsonReport(
+      { staged: true },
+      FAKE_AUTHENTICATED_CONTEXT.httpClient,
+      FAKE_AUTH,
+      { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
+    );
+    expect(report?.ignored).toEqual([
+      { path: normalizePath(outside), reason: 'outside-repository' },
+    ]);
   });
 });

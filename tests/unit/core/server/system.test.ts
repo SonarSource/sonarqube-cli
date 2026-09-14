@@ -24,7 +24,7 @@ import { SONARCLOUD_URL } from '@/core/config-constants.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { SystemClient } from '@/core/server/system.ts';
 
-import { mockFetch } from '../../helpers/mock-fetch.ts';
+import { fakeResponse, mockFetch } from '../../helpers/mock-fetch.ts';
 
 const SERVER_URL = 'https://sonarqube.example.com';
 const TOKEN = 'squ_test_token';
@@ -80,6 +80,34 @@ describe('SystemClient', () => {
       } as Response);
       const result = await client.getServerMode();
       expect(result.isErr()).toBe(true);
+    });
+  });
+
+  describe('getInstallationId', () => {
+    it('returns the installation id on success', async () => {
+      fetchSpy = mockFetch({ id: 'installation-id' });
+      expect(await client.getInstallationId().orThrow()).toBe('installation-id');
+    });
+
+    it('returns null when the field is absent from a successful response', async () => {
+      fetchSpy = mockFetch({});
+      expect(await client.getInstallationId().orThrow()).toBeNull();
+    });
+
+    it('throws on a non-critical failure (e.g. 403) instead of caching it as absent', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(
+        fakeResponse('Access denied', { ok: false, status: 403 }),
+      );
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.getInstallationId().orThrow()).rejects.toThrow();
+    });
+
+    it('throws on a critical failure (e.g. 500)', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(
+        fakeResponse('boom', { ok: false, status: 500 }),
+      );
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.getInstallationId().orThrow()).rejects.toThrow();
     });
   });
 });

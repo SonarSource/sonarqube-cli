@@ -6,4 +6,5 @@ registry = { url = "https://repox.jfrog.io/artifactory/api/npm/npm/", token = "$
 preload = [
   "./tests/coverage/preload-instrumenter.ts",
   "./tests/_common/preload-isolated-env.ts",
+  "./tests/_common/result-matchers.ts",
 ]

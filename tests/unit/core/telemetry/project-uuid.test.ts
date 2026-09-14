@@ -30,7 +30,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { ENV_SONAR_USER_HOME, getTelemetryDir } from '@/core/config-constants.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
@@ -46,13 +46,14 @@ import { mockProjectUuidGetSafe } from './project-uuid-api-mock.ts';
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function auth(overrides: Partial<ResolvedAuth> = {}): ResolvedAuth {
-  return {
+  return new ResolvedAuth({
     token: 't',
     serverUrl: 'https://sonarcloud.io',
     orgKey: 'my-org',
     connectionType: 'cloud',
+    source: 'state' as const,
     ...overrides,
-  };
+  });
 }
 
 /** Replicates project-uuid.ts#cacheKey so tests can seed the disk cache directly. */

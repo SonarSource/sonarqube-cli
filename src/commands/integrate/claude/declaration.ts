@@ -290,7 +290,9 @@ function resolveClaudeSettingsPath(context: IntegrationContext): string {
 }
 
 function resolveClaudeMdPath(context: IntegrationContext): string {
-  return join(context.targetRoot, CLAUDE_MD_FILE);
+  return context.scope === 'global'
+    ? join(context.targetRoot, CLAUDE_CONFIG_DIR, CLAUDE_MD_FILE)
+    : join(context.targetRoot, CLAUDE_MD_FILE);
 }
 
 function resolveClaudeMcpConfigPath(context: IntegrationContext): string {

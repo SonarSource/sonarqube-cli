@@ -26,6 +26,7 @@ import { join } from 'node:path';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { resolveCurrentGitBranch, resolveGitBranchAtRepoRoot } from '@/core/host/git/branch.ts';
 import { resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
+import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 
 /** Maximum byte size per file sent to SQAA. Files exceeding this are skipped. */
@@ -41,7 +42,7 @@ export interface ChangeSetOptions {
 /** A file excluded from analysis with the reason it was skipped. */
 export interface IgnoredFile {
   path: string;
-  reason: 'binary' | 'oversized';
+  reason: 'binary' | 'oversized' | 'outside-repository';
 }
 
 /** Result of resolving a change set: files to analyze and files silently ignored. */
@@ -76,11 +77,20 @@ export async function resolveChangeSet(
   const diffFiles = await getDiffFiles(repoRoot, { staged, base });
   const untrackedFiles = staged ? [] : await getUntrackedNonIgnoredFiles(repoRoot);
   const absolute = [...diffFiles, ...untrackedFiles].map((f) => join(repoRoot, f));
+  const inRepo: string[] = [];
+  const outsideIgnored: IgnoredFile[] = [];
+  for (const file of absolute) {
+    if (isAncestorOrSelf(repoRoot, canonicalizePath(file))) {
+      inRepo.push(file);
+    } else {
+      outsideIgnored.push({ path: file, reason: 'outside-repository' });
+    }
+  }
 
-  const { files: nonBinary, ignored: binaryIgnored } = partitionBinary(absolute);
+  const { files: nonBinary, ignored: binaryIgnored } = partitionBinary(inRepo);
   const { files, ignored: oversizedIgnored } = partitionBySize(nonBinary);
 
-  return { files, ignored: [...binaryIgnored, ...oversizedIgnored], repoRoot };
+  return { files, ignored: [...outsideIgnored, ...binaryIgnored, ...oversizedIgnored], repoRoot };
 }
 
 /** Explicit `--branch` wins; otherwise auto-detect from git when possible. */

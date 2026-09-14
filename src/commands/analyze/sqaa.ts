@@ -230,7 +230,7 @@ async function analyzeSqaaChangeSet(params: {
 
   if (changeSet.files.length === 0) {
     console.text(
-      'Vortex analysis: no files to analyze — all change set files were excluded (binary or oversized).',
+      'Vortex analysis: no files to analyze — all change set files were excluded (binary, oversized, or outside the repository).',
     );
     return;
   }

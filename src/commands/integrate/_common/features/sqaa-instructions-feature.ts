@@ -23,7 +23,8 @@ import type {
   ResourceDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { textSnippet, wholeFile } from '@/core/framework/features';
+import { skip, textSnippet, wholeFile } from '@/core/framework/features';
+import type { IntegrationScope } from '@/core/state/state.ts';
 
 import { sonarBeginMarker, sonarEndMarker } from '../instructions-templates.ts';
 import type { IntegrateAgentOptions } from '../types.ts';
@@ -31,6 +32,7 @@ import { vortexInstallDecision } from '../vortex.ts';
 
 export const SQAA_HOOK_FEATURE_ID = 'sonar-sqaa-hook';
 export const SQAA_INSTRUCTIONS_SUBFEATURE_ID = 'sqaa-instructions';
+export const SQAA_INSTRUCTIONS_GLOBAL_SUBFEATURE_ID = 'sqaa-instructions-global';
 const SQAA_INSTRUCTIONS_MARKER = 'sonarqube-agentic-analysis-protocol';
 
 export const SQAA_INSTRUCTIONS_BODY = `# Vortex analysis protocol
@@ -57,21 +59,29 @@ Per-edit hooks run faster STANDARD analysis. End-of-turn analysis must always us
 
 Non-negotiable rules:
 
-1. Mid-turn edits do **not** need Vortex analysis — only the final on-disk state matters. Skipping Vortex analysis at end-of-turn is a protocol violation.
-2. Run Vortex analysis **before** sending your final reply, marking the task done, or handing control back to the user.
-3. If Vortex analysis reports issues on lines you touched in this turn, fix them, then re-run Vortex analysis on the same scope (change set or explicit file list). Repeat until clean (or only pre-existing findings on lines you did not touch remain). Pre-existing findings on untouched lines are out of scope — do not "fix" them unless the user asked.
-4. If Vortex analysis is skipped (no SonarQube Cloud connection, or no project configured), state the skip reason to the user once and continue — do not retry.
-5. Do not suppress, summarize away, or omit Vortex analysis findings from your reply. Surface them verbatim.
+1. **Overrides every rule below:** if Vortex analysis reports that no project is configured, discard the output, do not run it again this session, and say **nothing** about it — no skip notice, no mention of Vortex or SonarQube. Reply as if this protocol did not exist. The only exception: once the user asks for Vortex analysis or configures a project, run it again and report any error.
+2. Mid-turn edits do **not** need Vortex analysis — only the final on-disk state matters. Skipping Vortex analysis at end-of-turn is a protocol violation.
+3. Run Vortex analysis **before** sending your final reply, marking the task done, or handing control back to the user.
+4. If Vortex analysis reports issues on lines you touched in this turn, fix them, then re-run Vortex analysis on the same scope (change set or explicit file list). Repeat until clean (or only pre-existing findings on lines you did not touch remain). Pre-existing findings on untouched lines are out of scope — do not "fix" them unless the user asked.
+5. If Vortex analysis is skipped for any other reason (e.g. no SonarQube Cloud connection), state the skip reason to the user once and continue — do not retry.
+6. Do not suppress, summarize away, or omit Vortex analysis findings from your reply. Surface them verbatim.
 `;
 
 /** End-of-turn SQAA instructions, written by each agent into its own rules format. */
 export function createSqaaInstructionsSubfeature<TOptions extends IntegrateAgentOptions>(
   resources: ResourceDeclaration[],
+  onlyScope?: IntegrationScope,
 ): SubfeatureDeclaration<TOptions> {
+  const globalOnly = onlyScope === 'global';
+
   return {
-    id: SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+    id: globalOnly ? SQAA_INSTRUCTIONS_GLOBAL_SUBFEATURE_ID : SQAA_INSTRUCTIONS_SUBFEATURE_ID,
     displayName: 'Vortex analysis instructions',
-    shouldInstall: ({ options }) => vortexInstallDecision(options.vortexDisposition),
+    shouldInstall: ({ options, scope }) =>
+      onlyScope !== undefined && scope !== onlyScope
+        ? skip()
+        : vortexInstallDecision(options.vortexDisposition),
+    migrationEligible: () => !globalOnly,
     resources,
   };
 }

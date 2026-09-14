@@ -28,7 +28,7 @@ import {
   isContextAugmentationSkipped,
   printSessionStartContext,
 } from '@/commands/integrate/_common/context-augmentation.ts';
-import { resolveAuth, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
 import logger from '@/core/observability/logger.ts';
@@ -90,7 +90,12 @@ async function resolveSessionStartContext(
     return null;
   }
 
-  const auth = await resolveAuth().catch(() => null);
+  const authResult = await ctx.resolveAuth();
+  if (authResult.isErr()) {
+    logSkip(authResult.error.message);
+    return null;
+  }
+  const auth = authResult.value;
   if (!auth) {
     logSkip('not authenticated');
     return null;

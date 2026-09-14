@@ -25,11 +25,11 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { VORTEX_HOOK_MARKER } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
-import { SQAA_INSTRUCTIONS_SUBFEATURE_ID } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
 import {
-  VORTEX_FEATURE_ID,
-  VORTEX_GLOBAL_SKIP_MESSAGE,
-} from '@/commands/integrate/_common/vortex.ts';
+  SQAA_INSTRUCTIONS_GLOBAL_SUBFEATURE_ID,
+  SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+} from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
+import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import type { CliState } from '@/core/state/state.ts';
 
@@ -548,7 +548,7 @@ describe('integrate antigravity', () => {
     );
 
     it(
-      'does not install Vortex without a project key even when entitled',
+      'installs Vortex without a project key when entitled',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -567,14 +567,14 @@ describe('integrate antigravity', () => {
         });
 
         expect(result.exitCode).toBe(0);
-        expect(harness.cwd.exists(...PROJECT_SQAA_RULE_PATH)).toBe(false);
-        expect(findAntigravityFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
+        expectAntigravityAlwaysOnRule(harness.cwd.file(...PROJECT_SQAA_RULE_PATH).asText());
+        expect(findAntigravityFeature(harness, VORTEX_FEATURE_ID)?.scope).toBe('project');
       },
       { timeout: 30000 },
     );
 
     it(
-      'skips Vortex on global install with the consistent notice when entitled',
+      'writes the SQAA rules into the global GEMINI.md on a global install when entitled',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -594,8 +594,16 @@ describe('integrate antigravity', () => {
         });
 
         expect(result.exitCode).toBe(0);
-        expect(findAntigravityFeature(harness, VORTEX_FEATURE_ID, 'global')).toBeUndefined();
-        expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_GLOBAL_SKIP_MESSAGE);
+        // Antigravity has no global rules directory, so the protocol goes into
+        // the user's shared GEMINI.md rather than a rule file.
+        expect(harness.cwd.exists(...PROJECT_SQAA_RULE_PATH)).toBe(false);
+        expect(harness.userHome.file(...GLOBAL_GEMINI_MD_PATH).asText()).toContain(
+          '# Vortex analysis protocol',
+        );
+        const vortexFeature = findAntigravityFeature(harness, VORTEX_FEATURE_ID, 'global');
+        expect(vortexFeature?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
+          SQAA_INSTRUCTIONS_GLOBAL_SUBFEATURE_ID,
+        ]);
       },
       { timeout: 30000 },
     );
