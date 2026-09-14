@@ -24,7 +24,7 @@ The two inputs are separate because the single boolean made _collect but do not 
 **Field completeness** (`isIdentityCompleteForConnection`, in `src/core/telemetry/identity-fetch.ts`):
 
 - **Cloud** — requires `user_uuid` and `organization_uuid_v4`. `enterprise_uuid` is optional: orgs that are not in an enterprise still evaluate LaunchDarkly with user + organization. A Cloud connection that already has user+org but `enterpriseUuid === undefined` (state written before this field existed) is still enriched once.
-- **Server** — requires `sqs_installation_id` only; `user_uuid` is optional on older SonarQube Server versions that do not return it (see `TelemetryEventPayload`). SonarQube Server has no enterprise context.
+- **Server** — requires `sqs_installation_id` only. SonarQube Server has no enterprise context.
 
 **`user_uuid` policy** — always attempted for cloud and server (login and env-var auth) whenever not already known. `recordConnectionFromAuth()` persists `userUuid` on the connection (`string` or explicit `null` after a successful fetch), for both auth sources. Telemetry skips re-fetch when `conn.userUuid !== undefined`. A successful API response with no user id is cached as confirmed-absent (`userUuid: null` in the disk entry) so old servers do not cause infinite re-fetch; transient API failures are not cached and retry on the next command.
 
@@ -36,7 +36,7 @@ The two inputs are separate because the single boolean made _collect but do not 
 
 `src/core/telemetry/project-uuid.ts` owns both halves:
 
-- **Resolver** — `resolveProjectUuid(auth, projectKey)`: cache-then-API, never rejects, short-circuits when telemetry is disabled. Permanent disk cache (`project-uuid-cache.json`) keyed by `` `${serverUrl}::${projectKey}` `` — deliberately _not_ by auth fingerprint, since the legacy id is a property of the project, not the caller. Resolved-but-empty is cached as `null` (stop retrying); transient failures are not cached (retry next call).
-- **Ambient context** — the project is a _per-invocation_ fact held in a module-level slot rather than threaded through call signatures. `noteProject(auth, projectKey)` records it (synchronous, no I/O, no-ops on a missing key); `currentProjectUuid()` resolves it, memoized to at most one API call per process; `buildCommandExecutedFact` is the only consumer. Tests **must** call `resetProjectUuidContextForTests()` in `beforeEach` — module state outlives individual tests in a file.
+- **Resolver** — `resolveProjectUuid(auth, projectKey)`; the caching strategy (permanent disk cache, keyed by project rather than by caller) and edge cases are documented in the function's own header comment.
+- **Ambient context** — the project key is held as per-invocation ambient state (`noteProject()` / `currentProjectUuid()`) rather than threaded through call signatures; `buildCommandExecutedFact` is the only consumer. Tests **must** call `resetProjectUuidContextForTests()` in `beforeEach` — module state outlives individual tests in a file.
 
 Call `noteProject` wherever a project key resolves and auth is in hand: `resolveSqaaAuthAndProject` (`analyze/sqaa-auth.ts` — the choke point for bare `sonar analyze`, `analyze agentic`, and `verify`), `analyze/dependency-risks.ts`, `remediate/index.ts`, the three `hook/` handlers (`agent-post-tool-use`, `codex-post-tool-use`, `git-pre-commit`), and `framework/features/install-integration.ts` (project scope only, from the first non-empty `attrs.projectKey` — so a secrets-only `integrate git` and `--global` report `null`). `sonar run mcp` deliberately does not note it: it starts a long-running server, so its `CliCommandExecuted` may never fire.
