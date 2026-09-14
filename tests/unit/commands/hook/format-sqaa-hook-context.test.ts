@@ -78,7 +78,7 @@ describe('formatSqaaJsonReportForHook', () => {
     );
 
     expect(text).not.toContain('no issues found');
-    expect(text).toContain('excluded (binary or oversized)');
+    expect(text).toContain('excluded (binary, oversized, or outside the repository)');
     expect(text).toContain('image.png');
     expect(text).toContain('binary');
   });
