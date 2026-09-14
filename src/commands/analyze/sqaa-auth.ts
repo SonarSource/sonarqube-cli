@@ -37,12 +37,8 @@ const LARGE_CHANGESET_HINT =
   '  --depth STANDARD  faster analysis (change-set / multi-file default is DEEP)';
 
 /**
- * Where a Vortex analysis request goes, once auth has been validated: the organization to
- * address and the client to send on. `orgKey` is Cloud-only, since Server has no
- * organizations and its A3S hub forces the request onto the instance's default one.
- *
- * Holds no credentials: `client` already carries them, so keeping a second copy here would
- * be a competing source of truth for the same request.
+ * `orgKey` is Cloud-only: Server has no organizations and its A3S hub forces the instance default.
+ * No credentials here — `client` already carries them.
  */
 export interface SqaaAuth {
   orgKey?: string;
