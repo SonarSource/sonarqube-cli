@@ -34,9 +34,13 @@ Three rules hold across every one of these clients, with no exception — keep i
 **Every API client is constructed from a `SonarHttpClient`**, never from a `(serverUrl, token)` pair
 it turns into one itself. An authenticated handler takes that transport from `ctx.httpClient`
 (`CommandAuthenticatedInvocationContext`, built lazily from `ctx.auth` and memoised for the
-invocation) rather than constructing one, so there is a single way to obtain a client. Only code
-with no authenticated context (hook handlers that resolve auth themselves and fail open) builds
-one inline and threads it down as a parameter. Sharing that instance buys uniformity, not caching:
+invocation) rather than constructing one, so there is a single way to obtain a client. Hook
+handlers with no authenticated context (they resolve auth themselves and fail open) build one
+inline and thread it down as a parameter, and so do framework/integrate helpers that take `auth`
+rather than a context (`integrate/_common/preflight-summary.ts`, `integrate/_common/vortex.ts`,
+`integrate/git/tools/git-integration-subfeatures.ts`, `core/vortex/entitlement.ts`) — threading a
+context through those call chains is a separate, larger change, tracked as out of scope on
+CLI-1072. Sharing that instance buys uniformity, not caching:
 the transport holds no per-request state, and the cache that matters lives on `OrganizationsClient`,
 so it is the next rule, not this one, that keeps a lookup from being repeated. It also does not yet
 buy test injection: the getter memoises into a private field with no constructor parameter or
