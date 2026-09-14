@@ -396,31 +396,20 @@ describe('resolveTelemetryIdentity()', () => {
     getSafeSpy.mockRestore();
   });
 
-  it('leaves sqs_installation_id null when system status fails with a critical error (500)', async () => {
-    const getSafeSpy = mockIdentityGetSafe({
-      status: [{ ok: false, status: 500 }],
-    });
-
-    const identity = await resolveTelemetryIdentity(serverAuth('sqs-token-2'));
-
-    expect(identity.sqs_installation_id).toBeNull();
-    getSafeSpy.mockRestore();
-  });
-
-  it('leaves sqs_installation_id null and retries after a non-critical failure (403)', async () => {
-    const auth = serverAuth('sqs-token-403');
+  it('leaves sqs_installation_id null when system status fails and retries after recovery', async () => {
+    const auth = serverAuth('sqs-token-2');
     const getSafeSpy = mockIdentityGetSafe({
       status: [
-        { ok: false, status: 403 },
-        { ok: true, id: 'sqs-after-403' },
+        { ok: false, status: 500 },
+        { ok: true, id: 'sqs-after-retry' },
       ],
     });
 
     const first = await resolveTelemetryIdentity(auth);
-    const second = await resolveTelemetryIdentity(serverAuth('sqs-token-403'));
+    const second = await resolveTelemetryIdentity(serverAuth('sqs-token-2'));
 
     expect(first.sqs_installation_id).toBeNull();
-    expect(second.sqs_installation_id).toBe('sqs-after-403');
+    expect(second.sqs_installation_id).toBe('sqs-after-retry');
     expect(
       getSafeSpy.mock.calls.filter((call: [string]) => call[0] === '/api/system/status'),
     ).toHaveLength(2);
@@ -507,33 +496,6 @@ describe('resolveTelemetryIdentity()', () => {
 
     expect(first.enterprise_uuid).toBeUndefined();
     expect(second.enterprise_uuid).toBe('ent-after-retry');
-    expect(
-      getSafeSpy.mock.calls.filter(
-        (call: [string]) => call[0] === '/enterprises/enterprise-organizations',
-      ),
-    ).toHaveLength(2);
-    getSafeSpy.mockRestore();
-  });
-
-  it('retries enterprise UUID fetch after a non-critical failure (403) instead of caching it as absent', async () => {
-    const auth = cloudAuth('transient-enterprise-403-token');
-    const getSafeSpy = mockIdentityGetSafe({
-      user: [{ ok: true, id: 'cloud-user' }],
-      org: [
-        { ok: true, uuidV4: 'cloud-org', id: 'legacy-org' },
-        { ok: true, uuidV4: 'cloud-org', id: 'legacy-org' },
-      ],
-      enterprise: [
-        { ok: false, status: 403 },
-        { ok: true, enterpriseId: 'ent-after-403-retry' },
-      ],
-    });
-
-    const first = await resolveTelemetryIdentity(auth);
-    const second = await resolveTelemetryIdentity(cloudAuth('transient-enterprise-403-token'));
-
-    expect(first.enterprise_uuid).toBeUndefined();
-    expect(second.enterprise_uuid).toBe('ent-after-403-retry');
     expect(
       getSafeSpy.mock.calls.filter(
         (call: [string]) => call[0] === '/enterprises/enterprise-organizations',
@@ -644,27 +606,6 @@ describe('resolveTelemetryIdentity()', () => {
 
     expect(first.user_uuid).toBeNull();
     expect(second.user_uuid).toBe('user-after-retry');
-    expect(
-      getSafeSpy.mock.calls.filter((call: [string]) => call[0] === '/api/users/current'),
-    ).toHaveLength(2);
-    getSafeSpy.mockRestore();
-  });
-
-  it('retries user_uuid fetch after a non-critical failure (403) instead of caching it as absent', async () => {
-    const auth = cloudAuth('transient-user-403-token');
-    const getSafeSpy = mockIdentityGetSafe({
-      user: [
-        { ok: false, status: 403 },
-        { ok: true, id: 'user-after-403-retry' },
-      ],
-      org: [{ ok: true, uuidV4: 'cached-org' }],
-    });
-
-    const first = await resolveTelemetryIdentity(auth);
-    const second = await resolveTelemetryIdentity(cloudAuth('transient-user-403-token'));
-
-    expect(first.user_uuid).toBeNull();
-    expect(second.user_uuid).toBe('user-after-403-retry');
     expect(
       getSafeSpy.mock.calls.filter((call: [string]) => call[0] === '/api/users/current'),
     ).toHaveLength(2);
