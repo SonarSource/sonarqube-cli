@@ -582,6 +582,34 @@ describe('quality-gate status <file> — coverage/duplications', () => {
   );
 
   it(
+    'shows the auto-detected pull request scope in the file-scoped table output',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('OK')
+            .withConditions([])
+            .withComponentsTreeItems([{ path: 'src/checkout.ts', qualifier: 'FIL' }])
+            .withPullRequests([{ key: '42', branch: 'feature-x' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'a.txt', 'a');
+      git(['checkout', '-b', 'feature-x'], harness.cwd.path);
+
+      const result = await harness.run(
+        `quality-gate status src/checkout.ts --project my-project --format table`,
+      );
+
+      expect(result.stdout).toContain('Pull Request: 42 (auto-detected from branch feature-x)');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'a nonexistent file path is reported clearly and exits 2, not treated as zero conditions',
     async () => {
       const server = await harness

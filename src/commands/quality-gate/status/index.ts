@@ -224,10 +224,13 @@ async function buildFileScopedResult(
   file: string,
   params: FileScopedResultParams,
 ): Promise<QualityGateResult> {
-  const componentKey = await resolveFileComponentKey(params.client, params.projectKey, file, {
-    branch: params.branch,
-    pullRequest: params.pullRequest,
-  });
+  const { componentKey, qualifier } = await resolveFileComponentKey(
+    params.client,
+    params.projectKey,
+    file,
+    { branch: params.branch, pullRequest: params.pullRequest },
+  );
+  const isDirectory = qualifier === 'DIR';
 
   const projectStatus = await fetchProjectStatus(
     params.client,
@@ -241,20 +244,18 @@ async function buildFileScopedResult(
   const metricsClient = new MetricsClient(params.client);
   const metrics = rawConditions.length > 0 ? await metricsClient.searchMetrics().orThrow() : [];
 
-  const { conditions: fileConditions, isDirectory } = await fetchFileScopedConditions(
-    rawConditions,
-    {
-      client: params.client,
-      projectKey: params.projectKey,
-      componentKey,
-      orgKey: params.orgKey,
-      metrics,
-      category: params.category,
-      top: params.top,
-      branch: params.branch,
-      pullRequest: params.pullRequest,
-    },
-  );
+  const fileConditions = await fetchFileScopedConditions(rawConditions, {
+    client: params.client,
+    projectKey: params.projectKey,
+    componentKey,
+    isDirectory,
+    orgKey: params.orgKey,
+    metrics,
+    category: params.category,
+    top: params.top,
+    branch: params.branch,
+    pullRequest: params.pullRequest,
+  });
   const applicableConditions = fileConditions.filter((c) => c.actualValue !== undefined);
   const conditions = params.all
     ? applicableConditions
@@ -263,7 +264,7 @@ async function buildFileScopedResult(
 
   if (params.category && !scopedCategoriesFor(isDirectory).has(params.category)) {
     params.console.warn(
-      `Category '${params.category}' has no file-level breakdown; showing conditions only.`,
+      `Category '${params.category}' has no ${isDirectory ? 'directory' : 'file'}-level breakdown; showing conditions only.`,
     );
   } else if (
     params.category &&

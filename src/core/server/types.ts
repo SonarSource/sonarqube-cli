@@ -195,6 +195,15 @@ export interface ComponentTreeMeasure {
   periods?: ComponentTreeMeasurePeriod[];
 }
 
+export interface ComponentSummary {
+  key: string;
+  qualifier: string;
+}
+
+export interface ComponentShowResponse {
+  component: ComponentSummary;
+}
+
 export interface ComponentTreeComponent {
   key: string;
   name: string;

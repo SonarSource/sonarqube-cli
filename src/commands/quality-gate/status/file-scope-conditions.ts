@@ -39,6 +39,7 @@ export interface FetchFileScopedConditionsParams {
   client: SonarHttpClient;
   projectKey: string;
   componentKey: string;
+  isDirectory: boolean;
   orgKey?: string;
   metrics: Metric[];
   category?: string;
@@ -74,21 +75,16 @@ const COMPARATOR_FAILS: Partial<Record<string, (actual: number, threshold: numbe
   NE: (actual, threshold) => actual !== threshold,
 };
 
-export interface FileScopedConditionsResult {
-  conditions: QualityGateConditionSummary[];
-  isDirectory: boolean;
-}
-
 export async function fetchFileScopedConditions(
   rawConditions: QualityGateCondition[],
   params: FetchFileScopedConditionsParams,
-): Promise<FileScopedConditionsResult> {
+): Promise<QualityGateConditionSummary[]> {
   const applicable = rawConditions.filter((condition) => {
     const category = METRIC_CATEGORIES.get(condition.metricKey);
     return !!category && FILE_SCOPED_CATEGORIES.has(category);
   });
   if (applicable.length === 0) {
-    return { conditions: [], isDirectory: false };
+    return [];
   }
 
   const measuresClient = new MeasuresClient(params.client);
@@ -101,17 +97,16 @@ export async function fetchFileScopedConditions(
       pullRequest: params.pullRequest,
     })
     .orThrow();
-  const isDirectory = component.qualifier === 'DIR';
 
   const metricsByKey = new Map(params.metrics.map((metric) => [metric.key, metric]));
   const context: FileScopeContext = {
     measuresClient,
     issuesClient,
     caches: { issues: new Map(), security: new Map() },
-    isDirectory,
+    isDirectory: params.isDirectory,
   };
 
-  const conditions = await Promise.all(
+  return Promise.all(
     applicable.map((condition) =>
       buildFileConditionSummary(
         condition,
@@ -122,7 +117,6 @@ export async function fetchFileScopedConditions(
       ),
     ),
   );
-  return { conditions, isDirectory };
 }
 
 async function buildFileConditionSummary(

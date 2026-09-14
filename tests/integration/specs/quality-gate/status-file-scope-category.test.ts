@@ -271,4 +271,43 @@ describe('quality-gate status <file> — --category', () => {
     },
     { timeout: 15000 },
   );
+
+  it(
+    'does not warn about drillability for a directory whose gate has no file-scoped conditions at all',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([
+          { key: 'new_sca_count_any_issue', type: 'INT', name: 'Count of new dependency risks' },
+        ])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'new_sca_count_any_issue',
+                comparator: 'GT',
+                errorThreshold: '0',
+              },
+            ])
+            .withComponentsTreeItems([{ path: 'src/checkout', qualifier: 'DIR' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status src/checkout --project my-project --category coverage --format json`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).not.toContain('has no');
+      expect(result.stderr).not.toContain('No failing conditions match');
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.status).toBe('NOT_APPLICABLE');
+      expect(parsed.qualityGate.conditions).toEqual([]);
+    },
+    { timeout: 15000 },
+  );
 });
