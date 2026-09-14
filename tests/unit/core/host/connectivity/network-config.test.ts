@@ -347,30 +347,17 @@ describe('buildFetchNetworkOptions', () => {
   });
 
   describe('noProxy bypass', () => {
-    it('skips proxy when hostname matches noProxy exactly', () => {
+    it.each([
+      ['hostname matches exactly', 'sonar.internal.corp.com', 'https://sonar.internal.corp.com/api'],
+      ['hostname matches suffix', 'corp.com', 'https://sonar.corp.com/api'],
+      ['noProxy is wildcard *', '*', 'https://sonar.example.com/api'],
+      ['* in comma-separated list', 'localhost,*', 'https://anything.example.com/api'],
+    ])('skips proxy when %s', (_, noProxy, url) => {
       const config = makeConfig({
         SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
-        SONAR_NO_PROXY: 'sonar.internal.corp.com',
+        SONAR_NO_PROXY: noProxy,
       });
-      const opts = buildFetchNetworkOptions('https://sonar.internal.corp.com/api', config);
-      expect(opts.proxy).toBeUndefined();
-    });
-
-    it('skips proxy when hostname matches noProxy suffix', () => {
-      const config = makeConfig({
-        SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
-        SONAR_NO_PROXY: 'corp.com',
-      });
-      const opts = buildFetchNetworkOptions('https://sonar.corp.com/api', config);
-      expect(opts.proxy).toBeUndefined();
-    });
-
-    it('skips proxy when noProxy is wildcard *', () => {
-      const config = makeConfig({
-        SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
-        SONAR_NO_PROXY: '*',
-      });
-      const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
+      const opts = buildFetchNetworkOptions(url, config);
       expect(opts.proxy).toBeUndefined();
     });
 
@@ -419,15 +406,6 @@ describe('buildFetchNetworkOptions', () => {
       expect(buildFetchNetworkOptions('https://corp.com/api', config).proxy).toBe(
         'https://proxy:8080',
       );
-    });
-
-    it('* as one entry in a comma-separated list matches everything', () => {
-      const config = makeConfig({
-        SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
-        SONAR_NO_PROXY: 'localhost,*',
-      });
-      const opts = buildFetchNetworkOptions('https://anything.example.com/api', config);
-      expect(opts.proxy).toBeUndefined();
     });
 
     it('port-specific noProxy entry only bypasses matching port', () => {
