@@ -195,6 +195,15 @@ export interface ComponentTreeMeasure {
   periods?: ComponentTreeMeasurePeriod[];
 }
 
+export interface ComponentSummary {
+  key: string;
+  qualifier: string;
+}
+
+export interface ComponentShowResponse {
+  component: ComponentSummary;
+}
+
 export interface ComponentTreeComponent {
   key: string;
   name: string;
@@ -208,6 +217,10 @@ export interface ComponentTreeResponse {
   paging: { pageIndex: number; pageSize: number; total: number };
   baseComponent: ComponentTreeComponent;
   components: ComponentTreeComponent[];
+}
+
+export interface ComponentMeasuresResponse {
+  component: ComponentTreeComponent;
 }
 
 export interface ComponentsTreeItem {

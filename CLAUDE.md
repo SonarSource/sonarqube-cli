@@ -40,6 +40,7 @@ The rest of this documentation loads on demand, never at session start. Content 
 
 - `src/commands/CLAUDE.md` — command framework (lifecycle stages, telemetry recording, root help) and per-command notes.
 - `src/commands/integrate/CLAUDE.md` — agent secrets hooks and Vortex (SQAA + Context Augmentation) across Claude, Codex, Cursor, Copilot and Antigravity.
+- `src/commands/quality-gate/CLAUDE.md` — `quality-gate status`, including file/directory scoping.
 - `src/core/framework/CLAUDE.md` — the declarative integration engine behind `sonar integrate`.
 - `src/core/telemetry/CLAUDE.md` — events, egress, identity resolution, `project_uuid`.
 - `src/core/update/CLAUDE.md` — the self-update lifecycle and its migrations.

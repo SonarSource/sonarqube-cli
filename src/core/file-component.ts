@@ -24,16 +24,21 @@ import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 
+export interface ResolvedFileComponent {
+  componentKey: string;
+  qualifier: string;
+}
+
 /**
- * Resolve a --file value to its exact SonarQube component key. Throws InvalidOptionError
- * when it doesn't resolve to exactly one file or directory.
+ * Resolve a --file value to its exact SonarQube component key and qualifier. Throws
+ * InvalidOptionError when it doesn't resolve to exactly one file or directory.
  */
 export async function resolveFileComponentKey(
   client: SonarHttpClient,
   projectKey: string,
   file: string,
   scope: { branch?: string; pullRequest?: string } = {},
-): Promise<string> {
+): Promise<ResolvedFileComponent> {
   const componentsClient = new ComponentsClient(client);
   const cleanedFile = normalizeFileValue(file);
 
@@ -50,12 +55,13 @@ async function resolveByExactPath(
   file: string,
   path: string,
   scope: { branch?: string; pullRequest?: string },
-): Promise<string> {
+): Promise<ResolvedFileComponent> {
   const componentKey = `${projectKey}:${path}`;
-  if (!(await componentsClient.componentExists(componentKey, scope).orThrow())) {
+  const component = await componentsClient.getComponent(componentKey, scope).orThrow();
+  if (!component) {
     throw notFoundError(file, projectKey);
   }
-  return componentKey;
+  return { componentKey, qualifier: component.qualifier };
 }
 
 async function resolveByNameAlone(
@@ -64,7 +70,7 @@ async function resolveByNameAlone(
   file: string,
   name: string,
   scope: { branch?: string; pullRequest?: string },
-): Promise<string> {
+): Promise<ResolvedFileComponent> {
   // ps=1 is enough — paging.total isn't affected by ps.
   const result = await componentsClient
     .searchComponentsByName(projectKey, name, 'FIL,UTS,DIR', 1, scope)
@@ -81,7 +87,8 @@ async function resolveByNameAlone(
     );
   }
 
-  return `${projectKey}:${result.components[0].path}`;
+  const component = result.components[0];
+  return { componentKey: `${projectKey}:${component.path}`, qualifier: component.qualifier };
 }
 
 function notFoundError(file: string, projectKey: string): InvalidOptionError {

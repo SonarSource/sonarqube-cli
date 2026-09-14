@@ -29,9 +29,10 @@ import type {
   QualityGateBreakdownEntry,
   QualityGateConditionSummary,
   QualityGateMetricBreakdown,
+  QualityGateViewModel,
 } from './condition-summary.ts';
 import type { QualityGateScope } from './scope.ts';
-import type { QualityGateVerdict } from './verdict.ts';
+import type { FileQualityGateVerdict } from './verdict.ts';
 
 /** Fits "Coverage on New Code" without padding. */
 const MIN_CONDITION_LABEL_WIDTH = 20;
@@ -42,10 +43,11 @@ const BREAKDOWN_VALUE_GAP = 2;
 /** One indent level deeper than a condition line. */
 const BREAKDOWN_INDENT = '        ';
 
-const VERDICT_BRACKETS: Record<QualityGateVerdict, string> = {
+const VERDICT_BRACKETS: Record<FileQualityGateVerdict, string> = {
   OK: '[✓ Passed]',
   ERROR: '[✗ Failed]',
   NOT_COMPUTED: '[⚠ Not computed]',
+  NOT_APPLICABLE: '[· Not applicable]',
 };
 
 /**
@@ -59,46 +61,76 @@ const INVERSE_COMPARATOR_SYMBOLS: Record<string, string> = {
   NE: '=',
 };
 
-export interface QualityGateTableViewModel {
-  verdict: QualityGateVerdict;
-  project: string;
-  scope: QualityGateScope;
-  conditions: QualityGateConditionSummary[];
+export function formatQualityGateTable(vm: QualityGateViewModel): string {
+  switch (vm.subject.kind) {
+    case 'project':
+      return formatProjectTable(vm.verdict, vm.subject.key, vm.scope, vm.conditions);
+    case 'file':
+      return formatFileTable(vm.verdict, vm.subject.path, vm.scope, vm.conditions);
+  }
 }
 
-export function formatQualityGateTable(vm: QualityGateTableViewModel): string {
+function formatProjectTable(
+  verdict: FileQualityGateVerdict,
+  project: string,
+  scope: QualityGateScope,
+  conditions: QualityGateConditionSummary[],
+): string {
   const lines: string[] = [
-    `=== Quality Gate: ${formatVerdictBracket(vm.verdict)} ===`,
-    `Project:      ${vm.project}`,
-    formatScopeLine(vm.scope),
+    `=== Quality Gate: ${formatVerdictBracket(verdict)} ===`,
+    `Project:      ${project}`,
+    formatScopeLine(scope),
   ];
 
-  if (vm.verdict === 'NOT_COMPUTED') {
-    lines.push('', `${cyan('ℹ')}  ${notComputedHint(vm.scope)}`);
+  if (verdict === 'NOT_COMPUTED') {
+    lines.push('', `${cyan('ℹ')}  ${notComputedHint(scope)}`);
   }
-
-  if (vm.conditions.length > 0) {
-    const [values] = padColumns(
-      [vm.conditions.map((condition) => condition.formattedActualValue ?? '—')],
-      [],
-      CONDITION_VALUE_GAP,
-    );
-    const [labels] = padColumns(
-      [vm.conditions.map((condition) => condition.metricName)],
-      [MIN_CONDITION_LABEL_WIDTH],
-      CONDITION_LABEL_GAP,
-    );
-    lines.push(
-      '',
-      'Conditions:',
-      ...vm.conditions.flatMap((condition, i) => [
-        formatConditionLine(condition, values[i], labels[i]),
-        ...formatBreakdownLines(condition),
-      ]),
-    );
+  if (conditions.length > 0) {
+    lines.push('', 'Conditions:', ...formatConditionsBlock(conditions));
   }
 
   return lines.join('\n');
+}
+
+function formatFileTable(
+  verdict: FileQualityGateVerdict,
+  file: string,
+  scope: QualityGateScope,
+  conditions: QualityGateConditionSummary[],
+): string {
+  const lines: string[] = [
+    `Quality Gate · ${file} ${formatVerdictBracket(verdict)}`,
+    formatScopeLine(scope),
+  ];
+
+  if (verdict === 'NOT_COMPUTED') {
+    lines.push('', `${cyan('ℹ')}  ${notComputedHint(scope)}`);
+  } else if (verdict === 'NOT_APPLICABLE') {
+    lines.push('', 'No quality gate conditions apply to this file.');
+  } else if (conditions.length === 0) {
+    lines.push('', 'All applicable conditions are passing (use --all to show them).');
+  } else {
+    lines.push(...formatConditionsBlock(conditions));
+  }
+
+  return lines.join('\n');
+}
+
+export function formatConditionsBlock(conditions: QualityGateConditionSummary[]): string[] {
+  const [values] = padColumns(
+    [conditions.map((condition) => condition.formattedActualValue ?? '—')],
+    [],
+    CONDITION_VALUE_GAP,
+  );
+  const [labels] = padColumns(
+    [conditions.map((condition) => condition.metricName)],
+    [MIN_CONDITION_LABEL_WIDTH],
+    CONDITION_LABEL_GAP,
+  );
+  return conditions.flatMap((condition, i) => [
+    formatConditionLine(condition, values[i], labels[i]),
+    ...formatBreakdownLines(condition),
+  ]);
 }
 
 function formatScopeLine(scope: QualityGateScope): string {
@@ -111,7 +143,7 @@ function formatScopeLine(scope: QualityGateScope): string {
   return `Branch:       ${scope.value}${scope.kind === 'default' ? ' (default)' : ''}`;
 }
 
-function formatVerdictBracket(verdict: QualityGateVerdict): string {
+function formatVerdictBracket(verdict: FileQualityGateVerdict): string {
   const bracket = VERDICT_BRACKETS[verdict];
   switch (verdict) {
     case 'OK':
@@ -120,6 +152,8 @@ function formatVerdictBracket(verdict: QualityGateVerdict): string {
       return red(bracket);
     case 'NOT_COMPUTED':
       return yellow(bracket);
+    case 'NOT_APPLICABLE':
+      return cyan(bracket);
   }
 }
 
