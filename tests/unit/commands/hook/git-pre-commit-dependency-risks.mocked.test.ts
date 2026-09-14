@@ -24,6 +24,7 @@ import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as scaInstall from '@/core/host/install/sca-scanner.ts';
+import * as projectInfo from '@/core/project-info.ts';
 
 import { ScaScanOrchestrator } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
 import type {
@@ -182,9 +183,14 @@ describe('runDepRisksStage', () => {
   let resolveScaScannerBinaryPathSpy: ReturnType<typeof spyOn>;
   let watchPatternsSpy: ReturnType<typeof spyOn>;
   let orchestratorRunSpy: ReturnType<typeof spyOn>;
+  let discoverProjectSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     fake = new FakeConsole();
+    discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
+      projectRoot: '/repo',
+      configSources: [],
+    });
     resolveScaScannerBinaryPathSpy = spyOn(
       scaInstall,
       'resolveScaScannerBinaryPath',
@@ -198,6 +204,7 @@ describe('runDepRisksStage', () => {
   });
 
   afterEach(() => {
+    discoverProjectSpy.mockRestore();
     resolveScaScannerBinaryPathSpy.mockRestore();
     watchPatternsSpy.mockRestore();
     orchestratorRunSpy.mockRestore();

@@ -40,7 +40,9 @@ import {
 } from '@/core/host/install/sca-scanner.ts';
 import { ResolveOnlySecretsInstaller } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
+import { discoverProject } from '@/core/project-info.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
+import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { countSelectedRisks } from '../analyze/dependency-risk-helpers/count-selected-risks.ts';
@@ -63,10 +65,23 @@ const HOOK_STATUS_FILTER = 'new';
 const HOOK_MIN_SEVERITY: Severity = 'MEDIUM';
 
 export interface DepRisksStageOptions {
+  /** The hook's baked `-p`, if any. Absent means "discover one", not "there is none". */
   project?: string;
   changedFiles: string[];
   auth: ResolvedAuth;
   ctx: CommandInvocationContext;
+}
+
+async function resolveProjectKey(options: DepRisksStageOptions): Promise<string | undefined> {
+  if (options.project) {
+    return options.project;
+  }
+  const discovered = await discoverProject(process.cwd(), {
+    auth: options.auth,
+    silent: true,
+    console: options.ctx.console,
+  });
+  return discovered.projectKey;
 }
 
 export async function runDepRisksStage(options: DepRisksStageOptions): Promise<void> {
@@ -84,7 +99,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
     return;
   }
 
-  const project = options.project;
+  const project = await resolveProjectKey(options);
   if (!project) {
     logger.warn('Dependency-risks hook: no project key resolved, skipping.');
     console.warn(
@@ -93,6 +108,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
     );
     return;
   }
+  noteProject(options.auth, project);
 
   const filter = buildRiskFilter(HOOK_STATUS_FILTER, HOOK_MIN_SEVERITY);
   if (!filter) {

@@ -22,12 +22,9 @@
 // when --dependency-risks is set, runs a dependency-risks scan as a follow-up stage.
 // Replaces the shell logic that was previously embedded in the git hook script.
 
-import { type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { spawnProcess } from '@/core/process/process.ts';
-import { discoverProject } from '@/core/project-info.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
-import type { Console } from '@/core/ui/console.ts';
 
 import { runDepRisksStage } from './git-pre-commit-dependency-risks.ts';
 import { runCommitSecretsStage } from './git-pre-commit-secrets.ts';
@@ -38,34 +35,12 @@ export interface GitPreCommitOptions {
   dependencyRisks?: boolean;
 }
 
-/**
- * Resolves the project key for --dependency-risks, falling back to project
- * discovery when `-p` was not passed. A secrets-only pre-commit hook is
- * intentionally project-agnostic and never bakes a `-p`, so the fallback is
- * skipped entirely when --dependency-risks is not set.
- */
-async function resolveDepRisksProjectKey(
-  options: GitPreCommitOptions,
-  auth: ResolvedAuth | null,
-  console: Console,
-): Promise<string | undefined> {
-  if (options.project) {
-    return options.project;
-  }
-  if (!options.dependencyRisks || !auth) {
-    return undefined;
-  }
-  const discovered = await discoverProject(process.cwd(), { auth, silent: true, console });
-  return discovered.projectKey;
-}
-
 export async function gitPreCommit(
   options: GitPreCommitOptions,
   files: string[],
   ctx: CommandInvocationContext,
 ): Promise<void> {
   const auth = await ctx.resolveAuthOrNull();
-  const projectKey = await resolveDepRisksProjectKey(options, auth, ctx.console);
 
   const stagedFiles = files.length > 0 ? files : await getStagedFiles();
   if (stagedFiles.length === 0) return;
@@ -74,16 +49,13 @@ export async function gitPreCommit(
     throw new MissingDependenciesError(HOOK_INACTIVE_UNAUTHENTICATED);
   }
 
-  // Noted before the stages, not inside the dependency-risks one, so a `-p` passed without
-  // --dependency-risks is still reported. In practice integrate only bakes `-p` into the hook
-  // alongside --dependency-risks, so a secrets-only pre-commit correctly reports null.
-  noteProject(auth, projectKey);
+  noteProject(auth, options.project);
 
   await runCommitSecretsStage(stagedFiles, auth, ctx);
 
   if (options.dependencyRisks) {
     await runDepRisksStage({
-      project: projectKey,
+      project: options.project,
       changedFiles: stagedFiles,
       auth,
       ctx,
