@@ -42,8 +42,8 @@ const CACHE_FILENAME = 'project-uuid-cache.json';
  * this runs in the `postAction` hook, after the command has already printed its result, so a
  * slow server would otherwise look like the CLI hanging at exit (worst for
  * `hook git-pre-commit`, where it would stall a commit). Enforced via the fetch's own
- * `AbortSignal` rather than a `Promise.race`, because racing only caps what we *await* — an
- * open socket keeps the process alive regardless. Only ever bites on the first run for a given
+ * `AbortSignal` rather than a `Promise.race`: racing only caps what we *await*, and an open
+ * socket keeps the process alive regardless. Only ever bites on the first run for a given
  * project; every later run hits the permanent disk cache.
  */
 const RESOLVE_BUDGET_MS = 3_000;
@@ -135,21 +135,21 @@ export async function resolveProjectUuid(
 
     const client = new SonarHttpClient(auth.serverUrl, auth.token);
     const result = await new ComponentsClient(client).getComponentId(projectKey, RESOLVE_BUDGET_MS);
-    // A 404 (`Ok(null)`) is definitive and gets cached; any other failure (`Err`) is
-    // deliberately not cached, so the next command retries. Each attempt is bounded by
-    // RESOLVE_BUDGET_MS, so a persistently hanging server costs that budget once per
-    // project-resolving command rather than once ever. Accepted rather than adding a negative
-    // TTL: every noteProject site sits on a path that already makes its own server calls under
-    // the 30s GET budget (SQAA, SCA, entitlement checks), so in any state where this hangs the
-    // command is already paying an order of magnitude more. A TTL would trade telemetry
-    // completeness — null for the whole TTL after the network recovers — for a latency win
-    // that is noise next to that. Revisit if it shows up in practice.
-    if (result.isOk()) {
+    // Only a resolved id is cached. `Ok(null)` is a 404: the project doesn't exist *yet*, and
+    // a later analysis commonly provisions it. So it retries on the next command instead of
+    // pinning `null` into the permanent, TTL-less cache, same as every other failure. Each
+    // attempt is bounded by RESOLVE_BUDGET_MS, so a persistently hanging server costs that
+    // budget once per project-resolving command rather than once ever. That is accepted
+    // instead of adding a negative TTL: every noteProject site already makes its own server
+    // calls under the 30s GET budget (SQAA, SCA, entitlement checks), so in any state where
+    // this hangs, the command is already paying an order of magnitude more. A TTL would trade
+    // telemetry completeness (null for the whole TTL after the network recovers) for a latency
+    // win that is noise next to that. Revisit if it shows up in practice.
+    if (result.isOk() && result.value !== null) {
       diskCache.entries[entryKey] = result.value;
       writeDiskCache(diskCache);
-      return result.value;
     }
-    return null;
+    return result.isOk() ? result.value : null;
   } catch {
     return null;
   }

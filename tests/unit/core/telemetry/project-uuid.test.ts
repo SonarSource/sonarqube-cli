@@ -138,17 +138,17 @@ describe('resolveProjectUuid()', () => {
     getSafeSpy.mockRestore();
   });
 
-  it('caches a confirmed-absent (resolved but empty) response as null and stops retrying', async () => {
+  it('does not cache a 404 (project not created yet) and retries on the next call', async () => {
     const getSafeSpy = mockProjectUuidGetSafe({
-      component: [{ ok: true }],
+      component: [{ ok: true }, { ok: true, id: 'AV-after-provisioning' }],
     });
 
-    const first = await resolveProjectUuid(auth(), 'proj-confirmed-absent');
-    const second = await resolveProjectUuid(auth(), 'proj-confirmed-absent');
+    const first = await resolveProjectUuid(auth(), 'proj-not-yet-provisioned');
+    const second = await resolveProjectUuid(auth(), 'proj-not-yet-provisioned');
 
     expect(first).toBeNull();
-    expect(second).toBeNull();
-    expect(getSafeSpy).toHaveBeenCalledTimes(1);
+    expect(second).toBe('AV-after-provisioning');
+    expect(getSafeSpy).toHaveBeenCalledTimes(2);
     getSafeSpy.mockRestore();
   });
 
