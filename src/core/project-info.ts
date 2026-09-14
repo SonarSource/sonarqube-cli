@@ -84,7 +84,11 @@ export interface DiscoveredProject {
 }
 
 export interface DiscoverProjectOptions {
-  /** When set, used for git-remote binding lookup. `null` skips git-remote binding entirely (no local `git remote` read either). */
+  /**
+   * Resolved auth for git-remote binding. Callers that need git-remote lookup must resolve
+   * auth first (for example via `ctx.resolveAuth()`) and pass the result; omitting `auth`
+   * skips git-remote binding. Pass `null` to skip git-remote binding entirely.
+   */
   auth?: ResolvedAuth | null;
   /**
    * When false, skips known-server-project-mapping (pre-login discovery uses false so active
