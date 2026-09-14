@@ -33,12 +33,8 @@ import {
   textSnippet,
   wholeFile,
 } from '@/core/framework/features';
-import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 
-import { getOptionalStringAttr } from '../_common/attrs.ts';
 import {
-  MCP_SERVER_FEATURE_BENEFIT,
-  MCP_SERVER_FEATURE_PREVIEW,
   SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
   SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
   SECRETS_PROMPT_FEATURE_BENEFIT,
@@ -49,6 +45,7 @@ import {
   SESSION_START_SCRIPT_REL,
   VORTEX_HOOK_MARKER,
 } from '../_common/features/context-augmentation-feature.ts';
+import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
   createSqaaInstructionsSnippet,
@@ -61,7 +58,6 @@ import {
   SONAR_SECRETS_MARKER,
 } from '../_common/hooks.ts';
 import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates.ts';
-import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
 import {
@@ -165,23 +161,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
       ],
       resolveCopilotSkillPath,
     ),
-    {
-      id: 'mcp-server',
-      displayName: 'MCP server',
-      benefitDescription: MCP_SERVER_FEATURE_BENEFIT,
-      previewDescription: MCP_SERVER_FEATURE_PREVIEW,
-      resources: [
-        jsonPatch({
-          id: 'copilot-mcp-config',
-          displayName: 'Copilot MCP configuration',
-          targetPath: resolveCopilotMcpConfigPath,
-          defaultValue: {},
-          patch: (document, context) =>
-            upsertJsonMcpServer(document, getDesiredCopilotMcpConfig(context)),
-          removePatch: (document) => removeJsonMcpServer(document),
-        }),
-      ],
-    },
+    createMcpServerFeature<CopilotIntegrationOptions>({ agent: 'copilot' }),
   ],
 };
 
@@ -216,10 +196,6 @@ function resolveHooksJsonPath(context: IntegrationContext): string {
   return join(resolveHooksDir(context), HOOKS_JSON);
 }
 
-function resolveCopilotMcpConfigPath(context: IntegrationContext): string {
-  return getMcpConfigFilePath('copilot', context.scope === 'global', context.targetRoot);
-}
-
 function resolveCopilotSkillPath(context: IntegrationContext): string {
   return join(context.targetRoot, '.github', 'skills', 'sonar-context-augmentation', 'SKILL.md');
 }
@@ -234,16 +210,4 @@ function resolveHooksDir(context: IntegrationContext): string {
   return context.scope === 'global'
     ? join(context.targetRoot, '.copilot', 'hooks')
     : join(context.targetRoot, PROJECT_HOOKS_REL_DIR);
-}
-
-function getDesiredCopilotMcpConfig(context: IntegrationContext) {
-  return getMcpConfig(
-    context.scope === 'global'
-      ? { withFsMount: false }
-      : {
-          withFsMount: true,
-          projectRoot: context.targetRoot,
-          projectKey: getOptionalStringAttr(context, 'projectKey'),
-        },
-  );
 }

@@ -31,15 +31,10 @@ import {
   isFeatureInstalledGloballyForProject,
   jsonPatch,
   textSnippet,
-  tomlPatch,
   wholeFile,
 } from '@/core/framework/features';
-import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 
-import { getOptionalStringAttr } from '../_common/attrs.ts';
 import {
-  MCP_SERVER_FEATURE_BENEFIT,
-  MCP_SERVER_FEATURE_PREVIEW,
   SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
   SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
   SECRETS_PROMPT_FEATURE_BENEFIT,
@@ -50,6 +45,7 @@ import {
   SESSION_START_SCRIPT_REL,
   VORTEX_HOOK_MARKER,
 } from '../_common/features/context-augmentation-feature.ts';
+import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
   createSqaaInstructionsSnippet,
@@ -65,7 +61,6 @@ import {
   upsertAgentHooks,
 } from '../_common/hooks.ts';
 import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates.ts';
-import { removeCodexMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature, vortexInstallDecision } from '../_common/vortex.ts';
 import { SECRETS_ON_READ_BODY } from './instructions-templates.ts';
@@ -157,22 +152,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
         }),
       ],
     },
-    {
-      id: 'mcp-server',
-      displayName: 'MCP server',
-      benefitDescription: MCP_SERVER_FEATURE_BENEFIT,
-      previewDescription: MCP_SERVER_FEATURE_PREVIEW,
-      resources: [
-        tomlPatch({
-          id: 'codex-mcp-config',
-          displayName: 'Codex MCP configuration',
-          targetPath: resolveCodexMcpConfigPath,
-          defaultValue: {},
-          patch: (document, context) => upsertCodexMcpServer(document, context),
-          removePatch: (document) => removeCodexMcpServer(document),
-        }),
-      ],
-    },
+    createMcpServerFeature<CodexIntegrationOptions>({ agent: 'codex', format: 'toml' }),
   ],
 };
 
@@ -258,42 +238,6 @@ function resolveCodexHooksPath(context: IntegrationContext): string {
   return join(context.targetRoot, CODEX_CONFIG_DIR, HOOKS_FILE);
 }
 
-function resolveCodexMcpConfigPath(context: IntegrationContext): string {
-  return getMcpConfigFilePath('codex', context.scope === 'global', context.targetRoot);
-}
-
 function resolveCodexSkillPath(context: IntegrationContext): string {
   return join(context.targetRoot, '.agents', 'skills', 'sonar-context-augmentation', 'SKILL.md');
-}
-
-function upsertCodexMcpServer(
-  document: Record<string, unknown>,
-  context: IntegrationContext,
-): Record<string, unknown> {
-  return {
-    ...document,
-    mcp_servers: {
-      ...toRecord(document.mcp_servers),
-      sonarqube: getDesiredCodexMcpConfig(context),
-    },
-  };
-}
-
-function getDesiredCodexMcpConfig(context: IntegrationContext) {
-  return getMcpConfig(
-    context.scope === 'global'
-      ? { withFsMount: false }
-      : {
-          withFsMount: true,
-          projectRoot: context.targetRoot,
-          projectKey: getOptionalStringAttr(context, 'projectKey'),
-        },
-  );
-}
-
-function toRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return {};
-  }
-  return { ...(value as Record<string, unknown>) };
 }
