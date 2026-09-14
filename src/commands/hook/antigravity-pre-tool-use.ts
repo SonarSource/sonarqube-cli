@@ -32,6 +32,7 @@ import { existsSync } from 'node:fs';
 
 import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { canonicalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 
 import { EXIT_CODE_SECRETS_FOUND } from '../analyze/secrets.ts';
@@ -69,6 +70,12 @@ export async function antigravityPreToolUse(ctx: CommandInvocationContext): Prom
   const filePath = payload.toolCall.args?.AbsolutePath;
   if (!filePath || !existsSync(filePath)) return;
 
+  const canonicalPath = canonicalizePath(filePath);
+  if (toRelativePosixPath(canonicalPath) == null) {
+    logger.debug(`Antigravity PreToolUse skipped: file outside cwd: ${filePath}`);
+    return;
+  }
+
   let deps: HookDependencies;
   try {
     deps = await resolveAuthAndSecrets();
@@ -84,11 +91,11 @@ export async function antigravityPreToolUse(ctx: CommandInvocationContext): Prom
     const exitCode = await runAndEmitFileSecretsScan(
       SECRETS_CALLER_COMMANDS.antigravityPreToolUse,
       deps,
-      filePath,
+      canonicalPath,
       ctx,
     );
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
-      denyToolUse(`Sonar detected secrets in file: ${filePath}`);
+      denyToolUse(`Sonar detected secrets in file: ${canonicalPath}`);
     }
   } catch (err) {
     logger.debug(`Antigravity PreToolUse secrets scan failed: ${(err as Error).message}`);
