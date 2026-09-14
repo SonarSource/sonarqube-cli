@@ -18,8 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// --category only gates breakdown attachment, never hides a condition. Uses issues + security,
-// since coverage/duplications are directory-only and never attach at file level either way.
+// --category only gates breakdown attachment, never hides a condition. Also covers the
+// "category not drillable at this scope" warning, distinct from "no failing condition
+// matches this category" - see CATEGORY_METRICS/FILE_SCOPED_CATEGORIES in breakdown.ts and
+// file-scope-conditions.ts.
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -128,7 +130,7 @@ describe('quality-gate status <file> — --category', () => {
                 errorThreshold: '0',
               },
               {
-                status: 'ERROR',
+                status: 'OK',
                 metricKey: 'vulnerabilities',
                 comparator: 'GT',
                 errorThreshold: '0',
@@ -137,7 +139,7 @@ describe('quality-gate status <file> — --category', () => {
             .withComponentsTreeItems([{ path: 'src/checkout.ts', qualifier: 'FIL' }])
             .withComponentMeasures('src/checkout.ts', [
               { metric: 'new_violations', value: '1' },
-              { metric: 'vulnerabilities', value: '1' },
+              { metric: 'vulnerabilities', value: '0' },
             ])
             .withIssue({
               key: 'ISSUE-1',
@@ -146,13 +148,55 @@ describe('quality-gate status <file> — --category', () => {
               component: 'my-project:src/checkout.ts',
               line: 17,
               isNewCode: true,
-            })
+            }),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status src/checkout.ts --project my-project --category security --format json --all`,
+      );
+
+      expect(result.exitCode).toBe(51);
+      expect(result.stderr).toContain("No failing conditions match category 'security'.");
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.conditions).toHaveLength(2);
+      expect(
+        parsed.qualityGate.conditions.every(
+          (c: { breakdown?: unknown }) => c.breakdown === undefined,
+        ),
+      ).toBe(true);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'warns that the category has no file-level breakdown, rather than claiming no failing condition matches it, for a directory-only category requested on a file',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'new_violations', type: 'INT', name: 'New Issues' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'new_violations',
+                comparator: 'GT',
+                errorThreshold: '0',
+              },
+            ])
+            .withComponentsTreeItems([{ path: 'src/checkout.ts', qualifier: 'FIL' }])
+            .withComponentMeasures('src/checkout.ts', [{ metric: 'new_violations', value: '1' }])
             .withIssue({
-              key: 'VULN-1',
-              ruleKey: 'java:S2076',
-              message: 'OS command injection',
+              key: 'ISSUE-1',
+              ruleKey: 'typescript:S1854',
+              message: "Dead assignment to 'total'",
               component: 'my-project:src/checkout.ts',
-              type: 'VULNERABILITY',
+              line: 17,
+              isNewCode: true,
             }),
         )
         .start();
@@ -163,14 +207,67 @@ describe('quality-gate status <file> — --category', () => {
       );
 
       expect(result.exitCode).toBe(51);
-      expect(result.stderr).toContain("No failing conditions match category 'duplications'.");
+      expect(result.stderr).toContain(
+        "Category 'duplications' has no file-level breakdown; showing conditions only.",
+      );
+      expect(result.stderr).not.toContain('No failing conditions match');
       const parsed = JSON.parse(result.stdout);
-      expect(parsed.qualityGate.conditions).toHaveLength(2);
-      expect(
-        parsed.qualityGate.conditions.every(
-          (c: { breakdown?: unknown }) => c.breakdown === undefined,
-        ),
-      ).toBe(true);
+      expect(parsed.qualityGate.conditions).toHaveLength(1);
+      expect(parsed.qualityGate.conditions[0].breakdown).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'warns that the category has no file-level breakdown for dependency-risks, which is never drillable at file/directory scope',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([
+          { key: 'new_violations', type: 'INT', name: 'New Issues' },
+          { key: 'new_sca_count_any_issue', type: 'INT', name: 'Count of new dependency risks' },
+        ])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('ERROR')
+            .withConditions([
+              {
+                status: 'ERROR',
+                metricKey: 'new_violations',
+                comparator: 'GT',
+                errorThreshold: '0',
+              },
+              {
+                status: 'ERROR',
+                metricKey: 'new_sca_count_any_issue',
+                comparator: 'GT',
+                errorThreshold: '0',
+              },
+            ])
+            .withComponentsTreeItems([{ path: 'src/checkout.ts', qualifier: 'FIL' }])
+            .withComponentMeasures('src/checkout.ts', [{ metric: 'new_violations', value: '1' }])
+            .withIssue({
+              key: 'ISSUE-1',
+              ruleKey: 'typescript:S1854',
+              message: "Dead assignment to 'total'",
+              component: 'my-project:src/checkout.ts',
+              line: 17,
+              isNewCode: true,
+            }),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status src/checkout.ts --project my-project --category dependency-risks --format json`,
+      );
+
+      expect(result.exitCode).toBe(51);
+      expect(result.stderr).toContain(
+        "Category 'dependency-risks' has no file-level breakdown; showing conditions only.",
+      );
+      expect(result.stderr).not.toContain('No failing conditions match');
     },
     { timeout: 15000 },
   );

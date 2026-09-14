@@ -151,6 +151,110 @@ describe('quality-gate status <file> — issues/security', () => {
   );
 
   it(
+    'reports a failing bugs condition for a file, filtered to BUG',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'bugs', type: 'INT', name: 'Bugs' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('OK')
+            .withConditions([
+              { status: 'OK', metricKey: 'bugs', comparator: 'GT', errorThreshold: '0' },
+            ])
+            .withComponentsTreeItems([{ path: 'src/exec.ts', qualifier: 'FIL' }])
+            .withComponentMeasures('src/exec.ts', [{ metric: 'bugs', value: '1' }])
+            .withIssue({
+              key: 'BUG-1',
+              ruleKey: 'java:S2589',
+              message: 'Remove this redundant condition',
+              component: 'my-project:src/exec.ts',
+              type: 'BUG',
+            })
+            .withIssue({
+              key: 'SMELL-1',
+              ruleKey: 'java:S100',
+              message: 'Rename this',
+              component: 'my-project:src/exec.ts',
+              type: 'CODE_SMELL',
+            }),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status src/exec.ts --project my-project --format json`,
+      );
+
+      expect(result.exitCode).toBe(51);
+      const parsed = JSON.parse(result.stdout);
+      const condition = parsed.qualityGate.conditions.find(
+        (c: { metric: string }) => c.metric === 'bugs',
+      );
+      expect(condition.breakdown.entries).toHaveLength(1);
+      expect(condition.breakdown.entries[0].key).toBe('BUG-1');
+
+      const recorded = server.getRecordedRequests();
+      const req = recorded.find((r) => r.path === '/api/issues/search');
+      expect(req?.query.types).toBe('BUG');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports a failing code_smells condition for a file, filtered to CODE_SMELL',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'code_smells', type: 'INT', name: 'Code Smells' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('OK')
+            .withConditions([
+              { status: 'OK', metricKey: 'code_smells', comparator: 'GT', errorThreshold: '0' },
+            ])
+            .withComponentsTreeItems([{ path: 'src/exec.ts', qualifier: 'FIL' }])
+            .withComponentMeasures('src/exec.ts', [{ metric: 'code_smells', value: '1' }])
+            .withIssue({
+              key: 'SMELL-1',
+              ruleKey: 'java:S100',
+              message: 'Rename this',
+              component: 'my-project:src/exec.ts',
+              type: 'CODE_SMELL',
+            })
+            .withIssue({
+              key: 'BUG-1',
+              ruleKey: 'java:S2589',
+              message: 'Remove this redundant condition',
+              component: 'my-project:src/exec.ts',
+              type: 'BUG',
+            }),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status src/exec.ts --project my-project --format json`,
+      );
+
+      expect(result.exitCode).toBe(51);
+      const parsed = JSON.parse(result.stdout);
+      const condition = parsed.qualityGate.conditions.find(
+        (c: { metric: string }) => c.metric === 'code_smells',
+      );
+      expect(condition.breakdown.entries).toHaveLength(1);
+      expect(condition.breakdown.entries[0].key).toBe('SMELL-1');
+
+      const recorded = server.getRecordedRequests();
+      const req = recorded.find((r) => r.path === '/api/issues/search');
+      expect(req?.query.types).toBe('CODE_SMELL');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'formats a RATING condition value as a letter grade, not the raw decimal measures/component sends',
     async () => {
       const server = await harness

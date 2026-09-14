@@ -24,6 +24,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { TestHarness } from '../../harness';
+import { commitFile, git, initGitRepo } from '../hook/git-test-helpers';
 
 describe('quality-gate status <file> — coverage/duplications', () => {
   let harness: TestHarness;
@@ -185,8 +186,85 @@ describe('quality-gate status <file> — coverage/duplications', () => {
       expect(parsed.qualityGate).toEqual({
         status: 'NOT_APPLICABLE',
         file: 'src/checkout.ts',
+        branch: 'main',
         conditions: [],
       });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports NOT_APPLICABLE, when a file-scoped condition has no measure for the file',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('OK')
+            .withConditions([
+              {
+                status: 'OK',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '94.4',
+              },
+            ])
+            .withComponentsTreeItems([{ path: 'src/checkout.ts', qualifier: 'FIL' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status src/checkout.ts --project my-project --format json`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate).toEqual({
+        status: 'NOT_APPLICABLE',
+        file: 'src/checkout.ts',
+        branch: 'main',
+        conditions: [],
+      });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'omits a measure-less condition even under --all',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMetrics([{ key: 'new_coverage', type: 'PERCENT', name: 'Coverage on New Code' }])
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('OK')
+            .withConditions([
+              {
+                status: 'OK',
+                metricKey: 'new_coverage',
+                comparator: 'LT',
+                errorThreshold: '80',
+                actualValue: '94.4',
+              },
+            ])
+            .withComponentsTreeItems([{ path: 'src/checkout.ts', qualifier: 'FIL' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status src/checkout.ts --project my-project --format table --all`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('[· Not applicable]');
+      expect(result.stdout).toContain('No quality gate conditions apply to this file.');
+      expect(result.stdout).not.toContain('Coverage on New Code');
     },
     { timeout: 15000 },
   );
@@ -291,6 +369,10 @@ describe('quality-gate status <file> — coverage/duplications', () => {
             .withComponentTreeFiles('new_coverage', [
               { path: 'src/checkout/cart.ts', value: '45.2' },
               { path: 'src/checkout/payment.ts', value: '58.6' },
+              // Outside the scoped directory and worse than both in-scope files, so it must be
+              // excluded by directory scoping — if the CLI regressed to project-wide scope, this
+              // entry would sort first (LT comparator = ascending) and the assertion below would fail.
+              { path: 'src/other/unrelated.ts', value: '10.0' },
             ]),
         )
         .start();
@@ -444,6 +526,62 @@ describe('quality-gate status <file> — coverage/duplications', () => {
   );
 
   it(
+    'includes the resolved branch in file-scoped JSON output',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('OK')
+            .withConditions([])
+            .withComponentsTreeItems([{ path: 'src/checkout.ts', qualifier: 'FIL' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `quality-gate status src/checkout.ts --project my-project --branch feature-x --format json`,
+      );
+
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.branch).toBe('feature-x');
+      expect(parsed.qualityGate.pullRequest).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'includes the auto-detected pull request in file-scoped JSON output',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p
+            .withProjectStatus('OK')
+            .withConditions([])
+            .withComponentsTreeItems([{ path: 'src/checkout.ts', qualifier: 'FIL' }])
+            .withPullRequests([{ key: '42', branch: 'feature-x' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'a.txt', 'a');
+      git(['checkout', '-b', 'feature-x'], harness.cwd.path);
+
+      const result = await harness.run(
+        `quality-gate status src/checkout.ts --project my-project --format json`,
+      );
+
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.qualityGate.pullRequest).toBe('42');
+      expect(parsed.qualityGate.branch).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'a nonexistent file path is reported clearly and exits 2, not treated as zero conditions',
     async () => {
       const server = await harness
@@ -485,6 +623,7 @@ describe('quality-gate status <file> — coverage/duplications', () => {
       expect(parsed.qualityGate).toEqual({
         status: 'NOT_COMPUTED',
         file: 'src/checkout.ts',
+        branch: 'main',
         conditions: [],
       });
     },

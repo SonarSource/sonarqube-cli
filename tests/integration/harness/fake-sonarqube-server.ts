@@ -1102,7 +1102,7 @@ export class FakeSonarQubeServerBuilder {
 
         if (path === '/api/measures/component_tree') {
           const componentKey = query.component ?? '';
-          const { projectKey } = resolveProjectKeyFromComponent(componentKey, projects);
+          const { projectKey, subPath } = resolveProjectKeyFromComponent(componentKey, projects);
           const projectData = projectKey ? projects.get(projectKey) : undefined;
           const metricKey = query.metricKeys;
 
@@ -1118,8 +1118,12 @@ export class FakeSonarQubeServerBuilder {
               status: projectData.componentTreeStatusCode,
             });
           }
-          const configuredFiles =
+          const allFiles =
             (metricKey && projectData?.componentTreeFilesByMetric.get(metricKey)) || [];
+          const configuredFiles =
+            subPath === undefined
+              ? allFiles
+              : allFiles.filter((file) => file.path.startsWith(`${subPath}/`));
           const pageSize = Number.parseInt(query.ps ?? '100', 10);
           const pagedFiles = configuredFiles.slice(0, pageSize);
 

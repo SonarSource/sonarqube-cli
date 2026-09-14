@@ -209,7 +209,7 @@ export function fetchCategoryBreakdown(
   }
 }
 
-export async function fetchMetricBreakdown(
+async function fetchMetricBreakdown(
   measuresClient: MeasuresClient,
   params: AttachBreakdownsParams,
   condition: QualityGateConditionSummary,

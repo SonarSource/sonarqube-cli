@@ -40,7 +40,7 @@ import {
   resolveEnrichableCategory,
 } from './breakdown.ts';
 import { selectConditions } from './condition-summary.ts';
-import { fetchFileScopedConditions } from './file-scope-conditions.ts';
+import { fetchFileScopedConditions, scopedCategoriesFor } from './file-scope-conditions.ts';
 import { formatFileQualityGateJson, formatQualityGateJson } from './format-json.ts';
 import { formatFileQualityGateTable, formatQualityGateTable } from './format-table.ts';
 import { type QualityGateScope, resolveQualityGateScope } from './scope.ts';
@@ -241,23 +241,31 @@ async function buildFileScopedResult(
   const metricsClient = new MetricsClient(params.client);
   const metrics = rawConditions.length > 0 ? await metricsClient.searchMetrics().orThrow() : [];
 
-  const fileConditions = await fetchFileScopedConditions(rawConditions, {
-    client: params.client,
-    projectKey: params.projectKey,
-    componentKey,
-    orgKey: params.orgKey,
-    metrics,
-    category: params.category,
-    top: params.top,
-    branch: params.branch,
-    pullRequest: params.pullRequest,
-  });
+  const { conditions: fileConditions, isDirectory } = await fetchFileScopedConditions(
+    rawConditions,
+    {
+      client: params.client,
+      projectKey: params.projectKey,
+      componentKey,
+      orgKey: params.orgKey,
+      metrics,
+      category: params.category,
+      top: params.top,
+      branch: params.branch,
+      pullRequest: params.pullRequest,
+    },
+  );
+  const applicableConditions = fileConditions.filter((c) => c.actualValue !== undefined);
   const conditions = params.all
-    ? fileConditions
-    : fileConditions.filter((c) => c.status === 'ERROR');
-  const verdict = toFileVerdict(projectVerdict, fileConditions);
+    ? applicableConditions
+    : applicableConditions.filter((c) => c.status === 'ERROR');
+  const verdict = toFileVerdict(projectVerdict, applicableConditions);
 
-  if (
+  if (params.category && !scopedCategoriesFor(isDirectory).has(params.category)) {
+    params.console.warn(
+      `Category '${params.category}' has no file-level breakdown; showing conditions only.`,
+    );
+  } else if (
     params.category &&
     fileConditions.some((c) => c.status === 'ERROR') &&
     !fileConditions.some((c) => resolveEnrichableCategory(c, params.category))

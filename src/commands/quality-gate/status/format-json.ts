@@ -38,8 +38,17 @@ export function formatQualityGateJson(vm: QualityGateViewModel): string {
 }
 
 export function formatFileQualityGateJson(vm: FileQualityGateViewModel): string {
+  const isPullRequest = vm.scope.kind === 'pullRequest' || vm.scope.kind === 'pullRequestAuto';
   return JSON.stringify(
-    { qualityGate: { status: vm.verdict, file: vm.file, conditions: vm.conditions } },
+    {
+      qualityGate: {
+        status: vm.verdict,
+        file: vm.file,
+        branch: isPullRequest ? undefined : vm.scope.value,
+        pullRequest: isPullRequest ? vm.scope.value : undefined,
+        conditions: vm.conditions,
+      },
+    },
     null,
     2,
   );

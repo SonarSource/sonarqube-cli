@@ -58,6 +58,15 @@ const DIRECTORY_ONLY_CATEGORIES = new Set(['coverage', 'duplications']);
 
 const FILE_SCOPED_CATEGORIES = new Set(['coverage', 'duplications', 'issues', 'security']);
 
+const FILE_ONLY_CATEGORIES = new Set(
+  [...FILE_SCOPED_CATEGORIES].filter((category) => !DIRECTORY_ONLY_CATEGORIES.has(category)),
+);
+
+/** Categories with any file/directory-level breakdown for the given component kind. */
+export function scopedCategoriesFor(isDirectory: boolean): ReadonlySet<string> {
+  return isDirectory ? FILE_SCOPED_CATEGORIES : FILE_ONLY_CATEGORIES;
+}
+
 const COMPARATOR_FAILS: Partial<Record<string, (actual: number, threshold: number) => boolean>> = {
   LT: (actual, threshold) => actual < threshold,
   GT: (actual, threshold) => actual > threshold,
@@ -65,16 +74,21 @@ const COMPARATOR_FAILS: Partial<Record<string, (actual: number, threshold: numbe
   NE: (actual, threshold) => actual !== threshold,
 };
 
+export interface FileScopedConditionsResult {
+  conditions: QualityGateConditionSummary[];
+  isDirectory: boolean;
+}
+
 export async function fetchFileScopedConditions(
   rawConditions: QualityGateCondition[],
   params: FetchFileScopedConditionsParams,
-): Promise<QualityGateConditionSummary[]> {
+): Promise<FileScopedConditionsResult> {
   const applicable = rawConditions.filter((condition) => {
     const category = METRIC_CATEGORIES.get(condition.metricKey);
     return !!category && FILE_SCOPED_CATEGORIES.has(category);
   });
   if (applicable.length === 0) {
-    return [];
+    return { conditions: [], isDirectory: false };
   }
 
   const measuresClient = new MeasuresClient(params.client);
@@ -97,7 +111,7 @@ export async function fetchFileScopedConditions(
     isDirectory,
   };
 
-  return Promise.all(
+  const conditions = await Promise.all(
     applicable.map((condition) =>
       buildFileConditionSummary(
         condition,
@@ -108,6 +122,7 @@ export async function fetchFileScopedConditions(
       ),
     ),
   );
+  return { conditions, isDirectory };
 }
 
 async function buildFileConditionSummary(
