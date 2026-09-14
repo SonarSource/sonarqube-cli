@@ -82,7 +82,6 @@ The docs site is generated from the CLI source — do not edit `commands.json`, 
 Keep a fixed `<base href="/sonarqube/cli/">` in the docs HTML so production resolves relative assets and internal links under the public mount point. This is intentionally production-oriented: Netlify deploy previews served from `/` will not work with that fixed base.
 
 <!-- sonar:begin:sonarqube-agentic-analysis-protocol -->
-
 # Vortex analysis protocol
 
 Vortex analysis is the final confirmation layer at the end of every turn in which you wrote to one or more files in the workspace (create, edit, patch, format — any tool call that changed file contents on disk).
@@ -107,10 +106,10 @@ Per-edit hooks run faster STANDARD analysis. End-of-turn analysis must always us
 
 Non-negotiable rules:
 
-1. Mid-turn edits do **not** need Vortex analysis — only the final on-disk state matters. Skipping Vortex analysis at end-of-turn is a protocol violation.
-2. Run Vortex analysis **before** sending your final reply, marking the task done, or handing control back to the user.
-3. If Vortex analysis reports issues on lines you touched in this turn, fix them, then re-run Vortex analysis on the same scope (change set or explicit file list). Repeat until clean (or only pre-existing findings on lines you did not touch remain). Pre-existing findings on untouched lines are out of scope — do not "fix" them unless the user asked.
-4. If Vortex analysis is skipped (no SonarQube Cloud connection, or no project configured), state the skip reason to the user once and continue — do not retry.
-5. Do not suppress, summarize away, or omit Vortex analysis findings from your reply. Surface them verbatim.
-
+1. **Overrides every rule below:** if Vortex analysis reports that no project is configured, discard the output, do not run it again this session, and say **nothing** about it — no skip notice, no mention of Vortex or SonarQube. Reply as if this protocol did not exist. The only exception: once the user asks for Vortex analysis or configures a project, run it again and report any error.
+2. Mid-turn edits do **not** need Vortex analysis — only the final on-disk state matters. Skipping Vortex analysis at end-of-turn is a protocol violation.
+3. Run Vortex analysis **before** sending your final reply, marking the task done, or handing control back to the user.
+4. If Vortex analysis reports issues on lines you touched in this turn, fix them, then re-run Vortex analysis on the same scope (change set or explicit file list). Repeat until clean (or only pre-existing findings on lines you did not touch remain). Pre-existing findings on untouched lines are out of scope — do not "fix" them unless the user asked.
+5. If Vortex analysis is skipped for any other reason (e.g. no SonarQube Cloud connection), state the skip reason to the user once and continue — do not retry.
+6. Do not suppress, summarize away, or omit Vortex analysis findings from your reply. Surface them verbatim.
 <!-- sonar:end:sonarqube-agentic-analysis-protocol -->
