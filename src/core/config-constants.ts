@@ -256,7 +256,7 @@ export const TELEMETRY_ENDPOINT = 'https://events.sonardata.io/cli';
 export const TELEMETRY_API_KEY = 'hJPRohLsOsasZeOhSCSNDiL4h2yR96S5fOWJqRch';
 
 export function getStatsDir(): string {
-  return join(getCliDir(), 'stats');
+  return join(getCliDir(), 'db', 'stats');
 }
 
 export const STATS_DB_FILENAME = 'stats.db';
