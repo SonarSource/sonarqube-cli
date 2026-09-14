@@ -27,6 +27,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ComponentsClient } from '@/core/server/components.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 
 import { getTelemetryDir } from '../config-constants.ts';
@@ -36,13 +37,14 @@ import { isTelemetryEnabled } from './enabled.ts';
 const CACHE_FILENAME = 'project-uuid-cache.json';
 
 /**
- * Transport-level budget for the one resolution per process. Deliberately far below
- * `getSafe`'s 30s default: this runs in the `postAction` hook, after the command has already
- * printed its result, so a slow server would otherwise look like the CLI hanging at exit
- * (worst for `hook git-pre-commit`, where it would stall a commit). Enforced via the fetch's
- * own `AbortSignal` rather than a `Promise.race`, because racing only caps what we *await* —
- * an open socket keeps the process alive regardless. Only ever bites on the first run for a
- * given project; every later run hits the permanent disk cache.
+ * Transport-level budget for the one resolution per process, passed to
+ * `ComponentsClient.getComponentId()`. Deliberately far below the default GET timeout (30s):
+ * this runs in the `postAction` hook, after the command has already printed its result, so a
+ * slow server would otherwise look like the CLI hanging at exit (worst for
+ * `hook git-pre-commit`, where it would stall a commit). Enforced via the fetch's own
+ * `AbortSignal` rather than a `Promise.race`, because racing only caps what we *await* — an
+ * open socket keeps the process alive regardless. Only ever bites on the first run for a given
+ * project; every later run hits the permanent disk cache.
  */
 const RESOLVE_BUDGET_MS = 3_000;
 
@@ -110,36 +112,6 @@ function writeDiskCache(cache: ProjectUuidCacheFile): void {
 }
 
 /**
- * Fetches the legacy project id from `/api/navigation/component`, end-to-end non-throwing.
- * Distinguishes a resolved-but-empty response (cache `null`, stop retrying) from a
- * transient/network failure (do not cache, retry next call) via the `ok` return flag.
- *
- * Deliberately does not reuse `ComponentsClient.getComponentId()`: that helper collapses both
- * outcomes to `null`, which would defeat the cache's retry semantics.
- */
-function fetchProjectUuid(
-  client: SonarHttpClient,
-  projectKey: string,
-): Promise<{ value: string | null; ok: boolean }> {
-  return client
-    .getSafe<{ id: string }>(
-      '/api/navigation/component',
-      { component: projectKey },
-      undefined,
-      RESOLVE_BUDGET_MS,
-    )
-    .match(
-      ({ response, value }): { value: string | null; ok: boolean } => {
-        if (!response.ok) {
-          return { value: null, ok: false };
-        }
-        return { value: value?.id ?? null, ok: true };
-      },
-      (): { value: string | null; ok: boolean } => ({ value: null, ok: false }),
-    );
-}
-
-/**
  * Resolves SonarQube's legacy internal project identifier for `projectKey`, caching the
  * result permanently under `{SONAR_USER_HOME}/sonarqube-cli/telemetry/project-uuid-cache.json`.
  *
@@ -162,20 +134,22 @@ export async function resolveProjectUuid(
     }
 
     const client = new SonarHttpClient(auth.serverUrl, auth.token);
-    const { value, ok } = await fetchProjectUuid(client, projectKey);
-    if (ok) {
-      diskCache.entries[entryKey] = value;
+    const result = await new ComponentsClient(client).getComponentId(projectKey, RESOLVE_BUDGET_MS);
+    // A 404 (`Ok(null)`) is definitive and gets cached; any other failure (`Err`) is
+    // deliberately not cached, so the next command retries. Each attempt is bounded by
+    // RESOLVE_BUDGET_MS, so a persistently hanging server costs that budget once per
+    // project-resolving command rather than once ever. Accepted rather than adding a negative
+    // TTL: every noteProject site sits on a path that already makes its own server calls under
+    // the 30s GET budget (SQAA, SCA, entitlement checks), so in any state where this hangs the
+    // command is already paying an order of magnitude more. A TTL would trade telemetry
+    // completeness — null for the whole TTL after the network recovers — for a latency win
+    // that is noise next to that. Revisit if it shows up in practice.
+    if (result.isOk()) {
+      diskCache.entries[entryKey] = result.value;
       writeDiskCache(diskCache);
+      return result.value;
     }
-    // Transient failures are deliberately not cached, so the next command retries. Each
-    // attempt is bounded by RESOLVE_BUDGET_MS, so a persistently hanging server costs that
-    // budget once per project-resolving command rather than once ever. Accepted rather than
-    // adding a negative TTL: every noteProject site sits on a path that already makes its own
-    // server calls under the 30s GET budget (SQAA, SCA, entitlement checks), so in any state
-    // where this hangs the command is already paying an order of magnitude more. A TTL would
-    // trade telemetry completeness — null for the whole TTL after the network recovers — for a
-    // latency win that is noise next to that. Revisit if it shows up in practice.
-    return value;
+    return null;
   } catch {
     return null;
   }

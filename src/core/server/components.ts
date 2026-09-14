@@ -96,10 +96,20 @@ export class ComponentsClient {
    * The external AI agents API expects this ID (not the human-readable key) as `projectId`.
    * Uses /api/navigation/component - same endpoint the web UI uses; `id` is always present there.
    * Only a 404 resolves to `null` - every other failure propagates, matching `componentExists`.
+   * `timeoutMs` overrides the default GET budget for callers with a tighter deadline (e.g.
+   * telemetry's `resolveProjectUuid`, which must not stall a hook past its own budget).
    */
-  getComponentId(componentKey: string): ResultAsync<string | null, HttpClientError> {
+  getComponentId(
+    componentKey: string,
+    timeoutMs?: number,
+  ): ResultAsync<string | null, HttpClientError> {
     return this.client
-      .getOrNullIf404<{ id: string }>('/api/navigation/component', { component: componentKey })
+      .getOrNullIf404<{ id: string }>(
+        '/api/navigation/component',
+        { component: componentKey },
+        undefined,
+        timeoutMs,
+      )
       .map((value) => value?.id ?? null);
   }
 

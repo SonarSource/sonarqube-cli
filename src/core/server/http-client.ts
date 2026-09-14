@@ -232,8 +232,9 @@ export class SonarHttpClient {
     endpoint: string,
     params?: QueryParams,
     baseUrl?: string,
+    timeoutMs?: number,
   ): ResultAsync<T | null, HttpClientError> {
-    return this.getSafe<T>(endpoint, params, baseUrl).andThen((result) => {
+    return this.getSafe<T>(endpoint, params, baseUrl, timeoutMs).andThen((result) => {
       if (result.response.status === HTTP_STATUS_NOT_FOUND) {
         return okAsync(null);
       }
