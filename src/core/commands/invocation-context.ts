@@ -25,9 +25,6 @@ import logger from '@/core/observability/logger.ts';
 import { okAsync, type ResultAsync } from '@/core/result.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-/** @deprecated Use {@link CliRuntime} from `@/core/commands/cli-runtime.ts`. */
-export type CommandInvocationContextRuntime = CliRuntime;
-
 /**
  * Named domain observation recorded by a command handler.
  *

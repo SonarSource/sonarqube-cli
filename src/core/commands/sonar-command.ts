@@ -72,9 +72,6 @@ const betaWarningsShownWithoutState = new Set<string>();
 export const COMMAND_CATEGORIES = ['core', 'data', 'integrate', 'cli-management'] as const;
 export type CommandCategory = (typeof COMMAND_CATEGORIES)[number];
 
-/** @deprecated Use {@link createCliRuntime} instead. */
-export { createCliRuntime as createDefaultCliRuntime } from '@/core/commands/cli-runtime.ts';
-
 function isPrivateBetaGated(lifecycle: LifecycleState): boolean {
   return lifecycle.stage === 'beta' && lifecycle.betaFlagKey !== undefined;
 }
@@ -725,31 +722,7 @@ export class SonarCommand extends Command {
   }
 }
 
-function collectPrivateBetaFlagKey(keys: Set<string>, lifecycle: LifecycleState): void {
-  if (lifecycle.stage === 'beta' && lifecycle.betaFlagKey !== undefined) {
-    keys.add(lifecycle.betaFlagKey);
-  }
-}
-
 /** Returns Private Beta flag keys recorded while building `root`. */
 export function collectPrivateBetaFlagKeys(root: SonarCommand): string[] {
   return [...root.runtime.privateBetaFlags.flagKeys()];
-}
-
-/** @deprecated Walks the tree; prefer {@link SonarCommand.runtime}.privateBetaFlags. */
-export function walkPrivateBetaFlagKeys(root: SonarCommand): string[] {
-  const keys = new Set<string>();
-
-  const visit = (command: SonarCommand): void => {
-    collectPrivateBetaFlagKey(keys, command.lifecycle);
-    for (const option of command.options) {
-      collectPrivateBetaFlagKey(keys, option.lifecycle);
-    }
-    for (const child of command.commands as SonarCommand[]) {
-      visit(child);
-    }
-  };
-
-  visit(root);
-  return [...keys];
 }

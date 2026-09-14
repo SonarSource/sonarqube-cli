@@ -33,7 +33,6 @@ import {
 import { getCustomRootHelp } from '@/core/commands/root-help.ts';
 import {
   ALPHA_ENV_VAR,
-  createDefaultCliRuntime,
   SonarCommand,
   type SonarCommandOptions,
   SonarOption,
@@ -119,9 +118,9 @@ describe('SonarCommand', () => {
     });
   });
 
-  describe('createDefaultCliRuntime()', () => {
+  describe('createCliRuntime()', () => {
     it('returns a runtime with resolvers and private beta disabled by default', () => {
-      const runtime = createDefaultCliRuntime();
+      const runtime = createCliRuntime();
       expect(runtime.isPrivateBetaEnabled('cli.beta.demo')).toBe(false);
       expect(runtime.authResolver).toBeDefined();
       expect(runtime.flagsResolver).toBeDefined();
