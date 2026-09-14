@@ -25,7 +25,6 @@ import { padColumns } from '@/core/ui/formatter/column-formatting.ts';
 import type {
   DependencyRiskBreakdownEntry,
   DuplicationsBreakdownEntry,
-  FileQualityGateViewModel,
   IssuesBreakdownEntry,
   QualityGateBreakdownEntry,
   QualityGateConditionSummary,
@@ -63,18 +62,55 @@ const INVERSE_COMPARATOR_SYMBOLS: Record<string, string> = {
 };
 
 export function formatQualityGateTable(vm: QualityGateViewModel): string {
+  switch (vm.subject.kind) {
+    case 'project':
+      return formatProjectTable(vm.verdict, vm.subject.key, vm.scope, vm.conditions);
+    case 'file':
+      return formatFileTable(vm.verdict, vm.subject.path, vm.scope, vm.conditions);
+  }
+}
+
+function formatProjectTable(
+  verdict: FileQualityGateVerdict,
+  project: string,
+  scope: QualityGateScope,
+  conditions: QualityGateConditionSummary[],
+): string {
   const lines: string[] = [
-    `=== Quality Gate: ${formatVerdictBracket(vm.verdict)} ===`,
-    `Project:      ${vm.project}`,
-    formatScopeLine(vm.scope),
+    `=== Quality Gate: ${formatVerdictBracket(verdict)} ===`,
+    `Project:      ${project}`,
+    formatScopeLine(scope),
   ];
 
-  if (vm.verdict === 'NOT_COMPUTED') {
-    lines.push('', `${cyan('ℹ')}  ${notComputedHint(vm.scope)}`);
+  if (verdict === 'NOT_COMPUTED') {
+    lines.push('', `${cyan('ℹ')}  ${notComputedHint(scope)}`);
+  }
+  if (conditions.length > 0) {
+    lines.push('', 'Conditions:', ...formatConditionsBlock(conditions));
   }
 
-  if (vm.conditions.length > 0) {
-    lines.push('', 'Conditions:', ...formatConditionsBlock(vm.conditions));
+  return lines.join('\n');
+}
+
+function formatFileTable(
+  verdict: FileQualityGateVerdict,
+  file: string,
+  scope: QualityGateScope,
+  conditions: QualityGateConditionSummary[],
+): string {
+  const lines: string[] = [
+    `Quality Gate · ${file} ${formatVerdictBracket(verdict)}`,
+    formatScopeLine(scope),
+  ];
+
+  if (verdict === 'NOT_COMPUTED') {
+    lines.push('', `${cyan('ℹ')}  ${notComputedHint(scope)}`);
+  } else if (verdict === 'NOT_APPLICABLE') {
+    lines.push('', 'No quality gate conditions apply to this file.');
+  } else if (conditions.length === 0) {
+    lines.push('', 'All applicable conditions are passing (use --all to show them).');
+  } else {
+    lines.push(...formatConditionsBlock(conditions));
   }
 
   return lines.join('\n');
@@ -95,23 +131,6 @@ export function formatConditionsBlock(conditions: QualityGateConditionSummary[])
     formatConditionLine(condition, values[i], labels[i]),
     ...formatBreakdownLines(condition),
   ]);
-}
-
-export function formatFileQualityGateTable(vm: FileQualityGateViewModel): string {
-  const lines: string[] = [
-    `Quality Gate · ${vm.file} ${formatVerdictBracket(vm.verdict)}`,
-    formatScopeLine(vm.scope),
-  ];
-  if (vm.verdict === 'NOT_COMPUTED') {
-    lines.push('', `${cyan('ℹ')}  ${notComputedHint(vm.scope)}`);
-  } else if (vm.verdict === 'NOT_APPLICABLE') {
-    lines.push('', 'No quality gate conditions apply to this file.');
-  } else if (vm.conditions.length === 0) {
-    lines.push('', 'All applicable conditions are passing (use --all to show them).');
-  } else {
-    lines.push(...formatConditionsBlock(vm.conditions));
-  }
-  return lines.join('\n');
 }
 
 function formatScopeLine(scope: QualityGateScope): string {

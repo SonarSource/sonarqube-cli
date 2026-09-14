@@ -39,10 +39,10 @@ import {
   IMPLEMENTED_CATEGORIES,
   resolveEnrichableCategory,
 } from './breakdown.ts';
-import { selectConditions } from './condition-summary.ts';
+import { type QualityGateViewModel, selectConditions } from './condition-summary.ts';
 import { fetchFileScopedConditions, scopedCategoriesFor } from './file-scope-conditions.ts';
-import { formatFileQualityGateJson, formatQualityGateJson } from './format-json.ts';
-import { formatFileQualityGateTable, formatQualityGateTable } from './format-table.ts';
+import { formatQualityGateJson } from './format-json.ts';
+import { formatQualityGateTable } from './format-table.ts';
 import { type QualityGateScope, resolveQualityGateScope } from './scope.ts';
 import { exitCodeFor, type FileQualityGateVerdict, toFileVerdict, toVerdict } from './verdict.ts';
 
@@ -63,21 +63,7 @@ export interface QualityGateStatusOptions {
   file?: string;
 }
 
-interface ProjectResultParams {
-  client: SonarHttpClient;
-  projectKey: string;
-  orgKey?: string;
-  scope: QualityGateScope;
-  branch?: string;
-  pullRequest?: string;
-  top: number;
-  category?: string;
-  all?: boolean;
-  format: string;
-  console: Console;
-}
-
-interface FileScopedResultParams {
+interface QualityGateHandlerParams {
   client: SonarHttpClient;
   projectKey: string;
   orgKey?: string;
@@ -165,7 +151,7 @@ async function assertProjectExists(client: SonarHttpClient, projectKey: string):
   }
 }
 
-async function buildProjectResult(params: ProjectResultParams): Promise<QualityGateResult> {
+async function buildProjectResult(params: QualityGateHandlerParams): Promise<QualityGateResult> {
   const projectStatus = await fetchProjectStatus(
     params.client,
     params.projectKey,
@@ -202,27 +188,23 @@ async function buildProjectResult(params: ProjectResultParams): Promise<QualityG
     params.console.warn(`No failing conditions match category '${params.category}'.`);
   }
 
+  const viewModel: QualityGateViewModel = {
+    subject: { kind: 'project', key: params.projectKey },
+    verdict,
+    scope: params.scope,
+    conditions,
+  };
   const message =
     params.format === 'table'
-      ? formatQualityGateTable({
-          verdict,
-          project: params.projectKey,
-          scope: params.scope,
-          conditions,
-        })
-      : formatQualityGateJson({
-          verdict,
-          project: params.projectKey,
-          scope: params.scope,
-          conditions,
-        });
+      ? formatQualityGateTable(viewModel)
+      : formatQualityGateJson(viewModel);
 
   return { message, verdict };
 }
 
 async function buildFileScopedResult(
   file: string,
-  params: FileScopedResultParams,
+  params: QualityGateHandlerParams,
 ): Promise<QualityGateResult> {
   const { componentKey, qualifier } = await resolveFileComponentKey(
     params.client,
@@ -274,11 +256,16 @@ async function buildFileScopedResult(
     params.console.warn(`No failing conditions match category '${params.category}'.`);
   }
 
-  const viewModel = { file, verdict, scope: params.scope, conditions };
+  const viewModel: QualityGateViewModel = {
+    subject: { kind: 'file', path: file },
+    verdict,
+    scope: params.scope,
+    conditions,
+  };
   const message =
     params.format === 'table'
-      ? formatFileQualityGateTable(viewModel)
-      : formatFileQualityGateJson(viewModel);
+      ? formatQualityGateTable(viewModel)
+      : formatQualityGateJson(viewModel);
 
   return { message, verdict };
 }

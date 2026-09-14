@@ -30,7 +30,7 @@ import type { Metric, QualityGateCondition } from '@/core/server/types.ts';
 
 import { formatMetricValue } from './format-metric-value.ts';
 import type { QualityGateScope } from './scope.ts';
-import type { FileQualityGateVerdict, QualityGateVerdict } from './verdict.ts';
+import type { FileQualityGateVerdict } from './verdict.ts';
 
 export interface QualityGateBreakdownEntry {
   path: string;
@@ -116,15 +116,10 @@ export interface QualityGateConditionSummary {
   breakdown?: QualityGateMetricBreakdown;
 }
 
-export interface QualityGateViewModel {
-  verdict: QualityGateVerdict;
-  project: string;
-  scope: QualityGateScope;
-  conditions: QualityGateConditionSummary[];
-}
+export type QualityGateSubject = { kind: 'project'; key: string } | { kind: 'file'; path: string };
 
-export interface FileQualityGateViewModel {
-  file: string;
+export interface QualityGateViewModel {
+  subject: QualityGateSubject;
   verdict: FileQualityGateVerdict;
   scope: QualityGateScope;
   conditions: QualityGateConditionSummary[];
