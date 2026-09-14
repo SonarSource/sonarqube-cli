@@ -23,7 +23,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 import * as gitDiscover from '@/core/host/git/discover.ts';
 import * as lookupPathResolver from '@/core/host/git/lookup-path-resolver.ts';
@@ -52,11 +52,12 @@ import { createFakeFsTestHandle } from './fake-fs-test-handle.ts';
 
 const fakeFs = createFakeFsTestHandle();
 
-const MOCK_AUTH: ResolvedAuth = {
+const MOCK_AUTH = new ResolvedAuth({
   token: 't',
   serverUrl: 'https://sonarcloud.io',
   connectionType: 'cloud',
-};
+  source: 'state',
+});
 
 function withCwd<T>(
   cwdSpy: Mock<typeof process.cwd>,
@@ -342,12 +343,13 @@ describe('discoverProject', () => {
 
     const result = await discoverProject(testDir, {
       console: new FakeConsole(),
-      auth: {
+      auth: new ResolvedAuth({
         token: 'token',
         serverUrl: 'https://sonarcloud.io',
         orgKey: 'my-org',
         connectionType: 'cloud',
-      },
+        source: 'state',
+      }),
     });
     expect(result.projectKey).toBe('from-remote');
     expect(result.organization).toBe('my-org');
@@ -371,7 +373,12 @@ describe('discoverProject', () => {
 
     const result = await discoverProject(testDir, {
       console: new FakeConsole(),
-      auth: { token: 't', serverUrl: 'https://sonarcloud.io', connectionType: 'cloud' },
+      auth: new ResolvedAuth({
+        token: 't',
+        serverUrl: 'https://sonarcloud.io',
+        connectionType: 'cloud',
+        source: 'state',
+      }),
     });
     expect(result.projectKey).toBe('local_key');
     expect(remoteSpy).not.toHaveBeenCalled();
@@ -708,7 +715,12 @@ describe('discoverProject', () => {
 
       const result = await discoverProject(testDir, {
         console: new FakeConsole(),
-        auth: { token: 't', serverUrl: 'https://sonarcloud.io', connectionType: 'cloud' },
+        auth: new ResolvedAuth({
+          token: 't',
+          serverUrl: 'https://sonarcloud.io',
+          connectionType: 'cloud',
+          source: 'state',
+        }),
       });
 
       expect(result.projectKey).toBe('known-project');
@@ -725,7 +737,12 @@ describe('discoverProject', () => {
 
       const result = await discoverProject(testDir, {
         console: new FakeConsole(),
-        auth: { token: 't', serverUrl: 'https://sonarcloud.io', connectionType: 'cloud' },
+        auth: new ResolvedAuth({
+          token: 't',
+          serverUrl: 'https://sonarcloud.io',
+          connectionType: 'cloud',
+          source: 'state',
+        }),
       });
 
       expect(result.projectKey).toBe('from-remote');
@@ -945,12 +962,13 @@ describe('discoverProject', () => {
 
         const result = await discoverProject(testDir, {
           console: new FakeConsole(),
-          auth: {
+          auth: new ResolvedAuth({
             token: 't',
             serverUrl: 'https://env-auth.example.com',
             orgKey: 'env-org',
             connectionType: 'cloud',
-          },
+            source: 'state',
+          }),
         });
 
         expect(result.serverUrl).toBe('https://env-auth.example.com');
@@ -1141,7 +1159,7 @@ describe('discoverOrganization', () => {
     }
   });
 
-  it('reads organization from a known-server-project-mapping before login too', async () => {
+  it('ignores known-server-project-mapping during pre-login discovery', async () => {
     const testDir = join(tmpdir(), 'sonarqube-cli-test-discover-org-known-mapping-' + Date.now());
     fakeFs.mkdir(testDir);
     const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue({
@@ -1158,7 +1176,7 @@ describe('discoverOrganization', () => {
 
     try {
       await withCwd(cwdSpy, testDir, async () => {
-        expect(await discoverOrganization(new FakeConsole())).toBe('known-org');
+        expect(await discoverOrganization(new FakeConsole())).toBeNull();
       });
     } finally {
       loadStateSpy.mockRestore();
@@ -1282,7 +1300,7 @@ describe('discoverServer', () => {
     }
   });
 
-  it('reads server URL from a known-server-project-mapping before login too', async () => {
+  it('ignores known-server-project-mapping during pre-login discovery', async () => {
     const testDir = join(
       tmpdir(),
       'sonarqube-cli-test-discover-server-known-mapping-' + Date.now(),
@@ -1301,7 +1319,7 @@ describe('discoverServer', () => {
 
     try {
       await withCwd(cwdSpy, testDir, async () => {
-        expect(await discoverServer(new FakeConsole())).toBe('https://known.example.com');
+        expect(await discoverServer(new FakeConsole())).toBeNull();
       });
     } finally {
       loadStateSpy.mockRestore();

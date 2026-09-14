@@ -33,7 +33,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
 
 import {
@@ -64,12 +64,13 @@ describe.skipIf(binaryPath === null)('parseSecretsJson — real binary', () => {
 
     server = await new FakeSonarQubeServerBuilder().withAuthToken('e2e-token').start();
 
-    auth = {
+    auth = new ResolvedAuth({
       serverUrl: server.baseUrl(),
       token: 'e2e-token',
       connectionType: 'cloud',
+      source: 'state',
       orgKey: 'test-org',
-    };
+    });
 
     // Allow HTTP for the local fake server
     process.env['SONAR_SECRETS_ALLOW_UNSECURE_HTTP'] = 'true';

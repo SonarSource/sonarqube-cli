@@ -27,6 +27,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { SqaaAnalysisClient } from '@/commands/analyze/sqaa-analysis-client.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
@@ -47,12 +48,13 @@ const TEST_TOKEN = 'squ_test_token';
 const FILE_CONTENT = 'const x = 1;\n';
 
 /** Fake auth for a cloud connection */
-const FAKE_AUTH: import('@/core/auth/auth-resolver.ts').ResolvedAuth = {
+const FAKE_AUTH = new ResolvedAuth({
   token: TEST_TOKEN,
   serverUrl: SONARCLOUD_URL,
   orgKey: TEST_ORG,
   connectionType: 'cloud',
-};
+  source: 'state',
+});
 
 let fake: FakeConsole;
 let FAKE_AUTHENTICATED_CONTEXT: CommandAuthenticatedInvocationContext;
@@ -292,11 +294,12 @@ describe('analyzeSqaa: path normalization', () => {
 
 describe('analyzeSqaa: explicit --project option', () => {
   it('runs Vortex analysis on SonarQube Server when --project is given', async () => {
-    const onPremiseAuth = {
+    const onPremiseAuth = new ResolvedAuth({
       token: TEST_TOKEN,
       serverUrl: 'https://mysonar.company.com',
-      connectionType: 'on-premise' as const,
-    };
+      connectionType: 'on-premise',
+      source: 'state',
+    });
 
     const onPremiseContext = new CommandAuthenticatedInvocationContext(
       onPremiseAuth,
@@ -335,11 +338,12 @@ describe('buildSqaaJsonReport', () => {
   });
 
   it('runs Vortex analysis on SonarQube Server', async () => {
-    const onPremiseAuth = {
+    const onPremiseAuth = new ResolvedAuth({
       token: TEST_TOKEN,
       serverUrl: 'https://mysonar.company.com',
-      connectionType: 'on-premise' as const,
-    };
+      connectionType: 'on-premise',
+      source: 'state',
+    });
 
     const report = await buildSqaaJsonReport({ file: ['src/index.ts'] }, onPremiseAuth, {
       telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,

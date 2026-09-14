@@ -22,7 +22,7 @@ import { createHash } from 'node:crypto';
 
 import { describe, expect, it } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
@@ -52,12 +52,13 @@ function makeInstalledFeature(
   };
 }
 
-const AUTH: ResolvedAuth = {
+const AUTH = new ResolvedAuth({
   connectionType: 'cloud',
+  source: 'state' as const,
   serverUrl: 'https://sonarcloud.io',
   token: 'test-token',
   orgKey: 'my-org',
-};
+});
 
 function record(params: Omit<Parameters<typeof recordIntegrationConfigured>[1], 'auth'>) {
   const ctx = new CommandInvocationContext(new FakeConsole());

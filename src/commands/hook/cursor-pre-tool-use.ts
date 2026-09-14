@@ -71,7 +71,7 @@ export async function cursorPreToolUse(ctx: CommandInvocationContext): Promise<H
 
   let deps: HookDependencies;
   try {
-    deps = await resolveAuthAndSecrets();
+    deps = await resolveAuthAndSecrets(ctx);
   } catch (err) {
     if (err instanceof MissingDependenciesError) {
       await denyCursor(err.message);

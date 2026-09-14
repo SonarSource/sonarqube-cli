@@ -25,7 +25,7 @@ import { createCommandTree } from '@/commands/command-tree.ts';
 
 import { FakeConsole } from '../../_common/fake-console.ts';
 
-const COMMAND_TREE = await createCommandTree({ console: new FakeConsole() });
+const COMMAND_TREE = createCommandTree({ console: new FakeConsole() });
 
 function resolveCommand(path: string[]): Command {
   let current: Command = COMMAND_TREE;

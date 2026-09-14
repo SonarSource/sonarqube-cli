@@ -20,17 +20,18 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 
 import { buildScaUrls } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-urls.ts';
 
 function auth(overrides: Partial<ResolvedAuth>): ResolvedAuth {
-  return {
+  return new ResolvedAuth({
     token: 'token',
     serverUrl: 'https://sonar.example.com',
     connectionType: 'on-premise',
+    source: 'state' as const,
     ...overrides,
-  };
+  });
 }
 
 describe('buildScaUrls', () => {

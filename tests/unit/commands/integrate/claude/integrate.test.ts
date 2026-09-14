@@ -25,7 +25,7 @@ import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:te
 import type { VortexDisposition } from '@/commands/integrate/_common/types.ts';
 import { integrateClaude } from '@/commands/integrate/claude';
 import * as hooks from '@/commands/integrate/claude/hooks.ts';
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import * as token from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -43,18 +43,20 @@ import { VortexEntitlementClient } from '@/core/vortex/entitlement.ts';
 
 import { FakeConsole } from '../../../../_common/fake-console.ts';
 
-const SERVER_AUTH: ResolvedAuth = {
+const SERVER_AUTH = new ResolvedAuth({
   token: 'test-token',
   serverUrl: 'https://sonar.example.com',
   connectionType: 'on-premise',
-};
+  source: 'state' as const,
+});
 
-const CLOUD_AUTH: ResolvedAuth = {
+const CLOUD_AUTH = new ResolvedAuth({
   token: 'test-token',
   orgKey: 'cloud-org',
   serverUrl: 'https://sonarcloud.io',
   connectionType: 'cloud',
-};
+  source: 'state' as const,
+});
 
 let fake: FakeConsole;
 let SERVER_CTX: CommandAuthenticatedInvocationContext;
@@ -204,11 +206,12 @@ describe('integrateCommand', () => {
 
   it('validates organization is provided when server is SonarQube Cloud', async () => {
     mockDiscoveredProject({});
-    const cloudAuthNoOrg: ResolvedAuth = {
+    const cloudAuthNoOrg = new ResolvedAuth({
       token: 'test-token',
       serverUrl: 'https://sonarcloud.io',
       connectionType: 'cloud',
-    };
+      source: 'state' as const,
+    });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(

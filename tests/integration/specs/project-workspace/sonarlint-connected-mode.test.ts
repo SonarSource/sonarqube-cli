@@ -23,18 +23,19 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { SONARCLOUD_URL } from '@/core/config-constants.ts';
 import { discoverOrganization, discoverProject, discoverServer } from '@/core/project-info.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 import { TestHarness } from '../../harness';
 
-const MOCK_AUTH: ResolvedAuth = {
+const MOCK_AUTH = new ResolvedAuth({
   token: 't',
   serverUrl: 'https://sonarcloud.io',
   connectionType: 'cloud',
-};
+  source: 'state',
+});
 
 async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
   const prev = process.cwd();
