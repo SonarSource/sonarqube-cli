@@ -28,6 +28,8 @@ import { SonarHttpClient } from '@/core/server/http-client.ts';
 
 interface ApiStep {
   ok: boolean;
+  /** HTTP status of the faked response. Defaults to 200 when `ok`, 500 otherwise. */
+  status?: number;
   id?: string;
   /** When true, getSafe() itself throws (network error/timeout) instead of resolving. */
   throws?: boolean;
@@ -57,6 +59,7 @@ export function mockProjectUuidGetSafe(
       endpoint: string,
       _params?: Record<string, string | number | boolean>,
       _baseUrl?: string,
+      _timeoutMs?: number,
     ): ResultAsync<SafeGetResult<TValue>, HttpClientError> => {
       if (endpoint === '/api/navigation/component') {
         const step = shiftStep(componentSteps, { ok: true });
@@ -64,7 +67,7 @@ export function mockProjectUuidGetSafe(
           return errAsync(new TransportError('network error'));
         }
         return okAsync({
-          response: { ok: step.ok } as Response,
+          response: { ok: step.ok, status: step.status ?? (step.ok ? 200 : 500) } as Response,
           value: (step.id ? { id: step.id } : {}) as TValue,
         });
       }

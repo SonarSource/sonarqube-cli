@@ -68,3 +68,11 @@ helpers whose parameters are command-specific (`fetchEligibleIssues` in
 also stay functions — the filters they hardcode are that command's policy, not the client's.
 
 New API calls belong in the domain wrapper for their area, never back in the transport class.
+
+**A domain method only exposes `timeoutMs` when a real caller needs a budget tighter than the
+default**, threaded through from that one call site, not added speculatively to keep sibling
+methods "consistent". `ComponentsClient.getComponentId()` takes one because
+`telemetry/project-uuid.ts` must not stall the `postAction` hook past `RESOLVE_BUDGET_MS`; its
+siblings on the same client (`getComponent`, `hasProjectBeenAnalyzed`, `getProjectSettings`) do
+not have that need, so they do not have the parameter, even though all three also go through
+`getOrNullIf404`. Do not copy `timeoutMs` onto a method that has no caller asking for it yet.

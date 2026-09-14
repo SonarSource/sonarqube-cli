@@ -232,8 +232,9 @@ export class SonarHttpClient {
     endpoint: string,
     params?: QueryParams,
     baseUrl?: string,
+    timeoutMs?: number,
   ): ResultAsync<T | null, HttpClientError> {
-    return this.getSafe<T>(endpoint, params, baseUrl).andThen((result) => {
+    return this.getSafe<T>(endpoint, params, baseUrl, timeoutMs).andThen((result) => {
       if (result.response.status === HTTP_STATUS_NOT_FOUND) {
         return okAsync(null);
       }
@@ -263,9 +264,9 @@ export class SonarHttpClient {
   /**
    * Resolves to `{ response, value }` and never rejects. Only the *status* is left
    * uninterpreted (`value` is `undefined` on a non-2xx response) for the handful of
-   * callers (`getOrNullIf404`, `ProjectBindingsClient`, `checkHubEntitlement`, telemetry
-   * project-uuid lookups) that need to branch on the status themselves instead of getting a
-   * single typed error for "not 2xx". A transport failure (DNS/TLS, connection refused,
+   * callers (`getOrNullIf404`, `ProjectBindingsClient`, `checkHubEntitlement`) that need to
+   * branch on the status themselves instead of getting a single typed error for "not 2xx".
+   * A transport failure (DNS/TLS, connection refused,
    * timeout) becomes `TransportError`; a body-parse failure on an otherwise-2xx response becomes
    * `UnexpectedApiError` instead, since the server did answer. Same split as
    * `toStatusCheckedResult` below, so a malformed body classifies the same way regardless
