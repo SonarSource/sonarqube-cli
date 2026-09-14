@@ -217,12 +217,14 @@ Three rules hold across all seventeen of them, with no exception — keep it tha
 **Every API client is constructed from a `SonarHttpClient`**, never from a `(serverUrl, token)` pair
 it turns into one itself. An authenticated handler takes that transport from `ctx.httpClient`
 (`CommandAuthenticatedInvocationContext`, built lazily from `ctx.auth` and memoised for the
-invocation) rather than constructing one, so there is a single way to obtain a client and a unit
-test can inject a fake instead of stubbing the transport class prototype. Only code with no
-authenticated context (hook handlers that resolve auth themselves and fail open) builds one inline
-and threads it down as a parameter. Sharing that instance buys uniformity, not caching: the
-transport holds no per-request state, and the cache that matters lives on `OrganizationsClient`,
-so it is the next rule, not this one, that keeps a lookup from being repeated.
+invocation) rather than constructing one, so there is a single way to obtain a client. Only code
+with no authenticated context (hook handlers that resolve auth themselves and fail open) builds
+one inline and threads it down as a parameter. Sharing that instance buys uniformity, not caching:
+the transport holds no per-request state, and the cache that matters lives on `OrganizationsClient`,
+so it is the next rule, not this one, that keeps a lookup from being repeated. It also does not yet
+buy test injection: the getter memoises into a private field with no constructor parameter or
+setter, so unit tests still stub `SonarHttpClient.prototype`; the natural seam is the `CliRuntime`
+CLI-1098 introduces.
 
 **A command-level client that needs a shared domain client exposes it as a `readonly` field**
 (`ImportApiClient.organizations`, `RemediateApiClient.issues` / `.components`) rather than

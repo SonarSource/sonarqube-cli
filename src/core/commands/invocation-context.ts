@@ -149,7 +149,10 @@ export class CommandAuthenticatedInvocationContext extends CommandInvocationCont
   /**
    * Shared `SonarHttpClient` for this invocation, built lazily from {@link auth} and
    * memoised for its lifetime. Every domain client constructed during the invocation
-   * should share this instance, so caches such as `OrganizationsClient`'s stay effective.
+   * should be built from this instance instead of a fresh `SonarHttpClient`. This buys
+   * uniformity, not caching: the transport holds no per-request state, so sharing it does
+   * not make a domain client's own cache (e.g. `OrganizationsClient`'s `orgInfoCache`)
+   * more effective.
    */
   get httpClient(): SonarHttpClient {
     this.client ??= new SonarHttpClient(this.auth.serverUrl, this.auth.token);
