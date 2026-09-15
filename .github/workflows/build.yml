@@ -79,6 +79,8 @@ jobs:
         shell: bash
         env:
           PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
+          ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
+          BUN_CONFIG_REGISTRY: https://repox.jfrog.io/artifactory/api/npm/npm/
         run: |
           set -euo pipefail
 
