@@ -24,6 +24,8 @@ import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as scaInstall from '@/core/host/install/sca-scanner.ts';
+import * as projectInfo from '@/core/project-info.ts';
+import { resetProjectUuidContextForTests } from '@/core/telemetry/project-uuid.ts';
 
 import { ScaScanOrchestrator } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
 import type {
@@ -182,9 +184,15 @@ describe('runDepRisksStage', () => {
   let resolveScaScannerBinaryPathSpy: ReturnType<typeof spyOn>;
   let watchPatternsSpy: ReturnType<typeof spyOn>;
   let orchestratorRunSpy: ReturnType<typeof spyOn>;
+  let discoverProjectSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
+    resetProjectUuidContextForTests();
     fake = new FakeConsole();
+    discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
+      projectRoot: '/repo',
+      configSources: [],
+    });
     resolveScaScannerBinaryPathSpy = spyOn(
       scaInstall,
       'resolveScaScannerBinaryPath',
@@ -198,6 +206,7 @@ describe('runDepRisksStage', () => {
   });
 
   afterEach(() => {
+    discoverProjectSpy.mockRestore();
     resolveScaScannerBinaryPathSpy.mockRestore();
     watchPatternsSpy.mockRestore();
     orchestratorRunSpy.mockRestore();
@@ -304,6 +313,59 @@ describe('runDepRisksStage', () => {
     });
 
     expect(orchestratorRunSpy).not.toHaveBeenCalled();
+    const skipCall = fake.findCall('success', 'No dependency manifests changed in this commit');
+    expect(skipCall).toBeDefined();
+  });
+
+  it('scans under the discovered project key when no -p was baked', async () => {
+    discoverProjectSpy.mockResolvedValue({
+      projectRoot: '/repo',
+      configSources: [],
+      projectKey: 'discovered-key',
+    });
+
+    let thrown: unknown;
+    try {
+      await runDepRisksStage({
+        project: undefined,
+        changedFiles: ['package.json'],
+        auth: FAKE_AUTH,
+        ctx: makeCtx(),
+      });
+    } catch (e) {
+      thrown = e;
+    }
+
+    expect(orchestratorRunSpy.mock.calls[0][1]).toBe('discovered-key');
+    expect((thrown as CommandFailedError).remediationHint).toContain(
+      "sonar analyze dependency-risks -p discovered-key'",
+    );
+  });
+
+  it('warns and skips when no project key resolved, but only after checking manifests changed', async () => {
+    await runDepRisksStage({
+      project: undefined,
+      changedFiles: ['package.json'],
+      auth: FAKE_AUTH,
+      ctx: makeCtx(),
+    });
+
+    expect(orchestratorRunSpy).not.toHaveBeenCalled();
+    const warnCall = fake.findCall('warn', 'no SonarQube project resolved for this repo');
+    expect(warnCall).toBeDefined();
+  });
+
+  it('does not warn about a missing project key when no dependency manifests changed', async () => {
+    await runDepRisksStage({
+      project: undefined,
+      changedFiles: ['index.ts'],
+      auth: FAKE_AUTH,
+      ctx: makeCtx(),
+    });
+
+    expect(orchestratorRunSpy).not.toHaveBeenCalled();
+    const projectWarnCall = fake.findCall('warn', 'no SonarQube project resolved for this repo');
+    expect(projectWarnCall).toBeUndefined();
     const skipCall = fake.findCall('success', 'No dependency manifests changed in this commit');
     expect(skipCall).toBeDefined();
   });

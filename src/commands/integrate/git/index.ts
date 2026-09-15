@@ -154,8 +154,8 @@ export async function integrateGit(
   const { auth, console } = ctx;
   validateHookOption(options.hook);
 
-  if (options.global && (options.dependencyRisks || options.project)) {
-    throw new InvalidOptionError('--dependency-risks and -p are not supported with --global.');
+  if (options.global && options.project) {
+    throw new InvalidOptionError('-p is not supported with --global.');
   }
 
   if (!options.nonInteractive) {
@@ -218,7 +218,9 @@ async function resolveProjectKey(
   }
 
   console.warn(
-    'No project key detected — some features will not be available. Run `sonar integrate git --help` for ways to define a project.',
+    'No project key detected — dependency-risks scanning (if installed) will resolve a project ' +
+      'per-repo at commit time instead of a fixed key. Run `sonar integrate git --help` for ways ' +
+      'to define one explicitly.',
   );
   return options;
 }

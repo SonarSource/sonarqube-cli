@@ -649,8 +649,7 @@
     ],
     hooks: [
       { title: 'Authenticate',        cmd: 'sonar auth login',                                        desc: 'Connect to SonarQube.' },
-      { title: 'Install hook',        cmd: 'sonar integrate git',                                     desc: 'Runs a secrets scan before every git commit or push.' },
-      { title: 'Add SCA scan',        cmd: 'sonar integrate git --dependency-risks -p <key>',         desc: 'Optional: also scan dependency manifests for security &amp; license risks on every commit.' },
+      { title: 'Install hook',        cmd: 'sonar integrate git',                                     desc: 'Runs a secrets scan before every git commit or push; also scans dependency manifests for security &amp; license risks on commit when SCA is available.' },
     ],
     'pr-issues': [
       { title: 'Authenticate',        cmd: 'sonar auth login',                                                              desc: 'Connect to SonarQube.' },

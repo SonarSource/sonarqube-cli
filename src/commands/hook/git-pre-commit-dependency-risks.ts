@@ -19,12 +19,14 @@
  */
 
 // Dependency-risks stage of the git pre-commit hook. Invoked after the secrets
-// stage when the user opted in via `--dependency-risks` and `-p <projectKey>`. Skips
-// silently when no manifests changed, fails-open on infra errors (auth/binary
-// missing, scanner failure), and blocks the commit only when risks matching the
-// configured filter are found.
+// stage when the hook was installed with dependency-risks scanning enabled
+// (--dependency-risks, optionally with -p <projectKey>). Skips silently when no
+// manifests changed, fails-open on infra errors (auth/binary missing, scanner
+// failure), and blocks the commit only when risks matching the configured filter
+// are found.
 
 import { createScaScanApi } from '@/commands/analyze/dependency-risk-helpers/sca-api.ts';
+import { SEVERITIES } from '@/commands/analyze/dependency-risk-helpers/view-model/build';
 import {
   recordScaAnalysisTelemetry,
   SCA_CALLER_COMMANDS,
@@ -38,7 +40,9 @@ import {
 } from '@/core/host/install/sca-scanner.ts';
 import { ResolveOnlySecretsInstaller } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
+import { discoverProject } from '@/core/project-info.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
+import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { countSelectedRisks } from '../analyze/dependency-risk-helpers/count-selected-risks.ts';
@@ -56,16 +60,28 @@ import {
 } from '../analyze/dependency-risk-helpers/sca-watch-patterns.ts';
 import type { DependencyRisksViewModel } from '../analyze/dependency-risk-helpers/view-model';
 import { buildDependencyRisksViewModel } from '../analyze/dependency-risk-helpers/view-model/build';
-import { SEVERITIES } from '../analyze/dependency-risk-helpers/view-model/build/severity.ts';
 
 const HOOK_STATUS_FILTER = 'new';
 const HOOK_MIN_SEVERITY: Severity = 'MEDIUM';
 
 export interface DepRisksStageOptions {
-  project: string;
+  /** The hook's baked `-p`, if any. Absent means "discover one", not "there is none". */
+  project?: string;
   changedFiles: string[];
   auth: ResolvedAuth;
   ctx: CommandInvocationContext;
+}
+
+async function resolveProjectKey(options: DepRisksStageOptions): Promise<string | undefined> {
+  if (options.project) {
+    return options.project;
+  }
+  const discovered = await discoverProject(process.cwd(), {
+    auth: options.auth,
+    silent: true,
+    console: options.ctx.console,
+  });
+  return discovered.projectKey;
 }
 
 export async function runDepRisksStage(options: DepRisksStageOptions): Promise<void> {
@@ -74,7 +90,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
   if (!binaryPath) {
     logger.warn('Dependency-risks hook: sca-scanner binary not installed, skipping.');
     console.warn(
-      "Dependency-risks scan skipped: sca-scanner binary not installed; commit not blocked. Re-run 'sonar integrate git --dependency-risks -p <project>' to restore it.",
+      "Dependency-risks scan skipped: sca-scanner binary not installed; commit not blocked. Re-run 'sonar integrate git -p <project>' to restore it.",
     );
     return;
   }
@@ -82,6 +98,17 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
   if (!(await shouldRunDependencyRiskAnalysis(binaryPath, options.changedFiles, console))) {
     return;
   }
+
+  const project = await resolveProjectKey(options);
+  if (!project) {
+    logger.warn('Dependency-risks hook: no project key resolved, skipping.');
+    console.warn(
+      'Dependency-risks scan skipped: no SonarQube project resolved for this repo; ' +
+        "commit not blocked. Re-run 'sonar integrate git -p <project>' to set one explicitly.",
+    );
+    return;
+  }
+  noteProject(options.auth, project);
 
   const filter = buildRiskFilter(HOOK_STATUS_FILTER, HOOK_MIN_SEVERITY);
   if (!filter) {
@@ -102,7 +129,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
       new ScaScannerNoopInstaller(binaryPath),
       new DefaultScaScannerSpawner(),
       new ResolveOnlySecretsInstaller(),
-    ).run(options.auth, options.project, SCA_CALLER_COMMANDS.gitPreCommit, options.ctx);
+    ).run(options.auth, project, SCA_CALLER_COMMANDS.gitPreCommit, options.ctx);
     viewModel = buildDependencyRisksViewModel(scan.response, filter);
   } catch (err) {
     // The orchestrator already emitted a failures_count:1 event if the SCA scan itself failed;
@@ -132,7 +159,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
   throw new CommandFailedError(
     `${matchedCount} dependency ${pluralize(matchedCount, 'risk')} found (${formatSeverityBreakdown(viewModel)})`,
     {
-      remediationHint: `Run 'sonar analyze dependency-risks -p ${options.project}' for details and fix recommendations. Bypass with 'git commit --no-verify' if risks are already reviewed.`,
+      remediationHint: `Run 'sonar analyze dependency-risks -p ${project}' for details and fix recommendations. Bypass with 'git commit --no-verify' if risks are already reviewed.`,
     },
   );
 }
