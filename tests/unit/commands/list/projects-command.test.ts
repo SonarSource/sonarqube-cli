@@ -209,17 +209,14 @@ describe('projectsSearchCommand', () => {
       expect(capturedParams?.ps).toBe(50);
     });
 
-    it('passes organization key for SonarCloud connections', async () => {
-      const cloudAuth = new ResolvedAuth({
-        token: 'cloud-token',
-        serverUrl: 'https://sonarcloud.io',
-        orgKey: 'my-org',
-        connectionType: 'cloud',
-        source: 'state' as const,
-      });
-
+    /** Runs a search against a transport built from `auth`, so `isCloud` matches the connection. */
+    async function captureParamsFor(
+      auth: ResolvedAuth,
+    ): Promise<Record<string, unknown> | undefined> {
+      const client = new SonarHttpClient(auth.serverUrl, auth.token);
+      const clientGetSpy: ReturnType<typeof spyOn> = spyOn(client, 'get');
       let capturedParams: Record<string, unknown> | undefined;
-      getSpy.mockImplementation(
+      clientGetSpy.mockImplementation(
         (
           _endpoint: string,
           params?: Record<string, unknown>,
@@ -232,46 +229,32 @@ describe('projectsSearchCommand', () => {
       await listProjects(
         DEFAULT_OPTIONS,
         new CommandAuthenticatedInvocationContext(
-          cloudAuth,
+          auth,
           new FakeConsole(),
           undefined,
-          createCliRuntime({ httpClientFactory: () => httpClient }),
+          createCliRuntime({ httpClientFactory: () => client }),
         ),
       );
 
-      expect(capturedParams?.organization).toBe('my-org');
+      return capturedParams;
+    }
+
+    it('passes organization key for SonarCloud connections', async () => {
+      const params = await captureParamsFor(
+        new ResolvedAuth({
+          token: 'cloud-token',
+          serverUrl: 'https://sonarcloud.io',
+          orgKey: 'my-org',
+          connectionType: 'cloud',
+          source: 'state' as const,
+        }),
+      );
+
+      expect(params?.organization).toBe('my-org');
     });
 
     it('does not pass organization key for on-premise connections', async () => {
-      const onPremAuth = new ResolvedAuth({
-        token: 'test-token',
-        serverUrl: 'https://sonar.example.com',
-        connectionType: 'on-premise',
-        source: 'state' as const,
-      });
-
-      let capturedParams: Record<string, unknown> | undefined;
-      getSpy.mockImplementation(
-        (
-          _endpoint: string,
-          params?: Record<string, unknown>,
-        ): ResultAsync<ProjectsSearchResponse, HttpClientError> => {
-          capturedParams = params;
-          return makeProjectsResponse([]);
-        },
-      );
-
-      await listProjects(
-        DEFAULT_OPTIONS,
-        new CommandAuthenticatedInvocationContext(
-          onPremAuth,
-          new FakeConsole(),
-          undefined,
-          createCliRuntime({ httpClientFactory: () => httpClient }),
-        ),
-      );
-
-      expect(capturedParams?.organization).toBeUndefined();
+      expect((await captureParamsFor(mockAuth))?.organization).toBeUndefined();
     });
   });
 });
