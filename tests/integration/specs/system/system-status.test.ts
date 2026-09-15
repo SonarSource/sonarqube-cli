@@ -103,7 +103,11 @@ const VALID_TOML_MCP_CONFIG = `[mcp_servers.sonarqube]\ncommand = "sonar"\nargs 
 function codexMcpState(targetRoot: string): Record<string, unknown> {
   return baseState({
     integrations: {
-      installed: [makeInstallEntry('test-id', 'codex', 'mcp-server', targetRoot)],
+      installed: [
+        makeInstallEntry('test-id', 'codex', 'mcp-server', targetRoot, [
+          makeResource('mcp-config', 'toml-patch', join(targetRoot, '.codex', 'config.toml')),
+        ]),
+      ],
     },
   });
 }
@@ -113,7 +117,7 @@ function mcpStateWithFeature(targetRoot: string, mcpConfigPath: string): Record<
     integrations: {
       installed: [
         makeInstallEntry('test-id', 'claude-code', 'mcp-server', targetRoot, [
-          makeResource('claude-mcp-config', 'whole-file', mcpConfigPath),
+          makeResource('mcp-config', 'whole-file', mcpConfigPath),
         ]),
       ],
     },
@@ -123,7 +127,11 @@ function mcpStateWithFeature(targetRoot: string, mcpConfigPath: string): Record<
 function mcpClaudeIntegrationState(targetRoot: string): Record<string, unknown> {
   return baseState({
     integrations: {
-      installed: [makeInstallEntry('test-id', 'claude-code', 'mcp-server', targetRoot)],
+      installed: [
+        makeInstallEntry('test-id', 'claude-code', 'mcp-server', targetRoot, [
+          makeResource('mcp-config', 'json-patch', join(targetRoot, '.claude.json')),
+        ]),
+      ],
     },
   });
 }
@@ -138,8 +146,10 @@ function legacyAgentState(): Record<string, unknown> {
 
 function antigravityStatusState(
   targetRoot: string,
+  userHome: string,
   scope: 'project' | 'global' = 'project',
 ): Record<string, unknown> {
+  const mcpConfigPath = join(userHome, '.gemini', 'config', 'mcp_config.json');
   const featureTemplate = {
     scope,
     targetRoot,
@@ -164,7 +174,11 @@ function antigravityStatusState(
           updatedAt: new Date().toISOString(),
           features: [
             { ...featureTemplate, featureId: 'sonar-secrets-hooks' },
-            { ...featureTemplate, featureId: 'mcp-server' },
+            {
+              ...featureTemplate,
+              featureId: 'mcp-server',
+              resources: [makeResource('mcp-config', 'json-patch', mcpConfigPath)],
+            },
           ],
         },
       ],
@@ -1043,8 +1057,12 @@ describe('system status', () => {
       const multiMcpState = baseState({
         integrations: {
           installed: [
-            makeInstallEntry('claude-id', 'claude-code', 'mcp-server', claudeGlobalRoot),
-            makeInstallEntry('copilot-id', 'copilot-cli', 'mcp-server', copilotGlobalRoot),
+            makeInstallEntry('claude-id', 'claude-code', 'mcp-server', claudeGlobalRoot, [
+              makeResource('mcp-config', 'json-patch', join(claudeGlobalRoot, '.claude.json')),
+            ]),
+            makeInstallEntry('copilot-id', 'copilot-cli', 'mcp-server', copilotGlobalRoot, [
+              makeResource('mcp-config', 'json-patch', join(copilotGlobalRoot, 'mcp-config.json')),
+            ]),
           ],
         },
       });
@@ -1086,8 +1104,12 @@ describe('system status', () => {
       const multiMcpState = baseState({
         integrations: {
           installed: [
-            makeInstallEntry('claude-id', 'claude-code', 'mcp-server', claudeGlobalRoot),
-            makeInstallEntry('copilot-id', 'copilot-cli', 'mcp-server', copilotGlobalRoot),
+            makeInstallEntry('claude-id', 'claude-code', 'mcp-server', claudeGlobalRoot, [
+              makeResource('mcp-config', 'json-patch', join(claudeGlobalRoot, '.claude.json')),
+            ]),
+            makeInstallEntry('copilot-id', 'copilot-cli', 'mcp-server', copilotGlobalRoot, [
+              makeResource('mcp-config', 'json-patch', join(copilotGlobalRoot, 'mcp-config.json')),
+            ]),
           ],
         },
       });
@@ -1142,7 +1164,11 @@ describe('system status', () => {
         }),
       );
       harness.userHome.writeFile(join('.gemini', 'config', 'mcp_config.json'), VALID_MCP_CONFIG);
-      harness.state().withRawState(JSON.stringify(antigravityStatusState(harness.cwd.path)));
+      harness
+        .state()
+        .withRawState(
+          JSON.stringify(antigravityStatusState(harness.cwd.path, harness.userHome.path)),
+        );
 
       const result = await harness.run('system status');
 
@@ -1192,7 +1218,11 @@ describe('system status', () => {
         }),
       );
       harness.userHome.writeFile(join('.gemini', 'config', 'mcp_config.json'), VALID_MCP_CONFIG);
-      harness.state().withRawState(JSON.stringify(antigravityStatusState(harness.cwd.path)));
+      harness
+        .state()
+        .withRawState(
+          JSON.stringify(antigravityStatusState(harness.cwd.path, harness.userHome.path)),
+        );
 
       const result = await harness.run('system status');
 

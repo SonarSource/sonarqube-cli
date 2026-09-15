@@ -24,15 +24,14 @@ import type { ContainerIntegrationContext } from '@/core/framework/features';
 import { getDefaultState } from '@/core/state/state.ts';
 
 import {
+  removeMcpServer,
+  upsertMcpServer,
+} from '../../../../../src/commands/integrate/_common/features/mcp-server-feature.ts';
+import {
   removeAgentHooks,
   SONAR_SECRETS_MARKER,
   upsertAgentHooks,
 } from '../../../../../src/commands/integrate/_common/hooks.ts';
-import {
-  removeCodexMcpServer,
-  removeJsonMcpServer,
-  upsertJsonMcpServer,
-} from '../../../../../src/commands/integrate/_common/mcp-config.ts';
 import { removeCopilotHooks } from '../../../../../src/commands/integrate/copilot/hooks.ts';
 import {
   normalizePreCommitConfig,
@@ -81,14 +80,14 @@ describe('integration remove helpers', () => {
     expect(removed.hooks?.PostToolUse?.[0]?.hooks[0]?.command).toBe('other');
   });
 
-  it('upsertJsonMcpServer inserts sonarqube entry into an empty document', () => {
-    const result = upsertJsonMcpServer({}, { command: 'sonar', args: ['run', 'mcp'] });
+  it('upsertMcpServer inserts sonarqube entry into an empty document', () => {
+    const result = upsertMcpServer({}, { command: 'sonar', args: ['run', 'mcp'] });
 
     expect(result.mcpServers).toEqual({ sonarqube: { command: 'sonar', args: ['run', 'mcp'] } });
   });
 
-  it('upsertJsonMcpServer preserves existing mcpServers entries', () => {
-    const result = upsertJsonMcpServer(
+  it('upsertMcpServer preserves existing mcpServers entries', () => {
+    const result = upsertMcpServer(
       { mcpServers: { other: { command: 'x' } } },
       { command: 'sonar', args: ['run', 'mcp'] },
     );
@@ -99,8 +98,8 @@ describe('integration remove helpers', () => {
     });
   });
 
-  it('upsertJsonMcpServer overwrites an existing sonarqube entry', () => {
-    const result = upsertJsonMcpServer(
+  it('upsertMcpServer overwrites an existing sonarqube entry', () => {
+    const result = upsertMcpServer(
       { mcpServers: { sonarqube: { command: 'old' } } },
       { command: 'sonar', args: ['run', 'mcp'] },
     );
@@ -108,40 +107,42 @@ describe('integration remove helpers', () => {
     expect(result.mcpServers).toEqual({ sonarqube: { command: 'sonar', args: ['run', 'mcp'] } });
   });
 
-  it('upsertJsonMcpServer preserves other top-level keys', () => {
-    const result = upsertJsonMcpServer({ inputs: [{ type: 'promptString', id: 'token' }] }, {});
+  it('upsertMcpServer preserves other top-level keys', () => {
+    const result = upsertMcpServer({ inputs: [{ type: 'promptString', id: 'token' }] }, {});
 
     expect(result.inputs).toEqual([{ type: 'promptString', id: 'token' }]);
   });
 
-  it('upsertJsonMcpServer handles a non-object document gracefully', () => {
-    expect(upsertJsonMcpServer(null, { command: 'sonar' }).mcpServers).toEqual({
+  it('upsertMcpServer handles a non-object document gracefully', () => {
+    expect(upsertMcpServer(null, { command: 'sonar' }).mcpServers).toEqual({
       sonarqube: { command: 'sonar' },
     });
-    expect(upsertJsonMcpServer(['unexpected'], { command: 'sonar' }).mcpServers).toEqual({
+    expect(upsertMcpServer(['unexpected'], { command: 'sonar' }).mcpServers).toEqual({
       sonarqube: { command: 'sonar' },
     });
   });
 
-  it('upsertJsonMcpServer uses a custom serverId when provided', () => {
-    const result = upsertJsonMcpServer({}, { command: 'sonar' }, 'my-server');
-
-    expect(result.mcpServers).toEqual({ 'my-server': { command: 'sonar' } });
-    expect(result.mcpServers).not.toHaveProperty('sonarqube');
-  });
-
-  it('removeJsonMcpServer drops sonarqube server only', () => {
-    const result = removeJsonMcpServer({
+  it('removeMcpServer drops sonarqube server only', () => {
+    const result = removeMcpServer({
       mcpServers: { sonarqube: { command: 'sonar' }, other: { command: 'x' } },
     });
 
     expect(result.mcpServers).toEqual({ other: { command: 'x' } });
   });
 
-  it('removeCodexMcpServer drops sonarqube from mcp_servers', () => {
-    const result = removeCodexMcpServer({
-      mcp_servers: { sonarqube: { command: 'sonar' }, other: {} },
-    });
+  it('upsertMcpServer writes the TOML mcp_servers table for Codex', () => {
+    const result = upsertMcpServer({ model: 'gpt-5' }, { command: 'sonar' }, 'toml');
+
+    expect(result.mcp_servers).toEqual({ sonarqube: { command: 'sonar' } });
+    expect(result).not.toHaveProperty('mcpServers');
+    expect(result.model).toBe('gpt-5');
+  });
+
+  it('removeMcpServer drops sonarqube from the TOML mcp_servers table', () => {
+    const result = removeMcpServer(
+      { mcp_servers: { sonarqube: { command: 'sonar' }, other: {} } },
+      'toml',
+    );
 
     expect(result.mcp_servers).toEqual({ other: {} });
   });

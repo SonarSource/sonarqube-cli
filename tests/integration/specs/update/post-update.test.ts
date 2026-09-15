@@ -25,6 +25,7 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
+import { MCP_CONFIG_RESOURCE_ID } from '@/commands/integrate/_common/features/mcp-server-feature.ts';
 import {
   SQAA_HOOK_FEATURE_ID,
   SQAA_INSTRUCTIONS_SUBFEATURE_ID,
@@ -131,6 +132,117 @@ describe('post-update migration', () => {
   afterEach(async () => {
     await harness.dispose();
   });
+
+  it(
+    're-records resources whose declared id changed, preserving the config file',
+    async () => {
+      // Older installs recorded `<agent>-mcp-config`; the framework now declares a single
+      // `mcp-config` id. Reconciliation must re-record it under the new id without
+      // disturbing unrelated entries in the agent's config file.
+      const now = new Date().toISOString();
+      const mcpJson = harness.cwd.file('.mcp.json');
+      const codexToml = harness.cwd.file('.codex', 'config.toml');
+      harness.cwd.writeFile(
+        '.mcp.json',
+        JSON.stringify({
+          mcpServers: {
+            other: { command: 'other-mcp', args: [] },
+            sonarqube: { command: 'sonar', args: ['run', 'mcp'] },
+          },
+        }),
+      );
+      harness.cwd.writeFile(
+        '.codex/config.toml',
+        'model = "gpt-5"\n\n[mcp_servers.sonarqube]\ncommand = "sonar"\nargs = ["run", "mcp"]\n',
+      );
+
+      const legacyMcpFeature = (resourceId: string, resourceType: string, path: string) => ({
+        featureId: 'mcp-server',
+        scope: 'project',
+        targetRoot: harness.cwd.path,
+        installedByCliVersion: '0.5.0',
+        installedAt: now,
+        updatedByCliVersion: '0.5.0',
+        updatedAt: now,
+        dependencies: [],
+        operations: [],
+        resources: [
+          {
+            id: resourceId,
+            resourceType,
+            path,
+            updatedByCliVersion: '0.5.0',
+            updatedAt: now,
+          },
+        ],
+      });
+
+      harness.state().withRawState(
+        JSON.stringify({
+          version: '1.0',
+          lastUpdated: now,
+          auth: { isAuthenticated: false, connections: [] },
+          agents: {},
+          config: { cliVersion: '0.5.0' },
+          telemetry: { enabled: false, firstUseDate: now, events: [] },
+          agentExtensions: [],
+          integrations: {
+            installed: [
+              {
+                id: randomUUID(),
+                integrationId: 'claude-code',
+                installedByCliVersion: '0.5.0',
+                installedAt: now,
+                updatedByCliVersion: '0.5.0',
+                updatedAt: now,
+                features: [legacyMcpFeature('claude-mcp-config', 'json-patch', mcpJson.path)],
+              },
+              {
+                id: randomUUID(),
+                integrationId: 'codex',
+                installedByCliVersion: '0.5.0',
+                installedAt: now,
+                updatedByCliVersion: '0.5.0',
+                updatedAt: now,
+                features: [legacyMcpFeature('codex-mcp-config', 'toml-patch', codexToml.path)],
+              },
+            ],
+          },
+        }),
+      );
+
+      const result = await harness.run('--version');
+
+      expect(result.exitCode).toBe(0);
+      const state = harness.stateJsonFile.asJson() as CliState;
+      const recordedResources = (integrationId: string) =>
+        state.integrations.installed
+          .find((integration) => integration.integrationId === integrationId)
+          ?.features.find((feature) => feature.featureId === 'mcp-server')?.resources;
+
+      expect(recordedResources('claude-code')).toEqual([
+        expect.objectContaining({
+          id: MCP_CONFIG_RESOURCE_ID,
+          resourceType: 'json-patch',
+          path: mcpJson.path,
+        }),
+      ]);
+      expect(recordedResources('codex')).toEqual([
+        expect.objectContaining({
+          id: MCP_CONFIG_RESOURCE_ID,
+          resourceType: 'toml-patch',
+          path: codexToml.path,
+        }),
+      ]);
+
+      // Unrelated settings survive the re-applied patch.
+      expect(mcpJson.asJson().mcpServers.other).toEqual({ command: 'other-mcp', args: [] });
+      expect(mcpJson.asJson().mcpServers.sonarqube.command).toBe('sonar');
+      expect(codexToml.asText()).toContain('model = "gpt-5"');
+      expect(codexToml.asText()).toContain('[mcp_servers.sonarqube]');
+    },
+    { timeout: 30000 },
+  );
 
   it(
     'quits quietly when state cannot be read',

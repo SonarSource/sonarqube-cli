@@ -20,7 +20,6 @@
 
 import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
@@ -33,7 +32,6 @@ import type {
 import { pemToPkcs12 } from '@/core/host/crypto/pkcs12.ts';
 
 import {
-  ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
   CLI_COMMAND_NAME,
   CLI_TMP_DIR,
   ENV_SONAR_USER_HOME,
@@ -374,30 +372,4 @@ export function resolveMcpContainerCommand(
   return detection.viaWsl
     ? getMcpWslContainerCommand(auth, detection.runtime, context, options, network)
     : getMcpContainerCommand(auth, detection.runtime, context, options, network);
-}
-
-export function getMcpConfigFilePath(
-  agent: string,
-  isGlobal: boolean,
-  projectRoot: string,
-): string {
-  if (agent === 'claude') {
-    return isGlobal ? join(homedir(), '.claude.json') : join(projectRoot, '.mcp.json');
-  } else if (agent === 'copilot') {
-    return isGlobal
-      ? join(homedir(), '.copilot', 'mcp-config.json')
-      : join(projectRoot, '.mcp.json');
-  } else if (agent === 'codex') {
-    return isGlobal
-      ? join(homedir(), '.codex', 'config.toml')
-      : join(projectRoot, '.codex', 'config.toml');
-  } else if (agent === 'cursor') {
-    return isGlobal
-      ? join(homedir(), '.cursor', 'mcp.json')
-      : join(projectRoot, '.cursor', 'mcp.json');
-  } else if (agent === 'antigravity') {
-    // Antigravity uses one global MCP file for all workspaces; scope is ignored.
-    return ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON;
-  }
-  throw new Error(`Unsupported agent: ${agent}`);
 }

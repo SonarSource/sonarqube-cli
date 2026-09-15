@@ -290,7 +290,7 @@ describe('integrate codex', () => {
         expect(mcpFeature).toMatchObject({
           resources: [
             {
-              id: 'codex-mcp-config',
+              id: 'mcp-config',
               resourceType: 'toml-patch',
               path: harness.cwd.file(...CONFIG_TOML_DIRS).path,
             },
@@ -355,7 +355,7 @@ describe('integrate codex', () => {
         expect(mcpFeature).toMatchObject({
           resources: [
             {
-              id: 'codex-mcp-config',
+              id: 'mcp-config',
               resourceType: 'toml-patch',
               path: harness.userHome.file(...CONFIG_TOML_DIRS).path,
             },

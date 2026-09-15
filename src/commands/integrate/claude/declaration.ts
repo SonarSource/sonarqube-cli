@@ -29,15 +29,11 @@ import type {
   SubfeatureDeclaration,
 } from '@/core/framework/features';
 import { jsonPatch, skip, wholeFile } from '@/core/framework/features';
-import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 
-import { getOptionalStringAttr } from '../_common/attrs.ts';
 import { isCagHookOrgAllowed } from '../_common/context-augmentation.ts';
 import { contextAugmentationBinaryDependency } from '../_common/context-augmentation-dependency.ts';
 import {
-  MCP_SERVER_FEATURE_BENEFIT,
-  MCP_SERVER_FEATURE_PREVIEW,
   SECRETS_COMBINED_FEATURE_BENEFIT,
   SECRETS_COMBINED_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
@@ -46,6 +42,7 @@ import {
   SESSION_START_SCRIPT_REL,
   VORTEX_HOOK_MARKER,
 } from '../_common/features/context-augmentation-feature.ts';
+import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
   createSqaaInstructionsSnippet,
@@ -60,7 +57,6 @@ import {
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../_common/hooks.ts';
-import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature, vortexInstallDecision } from '../_common/vortex.ts';
 import { createClaudeHookEventContainer } from './hook-container-feature.ts';
@@ -174,23 +170,9 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       ],
       resolveClaudeSkillPath,
     ),
-    {
-      id: 'mcp-server',
-      displayName: 'MCP server',
-      benefitDescription: MCP_SERVER_FEATURE_BENEFIT,
-      previewDescription: MCP_SERVER_FEATURE_PREVIEW,
-      resources: [
-        jsonPatch({
-          id: 'claude-mcp-config',
-          displayName: 'Claude MCP configuration',
-          targetPath: resolveClaudeMcpConfigPath,
-          defaultValue: {},
-          patch: (document, context) =>
-            upsertJsonMcpServer(document, getDesiredClaudeMcpConfig(context)),
-          removePatch: (document) => removeJsonMcpServer(document),
-        }),
-      ],
-    },
+    createMcpServerFeature<ClaudeIntegrationOptions>({
+      resolveConfigPath: resolveClaudeMcpConfigPath,
+    }),
   ],
 };
 
@@ -296,7 +278,7 @@ function resolveClaudeMdPath(context: IntegrationContext): string {
 }
 
 function resolveClaudeMcpConfigPath(context: IntegrationContext): string {
-  return getMcpConfigFilePath('claude', context.scope === 'global', context.targetRoot);
+  return join(context.targetRoot, context.scope === 'global' ? '.claude.json' : '.mcp.json');
 }
 
 function resolveClaudeSkillPath(context: IntegrationContext): string {
@@ -306,17 +288,5 @@ function resolveClaudeSkillPath(context: IntegrationContext): string {
     'skills',
     'sonar-context-augmentation',
     'SKILL.md',
-  );
-}
-
-function getDesiredClaudeMcpConfig(context: IntegrationContext) {
-  return getMcpConfig(
-    context.scope === 'global'
-      ? { withFsMount: false }
-      : {
-          withFsMount: true,
-          projectRoot: context.targetRoot,
-          projectKey: getOptionalStringAttr(context, 'projectKey'),
-        },
   );
 }

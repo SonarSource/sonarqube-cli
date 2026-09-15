@@ -49,7 +49,6 @@ import {
   SCA_SCANNER_CLI_VERSION,
   SONAR_CONTEXT_AUGMENTATION_VERSION,
 } from '@/core/host/install/signatures.ts';
-import { getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { loadState } from '@/core/state/state-repository.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -62,6 +61,7 @@ import {
 
 import { version as VERSION } from '../../../package.json';
 import { supportedIntegrations } from '../integrate';
+import { MCP_CONFIG_RESOURCE_ID } from '../integrate/_common/features/mcp-server-feature.ts';
 import { isVortexFeature } from '../integrate/_common/vortex.ts';
 import { checkAntigravitySecretsHookFile } from '../integrate/antigravity/health.ts';
 import { resolveAntigravityHooksJsonPathForScope } from '../integrate/antigravity/hooks.ts';
@@ -138,30 +138,24 @@ function getBinaryDisplayName(binaryId: string): string {
   return BINARY_DISPLAY_NAMES[binaryId] ?? binaryId;
 }
 
-// integrationId → agent string for getMcpConfigFilePath
-const INTEGRATION_TO_MCP_AGENT: Record<string, string> = {
-  'claude-code': 'claude',
-  'copilot-cli': 'copilot',
-  codex: 'codex',
-  antigravity: 'antigravity',
-};
-
 // integrationId → sonar integrate subcommand
 const INTEGRATION_TO_COMMAND: Record<string, string> = {
   'claude-code': 'sonar integrate claude',
   'copilot-cli': 'sonar integrate copilot',
   codex: 'sonar integrate codex',
+  cursor: 'sonar integrate cursor',
   antigravity: 'sonar integrate antigravity',
 };
 
-function findMcpFeatures(
-  state: CliState,
-): Array<{ integrationId: string; scope: 'project' | 'global'; targetRoot: string }> {
-  const features: Array<{
-    integrationId: string;
-    scope: 'project' | 'global';
-    targetRoot: string;
-  }> = [];
+interface McpFeatureRecord {
+  integrationId: string;
+  scope: 'project' | 'global';
+  targetRoot: string;
+  configPath: string | undefined;
+}
+
+function findMcpFeatures(state: CliState): McpFeatureRecord[] {
+  const features: McpFeatureRecord[] = [];
   for (const integration of state.integrations.installed) {
     for (const feature of integration.features) {
       if (feature.featureId === 'mcp-server') {
@@ -169,6 +163,10 @@ function findMcpFeatures(
           integrationId: integration.integrationId,
           scope: feature.scope,
           targetRoot: feature.targetRoot,
+          // Suffix match also accepts the pre-rename `<agent>-mcp-config` ids
+          configPath: feature.resources.find((resource) =>
+            resource.id.endsWith(MCP_CONFIG_RESOURCE_ID),
+          )?.path,
         });
       }
     }
@@ -176,8 +174,8 @@ function findMcpFeatures(
   return features;
 }
 
-function checkMcpConfigFile(configPath: string): IntegrationConfigStatus {
-  if (!existsSync(configPath)) return 'not_configured';
+function checkMcpConfigFile(configPath: string | undefined): IntegrationConfigStatus {
+  if (!configPath || !existsSync(configPath)) return 'not_configured';
   try {
     const raw = readFileSync(configPath, 'utf-8');
     if (configPath.endsWith('.toml')) {
@@ -210,11 +208,8 @@ function checkMcpConfigFile(configPath: string): IntegrationConfigStatus {
 function getMcpStatusForIntegration(
   integrationId: string,
   targetRoot: string,
-  allMcpFeatures: Array<{ integrationId: string; scope: 'project' | 'global'; targetRoot: string }>,
+  allMcpFeatures: McpFeatureRecord[],
 ): McpStatus | null {
-  const agentStr = INTEGRATION_TO_MCP_AGENT[integrationId];
-  if (!agentStr) return null;
-
   const mcpFeatures = allMcpFeatures.filter(
     (f) => f.integrationId === integrationId && f.targetRoot === targetRoot,
   );
@@ -222,12 +217,7 @@ function getMcpStatusForIntegration(
 
   let hasInvalid = false;
   for (const feature of mcpFeatures) {
-    const configPath = getMcpConfigFilePath(
-      agentStr,
-      feature.scope === 'global',
-      feature.targetRoot,
-    );
-    const configStatus = checkMcpConfigFile(configPath);
+    const configStatus = checkMcpConfigFile(feature.configPath);
     if (configStatus === 'configured') {
       return { config: 'configured' };
     }

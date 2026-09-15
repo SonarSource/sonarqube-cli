@@ -176,7 +176,7 @@ describe('integrate cursor', () => {
           scope: 'project',
           resources: [
             {
-              id: 'cursor-mcp-config',
+              id: 'mcp-config',
               resourceType: 'json-patch',
               path: harness.cwd.file(...MCP_JSON_DIRS).path,
             },
@@ -270,7 +270,7 @@ describe('integrate cursor', () => {
           scope: 'global',
           resources: [
             {
-              id: 'cursor-mcp-config',
+              id: 'mcp-config',
               resourceType: 'json-patch',
               path: harness.userHome.file(...MCP_JSON_DIRS).path,
             },

@@ -39,16 +39,14 @@ import {
   textSnippetRemover,
   wholeFile,
 } from '@/core/framework/features';
-import { getMcpConfig } from '@/core/host/mcp/mcp-helper.ts';
 
 import {
-  MCP_SERVER_FEATURE_BENEFIT,
-  MCP_SERVER_FEATURE_PREVIEW,
   SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
   SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
   SECRETS_PROMPT_FEATURE_BENEFIT,
   SECRETS_PROMPT_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
+import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
   createSqaaInstructionsRule,
@@ -57,7 +55,6 @@ import {
 } from '../_common/features/sqaa-instructions-feature.ts';
 import { buildUnixHookScript, buildWindowsHookScript } from '../_common/hooks.ts';
 import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates.ts';
-import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
 import {
@@ -150,22 +147,10 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
         }),
       ],
     },
-    {
-      id: 'mcp-server',
-      displayName: 'MCP server',
-      benefitDescription: MCP_SERVER_FEATURE_BENEFIT,
-      previewDescription: MCP_SERVER_FEATURE_PREVIEW,
-      resources: [
-        jsonPatch({
-          id: 'antigravity-mcp-config',
-          displayName: 'Antigravity MCP configuration',
-          targetPath: () => ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
-          defaultValue: {},
-          patch: (document) => upsertJsonMcpServer(document, getMcpConfig({ withFsMount: false })),
-          removePatch: (document) => removeJsonMcpServer(document),
-        }),
-      ],
-    },
+    createMcpServerFeature<AntigravityIntegrationOptions>({
+      resolveConfigPath: () => ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
+      alwaysGlobal: true,
+    }),
     {
       id: 'prompt-secrets-project-rules',
       displayName: 'prompt-secrets workspace rules',

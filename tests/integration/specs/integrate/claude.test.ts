@@ -149,7 +149,7 @@ describe('integrate claude', () => {
       expect(mcpFeature).toMatchObject({
         resources: [
           {
-            id: 'claude-mcp-config',
+            id: 'mcp-config',
             resourceType: 'json-patch',
             path: harness.cwd.file('.mcp.json').path,
           },

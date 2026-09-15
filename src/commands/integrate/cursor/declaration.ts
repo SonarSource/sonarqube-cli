@@ -34,12 +34,8 @@ import {
   sonarSecretsBinaryDependency,
   wholeFile,
 } from '@/core/framework/features';
-import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 
-import { getOptionalStringAttr } from '../_common/attrs.ts';
 import {
-  MCP_SERVER_FEATURE_BENEFIT,
-  MCP_SERVER_FEATURE_PREVIEW,
   SECRETS_COMBINED_FEATURE_BENEFIT,
   SECRETS_COMBINED_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
@@ -48,6 +44,7 @@ import {
   SESSION_START_SCRIPT_REL,
   VORTEX_HOOK_MARKER,
 } from '../_common/features/context-augmentation-feature.ts';
+import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
 import {
   resolveAgentHooksConfigPath,
   secretsScanningExample,
@@ -61,13 +58,13 @@ import {
   buildWindowsHookScript,
   resolveAgentHookScriptPath,
 } from '../_common/hooks.ts';
-import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
 import { buildCursorHookEntry, removeCursorHooks, upsertCursorHooks } from './hooks.ts';
 import { buildCursorAlwaysOnRule } from './rules.ts';
 
 const HOOKS_JSON = 'hooks.json';
+const MCP_JSON = 'mcp.json';
 const PREREAD_SCRIPT_REL = 'sonar-secrets/build-scripts/before-read-file-secrets';
 const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pre-tool-use-secrets';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
@@ -88,19 +85,7 @@ export interface CursorIntegrationOptions extends IntegrateAgentOptions {
 }
 
 function resolveCursorMcpConfigPath(context: IntegrationContext): string {
-  return getMcpConfigFilePath('cursor', context.scope === 'global', context.targetRoot);
-}
-
-function getDesiredCursorMcpConfig(context: IntegrationContext) {
-  return getMcpConfig(
-    context.scope === 'global'
-      ? { withFsMount: false }
-      : {
-          withFsMount: true,
-          projectRoot: context.targetRoot,
-          projectKey: getOptionalStringAttr(context, 'projectKey'),
-        },
-  );
+  return join(context.targetRoot, CURSOR_CONFIG_DIR, MCP_JSON);
 }
 
 function resolveCursorSqaaRulePath(context: IntegrationContext): string {
@@ -236,22 +221,8 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
       ],
       resolveCursorCagSkillPath,
     ),
-    {
-      id: 'mcp-server',
-      displayName: 'MCP server',
-      benefitDescription: MCP_SERVER_FEATURE_BENEFIT,
-      previewDescription: MCP_SERVER_FEATURE_PREVIEW,
-      resources: [
-        jsonPatch({
-          id: 'cursor-mcp-config',
-          displayName: 'Cursor MCP configuration',
-          targetPath: resolveCursorMcpConfigPath,
-          defaultValue: {},
-          patch: (document, context) =>
-            upsertJsonMcpServer(document, getDesiredCursorMcpConfig(context)),
-          removePatch: (document) => removeJsonMcpServer(document),
-        }),
-      ],
-    },
+    createMcpServerFeature<CursorIntegrationOptions>({
+      resolveConfigPath: resolveCursorMcpConfigPath,
+    }),
   ],
 };
