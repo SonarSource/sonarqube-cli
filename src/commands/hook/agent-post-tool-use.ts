@@ -93,15 +93,15 @@ async function handleSqaaPostToolUse(
   let fetchResult: Awaited<ReturnType<typeof fetchSingleFileReport>>;
   try {
     const fileContent = readFileSync(canonicalPath, 'utf-8');
-    const sqaaAuth = {
+    const target = {
       ...(auth.orgKey ? { orgKey: auth.orgKey } : {}),
-      client: new SonarHttpClient(auth.serverUrl, auth.token),
+      transport: new SonarHttpClient(auth.serverUrl, auth.token),
     };
     const branch = await resolveSqaaBranch(undefined, canonicalPath);
 
     const timedFetch = await timed(() =>
       fetchSingleFileReport(
-        sqaaAuth,
+        target,
         projectKey,
         canonicalPath,
         fileContent,
