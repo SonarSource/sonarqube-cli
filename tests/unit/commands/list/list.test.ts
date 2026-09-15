@@ -25,6 +25,7 @@
 import { beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { okAsync, type ResultAsync } from '@/core/result.ts';
 import type { HttpClientError } from '@/core/server/errors.ts';
@@ -452,6 +453,7 @@ describe('issuesSearchCommand', () => {
 
   let fake: FakeConsole;
   let mockCtx: CommandAuthenticatedInvocationContext;
+  let httpClient: SonarHttpClient;
 
   const emptyApiResponse = {
     issues: [],
@@ -463,7 +465,13 @@ describe('issuesSearchCommand', () => {
 
   beforeEach(() => {
     fake = new FakeConsole();
-    mockCtx = new CommandAuthenticatedInvocationContext(mockAuth, fake);
+    httpClient = new SonarHttpClient(mockAuth.serverUrl, mockAuth.token);
+    mockCtx = new CommandAuthenticatedInvocationContext(
+      mockAuth,
+      fake,
+      undefined,
+      createCliRuntime({ httpClientFactory: () => httpClient }),
+    );
   });
 
   it('throws when --project is missing', async () => {
@@ -510,7 +518,7 @@ describe('issuesSearchCommand', () => {
 
   it('normalizes severities to uppercase before passing to API', async () => {
     let capturedParams: Record<string, string> | undefined;
-    const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockImplementation(((
+    const getSpy = spyOn(httpClient, 'get').mockImplementation(((
       _endpoint: string,
       params?: MockParams,
     ): ResultAsync<IssuesSearchResponse, HttpClientError> => {
@@ -530,9 +538,7 @@ describe('issuesSearchCommand', () => {
   });
 
   it('succeeds when issues search returns results', async () => {
-    const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockReturnValue(
-      okAsync(emptyApiResponse),
-    );
+    const getSpy = spyOn(httpClient, 'get').mockReturnValue(okAsync(emptyApiResponse));
 
     try {
       await listIssues({ project: 'my-project', page: 1, pageSize: 500 }, mockCtx);
@@ -544,7 +550,7 @@ describe('issuesSearchCommand', () => {
 
   it('routes MQR severities to impactSeverities param on MQR server (SonarQube Cloud)', async () => {
     let capturedParams: Record<string, string> | undefined;
-    const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockImplementation(((
+    const getSpy = spyOn(httpClient, 'get').mockImplementation(((
       _endpoint: string,
       params?: MockParams,
     ): ResultAsync<IssuesSearchResponse, HttpClientError> => {
@@ -565,7 +571,7 @@ describe('issuesSearchCommand', () => {
 
   it('routes BLOCKER and INFO to impactSeverities on MQR server', async () => {
     let capturedParams: Record<string, string> | undefined;
-    const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockImplementation(((
+    const getSpy = spyOn(httpClient, 'get').mockImplementation(((
       _endpoint: string,
       params?: MockParams,
     ): ResultAsync<IssuesSearchResponse, HttpClientError> => {
@@ -593,7 +599,7 @@ describe('issuesSearchCommand', () => {
 
   it('routes Standard severities to severities param on Standard server', async () => {
     let capturedParams: Record<string, string> | undefined;
-    const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockImplementation(((
+    const getSpy = spyOn(httpClient, 'get').mockImplementation(((
       _endpoint: string,
       params?: MockParams,
     ): ResultAsync<IssuesSearchResponse, HttpClientError> => {
@@ -639,7 +645,7 @@ describe('issuesSearchCommand', () => {
 
   describe('table format', () => {
     async function printTable(issues: SonarQubeIssue[]): Promise<string> {
-      const getSpy = spyOn(SonarHttpClient.prototype, 'get').mockReturnValue(
+      const getSpy = spyOn(httpClient, 'get').mockReturnValue(
         okAsync({
           issues,
           total: issues.length,
