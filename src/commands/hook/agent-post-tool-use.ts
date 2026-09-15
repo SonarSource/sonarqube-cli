@@ -89,13 +89,14 @@ async function handleSqaaPostToolUse(
     return { decision: 'none' };
   }
 
+  const transport = new SonarHttpClient(auth.serverUrl, auth.token);
   const runStart = performance.now();
   let fetchResult: Awaited<ReturnType<typeof fetchSingleFileReport>>;
   try {
     const fileContent = readFileSync(canonicalPath, 'utf-8');
     const target = {
       ...(auth.orgKey ? { orgKey: auth.orgKey } : {}),
-      transport: new SonarHttpClient(auth.serverUrl, auth.token),
+      transport,
     };
     const branch = await resolveSqaaBranch(undefined, canonicalPath);
 
@@ -137,7 +138,7 @@ async function handleSqaaPostToolUse(
 
   if (fetchResult.error) {
     if (fetchResult.error instanceof SqaaForbiddenError) {
-      const wrote = await emitVortexUnavailableHookNotice(auth);
+      const wrote = await emitVortexUnavailableHookNotice(transport, auth);
       return { decision: wrote ? 'handled' : 'none' };
     }
     logger.debug(`PostToolUse SQAA analysis failed: ${fetchResult.error.message}`);

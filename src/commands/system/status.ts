@@ -49,6 +49,7 @@ import {
   SCA_SCANNER_CLI_VERSION,
   SONAR_CONTEXT_AUGMENTATION_VERSION,
 } from '@/core/host/install/signatures.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { loadState } from '@/core/state/state-repository.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -388,7 +389,7 @@ async function resolveAuthenticatedChecks(auth: ResolvedAuth | null): Promise<Au
 
   const [tokenStatus, vortex] = await Promise.all([
     checkTokenStatus(auth.serverUrl, auth.token),
-    resolveVortexEntitlement(auth),
+    resolveVortexEntitlement(new SonarHttpClient(auth.serverUrl, auth.token), auth),
   ]);
   return { tokenStatus, vortex };
 }
