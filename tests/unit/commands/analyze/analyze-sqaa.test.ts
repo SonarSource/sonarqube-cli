@@ -318,6 +318,7 @@ describe('buildSqaaJsonReport', () => {
   it('returns a single-file JSON report with forcedDepth STANDARD', async () => {
     const report = await buildSqaaJsonReport(
       { file: ['src/index.ts'], forcedDepth: 'STANDARD' },
+      FAKE_AUTHENTICATED_CONTEXT.httpClient,
       FAKE_AUTH,
       { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
     );
@@ -328,9 +329,12 @@ describe('buildSqaaJsonReport', () => {
   });
 
   it('defaults multi-file reports to DEEP analysisDepth', async () => {
-    const report = await buildSqaaJsonReport({ file: ['src/a.ts', 'src/b.ts'] }, FAKE_AUTH, {
-      telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,
-    });
+    const report = await buildSqaaJsonReport(
+      { file: ['src/a.ts', 'src/b.ts'] },
+      FAKE_AUTHENTICATED_CONTEXT.httpClient,
+      FAKE_AUTH,
+      { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
+    );
 
     expect(report).not.toBeNull();
     expect(report?.analysisDepth).toBe('DEEP');
@@ -345,9 +349,12 @@ describe('buildSqaaJsonReport', () => {
       source: 'state',
     });
 
-    const report = await buildSqaaJsonReport({ file: ['src/index.ts'] }, onPremiseAuth, {
-      telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,
-    });
+    const report = await buildSqaaJsonReport(
+      { file: ['src/index.ts'] },
+      FAKE_AUTHENTICATED_CONTEXT.httpClient,
+      onPremiseAuth,
+      { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
+    );
     expect(report).not.toBeNull();
     expect(createAnalysisSpy).toHaveBeenCalled();
     expect(createAnalysisSpy.mock.calls[0][0].organizationKey).toBeUndefined();
@@ -356,9 +363,12 @@ describe('buildSqaaJsonReport', () => {
   it('returns a failure entry when the API call fails', async () => {
     createAnalysisSpy.mockRejectedValue(new Error('Network error'));
 
-    const report = await buildSqaaJsonReport({ file: ['src/index.ts'] }, FAKE_AUTH, {
-      telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,
-    });
+    const report = await buildSqaaJsonReport(
+      { file: ['src/index.ts'] },
+      FAKE_AUTHENTICATED_CONTEXT.httpClient,
+      FAKE_AUTH,
+      { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
+    );
 
     expect(report?.failures).toHaveLength(1);
     expect(report?.failures[0].message).toContain('Network error');
@@ -367,9 +377,12 @@ describe('buildSqaaJsonReport', () => {
   it('throws InvalidOptionError for invalid --depth', async () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      buildSqaaJsonReport({ file: ['src/index.ts'], depth: 'INVALID' }, FAKE_AUTH, {
-        telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,
-      }),
+      buildSqaaJsonReport(
+        { file: ['src/index.ts'], depth: 'INVALID' },
+        FAKE_AUTHENTICATED_CONTEXT.httpClient,
+        FAKE_AUTH,
+        { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
+      ),
     ).rejects.toThrow(InvalidOptionError);
   });
 });
@@ -421,9 +434,12 @@ describe('analyzeSqaa: change-set mode', () => {
       repoRoot: process.cwd(),
     });
 
-    const report = await buildSqaaJsonReport({ staged: true }, FAKE_AUTH, {
-      telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,
-    });
+    const report = await buildSqaaJsonReport(
+      { staged: true },
+      FAKE_AUTHENTICATED_CONTEXT.httpClient,
+      FAKE_AUTH,
+      { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
+    );
 
     expect(report?.files).toHaveLength(0);
     expect(report?.ignored).toHaveLength(1);
@@ -459,9 +475,12 @@ describe('analyzeSqaa: change-set mode', () => {
     const output = fake.calls.map((c) => String(c.args[0])).join('\n');
     expect(output).toContain(normalizePath(outside));
 
-    const report = await buildSqaaJsonReport({ staged: true }, FAKE_AUTH, {
-      telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,
-    });
+    const report = await buildSqaaJsonReport(
+      { staged: true },
+      FAKE_AUTHENTICATED_CONTEXT.httpClient,
+      FAKE_AUTH,
+      { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
+    );
     expect(report?.ignored).toEqual([
       { path: normalizePath(outside), reason: 'outside-repository' },
     ]);

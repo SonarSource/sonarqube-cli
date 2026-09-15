@@ -21,19 +21,15 @@
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import {
-  type DopRepository,
-  ImportApiClient,
-  type ProvisionedProject,
-} from './_common/import-api.ts';
+import { type DopRepository, ImportApiClient, type ProvisionedProject } from './import-api.ts';
+import { ImportProgress } from './import-progress.ts';
 import type {
   OnlyPrivateProjects,
   RepositoryCollection,
   SkippedRepo,
-} from './_common/repository-collection';
+} from './repository-collection';
 import {
   assertSupportedAlm,
   computeInstallationKey,
@@ -42,11 +38,10 @@ import {
   type ResolvedRepo,
   resolveOrg,
   resolveRepos,
-} from './_common/resolve-options';
-import type { ImportOptions } from './_common/types';
-import { ImportProgress } from './import-progress.ts';
+} from './resolve-options';
+import type { ImportOptions } from './types';
 
-export { type ImportOptions } from './_common/types';
+export { type ImportOptions } from './types';
 
 /** Max number of `provision_projects` calls run concurrently. */
 const IMPORT_PROVISION_CONCURRENCY_LIMIT = 10;
@@ -248,7 +243,7 @@ export async function importHandler(
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   const { auth, console } = ctx;
-  const client = new ImportApiClient(new SonarHttpClient(auth.serverUrl, auth.token));
+  const client = new ImportApiClient(ctx.httpClient);
 
   console.intro('Import repositories', 'SonarQube');
 
