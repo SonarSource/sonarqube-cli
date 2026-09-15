@@ -86,16 +86,24 @@ runs:
       run: SONARQUBE_CLI_USE_COVERAGE=1 bun run test:integration
 
     # Workaround for CAG-933: CAG deduces the fake SonarQube Cloud API endpoint
-    # as api.localhost. That resolution is platform-specific; Windows CI does not
-    # resolve it by default. Pin api.localhost to loopback so the e2e test
-    # "forwards a Claude Bash hook payload to the real CAG binary and applies
-    # Gradle compression" can reach the fake server until CAG fixes this.
+    # as api.localhost. GitHub-hosted Ubuntu resolves *.localhost per RFC 6761;
+    # Windows and some self-hosted Linux images (sonar-m) do not. Pin
+    # api.localhost to loopback so the e2e tests that exercise Gradle
+    # compression can reach the fake server until CAG fixes this.
     - name: Resolve fake SonarQube Cloud API host (Windows)
       if: ${{ inputs.os == 'windows' }}
       shell: powershell
       run: |
         Add-Content -Path "$env:windir\System32\drivers\etc\hosts" -Value "`n127.0.0.1 api.localhost`n::1 api.localhost"
         Resolve-DnsName api.localhost
+
+    - name: Resolve fake SonarQube Cloud API host (Linux)
+      if: ${{ inputs.os == 'linux' }}
+      shell: bash
+      run: |
+        echo '127.0.0.1 api.localhost' | sudo tee -a /etc/hosts
+        echo '::1 api.localhost' | sudo tee -a /etc/hosts
+        getent hosts api.localhost
 
     - name: Run e2e tests (Windows)
       if: ${{ inputs.os == 'windows' }}

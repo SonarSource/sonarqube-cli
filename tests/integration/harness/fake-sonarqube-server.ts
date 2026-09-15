@@ -436,8 +436,9 @@ export class FakeSonarQubeServer {
 
   baseUrl(): string {
     // Use `localhost` (not `127.0.0.1`) so CAG's Cloud-API URL transformation
-    // (host → `api.<host>`) lands on `api.localhost`, which resolves to a
-    // loopback address per RFC 6761 and reaches the same server.
+    // (host → `api.<host>`) lands on `api.localhost`. RFC 6761 says that
+    // should loop back, but Windows and some Linux CI images do not resolve
+    // it — `.github/actions/run-integration-and-e2e` pins it in `/etc/hosts`.
     // `api.127.0.0.1` would not resolve, breaking any test that exercises
     // Cloud-mode CAG.
     return `http://localhost:${this.server.port}`;
