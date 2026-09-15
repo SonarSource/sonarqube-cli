@@ -23,7 +23,7 @@ import { type CliRuntime, createCliRuntime } from '@/core/commands/cli-runtime.t
 import { type LifecycleState, STABLE_LIFECYCLE } from '@/core/commands/stage.ts';
 import logger from '@/core/observability/logger.ts';
 import { okAsync, type ResultAsync } from '@/core/result.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
+import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 /**
@@ -82,7 +82,7 @@ export class CommandInvocationContext {
   constructor(
     readonly console: Console,
     private readonly lifecycle: LifecycleState = STABLE_LIFECYCLE,
-    private readonly runtime: CliRuntime = DISABLED_RUNTIME,
+    protected readonly runtime: CliRuntime = DISABLED_RUNTIME,
   ) {}
 
   /** True when this command is Alpha and alpha is enabled for this run. */
@@ -168,7 +168,7 @@ export class CommandAuthenticatedInvocationContext extends CommandInvocationCont
 
   /** Memoised for the invocation: domain clients are built from this, never from a fresh one. */
   get httpClient(): SonarHttpClient {
-    this.client ??= new SonarHttpClient(this.auth.serverUrl, this.auth.token);
+    this.client ??= this.runtime.httpClientFactory(this.auth);
     return this.client;
   }
 }
