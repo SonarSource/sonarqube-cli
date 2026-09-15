@@ -48,8 +48,8 @@ interface SqaaDepthResolution {
  * - otherwise (the bare `sonar analyze` catch-all): warn and return null so the
  *   surrounding command can proceed with its other analyses.
  *
- * A Cloud connection without an organization is always a graceful skip (the warning was
- * already emitted by resolveSqaaTarget).
+ * A Cloud connection without an organization follows the same split: fatal when the user
+ * named a project, a warning otherwise.
  */
 export function resolveSqaaContext(
   resolution: SqaaResolution,
@@ -60,6 +60,14 @@ export function resolveSqaaContext(
     case 'resolved':
       return { target: resolution.target, projectKey: resolution.projectKey };
     case 'no-org':
+      if (resolution.explicitProject) {
+        throw new CommandFailedError('Vortex analysis requires a SonarQube Cloud organization.', {
+          remediationHint: "Run 'sonar auth login' and select an organization, then retry.",
+        });
+      }
+      console.warn(
+        'Vortex analysis skipped: a SonarQube Cloud organization is required. Run: sonar auth login',
+      );
       return null;
     case 'no-project':
       if (policy.requireProject) {
