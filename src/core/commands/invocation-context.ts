@@ -60,6 +60,10 @@ export class TelemetryFact<TPayload = unknown> {
   }
 }
 
+export class StatsFact<TPayload = unknown> {
+  constructor(readonly payload: TPayload) {}
+}
+
 const DISABLED_RUNTIME: CliRuntime = createCliRuntime({ authResolver: new NullAuthResolver() });
 
 /**
@@ -77,6 +81,7 @@ const DISABLED_RUNTIME: CliRuntime = createCliRuntime({ authResolver: new NullAu
  */
 export class CommandInvocationContext {
   private readonly facts: TelemetryFact[] = [];
+  private readonly statsFactsBuffer: StatsFact[] = [];
 
   constructor(
     readonly console: Console,
@@ -136,6 +141,17 @@ export class CommandInvocationContext {
   /** Snapshot of facts recorded during this invocation. */
   telemetryFacts(): readonly TelemetryFact[] {
     return this.facts.slice();
+  }
+
+  recordStats(...facts: StatsFact[]): void {
+    if (facts.length === 0) {
+      return;
+    }
+    this.statsFactsBuffer.push(...facts);
+  }
+
+  statsFacts(): readonly StatsFact[] {
+    return this.statsFactsBuffer.slice();
   }
 }
 

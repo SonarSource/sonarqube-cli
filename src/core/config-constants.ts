@@ -255,6 +255,12 @@ export const TELEMETRY_ENDPOINT = 'https://events.sonardata.io/cli';
 /** Write-only ingest API key — intentionally embedded in the binary. */
 export const TELEMETRY_API_KEY = 'hJPRohLsOsasZeOhSCSNDiL4h2yR96S5fOWJqRch';
 
+export function getStatsDir(): string {
+  return join(getCliDir(), 'db', 'stats');
+}
+
+export const STATS_DB_FILENAME = 'stats.db';
+
 // ---------------------------------------------------------------------------
 // Sentry
 // ---------------------------------------------------------------------------
