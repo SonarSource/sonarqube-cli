@@ -163,8 +163,10 @@ function findMcpFeatures(state: CliState): McpFeatureRecord[] {
           integrationId: integration.integrationId,
           scope: feature.scope,
           targetRoot: feature.targetRoot,
-          configPath: feature.resources.find((resource) => resource.id === MCP_CONFIG_RESOURCE_ID)
-            ?.path,
+          // Suffix match also accepts the pre-rename `<agent>-mcp-config` ids
+          configPath: feature.resources.find((resource) =>
+            resource.id.endsWith(MCP_CONFIG_RESOURCE_ID),
+          )?.path,
         });
       }
     }
