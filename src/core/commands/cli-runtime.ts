@@ -18,10 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { AuthResolver } from '@/core/auth/auth-resolver.ts';
 import { PrivateBetaFlagRegistry } from '@/core/commands/private-beta-flag-registry.ts';
 import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
 import { FlagsResolver } from '@/core/launch-darkly/flags-resolver.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 /** Shared per-invocation context for command-tree construction and execution. */
@@ -36,6 +38,8 @@ export interface CliRuntime {
   privateBetaFlags: PrivateBetaFlagRegistry;
   /** Private Beta registration gate; Open Beta ignores this. */
   isPrivateBetaEnabled: (flagKey: string) => boolean;
+  /** Single construction site for `ctx.httpClient`. */
+  httpClientFactory: (auth: ResolvedAuth) => SonarHttpClient;
 }
 
 /** Reads {@link ALPHA_ENV_VAR} (`true` / `1` enable Alpha commands). */
@@ -52,6 +56,8 @@ export function createCliRuntime(options?: {
   privateBetaFlags?: PrivateBetaFlagRegistry;
   /** Test override; production uses {@link FlagsResolver.isPrivateBetaEnabled}. */
   isPrivateBetaEnabled?: (flagKey: string) => boolean;
+  /** Test override; production builds a real `SonarHttpClient` from the resolved auth. */
+  httpClientFactory?: (auth: ResolvedAuth) => SonarHttpClient;
 }): CliRuntime {
   const privateBetaFlags = options?.privateBetaFlags ?? new PrivateBetaFlagRegistry();
   const authResolver = options?.authResolver ?? new AuthResolver({ console: options?.console });
@@ -64,5 +70,7 @@ export function createCliRuntime(options?: {
     privateBetaFlags,
     isPrivateBetaEnabled:
       options?.isPrivateBetaEnabled ?? ((flagKey) => flagsResolver.isPrivateBetaEnabled(flagKey)),
+    httpClientFactory:
+      options?.httpClientFactory ?? ((auth) => new SonarHttpClient(auth.serverUrl, auth.token)),
   };
 }

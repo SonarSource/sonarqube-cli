@@ -21,6 +21,7 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { okAsync } from '@/core/result.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
@@ -41,15 +42,22 @@ const FAKE_AUTH = new ResolvedAuth({
 
 let fake: FakeConsole;
 let FAKE_CTX: CommandAuthenticatedInvocationContext;
+let httpClient: SonarHttpClient;
 
 let genericRequestSpy: ReturnType<typeof spyOn>;
 
 describe('apiCommand', () => {
   beforeEach(() => {
     fake = new FakeConsole();
-    FAKE_CTX = new CommandAuthenticatedInvocationContext(FAKE_AUTH, fake);
+    httpClient = new SonarHttpClient(FAKE_AUTH.serverUrl, FAKE_AUTH.token);
+    FAKE_CTX = new CommandAuthenticatedInvocationContext(
+      FAKE_AUTH,
+      fake,
+      undefined,
+      createCliRuntime({ httpClientFactory: () => httpClient }),
+    );
 
-    genericRequestSpy = spyOn(SonarHttpClient.prototype, 'genericRequest').mockReturnValue(
+    genericRequestSpy = spyOn(httpClient, 'genericRequest').mockReturnValue(
       okAsync('{"status":"UP"}'),
     );
   });

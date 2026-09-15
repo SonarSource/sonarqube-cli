@@ -5,6 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { errAsync, okAsync, type ResultAsync } from '@/core/result.ts';
 import type { HttpClientError } from '@/core/server/errors.ts';
@@ -29,6 +30,7 @@ const mockAuth = new ResolvedAuth({
 
 let fake: FakeConsole;
 let mockCtx: CommandAuthenticatedInvocationContext;
+let httpClient: SonarHttpClient;
 
 function makeProjectsResponse(
   components: { key: string; name: string }[],
@@ -41,14 +43,20 @@ function makeProjectsResponse(
 
 beforeEach(() => {
   fake = new FakeConsole();
-  mockCtx = new CommandAuthenticatedInvocationContext(mockAuth, fake);
+  httpClient = new SonarHttpClient(mockAuth.serverUrl, mockAuth.token);
+  mockCtx = new CommandAuthenticatedInvocationContext(
+    mockAuth,
+    fake,
+    undefined,
+    createCliRuntime({ httpClientFactory: () => httpClient }),
+  );
 });
 
 describe('projectsSearchCommand', () => {
   let getSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    getSpy = spyOn(SonarHttpClient.prototype, 'get').mockReturnValue(makeProjectsResponse([]));
+    getSpy = spyOn(httpClient, 'get').mockReturnValue(makeProjectsResponse([]));
   });
 
   afterEach(() => {
@@ -223,7 +231,12 @@ describe('projectsSearchCommand', () => {
 
       await listProjects(
         DEFAULT_OPTIONS,
-        new CommandAuthenticatedInvocationContext(cloudAuth, new FakeConsole()),
+        new CommandAuthenticatedInvocationContext(
+          cloudAuth,
+          new FakeConsole(),
+          undefined,
+          createCliRuntime({ httpClientFactory: () => httpClient }),
+        ),
       );
 
       expect(capturedParams?.organization).toBe('my-org');
@@ -250,7 +263,12 @@ describe('projectsSearchCommand', () => {
 
       await listProjects(
         DEFAULT_OPTIONS,
-        new CommandAuthenticatedInvocationContext(onPremAuth, new FakeConsole()),
+        new CommandAuthenticatedInvocationContext(
+          onPremAuth,
+          new FakeConsole(),
+          undefined,
+          createCliRuntime({ httpClientFactory: () => httpClient }),
+        ),
       );
 
       expect(capturedParams?.organization).toBeUndefined();
