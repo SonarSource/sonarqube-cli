@@ -29,11 +29,11 @@ import {
   type SqaaChunkGroupError,
   type SqaaChunkResponse,
 } from './sqaa-api.ts';
-import type { SqaaAuth } from './sqaa-auth.ts';
 import { type SqaaChunk, type SqaaChunkFile } from './sqaa-chunking.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import { isGlobalSqaaError, isPayloadTooLargeCommandError } from './sqaa-errors.ts';
 import type { SqaaProgress } from './sqaa-progress.ts';
+import type { SqaaRequestTarget } from './sqaa-resolution.ts';
 import type { SqaaAnalysisDepth, SqaaIssue } from './sqaa-wire-types.ts';
 
 export type FileSuccess = {
@@ -50,7 +50,7 @@ type ChunkPath = { file: string; filePath: string };
 export interface RunContext {
   files: string[];
   allPaths: string[];
-  sqaaAuth: SqaaAuth;
+  target: SqaaRequestTarget;
   projectKey: string;
   branch: string | undefined;
   progress: SqaaProgress;
@@ -238,7 +238,7 @@ async function processChunk(
 
   try {
     const { parts, groupErrors } = await fetchChunkWith413Split(
-      ctx.sqaaAuth,
+      ctx.target,
       ctx.projectKey,
       chunk.files,
       ctx.branch,

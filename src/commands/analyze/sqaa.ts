@@ -26,7 +26,6 @@ import type {
 } from '@/core/commands/invocation-context.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 
-import { resolveSqaaAuthAndProject } from './sqaa-auth.ts';
 import {
   resolveChangeSet,
   resolveSqaaBranch,
@@ -38,6 +37,7 @@ import {
   resolveSqaaContext,
 } from './sqaa-context.ts';
 import { resolveSqaaFileArgs } from './sqaa-file-arg.ts';
+import { resolveSqaaTargetAndProject } from './sqaa-resolution.ts';
 import {
   runSqaaAnalysis,
   runSqaaAnalysisOnExplicitFiles,
@@ -168,7 +168,7 @@ async function analyzeSqaaExplicitFiles(
   }
 
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'multi-file', forcedDepth);
-  const resolution = await resolveSqaaAuthAndProject(client, auth, project, console);
+  const resolution = await resolveSqaaTargetAndProject(client, auth, project, console);
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
 
@@ -235,7 +235,7 @@ async function analyzeSqaaChangeSet(params: {
     return;
   }
 
-  const resolution = await resolveSqaaAuthAndProject(
+  const resolution = await resolveSqaaTargetAndProject(
     client,
     auth,
     project,
