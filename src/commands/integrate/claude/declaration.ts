@@ -170,7 +170,9 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       ],
       resolveClaudeSkillPath,
     ),
-    createMcpServerFeature<ClaudeIntegrationOptions>({ agent: 'claude' }),
+    createMcpServerFeature<ClaudeIntegrationOptions>({
+      resolveConfigPath: resolveClaudeMcpConfigPath,
+    }),
   ],
 };
 
@@ -273,6 +275,10 @@ function resolveClaudeMdPath(context: IntegrationContext): string {
   return context.scope === 'global'
     ? join(context.targetRoot, CLAUDE_CONFIG_DIR, CLAUDE_MD_FILE)
     : join(context.targetRoot, CLAUDE_MD_FILE);
+}
+
+function resolveClaudeMcpConfigPath(context: IntegrationContext): string {
+  return join(context.targetRoot, context.scope === 'global' ? '.claude.json' : '.mcp.json');
 }
 
 function resolveClaudeSkillPath(context: IntegrationContext): string {

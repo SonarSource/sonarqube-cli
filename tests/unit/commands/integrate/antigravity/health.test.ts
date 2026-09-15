@@ -32,11 +32,9 @@ import {
 } from '@/commands/integrate/antigravity/hooks.ts';
 import {
   ANTIGRAVITY_GLOBAL_HOOKS_JSON,
-  ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
   ANTIGRAVITY_PROJECT_HOOKS_JSON,
   ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR_FROM_AGENTS,
 } from '@/core/config-constants.ts';
-import { getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
 
 describe('resolveAntigravityHooksJsonPathForScope', () => {
   it('returns project hooks.json under the target root', () => {
@@ -200,19 +198,5 @@ describe('checkAntigravitySecretsHookFile', () => {
     );
 
     expect(checkAntigravitySecretsHookFile(join(tempDir, 'hooks.json'))).toBe('invalid');
-  });
-});
-
-describe('getMcpConfigFilePath (antigravity)', () => {
-  it('returns the global Antigravity MCP path for project scope', () => {
-    expect(getMcpConfigFilePath('antigravity', false, '/repo')).toBe(
-      ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
-    );
-  });
-
-  it('returns the global Antigravity MCP path for global scope', () => {
-    expect(getMcpConfigFilePath('antigravity', true, '/repo')).toBe(
-      ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
-    );
   });
 });

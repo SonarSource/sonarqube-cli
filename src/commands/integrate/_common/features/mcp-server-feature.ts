@@ -24,19 +24,18 @@ import type {
   ResourceDeclaration,
 } from '@/core/framework/features';
 import { jsonPatch, tomlPatch } from '@/core/framework/features';
-import { getMcpConfig, getMcpConfigFilePath } from '@/core/host/mcp/mcp-helper.ts';
+import { getMcpConfig } from '@/core/host/mcp/mcp-helper.ts';
 
-import type { AgentIntegrateSubcommand } from '../agent-integrate-prelude.ts';
 import { getOptionalStringAttr } from '../attrs.ts';
 import { MCP_SERVER_FEATURE_BENEFIT, MCP_SERVER_FEATURE_PREVIEW } from '../feature-constants.ts';
 import type { IntegrateAgentOptions } from '../types.ts';
 
-export const MCP_SERVER_FEATURE_ID = 'mcp-server';
+export const MCP_CONFIG_RESOURCE_ID = 'mcp-config';
 
 export type McpConfigFormat = 'json' | 'toml';
 
 export interface McpServerFeatureConfig {
-  agent: AgentIntegrateSubcommand;
+  resolveConfigPath: (context: IntegrationContext) => string;
   format?: McpConfigFormat;
   alwaysGlobal?: boolean;
 }
@@ -45,7 +44,7 @@ export function createMcpServerFeature<TOptions extends IntegrateAgentOptions>(
   config: McpServerFeatureConfig,
 ): FeatureDeclaration<TOptions> {
   return {
-    id: MCP_SERVER_FEATURE_ID,
+    id: 'mcp-server',
     displayName: 'MCP server',
     benefitDescription: MCP_SERVER_FEATURE_BENEFIT,
     previewDescription: MCP_SERVER_FEATURE_PREVIEW,
@@ -61,15 +60,14 @@ const SERVERS_KEY: Record<McpConfigFormat, string> = {
 };
 
 function createMcpConfigResource({
-  agent,
+  resolveConfigPath,
   format = 'json',
   alwaysGlobal = false,
 }: McpServerFeatureConfig): ResourceDeclaration {
   const options = {
-    id: `${agent}-mcp-config`,
+    id: MCP_CONFIG_RESOURCE_ID,
     displayName: 'MCP configuration',
-    targetPath: (context: IntegrationContext) =>
-      getMcpConfigFilePath(agent, alwaysGlobal || context.scope === 'global', context.targetRoot),
+    targetPath: resolveConfigPath,
     defaultValue: {},
     patch: (document: Record<string, unknown>, context: IntegrationContext) =>
       upsertMcpServer(document, desiredMcpServerConfig(context, alwaysGlobal), format),

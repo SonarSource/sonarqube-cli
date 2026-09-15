@@ -161,7 +161,9 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
       ],
       resolveCopilotSkillPath,
     ),
-    createMcpServerFeature<CopilotIntegrationOptions>({ agent: 'copilot' }),
+    createMcpServerFeature<CopilotIntegrationOptions>({
+      resolveConfigPath: resolveCopilotMcpConfigPath,
+    }),
   ],
 };
 
@@ -194,6 +196,12 @@ function resolveCagHookScriptPath(context: IntegrationContext): string {
 
 function resolveHooksJsonPath(context: IntegrationContext): string {
   return join(resolveHooksDir(context), HOOKS_JSON);
+}
+
+function resolveCopilotMcpConfigPath(context: IntegrationContext): string {
+  return context.scope === 'global'
+    ? join(context.targetRoot, '.copilot', 'mcp-config.json')
+    : join(context.targetRoot, '.mcp.json');
 }
 
 function resolveCopilotSkillPath(context: IntegrationContext): string {

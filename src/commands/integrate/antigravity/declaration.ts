@@ -22,6 +22,7 @@ import { join } from 'node:path';
 
 import {
   ANTIGRAVITY_GLOBAL_GEMINI_MD,
+  ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
   ANTIGRAVITY_GLOBAL_SKILLS_DIR,
   ANTIGRAVITY_PROJECT_AGENTS_DIR,
   ANTIGRAVITY_PROJECT_RULES_DIR,
@@ -147,7 +148,7 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
       ],
     },
     createMcpServerFeature<AntigravityIntegrationOptions>({
-      agent: 'antigravity',
+      resolveConfigPath: () => ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
       alwaysGlobal: true,
     }),
     {

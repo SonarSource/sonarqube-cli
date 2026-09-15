@@ -20,7 +20,6 @@
 
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
@@ -30,7 +29,6 @@ import { CLI_TMP_DIR, SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '@/core/config-cons
 import type { ClientCertConfig, ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
 import * as pkcs12Module from '@/core/host/crypto/pkcs12.ts';
 import {
-  getMcpConfigFilePath,
   getMcpContainerCommand,
   MCP_DEFAULT_TOOLSETS,
   resolveMcpContainerCommand,
@@ -396,26 +394,6 @@ describe('resolveMcpContainerCommand (via WSL)', () => {
     expect(config.args[2]).toContain('-e SONARQUBE_PROJECT_KEY');
     expect(config.env.SONARQUBE_PROJECT_KEY).toBe('my-project');
     expect(config.env.WSLENV).toContain('SONARQUBE_PROJECT_KEY/u');
-  });
-});
-
-describe('getMcpConfigFilePath', () => {
-  it('returns ~/.claude.json for the global claude case', () => {
-    expect(getMcpConfigFilePath('claude', true, '/fake/project')).toBe(
-      join(homedir(), '.claude.json'),
-    );
-  });
-
-  it('returns <projectRoot>/.mcp.json for the project-level claude case', () => {
-    expect(getMcpConfigFilePath('claude', false, '/fake/project')).toBe(
-      join('/fake/project', '.mcp.json'),
-    );
-  });
-
-  it('throws for an unsupported agent', () => {
-    expect(() => getMcpConfigFilePath('unknown-agent', false, '/fake/project')).toThrow(
-      'Unsupported agent: unknown-agent',
-    );
   });
 });
 

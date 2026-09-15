@@ -67,6 +67,7 @@ import { SECRETS_ON_READ_BODY } from './instructions-templates.ts';
 
 const CODEX_CONFIG_DIR = '.codex';
 const HOOKS_FILE = 'hooks.json';
+const CONFIG_TOML_FILE = 'config.toml';
 const AGENTS_MD_FILE = 'AGENTS.md';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 const POSTTOOL_SQAA_SCRIPT_REL = 'sonar-sqaa/build-scripts/posttool-sqaa';
@@ -152,7 +153,10 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
         }),
       ],
     },
-    createMcpServerFeature<CodexIntegrationOptions>({ agent: 'codex', format: 'toml' }),
+    createMcpServerFeature<CodexIntegrationOptions>({
+      resolveConfigPath: resolveCodexMcpConfigPath,
+      format: 'toml',
+    }),
   ],
 };
 
@@ -236,6 +240,10 @@ function resolveCodexAgentsMdPath(context: IntegrationContext): string {
 
 function resolveCodexHooksPath(context: IntegrationContext): string {
   return join(context.targetRoot, CODEX_CONFIG_DIR, HOOKS_FILE);
+}
+
+function resolveCodexMcpConfigPath(context: IntegrationContext): string {
+  return join(context.targetRoot, CODEX_CONFIG_DIR, CONFIG_TOML_FILE);
 }
 
 function resolveCodexSkillPath(context: IntegrationContext): string {

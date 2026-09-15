@@ -64,6 +64,7 @@ import { buildCursorHookEntry, removeCursorHooks, upsertCursorHooks } from './ho
 import { buildCursorAlwaysOnRule } from './rules.ts';
 
 const HOOKS_JSON = 'hooks.json';
+const MCP_JSON = 'mcp.json';
 const PREREAD_SCRIPT_REL = 'sonar-secrets/build-scripts/before-read-file-secrets';
 const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pre-tool-use-secrets';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
@@ -81,6 +82,10 @@ const CAG_SKILL_NAME = 'sonar-context-augmentation';
 
 export interface CursorIntegrationOptions extends IntegrateAgentOptions {
   globalSecretsHookExists?: boolean;
+}
+
+function resolveCursorMcpConfigPath(context: IntegrationContext): string {
+  return join(context.targetRoot, CURSOR_CONFIG_DIR, MCP_JSON);
 }
 
 function resolveCursorSqaaRulePath(context: IntegrationContext): string {
@@ -216,6 +221,8 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
       ],
       resolveCursorCagSkillPath,
     ),
-    createMcpServerFeature<CursorIntegrationOptions>({ agent: 'cursor' }),
+    createMcpServerFeature<CursorIntegrationOptions>({
+      resolveConfigPath: resolveCursorMcpConfigPath,
+    }),
   ],
 };
