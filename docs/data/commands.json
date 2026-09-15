@@ -1,5 +1,5 @@
 {
-  "version": "1.7.0",
+  "version": "1.8.0",
   "commands": [
     {
       "id": "sonar",
@@ -25,6 +25,7 @@
         "sonar-context",
         "sonar-analyze",
         "sonar-remediate",
+        "sonar-link",
         "sonar-config",
         "sonar-system",
         "sonar-update"
@@ -183,7 +184,7 @@
         {
           "flags": "--statuses <statuses>",
           "long": "--statuses",
-          "description": "Filter by status (comma-separated list of: OPEN, CONFIRMED, FALSE_POSITIVE, ACCEPTED, FIXED)",
+          "description": "Filter by status (comma-separated list of: OPEN, CONFIRMED, FALSE_POSITIVE, ACCEPTED, FIXED). Defaults to OPEN, CONFIRMED.",
           "type": "string",
           "required": false
         },
@@ -219,6 +220,13 @@
           "flags": "--pull-request <pull-request>",
           "long": "--pull-request",
           "description": "Pull request ID",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--file <path>",
+          "long": "--file",
+          "description": "Limit results to one file, or to a directory's own files (not its subdirectories): a full path from the project root, or just a name if it matches only one",
           "type": "string",
           "required": false
         },
@@ -339,7 +347,14 @@
       "requiresAuth": true,
       "depth": 2,
       "parentId": "sonar-quality-gate",
-      "arguments": [],
+      "arguments": [
+        {
+          "name": "file",
+          "description": "File or directory path to show conditions for, instead of the whole project",
+          "required": false,
+          "variadic": false
+        }
+      ],
       "options": [
         {
           "flags": "-p, --project <project>",
@@ -381,6 +396,21 @@
           "description": "Also show passing conditions. By default only failing conditions are shown.",
           "type": "boolean",
           "required": false
+        },
+        {
+          "flags": "--category <category>",
+          "long": "--category",
+          "description": "Only show the breakdown for one category of failing conditions",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--top <top>",
+          "long": "--top",
+          "description": "Number of entries to include in the breakdown, per condition",
+          "type": "number",
+          "required": false,
+          "defaultValue": 500
         }
       ],
       "examples": [],
@@ -1117,6 +1147,39 @@
           "description": "Comma-separated issue keys to remediate non-interactively (max 20). Required when stdin is not a TTY.",
           "type": "string",
           "required": false
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-link",
+      "name": "link",
+      "fullName": "sonar link",
+      "aliases": [],
+      "description": "Link a project to the active connection in .sonar-config.json",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": true,
+      "depth": 1,
+      "parentId": "sonar",
+      "arguments": [
+        {
+          "name": "projectKey",
+          "description": "SonarQube project key",
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "flags": "--path <path>",
+          "long": "--path",
+          "description": "Path to the project root, relative to the repository root",
+          "type": "string",
+          "required": false,
+          "defaultValue": "."
         }
       ],
       "examples": [],
