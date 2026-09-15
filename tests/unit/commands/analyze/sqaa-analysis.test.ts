@@ -31,9 +31,9 @@ import {
   shouldContinueAfterChunk,
 } from '../../../../src/commands/analyze/sqaa-analysis.ts';
 import * as sqaaApi from '../../../../src/commands/analyze/sqaa-api.ts';
-import type { SqaaAuth } from '../../../../src/commands/analyze/sqaa-auth.ts';
 import type { SqaaChunkFile } from '../../../../src/commands/analyze/sqaa-chunking.ts';
 import { payloadTooLargeCommandError } from '../../../../src/commands/analyze/sqaa-errors.ts';
+import type { SqaaRequestTarget } from '../../../../src/commands/analyze/sqaa-resolution.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
 describe('distributeChunkResponse', () => {
@@ -142,9 +142,9 @@ describe('runAnalyses partial 413', () => {
     return { absolutePath: `/repo/${path}`, relativePath: path, content: 'x' };
   }
 
-  const AUTH: SqaaAuth = {
+  const TARGET: SqaaRequestTarget = {
     orgKey: 'org',
-    client: new SonarHttpClient('https://sonarcloud.io', 't'),
+    transport: new SonarHttpClient('https://sonarcloud.io', 't'),
   };
 
   it('sends all readable files in one request and records partial 413 failures', async () => {
@@ -182,7 +182,7 @@ describe('runAnalyses partial 413', () => {
     const tally = await runAnalyses({
       files,
       allPaths: ['a.ts', 'b.ts', 'c.ts'],
-      sqaaAuth: AUTH,
+      target: TARGET,
       projectKey: 'proj',
       branch: undefined,
       progress,
@@ -218,7 +218,7 @@ describe('runAnalyses partial 413', () => {
     const tally = await runAnalyses({
       files: ['/repo/ok.ts', '/repo/bad.ts'],
       allPaths: ['ok.ts', 'bad.ts'],
-      sqaaAuth: AUTH,
+      target: TARGET,
       projectKey: 'proj',
       branch: undefined,
       progress,

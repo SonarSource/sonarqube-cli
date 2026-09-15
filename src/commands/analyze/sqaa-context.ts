@@ -21,14 +21,14 @@
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import type { SqaaAuthResolution } from './sqaa-auth.ts';
-import { confirmLargeChangeset } from './sqaa-auth.ts';
 import {
   labelAnalysisDepth,
   parseSqaaDepthOption,
   resolveAnalysisDepth,
   type SqaaDeepWireDepth,
 } from './sqaa-depth.ts';
+import type { SqaaResolution } from './sqaa-resolution.ts';
+import { confirmLargeChangeset } from './sqaa-resolution.ts';
 import type { OutputFormat, SqaaResolvedContext } from './sqaa-types.ts';
 import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
@@ -41,7 +41,7 @@ interface SqaaDepthResolution {
 }
 
 /**
- * Apply the command's policy to an auth/project resolution. This is where the
+ * Apply the command's policy to a target/project resolution. This is where the
  * caller (not the resolver) decides what a missing project means:
  * - `requireProject` (explicit `analyze agentic` / `verify`): throw so the command
  *   exits with code 1 instead of skipping silently.
@@ -49,16 +49,16 @@ interface SqaaDepthResolution {
  *   surrounding command can proceed with its other analyses.
  *
  * A Cloud connection without an organization is always a graceful skip (the warning was
- * already emitted by resolveSqaaAuth).
+ * already emitted by resolveSqaaTarget).
  */
 export function resolveSqaaContext(
-  resolution: SqaaAuthResolution,
+  resolution: SqaaResolution,
   policy: { requireProject: boolean },
   console: Console,
 ): SqaaResolvedContext | null {
   switch (resolution.kind) {
     case 'resolved':
-      return { sqaaAuth: resolution.sqaaAuth, projectKey: resolution.projectKey };
+      return { target: resolution.target, projectKey: resolution.projectKey };
     case 'no-org':
       return null;
     case 'no-project':

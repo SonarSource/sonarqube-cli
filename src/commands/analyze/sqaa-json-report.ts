@@ -24,7 +24,6 @@ import { timed } from '@/core/observability/timed.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 
 import { readSqaaFileContent, toRelativePosixPath } from './sqaa-api.ts';
-import { resolveSqaaAuthAndProject } from './sqaa-auth.ts';
 import {
   resolveChangeSet,
   resolveSqaaBranch,
@@ -38,6 +37,7 @@ import {
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import { buildJsonReport, makeReport, type SqaaJsonReport } from './sqaa-display.ts';
 import { type ResolvedSqaaFileEntry, resolveSqaaFileArgs } from './sqaa-file-arg.ts';
+import { resolveSqaaTargetAndProject } from './sqaa-resolution.ts';
 import {
   fetchSingleFileReport,
   finishSqaaTelemetryFromReport,
@@ -68,7 +68,7 @@ async function buildSqaaJsonReportFromEntries(
     const fileContent = readSqaaFileContent(absolutePath);
     const { result: fetchResult, durationMs } = await timed(() =>
       fetchSingleFileReport(
-        resolved.sqaaAuth,
+        resolved.target,
         resolved.projectKey,
         absolutePath,
         fileContent,
@@ -122,7 +122,7 @@ async function buildSqaaJsonReportFromChangeSet(
   }
 
   const { console } = runOptions.telemetryCtx;
-  const resolution = await resolveSqaaAuthAndProject(
+  const resolution = await resolveSqaaTargetAndProject(
     client,
     auth,
     project,
@@ -179,7 +179,7 @@ export async function buildSqaaJsonReport(
     const entries = resolveSqaaFileArgs(rawFiles);
     const resolvedBranch = await resolveSqaaBranch(branch, entries[0].absolutePath);
     const { console } = runOptions.telemetryCtx;
-    const resolution = await resolveSqaaAuthAndProject(client, auth, project, console);
+    const resolution = await resolveSqaaTargetAndProject(client, auth, project, console);
     const resolved = resolveSqaaContext(resolution, { requireProject: false }, console);
     if (!resolved) return null;
 
