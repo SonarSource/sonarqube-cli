@@ -33,7 +33,6 @@ import {
 import type { Console } from '@/core/ui/console.ts';
 
 import { SqaaAnalysisClient } from './sqaa-analysis-client.ts';
-import type { SqaaAuth } from './sqaa-auth.ts';
 import { type PackChunksLimits, packFilesIntoChunks, type SqaaChunkFile } from './sqaa-chunking.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import { displaySqaaResults, printSingleFileTextFailure } from './sqaa-display.ts';
@@ -43,6 +42,7 @@ import {
   sqaaCommandFailedError,
   toSqaaCommandError,
 } from './sqaa-errors.ts';
+import type { SqaaRequestTarget } from './sqaa-resolution.ts';
 import { partitionSqaaAnalysisFiles, type SqaaFileValidationRejection } from './sqaa-validation.ts';
 import type { SqaaAnalysisFile, SqaaIssue } from './sqaa-wire-types.ts';
 
@@ -113,7 +113,7 @@ function validationGroupErrors(
 }
 
 async function postSqaaAnalysis(
-  auth: SqaaAuth,
+  target: SqaaRequestTarget,
   projectKey: string,
   branch: string | undefined,
   files: SqaaAnalysisFile[],
@@ -130,10 +130,10 @@ async function postSqaaAnalysis(
     );
   }
 
-  const client = new SqaaAnalysisClient(auth.client);
+  const client = new SqaaAnalysisClient(target.transport);
   try {
     const response = await client.createAnalysis({
-      ...(auth.orgKey ? { organizationKey: auth.orgKey } : {}),
+      ...(target.orgKey ? { organizationKey: target.orgKey } : {}),
       projectKey,
       ...(branch ? { branchName: branch } : {}),
       ...(wireDepth ? { analysisDepth: wireDepth } : {}),
@@ -154,12 +154,12 @@ async function postSqaaAnalysis(
 
 /** Validated SQAA POST for hook and other callers outside the analyze command. */
 export async function submitValidatedSqaaAnalysis(
-  auth: SqaaAuth,
+  target: SqaaRequestTarget,
   projectKey: string,
   files: SqaaAnalysisFile[],
   options: { branch?: string; analysisDepth?: SqaaDeepWireDepth } = {},
 ): Promise<SqaaChunkResponse> {
-  const { response } = await postSqaaAnalysis(auth, projectKey, options.branch, files, {
+  const { response } = await postSqaaAnalysis(target, projectKey, options.branch, files, {
     analysisDepth: options.analysisDepth,
   });
   return response;
@@ -174,7 +174,7 @@ export async function submitValidatedSqaaAnalysis(
  * pass the repository root so paths are stable regardless of where the user runs.
  */
 export async function fetchSqaaResponse(
-  auth: SqaaAuth,
+  target: SqaaRequestTarget,
   projectKey: string,
   file: string,
   fileContent: string,
@@ -184,7 +184,7 @@ export async function fetchSqaaResponse(
 ): Promise<{ issues: SqaaIssue[]; errors?: Array<{ code: string; message: string }> | null }> {
   const filePath = toRelativePosixPath(file, pathBase);
   const { response, rejected } = await postSqaaAnalysis(
-    auth,
+    target,
     projectKey,
     branch,
     [{ path: filePath, content: fileContent }],
@@ -230,7 +230,7 @@ export interface FetchSqaaRetryOptions {
  * Calls fetchSqaaResponse with a 503-retry loop.
  */
 export async function fetchWithRetry(
-  auth: SqaaAuth,
+  target: SqaaRequestTarget,
   projectKey: string,
   file: string,
   fileContent: string,
@@ -239,7 +239,7 @@ export async function fetchWithRetry(
 ): Promise<{ issues: SqaaIssue[]; errors?: Array<{ code: string; message: string }> | null }> {
   const { onRetry, pathBase, analysisDepth } = retryOptions ?? {};
   return with503Retry(
-    () => fetchSqaaResponse(auth, projectKey, file, fileContent, branch, pathBase, analysisDepth),
+    () => fetchSqaaResponse(target, projectKey, file, fileContent, branch, pathBase, analysisDepth),
     onRetry,
   );
 }
@@ -265,7 +265,7 @@ export type SqaaChunkGroupError = {
 };
 
 function packLimitsForRequest(
-  auth: SqaaAuth,
+  target: SqaaRequestTarget,
   projectKey: string,
   branch: string | undefined,
   overrides: { maxRequestBytes?: number; maxFilesPerRequest?: number } = {},
@@ -273,7 +273,7 @@ function packLimitsForRequest(
 ) {
   return {
     ...overrides,
-    organizationKey: auth.orgKey,
+    organizationKey: target.orgKey,
     projectKey,
     ...(branch ? { branchName: branch } : {}),
     ...(analysisDepth ? { analysisDepth } : {}),
@@ -281,14 +281,14 @@ function packLimitsForRequest(
 }
 
 function packLimitsFrom413Error(
-  auth: SqaaAuth,
+  target: SqaaRequestTarget,
   projectKey: string,
   branch: string | undefined,
   err: RequestPayloadTooLargeError,
   analysisDepth?: SqaaDeepWireDepth,
 ) {
   return packLimitsForRequest(
-    auth,
+    target,
     projectKey,
     branch,
     {
@@ -304,13 +304,13 @@ function packLimitsFrom413Error(
  * Throws ServiceUnavailableError on 503, RequestPayloadTooLargeError on 413.
  */
 export async function fetchChunkResponse(
-  auth: SqaaAuth,
+  target: SqaaRequestTarget,
   projectKey: string,
   files: SqaaAnalysisFile[],
   branch: string | undefined,
   analysisDepth?: SqaaDeepWireDepth,
 ): Promise<SqaaPostResult> {
-  return postSqaaAnalysis(auth, projectKey, branch, files, {
+  return postSqaaAnalysis(target, projectKey, branch, files, {
     analysisDepth,
     includePayloadTooLarge: true,
   });
@@ -320,7 +320,7 @@ export async function fetchChunkResponse(
  * Calls fetchChunkResponse with a 503-retry loop.
  */
 export async function fetchChunkWithRetry(
-  auth: SqaaAuth,
+  target: SqaaRequestTarget,
   projectKey: string,
   files: SqaaAnalysisFile[],
   branch: string | undefined,
@@ -328,7 +328,7 @@ export async function fetchChunkWithRetry(
   analysisDepth?: SqaaDeepWireDepth,
 ): Promise<SqaaPostResult> {
   return with503Retry(
-    () => fetchChunkResponse(auth, projectKey, files, branch, analysisDepth),
+    () => fetchChunkResponse(target, projectKey, files, branch, analysisDepth),
     onRetry,
   );
 }
@@ -347,7 +347,7 @@ function splitChunkFiles(files: SqaaChunkFile[], limits: PackChunksLimits): Sqaa
 }
 
 async function fetchSplitParts(
-  auth: SqaaAuth,
+  target: SqaaRequestTarget,
   projectKey: string,
   partGroups: SqaaChunkFile[][],
   branch: string | undefined,
@@ -360,7 +360,7 @@ async function fetchSplitParts(
   for (const group of partGroups) {
     try {
       const result = await fetchChunkWith413Split(
-        auth,
+        target,
         projectKey,
         group,
         branch,
@@ -385,7 +385,7 @@ async function fetchSplitParts(
  * Returns partial successes when only some sub-chunks fail after splitting.
  */
 export async function fetchChunkWith413Split(
-  auth: SqaaAuth,
+  target: SqaaRequestTarget,
   projectKey: string,
   chunkFiles: SqaaChunkFile[],
   branch: string | undefined,
@@ -404,7 +404,7 @@ export async function fetchChunkWith413Split(
 
   try {
     const { response, rejected } = await fetchChunkWithRetry(
-      auth,
+      target,
       projectKey,
       analysisFiles,
       branch,
@@ -440,11 +440,11 @@ export async function fetchChunkWith413Split(
     onPayloadSplit?.();
 
     const splitResult = await fetchSplitParts(
-      auth,
+      target,
       projectKey,
       splitChunkFiles(
         validChunkFiles,
-        packLimitsFrom413Error(auth, projectKey, branch, err, analysisDepth),
+        packLimitsFrom413Error(target, projectKey, branch, err, analysisDepth),
       ),
       branch,
       onRetry,
@@ -500,7 +500,7 @@ export async function defaultRetryCountdown(
  * Returns the number of issues found. Analysis failures render as a ✗ file row (exit 1).
  */
 export async function callSqaaApiAndDisplay(
-  auth: SqaaAuth,
+  target: SqaaRequestTarget,
   projectKey: string,
   file: string,
   fileContent: string,
@@ -511,7 +511,7 @@ export async function callSqaaApiAndDisplay(
   const filePath = toRelativePosixPath(file);
   const displayDepth = analysisDepth === 'DEEP' ? 'DEEP' : 'STANDARD';
   try {
-    const response = await fetchWithRetry(auth, projectKey, file, fileContent, branch, {
+    const response = await fetchWithRetry(target, projectKey, file, fileContent, branch, {
       analysisDepth,
     });
     return displaySqaaResults(response.issues, response.errors, filePath, console, displayDepth);

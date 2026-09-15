@@ -123,11 +123,12 @@ export function vortexInstallDecision(disposition: VortexDisposition | undefined
 }
 
 async function resolveScaEnabled(
+  transport: SonarHttpClient,
   auth: ResolvedAuth,
   isServer: boolean,
   console: Console,
 ): Promise<boolean> {
-  const client = new ScaClient(new SonarHttpClient(auth.serverUrl, auth.token));
+  const client = new ScaClient(transport);
   const scaStatus = await client
     .getScaEnablement(isServer ? 'on-premise' : 'cloud', auth.orgKey)
     .orThrow();
@@ -145,7 +146,8 @@ export async function resolveVortexSetup(
   auth: ResolvedAuth,
   console: Console,
 ): Promise<ResolvedVortexSetup> {
-  const { status } = await resolveVortexEntitlement(auth);
+  const transport = new SonarHttpClient(auth.serverUrl, auth.token);
+  const { status } = await resolveVortexEntitlement(transport, auth);
   const isServer = !isSonarQubeCloud(auth.serverUrl);
   const settled = (disposition: VortexDisposition): ResolvedVortexSetup => ({ disposition });
 
@@ -174,6 +176,6 @@ export async function resolveVortexSetup(
   // SCA tools only when SCA is available on the connection.
   return {
     ...settled('install'),
-    scaEnabled: await resolveScaEnabled(auth, isServer, console),
+    scaEnabled: await resolveScaEnabled(transport, auth, isServer, console),
   };
 }

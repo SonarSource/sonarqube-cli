@@ -19,6 +19,7 @@
  */
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { vortexUnavailableHookMessage } from '@/core/vortex/availability-messages.ts';
 import { recheckVortexEntitlement } from '@/core/vortex/entitlement.ts';
 import {
@@ -29,7 +30,10 @@ import {
 import { writePostToolUseHookOutput } from './format-sqaa-hook-context.ts';
 
 /** Returns whether a message was written, so dispatcher-based callers can report `handled` accurately. */
-export async function emitVortexUnavailableHookNotice(auth: ResolvedAuth): Promise<boolean> {
+export async function emitVortexUnavailableHookNotice(
+  transport: SonarHttpClient,
+  auth: ResolvedAuth,
+): Promise<boolean> {
   // The timestamp is written only for `not_entitled`, which in a hook means the org's
   // trial ended — a sticky state that will not become `over_consumption` within the
   // cooldown. So a fresh timestamp lets us skip the re-check network calls entirely
@@ -37,7 +41,7 @@ export async function emitVortexUnavailableHookNotice(auth: ResolvedAuth): Promi
   if (!isVortexEntitlementLossNoticeDue()) {
     return false;
   }
-  const status = await recheckVortexEntitlement(auth);
+  const status = await recheckVortexEntitlement(transport, auth);
   const message = vortexUnavailableHookMessage(status);
   if (!message) {
     return false;
