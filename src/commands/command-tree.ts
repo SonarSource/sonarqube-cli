@@ -262,7 +262,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .command('issues')
     .description('Search for issues in SonarQube')
     .showUpdateNotification(isTableFormatOption)
-    .requiredOption('-p, --project <project>', 'Project key')
+    .option('-p, --project <project>', 'Project key')
     .option(
       '--statuses <statuses>',
       `Filter by status (comma-separated list of: ${VALID_STATUSES.join(', ')}). Defaults to ${DEFAULT_STATUSES.join(', ')}.`,

@@ -25,10 +25,12 @@ import { encode as encodeToToon } from '@toon-format/toon';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFileComponentKey } from '@/core/file-component.ts';
+import { resolveProjectKey } from '@/core/project-info.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { SystemClient } from '@/core/server/system.ts';
 import type { IssuesSearchParams, SonarQubeIssue } from '@/core/server/types.ts';
+import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { columnFormatting } from '@/core/ui/formatter/column-formatting.ts';
 import { formatCSV } from '@/core/ui/formatter/csv.ts';
 
@@ -119,9 +121,6 @@ export async function listIssues(
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   const { auth, console } = ctx;
-  if (!options.project) {
-    throw new InvalidOptionError('--project is required.', 'Add --project <key>.');
-  }
 
   const format = options.format ?? 'json';
   if (!VALID_FORMATS.includes(format.toLowerCase())) {
@@ -170,6 +169,9 @@ export async function listIssues(
     }
   }
 
+  const projectKey = await resolveProjectKey(options.project, auth, console);
+  noteProject(auth, projectKey);
+
   const client = ctx.connection.httpClient;
   const issuesClient = new IssuesClient(client);
 
@@ -177,7 +179,7 @@ export async function listIssues(
   if (options.file) {
     ({ componentKey: componentKeys } = await resolveFileComponentKey(
       client,
-      options.project,
+      projectKey,
       options.file,
       { branch: options.branch, pullRequest: options.pullRequest },
     ));
@@ -192,7 +194,7 @@ export async function listIssues(
       : {};
 
   const params: IssuesSearchParams = {
-    projects: componentKeys ?? options.project,
+    projects: componentKeys ?? projectKey,
     organization: auth.orgKey,
     severities: normalizedSeverities,
     impactSeverities: normalizedImpactSeverities,

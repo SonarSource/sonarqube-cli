@@ -474,13 +474,6 @@ describe('issuesSearchCommand', () => {
     );
   });
 
-  it('throws when --project is missing', async () => {
-    // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(listIssues({ page: 1, pageSize: 500 }, mockCtx)).rejects.toThrow(
-      '--project is required',
-    );
-  });
-
   it('throws when --format is invalid', async () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
@@ -659,7 +652,8 @@ describe('issuesSearchCommand', () => {
           { project: 'my-project', format: 'table', page: 1, pageSize: 500 },
           mockCtx,
         );
-        const printed = fake.calls.find((c) => c.method === 'print')?.args[0];
+        const printCalls = fake.calls.filter((c) => c.method === 'print');
+        const printed = printCalls[printCalls.length - 1]?.args[0];
         expect(typeof printed).toBe('string');
         return printed as string;
       } finally {

@@ -507,7 +507,6 @@ describe('list issues', () => {
   it(
     'exits with code 1 and prompts to authenticate when no auth is configured',
     async () => {
-      // --project must be supplied so Commander passes control to authenticated()
       const result = await harness.run('list issues --project my-project');
 
       expect(result.exitCode).toBe(1);
@@ -519,15 +518,56 @@ describe('list issues', () => {
   );
 
   it(
-    'exits with code 1 when --project is missing',
+    'auto-detects the project key from sonar-project.properties when --project is omitted',
     async () => {
-      // Commander enforces the requiredOption before the action handler runs — no auth needed
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('demo')
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=demo\n');
+
+      const result = await harness.run('list issues');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain('Using auto-detected project key: demo');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 1 when no project key can be resolved',
+    async () => {
+      harness.withAuth('http://127.0.0.1:19999', 'test-token');
+
       const result = await harness.run('list issues');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain(
-        "❌ error: required option '-p, --project <project>' not specified",
-      );
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('Could not determine project key.');
+      expect(output).toContain('Use --project <key>');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'prefers an explicit --project over auto-detection',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('demo')
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      // A different key in the config must not override the explicit flag.
+      harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=other\n');
+
+      const result = await harness.run('list issues --project demo');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain('Using project key: demo');
+      expect(result.stderr).not.toContain('Using auto-detected project key');
     },
     { timeout: 15000 },
   );
