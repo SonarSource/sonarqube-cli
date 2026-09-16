@@ -38,7 +38,7 @@ export interface CliRuntime {
   privateBetaFlags: PrivateBetaFlagRegistry;
   /** Private Beta registration gate; Open Beta ignores this. */
   isPrivateBetaEnabled: (flagKey: string) => boolean;
-  /** Single construction site for `ctx.httpClient`. */
+  /** Single construction site for `ctx.connection.httpClient`. */
   httpClientFactory: (auth: ResolvedAuth) => SonarHttpClient;
 }
 

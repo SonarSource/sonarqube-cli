@@ -243,7 +243,7 @@ export async function importHandler(
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   const { auth, console } = ctx;
-  const client = new ImportApiClient(ctx.httpClient);
+  const client = new ImportApiClient(ctx.connection.httpClient);
 
   console.intro('Import repositories', 'SonarQube');
 

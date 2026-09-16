@@ -25,6 +25,7 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as scaInstall from '@/core/host/install/sca-scanner.ts';
 import * as projectInfo from '@/core/project-info.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { resetProjectUuidContextForTests } from '@/core/telemetry/project-uuid.ts';
 
@@ -51,7 +52,10 @@ const FAKE_AUTH = new ResolvedAuth({
   source: 'state',
 });
 
-const FAKE_CLIENT = new SonarHttpClient(FAKE_AUTH.serverUrl, FAKE_AUTH.token);
+const FAKE_CONNECTION: SonarConnection = {
+  auth: FAKE_AUTH,
+  httpClient: new SonarHttpClient(FAKE_AUTH.serverUrl, FAKE_AUTH.token),
+};
 
 // issue.status null + newlyIntroduced true → effectiveStatus returns 'NEW', passing the hook's 'new' filter
 const SCAN_RESULT_WITH_RISK: AnalyzeProjectResponse = {
@@ -221,8 +225,7 @@ describe('runDepRisksStage', () => {
       await runDepRisksStage({
         project: 'demo',
         changedFiles: ['package.json'],
-        auth: FAKE_AUTH,
-        client: FAKE_CLIENT,
+        connection: FAKE_CONNECTION,
         ctx: makeCtx(),
       });
     } catch (e) {
@@ -245,8 +248,7 @@ describe('runDepRisksStage', () => {
       await runDepRisksStage({
         project: 'demo',
         changedFiles: ['package.json'],
-        auth: FAKE_AUTH,
-        client: FAKE_CLIENT,
+        connection: FAKE_CONNECTION,
         ctx: makeCtx(),
       });
     } catch (e) {
@@ -265,8 +267,7 @@ describe('runDepRisksStage', () => {
     await runDepRisksStage({
       project: 'demo',
       changedFiles: ['package.json'],
-      auth: FAKE_AUTH,
-      client: FAKE_CLIENT,
+      connection: FAKE_CONNECTION,
       ctx: makeCtx(),
     });
 
@@ -282,8 +283,7 @@ describe('runDepRisksStage', () => {
       await runDepRisksStage({
         project: 'demo',
         changedFiles: ['package.json'],
-        auth: FAKE_AUTH,
-        client: FAKE_CLIENT,
+        connection: FAKE_CONNECTION,
         ctx: makeCtx(),
       });
     } catch (e) {
@@ -302,8 +302,7 @@ describe('runDepRisksStage', () => {
     await runDepRisksStage({
       project: 'demo',
       changedFiles: ['package.json'],
-      auth: FAKE_AUTH,
-      client: FAKE_CLIENT,
+      connection: FAKE_CONNECTION,
       ctx: makeCtx(),
     });
 
@@ -316,8 +315,7 @@ describe('runDepRisksStage', () => {
     await runDepRisksStage({
       project: 'demo',
       changedFiles: ['index.ts'],
-      auth: FAKE_AUTH,
-      client: FAKE_CLIENT,
+      connection: FAKE_CONNECTION,
       ctx: makeCtx(),
     });
 
@@ -338,8 +336,7 @@ describe('runDepRisksStage', () => {
       await runDepRisksStage({
         project: undefined,
         changedFiles: ['package.json'],
-        auth: FAKE_AUTH,
-        client: FAKE_CLIENT,
+        connection: FAKE_CONNECTION,
         ctx: makeCtx(),
       });
     } catch (e) {
@@ -356,8 +353,7 @@ describe('runDepRisksStage', () => {
     await runDepRisksStage({
       project: undefined,
       changedFiles: ['package.json'],
-      auth: FAKE_AUTH,
-      client: FAKE_CLIENT,
+      connection: FAKE_CONNECTION,
       ctx: makeCtx(),
     });
 
@@ -370,8 +366,7 @@ describe('runDepRisksStage', () => {
     await runDepRisksStage({
       project: undefined,
       changedFiles: ['index.ts'],
-      auth: FAKE_AUTH,
-      client: FAKE_CLIENT,
+      connection: FAKE_CONNECTION,
       ctx: makeCtx(),
     });
 

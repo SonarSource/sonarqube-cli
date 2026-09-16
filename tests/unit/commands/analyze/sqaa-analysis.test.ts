@@ -21,7 +21,9 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { SqaaProgress } from '@/commands/analyze/sqaa-progress.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 import { RequestPayloadTooLargeError } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 
@@ -33,7 +35,6 @@ import {
 import * as sqaaApi from '../../../../src/commands/analyze/sqaa-api.ts';
 import type { SqaaChunkFile } from '../../../../src/commands/analyze/sqaa-chunking.ts';
 import { payloadTooLargeCommandError } from '../../../../src/commands/analyze/sqaa-errors.ts';
-import type { SqaaRequestTarget } from '../../../../src/commands/analyze/sqaa-resolution.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
 describe('distributeChunkResponse', () => {
@@ -142,9 +143,15 @@ describe('runAnalyses partial 413', () => {
     return { absolutePath: `/repo/${path}`, relativePath: path, content: 'x' };
   }
 
-  const TARGET: SqaaRequestTarget = {
-    orgKey: 'org',
-    transport: new SonarHttpClient('https://sonarcloud.io', 't'),
+  const CONNECTION: SonarConnection = {
+    auth: new ResolvedAuth({
+      token: 't',
+      serverUrl: 'https://sonarcloud.io',
+      orgKey: 'org',
+      connectionType: 'cloud',
+      source: 'state',
+    }),
+    httpClient: new SonarHttpClient('https://sonarcloud.io', 't'),
   };
 
   it('sends all readable files in one request and records partial 413 failures', async () => {
@@ -182,7 +189,7 @@ describe('runAnalyses partial 413', () => {
     const tally = await runAnalyses({
       files,
       allPaths: ['a.ts', 'b.ts', 'c.ts'],
-      target: TARGET,
+      connection: CONNECTION,
       projectKey: 'proj',
       branch: undefined,
       progress,
@@ -218,7 +225,7 @@ describe('runAnalyses partial 413', () => {
     const tally = await runAnalyses({
       files: ['/repo/ok.ts', '/repo/bad.ts'],
       allPaths: ['ok.ts', 'bad.ts'],
-      target: TARGET,
+      connection: CONNECTION,
       projectKey: 'proj',
       branch: undefined,
       progress,

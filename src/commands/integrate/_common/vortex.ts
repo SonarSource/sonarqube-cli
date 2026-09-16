@@ -29,6 +29,7 @@ import type {
 } from '@/core/framework/features';
 import { askUser, install, skip, uninstall } from '@/core/framework/features';
 import { wholeFileRemover } from '@/core/framework/resources';
+import type { SonarConnection } from '@/core/server/connection.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { ScaClient } from '@/core/server/sca.ts';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
@@ -123,12 +124,11 @@ export function vortexInstallDecision(disposition: VortexDisposition | undefined
 }
 
 async function resolveScaEnabled(
-  transport: SonarHttpClient,
-  auth: ResolvedAuth,
+  { auth, httpClient }: SonarConnection,
   isServer: boolean,
   console: Console,
 ): Promise<boolean> {
-  const client = new ScaClient(transport);
+  const client = new ScaClient(httpClient);
   const scaStatus = await client
     .getScaEnablement(isServer ? 'on-premise' : 'cloud', auth.orgKey)
     .orThrow();
@@ -146,8 +146,11 @@ export async function resolveVortexSetup(
   auth: ResolvedAuth,
   console: Console,
 ): Promise<ResolvedVortexSetup> {
-  const transport = new SonarHttpClient(auth.serverUrl, auth.token);
-  const { status } = await resolveVortexEntitlement(transport, auth);
+  const connection: SonarConnection = {
+    auth,
+    httpClient: new SonarHttpClient(auth.serverUrl, auth.token),
+  };
+  const { status } = await resolveVortexEntitlement(connection);
   const isServer = !isSonarQubeCloud(auth.serverUrl);
   const settled = (disposition: VortexDisposition): ResolvedVortexSetup => ({ disposition });
 
@@ -176,6 +179,6 @@ export async function resolveVortexSetup(
   // SCA tools only when SCA is available on the connection.
   return {
     ...settled('install'),
-    scaEnabled: await resolveScaEnabled(transport, auth, isServer, console),
+    scaEnabled: await resolveScaEnabled(connection, isServer, console),
   };
 }

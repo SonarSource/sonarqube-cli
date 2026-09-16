@@ -21,14 +21,15 @@
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import type { VortexEntitlementStatus } from '@/core/vortex/entitlement.ts';
 import { VortexEntitlementClient } from '@/core/vortex/entitlement.ts';
 import { recheckVortexEntitlement, resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 /** Every test stubs `hasVortexEntitlement`, so no request is ever issued through it. */
-function transport(auth: ResolvedAuth): SonarHttpClient {
-  return new SonarHttpClient(auth.serverUrl, auth.token);
+function connection(auth: ResolvedAuth): SonarConnection {
+  return { auth, httpClient: new SonarHttpClient(auth.serverUrl, auth.token) };
 }
 
 function cloudAuth(orgKey = 'my-org'): ResolvedAuth {
@@ -57,7 +58,7 @@ describe('recheckVortexEntitlement', () => {
     });
 
     const auth = cloudAuth('acme');
-    const status = await recheckVortexEntitlement(transport(auth), auth);
+    const status = await recheckVortexEntitlement(connection(auth));
 
     expect(status).toBe('not_entitled');
     expect(entitlementSpy).toHaveBeenCalledWith('acme');
@@ -73,7 +74,7 @@ describe('recheckVortexEntitlement', () => {
         status: verdict,
       });
 
-      expect(await recheckVortexEntitlement(transport(cloudAuth()), cloudAuth())).toBe(verdict);
+      expect(await recheckVortexEntitlement(connection(cloudAuth()))).toBe(verdict);
     },
   );
 });
@@ -97,7 +98,7 @@ describe('resolveVortexEntitlement', () => {
   it('returns not_applicable without calling the API for Cloud without an org', async () => {
     entitlementSpy = spyOn(VortexEntitlementClient.prototype, 'hasVortexEntitlement');
     const auth = new ResolvedAuth({ ...cloudAuth(), orgKey: undefined });
-    expect(await resolveVortexEntitlement(transport(auth), auth)).toEqual({
+    expect(await resolveVortexEntitlement(connection(auth))).toEqual({
       status: 'not_applicable',
     });
     expect(entitlementSpy).not.toHaveBeenCalled();
@@ -111,7 +112,7 @@ describe('resolveVortexEntitlement', () => {
       status: 'enabled',
     });
     const auth = serverAuth();
-    expect(await resolveVortexEntitlement(transport(auth), auth)).toEqual({
+    expect(await resolveVortexEntitlement(connection(auth))).toEqual({
       status: 'enabled',
     });
     expect(entitlementSpy).toHaveBeenCalled();

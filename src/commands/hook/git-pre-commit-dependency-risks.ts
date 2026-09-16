@@ -31,7 +31,6 @@ import {
   recordScaAnalysisTelemetry,
   SCA_CALLER_COMMANDS,
 } from '@/commands/analyze/sca-analysis-telemetry.ts';
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import {
@@ -41,7 +40,7 @@ import {
 import { ResolveOnlySecretsInstaller } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
-import { type SonarHttpClient } from '@/core/server/http-client.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -68,8 +67,7 @@ export interface DepRisksStageOptions {
   /** The hook's baked `-p`, if any. Absent means "discover one", not "there is none". */
   project?: string;
   changedFiles: string[];
-  auth: ResolvedAuth;
-  client: SonarHttpClient;
+  connection: SonarConnection;
   ctx: CommandInvocationContext;
 }
 
@@ -78,7 +76,7 @@ async function resolveProjectKey(options: DepRisksStageOptions): Promise<string 
     return options.project;
   }
   const discovered = await discoverProject(process.cwd(), {
-    auth: options.auth,
+    auth: options.connection.auth,
     silent: true,
     console: options.ctx.console,
   });
@@ -109,7 +107,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
     );
     return;
   }
-  noteProject(options.auth, project);
+  noteProject(options.connection.auth, project);
 
   const filter = buildRiskFilter(HOOK_STATUS_FILTER, HOOK_MIN_SEVERITY);
   if (!filter) {
@@ -122,13 +120,13 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
   let scan: ScaScanResult;
   let viewModel: DependencyRisksViewModel;
   try {
-    const client = createScaScanApi(options.client);
+    const client = createScaScanApi(options.connection.httpClient);
     scan = await new ScaScanOrchestrator(
       client,
       new ScaScannerNoopInstaller(binaryPath),
       new DefaultScaScannerSpawner(),
       new ResolveOnlySecretsInstaller(),
-    ).run(options.auth, project, SCA_CALLER_COMMANDS.gitPreCommit, options.ctx);
+    ).run(options.connection.auth, project, SCA_CALLER_COMMANDS.gitPreCommit, options.ctx);
     viewModel = buildDependencyRisksViewModel(scan.response, filter);
   } catch (err) {
     // The orchestrator already emitted a failures_count:1 event if the SCA scan itself failed;
@@ -142,7 +140,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
   // Hook has no analyze-style 0/1/51 exit code, so exit_code is null.
   recordScaAnalysisTelemetry(
     options.ctx,
-    options.auth,
+    options.connection.auth,
     SCA_CALLER_COMMANDS.gitPreCommit,
     scan.response,
     scan.scanDurationMs,

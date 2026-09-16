@@ -22,19 +22,26 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { SqaaAnalysisClient } from '@/commands/analyze/sqaa-analysis-client.ts';
 import type { SqaaAnalysisRequest } from '@/commands/analyze/sqaa-wire-types.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { ENV_SQAA_RETRY_BASE_DELAY_MS } from '@/core/config-constants.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 import { RequestPayloadTooLargeError, ServiceUnavailableError } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 
 import { fetchChunkWith413Split } from '../../../../src/commands/analyze/sqaa-api.ts';
 import type { SqaaChunkFile } from '../../../../src/commands/analyze/sqaa-chunking.ts';
 import * as sqaaChunking from '../../../../src/commands/analyze/sqaa-chunking.ts';
-import type { SqaaRequestTarget } from '../../../../src/commands/analyze/sqaa-resolution.ts';
 
-const TARGET: SqaaRequestTarget = {
-  orgKey: 'org',
-  transport: new SonarHttpClient('https://sonarcloud.io', 'token'),
+const CONNECTION: SonarConnection = {
+  auth: new ResolvedAuth({
+    token: 'token',
+    serverUrl: 'https://sonarcloud.io',
+    orgKey: 'org',
+    connectionType: 'cloud',
+    source: 'state',
+  }),
+  httpClient: new SonarHttpClient('https://sonarcloud.io', 'token'),
 };
 
 function makeFile(relativePath: string): SqaaChunkFile {
@@ -83,7 +90,7 @@ describe('fetchChunkWith413Split', () => {
     });
 
     const result = await fetchChunkWith413Split(
-      TARGET,
+      CONNECTION,
       'project',
       [makeFile('a.ts'), makeFile('b.ts')],
       undefined,
@@ -114,7 +121,7 @@ describe('fetchChunkWith413Split', () => {
     });
 
     const result = await fetchChunkWith413Split(
-      TARGET,
+      CONNECTION,
       'project',
       [makeFile('a.ts'), makeFile('b.ts')],
       undefined,
@@ -141,7 +148,7 @@ describe('fetchChunkWith413Split', () => {
     });
 
     const err = await fetchChunkWith413Split(
-      TARGET,
+      CONNECTION,
       'project',
       [makeFile('a.ts'), makeFile('b.ts')],
       undefined,
@@ -171,7 +178,7 @@ describe('fetchChunkWith413Split', () => {
     const files = [makeFile('a.ts'), makeFile('b.ts'), makeFile('c.ts')];
 
     try {
-      await fetchChunkWith413Split(TARGET, 'project', files, undefined);
+      await fetchChunkWith413Split(CONNECTION, 'project', files, undefined);
       expect(packSpy.mock.calls[0]?.[1]).toMatchObject({
         maxRequestBytes: 512_000,
         maxFilesPerRequest: 2,
@@ -191,7 +198,7 @@ describe('fetchChunkWith413Split', () => {
     );
 
     const file = makeFile('large.ts');
-    const result = await fetchChunkWith413Split(TARGET, 'project', [file], undefined);
+    const result = await fetchChunkWith413Split(CONNECTION, 'project', [file], undefined);
 
     expect(result.parts).toEqual([]);
     expect(result.groupErrors).toHaveLength(1);
@@ -207,7 +214,7 @@ describe('fetchChunkWith413Split', () => {
     });
 
     const result = await fetchChunkWith413Split(
-      TARGET,
+      CONNECTION,
       'project',
       [makeFile('a.ts'), makeFile('src\\bad.ts')],
       undefined,
@@ -227,7 +234,7 @@ describe('fetchChunkWith413Split', () => {
   it('does not call the API when every file path fails pre-flight validation', async () => {
     const file = makeFile('/absolute/large.ts');
 
-    const result = await fetchChunkWith413Split(TARGET, 'project', [file], undefined);
+    const result = await fetchChunkWith413Split(CONNECTION, 'project', [file], undefined);
 
     expect(createAnalysisSpy).not.toHaveBeenCalled();
     expect(result.parts).toEqual([]);
@@ -238,7 +245,7 @@ describe('fetchChunkWith413Split', () => {
   it('rejects every invalid path in a chunk without calling the API', async () => {
     const a = makeFile('a\\.ts');
     const b = makeFile('b\\.ts');
-    const result = await fetchChunkWith413Split(TARGET, 'project', [a, b], undefined);
+    const result = await fetchChunkWith413Split(CONNECTION, 'project', [a, b], undefined);
 
     expect(createAnalysisSpy).not.toHaveBeenCalled();
     expect(result.parts).toEqual([]);
@@ -257,7 +264,7 @@ describe('fetchChunkWith413Split', () => {
 
     const first = makeFile('dup.ts');
     const second = makeFile('dup.ts');
-    const result = await fetchChunkWith413Split(TARGET, 'project', [first, second], undefined);
+    const result = await fetchChunkWith413Split(CONNECTION, 'project', [first, second], undefined);
 
     expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
     expect(createAnalysisSpy.mock.calls[0]?.[0].files).toHaveLength(1);

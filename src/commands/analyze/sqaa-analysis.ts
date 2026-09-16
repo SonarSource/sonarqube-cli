@@ -21,6 +21,7 @@
 // Sequential chunked execution engine for SQAA change-set analysis
 
 import { getSqaaRetry503BaseDelayMs } from '@/core/config-constants.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 
 import {
   fetchChunkWith413Split,
@@ -33,7 +34,6 @@ import { type SqaaChunk, type SqaaChunkFile } from './sqaa-chunking.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import { isGlobalSqaaError, isPayloadTooLargeCommandError } from './sqaa-errors.ts';
 import type { SqaaProgress } from './sqaa-progress.ts';
-import type { SqaaRequestTarget } from './sqaa-resolution.ts';
 import type { SqaaAnalysisDepth, SqaaIssue } from './sqaa-wire-types.ts';
 
 export type FileSuccess = {
@@ -50,7 +50,7 @@ type ChunkPath = { file: string; filePath: string };
 export interface RunContext {
   files: string[];
   allPaths: string[];
-  target: SqaaRequestTarget;
+  connection: SonarConnection;
   projectKey: string;
   branch: string | undefined;
   progress: SqaaProgress;
@@ -238,7 +238,7 @@ async function processChunk(
 
   try {
     const { parts, groupErrors } = await fetchChunkWith413Split(
-      ctx.target,
+      ctx.connection,
       ctx.projectKey,
       chunk.files,
       ctx.branch,

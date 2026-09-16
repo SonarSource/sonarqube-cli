@@ -24,7 +24,6 @@
 
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { spawnProcess } from '@/core/process/process.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
 import { runDepRisksStage } from './git-pre-commit-dependency-risks.ts';
@@ -41,14 +40,15 @@ export async function gitPreCommit(
   files: string[],
   ctx: CommandInvocationContext,
 ): Promise<void> {
-  const auth = await ctx.resolveAuthOrNull();
+  const connection = await ctx.resolveConnection();
 
   const stagedFiles = files.length > 0 ? files : await getStagedFiles();
   if (stagedFiles.length === 0) return;
 
-  if (!auth) {
+  if (!connection) {
     throw new MissingDependenciesError(HOOK_INACTIVE_UNAUTHENTICATED);
   }
+  const { auth } = connection;
 
   noteProject(auth, options.project);
 
@@ -58,8 +58,7 @@ export async function gitPreCommit(
     await runDepRisksStage({
       project: options.project,
       changedFiles: stagedFiles,
-      auth,
-      client: new SonarHttpClient(auth.serverUrl, auth.token),
+      connection,
       ctx,
     });
   }

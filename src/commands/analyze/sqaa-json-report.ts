@@ -18,10 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { timed } from '@/core/observability/timed.ts';
-import type { SonarHttpClient } from '@/core/server/http-client.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 
 import { readSqaaFileContent, toRelativePosixPath } from './sqaa-api.ts';
 import {
@@ -37,7 +36,7 @@ import {
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import { buildJsonReport, makeReport, type SqaaJsonReport } from './sqaa-display.ts';
 import { type ResolvedSqaaFileEntry, resolveSqaaFileArgs } from './sqaa-file-arg.ts';
-import { resolveSqaaTargetAndProject } from './sqaa-resolution.ts';
+import { resolveSqaaConnectionAndProject } from './sqaa-resolution.ts';
 import {
   fetchSingleFileReport,
   finishSqaaTelemetryFromReport,
@@ -57,7 +56,6 @@ type JsonReportRunOptions = AnalyzeSqaaRunOptions & {
 async function buildSqaaJsonReportFromEntries(
   entries: ResolvedSqaaFileEntry[],
   resolved: SqaaResolvedContext,
-  _auth: ResolvedAuth,
   branch: string | undefined,
   wireDepth: SqaaDeepWireDepth | undefined,
   displayDepth: SqaaAnalysisDepth,
@@ -68,7 +66,7 @@ async function buildSqaaJsonReportFromEntries(
     const fileContent = readSqaaFileContent(absolutePath);
     const { result: fetchResult, durationMs } = await timed(() =>
       fetchSingleFileReport(
-        resolved.target,
+        resolved.connection,
         resolved.projectKey,
         absolutePath,
         fileContent,
@@ -102,8 +100,7 @@ async function buildSqaaJsonReportFromEntries(
 
 async function buildSqaaJsonReportFromChangeSet(
   options: AnalyzeSqaaOptions,
-  client: SonarHttpClient,
-  auth: ResolvedAuth,
+  connection: SonarConnection,
   rawDepth: string | undefined,
   forcedDepth: SqaaAnalysisDepth | undefined,
   runOptions: JsonReportRunOptions,
@@ -122,9 +119,8 @@ async function buildSqaaJsonReportFromChangeSet(
   }
 
   const { console } = runOptions.telemetryCtx;
-  const resolution = await resolveSqaaTargetAndProject(
-    client,
-    auth,
+  const resolution = await resolveSqaaConnectionAndProject(
+    connection,
     project,
     console,
     changeSet.repoRoot,
@@ -168,18 +164,17 @@ async function buildSqaaJsonReportFromChangeSet(
  */
 export async function buildSqaaJsonReport(
   options: AnalyzeSqaaOptions,
-  client: SonarHttpClient,
-  auth: ResolvedAuth,
+  connection: SonarConnection,
   runOptions: JsonReportRunOptions,
 ): Promise<SqaaJsonReport | null> {
-  const telemetryOptions = { ...runOptions, auth };
+  const telemetryOptions = { ...runOptions, auth: connection.auth };
   const { file: rawFiles, branch, project, force, depth: rawDepth, forcedDepth } = options;
 
   if (rawFiles?.length) {
     const entries = resolveSqaaFileArgs(rawFiles);
     const resolvedBranch = await resolveSqaaBranch(branch, entries[0].absolutePath);
     const { console } = runOptions.telemetryCtx;
-    const resolution = await resolveSqaaTargetAndProject(client, auth, project, console);
+    const resolution = await resolveSqaaConnectionAndProject(connection, project, console);
     const resolved = resolveSqaaContext(resolution, { requireProject: false }, console);
     if (!resolved) return null;
 
@@ -188,7 +183,6 @@ export async function buildSqaaJsonReport(
       return buildSqaaJsonReportFromEntries(
         entries,
         resolved,
-        auth,
         resolvedBranch,
         wireDepth,
         displayDepth,
@@ -206,7 +200,6 @@ export async function buildSqaaJsonReport(
     return buildSqaaJsonReportFromEntries(
       entries,
       resolved,
-      auth,
       resolvedBranch,
       wireDepth,
       displayDepth,
@@ -216,8 +209,7 @@ export async function buildSqaaJsonReport(
 
   return buildSqaaJsonReportFromChangeSet(
     options,
-    client,
-    auth,
+    connection,
     rawDepth,
     forcedDepth,
     telemetryOptions,

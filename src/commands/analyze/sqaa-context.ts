@@ -41,15 +41,15 @@ interface SqaaDepthResolution {
 }
 
 /**
- * Apply the command's policy to a target/project resolution. This is where the
+ * Apply the command's policy to a connection/project resolution. This is where the
  * caller (not the resolver) decides what a missing project means:
  * - `requireProject` (explicit `analyze agentic` / `verify`): throw so the command
  *   exits with code 1 instead of skipping silently.
  * - otherwise (the bare `sonar analyze` catch-all): warn and return null so the
  *   surrounding command can proceed with its other analyses.
  *
- * A Cloud connection without an organization is always a graceful skip (the warning was
- * already emitted by resolveSqaaTarget).
+ * A Cloud connection without an organization follows the same split: fatal when the user
+ * named a project, a warning otherwise.
  */
 export function resolveSqaaContext(
   resolution: SqaaResolution,
@@ -58,8 +58,16 @@ export function resolveSqaaContext(
 ): SqaaResolvedContext | null {
   switch (resolution.kind) {
     case 'resolved':
-      return { target: resolution.target, projectKey: resolution.projectKey };
+      return { connection: resolution.connection, projectKey: resolution.projectKey };
     case 'no-org':
+      if (resolution.explicitProject) {
+        throw new CommandFailedError('Vortex analysis requires a SonarQube Cloud organization.', {
+          remediationHint: "Run 'sonar auth login' and select an organization, then retry.",
+        });
+      }
+      console.warn(
+        'Vortex analysis skipped: a SonarQube Cloud organization is required. Run: sonar auth login',
+      );
       return null;
     case 'no-project':
       if (policy.requireProject) {

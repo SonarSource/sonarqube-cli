@@ -170,7 +170,7 @@ export async function listIssues(
     }
   }
 
-  const client = ctx.httpClient;
+  const client = ctx.connection.httpClient;
   const issuesClient = new IssuesClient(client);
 
   let componentKeys: string | undefined;

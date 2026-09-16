@@ -49,7 +49,7 @@ import {
   SCA_SCANNER_CLI_VERSION,
   SONAR_CONTEXT_AUGMENTATION_VERSION,
 } from '@/core/host/install/signatures.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { loadState } from '@/core/state/state-repository.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -382,14 +382,17 @@ async function getCliUpdateInfo(): Promise<CliUpdateInfo | null> {
   }
 }
 
-async function resolveAuthenticatedChecks(auth: ResolvedAuth | null): Promise<AuthenticatedChecks> {
-  if (!auth) {
+async function resolveAuthenticatedChecks(
+  connection: SonarConnection | null,
+): Promise<AuthenticatedChecks> {
+  if (!connection) {
     return { tokenStatus: null, vortex: { status: 'not_applicable' } };
   }
 
+  const { auth } = connection;
   const [tokenStatus, vortex] = await Promise.all([
     checkTokenStatus(auth.serverUrl, auth.token),
-    resolveVortexEntitlement(new SonarHttpClient(auth.serverUrl, auth.token), auth),
+    resolveVortexEntitlement(connection),
   ]);
   return { tokenStatus, vortex };
 }
@@ -405,9 +408,13 @@ export async function systemStatus(
     integration.features.some(isVortexFeature),
   );
 
-  const [auth, updateResult] = await Promise.all([ctx.resolveAuthOrNull(), getCliUpdateInfo()]);
+  const [connection, updateResult] = await Promise.all([
+    ctx.resolveConnection(),
+    getCliUpdateInfo(),
+  ]);
+  const auth = connection?.auth ?? null;
 
-  const { tokenStatus, vortex } = await resolveAuthenticatedChecks(auth);
+  const { tokenStatus, vortex } = await resolveAuthenticatedChecks(connection);
 
   const binaries = state.dependencies.installed
     .filter((d): d is typeof d & { path: string; version: string } => !!(d.path && d.version))

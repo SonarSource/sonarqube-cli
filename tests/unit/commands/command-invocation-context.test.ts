@@ -183,11 +183,50 @@ describe('CommandInvocationContext.resolveAuth', () => {
   });
 });
 
-describe('CommandAuthenticatedInvocationContext.httpClient', () => {
+describe('CommandInvocationContext.resolveConnection', () => {
+  it('returns null when the invocation has no usable credentials', async () => {
+    const resolveFromStateSpy = spyResolveFromState().mockResolvedValue(null);
+    const context = new CommandInvocationContext(
+      new FakeConsole(),
+      undefined,
+      createCliRuntime({ authResolver: new AuthResolver({ silent: true }) }),
+    );
+
+    expect(await context.resolveConnection()).toBeNull();
+    resolveFromStateSpy.mockRestore();
+  });
+
+  it('memoizes the connection so domain clients share one transport', async () => {
+    const resolveFromStateSpy = spyResolveFromState().mockResolvedValue(FAKE_AUTH);
+    let calls = 0;
+    const context = new CommandInvocationContext(
+      new FakeConsole(),
+      undefined,
+      createCliRuntime({
+        authResolver: new AuthResolver({ silent: true }),
+        httpClientFactory: (auth) => {
+          calls += 1;
+          return new SonarHttpClient(auth.serverUrl, auth.token);
+        },
+      }),
+    );
+
+    const first = await context.resolveConnection();
+    const second = await context.resolveConnection();
+
+    expect(first).not.toBeNull();
+    expect(second).toBe(first);
+    expect(calls).toBe(1);
+    resolveFromStateSpy.mockRestore();
+  });
+});
+
+describe('CommandAuthenticatedInvocationContext.connection', () => {
   it('builds the default client from the resolved auth', () => {
     const context = new CommandAuthenticatedInvocationContext(FAKE_AUTH, new FakeConsole());
 
-    expect(context.httpClient).toBeInstanceOf(SonarHttpClient);
+    expect(context.connection.auth).toBe(FAKE_AUTH);
+    expect(context.connection.httpClient).toBeInstanceOf(SonarHttpClient);
   });
 
   it('builds via runtime.httpClientFactory exactly once, memoising the result', () => {
@@ -207,8 +246,8 @@ describe('CommandAuthenticatedInvocationContext.httpClient', () => {
       }),
     );
 
-    expect(context.httpClient).toBe(fakeClient);
-    expect(context.httpClient).toBe(fakeClient);
+    expect(context.connection.httpClient).toBe(fakeClient);
+    expect(context.connection.httpClient).toBe(fakeClient);
     expect(calls).toBe(1);
     expect(seenAuth).toBe(FAKE_AUTH);
   });
