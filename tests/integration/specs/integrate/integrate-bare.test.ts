@@ -56,40 +56,31 @@ describe('integrate (bare command)', () => {
   );
 
   it(
-    'rejects conflicting --project and --global before prompting',
+    'requires an explicit agent in non-interactive mode',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('test-token').start();
       harness.withAuth(server.baseUrl(), 'test-token');
 
-      const result = await harness.run('integrate --project foo --global');
+      const result = await harness.run('integrate --non-interactive');
 
       expect(result.exitCode).toBe(2);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('--global and --project are mutually exclusive');
-      // The conflict is caught up front, before the tool-selection prompt renders.
+      expect(output).toContain('--non-interactive requires an explicit agent');
       expect(output).not.toContain('Select the tool you want to integrate with');
     },
     { timeout: 15000 },
   );
 
   it(
-    'runs only the single selected integration',
+    'runs only the single selected integration, installing globally',
     async () => {
-      const server = await harness
-        .newFakeServer()
-        .withAuthToken('test-token')
-        .withProject('my-project')
-        .start();
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
       harness.withAuth(server.baseUrl(), 'test-token');
-      harness.cwd.writeFile(
-        'sonar-project.properties',
-        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
-      );
 
       // Single-select: the cursor starts on Claude (index 0); Enter confirms it.
+      // There is no scope prompt anymore — every integration installs globally.
       const session = harness.runInteractive('integrate');
       await session.accept('Select the tool you want to integrate with');
-      await session.accept('Where should SonarQube be integrated?');
       await session.accept('Install secret scanning hooks?');
       await session.accept('Install MCP server?');
       const result = await session.waitFinish();
@@ -99,36 +90,6 @@ describe('integrate (bare command)', () => {
       expect(output).toContain('SonarQube Integration Setup for Claude Code');
       expect(output.split('Setup complete!').length - 1).toBe(1);
 
-      expect(harness.cwd.exists('.claude', 'settings.json')).toBe(true);
-      expect(
-        harness.cwd.exists(
-          '.claude',
-          'hooks',
-          'sonar-secrets',
-          'build-scripts',
-          hookScriptName('pretool-secrets'),
-        ),
-      ).toBe(true);
-      expect(harness.cwd.exists('.mcp.json')).toBe(true);
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'forwards --global to the selected integration',
-    async () => {
-      const server = await harness.newFakeServer().withAuthToken('test-token').start();
-      harness.withAuth(server.baseUrl(), 'test-token');
-
-      // --global is passed through to the integration: scope prompt is skipped and
-      // the integration installs at global scope.
-      const session = harness.runInteractive('integrate --global');
-      await session.accept('Select the tool you want to integrate with');
-      await session.accept('Install secret scanning hooks?');
-      await session.accept('Install MCP server?');
-      const result = await session.waitFinish();
-
-      expect(result.exitCode).toBe(0);
       const feature = findInstalledFeature(harness, 'claude-code', 'sonar-secrets-hooks');
       expect(feature?.scope).toBe('global');
       expect(harness.userHome.exists('.claude', 'settings.json')).toBe(true);
@@ -147,38 +108,80 @@ describe('integrate (bare command)', () => {
   );
 
   it(
-    'forwards --project to the selected integration',
+    'mentions detected installed agents before the selection prompt',
     async () => {
-      const server = await harness
-        .newFakeServer()
-        .withAuthToken('test-token')
-        .withProject('my-project')
-        .start();
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
       harness.withAuth(server.baseUrl(), 'test-token');
+      // Marks Claude Code as installed on this machine for detection purposes.
+      harness.userHome.writeFile('.claude.json', '{}');
 
-      // -p is passed through to the integration: scope prompt is skipped (explicit
-      // project key implies project scope) and the key is baked into the install.
-      const session = harness.runInteractive('integrate --project my-project');
-      await session.accept('Select the tool you want to integrate with');
-      await session.accept('Install secret scanning hooks?');
-      await session.accept('Install MCP server?');
+      const session = harness.runInteractive('integrate');
+      await session.waitText('Detected agents on your machine: Claude Code');
+      session.keyCtrlC();
       const result = await session.waitFinish();
 
-      expect(result.exitCode).toBe(0);
-      const feature = findInstalledFeature(harness, 'claude-code', 'sonar-secrets-hooks');
-      expect(feature?.scope).toBe('project');
-      expect(feature?.attrs).toMatchObject({ projectKey: 'my-project' });
-      expect(harness.cwd.exists('.claude', 'settings.json')).toBe(true);
-      expect(
-        harness.cwd.exists(
-          '.claude',
-          'hooks',
-          'sonar-secrets',
-          'build-scripts',
-          hookScriptName('pretool-secrets'),
-        ),
-      ).toBe(true);
+      expect(result.stdout).toContain('Detected agents on your machine: Claude Code');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'mentions already-integrated tools before the selection prompt',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const setup = await harness.run('integrate claude --non-interactive');
+      expect(setup.exitCode).toBe(0);
+      // harness.state() re-seeds state.json from the builder on every spawn; re-feed it
+      // the state the CLI actually wrote so the next invocation sees it (see vortex.test.ts).
+      harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
+
+      const session = harness.runInteractive('integrate');
+      await session.waitText('Already integrated: Claude Code');
+      session.keyCtrlC();
+      await session.waitFinish();
     },
     { timeout: 30000 },
+  );
+
+  it(
+    'warns about hook-execution conflicts when Claude and Cursor are both detected',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      harness.userHome.writeFile('.claude.json', '{}');
+      harness.userHome.writeFile('.cursor/marker', '');
+
+      const session = harness.runInteractive('integrate');
+      await session.waitText('Select the tool you want to integrate with');
+      session.keyCtrlC();
+      const result = await session.waitFinish();
+
+      expect(result.stderr).toContain(
+        'Both Claude Code and Cursor were detected on this machine. Integrating with both may cause conflicts in hook execution.',
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'warns about hook-execution conflicts when Claude and Copilot are both detected',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      harness.userHome.writeFile('.claude.json', '{}');
+      harness.userHome.writeFile('.copilot/marker', '');
+
+      const session = harness.runInteractive('integrate');
+      await session.waitText('Select the tool you want to integrate with');
+      session.keyCtrlC();
+      const result = await session.waitFinish();
+
+      expect(result.stderr).toContain(
+        'Both Claude Code and Copilot were detected on this machine. Integrating with both may cause conflicts in hook execution.',
+      );
+    },
+    { timeout: 15000 },
   );
 });
