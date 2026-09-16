@@ -37,10 +37,17 @@ export function isCorruptionError(error: unknown): boolean {
 
 function openAndMigrate(dbPath: string): Database {
   const db = new Database(dbPath, { create: true });
-  db.run('PRAGMA journal_mode = WAL');
-  db.run('PRAGMA busy_timeout = 5000');
-  applyStatsMigrations(db);
-  return db;
+  try {
+    db.run('PRAGMA journal_mode = WAL');
+    db.run('PRAGMA busy_timeout = 5000');
+    applyStatsMigrations(db);
+    return db;
+  } catch (error) {
+    // Windows can't rename/delete a file with an open handle — release ours before the
+    // caller tries to quarantine it, or the retry will just fail on the same locked file.
+    db.close();
+    throw error;
+  }
 }
 
 function quarantineLedgerFiles(dbPath: string): void {
