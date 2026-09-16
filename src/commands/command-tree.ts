@@ -34,6 +34,7 @@ import {
 } from '@/core/commands/sonar-command.ts';
 import { resolveGitlabToken } from '@/core/gitlab/token.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
+import logger from '@/core/observability/logger.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
 import { GENERIC_HTTP_METHODS } from '@/core/server/http-client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
@@ -44,6 +45,7 @@ import { buildCommandExecutedFact } from '@/core/telemetry/command-executed.ts';
 import { resolveInvocationAuthForTelemetry } from '@/core/telemetry/identity.ts';
 import type { Console } from '@/core/ui/console.ts';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
+import { runPostUpdateActions } from '@/core/update/post-update.ts';
 
 import { version as VERSION } from '../../package.json';
 import {
@@ -97,9 +99,12 @@ import { gitPrePush } from './hook/git-pre-push.ts';
 import type { HookCommandResult } from './hook/hook-command-result.ts';
 import { importHandler, type ImportOptions } from './import';
 import { collectRepoOption } from './import/repo-option.ts';
+import { supportedIntegrations } from './integrate';
 import type { IntegrateAgentOptions } from './integrate/_common/types.ts';
 import { integrateAntigravity } from './integrate/antigravity';
 import { integrateClaude } from './integrate/claude';
+import { CLAUDE_INTEGRATION_ID } from './integrate/claude/declaration.ts';
+import { installHooks } from './integrate/claude/hooks.ts';
 import { integrateCodex } from './integrate/codex';
 import { integrateCopilot } from './integrate/copilot';
 import { integrateCursor } from './integrate/cursor';
@@ -909,6 +914,25 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     sentryInitialized = true;
     const state = tryLoadState();
     if (state) initSentry(state);
+  });
+
+  // Registered after the Sentry hook so a crash inside a migration is reportable.
+  let postUpdateRan = false;
+  COMMAND_TREE.hook('preAction', async () => {
+    if (postUpdateRan) return;
+    postUpdateRan = true;
+    try {
+      await runPostUpdateActions({
+        supportedIntegrations,
+        claudeIntegrationId: CLAUDE_INTEGRATION_ID,
+        installHooks,
+        console,
+        runtime,
+      });
+    } catch (error) {
+      // A throw from a Commander hook would abort the user's command.
+      logger.debug(`Post-update actions failed: ${(error as Error).message}`);
+    }
   });
 
   // Emit handler facts plus CliCommandExecuted in one commit.

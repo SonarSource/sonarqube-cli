@@ -45,7 +45,6 @@ import {
 } from './_helpers';
 
 const DEFAULT_TIMEOUT_MS = 180_000;
-const POST_UPDATE_TIMEOUT_MS = 150_000;
 
 setDefaultTimeout(DEFAULT_TIMEOUT_MS);
 
@@ -61,7 +60,7 @@ describe('sonar-context-augmentation copilot hook refresh (offline, real binary)
     });
     copilotSkillPath = seedLegacySkillFile(harness.cwd.path, 'copilot', '# stale skill\n');
 
-    const result = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
+    const result = await harness.runToTriggerPostUpdate({ useCagTimeout: true });
     expect(result.exitCode, result.stderr).toBe(0);
   });
 

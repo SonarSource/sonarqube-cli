@@ -1666,8 +1666,7 @@ describe.skipIf(IS_WINDOWS)('post-update migration on CLI upgrade', () => {
         ),
       );
 
-      // Run any CLI command — post-update fires automatically when cliVersion < current
-      const result = await harness.run('--version');
+      const result = await harness.runToTriggerPostUpdate();
 
       expect(result.exitCode).toBe(0);
 
@@ -1754,8 +1753,7 @@ describe.skipIf(IS_WINDOWS)('post-update migration on CLI upgrade', () => {
         ),
       );
 
-      // Run any CLI command — post-update fires automatically when cliVersion < current
-      const result = await harness.run('--version');
+      const result = await harness.runToTriggerPostUpdate();
 
       expect(result.exitCode).toBe(0);
 

@@ -23,12 +23,8 @@
 // Main CLI entry point
 
 import { createCommandTree } from '@/commands/command-tree.ts';
-import { supportedIntegrations } from '@/commands/integrate';
-import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
-import { installHooks } from '@/commands/integrate/claude/hooks.ts';
 import { flushSentry } from '@/core/observability/sentry.ts';
 import { TerminalConsole } from '@/core/ui/terminal-console.ts';
-import * as postUpdate from '@/core/update/post-update.ts';
 
 function argvRequestsFormattedOutput(): boolean {
   return process.argv.some(
@@ -47,13 +43,6 @@ const console = new TerminalConsole();
 if (argvRequestsFormattedOutput()) {
   console.setFormattedOutputMode(true);
 }
-
-await postUpdate.runPostUpdateActions({
-  supportedIntegrations,
-  claudeIntegrationId: CLAUDE_INTEGRATION_ID,
-  installHooks,
-  console,
-});
 
 const tree = createCommandTree({ console });
 

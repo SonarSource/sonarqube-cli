@@ -59,7 +59,6 @@ import {
 } from './_helpers';
 
 const DEFAULT_TIMEOUT_MS = 180_000;
-const POST_UPDATE_TIMEOUT_MS = 150_000;
 const HELP_TIMEOUT_MS = 30_000;
 
 setDefaultTimeout(DEFAULT_TIMEOUT_MS);
@@ -83,7 +82,7 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
 
     seededSkillPath = seedLegacySkillFile(harness.cwd.path, 'claude', '# stale skill\n');
 
-    postUpdateResult = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
+    postUpdateResult = await harness.runToTriggerPostUpdate({ useCagTimeout: true });
   });
 
   afterAll(async () => {
@@ -167,7 +166,7 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
       // bumping state.
       rmSync(scriptPath);
 
-      refreshResult = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
+      refreshResult = await harness.runToTriggerPostUpdate({ useCagTimeout: true });
     });
 
     it('the simulated self-update exits successfully', () => {

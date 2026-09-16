@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { CliRuntime } from '@/core/commands/cli-runtime.ts';
 import {
   type IntegrationRegistry,
   reconcileInstalledIntegrations,
@@ -46,7 +47,7 @@ import { migrateLegacyTelemetryEvents } from './telemetry-migration.ts';
 /**
  * Command-layer values `post-update` needs but must not import directly
  * (this module lives in `core/`, which must not depend on `commands/`).
- * The CLI composition root (`src/index.ts`) supplies these.
+ * The command tree's root `preAction` hook supplies these.
  */
 export interface PostUpdateDependencies {
   /** Full registry of declarative integrations (`@/commands/integrate`). */
@@ -57,6 +58,8 @@ export interface PostUpdateDependencies {
   installHooks: InstallHooksFn;
   /** Process console created at CLI startup. */
   console: Console;
+  /** Credentials for migrations that need them, via `runtime.authResolver.resolveAuth()`. */
+  runtime: CliRuntime;
 }
 
 /**
