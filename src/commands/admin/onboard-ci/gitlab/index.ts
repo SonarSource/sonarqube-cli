@@ -25,7 +25,7 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
 import type { GitLabRepo } from '@/core/gitlab/client.ts';
 import { GitLabClient } from '@/core/gitlab/client.ts';
-import type { SonarHttpClient } from '@/core/server/http-client.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 import { ConcurrentProgress } from '@/core/ui/components/concurrent-progress.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -211,8 +211,7 @@ export function assertOnPremiseConnection(auth: ResolvedAuth): void {
 }
 
 async function preflight(
-  client: SonarHttpClient,
-  auth: ResolvedAuth,
+  connection: SonarConnection,
   gitlabToken: string,
   options: OnboardCiGitlabOptions,
 ): Promise<{
@@ -222,9 +221,10 @@ async function preflight(
   dopSettingKey: string;
   gitlabUrl: string;
 }> {
+  const { auth, httpClient } = connection;
   assertOnPremiseConnection(auth);
 
-  const sqsClient = new OnboardCiSqsClient(client);
+  const sqsClient = new OnboardCiSqsClient(httpClient);
   if (!(await sqsClient.users.hasProvisionProjectsPermission().orThrow())) {
     throw new CommandFailedError(
       'This command requires the "Provision Projects" global permission in SonarQube.',
@@ -375,15 +375,13 @@ function buildOutroMessage(opened: number, skipped: number, failed: number): str
 }
 
 export async function onboardCiGitlab(
-  client: SonarHttpClient,
-  auth: ResolvedAuth,
+  connection: SonarConnection,
   gitlabToken: string,
   options: OnboardCiGitlabOptions,
   console: Console,
 ): Promise<void> {
   const { sqsClient, gitlabClient, dopSettingId, dopSettingKey, gitlabUrl } = await preflight(
-    client,
-    auth,
+    connection,
     gitlabToken,
     options,
   );
@@ -408,7 +406,7 @@ export async function onboardCiGitlab(
     gitlab: gitlabClient,
     sqs: sqsClient,
     dopSettingId,
-    auth,
+    auth: connection.auth,
     options,
   };
 
