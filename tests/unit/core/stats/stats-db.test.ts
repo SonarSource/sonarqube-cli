@@ -23,6 +23,7 @@ import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { Database } from 'bun:sqlite';
 import { describe, expect, it } from 'bun:test';
 
 import {
@@ -31,7 +32,9 @@ import {
   getStatsDir,
   STATS_DB_FILENAME,
 } from '@/core/config-constants.ts';
-import { openStatsDb } from '@/core/stats/stats-db.ts';
+import { isCorruptionError, openStatsDb } from '@/core/stats/stats-db.ts';
+
+const IS_WINDOWS = process.platform === 'win32';
 
 async function withTempSonarUserHome<T>(fn: () => T | Promise<T>): Promise<T> {
   const testSonarUserHome = await mkdtemp(join(tmpdir(), 'cli-stats-db-test-'));
@@ -45,7 +48,13 @@ async function withTempSonarUserHome<T>(fn: () => T | Promise<T>): Promise<T> {
     } else {
       process.env[ENV_SONAR_USER_HOME] = previous;
     }
-    await rm(testSonarUserHome, { recursive: true, force: true });
+    // Windows can briefly hold the just-closed db's WAL/SHM handles; retry past that race.
+    await rm(testSonarUserHome, {
+      recursive: true,
+      force: true,
+      maxRetries: IS_WINDOWS ? 15 : 5,
+      retryDelay: IS_WINDOWS ? 200 : 100,
+    });
   }
 }
 
@@ -92,5 +101,38 @@ describe('openStatsDb', () => {
 
       expect(() => openStatsDb()).toThrow();
     });
+  });
+
+  it('propagates a transient lock error instead of quarantining a healthy ledger', async () => {
+    await withTempSonarUserHome(async () => {
+      const dbPath = join(getStatsDir(), STATS_DB_FILENAME);
+      mkdirSync(getStatsDir(), { recursive: true });
+
+      const blocker = new Database(dbPath, { create: true });
+      blocker.run('BEGIN IMMEDIATE');
+      try {
+        expect(() => openStatsDb()).toThrow();
+      } finally {
+        blocker.run('COMMIT');
+        blocker.close();
+      }
+
+      const filesInStatsDir = await readdir(getStatsDir());
+      expect(filesInStatsDir.some((name) => name.includes('.corrupted-'))).toBe(false);
+    });
+  });
+});
+
+describe('isCorruptionError', () => {
+  it('treats SQLITE_NOTADB and SQLITE_CORRUPT* as corruption', () => {
+    expect(isCorruptionError({ code: 'SQLITE_NOTADB' })).toBe(true);
+    expect(isCorruptionError({ code: 'SQLITE_CORRUPT' })).toBe(true);
+    expect(isCorruptionError({ code: 'SQLITE_CORRUPT_VTAB' })).toBe(true);
+  });
+
+  it('does not treat a transient lock/busy error as corruption', () => {
+    expect(isCorruptionError({ code: 'SQLITE_BUSY' })).toBe(false);
+    expect(isCorruptionError({ code: 'SQLITE_LOCKED' })).toBe(false);
+    expect(isCorruptionError(new Error('some unrelated failure'))).toBe(false);
   });
 });

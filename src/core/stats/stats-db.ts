@@ -28,10 +28,17 @@ import logger from '@/core/observability/logger.ts';
 
 import { applyStatsMigrations } from './stats-migrations.ts';
 
+const CORRUPTION_ERROR_CODE_PREFIXES = ['SQLITE_NOTADB', 'SQLITE_CORRUPT'];
+
+export function isCorruptionError(error: unknown): boolean {
+  const code = (error as { code?: string }).code ?? '';
+  return CORRUPTION_ERROR_CODE_PREFIXES.some((prefix) => code.startsWith(prefix));
+}
+
 function openAndMigrate(dbPath: string): Database {
   const db = new Database(dbPath, { create: true });
   db.run('PRAGMA journal_mode = WAL');
-  db.run('PRAGMA busy_timeout = 200');
+  db.run('PRAGMA busy_timeout = 5000');
   applyStatsMigrations(db);
   return db;
 }
@@ -54,8 +61,11 @@ export function openStatsDb(): Database {
   try {
     return openAndMigrate(dbPath);
   } catch (error) {
+    if (!isCorruptionError(error)) {
+      throw error;
+    }
     logger.debug(
-      `openStatsDb: ledger unreadable, quarantining and starting fresh: ${(error as Error).message}`,
+      `openStatsDb: ledger corrupted, quarantining and starting fresh: ${(error as Error).message}`,
     );
     quarantineLedgerFiles(dbPath);
     return openAndMigrate(dbPath);

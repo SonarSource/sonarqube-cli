@@ -77,9 +77,11 @@ export function upsertRuleMessages(messages: Readonly<Record<string, string>>): 
        VALUES (?, ?, ?)
        ON CONFLICT (rule_key) DO UPDATE SET message = excluded.message, last_seen_ms = excluded.last_seen_ms`,
     );
-    for (const [ruleKey, message] of Object.entries(messages)) {
-      upsert.run(ruleKey, message, timestampMs);
-    }
+    db.transaction(() => {
+      for (const [ruleKey, message] of Object.entries(messages)) {
+        upsert.run(ruleKey, message, timestampMs);
+      }
+    })();
   });
 }
 
@@ -97,17 +99,19 @@ export function dedupeAgainstSeen(scope: string, fingerprints: readonly string[]
 
     const notSeenBefore = new Set<string>();
     const dedupedInThisCall = new Set<string>();
-    for (const fingerprint of fingerprints) {
-      if (dedupedInThisCall.has(fingerprint)) {
-        continue;
-      }
-      dedupedInThisCall.add(fingerprint);
+    db.transaction(() => {
+      for (const fingerprint of fingerprints) {
+        if (dedupedInThisCall.has(fingerprint)) {
+          continue;
+        }
+        dedupedInThisCall.add(fingerprint);
 
-      if (!selectSeen.get(scope, fingerprint)) {
-        notSeenBefore.add(fingerprint);
+        if (!selectSeen.get(scope, fingerprint)) {
+          notSeenBefore.add(fingerprint);
+        }
+        upsertSeen.run(scope, fingerprint, timestampMs, timestampMs);
       }
-      upsertSeen.run(scope, fingerprint, timestampMs, timestampMs);
-    }
+    })();
     return notSeenBefore;
   });
 }

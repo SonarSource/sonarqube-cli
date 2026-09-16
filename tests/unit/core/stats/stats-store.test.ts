@@ -32,6 +32,8 @@ import {
   upsertRuleMessages,
 } from '@/core/stats/stats-store.ts';
 
+const IS_WINDOWS = process.platform === 'win32';
+
 let testSonarUserHome: string;
 const previousSonarUserHome = process.env[ENV_SONAR_USER_HOME];
 
@@ -41,7 +43,13 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(testSonarUserHome, { recursive: true, force: true });
+  // Windows can briefly hold the just-closed db's WAL/SHM handles; retry past that race.
+  await rm(testSonarUserHome, {
+    recursive: true,
+    force: true,
+    maxRetries: IS_WINDOWS ? 15 : 5,
+    retryDelay: IS_WINDOWS ? 200 : 100,
+  });
   if (previousSonarUserHome === undefined) {
     delete process.env[ENV_SONAR_USER_HOME];
   } else {
