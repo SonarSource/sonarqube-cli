@@ -25,10 +25,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { VORTEX_HOOK_MARKER } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
-import {
-  SQAA_INSTRUCTIONS_GLOBAL_SUBFEATURE_ID,
-  SQAA_INSTRUCTIONS_SUBFEATURE_ID,
-} from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
+import { SQAA_INSTRUCTIONS_GLOBAL_SUBFEATURE_ID } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
 import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import type { CliState } from '@/core/state/state.ts';
@@ -40,21 +37,12 @@ import {
 import { type CliResult, IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
 import {
   type AntigravityHooksJson,
-  expectAntigravityAlwaysOnRule,
   findAntigravityFeature,
   GLOBAL_GEMINI_MD_PATH,
   GLOBAL_HOOK_SCRIPT_PATH,
   GLOBAL_HOOKS_JSON_PATH,
   GLOBAL_MCP_CONFIG_PATH,
-  PROJECT_HOOK_SCRIPT_PATH,
-  PROJECT_HOOKS_JSON_PATH,
-  PROJECT_PROMPT_SECRETS_RULE_PATH,
-  PROJECT_SQAA_RULE_PATH,
-  writeDisabledGlobalHook,
   writeExistingGlobalGeminiRules,
-  writeExistingGlobalHook,
-  writeExistingGlobalInstructions,
-  writeOrphanedGlobalHookConfig,
 } from './antigravity-test-helpers';
 
 const TEST_PROJECT = 'my-project';
@@ -79,159 +67,11 @@ describe('integrate antigravity', () => {
     expect(result.stdout).toContain('antigravity');
   });
 
-  describe('project-level install (default)', () => {
-    it(
-      'writes hook script, hooks.json, and prompt-secrets workspace rule',
-      async () => {
-        const result = await harness.run(
-          `integrate antigravity --project ${TEST_PROJECT} --non-interactive`,
-        );
-
-        expect(result.exitCode).toBe(0);
-        expect(harness.cwd.exists(...PROJECT_HOOK_SCRIPT_PATH)).toBe(true);
-        expect(harness.cwd.exists(...PROJECT_HOOKS_JSON_PATH)).toBe(true);
-        expect(harness.cwd.exists(...PROJECT_PROMPT_SECRETS_RULE_PATH)).toBe(true);
-
-        const hooksJson = harness.cwd
-          .file(...PROJECT_HOOKS_JSON_PATH)
-          .asJson() as AntigravityHooksJson;
-        const command = normalizePath(
-          hooksJson['sonar-secrets']?.PreToolUse?.[0]?.hooks?.[0]?.command ?? '',
-        );
-        expect(command.startsWith('/')).toBe(false);
-        expect(command.startsWith(IS_WINDOWS ? 'powershell' : 'bash')).toBe(true);
-        expect(command).toContain('sonar/hooks');
-        expect(command).toMatch(IS_WINDOWS ? /powershell -NoProfile -File "/ : /bash "/);
-        expect(hooksJson['sonar-secrets']?.enabled).toBe(true);
-        expect(hooksJson['sonar-secrets']?.PreToolUse?.[0]?.matcher).toBe('view_file');
-
-        const scriptBody = harness.cwd.file(...PROJECT_HOOK_SCRIPT_PATH).asText();
-        expect(scriptBody).toContain('sonar hook antigravity-pre-tool-use');
-
-        const rule = harness.cwd.file(...PROJECT_PROMPT_SECRETS_RULE_PATH).asText();
-        expectAntigravityAlwaysOnRule(rule);
-        expect(rule).toContain('# SonarQube secrets scanning for prompts protocol');
-
-        expect(harness.userHome.exists(...GLOBAL_MCP_CONFIG_PATH)).toBe(true);
-        const mcp = harness.userHome.file(...GLOBAL_MCP_CONFIG_PATH).asJson() as {
-          mcpServers?: { sonarqube?: { command?: string; args?: string[] } };
-        };
-        expect(mcp.mcpServers?.sonarqube?.command).toBe('sonar');
-        expect(mcp.mcpServers?.sonarqube?.args?.slice(0, 2)).toEqual(['run', 'mcp']);
-        expect(mcp.mcpServers?.sonarqube?.args ?? []).not.toContain('--project');
-        expect(findAntigravityFeature(harness, 'mcp-server')).toBeDefined();
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'records sonar-secrets-hooks and prompt-secrets-project-rules in state',
-      async () => {
-        await harness.run(`integrate antigravity --project ${TEST_PROJECT} --non-interactive`);
-
-        const secretsFeature = findAntigravityFeature(harness, 'sonar-secrets-hooks');
-        expect(secretsFeature?.scope).toBe('project');
-        expect(secretsFeature?.attrs?.projectKey).toBe(TEST_PROJECT);
-
-        const projectRulesFeature = findAntigravityFeature(harness, 'prompt-secrets-project-rules');
-        expect(projectRulesFeature?.scope).toBe('project');
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'is idempotent on re-run (health check / repair)',
-      async () => {
-        await harness.run(`integrate antigravity --project ${TEST_PROJECT} --non-interactive`);
-        const result = await harness.run(
-          `integrate antigravity --project ${TEST_PROJECT} --non-interactive`,
-        );
-
-        expect(result.exitCode).toBe(0);
-        const rule = harness.cwd.file(...PROJECT_PROMPT_SECRETS_RULE_PATH).asText();
-        const headingCount =
-          rule.split('# SonarQube secrets scanning for prompts protocol').length - 1;
-        expect(headingCount).toBe(1);
-      },
-      { timeout: 60000 },
-    );
-
-    it(
-      'preserves unrelated hooks.json blocks',
-      async () => {
-        harness.cwd.writeFile(
-          '.agents/hooks.json',
-          JSON.stringify({
-            'other-hook': {
-              PreToolUse: [{ matcher: 'run_command', hooks: [{ command: './lint.sh' }] }],
-            },
-          }),
-        );
-
-        const result = await harness.run('integrate antigravity --non-interactive');
-        expect(result.exitCode).toBe(0);
-
-        const hooksJson = harness.cwd
-          .file(...PROJECT_HOOKS_JSON_PATH)
-          .asJson() as AntigravityHooksJson;
-        expect(hooksJson['other-hook']).toBeDefined();
-        expect(hooksJson['sonar-secrets']).toBeDefined();
-      },
-      { timeout: 30000 },
-    );
-
-    it.each([
-      [true, true, true],
-      [true, false, false],
-      [false, true, false],
-      [false, false, false],
-    ])(
-      'prints a non-interactive hint with --non-interactive plus -p/-g examples only for a detected AI agent without --non-interactive (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
-      async (isAgent, isInteractive, expectedShownPrompt) => {
-        // -p skips the scope prompt; three features ask by default (secrets
-        // hooks, MCP server, prompt-secrets project rules) — Vortex is skipped
-        // (Server hubs absent) and prompt-secrets global rules are
-        // skipped (project scope). --non-interactive skips those asks too.
-        const extraEnv: Record<string, string> = isAgent ? { ANTIGRAVITY_AGENT: '1' } : {};
-        let result: CliResult;
-        if (isInteractive) {
-          const session = harness.runInteractive(
-            `integrate antigravity --project ${TEST_PROJECT}`,
-            {
-              extraEnv,
-            },
-          );
-          await session.accept('Install secret scanning hooks?');
-          await session.accept('Install MCP server?');
-          await session.accept('Install prompt-secrets workspace rules?');
-          result = await session.waitFinish();
-        } else {
-          result = await harness.run(
-            `integrate antigravity --project ${TEST_PROJECT} --non-interactive`,
-            { extraEnv },
-          );
-        }
-
-        expect(result.exitCode).toBe(0);
-        if (expectedShownPrompt) {
-          expectAgentPromptHint(
-            result.stdout,
-            'sonar integrate antigravity --non-interactive',
-            'sonar integrate antigravity --non-interactive -g',
-          );
-        } else {
-          expectNoAgentPromptHint(result.stdout);
-        }
-      },
-      { timeout: 30000 },
-    );
-  });
-
-  describe('global install (-g)', () => {
+  describe('install (global by default)', () => {
     it(
       'writes hook script, hooks.json, and prompt-secrets snippet in ~/.gemini/GEMINI.md',
       async () => {
-        const result = await harness.run('integrate antigravity -g --non-interactive');
+        const result = await harness.run('integrate antigravity --non-interactive');
 
         expect(result.exitCode).toBe(0);
         expect(harness.userHome.exists(...GLOBAL_HOOK_SCRIPT_PATH)).toBe(true);
@@ -250,6 +90,11 @@ describe('integrate antigravity', () => {
         expect(command.startsWith(IS_WINDOWS ? 'powershell' : 'bash')).toBe(true);
         expect(command.includes(homePathNorm)).toBe(true);
         expect(command).toContain('.gemini/config/sonar/hooks');
+        expect(json['sonar-secrets']?.enabled).toBe(true);
+        expect(json['sonar-secrets']?.PreToolUse?.[0]?.matcher).toBe('view_file');
+
+        const scriptBody = harness.userHome.file(...GLOBAL_HOOK_SCRIPT_PATH).asText();
+        expect(scriptBody).toContain('sonar hook antigravity-pre-tool-use');
 
         expect(harness.userHome.exists(...GLOBAL_MCP_CONFIG_PATH)).toBe(true);
         const mcp = harness.userHome.file(...GLOBAL_MCP_CONFIG_PATH).asJson() as {
@@ -266,7 +111,7 @@ describe('integrate antigravity', () => {
     it(
       'records secrets hooks and instructions as global features',
       async () => {
-        await harness.run('integrate antigravity -g --non-interactive');
+        await harness.run('integrate antigravity --non-interactive');
 
         expect(findAntigravityFeature(harness, 'sonar-secrets-hooks', 'global')).toBeDefined();
         expect(
@@ -282,11 +127,50 @@ describe('integrate antigravity', () => {
     );
 
     it(
+      'is idempotent on re-run (health check / repair)',
+      async () => {
+        await harness.run('integrate antigravity --non-interactive');
+        const result = await harness.run('integrate antigravity --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        const gemini = harness.userHome.file(...GLOBAL_GEMINI_MD_PATH).asText();
+        const headingCount =
+          gemini.split('# SonarQube secrets scanning for prompts protocol').length - 1;
+        expect(headingCount).toBe(1);
+      },
+      { timeout: 60000 },
+    );
+
+    it(
+      'preserves unrelated hooks.json blocks',
+      async () => {
+        harness.userHome.writeFile(
+          join('.gemini', 'config', 'hooks.json'),
+          JSON.stringify({
+            'other-hook': {
+              PreToolUse: [{ matcher: 'run_command', hooks: [{ command: './lint.sh' }] }],
+            },
+          }),
+        );
+
+        const result = await harness.run('integrate antigravity --non-interactive');
+        expect(result.exitCode).toBe(0);
+
+        const hooksJson = harness.userHome
+          .file(...GLOBAL_HOOKS_JSON_PATH)
+          .asJson() as AntigravityHooksJson;
+        expect(hooksJson['other-hook']).toBeDefined();
+        expect(hooksJson['sonar-secrets']).toBeDefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it(
       'preserves pre-existing GEMINI.md content and appends the managed prompt-secrets block',
       async () => {
         writeExistingGlobalGeminiRules(harness);
 
-        const result = await harness.run('integrate antigravity -g --non-interactive');
+        const result = await harness.run('integrate antigravity --non-interactive');
 
         expect(result.exitCode).toBe(0);
         const body = harness.userHome.file(...GLOBAL_GEMINI_MD_PATH).asText();
@@ -295,130 +179,37 @@ describe('integrate antigravity', () => {
       },
       { timeout: 30000 },
     );
-  });
 
-  describe('project-level install when global Antigravity rules already exist', () => {
-    it(
-      'writes the project-level rule file and leaves the legacy global instructions file untouched',
-      async () => {
-        writeExistingGlobalInstructions(harness);
-        const before = harness.userHome
-          .file('.gemini', 'config', 'instructions', 'sonarqube.instructions.md')
-          .asText();
-
-        const result = await harness.run('integrate antigravity --non-interactive');
-
-        expect(result.exitCode).toBe(0);
-        expectAntigravityAlwaysOnRule(
-          harness.cwd.file(...PROJECT_PROMPT_SECRETS_RULE_PATH).asText(),
-        );
-        expect(
-          harness.userHome
-            .file('.gemini', 'config', 'instructions', 'sonarqube.instructions.md')
-            .asText(),
-        ).toBe(before);
-        expect(findAntigravityFeature(harness, 'prompt-secrets-project-rules')?.scope).toBe(
-          'project',
-        );
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'auto-skips the hook (with message) and asks a custom question when a global hook and global rules both exist',
-      async () => {
-        writeExistingGlobalHook(harness);
-        writeExistingGlobalInstructions(harness);
-
-        const session = harness.runInteractive('integrate antigravity', {
-          extraEnv: { __SQCLI_DEV_SKIP_CAG: '1' },
-        });
-        await session.accept('Where should SonarQube be integrated?');
-        await session.accept('Install MCP server?');
-        await session.accept(
-          'Global Antigravity rules already exist. Do you also want to create a project-local copy for this repo?',
-        );
-        const result = await session.waitFinish();
+    it.each([
+      [true, true, true],
+      [true, false, false],
+      [false, true, false],
+      [false, false, false],
+    ])(
+      'prints a non-interactive hint only for a detected AI agent without --non-interactive (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
+      async (isAgent, isInteractive, expectedShownPrompt) => {
+        const extraEnv: Record<string, string> = isAgent ? { ANTIGRAVITY_AGENT: '1' } : {};
+        let result: CliResult;
+        if (isInteractive) {
+          const session = harness.runInteractive('integrate antigravity', {
+            extraEnv,
+          });
+          await session.accept('Install secret scanning hooks?');
+          await session.accept('Install MCP server?');
+          await session.accept('Install prompt-secrets global rules?');
+          result = await session.waitFinish();
+        } else {
+          result = await harness.run('integrate antigravity --non-interactive', { extraEnv });
+        }
 
         expect(result.exitCode).toBe(0);
-        const output = result.stdout + result.stderr;
-        expect(output).toContain('global secrets scanning hook');
-        expect(output).not.toContain('Install secret scanning hooks?');
-        expect(harness.cwd.exists(...PROJECT_HOOK_SCRIPT_PATH)).toBe(false);
-        expect(findAntigravityFeature(harness, 'sonar-secrets-hooks')).toBeUndefined();
-        expect(output).toContain(
-          'Global Antigravity rules already exist. Do you also want to create a project-local copy for this repo?',
-        );
-        expect(harness.cwd.exists(...PROJECT_PROMPT_SECRETS_RULE_PATH)).toBe(true);
-        expect(findAntigravityFeature(harness, 'prompt-secrets-project-rules')?.scope).toBe(
-          'project',
-        );
+        if (expectedShownPrompt) {
+          expectAgentPromptHint(result.stdout, 'sonar integrate antigravity --non-interactive');
+        } else {
+          expectNoAgentPromptHint(result.stdout);
+        }
       },
       { timeout: 30000 },
-    );
-  });
-
-  describe('project install when a global secrets hook already exists', () => {
-    it(
-      'skips project-level secrets hooks but still installs prompt-secrets rules',
-      async () => {
-        writeExistingGlobalHook(harness);
-
-        const result = await harness.run('integrate antigravity --non-interactive');
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout + result.stderr).toContain('global secrets scanning hook');
-        expect(harness.cwd.exists(...PROJECT_HOOK_SCRIPT_PATH)).toBe(false);
-        expect(harness.cwd.exists(...PROJECT_PROMPT_SECRETS_RULE_PATH)).toBe(true);
-        expect(findAntigravityFeature(harness, 'sonar-secrets-hooks')).toBeUndefined();
-        expect(findAntigravityFeature(harness, 'prompt-secrets-project-rules')).toBeDefined();
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'installs project-level secrets hooks when the global block is disabled',
-      async () => {
-        writeDisabledGlobalHook(harness);
-
-        const result = await harness.run('integrate antigravity --non-interactive');
-
-        expect(result.exitCode).toBe(0);
-        expect(harness.cwd.exists(...PROJECT_HOOK_SCRIPT_PATH)).toBe(true);
-        expect(harness.cwd.exists(...PROJECT_HOOKS_JSON_PATH)).toBe(true);
-        expect(findAntigravityFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'installs project-level secrets hooks when global hooks.json references a missing script',
-      async () => {
-        writeOrphanedGlobalHookConfig(harness);
-
-        const result = await harness.run('integrate antigravity --non-interactive');
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout + result.stderr).toContain('backing script is missing');
-        expect(harness.cwd.exists(...PROJECT_HOOK_SCRIPT_PATH)).toBe(true);
-        expect(findAntigravityFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
-      },
-      { timeout: 30000 },
-    );
-  });
-
-  describe('option validation', () => {
-    it(
-      'exits with code 2 when both --global and --project are provided',
-      async () => {
-        const result = await harness.run('integrate antigravity --global --project foo');
-
-        expect(result.exitCode).toBe(2);
-        expect(result.stdout + result.stderr).toContain(
-          '--global and --project are mutually exclusive',
-        );
-      },
-      { timeout: 15000 },
     );
   });
 
@@ -470,16 +261,15 @@ describe('integrate antigravity', () => {
 
   describe('--help', () => {
     it(
-      'documents options consistent with other agent integrate commands',
+      'documents options consistent with other agent integrate commands, with no scope flags',
       async () => {
         const result = await harness.run('integrate antigravity --help');
 
         expect(result.exitCode).toBe(0);
         const help = result.stdout;
-        expect(help).toContain('--project');
-        expect(help).toContain('--global');
         expect(help).toContain('--non-interactive');
-        expect(help).toContain('sonar.projectKey');
+        expect(help).not.toContain('--project');
+        expect(help).not.toContain('--global');
       },
       { timeout: 15000 },
     );
@@ -487,10 +277,17 @@ describe('integrate antigravity', () => {
 
   describe('Vortex (SQAA rules)', () => {
     it(
-      'writes SQAA workspace rules and nothing for Context Augmentation when the org is entitled and a project key is present',
+      'writes the SQAA rules into the global GEMINI.md and nothing for Context Augmentation when entitled, with a discovered project key',
       async () => {
-        const legacySkillPath = ['.agents', 'skills', 'sonar-context-augmentation', 'SKILL.md'];
-        harness.cwd.writeFile(join(...legacySkillPath), '# stale skill\n');
+        const legacySkillPath = [
+          '.gemini',
+          'config',
+          'skills',
+          'sonar-context-augmentation',
+          'SKILL.md',
+        ];
+        harness.userHome.writeFile(join(...legacySkillPath), '# stale skill\n');
+        harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
         const server = await harness
           .newFakeServer()
           .withAuthToken('cloud-token')
@@ -501,31 +298,26 @@ describe('integrate antigravity', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
 
-        const result = await harness.run(
-          `integrate antigravity --project ${TEST_PROJECT} --non-interactive`,
-          {
-            extraEnv: {
-              SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
-              SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
-            },
+        const result = await harness.run('integrate antigravity --non-interactive', {
+          extraEnv: {
+            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
           },
-        );
+        });
 
         expect(result.exitCode).toBe(0);
-        expectAntigravityAlwaysOnRule(
-          harness.cwd.file(...PROJECT_PROMPT_SECRETS_RULE_PATH).asText(),
-        );
-        const sqaaRule = harness.cwd.file(...PROJECT_SQAA_RULE_PATH).asText();
-        expectAntigravityAlwaysOnRule(sqaaRule);
-        expect(sqaaRule).toContain('# Vortex analysis protocol');
-        expect(sqaaRule).toContain('sonar analyze agentic --depth DEEP');
-        const vortexFeature = findAntigravityFeature(harness, VORTEX_FEATURE_ID);
-        expect(vortexFeature?.scope).toBe('project');
-        const subfeatureIds = vortexFeature?.subfeatures?.map((subfeature) => subfeature.featureId);
-        expect(subfeatureIds).toEqual([SQAA_INSTRUCTIONS_SUBFEATURE_ID]);
+        // Antigravity has no global rules directory, so the protocol goes into
+        // the user's shared GEMINI.md rather than a rule file.
+        const gemini = harness.userHome.file(...GLOBAL_GEMINI_MD_PATH).asText();
+        expect(gemini).toContain('# Vortex analysis protocol');
+        expect(gemini).toContain('sonar analyze agentic --depth DEEP');
+        const vortexFeature = findAntigravityFeature(harness, VORTEX_FEATURE_ID, 'global');
+        expect(vortexFeature?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
+          SQAA_INSTRUCTIONS_GLOBAL_SUBFEATURE_ID,
+        ]);
 
-        expect(harness.cwd.exists(...legacySkillPath)).toBe(false);
-        expect(harness.cwd.file(...PROJECT_HOOKS_JSON_PATH).asText()).not.toContain(
+        expect(harness.userHome.exists(...legacySkillPath)).toBe(false);
+        expect(harness.userHome.file(...GLOBAL_HOOKS_JSON_PATH).asText()).not.toContain(
           VORTEX_HOOK_MARKER,
         );
         const state = harness.stateJsonFile.asJson() as CliState;
@@ -541,7 +333,9 @@ describe('integrate antigravity', () => {
         const result = await harness.run('integrate antigravity --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        expect(harness.cwd.exists(...PROJECT_SQAA_RULE_PATH)).toBe(false);
+        expect(harness.userHome.file(...GLOBAL_GEMINI_MD_PATH).asText()).not.toContain(
+          '# Vortex analysis protocol',
+        );
         expect(findAntigravityFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
       },
       { timeout: 30000 },
@@ -567,43 +361,10 @@ describe('integrate antigravity', () => {
         });
 
         expect(result.exitCode).toBe(0);
-        expectAntigravityAlwaysOnRule(harness.cwd.file(...PROJECT_SQAA_RULE_PATH).asText());
-        expect(findAntigravityFeature(harness, VORTEX_FEATURE_ID)?.scope).toBe('project');
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'writes the SQAA rules into the global GEMINI.md on a global install when entitled',
-      async () => {
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('cloud-token')
-          .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
-          .withVortexEntitlement(TEST_ORG, 'test-uuid-1234')
-          .withProject(TEST_PROJECT)
-          .start();
-        const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
-
-        const result = await harness.run('integrate antigravity -g --non-interactive', {
-          extraEnv: {
-            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
-            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
-          },
-        });
-
-        expect(result.exitCode).toBe(0);
-        // Antigravity has no global rules directory, so the protocol goes into
-        // the user's shared GEMINI.md rather than a rule file.
-        expect(harness.cwd.exists(...PROJECT_SQAA_RULE_PATH)).toBe(false);
         expect(harness.userHome.file(...GLOBAL_GEMINI_MD_PATH).asText()).toContain(
           '# Vortex analysis protocol',
         );
-        const vortexFeature = findAntigravityFeature(harness, VORTEX_FEATURE_ID, 'global');
-        expect(vortexFeature?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
-          SQAA_INSTRUCTIONS_GLOBAL_SUBFEATURE_ID,
-        ]);
+        expect(findAntigravityFeature(harness, VORTEX_FEATURE_ID)?.scope).toBe('global');
       },
       { timeout: 30000 },
     );
@@ -620,19 +381,16 @@ describe('integrate antigravity', () => {
           .start();
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
+        harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
 
         const extraEnv = {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
         };
-        await harness.run(`integrate antigravity --project ${TEST_PROJECT} --non-interactive`, {
-          extraEnv,
-        });
-        await harness.run(`integrate antigravity --project ${TEST_PROJECT} --non-interactive`, {
-          extraEnv,
-        });
+        await harness.run('integrate antigravity --non-interactive', { extraEnv });
+        await harness.run('integrate antigravity --non-interactive', { extraEnv });
 
-        const body = harness.cwd.file(...PROJECT_SQAA_RULE_PATH).asText();
+        const body = harness.userHome.file(...GLOBAL_GEMINI_MD_PATH).asText();
         expect(body.match(/# Vortex analysis protocol/g)?.length).toBe(1);
       },
       { timeout: 60000 },
@@ -641,7 +399,7 @@ describe('integrate antigravity', () => {
 
   describe('MCP server', () => {
     it(
-      'preserves unrelated MCP servers on project install',
+      'preserves unrelated MCP servers on install',
       async () => {
         harness.userHome.writeFile(
           join('.gemini', 'config', 'mcp_config.json'),
@@ -664,9 +422,10 @@ describe('integrate antigravity', () => {
     );
 
     it(
-      'omits --project even when integrate supplies a project key',
+      'omits --project even when a project key is discovered',
       async () => {
-        await harness.run(`integrate antigravity --project ${TEST_PROJECT} --non-interactive`);
+        harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
+        await harness.run('integrate antigravity --non-interactive');
 
         const mcp = harness.userHome.file(...GLOBAL_MCP_CONFIG_PATH).asJson() as {
           mcpServers?: { sonarqube?: { args?: string[] } };
@@ -694,9 +453,7 @@ describe('integrate antigravity', () => {
           }),
         );
 
-        const result = await harness.run(
-          `integrate antigravity --project proj-b --non-interactive`,
-        );
+        const result = await harness.run('integrate antigravity --non-interactive');
 
         expect(result.exitCode).toBe(0);
 
