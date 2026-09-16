@@ -48,13 +48,14 @@ async function withTempSonarUserHome<T>(fn: () => T | Promise<T>): Promise<T> {
     } else {
       process.env[ENV_SONAR_USER_HOME] = previous;
     }
-    // Windows can briefly hold the just-closed db's WAL/SHM handles; retry past that race.
+    // Windows can hold the just-closed db's WAL/SHM handles past our retries; best-effort
+    // only — the OS reclaims the temp dir regardless, same as tests/integration/harness/index.ts.
     await rm(testSonarUserHome, {
       recursive: true,
       force: true,
       maxRetries: IS_WINDOWS ? 15 : 5,
       retryDelay: IS_WINDOWS ? 200 : 100,
-    });
+    }).catch(() => {});
   }
 }
 
