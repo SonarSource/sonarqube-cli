@@ -20,8 +20,6 @@
 
 // Integrate command - setup SonarQube integration for Claude Code
 
-import { homedir } from 'node:os';
-
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { installIntegration } from '@/core/framework/features';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
@@ -38,7 +36,6 @@ import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { resolveVortexSetup } from '../_common/vortex.ts';
 import { supportedIntegrations } from '../index.ts';
 import { CLAUDE_INTEGRATION_ID, type ClaudeIntegrationOptions } from './declaration.ts';
-import { detectGlobalSecretsHook } from './hooks.ts';
 
 export interface ConfigurationData {
   serverURL: string;
@@ -56,29 +53,12 @@ export async function integrateClaude(
 ): Promise<void> {
   const { auth, console } = ctx;
   if (!options.nonInteractive) {
-    printAgentNonInteractiveAlternativeHint(
-      console,
-      'sonar integrate claude --non-interactive',
-      'sonar integrate claude --non-interactive -g',
-    );
+    printAgentNonInteractiveAlternativeHint(console, 'sonar integrate claude --non-interactive');
   }
 
-  const integrateCtx = await displayAgentIntegratePrelude(
-    'Claude Code',
-    'claude',
-    options,
-    auth,
-    console,
-  );
+  const integrateCtx = await displayAgentIntegratePrelude('Claude Code', auth, console);
 
   const config = toConfigurationData(integrateCtx);
-  // Probe for a global Claude hook; warns on orphaned installs and returns
-  // the hook dir when project-level secrets hooks should be skipped.
-  const existingGlobalHookPath = integrateCtx.isGlobal
-    ? undefined
-    : await detectGlobalSecretsHook(homedir(), console);
-  const skipSecretsHooks = !!existingGlobalHookPath;
-
   const vortex = await resolveVortexSetup(auth, console);
   const featureAttrs = buildRecordedIntegrationAttrs({
     baseAttrs: buildIntegrationAttrs(config),
@@ -88,14 +68,10 @@ export async function integrateClaude(
     orgKey: config.organization,
     contextAugmentation: vortex,
   });
-  const { installRoot, installScope } = resolveIntegrateInstallTarget(
-    integrateCtx.isGlobal,
-    integrateCtx.project.projectRoot,
-  );
+  const { installRoot, installScope } = resolveIntegrateInstallTarget();
   const integrationOptions = {
     ...options,
     projectRoot: integrateCtx.project.projectRoot,
-    globalSecretsHookExists: skipSecretsHooks,
     vortexDisposition: vortex.disposition,
   } satisfies ClaudeIntegrationOptions;
   let installError: Error | undefined;
@@ -124,7 +100,7 @@ export async function integrateClaude(
   } catch (error) {
     installError = error instanceof Error ? error : new Error(String(error));
   }
-  await removeObsoleteHookArtifacts(integrateCtx.project.projectRoot);
+  await removeObsoleteHookArtifacts(installRoot);
   if (installError) {
     throw installError;
   }
