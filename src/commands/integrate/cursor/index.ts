@@ -34,26 +34,14 @@ export async function integrateCursor(
 ): Promise<void> {
   const { auth, console } = ctx;
   if (!options.nonInteractive) {
-    printAgentNonInteractiveAlternativeHint(
-      console,
-      'sonar integrate cursor --non-interactive',
-      'sonar integrate cursor --non-interactive -g',
-    );
+    printAgentNonInteractiveAlternativeHint(console, 'sonar integrate cursor --non-interactive');
   }
 
-  const integrateCtx = await displayAgentIntegratePrelude(
-    'Cursor',
-    'cursor',
-    options,
-    auth,
-    console,
+  const integrateCtx = await displayAgentIntegratePrelude('Cursor', auth, console);
+
+  console.warn(
+    "Cursor's cloud/background agents only pick up project-level hooks, not global ones.",
   );
-
-  if (integrateCtx.isGlobal) {
-    console.warn(
-      "Cursor's cloud/background agents only pick up project-level hooks, not global ones. Re-run without --global from a project directory for full hook coverage.",
-    );
-  }
 
   await finalizeAgentInstall<CursorIntegrationOptions>({
     integrationId: CURSOR_INTEGRATION_ID,
