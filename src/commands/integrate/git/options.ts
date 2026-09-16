@@ -24,8 +24,7 @@ export interface IntegrateGitOptions {
   hook?: GitHookType;
   force?: boolean;
   nonInteractive?: boolean;
-  global?: boolean;
-  /** Project key baked into the dependency-risks hook for project-scope installs. Not supported with `--global`. */
+  /** Project key baked into the dependency-risks hook for the project-scoped install path (CLI-1118). */
   project?: string;
   /** Set by the bare `sonar integrate` router; forwarded to telemetry only. */
   isFromRouter?: boolean;
