@@ -71,6 +71,7 @@ function migrateState(raw: Record<string, unknown>): CliState {
     raw.dependencies = { installed: [] };
   }
   migrateLegacyToolRecords(raw);
+  backfillInstalledFeatureArrays(raw);
   if (!raw.auth) {
     raw.auth = getDefaultState(VERSION).auth;
     return raw as unknown as CliState;
@@ -83,6 +84,36 @@ function migrateState(raw: Record<string, unknown>): CliState {
     }
   }
   return raw as unknown as CliState;
+}
+
+/**
+ * `InstalledIntegrationFeature` declares `dependencies`, `resources` and `operations` as
+ * required, but a state file written by an older CLI can omit them, and the load path casts
+ * rather than validates — so readers would trust a type that lies and throw on `.find()`.
+ */
+function backfillInstalledFeatureArrays(raw: Record<string, unknown>): void {
+  const installed = (raw.integrations as { installed?: unknown }).installed;
+  if (!Array.isArray(installed)) {
+    return;
+  }
+
+  for (const integration of installed as Record<string, unknown>[]) {
+    if (!Array.isArray(integration.features)) {
+      integration.features = [];
+      continue;
+    }
+    for (const feature of integration.features as Record<string, unknown>[]) {
+      backfillFeatureArrays(feature);
+    }
+  }
+}
+
+function backfillFeatureArrays(feature: Record<string, unknown>): void {
+  for (const field of ['dependencies', 'resources', 'operations']) {
+    if (!Array.isArray(feature[field])) {
+      feature[field] = [];
+    }
+  }
 }
 
 /**

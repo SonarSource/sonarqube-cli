@@ -491,6 +491,40 @@ describe('loadState: migration', () => {
     expect(state.tools).toBeUndefined();
   });
 
+  it('backfills the array fields of an installed feature written without them', () => {
+    mkdirSync(testCliDir, { recursive: true });
+    const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
+    raw['integrations'] = {
+      installed: [
+        {
+          id: 'claude',
+          integrationId: 'claude',
+          features: [
+            {
+              featureId: 'mcp-server',
+              scope: 'global',
+              targetRoot: '/home/user',
+              installedByCliVersion: '0.1.0',
+              installedAt: '2026-01-01T00:00:00.000Z',
+              updatedByCliVersion: '0.1.0',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+        },
+        { id: 'git', integrationId: 'git' },
+      ],
+    };
+    writeFileSync(testStateFile, JSON.stringify(raw), 'utf-8');
+
+    const state = loadState('0.1.0');
+
+    const feature = state.integrations.installed[0].features[0];
+    expect(feature.resources).toEqual([]);
+    expect(feature.dependencies).toEqual([]);
+    expect(feature.operations).toEqual([]);
+    expect(state.integrations.installed[1].features).toEqual([]);
+  });
+
   it('removes legacy keystoreKey field from connections', () => {
     const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
     (raw['auth'] as Record<string, unknown>)['connections'] = [
