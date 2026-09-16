@@ -386,9 +386,17 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       category: 'integrate',
     })
     .showUpdateNotification((opts) => !opts.nonInteractive)
-    .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
-    .option('-g, --global', 'Install integrations globally.')
+    .option('--non-interactive', 'Non-interactive mode (no prompts); requires an explicit agent')
+    .enablePositionalOptions()
     .rejectUnknownSubcommands()
+    // `--non-interactive` before the agent name (e.g. `integrate --non-interactive claude`) is
+    // parsed onto this command, not the subcommand it dispatches to; forward it explicitly so
+    // placement doesn't silently fall back to interactive mode.
+    .hook('preSubcommand', (thisCommand, subCommand) => {
+      if (thisCommand.opts().nonInteractive) {
+        subCommand.setOptionValueWithSource('nonInteractive', true, 'cli');
+      }
+    })
     .authenticatedAction((ctx, options: IntegrateBareOptions) => integrateBare(ctx, options));
 
   integrateCommand
@@ -402,14 +410,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option('--force', 'Overwrite existing hook if it is not from sonar integrate git')
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
-    .option(
-      '--global',
-      'Install hook globally for all repositories (sets git config --global core.hooksPath)',
-    )
-    .option(
-      '-p, --project <project>',
-      'Project key baked into the dependency-risks hook (not supported with --global)',
-    )
     .authenticatedAction((ctx, options: IntegrateGitOptions) => integrateGit(options, ctx));
 
   integrateCommand
@@ -417,13 +417,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description(
       'Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.',
     )
-    .option('-p, --project <project>', 'Project key. Ignored when --global is used.')
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
-    .option(
-      '-g, --global',
-      'Install hooks and config globally to ~/.claude instead of project directory',
-    )
-    .addHelpText('after', projectKeyExtraHelp)
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateClaude(options, ctx));
 
   integrateCommand
@@ -431,13 +425,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description(
       'Setup SonarQube integration for GitHub Copilot CLI. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.',
     )
-    .option(
-      '-g, --global',
-      'Install hooks and config globally to ~/.copilot instead of project directory',
-    )
-    .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
-    .addHelpText('after', projectKeyExtraHelp)
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCopilot(options, ctx));
 
   // `sonar context` — passthrough wrapper for sonar-context-augmentation.
@@ -469,13 +457,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description(
       'Setup SonarQube integration for Codex. This will install a UserPromptSubmit hook that scans prompts for secrets before they are sent.',
     )
-    .option(
-      '-g, --global',
-      'Install hook and config globally to ~/.codex instead of project directory',
-    )
-    .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
-    .addHelpText('after', projectKeyExtraHelp)
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCodex(options, ctx));
 
   integrateCommand
@@ -483,13 +465,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description(
       'Setup SonarQube integration for Antigravity. Installs secrets scanning hooks, prompt-secrets instructions, and Vortex Context.',
     )
-    .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
-    .option(
-      '-g, --global',
-      'Install hooks and config globally under ~/.gemini/config instead of the project .agents/ directory',
-    )
-    .addHelpText('after', projectKeyExtraHelp)
     .authenticatedAction((ctx, options: IntegrateAgentOptions) =>
       integrateAntigravity(options, ctx),
     );
@@ -497,15 +473,9 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   integrateCommand
     .command('cursor')
     .description(
-      'Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure Vortex analysis.',
+      "Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure Vortex analysis. Note: Cursor's cloud/background agents only pick up project-level hooks, not global ones.",
     )
-    .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
-    .option(
-      '-g, --global',
-      "Install config globally to ~/.cursor instead of project directory. Note: Cursor's cloud/background agents only pick up project-level hooks, not global ones.",
-    )
-    .addHelpText('after', projectKeyExtraHelp)
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCursor(options, ctx));
 
   // Analyze code for quality and security issues

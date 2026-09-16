@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { DiscoveredProject } from '@/core/project-info.ts';
@@ -26,9 +26,7 @@ import type { DiscoveredProject } from '@/core/project-info.ts';
 import {
   assertSonarCloudOrganization,
   buildAgentIntegrateContext,
-  warnMissingIntegrateProjectKey,
 } from '../../../../../src/commands/integrate/_common/agent-integrate-prelude.ts';
-import { FakeConsole } from '../../../../_common/fake-console.ts';
 
 const AUTH = new ResolvedAuth({
   token: 'token',
@@ -54,34 +52,9 @@ describe('assertSonarCloudOrganization', () => {
 });
 
 describe('buildAgentIntegrateContext', () => {
-  it('prefers --project over discovered project key', () => {
-    const ctx = buildAgentIntegrateContext({ project: 'cli-key' }, AUTH, PROJECT);
+  it('uses the discovered project key', () => {
+    const ctx = buildAgentIntegrateContext(AUTH, PROJECT);
 
-    expect(ctx.projectKey).toBe('cli-key');
-    expect(ctx.isGlobal).toBe(false);
-  });
-});
-
-describe('warnMissingIntegrateProjectKey', () => {
-  let fake: FakeConsole;
-
-  beforeEach(() => {
-    fake = new FakeConsole();
-  });
-
-  it('warns for project-scoped install without a project key', () => {
-    warnMissingIntegrateProjectKey('codex', false, undefined, fake);
-
-    expect(
-      fake.calls.some(
-        (c) => c.method === 'warn' && String(c.args[0]).includes('sonar integrate codex --help'),
-      ),
-    ).toBe(true);
-  });
-
-  it('stays silent for global install without a project key', () => {
-    warnMissingIntegrateProjectKey('copilot', true, undefined, fake);
-
-    expect(fake.calls.some((c) => c.method === 'warn')).toBe(false);
+    expect(ctx.projectKey).toBe('discovered-key');
   });
 });
