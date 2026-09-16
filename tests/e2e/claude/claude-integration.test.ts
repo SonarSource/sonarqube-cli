@@ -49,10 +49,6 @@ const GITHUB_TEST_TOKEN = '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';
 export const TEST_TOKEN = 'e2e-token';
 const CAG_POST_UPDATE_TIMEOUT_MS = 150_000;
 
-interface IntegrateOptions {
-  global?: boolean;
-}
-
 describe.skipIf(!isClaudeCodeEnvSetup())(
   'sonar integrate claude with real Claude Code (e2e)',
   () => {
@@ -78,12 +74,11 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
       });
     });
 
-    testSuite('project hooks');
-    testSuite('global hooks', { global: true });
+    testSuite();
     contextAugmentationHookSuite();
 
-    function testSuite(label: string, integrateOptions?: IntegrateOptions) {
-      describe(`Claude Code should consider ${label} installed via 'sonar integrate claude'`, () => {
+    function testSuite() {
+      describe(`Claude Code should consider hooks installed via 'sonar integrate claude'`, () => {
         let harness: TestHarness;
         let extraEnv: Record<string, string>;
 
@@ -96,7 +91,7 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
           extraEnv = {
             DISABLE_AUTOUPDATER: '1',
           };
-          await sonarLoginAndIntegrateClaude(harness, extraEnv, server.baseUrl(), integrateOptions);
+          await sonarLoginAndIntegrateClaude(harness, extraEnv, server.baseUrl());
         });
 
         afterAll(async () => {
@@ -261,7 +256,6 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
       harness: TestHarness,
       extraEnv: Record<string, string>,
       serverUrl: string,
-      options?: IntegrateOptions,
     ) {
       const session = harness.runInteractive(`auth login --server ${serverUrl}`, {
         extraEnv,
@@ -269,13 +263,10 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
       });
       await session.accept('Connect to:');
       const login = await session.waitFinish();
-      const integrate = await harness.run(
-        `integrate claude --non-interactive${options?.global ? ' -g' : ''}`,
-        {
-          extraEnv,
-          timeoutMs: 90_000,
-        },
-      );
+      const integrate = await harness.run('integrate claude --non-interactive', {
+        extraEnv,
+        timeoutMs: 90_000,
+      });
 
       expect(login.exitCode, login.stderr).toBe(0);
       expect(integrate.exitCode, integrate.stderr).toBe(0);
