@@ -75,12 +75,13 @@ export async function codexPostToolUse(ctx: CommandInvocationContext): Promise<H
 
   noteProject(auth, projectKey);
 
+  const transport = new SonarHttpClient(auth.serverUrl, auth.token);
   const runStart = performance.now();
   let report: SqaaJsonReport | null;
   try {
     report = await buildSqaaJsonReport(
       { project: projectKey, force: true, format: 'json', forcedDepth: 'STANDARD' },
-      new SonarHttpClient(auth.serverUrl, auth.token),
+      transport,
       auth,
       {
         telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
@@ -104,7 +105,7 @@ export async function codexPostToolUse(ctx: CommandInvocationContext): Promise<H
   if (!report) return { agentSessionId: fromHook };
 
   if (report.globalError?.kind === 'forbidden') {
-    await emitVortexUnavailableHookNotice(auth);
+    await emitVortexUnavailableHookNotice(transport, auth);
     return { agentSessionId: fromHook };
   }
 

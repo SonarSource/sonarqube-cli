@@ -114,7 +114,7 @@ async function resolveSessionStartContext(
 
   const client = new SonarHttpClient(auth.serverUrl, auth.token);
   const [vortexEntitlement, scaEnabled] = await Promise.all([
-    resolveVortexEntitlement(auth),
+    resolveVortexEntitlement(client, auth),
     isScaEnabled(client, auth),
   ]);
   if (vortexEntitlement.status !== 'enabled') {

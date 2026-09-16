@@ -28,6 +28,7 @@ import {
   TelemetryFact,
 } from '@/core/commands/invocation-context.ts';
 import type { LifecycleState } from '@/core/commands/sonar-command.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 
 import { FakeConsole } from '../../_common/fake-console.ts';
 
@@ -179,6 +180,37 @@ describe('CommandInvocationContext.resolveAuth', () => {
     expect(result.isOk()).toBe(true);
     expect(result._unsafeUnwrap()).toEqual(FAKE_AUTH);
     expect(resolveAuthSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('CommandAuthenticatedInvocationContext.httpClient', () => {
+  it('builds the default client from the resolved auth', () => {
+    const context = new CommandAuthenticatedInvocationContext(FAKE_AUTH, new FakeConsole());
+
+    expect(context.httpClient).toBeInstanceOf(SonarHttpClient);
+  });
+
+  it('builds via runtime.httpClientFactory exactly once, memoising the result', () => {
+    let calls = 0;
+    let seenAuth: ResolvedAuth | undefined;
+    const fakeClient = new SonarHttpClient('https://fake.example.com', 'fake-token');
+    const context = new CommandAuthenticatedInvocationContext(
+      FAKE_AUTH,
+      new FakeConsole(),
+      undefined,
+      createCliRuntime({
+        httpClientFactory: (auth) => {
+          calls += 1;
+          seenAuth = auth;
+          return fakeClient;
+        },
+      }),
+    );
+
+    expect(context.httpClient).toBe(fakeClient);
+    expect(context.httpClient).toBe(fakeClient);
+    expect(calls).toBe(1);
+    expect(seenAuth).toBe(FAKE_AUTH);
   });
 });
 

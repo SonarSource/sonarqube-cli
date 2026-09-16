@@ -24,8 +24,8 @@ import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import type { SqaaTelemetryCallerCommand } from './sqaa-analysis-telemetry.ts';
-import type { SqaaAuth } from './sqaa-auth.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
+import type { SqaaRequestTarget } from './sqaa-resolution.ts';
 import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
 export const VALID_FORMATS = ['text', 'json'] as const;
@@ -56,7 +56,7 @@ export interface AnalyzeSqaaOptions {
 }
 
 export interface SqaaResolvedContext {
-  sqaaAuth: SqaaAuth;
+  target: SqaaRequestTarget;
   projectKey: string;
 }
 

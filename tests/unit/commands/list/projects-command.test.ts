@@ -5,6 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { errAsync, okAsync, type ResultAsync } from '@/core/result.ts';
 import type { HttpClientError } from '@/core/server/errors.ts';
@@ -29,6 +30,7 @@ const mockAuth = new ResolvedAuth({
 
 let fake: FakeConsole;
 let mockCtx: CommandAuthenticatedInvocationContext;
+let httpClient: SonarHttpClient;
 
 function makeProjectsResponse(
   components: { key: string; name: string }[],
@@ -41,14 +43,20 @@ function makeProjectsResponse(
 
 beforeEach(() => {
   fake = new FakeConsole();
-  mockCtx = new CommandAuthenticatedInvocationContext(mockAuth, fake);
+  httpClient = new SonarHttpClient(mockAuth.serverUrl, mockAuth.token);
+  mockCtx = new CommandAuthenticatedInvocationContext(
+    mockAuth,
+    fake,
+    undefined,
+    createCliRuntime({ httpClientFactory: () => httpClient }),
+  );
 });
 
 describe('projectsSearchCommand', () => {
   let getSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    getSpy = spyOn(SonarHttpClient.prototype, 'get').mockReturnValue(makeProjectsResponse([]));
+    getSpy = spyOn(httpClient, 'get').mockReturnValue(makeProjectsResponse([]));
   });
 
   afterEach(() => {
@@ -201,17 +209,14 @@ describe('projectsSearchCommand', () => {
       expect(capturedParams?.ps).toBe(50);
     });
 
-    it('passes organization key for SonarCloud connections', async () => {
-      const cloudAuth = new ResolvedAuth({
-        token: 'cloud-token',
-        serverUrl: 'https://sonarcloud.io',
-        orgKey: 'my-org',
-        connectionType: 'cloud',
-        source: 'state' as const,
-      });
-
+    /** Runs a search against a transport built from `auth`, so `isCloud` matches the connection. */
+    async function captureParamsFor(
+      auth: ResolvedAuth,
+    ): Promise<Record<string, unknown> | undefined> {
+      const client = new SonarHttpClient(auth.serverUrl, auth.token);
+      const clientGetSpy: ReturnType<typeof spyOn> = spyOn(client, 'get');
       let capturedParams: Record<string, unknown> | undefined;
-      getSpy.mockImplementation(
+      clientGetSpy.mockImplementation(
         (
           _endpoint: string,
           params?: Record<string, unknown>,
@@ -223,37 +228,33 @@ describe('projectsSearchCommand', () => {
 
       await listProjects(
         DEFAULT_OPTIONS,
-        new CommandAuthenticatedInvocationContext(cloudAuth, new FakeConsole()),
+        new CommandAuthenticatedInvocationContext(
+          auth,
+          new FakeConsole(),
+          undefined,
+          createCliRuntime({ httpClientFactory: () => client }),
+        ),
       );
 
-      expect(capturedParams?.organization).toBe('my-org');
+      return capturedParams;
+    }
+
+    it('passes organization key for SonarCloud connections', async () => {
+      const params = await captureParamsFor(
+        new ResolvedAuth({
+          token: 'cloud-token',
+          serverUrl: 'https://sonarcloud.io',
+          orgKey: 'my-org',
+          connectionType: 'cloud',
+          source: 'state' as const,
+        }),
+      );
+
+      expect(params?.organization).toBe('my-org');
     });
 
     it('does not pass organization key for on-premise connections', async () => {
-      const onPremAuth = new ResolvedAuth({
-        token: 'test-token',
-        serverUrl: 'https://sonar.example.com',
-        connectionType: 'on-premise',
-        source: 'state' as const,
-      });
-
-      let capturedParams: Record<string, unknown> | undefined;
-      getSpy.mockImplementation(
-        (
-          _endpoint: string,
-          params?: Record<string, unknown>,
-        ): ResultAsync<ProjectsSearchResponse, HttpClientError> => {
-          capturedParams = params;
-          return makeProjectsResponse([]);
-        },
-      );
-
-      await listProjects(
-        DEFAULT_OPTIONS,
-        new CommandAuthenticatedInvocationContext(onPremAuth, new FakeConsole()),
-      );
-
-      expect(capturedParams?.organization).toBeUndefined();
+      expect((await captureParamsFor(mockAuth))?.organization).toBeUndefined();
     });
   });
 });

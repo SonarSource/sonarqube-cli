@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Auth and project-key resolution for SQAA commands.
+// Request-target and project-key resolution for SQAA commands.
 
 import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
@@ -36,31 +36,28 @@ const LARGE_CHANGESET_HINT =
   '  --file <path>     analyze specific file(s) — repeat for multiple files\n' +
   '  --depth STANDARD  faster analysis (change-set / multi-file default is DEEP)';
 
-/**
- * `orgKey` is Cloud-only: Server has no organizations and its A3S hub forces the instance default.
- * No credentials here — `client` already carries them.
- */
-export interface SqaaAuth {
+/** `orgKey` is Cloud-only: Server has no organizations and its A3S hub forces the instance default. */
+export interface SqaaRequestTarget {
   orgKey?: string;
-  client: SonarHttpClient;
+  transport: SonarHttpClient;
 }
 
 /**
- * Outcome of resolving auth + project key for SQAA. This resolver reports
+ * Outcome of resolving a request target + project key for SQAA. This resolver reports
  * what it found and leaves the policy (skip vs. fail) to the caller:
- * - `resolved`: usable auth and project key.
+ * - `resolved`: usable target and project key.
  * - `no-org`: Cloud is authenticated but has no organization (a warning was already
  *   emitted, since this is always a graceful skip).
  * - `no-project`: auth is fine but no project is configured. The caller
  *   decides whether this is an error or a graceful skip.
  */
-export type SqaaAuthResolution =
-  | { kind: 'resolved'; sqaaAuth: SqaaAuth; projectKey: string }
+export type SqaaResolution =
+  | { kind: 'resolved'; target: SqaaRequestTarget; projectKey: string }
   | { kind: 'no-org' }
   | { kind: 'no-project' };
 
 /**
- * Combines auth validation and project-key resolution. Never throws or warns for
+ * Combines target resolution and project-key resolution. Never throws or warns for
  * `no-project` — the caller owns that decision (see `resolveSqaaContext` in sqaa.ts).
  *
  * Not side-effect-free: on a successful resolution it publishes the project key for
@@ -68,21 +65,21 @@ export type SqaaAuthResolution =
  * entry point — bare `sonar analyze`, `analyze agentic`, and `verify` — so noting here covers
  * all of them instead of at each of the five downstream call sites.
  */
-export async function resolveSqaaAuthAndProject(
-  client: SonarHttpClient,
+export async function resolveSqaaTargetAndProject(
+  transport: SonarHttpClient,
   auth: ResolvedAuth,
   explicitProject: string | undefined,
   console: Console,
   projectRoot?: string,
-): Promise<SqaaAuthResolution> {
-  const sqaaAuth = resolveSqaaAuth(client, auth, explicitProject, console);
-  if (!sqaaAuth) return { kind: 'no-org' };
+): Promise<SqaaResolution> {
+  const target = resolveSqaaTarget(transport, auth, explicitProject, console);
+  if (!target) return { kind: 'no-org' };
 
   const projectKey = explicitProject ?? (await resolveSqaaProjectKey(auth, console, projectRoot));
   if (!projectKey) return { kind: 'no-project' };
 
   noteProject(auth, projectKey);
-  return { kind: 'resolved', sqaaAuth, projectKey };
+  return { kind: 'resolved', target, projectKey };
 }
 
 /**
@@ -92,12 +89,12 @@ export async function resolveSqaaAuthAndProject(
  * Returns null when a Cloud connection has no organization and --project is not set.
  * Throws CommandFailedError when --project is set, since the caller asked explicitly.
  */
-export function resolveSqaaAuth(
-  client: SonarHttpClient,
+export function resolveSqaaTarget(
+  transport: SonarHttpClient,
   auth: ResolvedAuth,
   explicitProject: string | undefined,
   console: Console,
-): SqaaAuth | null {
+): SqaaRequestTarget | null {
   if (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey) {
     if (explicitProject) {
       throw new CommandFailedError('Vortex analysis requires a SonarQube Cloud organization.', {
@@ -112,7 +109,7 @@ export function resolveSqaaAuth(
 
   return {
     ...(auth.orgKey ? { orgKey: auth.orgKey } : {}),
-    client,
+    transport,
   };
 }
 

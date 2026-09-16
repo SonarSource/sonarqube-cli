@@ -21,13 +21,13 @@
 // Vortex entitlement: the two hub queries and every way the CLI asks about them.
 
 import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
+import { type SonarHttpClient } from '@/core/server/http-client.ts';
 import { HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 
 /**
- * `not_applicable` is returned when Vortex cannot apply to this connection: Cloud without
- * an organization (see `resolveVortexEntitlement`), or a Server missing either hub (HTTP 404).
+ * `not_applicable` is returned when Vortex cannot apply to this connection: Cloud without an
+ * organization (see `resolveVortexEntitlement`), or a Server missing either hub (HTTP 404).
  */
 export type VortexEntitlementStatus =
   'enabled' | 'over_consumption' | 'not_entitled' | 'check_failed' | 'not_applicable';
@@ -172,11 +172,12 @@ function mergeVortexEntitlement(
   return { status: 'enabled', consumption: cag.consumption };
 }
 
-/** Shared low-level call: every entitlement lookup in this file goes through here. */
-async function queryVortexEntitlement(auth: ResolvedAuth): Promise<VortexEntitlementResult> {
-  return new VortexEntitlementClient(
-    new SonarHttpClient(auth.serverUrl, auth.token),
-  ).hasVortexEntitlement(auth.orgKey);
+/** The one place mapping a resolved connection onto the entitlement client. */
+function queryVortexEntitlement(
+  transport: SonarHttpClient,
+  auth: ResolvedAuth,
+): Promise<VortexEntitlementResult> {
+  return new VortexEntitlementClient(transport).hasVortexEntitlement(auth.orgKey);
 }
 
 /**
@@ -185,29 +186,28 @@ async function queryVortexEntitlement(auth: ResolvedAuth): Promise<VortexEntitle
  * coupling to any command or output layer.
  */
 export async function recheckVortexEntitlement(
+  transport: SonarHttpClient,
   auth: ResolvedAuth,
 ): Promise<VortexEntitlementStatus> {
-  const { status } = await queryVortexEntitlement(auth);
+  const { status } = await queryVortexEntitlement(transport, auth);
   return status;
 }
 
 /**
- * `not_applicable` is decided here for connections that cannot ask either hub at all
- * (unauthenticated, or Cloud without an organization). Server connections are
+ * `not_applicable` is decided here for a Cloud connection without an organization,
+ * which cannot ask either hub. Server connections are
  * queried: a missing hub returns `not_applicable` from the 404, distinct from a
  * real `not_entitled` licence refusal. Cloud vs Server follows the URL
  * (`isSonarQubeCloud`), same as `SonarHttpClient`, not the stored connection type.
  */
 export async function resolveVortexEntitlement(
-  auth: ResolvedAuth | null,
+  transport: SonarHttpClient,
+  auth: ResolvedAuth,
 ): Promise<VortexEntitlementResult> {
-  if (!auth) {
-    return { status: 'not_applicable' };
-  }
   if (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey) {
     return { status: 'not_applicable' };
   }
-  return queryVortexEntitlement(auth);
+  return queryVortexEntitlement(transport, auth);
 }
 
 export function isVortexEntitlementLoss(
