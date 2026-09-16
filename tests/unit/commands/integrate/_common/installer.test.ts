@@ -38,6 +38,7 @@ import {
 } from '@/core/framework/features';
 import { type CliState, getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
+import { QuietConsole } from '@/core/ui/quiet-console.ts';
 
 import { FakeConsole } from '../../../../_common/fake-console.ts';
 
@@ -731,6 +732,82 @@ describe('generic integration installer', () => {
     expect(installed).toEqual([]);
     expect(hasUiCall('warn', 'Failed to update configuration state: write failed')).toBe(true);
   });
+
+  it('applies resources and operations and records state without printing when quiet', async () => {
+    const state = getDefaultState('test');
+    loadStateSpy.mockReturnValue(state);
+    const operationCalls: string[] = [];
+    const integration = registerIntegration(registry, 'installer-quiet', [
+      {
+        id: 'feature',
+        displayName: 'Feature',
+        resources: [
+          wholeFile({
+            id: 'file',
+            displayName: 'Config file',
+            targetPath: join(tempDir, 'config.txt'),
+            content: 'enabled=true\n',
+          }),
+        ],
+        operations: [
+          {
+            id: 'operation',
+            displayName: 'Setup operation',
+            apply: () => {
+              operationCalls.push('called');
+            },
+          },
+        ],
+      },
+    ]);
+
+    let installedCount = -1;
+    const stdout = await captureStdoutAsync(async () => {
+      installedCount = (
+        await installIntegration({
+          registry,
+          integrationId: integration.id,
+          options: {},
+          targetRoot: tempDir,
+          scope: 'project',
+          console: new QuietConsole(fake),
+          nonInteractive: true,
+        })
+      ).length;
+    });
+
+    expect(installedCount).toBe(1);
+    expect(await readFile(join(tempDir, 'config.txt'), 'utf-8')).toBe('enabled=true\n');
+    expect(operationCalls).toEqual(['called']);
+    expect(saveStateSpy).toHaveBeenCalledWith(state);
+    expect(fake.calls).toEqual([]);
+    expect(stdout).toBe('');
+  });
+
+  it('warns through a quiet console when writing state fails', async () => {
+    saveStateSpy.mockImplementation(() => {
+      throw new Error('write failed');
+    });
+    const integration = registerIntegration(registry, 'installer-quiet-state-failure', [
+      {
+        id: 'feature',
+        displayName: 'Feature',
+        operations: [{ id: 'operation', apply: () => undefined }],
+      },
+    ]);
+
+    await installIntegration({
+      registry,
+      integrationId: integration.id,
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+      console: new QuietConsole(fake),
+      nonInteractive: true,
+    });
+
+    expect(hasUiCall('warn', 'Failed to update configuration state: write failed')).toBe(true);
+  });
 });
 
 /** Mirrors `recordInstalledDependency`, which every binary installer calls for itself. */
@@ -748,6 +825,21 @@ function recordDependencyLikeInstaller(
 
 function hasUiCall(method: string, message: string): boolean {
   return fake.calls.some((call) => call.method === method && call.args[0] === message);
+}
+
+/** Catches output written straight to the stream, bypassing the injected console. */
+async function captureStdoutAsync(fn: () => Promise<void>): Promise<string> {
+  const chunks: string[] = [];
+  const spy = spyOn(process.stdout, 'write').mockImplementation((chunk: unknown) => {
+    chunks.push(String(chunk));
+    return true;
+  });
+  try {
+    await fn();
+  } finally {
+    spy.mockRestore();
+  }
+  return chunks.join('');
 }
 
 async function catchError(fn: () => Promise<unknown>): Promise<Error | undefined> {
