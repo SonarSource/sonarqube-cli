@@ -103,7 +103,7 @@ export async function qualityGateStatus(
   const projectKey = await resolveProjectKey(options.project, auth, console, true);
   noteProject(auth, projectKey);
 
-  const client = ctx.httpClient;
+  const client = ctx.connection.httpClient;
   await assertProjectExists(client, projectKey);
 
   const { queryParams, scope } = await resolveQualityGateScope(client, projectKey, options);

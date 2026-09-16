@@ -18,12 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Request-target and project-key resolution for SQAA commands.
+// Connection and project-key resolution for SQAA commands.
 
 import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
-import type { SonarHttpClient } from '@/core/server/http-client.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -35,28 +35,22 @@ const LARGE_CHANGESET_HINT =
   '  --file <path>     analyze specific file(s) — repeat for multiple files\n' +
   '  --depth STANDARD  faster analysis (change-set / multi-file default is DEEP)';
 
-/** `orgKey` is Cloud-only: Server has no organizations and its A3S hub forces the instance default. */
-export interface SqaaRequestTarget {
-  orgKey?: string;
-  transport: SonarHttpClient;
-}
-
 /**
- * Outcome of resolving a request target + project key for SQAA. This resolver reports
+ * Outcome of resolving a connection + project key for SQAA. This resolver reports
  * what it found and leaves the policy (skip vs. fail) to the caller:
- * - `resolved`: usable target and project key.
+ * - `resolved`: usable connection and project key.
  * - `no-org`: Cloud is authenticated but has no organization. `explicitProject` tells the
  *   caller whether the user named a project, which is what makes this fatal rather than a skip.
  * - `no-project`: auth is fine but no project is configured. The caller
  *   decides whether this is an error or a graceful skip.
  */
 export type SqaaResolution =
-  | { kind: 'resolved'; target: SqaaRequestTarget; projectKey: string }
+  | { kind: 'resolved'; connection: SonarConnection; projectKey: string }
   | { kind: 'no-org'; explicitProject: boolean }
   | { kind: 'no-project' };
 
 /**
- * Combines target resolution and project-key resolution. Never throws or warns — every
+ * Checks the connection is usable for SQAA and resolves the project key. Never throws or warns — every
  * unusable outcome comes back as a `kind`, and the caller owns what it means
  * (see `resolveSqaaContext` in sqaa-context.ts).
  *
@@ -65,13 +59,13 @@ export type SqaaResolution =
  * entry point — bare `sonar analyze`, `analyze agentic`, and `verify` — so noting here covers
  * all of them instead of at each of the five downstream call sites.
  */
-export async function resolveSqaaTargetAndProject(
-  transport: SonarHttpClient,
-  auth: ResolvedAuth,
+export async function resolveSqaaConnectionAndProject(
+  connection: SonarConnection,
   explicitProject: string | undefined,
   console: Console,
   projectRoot?: string,
 ): Promise<SqaaResolution> {
+  const { auth } = connection;
   if (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey) {
     return { kind: 'no-org', explicitProject: Boolean(explicitProject) };
   }
@@ -80,11 +74,7 @@ export async function resolveSqaaTargetAndProject(
   if (!projectKey) return { kind: 'no-project' };
 
   noteProject(auth, projectKey);
-  return {
-    kind: 'resolved',
-    target: { ...(auth.orgKey ? { orgKey: auth.orgKey } : {}), transport },
-    projectKey,
-  };
+  return { kind: 'resolved', connection, projectKey };
 }
 
 /**

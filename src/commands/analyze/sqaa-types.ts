@@ -20,12 +20,11 @@
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import type { SonarHttpClient } from '@/core/server/http-client.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import type { SqaaTelemetryCallerCommand } from './sqaa-analysis-telemetry.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
-import type { SqaaRequestTarget } from './sqaa-resolution.ts';
 import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
 export const VALID_FORMATS = ['text', 'json'] as const;
@@ -56,13 +55,12 @@ export interface AnalyzeSqaaOptions {
 }
 
 export interface SqaaResolvedContext {
-  target: SqaaRequestTarget;
+  connection: SonarConnection;
   projectKey: string;
 }
 
 export interface SqaaBatchRunOptions {
   resolved: SqaaResolvedContext;
-  auth: ResolvedAuth;
   console: Console;
   branch?: string;
   format?: OutputFormat;
@@ -73,7 +71,7 @@ export interface SqaaBatchRunOptions {
 }
 
 export interface SingleFileRunOptions {
-  client: SonarHttpClient;
+  connection: SonarConnection;
   console: Console;
   branch?: string;
   explicitProject?: string;

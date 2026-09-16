@@ -113,7 +113,7 @@ export async function apiCommand(
     contentType = 'form';
   }
 
-  const response = await ctx.httpClient
+  const response = await ctx.connection.httpClient
     .genericRequest(upperMethod, endpoint, console, options.data, contentType, options.verbose)
     .orThrow();
   console.print(response);

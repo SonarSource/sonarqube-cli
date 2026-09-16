@@ -41,7 +41,7 @@ interface SqaaDepthResolution {
 }
 
 /**
- * Apply the command's policy to a target/project resolution. This is where the
+ * Apply the command's policy to a connection/project resolution. This is where the
  * caller (not the resolver) decides what a missing project means:
  * - `requireProject` (explicit `analyze agentic` / `verify`): throw so the command
  *   exits with code 1 instead of skipping silently.
@@ -58,7 +58,7 @@ export function resolveSqaaContext(
 ): SqaaResolvedContext | null {
   switch (resolution.kind) {
     case 'resolved':
-      return { target: resolution.target, projectKey: resolution.projectKey };
+      return { connection: resolution.connection, projectKey: resolution.projectKey };
     case 'no-org':
       if (resolution.explicitProject) {
         throw new CommandFailedError('Vortex analysis requires a SonarQube Cloud organization.', {

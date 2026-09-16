@@ -23,7 +23,7 @@ import { type CliRuntime, createCliRuntime } from '@/core/commands/cli-runtime.t
 import { type LifecycleState, STABLE_LIFECYCLE } from '@/core/commands/stage.ts';
 import logger from '@/core/observability/logger.ts';
 import { okAsync, type ResultAsync } from '@/core/result.ts';
-import type { SonarHttpClient } from '@/core/server/http-client.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 /**
@@ -78,6 +78,7 @@ const DISABLED_RUNTIME: CliRuntime = createCliRuntime({ authResolver: new NullAu
  */
 export class CommandInvocationContext {
   private readonly facts: TelemetryFact[] = [];
+  private pendingConnection?: Promise<SonarConnection | null>;
 
   constructor(
     readonly console: Console,
@@ -126,6 +127,24 @@ export class CommandInvocationContext {
     return authResult.value;
   }
 
+  /**
+   * Resolve the connection for this invocation — the auth plus the transport bound to its server.
+   * `null` when the invocation has no usable credentials: an anonymous handler may well be
+   * authenticated, and one that is not still has to run, so this is an outcome rather than a
+   * failure. Resolution failures are treated the same way, and logged by {@link resolveAuthOrNull}.
+   *
+   * Memoized, so every domain client built during the invocation shares one transport.
+   */
+  resolveConnection(options?: { silent?: boolean }): Promise<SonarConnection | null> {
+    this.pendingConnection ??= this.openConnection(options);
+    return this.pendingConnection;
+  }
+
+  private async openConnection(options?: { silent?: boolean }): Promise<SonarConnection | null> {
+    const auth = await this.resolveAuthOrNull(options);
+    return auth === null ? null : { auth, httpClient: this.runtime.httpClientFactory(auth) };
+  }
+
   /** Record telemetry facts for `postAction` drain. */
   recordTelemetry(...facts: TelemetryFact[]): void {
     if (facts.length === 0) {
@@ -147,7 +166,7 @@ export class CommandInvocationContext {
  * resolved auth for this invocation.
  */
 export class CommandAuthenticatedInvocationContext extends CommandInvocationContext {
-  private client?: SonarHttpClient;
+  private memoizedConnection?: SonarConnection;
 
   constructor(
     readonly auth: ResolvedAuth,
@@ -166,9 +185,19 @@ export class CommandAuthenticatedInvocationContext extends CommandInvocationCont
     return Promise.resolve(this.auth);
   }
 
-  /** Memoised for the invocation: domain clients are built from this, never from a fresh one. */
-  get httpClient(): SonarHttpClient {
-    this.client ??= this.runtime.httpClientFactory(this.auth);
-    return this.client;
+  /**
+   * The connection for this invocation. Synchronous here because {@link auth} is already
+   * resolved; memoised, so domain clients are built from this transport and never a fresh one.
+   */
+  get connection(): SonarConnection {
+    this.memoizedConnection ??= {
+      auth: this.auth,
+      httpClient: this.runtime.httpClientFactory(this.auth),
+    };
+    return this.memoizedConnection;
+  }
+
+  override resolveConnection(): Promise<SonarConnection> {
+    return Promise.resolve(this.connection);
   }
 }

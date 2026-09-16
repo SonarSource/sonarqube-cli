@@ -31,7 +31,6 @@ import { isSonarQubeCloud } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
 import {
@@ -60,11 +59,12 @@ export async function codexPostToolUse(ctx: CommandInvocationContext): Promise<H
     }
   }
 
-  const auth = await ctx.resolveAuthOrNull();
+  const connection = await ctx.resolveConnection();
   // Cloud addresses an organization; Server has none and resolves it from the instance.
-  if (!auth || (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey)) {
+  if (!connection || (isSonarQubeCloud(connection.auth.serverUrl) && !connection.auth.orgKey)) {
     return { agentSessionId: fromHook };
   }
+  const { auth } = connection;
 
   const { projectKey } = await discoverProject(process.cwd(), {
     auth,
@@ -75,14 +75,12 @@ export async function codexPostToolUse(ctx: CommandInvocationContext): Promise<H
 
   noteProject(auth, projectKey);
 
-  const transport = new SonarHttpClient(auth.serverUrl, auth.token);
   const runStart = performance.now();
   let report: SqaaJsonReport | null;
   try {
     report = await buildSqaaJsonReport(
       { project: projectKey, force: true, format: 'json', forcedDepth: 'STANDARD' },
-      transport,
-      auth,
+      connection,
       {
         telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
         telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
@@ -105,7 +103,7 @@ export async function codexPostToolUse(ctx: CommandInvocationContext): Promise<H
   if (!report) return { agentSessionId: fromHook };
 
   if (report.globalError?.kind === 'forbidden') {
-    await emitVortexUnavailableHookNotice(transport, auth);
+    await emitVortexUnavailableHookNotice(connection);
     return { agentSessionId: fromHook };
   }
 

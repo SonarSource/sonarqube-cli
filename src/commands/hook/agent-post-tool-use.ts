@@ -35,7 +35,6 @@ import logger from '@/core/observability/logger.ts';
 import { timed } from '@/core/observability/timed.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
 import { resolveSqaaBranch } from '../analyze/sqaa-changeset.ts';
@@ -61,10 +60,11 @@ async function handleSqaaPostToolUse(
     return { decision: 'none' };
   }
 
-  const auth = await ctx.resolveAuthOrNull();
-  if (!auth) {
+  const connection = await ctx.resolveConnection();
+  if (!connection) {
     return { decision: 'none' };
   }
+  const { auth } = connection;
 
   // Cloud addresses an organization; Server has none and resolves it from the instance.
   if (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey) {
@@ -89,20 +89,15 @@ async function handleSqaaPostToolUse(
     return { decision: 'none' };
   }
 
-  const transport = new SonarHttpClient(auth.serverUrl, auth.token);
   const runStart = performance.now();
   let fetchResult: Awaited<ReturnType<typeof fetchSingleFileReport>>;
   try {
     const fileContent = readFileSync(canonicalPath, 'utf-8');
-    const target = {
-      ...(auth.orgKey ? { orgKey: auth.orgKey } : {}),
-      transport,
-    };
     const branch = await resolveSqaaBranch(undefined, canonicalPath);
 
     const timedFetch = await timed(() =>
       fetchSingleFileReport(
-        target,
+        connection,
         projectKey,
         canonicalPath,
         fileContent,
@@ -138,7 +133,7 @@ async function handleSqaaPostToolUse(
 
   if (fetchResult.error) {
     if (fetchResult.error instanceof SqaaForbiddenError) {
-      const wrote = await emitVortexUnavailableHookNotice(transport, auth);
+      const wrote = await emitVortexUnavailableHookNotice(connection);
       return { decision: wrote ? 'handled' : 'none' };
     }
     logger.debug(`PostToolUse SQAA analysis failed: ${fetchResult.error.message}`);

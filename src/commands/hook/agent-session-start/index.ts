@@ -28,12 +28,11 @@ import {
   isContextAugmentationSkipped,
   printSessionStartContext,
 } from '@/commands/integrate/_common/context-augmentation.ts';
-import { type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 import { ScaClient } from '@/core/server/sca.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
@@ -90,16 +89,12 @@ async function resolveSessionStartContext(
     return null;
   }
 
-  const authResult = await ctx.resolveAuth();
-  if (authResult.isErr()) {
-    logSkip(authResult.error.message);
+  const connection = await ctx.resolveConnection();
+  if (!connection) {
+    logSkip('no usable credentials');
     return null;
   }
-  const auth = authResult.value;
-  if (!auth) {
-    logSkip('not authenticated');
-    return null;
-  }
+  const { auth } = connection;
 
   const discovered = await discoverProject(input.startDir ?? process.cwd(), {
     auth,
@@ -112,10 +107,9 @@ async function resolveSessionStartContext(
   }
   noteProject(auth, discovered.projectKey);
 
-  const client = new SonarHttpClient(auth.serverUrl, auth.token);
   const [vortexEntitlement, scaEnabled] = await Promise.all([
-    resolveVortexEntitlement(client, auth),
-    isScaEnabled(client, auth),
+    resolveVortexEntitlement(connection),
+    isScaEnabled(connection),
   ]);
   if (vortexEntitlement.status !== 'enabled') {
     logSkip(`Vortex entitlement is '${vortexEntitlement.status}'`);
@@ -151,7 +145,7 @@ async function resolveSessionStartContext(
   return { additionalContext: result.stdout };
 }
 
-function isScaEnabled(httpClient: SonarHttpClient, auth: ResolvedAuth): Promise<boolean> {
+function isScaEnabled({ auth, httpClient }: SonarConnection): Promise<boolean> {
   const client = new ScaClient(httpClient);
   return client.checkScaEnabled(auth.connectionType, auth.orgKey).orThrow();
 }

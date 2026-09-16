@@ -55,7 +55,7 @@ export function listProjects(
     );
   }
 
-  const projectsClient = new ProjectsClient(ctx.httpClient);
+  const projectsClient = new ProjectsClient(ctx.connection.httpClient);
 
   return projectsClient
     .searchProjects({

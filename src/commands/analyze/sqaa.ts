@@ -18,13 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type {
   CommandAuthenticatedInvocationContext,
   CommandInvocationContext,
 } from '@/core/commands/invocation-context.ts';
-import type { SonarHttpClient } from '@/core/server/http-client.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 
 import {
   resolveChangeSet,
@@ -37,7 +36,7 @@ import {
   resolveSqaaContext,
 } from './sqaa-context.ts';
 import { resolveSqaaFileArgs } from './sqaa-file-arg.ts';
-import { resolveSqaaTargetAndProject } from './sqaa-resolution.ts';
+import { resolveSqaaConnectionAndProject } from './sqaa-resolution.ts';
 import {
   runSqaaAnalysis,
   runSqaaAnalysisOnExplicitFiles,
@@ -64,7 +63,7 @@ export async function analyzeSqaa(
   ctx: CommandAuthenticatedInvocationContext,
   runOptions: AnalyzeSqaaRunOptions = {},
 ): Promise<void> {
-  const { auth, httpClient: client } = ctx;
+  const { connection } = ctx;
   const { requireProject = true, telemetryCallerCommand } = runOptions;
   const telemetryCtx = runOptions.telemetryCtx ?? ctx;
   const {
@@ -85,8 +84,7 @@ export async function analyzeSqaa(
 
   if (rawFiles?.length) {
     await analyzeSqaaExplicitFiles(rawFiles, {
-      client,
-      auth,
+      connection,
       branch,
       project,
       force,
@@ -101,8 +99,7 @@ export async function analyzeSqaa(
   }
 
   await analyzeSqaaChangeSet({
-    client,
-    auth,
+    connection,
     staged,
     base,
     branch,
@@ -120,8 +117,7 @@ export async function analyzeSqaa(
 async function analyzeSqaaExplicitFiles(
   rawFiles: string[],
   params: {
-    client: SonarHttpClient;
-    auth: ResolvedAuth;
+    connection: SonarConnection;
     branch?: string;
     project?: string;
     force?: boolean;
@@ -135,8 +131,7 @@ async function analyzeSqaaExplicitFiles(
 ): Promise<void> {
   const entries = resolveSqaaFileArgs(rawFiles);
   const {
-    client,
-    auth,
+    connection,
     branch,
     project,
     force,
@@ -152,8 +147,8 @@ async function analyzeSqaaExplicitFiles(
 
   if (entries.length === 1) {
     const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'single-file', forcedDepth);
-    await runSqaaAnalysis(entries[0].absolutePath, auth, {
-      client,
+    await runSqaaAnalysis(entries[0].absolutePath, {
+      connection,
       branch: resolvedBranch,
       explicitProject: project,
       format,
@@ -168,7 +163,7 @@ async function analyzeSqaaExplicitFiles(
   }
 
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'multi-file', forcedDepth);
-  const resolution = await resolveSqaaTargetAndProject(client, auth, project, console);
+  const resolution = await resolveSqaaConnectionAndProject(connection, project, console);
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
 
@@ -176,7 +171,6 @@ async function analyzeSqaaExplicitFiles(
 
   await runSqaaAnalysisOnExplicitFiles(entries, {
     resolved,
-    auth,
     branch: resolvedBranch,
     format,
     wireDepth,
@@ -188,8 +182,7 @@ async function analyzeSqaaExplicitFiles(
 }
 
 async function analyzeSqaaChangeSet(params: {
-  client: SonarHttpClient;
-  auth: ResolvedAuth;
+  connection: SonarConnection;
   staged?: boolean;
   base?: string;
   branch?: string;
@@ -203,8 +196,7 @@ async function analyzeSqaaChangeSet(params: {
   telemetryCtx: CommandInvocationContext;
 }): Promise<void> {
   const {
-    client,
-    auth,
+    connection,
     staged,
     base,
     branch,
@@ -235,9 +227,8 @@ async function analyzeSqaaChangeSet(params: {
     return;
   }
 
-  const resolution = await resolveSqaaTargetAndProject(
-    client,
-    auth,
+  const resolution = await resolveSqaaConnectionAndProject(
+    connection,
     project,
     console,
     changeSet.repoRoot,
@@ -249,7 +240,6 @@ async function analyzeSqaaChangeSet(params: {
 
   await runSqaaAnalysisOnFiles(changeSet, {
     resolved,
-    auth,
     branch: resolvedBranch,
     format,
     wireDepth,

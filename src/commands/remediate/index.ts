@@ -78,7 +78,7 @@ export async function remediate(
   assertCloudConnection(auth);
   assertInteractiveOrIssuesSupplied(suppliedIssueKeys);
 
-  const client = new RemediateApiClient(ctx.httpClient);
+  const client = new RemediateApiClient(ctx.connection.httpClient);
   // resolveAuth guarantees orgKey is set for cloud connections (see auth-resolver.ts);
   // narrow once and reuse throughout this function.
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion

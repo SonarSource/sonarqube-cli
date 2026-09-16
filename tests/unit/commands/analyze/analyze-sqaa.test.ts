@@ -318,8 +318,7 @@ describe('buildSqaaJsonReport', () => {
   it('returns a single-file JSON report with forcedDepth STANDARD', async () => {
     const report = await buildSqaaJsonReport(
       { file: ['src/index.ts'], forcedDepth: 'STANDARD' },
-      FAKE_AUTHENTICATED_CONTEXT.httpClient,
-      FAKE_AUTH,
+      FAKE_AUTHENTICATED_CONTEXT.connection,
       { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
     );
 
@@ -331,8 +330,7 @@ describe('buildSqaaJsonReport', () => {
   it('defaults multi-file reports to DEEP analysisDepth', async () => {
     const report = await buildSqaaJsonReport(
       { file: ['src/a.ts', 'src/b.ts'] },
-      FAKE_AUTHENTICATED_CONTEXT.httpClient,
-      FAKE_AUTH,
+      FAKE_AUTHENTICATED_CONTEXT.connection,
       { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
     );
 
@@ -351,8 +349,7 @@ describe('buildSqaaJsonReport', () => {
 
     const report = await buildSqaaJsonReport(
       { file: ['src/index.ts'] },
-      FAKE_AUTHENTICATED_CONTEXT.httpClient,
-      onPremiseAuth,
+      new CommandAuthenticatedInvocationContext(onPremiseAuth, fake).connection,
       { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
     );
     expect(report).not.toBeNull();
@@ -365,8 +362,7 @@ describe('buildSqaaJsonReport', () => {
 
     const report = await buildSqaaJsonReport(
       { file: ['src/index.ts'] },
-      FAKE_AUTHENTICATED_CONTEXT.httpClient,
-      FAKE_AUTH,
+      FAKE_AUTHENTICATED_CONTEXT.connection,
       { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
     );
 
@@ -379,8 +375,7 @@ describe('buildSqaaJsonReport', () => {
     await expect(
       buildSqaaJsonReport(
         { file: ['src/index.ts'], depth: 'INVALID' },
-        FAKE_AUTHENTICATED_CONTEXT.httpClient,
-        FAKE_AUTH,
+        FAKE_AUTHENTICATED_CONTEXT.connection,
         { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
       ),
     ).rejects.toThrow(InvalidOptionError);
@@ -436,8 +431,7 @@ describe('analyzeSqaa: change-set mode', () => {
 
     const report = await buildSqaaJsonReport(
       { staged: true },
-      FAKE_AUTHENTICATED_CONTEXT.httpClient,
-      FAKE_AUTH,
+      FAKE_AUTHENTICATED_CONTEXT.connection,
       { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
     );
 
@@ -477,8 +471,7 @@ describe('analyzeSqaa: change-set mode', () => {
 
     const report = await buildSqaaJsonReport(
       { staged: true },
-      FAKE_AUTHENTICATED_CONTEXT.httpClient,
-      FAKE_AUTH,
+      FAKE_AUTHENTICATED_CONTEXT.connection,
       { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
     );
     expect(report?.ignored).toEqual([

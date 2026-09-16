@@ -18,8 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import type { SonarHttpClient } from '@/core/server/http-client.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 import { vortexUnavailableHookMessage } from '@/core/vortex/availability-messages.ts';
 import { recheckVortexEntitlement } from '@/core/vortex/entitlement.ts';
 import {
@@ -31,8 +30,7 @@ import { writePostToolUseHookOutput } from './format-sqaa-hook-context.ts';
 
 /** Returns whether a message was written, so dispatcher-based callers can report `handled` accurately. */
 export async function emitVortexUnavailableHookNotice(
-  transport: SonarHttpClient,
-  auth: ResolvedAuth,
+  connection: SonarConnection,
 ): Promise<boolean> {
   // The timestamp is written only for `not_entitled`, which in a hook means the org's
   // trial ended — a sticky state that will not become `over_consumption` within the
@@ -41,7 +39,7 @@ export async function emitVortexUnavailableHookNotice(
   if (!isVortexEntitlementLossNoticeDue()) {
     return false;
   }
-  const status = await recheckVortexEntitlement(transport, auth);
+  const status = await recheckVortexEntitlement(connection);
   const message = vortexUnavailableHookMessage(status);
   if (!message) {
     return false;

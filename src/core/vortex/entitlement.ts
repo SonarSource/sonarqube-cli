@@ -20,7 +20,8 @@
 
 // Vortex entitlement: the two hub queries and every way the CLI asks about them.
 
-import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { isSonarQubeCloud } from '@/core/auth/auth-resolver.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 import { type SonarHttpClient } from '@/core/server/http-client.ts';
 import { HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
@@ -173,11 +174,11 @@ function mergeVortexEntitlement(
 }
 
 /** The one place mapping a resolved connection onto the entitlement client. */
-function queryVortexEntitlement(
-  transport: SonarHttpClient,
-  auth: ResolvedAuth,
-): Promise<VortexEntitlementResult> {
-  return new VortexEntitlementClient(transport).hasVortexEntitlement(auth.orgKey);
+function queryVortexEntitlement({
+  auth,
+  httpClient,
+}: SonarConnection): Promise<VortexEntitlementResult> {
+  return new VortexEntitlementClient(httpClient).hasVortexEntitlement(auth.orgKey);
 }
 
 /**
@@ -186,10 +187,9 @@ function queryVortexEntitlement(
  * coupling to any command or output layer.
  */
 export async function recheckVortexEntitlement(
-  transport: SonarHttpClient,
-  auth: ResolvedAuth,
+  connection: SonarConnection,
 ): Promise<VortexEntitlementStatus> {
-  const { status } = await queryVortexEntitlement(transport, auth);
+  const { status } = await queryVortexEntitlement(connection);
   return status;
 }
 
@@ -201,13 +201,13 @@ export async function recheckVortexEntitlement(
  * (`isSonarQubeCloud`), same as `SonarHttpClient`, not the stored connection type.
  */
 export async function resolveVortexEntitlement(
-  transport: SonarHttpClient,
-  auth: ResolvedAuth,
+  connection: SonarConnection,
 ): Promise<VortexEntitlementResult> {
+  const { auth } = connection;
   if (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey) {
     return { status: 'not_applicable' };
   }
-  return queryVortexEntitlement(transport, auth);
+  return queryVortexEntitlement(connection);
 }
 
 export function isVortexEntitlementLoss(

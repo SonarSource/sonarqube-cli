@@ -73,7 +73,7 @@ export async function analyzeDependencyRisks(
   const projectKey = await resolveProjectKey(options.project, auth, ctx.console);
   noteProject(auth, projectKey);
 
-  const client = createScaScanApi(ctx.httpClient);
+  const client = createScaScanApi(ctx.connection.httpClient);
   const orchestrator = new ScaScanOrchestrator(
     client,
     new DefaultScaScannerInstaller(ctx.console),
