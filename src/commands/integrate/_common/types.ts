@@ -21,9 +21,7 @@
 export type VortexDisposition = 'install' | 'preserve' | 'remove';
 
 export interface IntegrateAgentOptions {
-  project?: string;
   nonInteractive?: boolean;
-  global?: boolean;
   /** Set by the bare `sonar integrate` router; forwarded to telemetry only. */
   isFromRouter?: boolean;
   /** Used by Vortex. */

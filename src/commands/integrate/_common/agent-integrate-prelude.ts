@@ -23,33 +23,19 @@
 import { homedir } from 'node:os';
 
 import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { type DiscoveredProject, discoverProject } from '@/core/project-info.ts';
 import type { IntegrationScope } from '@/core/state/state.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import { isGlobalIntegrateScope, resolveIntegrateScope } from './integrate-scope.ts';
 import { printAgentPreflightSummary } from './preflight-summary.ts';
-import type { IntegrateAgentOptions } from './types.ts';
-
-export type AgentIntegrateSubcommand = 'antigravity' | 'claude' | 'codex' | 'copilot' | 'cursor';
 
 export interface AgentIntegrateContext {
   project: DiscoveredProject;
-  isGlobal: boolean;
   projectKey: string | undefined;
   serverUrl: string;
   organization: string | undefined;
   token: string;
-}
-
-/** Rejects `--global` combined with `--project`. */
-export function assertIntegrateScopeOptions(options: IntegrateAgentOptions): void {
-  if (options.global && options.project) {
-    throw new InvalidOptionError(
-      '--global and --project are mutually exclusive; please specify only one scope.',
-    );
-  }
 }
 
 export function introAgentIntegration(agentDisplayName: string, console: Console): void {
@@ -83,19 +69,6 @@ export function warnAuthProjectMismatches(
   }
 }
 
-export function warnMissingIntegrateProjectKey(
-  subcommand: AgentIntegrateSubcommand,
-  isGlobal: boolean,
-  projectKey: string | undefined,
-  console: Console,
-): void {
-  if (!isGlobal && !projectKey) {
-    console.warn(
-      `No project key provided - project related actions will be skipped. Run \`sonar integrate ${subcommand} --help\` for ways to define a project.`,
-    );
-  }
-}
-
 export function assertSonarCloudOrganization(
   serverUrl: string,
   organization: string | undefined,
@@ -108,14 +81,12 @@ export function assertSonarCloudOrganization(
 }
 
 export function buildAgentIntegrateContext(
-  options: IntegrateAgentOptions,
   auth: ResolvedAuth,
   project: DiscoveredProject,
 ): AgentIntegrateContext {
   return {
     project,
-    isGlobal: options.global ?? false,
-    projectKey: options.project || project.projectKey,
+    projectKey: project.projectKey,
     serverUrl: auth.serverUrl,
     organization: auth.orgKey,
     token: auth.token,
@@ -123,22 +94,19 @@ export function buildAgentIntegrateContext(
 }
 
 /**
- * Shared preflight for all agent integrate commands: scope validation, intro,
- * project discovery, mismatch warnings, cloud org check, Connection/Project
- * preflight summary (including token validation), then install-scope selection.
+ * Shared preflight for all agent integrate commands: intro, project discovery,
+ * mismatch warnings, cloud org check, then the Connection/Project preflight
+ * summary (including token validation). Every agent integration installs
+ * globally.
  */
 export async function displayAgentIntegratePrelude(
   agentDisplayName: string,
-  subcommand: AgentIntegrateSubcommand,
-  options: IntegrateAgentOptions,
   auth: ResolvedAuth,
   console: Console,
 ): Promise<AgentIntegrateContext> {
-  assertIntegrateScopeOptions(options);
   introAgentIntegration(agentDisplayName, console);
   const project = await discoverIntegrateProject(auth, console);
   warnAuthProjectMismatches(auth, project, console);
-  const projectKey = options.project || project.projectKey;
   assertSonarCloudOrganization(auth.serverUrl, auth.orgKey);
   await printAgentPreflightSummary(
     {
@@ -146,28 +114,17 @@ export async function displayAgentIntegratePrelude(
       organization: auth.orgKey,
       token: auth.token,
       project,
-      projectKey,
-      cliProjectKey: options.project,
+      projectKey: project.projectKey,
     },
     console,
   );
-  const scope = await resolveIntegrateScope({
-    ...options,
-    projectRoot: project.projectRoot,
-    projectKey: options.project,
-    console,
-  });
-  const isGlobal = isGlobalIntegrateScope(scope);
-  warnMissingIntegrateProjectKey(subcommand, isGlobal, projectKey, console);
-  return buildAgentIntegrateContext({ ...options, global: isGlobal }, auth, project);
+  return buildAgentIntegrateContext(auth, project);
 }
 
-export function resolveIntegrateInstallTarget(
-  isGlobal: boolean,
-  projectRoot: string,
-): { installRoot: string; installScope: IntegrationScope } {
-  return {
-    installRoot: isGlobal ? homedir() : projectRoot,
-    installScope: isGlobal ? 'global' : 'project',
-  };
+/** Every agent integration installs to the user's home directory. */
+export function resolveIntegrateInstallTarget(): {
+  installRoot: string;
+  installScope: IntegrationScope;
+} {
+  return { installRoot: homedir(), installScope: 'global' };
 }
