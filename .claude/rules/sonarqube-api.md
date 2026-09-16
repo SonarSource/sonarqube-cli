@@ -21,7 +21,7 @@ Everything above transport is a small per-domain wrapper taking a `SonarHttpClie
 whoever uses it. Shared domains stay in `src/core/server/`, one file per client named for its
 domain — e.g. `OrganizationsClient` (`organizations.ts`, also home to `Organization` /
 `OrganizationRecord` / `OrganizationAccess`). Command-specific surfaces sit with their command: `ImportApiClient`
-(`src/commands/import/_common/import-api.ts`, owning `DopRepository` / `ProvisionedProject`),
+(`src/commands/import/import-api.ts`, owning `DopRepository` / `ProvisionedProject`),
 `RemediateApiClient` (`src/commands/remediate/remediate-api.ts`, owning the agent-job types),
 `OnboardCiSqsClient` (`src/commands/admin/onboard-ci/gitlab/sqs-api.ts`), `SqaaAnalysisClient`
 (`src/commands/analyze/sqaa-analysis-client.ts`, with the wire shapes in `sqaa-wire-types.ts`), the
@@ -29,12 +29,9 @@ domain — e.g. `OrganizationsClient` (`organizations.ts`, also home to `Organiz
 `VortexEntitlementClient` (`src/core/vortex/entitlement.ts`, owning `VortexEntitlementResult` /
 `VortexEntitlementStatus` and `SERVER_ORGANIZATION_ID_PLACEHOLDER`).
 
-Three rules hold across every one of these clients, with no exception — keep it that way when adding one.
+Every one of these clients follows the rules below, with no exception — keep it that way when adding one.
 
-**Every API client is constructed from a `SonarHttpClient`**, never from a `(serverUrl, token)` pair
-it turns into one itself. The command handler builds the transport client once and passes it in, so
-a single instance can be shared by every domain client in a run — which is what keeps
-`OrganizationsClient`'s organization cache effective instead of one cache per caller.
+**Every API client is constructed from a `SonarHttpClient`**, never from a `(serverUrl, token)` pair it turns into one itself. An authenticated handler takes that transport from `ctx.httpClient` (`CommandAuthenticatedInvocationContext`, built lazily from `ctx.auth` and memoised for the invocation) rather than constructing one, so there is a single way to obtain a client. Code with no invocation context to read it from — hook handlers that resolve auth themselves and fail open, framework/integrate helpers that take `auth` rather than a context, and telemetry/auth code that runs before a connection exists or outside any command — builds one inline and threads it down as a parameter.
 
 **A command-level client that needs a shared domain client exposes it as a `readonly` field**
 (`ImportApiClient.organizations`, `RemediateApiClient.issues` / `.components`) rather than
@@ -53,8 +50,6 @@ helpers whose parameters are command-specific (`fetchEligibleIssues` in
 `src/commands/remediate/index.ts`, the measures helpers in `src/commands/quality-gate/status/`)
 also stay functions — the filters they hardcode are that command's policy, not the client's.
 
-New API calls belong in the domain wrapper for their area, never back in the transport class.
-
 **A domain method only exposes `timeoutMs` when a real caller needs a budget tighter than the
 default**, threaded through from that one call site, not added speculatively to keep sibling
 methods "consistent". `ComponentsClient.getComponentId()` takes one because
@@ -62,3 +57,5 @@ methods "consistent". `ComponentsClient.getComponentId()` takes one because
 siblings on the same client (`getComponent`, `hasProjectBeenAnalyzed`, `getProjectSettings`) do
 not have that need, so they do not have the parameter, even though all three also go through
 `getOrNullIf404`. Do not copy `timeoutMs` onto a method that has no caller asking for it yet.
+
+New API calls belong in the domain wrapper for their area, never back in the transport class.

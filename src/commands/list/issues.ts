@@ -25,7 +25,6 @@ import { encode as encodeToToon } from '@toon-format/toon';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFileComponentKey } from '@/core/file-component.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { SystemClient } from '@/core/server/system.ts';
@@ -171,7 +170,7 @@ export async function listIssues(
     }
   }
 
-  const client = new SonarHttpClient(auth.serverUrl, auth.token);
+  const client = ctx.httpClient;
   const issuesClient = new IssuesClient(client);
 
   let componentKeys: string | undefined;

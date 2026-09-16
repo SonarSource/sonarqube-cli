@@ -23,6 +23,7 @@ import { type CliRuntime, createCliRuntime } from '@/core/commands/cli-runtime.t
 import { type LifecycleState, STABLE_LIFECYCLE } from '@/core/commands/stage.ts';
 import logger from '@/core/observability/logger.ts';
 import { okAsync, type ResultAsync } from '@/core/result.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 /**
@@ -146,6 +147,8 @@ export class CommandInvocationContext {
  * resolved auth for this invocation.
  */
 export class CommandAuthenticatedInvocationContext extends CommandInvocationContext {
+  private client?: SonarHttpClient;
+
   constructor(
     readonly auth: ResolvedAuth,
     console: Console,
@@ -161,5 +164,11 @@ export class CommandAuthenticatedInvocationContext extends CommandInvocationCont
 
   override resolveAuthOrNull(): Promise<ResolvedAuth> {
     return Promise.resolve(this.auth);
+  }
+
+  /** Memoised for the invocation: domain clients are built from this, never from a fresh one. */
+  get httpClient(): SonarHttpClient {
+    this.client ??= new SonarHttpClient(this.auth.serverUrl, this.auth.token);
+    return this.client;
   }
 }
