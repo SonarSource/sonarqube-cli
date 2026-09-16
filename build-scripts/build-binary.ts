@@ -29,6 +29,12 @@ import { join } from 'node:path';
 
 import { resolveDistribution } from '@/core/host/distribution.ts';
 
+import {
+  compileTargetMatchesHost,
+  downloadCompileTargetExecutable,
+  REPOX_NPM_REGISTRY,
+} from './compile-target-runtime.ts';
+
 const PROJECT_ROOT = join(import.meta.dir, '..');
 const DEFAULT_OUTFILE = join(PROJECT_ROOT, 'dist', 'sonarqube-cli');
 const DISTRIBUTION_DEFINE_KEY = 'process.env.SONARQUBE_CLI_DISTRIBUTION';
@@ -40,18 +46,40 @@ const target = process.env.SONARQUBE_CLI_TARGET as BuildTarget | undefined;
 
 console.log(`Building CLI binary for distribution: ${distribution} (${target ?? 'host'})`);
 
-const result = await Bun.build({
-  entrypoints: [join(PROJECT_ROOT, 'src/index.ts')],
-  compile: target ? { target, outfile } : { outfile },
-  define: {
-    [DISTRIBUTION_DEFINE_KEY]: JSON.stringify(distribution),
-  },
-});
+const compile: { target?: BuildTarget; outfile: string; executablePath?: string } = target
+  ? { target, outfile }
+  : { outfile };
 
-if (!result.success) {
-  const logs = result.logs.map((log) => log.message ?? JSON.stringify(log)).join('\n');
-  process.stderr.write(`${logs || 'Failed to build CLI binary'}\n`);
-  process.exit(1);
+let cleanupCompileRuntime: (() => void) | undefined;
+const artifactoryToken = process.env.ARTIFACTORY_PRIVATE_READER_PASSWORD;
+if (target && artifactoryToken && !compileTargetMatchesHost(target)) {
+  const { executablePath, cleanup } = await downloadCompileTargetExecutable({
+    target,
+    bunVersion: Bun.version,
+    registryUrl: process.env.BUN_CONFIG_REGISTRY ?? REPOX_NPM_REGISTRY,
+    token: artifactoryToken,
+  });
+  compile.executablePath = executablePath;
+  cleanupCompileRuntime = cleanup;
+  console.log(`Using compile runtime from Repox: ${executablePath}`);
+}
+
+try {
+  const result = await Bun.build({
+    entrypoints: [join(PROJECT_ROOT, 'src/index.ts')],
+    compile,
+    define: {
+      [DISTRIBUTION_DEFINE_KEY]: JSON.stringify(distribution),
+    },
+  });
+
+  if (!result.success) {
+    const logs = result.logs.map((log) => log.message ?? JSON.stringify(log)).join('\n');
+    process.stderr.write(`${logs || 'Failed to build CLI binary'}\n`);
+    process.exit(1);
+  }
+} finally {
+  cleanupCompileRuntime?.();
 }
 
 console.log(`CLI binary built: ${outfile}`);
