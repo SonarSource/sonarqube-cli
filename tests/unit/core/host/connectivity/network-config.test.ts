@@ -445,45 +445,23 @@ describe('buildFetchNetworkOptions', () => {
       ).toBeUndefined();
     });
 
-    it('skips proxy for unbracketed IPv6 noProxy entries such as ::1', () => {
-      const config = makeConfig({
-        SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
-        SONAR_NO_PROXY: '::1',
-      });
-      expect(buildFetchNetworkOptions('https://[::1]/api', config).proxy).toBeUndefined();
-      expect(buildFetchNetworkOptions('https://[2001:db8::1]/api', config).proxy).toBe(
-        'https://proxy:8080',
-      );
-    });
-
-    it('skips proxy for bracketed IPv6 noProxy entries', () => {
-      const config = makeConfig({
-        SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
-        SONAR_NO_PROXY: '[::1]',
-      });
-      expect(buildFetchNetworkOptions('https://[::1]/api', config).proxy).toBeUndefined();
-    });
-
-    it('skips proxy for a full unbracketed IPv6 address', () => {
-      const config = makeConfig({
-        SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
-        SONAR_NO_PROXY: '2001:db8::1',
-      });
-      expect(buildFetchNetworkOptions('https://[2001:db8::1]/api', config).proxy).toBeUndefined();
-      expect(buildFetchNetworkOptions('https://[::1]/api', config).proxy).toBe(
-        'https://proxy:8080',
-      );
-    });
-
-    it('port-specific IPv6 noProxy entry only bypasses matching port', () => {
-      const config = makeConfig({
-        SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
-        SONAR_NO_PROXY: '[::1]:9000',
-      });
-      expect(buildFetchNetworkOptions('https://[::1]/api', config).proxy).toBe(
-        'https://proxy:8080',
-      );
-      expect(buildFetchNetworkOptions('https://[::1]:9000/api', config).proxy).toBeUndefined();
+    it('matches IPv6 noProxy entries without treating colons as a port', () => {
+      const proxy = 'https://proxy:8080';
+      for (const { noProxy, url, bypass } of [
+        { noProxy: '::1', url: 'https://[::1]/api', bypass: true },
+        { noProxy: '::1', url: 'https://[2001:db8::1]/api', bypass: false },
+        { noProxy: '[::1]', url: 'https://[::1]/api', bypass: true },
+        { noProxy: '2001:db8::1', url: 'https://[2001:db8::1]/api', bypass: true },
+        { noProxy: '2001:db8::1', url: 'https://[::1]/api', bypass: false },
+        { noProxy: '[::1]:9000', url: 'https://[::1]/api', bypass: false },
+        { noProxy: '[::1]:9000', url: 'https://[::1]:9000/api', bypass: true },
+      ]) {
+        const config = makeConfig({
+          SONAR_HTTPS_PROXY_URL: proxy,
+          SONAR_NO_PROXY: noProxy,
+        });
+        expect(buildFetchNetworkOptions(url, config).proxy).toBe(bypass ? undefined : proxy);
+      }
     });
 
     it('does not bypass proxy when noProxy is from different tier than proxy', () => {
