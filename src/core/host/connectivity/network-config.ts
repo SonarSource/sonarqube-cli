@@ -332,7 +332,7 @@ function tryParseUrl(url: string): URL | null {
 }
 
 function matchesNoProxy(hostname: string, port: number, noProxy: string): boolean {
-  const h = hostname.toLowerCase();
+  const h = stripIpv6Brackets(hostname).toLowerCase();
   if (noProxy.toLowerCase() === '*') {
     return true;
   }
@@ -350,11 +350,38 @@ function matchesNoProxy(hostname: string, port: number, noProxy: string): boolea
 }
 
 function parseNoProxyEntry(entry: string): { host: string; port: number } {
+  // `[IPv6]:port` is the only unambiguous host:port form; unbracketed IPv6 uses colons.
+  const bracketedWithPort = /^\[([^\]]+)]:(\d+)$/.exec(entry);
+  if (bracketedWithPort) {
+    return {
+      host: canonicalizeIpv6(bracketedWithPort[1].toLowerCase()),
+      port: Number.parseInt(bracketedWithPort[2]),
+    };
+  }
+
+  const host = stripIpv6Brackets(entry).toLowerCase();
+  if (isIpv6Literal(host)) {
+    return { host: canonicalizeIpv6(host), port: 0 };
+  }
+
   const withPort = /^(.+):(\d+)$/.exec(entry);
   return {
     host: (withPort ? withPort[1] : entry).toLowerCase(),
     port: withPort ? Number.parseInt(withPort[2]) : 0,
   };
+}
+
+function canonicalizeIpv6(host: string): string {
+  const parsed = tryParseUrl(`http://[${host}]`);
+  return parsed ? stripIpv6Brackets(parsed.hostname) : host;
+}
+
+function stripIpv6Brackets(host: string): string {
+  return host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
+}
+
+function isIpv6Literal(host: string): boolean {
+  return host.includes('::') || host.split(':').length > 2;
 }
 
 function normalizeHostPattern(host: string): string {
