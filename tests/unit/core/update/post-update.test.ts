@@ -29,13 +29,18 @@ import { AuthResolver } from '@/core/auth/auth-resolver.ts';
 import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { IntegrationRegistry } from '@/core/framework/features';
 import * as secretsInstall from '@/core/host/install/secrets.ts';
+import logger from '@/core/observability/logger.ts';
 import { okAsync } from '@/core/result.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import * as migration from '@/core/update/claude-hooks-migration.ts';
 import type { PostUpdateDependencies } from '@/core/update/post-update.ts';
-import { migrateDeclarativeIntegrations, runPostUpdateActions } from '@/core/update/post-update.ts';
+import {
+  migrateDeclarativeIntegrations,
+  runPostUpdateActions,
+  runPostUpdateActionsSafely,
+} from '@/core/update/post-update.ts';
 import * as versionLib from '@/core/version.ts';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
@@ -108,6 +113,23 @@ describe('runPostUpdateActions', () => {
 
     expect(loadStateSpy).not.toHaveBeenCalled();
     expect(saveStateSpy).not.toHaveBeenCalled();
+  });
+
+  it('swallows and logs a throw when called through runPostUpdateActionsSafely', async () => {
+    stateFileExistsSpy.mockImplementation(() => {
+      throw new Error('state directory unreadable');
+    });
+    const debugSpy = spyOn(logger, 'debug').mockImplementation(() => {});
+
+    try {
+      await runPostUpdateActionsSafely(makeDeps());
+
+      expect(debugSpy).toHaveBeenCalledWith(
+        'Post-update actions failed: state directory unreadable',
+      );
+    } finally {
+      debugSpy.mockRestore();
+    }
   });
 
   it('does nothing when version is already up to date', async () => {

@@ -34,7 +34,6 @@ import {
 } from '@/core/commands/sonar-command.ts';
 import { resolveGitlabToken } from '@/core/gitlab/token.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
-import logger from '@/core/observability/logger.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
 import { GENERIC_HTTP_METHODS } from '@/core/server/http-client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
@@ -45,7 +44,7 @@ import { buildCommandExecutedFact } from '@/core/telemetry/command-executed.ts';
 import { resolveInvocationAuthForTelemetry } from '@/core/telemetry/identity.ts';
 import type { Console } from '@/core/ui/console.ts';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
-import { runPostUpdateActions } from '@/core/update/post-update.ts';
+import { runPostUpdateActionsSafely } from '@/core/update/post-update.ts';
 
 import { version as VERSION } from '../../package.json';
 import {
@@ -906,8 +905,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   }
 
   // Defer Sentry initialization until a command action is about to run, so that
-  // non-execution paths like --help, --version, and unknown commands don't pay
-  // for it. The guard avoids re-loading state and re-initializing on nested commands.
+  // --help and --version don't pay for it (unknown commands do reach the root
+  // action). The guard avoids re-loading state and re-initializing on nested commands.
   let sentryInitialized = false;
   COMMAND_TREE.hook('preAction', () => {
     if (sentryInitialized) return;
@@ -916,23 +915,18 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     if (state) initSentry(state);
   });
 
-  // Registered after the Sentry hook so a crash inside a migration is reportable.
   let postUpdateRan = false;
   COMMAND_TREE.hook('preAction', async () => {
     if (postUpdateRan) return;
     postUpdateRan = true;
-    try {
-      await runPostUpdateActions({
-        supportedIntegrations,
-        claudeIntegrationId: CLAUDE_INTEGRATION_ID,
-        installHooks,
-        console,
-        runtime,
-      });
-    } catch (error) {
-      // A throw from a Commander hook would abort the user's command.
-      logger.debug(`Post-update actions failed: ${(error as Error).message}`);
-    }
+    // Safely: a throw from a Commander hook would abort the user's command.
+    await runPostUpdateActionsSafely({
+      supportedIntegrations,
+      claudeIntegrationId: CLAUDE_INTEGRATION_ID,
+      installHooks,
+      console,
+      runtime,
+    });
   });
 
   // Emit handler facts plus CliCommandExecuted in one commit.

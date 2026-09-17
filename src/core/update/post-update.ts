@@ -103,6 +103,14 @@ export async function runPostUpdateActions(deps: PostUpdateDependencies): Promis
   }
 }
 
+export async function runPostUpdateActionsSafely(deps: PostUpdateDependencies): Promise<void> {
+  try {
+    await runPostUpdateActions(deps);
+  } catch (error) {
+    logger.debug(`Post-update actions failed: ${(error as Error).message}`);
+  }
+}
+
 async function runActions(deps: PostUpdateDependencies): Promise<void> {
   migrateLegacyTelemetryEvents();
   // Must run before migrateDeclarativeIntegrations
