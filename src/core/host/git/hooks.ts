@@ -32,12 +32,16 @@ import { spawnProcess } from '../../process/process.ts';
 export const PRE_COMMIT_CONFIG_FILE = '.pre-commit-config.yaml';
 
 /**
- * Resolves the directory git uses for hooks (core.hooksPath or .git/hooks).
+ * Resolves the directory git uses for hooks, from the repository's own config only
+ * (core.hooksPath or .git/hooks) — never an inherited global/system core.hooksPath, since a
+ * repo-scoped install must not follow (or overwrite) a hooks path configured for every repo.
  */
-export async function resolveGitHooksDir(root: string): Promise<string> {
+export async function resolveLocalGitHooksDir(root: string): Promise<string> {
   let configResult;
   try {
-    configResult = await spawnProcess('git', ['config', 'core.hooksPath'], { cwd: root });
+    configResult = await spawnProcess('git', ['config', '--local', 'core.hooksPath'], {
+      cwd: root,
+    });
   } catch {
     configResult = null;
   }
@@ -99,7 +103,7 @@ export class GitRepo {
   }
 
   private async getHooksDirOnce(): Promise<string> {
-    this._hooksDir ??= resolveGitHooksDir(this.rootDir);
+    this._hooksDir ??= resolveLocalGitHooksDir(this.rootDir);
     return this._hooksDir;
   }
 
@@ -109,7 +113,7 @@ export class GitRepo {
     return normalizePath(hooksDir).startsWith(normalizePath(join(this.rootDir, '.husky')));
   }
 
-  /** Resolved git hooks directory (core.hooksPath or .git/hooks). */
+  /** Resolved local git hooks directory (core.hooksPath or .git/hooks); never an inherited global value. */
   async getHooksDir(): Promise<string> {
     return this.getHooksDirOnce();
   }
