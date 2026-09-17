@@ -53,10 +53,8 @@ export function createContextAugmentationSubfeature<TOptions extends IntegrateAg
   return {
     id: CONTEXT_AUGMENTATION_FEATURE_ID,
     displayName: 'Vortex Context',
-    shouldInstall: ({ options: integrateOptions }) =>
-      isContextAugmentationSkipped()
-        ? skip()
-        : vortexInstallDecision(integrateOptions.vortexDisposition),
+    shouldInstall: (invocation) =>
+      isContextAugmentationSkipped() ? skip() : vortexInstallDecision(invocation),
     dependencies: [contextAugmentationBinaryDependency],
     resources: [createHookScriptResource(options), options.hookConfigResource],
     operations: [

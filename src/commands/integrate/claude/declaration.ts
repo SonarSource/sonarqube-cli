@@ -25,6 +25,7 @@ import type {
   InstallDecision,
   IntegrationContext,
   IntegrationDeclaration,
+  IntegrationInvocation,
   ResourceDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
@@ -126,6 +127,23 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
         },
       ],
     }),
+    // Declared before the PostToolUse container below: that container's
+    // `sqaa-posttooluse`/`cag-posttooluse` subfeatures read this feature's
+    // resolved decision (see `vortexInstallDecision`), which only exists
+    // once this one has been evaluated.
+    createVortexFeature<ClaudeIntegrationOptions>(
+      [
+        createSqaaInstructionsSubfeature([createSqaaInstructionsSnippet(resolveClaudeMdPath)]),
+        createContextAugmentationSubfeature<ClaudeIntegrationOptions>({
+          agent: 'claude',
+          scriptPath: (context) =>
+            resolveAgentHookScriptPath(context, CLAUDE_CONFIG_DIR, SESSION_START_SCRIPT_REL),
+          hookConfigResource: createCagHookConfigResource(),
+        }),
+        createContextAugmentationFailureHookSubfeature(),
+      ],
+      resolveClaudeSkillPath,
+    ),
     createClaudeHookEventContainer<ClaudeIntegrationOptions>({
       id: SQAA_HOOK_FEATURE_ID,
       displayName: 'Vortex analysis hook',
@@ -144,32 +162,19 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           id: 'sqaa-posttooluse',
           displayName: 'Vortex analysis',
           matcher: 'Edit|Write',
-          shouldInstall: ({ options }) => vortexInstallDecision(options.vortexDisposition),
+          shouldInstall: (invocation) => vortexInstallDecision(invocation),
         },
         {
           id: 'cag-posttooluse',
           displayName: 'Vortex context augmentation hook',
           matcher: CONTEXT_AUGMENTATION_TOOL_MATCHER,
           dependencies: [contextAugmentationBinaryDependency],
-          shouldInstall: ({ options, attrs }) => shouldInstallCagHook(options, attrs),
+          shouldInstall: (invocation) => shouldInstallCagHook(invocation),
           migrationEligible: isCagHookAllowedForAttrs,
         },
       ],
       defaultInstallSubfeatureIds: ['sqaa-posttooluse', 'cag-posttooluse'],
     }),
-    createVortexFeature<ClaudeIntegrationOptions>(
-      [
-        createSqaaInstructionsSubfeature([createSqaaInstructionsSnippet(resolveClaudeMdPath)]),
-        createContextAugmentationSubfeature<ClaudeIntegrationOptions>({
-          agent: 'claude',
-          scriptPath: (context) =>
-            resolveAgentHookScriptPath(context, CLAUDE_CONFIG_DIR, SESSION_START_SCRIPT_REL),
-          hookConfigResource: createCagHookConfigResource(),
-        }),
-        createContextAugmentationFailureHookSubfeature(),
-      ],
-      resolveClaudeSkillPath,
-    ),
     createMcpServerFeature<ClaudeIntegrationOptions>({
       resolveConfigPath: resolveClaudeMcpConfigPath,
     }),
@@ -184,14 +189,16 @@ function isCagHookAllowedForAttrs(
 }
 
 function shouldInstallCagHook(
-  options: ClaudeIntegrationOptions,
-  attrs: Record<string, IntegrationStateAttribute> | undefined,
+  invocation: IntegrationInvocation<ClaudeIntegrationOptions>,
 ): InstallDecision {
   // The allowlist only withholds a new install; it never tears an existing hook down.
-  if (options.vortexDisposition === 'install' && !isCagHookAllowedForAttrs(attrs)) {
+  if (
+    invocation.options.vortexDisposition === 'install' &&
+    !isCagHookAllowedForAttrs(invocation.attrs)
+  ) {
     return skip();
   }
-  return vortexInstallDecision(options.vortexDisposition);
+  return vortexInstallDecision(invocation);
 }
 
 function createCagHookConfigResource(): ResourceDeclaration {
@@ -229,7 +236,7 @@ function createContextAugmentationFailureHookSubfeature(): SubfeatureDeclaration
   return {
     id: CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
     displayName: 'Vortex context augmentation hook',
-    shouldInstall: ({ options, attrs }) => shouldInstallCagHook(options, attrs),
+    shouldInstall: (invocation) => shouldInstallCagHook(invocation),
     migrationEligible: isCagHookAllowedForAttrs,
     dependencies: [contextAugmentationBinaryDependency],
     resources: [
