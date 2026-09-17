@@ -455,6 +455,9 @@ describe('buildFetchNetworkOptions', () => {
         { noProxy: '2001:db8::1', url: 'https://[::1]/api', bypass: false },
         { noProxy: '[::1]:9000', url: 'https://[::1]/api', bypass: false },
         { noProxy: '[::1]:9000', url: 'https://[::1]:9000/api', bypass: true },
+        { noProxy: '0:0:0:0:0:0:0:1', url: 'https://[::1]/api', bypass: true },
+        { noProxy: '2001:0db8::1', url: 'https://[2001:db8::1]/api', bypass: true },
+        { noProxy: '::ffff:192.168.1.10', url: 'https://[::ffff:192.168.1.10]/api', bypass: true },
       ]) {
         const config = makeConfig({
           SONAR_HTTPS_PROXY_URL: proxy,

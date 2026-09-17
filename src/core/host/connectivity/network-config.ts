@@ -349,20 +349,22 @@ function matchesNoProxy(hostname: string, port: number, noProxy: string): boolea
     });
 }
 
-// curl and Go accept unbracketed IPv6 (`::1`) and `[IPv6]:port` only when a port
-// is set. A naive last-`:digits` split would turn `::1` into host `:` / port `1`.
+// Accepted forms: hostname, IPv4, unbracketed IPv6 (`::1`), and `[IPv6]:port` when
+// a port is set (curl/Go). IPv6 is canonicalized through the URL parser so expanded
+// and compressed spellings match. A naive last-`:digits` split would turn `::1`
+// into host `:` / port `1`.
 function parseNoProxyEntry(entry: string): { host: string; port: number } {
   const bracketedWithPort = /^\[([^\]]+)]:(\d+)$/.exec(entry);
   if (bracketedWithPort) {
     return {
-      host: bracketedWithPort[1].toLowerCase(),
+      host: canonicalizeIpv6(bracketedWithPort[1].toLowerCase()),
       port: Number.parseInt(bracketedWithPort[2]),
     };
   }
 
   const host = stripIpv6Brackets(entry).toLowerCase();
   if (isIpv6Literal(host)) {
-    return { host, port: 0 };
+    return { host: canonicalizeIpv6(host), port: 0 };
   }
 
   const withPort = /^(.+):(\d+)$/.exec(entry);
@@ -370,6 +372,11 @@ function parseNoProxyEntry(entry: string): { host: string; port: number } {
     host: (withPort ? withPort[1] : entry).toLowerCase(),
     port: withPort ? Number.parseInt(withPort[2]) : 0,
   };
+}
+
+function canonicalizeIpv6(host: string): string {
+  const parsed = tryParseUrl(`http://[${host}]`);
+  return parsed ? stripIpv6Brackets(parsed.hostname) : host;
 }
 
 function stripIpv6Brackets(host: string): string {
