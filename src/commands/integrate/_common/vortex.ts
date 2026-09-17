@@ -145,10 +145,15 @@ export function vortexInstallDecision<TOptions extends IntegrateAgentOptions>(
   if (resolved === 'install') {
     return install();
   }
-  if (resolved === 'uninstall') {
+  // A first-time 'declined' answer means Vortex itself was never installed —
+  // but a sibling like Claude's PostToolUse container can still hold a stale
+  // record from before this fix (or any other drift), so treat it the same
+  // as 'uninstall' to tear that down. `uninstall()` is already a no-op with
+  // no message when the sibling was never installed (selection.ts).
+  if (resolved === 'uninstall' || resolved === 'declined') {
     return uninstall();
   }
-  if (resolved === 'skip' || resolved === 'declined') {
+  if (resolved === 'skip') {
     return skip();
   }
   return vortexInstallDecisionFromDisposition(invocation.options.vortexDisposition);
