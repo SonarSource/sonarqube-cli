@@ -26,7 +26,7 @@ import { Database } from 'bun:sqlite';
 import { getStatsDir, STATS_DB_FILENAME } from '@/core/config-constants.ts';
 import logger from '@/core/observability/logger.ts';
 
-import { applyStatsMigrations } from './stats-migrations.ts';
+import { applyStatsMigrations } from './migrations.ts';
 
 const CORRUPTION_ERROR_CODE_PREFIXES = ['SQLITE_NOTADB', 'SQLITE_CORRUPT'];
 

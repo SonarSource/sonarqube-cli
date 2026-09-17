@@ -18,45 +18,17 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { Database } from 'bun:sqlite';
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 
-import { ENV_SONAR_USER_HOME, getStatsDir, STATS_DB_FILENAME } from '@/core/config-constants.ts';
-import {
-  dedupeAgainstSeen,
-  recordStatsEvent,
-  upsertRuleMessages,
-} from '@/core/stats/stats-store.ts';
+import { getStatsDir, STATS_DB_FILENAME } from '@/core/config-constants.ts';
+import { dedupeAgainstSeen, recordStatsEvent, upsertRuleMessages } from '@/core/stats/store.ts';
 
-const IS_WINDOWS = process.platform === 'win32';
+import { useTempSonarUserHome } from './_helpers.ts';
 
-let testSonarUserHome: string;
-const previousSonarUserHome = process.env[ENV_SONAR_USER_HOME];
-
-beforeEach(async () => {
-  testSonarUserHome = await mkdtemp(join(tmpdir(), 'cli-stats-store-test-'));
-  process.env[ENV_SONAR_USER_HOME] = testSonarUserHome;
-});
-
-afterEach(async () => {
-  // Windows can hold the just-closed db's WAL/SHM handles past our retries; best-effort
-  // only — the OS reclaims the temp dir regardless, same as tests/integration/harness/index.ts.
-  await rm(testSonarUserHome, {
-    recursive: true,
-    force: true,
-    maxRetries: IS_WINDOWS ? 15 : 5,
-    retryDelay: IS_WINDOWS ? 200 : 100,
-  }).catch(() => {});
-  if (previousSonarUserHome === undefined) {
-    delete process.env[ENV_SONAR_USER_HOME];
-  } else {
-    process.env[ENV_SONAR_USER_HOME] = previousSonarUserHome;
-  }
-});
+useTempSonarUserHome('cli-stats-store-test-');
 
 function readEvents(): Array<{
   timestamp_ms: number;

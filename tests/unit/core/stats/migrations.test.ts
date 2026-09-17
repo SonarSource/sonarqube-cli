@@ -25,7 +25,7 @@ import {
   applyMigrations,
   applyStatsMigrations,
   type StatsMigration,
-} from '@/core/stats/stats-migrations.ts';
+} from '@/core/stats/migrations.ts';
 
 function userVersion(db: Database): number {
   return (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;

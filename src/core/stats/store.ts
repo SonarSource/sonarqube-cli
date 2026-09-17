@@ -20,7 +20,7 @@
 
 import type { Database } from 'bun:sqlite';
 
-import { openStatsDb } from './stats-db.ts';
+import { openStatsDb } from './db.ts';
 
 export type StatsAnalyzer = 'sonar-secrets' | 'sqaa' | 'sca-scanner-cli';
 
