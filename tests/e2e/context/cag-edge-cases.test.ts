@@ -37,6 +37,10 @@ import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatur
 import type { CliState } from '@/core/state/state.ts';
 
 import { version as CURRENT_CLI_VERSION } from '../../../package.json';
+import {
+  POST_UPDATE_CAG_TIMEOUT_MS,
+  POST_UPDATE_TRIGGER_COMMAND,
+} from '../../_common/isolated-cli-env.js';
 import { TestHarness } from '../../integration/harness';
 import {
   CLAUDE_SKILL_RELATIVE_PATH,
@@ -53,7 +57,6 @@ import {
 } from './_helpers';
 
 const DEFAULT_TIMEOUT_MS = 180_000;
-const POST_UPDATE_TIMEOUT_MS = 150_000;
 
 setDefaultTimeout(DEFAULT_TIMEOUT_MS);
 
@@ -77,7 +80,9 @@ describe('sonar-context-augmentation post-update edge cases (offline, real binar
       skills: [{ agentId: 'claude', projectRoot: missingRoot }],
     });
 
-    const result = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
+    const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND, {
+      timeoutMs: POST_UPDATE_CAG_TIMEOUT_MS,
+    });
     expect(result.exitCode, result.stderr).toBe(0);
 
     expect(existsSync(cagBinaryPath), 'binary should not be downloaded for a deleted project').toBe(
@@ -119,7 +124,9 @@ describe('sonar-context-augmentation post-update edge cases (offline, real binar
     const skillPathA = seedLegacySkillFile(projectA, 'claude', '# stale skill A\n');
     const skillPathB = seedLegacySkillFile(projectB, 'claude', '# stale skill B\n');
 
-    const result = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
+    const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND, {
+      timeoutMs: POST_UPDATE_CAG_TIMEOUT_MS,
+    });
     expect(result.exitCode, result.stderr).toBe(0);
 
     expect(existsSync(skillPathA)).toBe(false);
@@ -158,7 +165,9 @@ describe('sonar-context-augmentation post-update edge cases (offline, real binar
       skills: [{ agentId: 'claude', projectRoot: harness.cwd.path }],
     });
 
-    const result = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
+    const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND, {
+      timeoutMs: POST_UPDATE_CAG_TIMEOUT_MS,
+    });
     expect(result.exitCode, result.stderr).toBe(0);
 
     expect(existsSync(cagBinaryPath), 'no binary should be downloaded on no-op').toBe(false);
@@ -192,7 +201,9 @@ describe('sonar-context-augmentation post-update edge cases (offline, real binar
       skills: [{ agentId: 'claude', projectRoot: harness.cwd.path }],
     });
 
-    const result = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
+    const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND, {
+      timeoutMs: POST_UPDATE_CAG_TIMEOUT_MS,
+    });
     expect(result.exitCode, result.stderr).toBe(0);
 
     expect(existsSync(cagBinaryPath), 'new versioned binary should be present').toBe(true);

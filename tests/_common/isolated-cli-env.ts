@@ -18,10 +18,19 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-/** Default env for spawned CLI processes in tests. */
+/** Defaults for spawning the CLI in tests: isolation env, plus shared invocation constants. */
 
 import { ENV_DO_NOT_TRACK } from '@/core/config-constants.ts';
 import { ENV_TELEMETRY_EGRESS, TELEMETRY_EGRESS_OFF } from '@/core/telemetry/egress.ts';
+
+/**
+ * Cheapest invocation that still reaches a command action, so the root `preAction`
+ * hook runs post-update migrations.
+ */
+export const POST_UPDATE_TRIGGER_COMMAND = '';
+
+/** Ceiling for a post-update run whose migration re-downloads the CAG binary. */
+export const POST_UPDATE_CAG_TIMEOUT_MS = 150_000;
 
 /**
  * Both switches are needed: a test asserting on telemetry must re-enable consent
