@@ -157,7 +157,7 @@ export class OrganizationsClient {
     return this.client
       .getOrNullIf404<OrganizationRecord[]>(
         endpoint,
-        { organizationKey },
+        { organizationKey, excludeEligibility: 'true' },
         this.client.apiHostFor(endpoint),
       )
       .match(

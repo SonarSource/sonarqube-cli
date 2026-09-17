@@ -178,6 +178,8 @@ describe('OrganizationsClient', () => {
       expect(url.origin).toBe(SONARCLOUD_API_URL);
       expect(url.pathname).toBe('/organizations/organizations');
       expect(url.searchParams.get('organizationKey')).toBe('my-org');
+      // Login validation discards eligibility data, so it must not ask the API to compute it.
+      expect(url.searchParams.get('excludeEligibility')).toBe('true');
     });
 
     it('reports a server error as check_failed rather than as a missing organization', async () => {
