@@ -398,9 +398,33 @@ jobs:
 
   unit-tests-windows:
     name: Unit Tests - windows
-    runs-on: warp-custom-windows-2022-s
+    runs-on: warp-custom-pr-476-windows-2022-base-v20260917063655
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: PREQ-8731 tar PATH smoke
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tarSrc = (Get-Command tar.exe).Source
+          Write-Host "tar.exe=$tarSrc"
+          if ($tarSrc -notlike '*System32*') {
+            throw "tar.exe resolves to $tarSrc instead of System32"
+          }
+          $payload = Join-Path $env:TEMP 'preq-8731-tar-probe.txt'
+          $tarball = Join-Path $env:TEMP 'preq-8731-tar-probe.tgz'
+          'ok' | Set-Content -Path $payload
+          if (Test-Path $tarball) { Remove-Item -Path $tarball -Force }
+          & tar.exe -czf $tarball $payload
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $tarball)) {
+            throw "tar -czf with a drive-letter path failed (exit $LASTEXITCODE, tar=$tarSrc)"
+          }
+          Remove-Item -Path $payload, $tarball -Force -ErrorAction SilentlyContinue
+          $findVer = & find.exe --version 2>&1 | Select-Object -First 1
+          Write-Host "find.exe=$((Get-Command find.exe).Source) $findVer"
+          if ($findVer -notlike '*GNU find*') {
+            throw "find.exe is not GNU find: $findVer"
+          }
 
       - name: Vault Secrets
         id: secrets
@@ -448,7 +472,7 @@ jobs:
 
   integration-and-e2e-windows:
     name: Integration and E2E Tests - windows
-    runs-on: warp-custom-windows-2022-s
+    runs-on: warp-custom-pr-476-windows-2022-base-v20260917063655
     needs: [prepare, build-binaries]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
