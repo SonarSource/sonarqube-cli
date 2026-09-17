@@ -1043,6 +1043,10 @@ describe('integrate git --local (CLI-1118)', () => {
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
       initGitRepo(harness);
+      // Establish an inherited global core.hooksPath first, so this actually exercises the
+      // husky override winning over it, rather than trivially matching because neither is set.
+      const globalInstall = await harness.run('integrate git --hook pre-commit --non-interactive');
+      expect(globalInstall.exitCode).toBe(0);
       mkdirSync(join(harness.cwd.path, '.husky'), { recursive: true });
       Bun.spawnSync(['git', 'config', 'core.hooksPath', '.husky'], { cwd: harness.cwd.path });
 
@@ -1053,6 +1057,74 @@ describe('integrate git --local (CLI-1118)', () => {
       expect(localInstall.exitCode).toBe(0);
       const output = localInstall.stdout + localInstall.stderr;
       expect(output).not.toContain('takes precedence over');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'installs into the shared hooks dir from a linked worktree, never the global one',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+
+      const globalHookFile = ['.sonar', 'sonarqube-cli', 'hooks', 'pre-commit'];
+      const globalInstall = await harness.run('integrate git --hook pre-commit --non-interactive');
+      expect(globalInstall.exitCode).toBe(0);
+      const globalHookBefore = harness.userHome.file(...globalHookFile).asText();
+
+      // A worktree needs an existing commit to branch from.
+      setupGitUser(harness.cwd.path);
+      harness.cwd.writeFile('initial.js', 'const x = 1;\n');
+      Bun.spawnSync(['git', 'add', 'initial.js'], { cwd: harness.cwd.path });
+      Bun.spawnSync(['git', 'commit', '-m', 'initial'], { cwd: harness.cwd.path });
+
+      const worktreePath = join(harness.cwd.path, '..', 'linked-worktree');
+      const worktreeAdd = Bun.spawnSync(
+        ['git', 'worktree', 'add', worktreePath, '-b', 'linked-branch'],
+        { cwd: harness.cwd.path },
+      );
+      expect(worktreeAdd.exitCode).toBe(0);
+
+      // In the worktree, `.git` is a file, not a directory — this is exactly the case where
+      // the fallback resolver matters (`--git-common-dir`, never `--git-path hooks`, which
+      // would follow the inherited global core.hooksPath set above).
+      const localInstall = await harness.run(
+        'integrate git --local --hook pre-commit --non-interactive',
+        { cwd: worktreePath },
+      );
+
+      expect(localInstall.exitCode).toBe(0);
+      // The global hook must stay untouched — the whole point of --local.
+      expect(harness.userHome.file(...globalHookFile).asText()).toBe(globalHookBefore);
+      // The hook lands in the *shared* .git/hooks (common dir), reachable from either worktree.
+      expect(existsSync(join(harness.cwd.path, '.git', 'hooks', 'pre-commit'))).toBe(true);
+      expect(existsSync(join(worktreePath, '.git'))).toBe(true); // sanity: still a linked worktree
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'warns when a pre-commit-framework repo would also be shadowed by an inherited core.hooksPath',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+
+      // pre-commit-install writes straight into .git/hooks and never touches
+      // core.hooksPath, so an inherited global value shadows it exactly like plain native git.
+      const globalInstall = await harness.run('integrate git --hook pre-commit --non-interactive');
+      expect(globalInstall.exitCode).toBe(0);
+      harness.cwd.writeFile('.pre-commit-config.yaml', 'repos: []\n');
+
+      const localInstall = await harness.run(
+        'integrate git --local --hook pre-commit --non-interactive',
+      );
+
+      // The warning is printed before the pre-commit-framework activation step, which shells
+      // out to the real `pre-commit` binary (mocked instead in the unit suite — see
+      // git-precommit-framework.test.ts) and isn't guaranteed present here, so this only
+      // asserts on the warning itself, not the overall exit code.
+      const output = localInstall.stdout + localInstall.stderr;
+      expect(output).toContain('takes precedence over');
     },
     { timeout: 15000 },
   );
