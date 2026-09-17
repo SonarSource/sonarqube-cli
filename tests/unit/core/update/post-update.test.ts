@@ -23,13 +23,11 @@ import * as fs from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
 import { supportedIntegrations } from '@/commands/integrate';
-import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import * as hooks from '@/commands/integrate/claude/hooks.ts';
 import { AuthResolver } from '@/core/auth/auth-resolver.ts';
 import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { IntegrationRegistry } from '@/core/framework/features';
 import * as secretsInstall from '@/core/host/install/secrets.ts';
-import logger from '@/core/observability/logger.ts';
 import { okAsync } from '@/core/result.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
@@ -52,7 +50,6 @@ function makeDeps(): PostUpdateDependencies {
   authResolver.resolveAuth = () => okAsync(null);
   return {
     supportedIntegrations,
-    claudeIntegrationId: CLAUDE_INTEGRATION_ID,
     installHooks: hooks.installHooks,
     console,
     runtime: createCliRuntime({ authResolver, console, isAlphaEnabled: false }),
@@ -115,21 +112,28 @@ describe('runPostUpdateActions', () => {
     expect(saveStateSpy).not.toHaveBeenCalled();
   });
 
-  it('swallows and logs a throw when called through runPostUpdateActionsSafely', async () => {
+  it('swallows and warns on a throw when called through runPostUpdateActionsSafely', async () => {
     stateFileExistsSpy.mockImplementation(() => {
       throw new Error('state directory unreadable');
     });
-    const debugSpy = spyOn(logger, 'debug').mockImplementation(() => {});
+    const deps = makeDeps();
 
-    try {
-      await runPostUpdateActionsSafely(makeDeps());
+    await runPostUpdateActionsSafely(deps);
 
-      expect(debugSpy).toHaveBeenCalledWith(
-        'Post-update actions failed: state directory unreadable',
-      );
-    } finally {
-      debugSpy.mockRestore();
-    }
+    expect(
+      (deps.console as FakeConsole).findCall('warn', 'state directory unreadable'),
+    ).toBeDefined();
+  });
+
+  it('warns when post-update actions fail', async () => {
+    saveStateSpy.mockImplementation(() => {
+      throw new Error('state file is read-only');
+    });
+    const deps = makeDeps();
+
+    await runPostUpdateActions(deps);
+
+    expect((deps.console as FakeConsole).findCall('warn', 'state file is read-only')).toBeDefined();
   });
 
   it('does nothing when version is already up to date', async () => {

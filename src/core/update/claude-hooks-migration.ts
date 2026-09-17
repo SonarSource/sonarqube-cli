@@ -59,12 +59,11 @@ export type InstallHooksFn = (projectRoot: string, globalDir: string | undefined
  */
 export async function migrateClaudeCodeHooks(
   installHooksFn: InstallHooksFn,
-  claudeIntegrationId: string,
   homedirFn: () => string = homedir,
 ): Promise<void> {
   const state = loadState();
 
-  if (hasInstalledDeclarativeIntegration(state, claudeIntegrationId)) {
+  if (hasInstalledDeclarativeIntegration(state)) {
     logger.debug('Declarative Claude Code integration detected — skipping legacy hook migration');
     return;
   }
@@ -117,9 +116,9 @@ function resolveLocations(state: CliState, homedirFn: () => string): Location[] 
   return [];
 }
 
-function hasInstalledDeclarativeIntegration(state: CliState, integrationId: string): boolean {
+function hasInstalledDeclarativeIntegration(state: CliState): boolean {
   return state.integrations.installed.some(
-    (entry) => entry.integrationId === integrationId && entry.features.length > 0,
+    (entry) => entry.integrationId === 'claude-code' && entry.features.length > 0,
   );
 }
 

@@ -102,7 +102,6 @@ import { supportedIntegrations } from './integrate';
 import type { IntegrateAgentOptions } from './integrate/_common/types.ts';
 import { integrateAntigravity } from './integrate/antigravity';
 import { integrateClaude } from './integrate/claude';
-import { CLAUDE_INTEGRATION_ID } from './integrate/claude/declaration.ts';
 import { installHooks } from './integrate/claude/hooks.ts';
 import { integrateCodex } from './integrate/codex';
 import { integrateCopilot } from './integrate/copilot';
@@ -915,14 +914,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     if (state) initSentry(state);
   });
 
-  let postUpdateRan = false;
   COMMAND_TREE.hook('preAction', async () => {
-    if (postUpdateRan) return;
-    postUpdateRan = true;
     // Safely: a throw from a Commander hook would abort the user's command.
     await runPostUpdateActionsSafely({
       supportedIntegrations,
-      claudeIntegrationId: CLAUDE_INTEGRATION_ID,
       installHooks,
       console,
       runtime,

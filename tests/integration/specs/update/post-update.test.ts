@@ -38,6 +38,7 @@ import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-ty
 import type { CliState, InstalledIntegrationFeature } from '@/core/state/state.ts';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
+import { POST_UPDATE_TRIGGER_COMMAND } from '../../../_common/isolated-cli-env.js';
 import { hookScriptName, IS_WINDOWS, TestHarness } from '../../harness';
 import { expectVortexHookInstalled, readCagInvocations } from '../../harness/cag-helpers';
 
@@ -211,7 +212,7 @@ describe('post-update migration', () => {
         }),
       );
 
-      const result = await harness.runToTriggerPostUpdate();
+      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
 
       expect(result.exitCode).toBe(0);
       const state = harness.stateJsonFile.asJson() as CliState;
@@ -251,7 +252,7 @@ describe('post-update migration', () => {
       // crash the CLI or overwrite the file.
       harness.state().withRawState('not-valid-json');
 
-      const result = await harness.runToTriggerPostUpdate();
+      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
 
       expect(result.exitCode).toBe(0);
       expect(harness.stateJsonFile.asText()).toBe('not-valid-json');
@@ -313,7 +314,7 @@ describe('post-update migration', () => {
 
       harness.state().withRawState(JSON.stringify(staleState));
 
-      await harness.runToTriggerPostUpdate();
+      await harness.run(POST_UPDATE_TRIGGER_COMMAND);
 
       const state = harness.stateJsonFile.asJson();
       const extensions = state.agentExtensions as Array<{ name: string }>;
@@ -403,7 +404,7 @@ describe('post-update migration', () => {
       // Copies the current-version CAG stub into <cliHome>/bin so the stop step can spawn it.
       harness.state().withContextAugmentationBinaryInstalled();
 
-      await harness.runToTriggerPostUpdate();
+      await harness.run(POST_UPDATE_TRIGGER_COMMAND);
 
       const invocations = readCagInvocations(harness);
       expect(
@@ -426,7 +427,7 @@ describe('post-update migration', () => {
       );
       harness.state().withContextAugmentationBinaryInstalled();
 
-      const result = await harness.runToTriggerPostUpdate();
+      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
 
       expect(result.exitCode).toBe(0);
       const vortex = expectFullClaudeVortexMigration();
@@ -452,7 +453,7 @@ describe('post-update migration', () => {
       ]);
       harness.state().withContextAugmentationBinaryInstalled();
 
-      const result = await harness.runToTriggerPostUpdate();
+      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
 
       expect(result.exitCode).toBe(0);
       const state = harness.stateJsonFile.asJson() as CliState;
@@ -484,7 +485,7 @@ describe('post-update migration', () => {
       );
       harness.state().withContextAugmentationBinaryInstalled();
 
-      const result = await harness.runToTriggerPostUpdate();
+      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
 
       expect(result.exitCode).toBe(0);
       const state = harness.stateJsonFile.asJson() as CliState;
@@ -507,7 +508,7 @@ describe('post-update migration', () => {
       seedPreUnificationFeatures('claude-code', [SQAA_HOOK_FEATURE_ID], CAG_HOOK_ALLOWED_ORG_KEY);
       harness.state().withContextAugmentationBinaryInstalled();
 
-      const result = await harness.runToTriggerPostUpdate();
+      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
 
       expect(result.exitCode).toBe(0);
       const state = harness.stateJsonFile.asJson() as CliState;
@@ -534,7 +535,7 @@ describe('post-update migration', () => {
       ]);
       harness.state().withContextAugmentationBinaryInstalled();
 
-      const result = await harness.runToTriggerPostUpdate();
+      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
 
       expect(result.exitCode).toBe(0);
       const state = harness.stateJsonFile.asJson() as CliState;
@@ -563,7 +564,7 @@ describe('post-update migration', () => {
       ]);
       harness.state().withContextAugmentationBinaryInstalled();
 
-      const result = await harness.runToTriggerPostUpdate();
+      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
 
       expect(result.exitCode).toBe(0);
       const state = harness.stateJsonFile.asJson() as CliState;
@@ -592,7 +593,7 @@ describe('post-update migration', () => {
       ]);
       harness.state().withContextAugmentationBinaryInstalled();
 
-      const result = await harness.runToTriggerPostUpdate();
+      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
 
       expect(result.exitCode).toBe(0);
       const state = harness.stateJsonFile.asJson() as CliState;
@@ -622,7 +623,7 @@ describe('post-update migration', () => {
       seedPreUnificationFeatures('codex', [SQAA_HOOK_FEATURE_ID, CONTEXT_AUGMENTATION_FEATURE_ID]);
       harness.state().withContextAugmentationBinaryInstalled();
 
-      const result = await harness.runToTriggerPostUpdate();
+      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
 
       expect(result.exitCode).toBe(0);
       const state = harness.stateJsonFile.asJson() as CliState;
@@ -656,7 +657,7 @@ describe('post-update migration', () => {
       harness.state().withContextAugmentationBinaryInstalled();
       harness.cwd.writeFile('.claude/settings.json', '{ not json');
 
-      const result = await harness.runToTriggerPostUpdate();
+      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
 
       expect(result.exitCode).toBe(0);
       const state = harness.stateJsonFile.asJson() as CliState;
@@ -784,7 +785,7 @@ describe('post-update migration', () => {
         }),
       );
 
-      const result = await harness.runToTriggerPostUpdate();
+      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
 
       expect(result.exitCode).toBe(0);
       expect(harness.cwd.file(pretoolScriptRel).asText()).toContain(

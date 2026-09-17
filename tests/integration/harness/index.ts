@@ -235,23 +235,6 @@ export class TestHarness {
     }
   }
 
-  /** Ceiling for a post-update run that downloads the CAG binary. */
-  private static readonly CAG_POST_UPDATE_TIMEOUT_MS = 150_000;
-
-  /**
-   * Runs the cheapest CLI invocation that triggers post-update migrations.
-   * Pass `useCagTimeout` when the migration will re-download the CAG binary.
-   */
-  async runToTriggerPostUpdate(
-    options?: RunOptions & { useCagTimeout?: boolean },
-  ): Promise<CliResult> {
-    const { useCagTimeout, ...runOptions } = options ?? {};
-    return this.run('', {
-      timeoutMs: useCagTimeout ? TestHarness.CAG_POST_UPDATE_TIMEOUT_MS : undefined,
-      ...runOptions,
-    });
-  }
-
   /**
    * Dump stdin on a session and wait for exit. Use `waitText` + keystrokes for prompts.
    */

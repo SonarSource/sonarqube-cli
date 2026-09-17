@@ -52,8 +52,6 @@ import { migrateLegacyTelemetryEvents } from './telemetry-migration.ts';
 export interface PostUpdateDependencies {
   /** Full registry of declarative integrations (`@/commands/integrate`). */
   supportedIntegrations: IntegrationRegistry;
-  /** Claude Code's integration id (`@/commands/integrate/claude/declaration.ts`). */
-  claudeIntegrationId: string;
   /** Installs/refreshes Claude Code hook scripts (`@/commands/integrate/claude/hooks.ts`). */
   installHooks: InstallHooksFn;
   /** Process console created at CLI startup. */
@@ -99,7 +97,7 @@ export async function runPostUpdateActions(deps: PostUpdateDependencies): Promis
     cleanObsoleteFromState(state);
     saveState(state);
   } catch (error) {
-    logger.debug(`Post-update actions failed: ${(error as Error).message}`);
+    deps.console.warn(`Post-update actions failed: ${(error as Error).message}`);
   }
 }
 
@@ -107,7 +105,7 @@ export async function runPostUpdateActionsSafely(deps: PostUpdateDependencies): 
   try {
     await runPostUpdateActions(deps);
   } catch (error) {
-    logger.debug(`Post-update actions failed: ${(error as Error).message}`);
+    deps.console.warn(`Post-update actions failed: ${(error as Error).message}`);
   }
 }
 
@@ -116,7 +114,7 @@ async function runActions(deps: PostUpdateDependencies): Promise<void> {
   // Must run before migrateDeclarativeIntegrations
   migrateKnownServerKeyMappingsForProjectLevelFeatures();
   await migrateDeclarativeIntegrations(deps.supportedIntegrations, deps.console);
-  await migrateClaudeCodeHooks(deps.installHooks, deps.claudeIntegrationId);
+  await migrateClaudeCodeHooks(deps.installHooks);
   await updateSecretsBinaryIfNeeded(deps.console);
   await updateScaScannerBinaryIfNeeded(deps.console);
 }

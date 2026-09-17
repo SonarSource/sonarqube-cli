@@ -45,6 +45,10 @@ import { buildLocalCagBinaryName } from '@/core/host/install/context-augmentatio
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
 import type { CliState } from '@/core/state/state.ts';
 
+import {
+  POST_UPDATE_CAG_TIMEOUT_MS,
+  POST_UPDATE_TRIGGER_COMMAND,
+} from '../../_common/isolated-cli-env.js';
 import { TestHarness } from '../../integration/harness';
 import {
   expectSessionStartHookRefreshed,
@@ -82,7 +86,9 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
 
     seededSkillPath = seedLegacySkillFile(harness.cwd.path, 'claude', '# stale skill\n');
 
-    postUpdateResult = await harness.runToTriggerPostUpdate({ useCagTimeout: true });
+    postUpdateResult = await harness.run(POST_UPDATE_TRIGGER_COMMAND, {
+      timeoutMs: POST_UPDATE_CAG_TIMEOUT_MS,
+    });
   });
 
   afterAll(async () => {
@@ -166,7 +172,9 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
       // bumping state.
       rmSync(scriptPath);
 
-      refreshResult = await harness.runToTriggerPostUpdate({ useCagTimeout: true });
+      refreshResult = await harness.run(POST_UPDATE_TRIGGER_COMMAND, {
+        timeoutMs: POST_UPDATE_CAG_TIMEOUT_MS,
+      });
     });
 
     it('the simulated self-update exits successfully', () => {
