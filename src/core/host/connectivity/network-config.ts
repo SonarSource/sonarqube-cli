@@ -349,11 +349,8 @@ function matchesNoProxy(hostname: string, port: number, noProxy: string): boolea
     });
 }
 
-// Accepted forms: hostname, IPv4, unbracketed IPv6 (`::1`), and `[IPv6]:port` when
-// a port is set (curl/Go). IPv6 is canonicalized through the URL parser so expanded
-// and compressed spellings match. A naive last-`:digits` split would turn `::1`
-// into host `:` / port `1`.
 function parseNoProxyEntry(entry: string): { host: string; port: number } {
+  // `[IPv6]:port` is the only unambiguous host:port form; unbracketed IPv6 uses colons.
   const bracketedWithPort = /^\[([^\]]+)]:(\d+)$/.exec(entry);
   if (bracketedWithPort) {
     return {
