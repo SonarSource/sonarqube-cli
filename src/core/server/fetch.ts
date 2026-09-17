@@ -85,7 +85,7 @@ const MAX_REDIRECTS = 5;
  */
 export async function fetchAnonymous(url: string, init: RequestInit = {}): Promise<Response> {
   assertNoCredentialHeaders(init.headers);
-  return followRedirects(url, init);
+  return sendAndFollowRedirects(url, init);
 }
 
 function assertNoCredentialHeaders(headers: RequestInit['headers']): void {
@@ -114,10 +114,10 @@ function assertNoCredentialHeaders(headers: RequestInit['headers']): void {
  * reuses the proxy/TLS options computed for the original scheme.
  */
 export async function fetchAuthenticated(url: string, init: RequestInit): Promise<Response> {
-  return followRedirects(url, init, assertAllowedRedirect);
+  return sendAndFollowRedirects(url, init, assertAllowedRedirect);
 }
 
-async function followRedirects(
+async function sendAndFollowRedirects(
   url: string,
   init: RequestInit,
   onRedirect?: (fromUrl: string, redirectUrl: URL) => void,
