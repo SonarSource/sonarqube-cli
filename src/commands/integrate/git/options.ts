@@ -24,7 +24,9 @@ export interface IntegrateGitOptions {
   hook?: GitHookType;
   force?: boolean;
   nonInteractive?: boolean;
-  /** Project key baked into the dependency-risks hook for the project-scoped install path (CLI-1118). */
+  /** Installs the project-scoped hook instead of the global one. Hidden workaround flag (CLI-1118). */
+  local?: boolean;
+  /** Project key baked into the dependency-risks hook for the project-scoped install path. */
   project?: string;
   /** Set by the bare `sonar integrate` router; forwarded to telemetry only. */
   isFromRouter?: boolean;

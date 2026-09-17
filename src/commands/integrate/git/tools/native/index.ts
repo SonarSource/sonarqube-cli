@@ -29,7 +29,7 @@ import type {
   IntegrationDeclaration,
 } from '@/core/framework/features/types.ts';
 import { wholeFile, wholeFileRemover } from '@/core/framework/resources';
-import { resolveGitHooksDir } from '@/core/host/git/hooks.ts';
+import { resolveLocalGitHooksDir } from '@/core/host/git/hooks.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 
@@ -182,7 +182,7 @@ async function resolveNativeGitHookPath(
   if (context.scope === 'global') {
     return join(context.targetRoot, hook);
   }
-  return join(await resolveGitHooksDir(context.targetRoot), hook);
+  return join(await resolveLocalGitHooksDir(context.targetRoot), hook);
 }
 
 export {

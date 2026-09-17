@@ -29,7 +29,7 @@ import {
   integrateGit,
   type IntegrateGitOptions,
   isGitHookType,
-  resolveGitHooksDir,
+  resolveLocalGitHooksDir,
 } from '@/commands/integrate/git';
 import {
   getNativeHookMarker,
@@ -82,14 +82,14 @@ describe('hasMarker', () => {
   });
 });
 
-describe('resolveGitHooksDir', () => {
+describe('resolveLocalGitHooksDir', () => {
   it('returns <root>/.git/hooks when .git is a directory and core.hooksPath is not set', async () => {
     mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
 
     const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
 
     try {
-      const result = await resolveGitHooksDir(TEMP_DIR);
+      const result = await resolveLocalGitHooksDir(TEMP_DIR);
       expect(result).toBe(join(TEMP_DIR, '.git', 'hooks'));
     } finally {
       spawnSpy.mockRestore();
@@ -107,7 +107,7 @@ describe('resolveGitHooksDir', () => {
     });
 
     try {
-      const result = await resolveGitHooksDir(TEMP_DIR);
+      const result = await resolveLocalGitHooksDir(TEMP_DIR);
       expect(result).toBe(join(TEMP_DIR, '.husky'));
     } finally {
       spawnSpy.mockRestore();
@@ -128,7 +128,7 @@ describe('resolveGitHooksDir', () => {
 
     try {
       // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-      await expect(resolveGitHooksDir(TEMP_DIR)).rejects.toThrow(
+      await expect(resolveLocalGitHooksDir(TEMP_DIR)).rejects.toThrow(
         'Could not resolve git hooks directory (exit code 128)',
       );
     } finally {
@@ -137,21 +137,21 @@ describe('resolveGitHooksDir', () => {
     }
   });
 
-  it('returns absolute path from git rev-parse as-is when it starts with /', async () => {
+  it('returns absolute common dir joined with hooks when it starts with /', async () => {
     mkdirSync(TEMP_DIR, { recursive: true });
     writeFileSync(join(TEMP_DIR, '.git'), 'gitdir: /abs/.git/worktrees/foo\n');
 
     const spawnSpy = spyOn(processLib, 'spawnProcess')
-      .mockResolvedValueOnce(NO_HOOKS_PATH) // git config core.hooksPath → not set
+      .mockResolvedValueOnce(NO_HOOKS_PATH) // git config --local core.hooksPath → not set
       .mockResolvedValueOnce({
         exitCode: 0,
-        stdout: '/abs/.git/worktrees/foo/hooks\n',
+        stdout: '/abs/.git\n',
         stderr: '',
-      }); // git rev-parse
+      }); // git rev-parse --git-common-dir
 
     try {
-      const result = await resolveGitHooksDir(TEMP_DIR);
-      expect(result).toBe('/abs/.git/worktrees/foo/hooks');
+      const result = await resolveLocalGitHooksDir(TEMP_DIR);
+      expect(result).toBe('/abs/.git/hooks');
       expect(isAbsolute(result)).toBe(true);
     } finally {
       spawnSpy.mockRestore();
@@ -159,39 +159,40 @@ describe('resolveGitHooksDir', () => {
     }
   });
 
-  it('joins relative path from git rev-parse with root when it does not start with /', async () => {
+  it('joins relative common dir from git rev-parse with root when it does not start with /', async () => {
     mkdirSync(TEMP_DIR, { recursive: true });
     writeFileSync(join(TEMP_DIR, '.git'), 'gitdir: .git/worktrees/foo\n');
 
     const spawnSpy = spyOn(processLib, 'spawnProcess')
-      .mockResolvedValueOnce(NO_HOOKS_PATH) // git config core.hooksPath → not set
-      .mockResolvedValueOnce({ exitCode: 0, stdout: '.git/worktrees/foo/hooks\n', stderr: '' }); // git rev-parse
+      .mockResolvedValueOnce(NO_HOOKS_PATH) // git config --local core.hooksPath → not set
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '.git\n', stderr: '' }); // git rev-parse --git-common-dir
 
     try {
-      const result = await resolveGitHooksDir(TEMP_DIR);
-      expect(result).toBe(join(TEMP_DIR, '.git/worktrees/foo/hooks'));
+      const result = await resolveLocalGitHooksDir(TEMP_DIR);
+      expect(result).toBe(join(TEMP_DIR, '.git', 'hooks'));
     } finally {
       spawnSpy.mockRestore();
       rmSync(TEMP_DIR, { recursive: true, force: true });
     }
   });
 
-  it('returns the path from git rev-parse when .git is a file (worktree)', async () => {
+  it('uses --git-common-dir (never --git-path hooks) when .git is a file (worktree)', async () => {
     mkdirSync(TEMP_DIR, { recursive: true });
     writeFileSync(join(TEMP_DIR, '.git'), 'gitdir: /some/real/.git/worktrees/foo\n');
 
     const spawnSpy = spyOn(processLib, 'spawnProcess')
-      .mockResolvedValueOnce(NO_HOOKS_PATH) // git config core.hooksPath → not set
+      .mockResolvedValueOnce(NO_HOOKS_PATH) // git config --local core.hooksPath → not set
       .mockResolvedValueOnce({
         exitCode: 0,
-        stdout: '/some/real/.git/worktrees/foo/hooks\n',
+        stdout: '/some/real/.git\n',
         stderr: '',
-      }); // git rev-parse
+      }); // git rev-parse --git-common-dir
 
     try {
-      const result = await resolveGitHooksDir(TEMP_DIR);
-      expect(result).toBe('/some/real/.git/worktrees/foo/hooks');
-      expect(spawnSpy).toHaveBeenCalledWith('git', ['rev-parse', '--git-path', 'hooks'], {
+      const result = await resolveLocalGitHooksDir(TEMP_DIR);
+      expect(result).toBe('/some/real/.git/hooks');
+      // --git-common-dir never follows an inherited core.hooksPath, unlike --git-path hooks.
+      expect(spawnSpy).toHaveBeenCalledWith('git', ['rev-parse', '--git-common-dir'], {
         cwd: TEMP_DIR,
       });
     } finally {
