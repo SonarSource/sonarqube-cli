@@ -84,9 +84,13 @@ describe('downloadCompileTargetExecutable()', () => {
     cleanups.push(() => rmSync(staging, { recursive: true, force: true }));
     mkdirSync(join(staging, 'package', 'bin'), { recursive: true });
     writeFileSync(join(staging, 'package', 'bin', 'bun'), 'fake-bun-runtime');
+    // GNU tar treats `C:` as a remote host; keep the archive name relative.
+    const packed = Bun.spawnSync(['tar', '-czf', 'pkg.tgz', 'package'], {
+      cwd: staging,
+      stderr: 'pipe',
+    });
+    expect(packed.exitCode, packed.stderr.toString()).toBe(0);
     const tarballPath = join(staging, 'pkg.tgz');
-    const packed = Bun.spawnSync(['tar', '-czf', tarballPath, '-C', staging, 'package']);
-    expect(packed.exitCode).toBe(0);
 
     const server = Bun.serve({
       hostname: '127.0.0.1',
