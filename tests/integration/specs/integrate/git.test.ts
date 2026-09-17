@@ -868,3 +868,119 @@ describe('integrate git (native hooks)', () => {
     { timeout: 15000 },
   );
 });
+
+describe('integrate git --local (CLI-1118)', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'is hidden from --help',
+    async () => {
+      const result = await harness.run('integrate git --help');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain('--local');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'fails when run outside a git repository',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+
+      const result = await harness.run('integrate git --local --non-interactive');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('No git repository found');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'installs a project-scoped native hook when neither husky nor pre-commit is in use',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+
+      const result = await harness.run('integrate git --local --hook pre-commit --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Setup complete!');
+      expect(harness.cwd.exists('.git', 'hooks', 'pre-commit')).toBe(true);
+      expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-commit')).toBe(false);
+
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const gitIntegration = getInstalledIntegration(state, 'native-git');
+      expect(gitIntegration.features[0].scope).toBe('project');
+      expect(gitIntegration.features[0].targetRoot).toBe(harness.cwd.path);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'installs the husky integration when core.hooksPath points to .husky',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+      mkdirSync(join(harness.cwd.path, '.husky'), { recursive: true });
+      Bun.spawnSync(['git', 'config', 'core.hooksPath', '.husky'], { cwd: harness.cwd.path });
+
+      const result = await harness.run('integrate git --local --hook pre-commit --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const huskyIntegration = getInstalledIntegration(state, 'husky');
+      expect(huskyIntegration.features[0].scope).toBe('project');
+    },
+    { timeout: 15000 },
+  );
+
+  // Pre-commit-framework detection (.pre-commit-config.yaml present) is deliberately not
+  // covered here: activating it shells out to the real `pre-commit` binary, which isn't
+  // guaranteed to be installed in every dev/CI environment — the same reason its install
+  // mechanics are unit-tested with a mocked spawnProcess in
+  // tests/unit/commands/integrate/git/git-precommit-framework.test.ts instead. The routing
+  // logic that picks it (resolveGitIntegrationId) is unchanged by --local and already
+  // exercised for the husky case above.
+
+  it(
+    'bakes the discovered project key into the hook attrs',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+      harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=my-project\n');
+
+      const result = await harness.run('integrate git --local --hook pre-commit --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const gitIntegration = getInstalledIntegration(state, 'native-git');
+      expect(gitIntegration.features[0].attrs).toMatchObject({ projectKey: 'my-project' });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'still installs globally by default when --local is omitted',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+
+      const result = await harness.run('integrate git --hook pre-commit --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const gitIntegration = getInstalledIntegration(state, 'native-git');
+      expect(gitIntegration.features[0].scope).toBe('global');
+    },
+    { timeout: 15000 },
+  );
+});

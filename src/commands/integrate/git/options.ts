@@ -24,6 +24,8 @@ export interface IntegrateGitOptions {
   hook?: GitHookType;
   force?: boolean;
   nonInteractive?: boolean;
+  /** Installs the project-scoped hook instead of the global one. Hidden workaround flag. */
+  local?: boolean;
   /** Project key baked into the dependency-risks hook for the project-scoped install path. */
   project?: string;
   /** Set by the bare `sonar integrate` router; forwarded to telemetry only. */

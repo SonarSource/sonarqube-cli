@@ -28,6 +28,7 @@ import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { GLOBAL_HOOKS_DIR } from '@/core/config-constants.ts';
 import { installIntegration } from '@/core/framework/features';
+import { findGitRoot } from '@/core/host/git/discover.ts';
 import { GitRepo, resolveGitHooksDir } from '@/core/host/git/hooks.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import { discoverProject } from '@/core/project-info.ts';
@@ -36,6 +37,7 @@ import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/ag
 import { type Console, phaseItem } from '@/core/ui/console.ts';
 
 import { recordIntegrationConfigured } from '../_common/integrate-telemetry.ts';
+import { printGitPreflightSummary } from '../_common/preflight-summary.ts';
 import { supportedIntegrations } from '../index.ts';
 import type { GitHookType, IntegrateGitOptions } from './options.ts';
 import {
@@ -144,6 +146,30 @@ async function integrateGitGlobal(
   await installGitFeatures(options, GLOBAL_HOOKS_DIR, 'global', auth, ctx);
 }
 
+/**
+ * `--local` workaround for setups where a global hook doesn't fit (e.g. an
+ * existing Husky config): installs the hook for the current repository only.
+ */
+async function integrateGitLocal(
+  options: IntegrateGitOptions,
+  auth: ResolvedAuth,
+  ctx: CommandAuthenticatedInvocationContext,
+): Promise<void> {
+  const { console } = ctx;
+  const { gitRoot, isGit } = findGitRoot(process.cwd());
+  if (!isGit) {
+    throw new CommandFailedError('No git repository found.', {
+      remediationHint: 'Run this command from inside a git repository, or omit --local.',
+    });
+  }
+
+  await printGitPreflightSummary(gitRoot, console);
+  console.blank();
+
+  const resolvedOptions = await resolveProjectKey(options, gitRoot, auth, console);
+  await installGitFeatures(resolvedOptions, gitRoot, 'project', auth, ctx);
+}
+
 export async function integrateGit(
   options: IntegrateGitOptions,
   ctx: CommandAuthenticatedInvocationContext,
@@ -161,10 +187,13 @@ export async function integrateGit(
   );
   console.info(yellow('Some scan types may be unavailable for certain hook types.'));
 
+  if (options.local) {
+    return integrateGitLocal(options, auth, ctx);
+  }
+
   return integrateGitGlobal(options, auth, ctx);
 }
 
-/** Unused by the global-only flow above; kept so a future project-scoped install path can resolve a project key the same way. */
 export async function resolveProjectKey(
   options: IntegrateGitOptions,
   root: string,
