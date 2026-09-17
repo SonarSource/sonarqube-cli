@@ -332,7 +332,7 @@ function tryParseUrl(url: string): URL | null {
 }
 
 function matchesNoProxy(hostname: string, port: number, noProxy: string): boolean {
-  const h = hostname.toLowerCase();
+  const h = stripIpv6Brackets(hostname).toLowerCase();
   if (noProxy.toLowerCase() === '*') {
     return true;
   }
@@ -349,12 +349,35 @@ function matchesNoProxy(hostname: string, port: number, noProxy: string): boolea
     });
 }
 
+// curl and Go accept unbracketed IPv6 (`::1`) and `[IPv6]:port` only when a port
+// is set. A naive last-`:digits` split would turn `::1` into host `:` / port `1`.
 function parseNoProxyEntry(entry: string): { host: string; port: number } {
+  const bracketedWithPort = /^\[([^\]]+)]:(\d+)$/.exec(entry);
+  if (bracketedWithPort) {
+    return {
+      host: bracketedWithPort[1].toLowerCase(),
+      port: Number.parseInt(bracketedWithPort[2]),
+    };
+  }
+
+  const host = stripIpv6Brackets(entry).toLowerCase();
+  if (isIpv6Literal(host)) {
+    return { host, port: 0 };
+  }
+
   const withPort = /^(.+):(\d+)$/.exec(entry);
   return {
     host: (withPort ? withPort[1] : entry).toLowerCase(),
     port: withPort ? Number.parseInt(withPort[2]) : 0,
   };
+}
+
+function stripIpv6Brackets(host: string): string {
+  return host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
+}
+
+function isIpv6Literal(host: string): boolean {
+  return host.includes('::') || host.split(':').length > 2;
 }
 
 function normalizeHostPattern(host: string): string {
