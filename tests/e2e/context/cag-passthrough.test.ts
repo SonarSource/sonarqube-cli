@@ -29,6 +29,10 @@ import { mkdirSync } from 'node:fs';
 
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
+import {
+  POST_UPDATE_CAG_TIMEOUT_MS,
+  POST_UPDATE_TRIGGER_COMMAND,
+} from '../../_common/isolated-cli-env.js';
 import { TestHarness } from '../../integration/harness';
 import {
   ALLOWLISTED_CAG_ORG_KEY,
@@ -39,7 +43,6 @@ import {
 } from './_helpers';
 
 const DEFAULT_TIMEOUT_MS = 180_000;
-const POST_UPDATE_TIMEOUT_MS = 150_000;
 const PASSTHROUGH_TIMEOUT_MS = 30_000;
 const TEST_TOKEN = 'offline-e2e-token';
 
@@ -95,7 +98,9 @@ describe('sonar-context-augmentation passthrough behaviors (offline, real binary
       SONARQUBE_CLI_SERVER: server.baseUrl(),
       SONARQUBE_CLI_ORG: ALLOWLISTED_CAG_ORG_KEY,
     };
-    const install = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
+    const install = await harness.run(POST_UPDATE_TRIGGER_COMMAND, {
+      timeoutMs: POST_UPDATE_CAG_TIMEOUT_MS,
+    });
     expect(install.exitCode, install.stderr).toBe(0);
   });
 

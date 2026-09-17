@@ -23,27 +23,36 @@ import * as fs from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
 import { supportedIntegrations } from '@/commands/integrate';
-import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import * as hooks from '@/commands/integrate/claude/hooks.ts';
+import { AuthResolver } from '@/core/auth/auth-resolver.ts';
+import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { IntegrationRegistry } from '@/core/framework/features';
 import * as secretsInstall from '@/core/host/install/secrets.ts';
+import { okAsync } from '@/core/result.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import * as migration from '@/core/update/claude-hooks-migration.ts';
 import type { PostUpdateDependencies } from '@/core/update/post-update.ts';
-import { migrateDeclarativeIntegrations, runPostUpdateActions } from '@/core/update/post-update.ts';
+import {
+  migrateDeclarativeIntegrations,
+  runPostUpdateActions,
+  runPostUpdateActionsSafely,
+} from '@/core/update/post-update.ts';
 import * as versionLib from '@/core/version.ts';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
 function makeDeps(): PostUpdateDependencies {
+  const console = new FakeConsole();
+  const authResolver = new AuthResolver();
+  authResolver.resolveAuth = () => okAsync(null);
   return {
     supportedIntegrations,
-    claudeIntegrationId: CLAUDE_INTEGRATION_ID,
     installHooks: hooks.installHooks,
-    console: new FakeConsole(),
+    console,
+    runtime: createCliRuntime({ authResolver, console, isAlphaEnabled: false }),
   };
 }
 
@@ -101,6 +110,30 @@ describe('runPostUpdateActions', () => {
 
     expect(loadStateSpy).not.toHaveBeenCalled();
     expect(saveStateSpy).not.toHaveBeenCalled();
+  });
+
+  it('swallows and warns on a throw when called through runPostUpdateActionsSafely', async () => {
+    stateFileExistsSpy.mockImplementation(() => {
+      throw new Error('state directory unreadable');
+    });
+    const deps = makeDeps();
+
+    await runPostUpdateActionsSafely(deps);
+
+    expect(
+      (deps.console as FakeConsole).findCall('warn', 'state directory unreadable'),
+    ).toBeDefined();
+  });
+
+  it('warns when post-update actions fail', async () => {
+    saveStateSpy.mockImplementation(() => {
+      throw new Error('state file is read-only');
+    });
+    const deps = makeDeps();
+
+    await runPostUpdateActions(deps);
+
+    expect((deps.console as FakeConsole).findCall('warn', 'state file is read-only')).toBeDefined();
   });
 
   it('does nothing when version is already up to date', async () => {
