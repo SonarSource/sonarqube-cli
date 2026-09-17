@@ -47,7 +47,7 @@ const HELP_TIMEOUT_MS = 30_000;
 
 setDefaultTimeout(DEFAULT_TIMEOUT_MS);
 
-describe('sonar-context-augmentation production CDN smoke (real binary, no SonarQube)', () => {
+describe('sonar-context-augmentation production CDN smoke', () => {
   let harness: TestHarness;
   let cagBinaryPath: string;
   let postUpdateResult: { exitCode: number; stdout: string; stderr: string };
