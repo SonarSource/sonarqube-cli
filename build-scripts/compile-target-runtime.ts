@@ -105,7 +105,9 @@ export async function downloadCompileTargetExecutable(options: {
     const tarballPath = join(extractDir, 'bun.tgz');
     await Bun.write(tarballPath, response);
 
-    const extracted = Bun.spawnSync(['tar', '-xzf', tarballPath, '-C', extractDir], {
+    // GNU tar treats `C:` as a remote host; keep the archive name relative.
+    const extracted = Bun.spawnSync(['tar', '-xzf', 'bun.tgz'], {
+      cwd: extractDir,
       stderr: 'pipe',
     });
     if (extracted.exitCode !== 0) {
