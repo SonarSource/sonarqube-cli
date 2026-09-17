@@ -29,7 +29,11 @@ import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invo
 import { GLOBAL_HOOKS_DIR } from '@/core/config-constants.ts';
 import { installIntegration } from '@/core/framework/features';
 import { findGitRoot } from '@/core/host/git/discover.ts';
-import { GitRepo, resolveLocalGitHooksDir } from '@/core/host/git/hooks.ts';
+import {
+  GitRepo,
+  resolveEffectiveGitHooksDir,
+  resolveLocalGitHooksDir,
+} from '@/core/host/git/hooks.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { yellow } from '@/core/ui/colors.ts';
@@ -143,7 +147,14 @@ async function integrateGitGlobal(
   }
   console.blank();
 
-  await installGitFeatures(options, GLOBAL_HOOKS_DIR, 'global', auth, ctx);
+  await installGitFeatures(
+    options,
+    GLOBAL_HOOKS_DIR,
+    'global',
+    NATIVE_GIT_INTEGRATION_ID,
+    auth,
+    ctx,
+  );
 }
 
 /**
@@ -166,8 +177,43 @@ async function integrateGitLocal(
   await printGitPreflightSummary(gitRoot, console);
   console.blank();
 
+  const integrationId = await resolveGitIntegrationId(gitRoot, 'project');
+  await warnIfLocalHookWouldBeShadowed(integrationId, gitRoot, console);
+
   const resolvedOptions = await resolveProjectKey(options, gitRoot, auth, console);
-  await installGitFeatures(resolvedOptions, gitRoot, 'project', auth, ctx);
+  await installGitFeatures(resolvedOptions, gitRoot, 'project', integrationId, auth, ctx);
+}
+
+/**
+ * `--local` never follows an inherited core.hooksPath (`resolveLocalGitHooksDir`), so it can't
+ * overwrite a global install — but git itself still prefers that inherited value over
+ * `.git/hooks`, which would leave the hook this installs unreachable. Husky and the pre-commit
+ * framework already set their own local override, so `resolveLocalGitHooksDir` matches what git
+ * actually uses for them; only the plain-native-git case can diverge.
+ */
+async function warnIfLocalHookWouldBeShadowed(
+  integrationId: GitIntegrationId,
+  gitRoot: string,
+  console: Console,
+): Promise<void> {
+  if (integrationId !== NATIVE_GIT_INTEGRATION_ID) {
+    return;
+  }
+
+  const [localHooksDir, effectiveHooksDir] = await Promise.all([
+    resolveLocalGitHooksDir(gitRoot),
+    resolveEffectiveGitHooksDir(gitRoot),
+  ]);
+  if (normalizePath(localHooksDir) === normalizePath(effectiveHooksDir)) {
+    return;
+  }
+
+  console.warn(
+    `An inherited core.hooksPath (${effectiveHooksDir}) takes precedence over ${localHooksDir}, ` +
+      'so the hook --local installs here will not run until this repository overrides it:',
+  );
+  console.text(`    git config --local core.hooksPath ${localHooksDir}`);
+  console.blank();
 }
 
 export async function integrateGit(
@@ -223,10 +269,10 @@ async function installGitFeatures(
   options: IntegrateGitOptions,
   targetRoot: string,
   scope: 'project' | 'global',
+  integrationId: GitIntegrationId,
   auth: ResolvedAuth,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const integrationId = await resolveGitIntegrationId(targetRoot, scope);
   await installIntegration({
     registry: supportedIntegrations,
     integrationId,

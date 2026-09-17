@@ -37,11 +37,26 @@ export const PRE_COMMIT_CONFIG_FILE = '.pre-commit-config.yaml';
  * repo-scoped install must not follow (or overwrite) a hooks path configured for every repo.
  */
 export async function resolveLocalGitHooksDir(root: string): Promise<string> {
+  return resolveGitHooksDirWithConfigScope(root, ['config', '--local', 'core.hooksPath']);
+}
+
+/**
+ * Resolves the directory git will *actually* use for hooks in this repo right now — the
+ * effective `core.hooksPath` (local, else inherited global/system), else `.git/hooks`. Only
+ * for diagnostics (e.g. warning that a `--local` install is shadowed by an inherited value);
+ * installing a hook must always target {@link resolveLocalGitHooksDir} instead.
+ */
+export async function resolveEffectiveGitHooksDir(root: string): Promise<string> {
+  return resolveGitHooksDirWithConfigScope(root, ['config', 'core.hooksPath']);
+}
+
+async function resolveGitHooksDirWithConfigScope(
+  root: string,
+  configCommand: string[],
+): Promise<string> {
   let configResult;
   try {
-    configResult = await spawnProcess('git', ['config', '--local', 'core.hooksPath'], {
-      cwd: root,
-    });
+    configResult = await spawnProcess('git', configCommand, { cwd: root });
   } catch {
     configResult = null;
   }

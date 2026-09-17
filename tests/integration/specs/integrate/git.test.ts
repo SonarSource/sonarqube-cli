@@ -1014,4 +1014,46 @@ describe('integrate git --local (CLI-1118)', () => {
     },
     { timeout: 15000 },
   );
+
+  it(
+    'warns that the local hook is shadowed by an inherited global core.hooksPath',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+
+      const globalInstall = await harness.run('integrate git --hook pre-commit --non-interactive');
+      expect(globalInstall.exitCode).toBe(0);
+
+      // No repo-local core.hooksPath is set — only the global one from the install above,
+      // so the hook --local installs at .git/hooks will never actually run.
+      const localInstall = await harness.run(
+        'integrate git --local --hook pre-commit --non-interactive',
+      );
+
+      expect(localInstall.exitCode).toBe(0);
+      const output = localInstall.stdout + localInstall.stderr;
+      expect(output).toContain('takes precedence over');
+      expect(output).toContain('git config --local core.hooksPath');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'does not warn when --local resolves to a husky hooks dir (repo-local override already matches)',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+      mkdirSync(join(harness.cwd.path, '.husky'), { recursive: true });
+      Bun.spawnSync(['git', 'config', 'core.hooksPath', '.husky'], { cwd: harness.cwd.path });
+
+      const localInstall = await harness.run(
+        'integrate git --local --hook pre-commit --non-interactive',
+      );
+
+      expect(localInstall.exitCode).toBe(0);
+      const output = localInstall.stdout + localInstall.stderr;
+      expect(output).not.toContain('takes precedence over');
+    },
+    { timeout: 15000 },
+  );
 });
