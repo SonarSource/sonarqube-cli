@@ -477,9 +477,13 @@ export class FakeSonarQubeServerBuilder {
   private systemVersion = '25.1.0.102122';
   private memberOrganizations: Organization[] = [];
   private memberOrganizationsTotal?: number;
-  // The default Cloud fixture is resolvable by key but is not a membership.
-  // Other organization keys return 404 unless a test configures them.
-  private visibleOrganizations: Organization[] = [{ key: 'my-org', name: 'My Org' }];
+  // The default Cloud fixture answers `/organizations/organizations` only: it is neither a
+  // membership nor visible to the v1 `organizations=` search, so seeding it leaves every
+  // pre-existing v1 expectation untouched. Other keys return 404 unless a test configures them.
+  private readonly defaultResolvableOrganizations: Organization[] = [
+    { key: 'my-org', name: 'My Org' },
+  ];
+  private visibleOrganizations: Organization[] = [];
   private readonly dopRepositoriesByOrgId: Map<string, DopRepositoryConfig[]> = new Map();
   /** Keyed by org legacy id, for `GET /dop-translation/organization-bindings`. */
   private readonly organizationBindingsByOrgId: Map<string, string> = new Map();
@@ -498,7 +502,7 @@ export class FakeSonarQubeServerBuilder {
   private agentJobErrorCode?: number;
   private agentJobErrorMessage?: string;
   private remediationAgentEntitlement = { eligible: true, delegateIssuesEnabled: true };
-  private orgsLookupReturnsEmpty = false;
+  private orgsLookupReturnsNotFound = false;
   private orgsLookupErrorCode?: number;
   private organizationsSearchErrorCode?: number;
   private organizationBindingsErrorCode?: number;
@@ -613,9 +617,9 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
-  /** Make `/organizations/organizations` return 404 for an organization-key lookup. */
+  /** Make `/organizations/organizations` answer every lookup with 404, keyed or not. */
   withMissingOrg(): this {
-    this.orgsLookupReturnsEmpty = true;
+    this.orgsLookupReturnsNotFound = true;
     return this;
   }
 
@@ -850,6 +854,7 @@ export class FakeSonarQubeServerBuilder {
       memberOrganizations,
       memberOrganizationsTotal: rawMemberOrganizationsTotal,
       visibleOrganizations,
+      defaultResolvableOrganizations,
       dopRepositoriesByOrgId,
       organizationBindingsByOrgId,
       revokeTokenStatusCode,
@@ -871,7 +876,7 @@ export class FakeSonarQubeServerBuilder {
       agentJobErrorMessage,
       serverMode,
       remediationAgentEntitlement,
-      orgsLookupReturnsEmpty,
+      orgsLookupReturnsNotFound,
       orgsLookupErrorCode,
       organizationsSearchErrorCode,
       organizationBindingsErrorCode,
@@ -1498,7 +1503,7 @@ export class FakeSonarQubeServerBuilder {
               headers: { 'Content-Type': 'application/json' },
             });
           }
-          if (orgsLookupReturnsEmpty) {
+          if (orgsLookupReturnsNotFound) {
             return new Response(JSON.stringify({ message: 'Organization is not found' }), {
               status: 404,
               headers: { 'Content-Type': 'application/json' },
@@ -1517,9 +1522,11 @@ export class FakeSonarQubeServerBuilder {
             );
           }
           if (orgKey) {
-            const organization = [...memberOrganizations, ...visibleOrganizations].find(
-              ({ key }) => key === orgKey,
-            );
+            const organization = [
+              ...memberOrganizations,
+              ...visibleOrganizations,
+              ...defaultResolvableOrganizations,
+            ].find(({ key }) => key === orgKey);
             if (!organization) {
               return new Response(
                 JSON.stringify({ message: `Organization with key ${orgKey} is not found` }),

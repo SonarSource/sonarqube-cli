@@ -166,7 +166,7 @@ describe('sonar import', () => {
       async () => {
         const server = await harness.newFakeServer().withAuthToken('test-token').start();
         const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token', 'unknown-org');
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
         const result = await harness.run('import', {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
@@ -174,7 +174,7 @@ describe('sonar import', () => {
 
         expect(result.exitCode).toBe(1);
         const output = result.stdout + result.stderr;
-        expect(output).toContain("Organization 'unknown-org' not found.");
+        expect(output).toContain("Organization 'my-org' not found.");
       },
       { timeout: 15000 },
     );
