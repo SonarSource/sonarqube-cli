@@ -77,10 +77,10 @@ export function createSqaaInstructionsSubfeature<TOptions extends IntegrateAgent
   return {
     id: globalOnly ? SQAA_INSTRUCTIONS_GLOBAL_SUBFEATURE_ID : SQAA_INSTRUCTIONS_SUBFEATURE_ID,
     displayName: 'Vortex analysis instructions',
-    shouldInstall: ({ options, scope }) =>
-      onlyScope !== undefined && scope !== onlyScope
+    shouldInstall: (invocation) =>
+      onlyScope !== undefined && invocation.scope !== onlyScope
         ? skip()
-        : vortexInstallDecision(options.vortexDisposition),
+        : vortexInstallDecision(invocation),
     migrationEligible: () => !globalOnly,
     resources,
   };

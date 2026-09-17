@@ -25,7 +25,10 @@ import { isAbsolute } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { SQAA_INSTRUCTIONS_SUBFEATURE_ID } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
+import {
+  SQAA_HOOK_FEATURE_ID,
+  SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+} from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
 import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
 import { claudeIntegration } from '@/commands/integrate/claude/declaration.ts';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
@@ -2031,6 +2034,73 @@ describe('integrate claude — keep/remove already-installed features', () => {
       expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
         true,
       );
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'declining to keep an entitled Vortex removes it everywhere, not just the umbrella feature',
+    async () => {
+      harness.state().withContextAugmentationBinaryInstalled();
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .withVortexEntitlement('my-org', 'test-uuid-1234')
+        .withProject('my-project')
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', 'my-org');
+      harness
+        .state()
+        .withInstalledIntegrationFeature(
+          claudeIntegration,
+          'sonar-secrets-hooks',
+          'global',
+          harness.userHome.path,
+        )
+        .withInstalledIntegrationFeature(
+          claudeIntegration,
+          VORTEX_FEATURE_ID,
+          'global',
+          harness.userHome.path,
+        )
+        .withInstalledIntegrationFeature(
+          claudeIntegration,
+          SQAA_HOOK_FEATURE_ID,
+          'global',
+          harness.userHome.path,
+        )
+        .withInstalledIntegrationFeature(
+          claudeIntegration,
+          'mcp-server',
+          'global',
+          harness.userHome.path,
+        );
+      harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=my-project');
+
+      const session = harness.runInteractive('integrate claude', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+      await session.accept('secret scanning hooks (currently installed)  Keep?');
+      await session.decline('Vortex (currently installed)  Keep?');
+      await session.accept('Proceed with removal?');
+      await session.accept('MCP server (currently installed)  Keep?');
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      const output = `${result.stdout}\n${result.stderr}`;
+      // The sibling PostToolUse dispatch container ("Vortex analysis hook")
+      // must never ask independently — it has to agree with whatever the
+      // umbrella "Vortex" feature's single ask resolved to.
+      expect(output).not.toContain('Vortex analysis hook (currently installed)');
+      expect(output).not.toContain('Installing Vortex analysis hook');
+
+      expect(findClaudeFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
+      expect(findClaudeFeature(harness, SQAA_HOOK_FEATURE_ID)).toBeUndefined();
     },
     { timeout: 30000 },
   );
