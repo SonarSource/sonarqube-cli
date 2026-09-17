@@ -21,6 +21,8 @@
 // Integration tests for post-update migration (runPostUpdateActions)
 
 import { randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -31,16 +33,36 @@ import {
   SQAA_INSTRUCTIONS_SUBFEATURE_ID,
 } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
 import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
-import { CONTEXT_AUGMENTATION_HOOK_FEATURE_ID } from '@/commands/integrate/claude/declaration.ts';
+import {
+  CLAUDE_INTEGRATION_ID,
+  CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
+} from '@/commands/integrate/claude/declaration.ts';
+import { CODEX_INTEGRATION_ID } from '@/commands/integrate/codex/declaration.ts';
+import { COPILOT_INTEGRATION_ID } from '@/commands/integrate/copilot/declaration.ts';
+import { CURSOR_INTEGRATION_ID } from '@/commands/integrate/cursor/declaration.ts';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalCagBinaryName } from '@/core/host/install/context-augmentation.ts';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
 import type { CliState, InstalledIntegrationFeature } from '@/core/state/state.ts';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
 import { POST_UPDATE_TRIGGER_COMMAND } from '../../../_common/isolated-cli-env.js';
 import { hookScriptName, IS_WINDOWS, TestHarness } from '../../harness';
 import { expectVortexHookInstalled, readCagInvocations } from '../../harness/cag-helpers';
+import {
+  CLAUDE_SKILL_RELATIVE_PATH,
+  expectSessionStartHookRefreshed,
+  findRecordedCagDependency,
+  findRecordedCagFeature,
+  findRecordedCagSkillResource,
+  findRecordedSessionStartScriptResource,
+  seedLegacySkillFile,
+  seedState,
+  sessionStartScriptPath,
+  STALE_CLI_VERSION,
+  STALE_SKILL_VERSION,
+} from '../../harness/cag-state.ts';
 
 const CAG_HOOK_ALLOWED_ORG_KEY = 'denis-troller-sonar';
 
@@ -807,6 +829,244 @@ describe('post-update migration', () => {
     },
     { timeout: 15000 },
   );
+
+  describe('CAG declarative refresh', () => {
+    const CAG_SKILL_AGENTS = [
+      ['claude', CLAUDE_INTEGRATION_ID],
+      ['copilot', COPILOT_INTEGRATION_ID],
+      ['codex', CODEX_INTEGRATION_ID],
+      ['cursor', CURSOR_INTEGRATION_ID],
+    ] as const;
+
+    beforeEach(async () => {
+      mkdirSync(harness.cwd.path, { recursive: true });
+      await harness.newFakeBinariesServer().start();
+    });
+
+    it.each(CAG_SKILL_AGENTS)(
+      'migrates a recorded %s CAG skill to the session-start hook',
+      async (agentId, integrationId) => {
+        seedState(harness, {
+          installCagStub: true,
+          skills: [{ agentId, projectRoot: harness.cwd.path }],
+        });
+        const skillPath = seedLegacySkillFile(harness.cwd.path, agentId, '# stale skill\n');
+
+        const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+        expect(result.exitCode, result.stderr).toBe(0);
+
+        expect(existsSync(skillPath)).toBe(false);
+        expectSessionStartHookRefreshed(harness.cwd.path, agentId);
+
+        const state = harness.stateJsonFile.asJson() as CliState;
+        expect(state.config.cliVersion).not.toBe(STALE_CLI_VERSION);
+        const feature = findRecordedCagFeature(
+          state,
+          ({ integrationId: recordedId, feature: installedFeature }) =>
+            recordedId === integrationId && installedFeature.targetRoot === harness.cwd.path,
+        );
+        expect(feature).toBeDefined();
+        if (!feature) {
+          throw new Error(`Expected a recorded declarative ${agentId} CAG feature`);
+        }
+        expect(findRecordedSessionStartScriptResource(feature)?.path).toBe(
+          sessionStartScriptPath(harness.cwd.path, agentId),
+        );
+        expect(findRecordedCagSkillResource(feature)).toBeUndefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'skips the refresh when the recorded project root no longer exists',
+      async () => {
+        const missingRoot = join(harness.cwd.path, 'has-been-deleted');
+        seedState(harness, {
+          skills: [{ agentId: 'claude', projectRoot: missingRoot }],
+        });
+
+        const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+        expect(result.exitCode, result.stderr).toBe(0);
+
+        const cagBinaryPath = join(
+          harness.cliHome.path,
+          'bin',
+          buildLocalCagBinaryName(detectPlatform()),
+        );
+        expect(existsSync(cagBinaryPath)).toBe(false);
+        expect(existsSync(join(missingRoot, CLAUDE_SKILL_RELATIVE_PATH))).toBe(false);
+        expect(existsSync(sessionStartScriptPath(missingRoot, 'claude'))).toBe(false);
+
+        const state = harness.stateJsonFile.asJson() as CliState;
+        expect(state.config.cliVersion).not.toBe(STALE_CLI_VERSION);
+        expect(findRecordedCagDependency(state)).toBeUndefined();
+        const feature = findRecordedCagFeature(
+          state,
+          ({ integrationId, feature: installedFeature }) =>
+            integrationId === CLAUDE_INTEGRATION_ID && installedFeature.targetRoot === missingRoot,
+        );
+        expect(feature).toBeDefined();
+        if (!feature) {
+          throw new Error('Expected the deleted-root declarative CAG feature to remain recorded');
+        }
+        const resource = findRecordedCagSkillResource(feature);
+        expect(resource).toBeDefined();
+        expect(resource?.version).toBe(STALE_SKILL_VERSION);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'refreshes every recorded install across multiple project roots in one post-update',
+      async () => {
+        const projectA = join(harness.userHome.path, 'project-a');
+        const projectB = join(harness.userHome.path, 'project-b');
+        mkdirSync(projectA, { recursive: true });
+        mkdirSync(projectB, { recursive: true });
+
+        seedState(harness, {
+          installCagStub: true,
+          skills: [
+            { agentId: 'claude', projectRoot: projectA },
+            { agentId: 'claude', projectRoot: projectB },
+          ],
+        });
+        const skillPathA = seedLegacySkillFile(projectA, 'claude', '# stale skill A\n');
+        const skillPathB = seedLegacySkillFile(projectB, 'claude', '# stale skill B\n');
+
+        const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+        expect(result.exitCode, result.stderr).toBe(0);
+
+        expect(existsSync(skillPathA)).toBe(false);
+        expect(existsSync(skillPathB)).toBe(false);
+        expectSessionStartHookRefreshed(projectA, 'claude');
+        expectSessionStartHookRefreshed(projectB, 'claude');
+
+        const state = harness.stateJsonFile.asJson() as CliState;
+        const featureA = findRecordedCagFeature(
+          state,
+          ({ integrationId, feature }) =>
+            integrationId === CLAUDE_INTEGRATION_ID && feature.targetRoot === projectA,
+        );
+        const featureB = findRecordedCagFeature(
+          state,
+          ({ integrationId, feature }) =>
+            integrationId === CLAUDE_INTEGRATION_ID && feature.targetRoot === projectB,
+        );
+        expect(featureA).toBeDefined();
+        expect(featureB).toBeDefined();
+        if (!featureA || !featureB) {
+          throw new Error('Expected both declarative Claude CAG features to remain recorded');
+        }
+        expect(findRecordedSessionStartScriptResource(featureA)?.path).toBe(
+          sessionStartScriptPath(projectA, 'claude'),
+        );
+        expect(findRecordedSessionStartScriptResource(featureB)?.path).toBe(
+          sessionStartScriptPath(projectB, 'claude'),
+        );
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'is a no-op when state.config.cliVersion already matches the current CLI version',
+      async () => {
+        seedState(harness, {
+          cliVersion: CURRENT_VERSION,
+          skills: [{ agentId: 'claude', projectRoot: harness.cwd.path }],
+        });
+
+        const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+        expect(result.exitCode, result.stderr).toBe(0);
+
+        const cagBinaryPath = join(
+          harness.cliHome.path,
+          'bin',
+          buildLocalCagBinaryName(detectPlatform()),
+        );
+        expect(existsSync(cagBinaryPath)).toBe(false);
+        expect(existsSync(sessionStartScriptPath(harness.cwd.path, 'claude'))).toBe(false);
+
+        const state = harness.stateJsonFile.asJson() as CliState;
+        expect(state.config.cliVersion).toBe(CURRENT_VERSION);
+        expect(findRecordedCagDependency(state)).toBeUndefined();
+        const feature = findRecordedCagFeature(
+          state,
+          ({ integrationId, feature: installedFeature }) =>
+            integrationId === CLAUDE_INTEGRATION_ID &&
+            installedFeature.targetRoot === harness.cwd.path,
+        );
+        expect(feature).toBeDefined();
+        if (!feature) {
+          throw new Error('Expected the no-op declarative CAG feature to remain recorded');
+        }
+        const resource = findRecordedCagSkillResource(feature);
+        expect(resource).toBeDefined();
+        expect(resource?.version).toBe(STALE_SKILL_VERSION);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'removes stale-version binaries left in the bin directory after a refresh',
+      async () => {
+        const binDir = join(harness.cliHome.path, 'bin');
+        mkdirSync(binDir, { recursive: true });
+        const oldBinaryName = `${CONTEXT_AUGMENTATION_BINARY_NAME}-0.5.0.0-${detectPlatform().os}-${detectPlatform().arch}`;
+        const oldBinaryPath = join(binDir, oldBinaryName);
+        writeFileSync(oldBinaryPath, 'stale binary contents', 'utf-8');
+
+        seedState(harness, {
+          skills: [{ agentId: 'claude', projectRoot: harness.cwd.path }],
+        });
+
+        const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+        expect(result.exitCode, result.stderr).toBe(0);
+
+        const cagBinaryPath = join(binDir, buildLocalCagBinaryName(detectPlatform()));
+        expect(existsSync(cagBinaryPath)).toBe(true);
+        expect(existsSync(oldBinaryPath)).toBe(false);
+
+        const lingeringCagBinaries = readdirSync(binDir).filter((file) =>
+          file.startsWith(`${CONTEXT_AUGMENTATION_BINARY_NAME}-`),
+        );
+        expect(lingeringCagBinaries).toEqual([buildLocalCagBinaryName(detectPlatform())]);
+        expect(findRecordedCagDependency(harness.stateJsonFile.asJson() as CliState)?.version).toBe(
+          SONAR_CONTEXT_AUGMENTATION_VERSION,
+        );
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'reinstalls the session-start hook after a subsequent CLI upgrade',
+      async () => {
+        seedState(harness, {
+          installCagStub: true,
+          skills: [{ agentId: 'claude', projectRoot: harness.cwd.path }],
+        });
+
+        const first = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+        expect(first.exitCode, first.stderr).toBe(0);
+
+        const scriptPath = sessionStartScriptPath(harness.cwd.path, 'claude');
+        const preMutationContent = readFileSync(scriptPath, 'utf-8');
+        const state = harness.stateJsonFile.asJson() as CliState;
+        state.config.cliVersion = STALE_CLI_VERSION;
+        harness.state().withRawState(JSON.stringify(state, null, 2));
+        rmSync(scriptPath);
+
+        const second = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+        expect(second.exitCode, second.stderr).toBe(0);
+        expect(existsSync(scriptPath)).toBe(true);
+        expect(readFileSync(scriptPath, 'utf-8')).toEqual(preMutationContent);
+        expect((harness.stateJsonFile.asJson() as CliState).config.cliVersion).not.toBe(
+          STALE_CLI_VERSION,
+        );
+      },
+      { timeout: 30000 },
+    );
+  });
 
   describe('trigger', () => {
     const STALE_CLI_VERSION = '0.5.0';

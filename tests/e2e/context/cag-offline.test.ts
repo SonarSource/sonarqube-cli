@@ -19,58 +19,37 @@
  */
 
 /**
- * Offline e2e for sonar-context-augmentation.
+ * Production-CDN smoke for sonar-context-augmentation.
  *
- * Exercises the *real* CAG binary download, PGP signature verification,
- * tar extraction, and declarative resource refresh — without touching
- * SonarQube/Cloud. Only network reach is `binaries.sonarsource.com` for
- * the archive and detached signature; post-update refreshes the declarative
- * resources but does not rerun `tool integrate`.
- *
- * Trigger path: pre-seed `state.json` with a stale declarative CAG feature and
- * a stale `config.cliVersion`. The next `sonar` invocation runs
- * `runPostUpdateActions()` which reconciles declarative integrations, so an
- * older install recorded against the retired skill resource is migrated to the
- * session-start hook.
+ * Seeds a stale declarative CAG feature so `runPostUpdateActions()` downloads
+ * the real archive from `binaries.sonarsource.com`, PGP-verifies it, and
+ * extracts the binary. Declarative skill→hook refresh is covered by
+ * integration tests against the CAG stub / fake binaries server.
  */
 
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
-import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalCagBinaryName } from '@/core/host/install/context-augmentation.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
 import type { CliState } from '@/core/state/state.ts';
 
-import {
-  POST_UPDATE_CAG_TIMEOUT_MS,
-  POST_UPDATE_TRIGGER_COMMAND,
-} from '../../_common/isolated-cli-env.js';
+import { POST_UPDATE_TRIGGER_COMMAND } from '../../_common/isolated-cli-env.js';
 import { TestHarness } from '../../integration/harness';
-import {
-  expectSessionStartHookRefreshed,
-  findRecordedCagDependency,
-  findRecordedCagFeature,
-  findRecordedCagSkillResource,
-  findRecordedSessionStartScriptResource,
-  seedLegacySkillFile,
-  seedState,
-  sessionStartScriptPath,
-  STALE_CLI_VERSION,
-} from './_helpers';
+import { findRecordedCagDependency, seedState, STALE_CLI_VERSION } from './_helpers';
 
 const DEFAULT_TIMEOUT_MS = 180_000;
+const PRODUCTION_CDN_DOWNLOAD_TIMEOUT_MS = 150_000;
 const HELP_TIMEOUT_MS = 30_000;
 
 setDefaultTimeout(DEFAULT_TIMEOUT_MS);
 
-describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', () => {
+describe('sonar-context-augmentation production CDN smoke (real binary, no SonarQube)', () => {
   let harness: TestHarness;
   let cagBinaryPath: string;
-  let seededSkillPath: string;
   let postUpdateResult: { exitCode: number; stdout: string; stderr: string };
 
   beforeAll(async () => {
@@ -84,10 +63,8 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
       skills: [{ agentId: 'claude', projectRoot: harness.cwd.path }],
     });
 
-    seededSkillPath = seedLegacySkillFile(harness.cwd.path, 'claude', '# stale skill\n');
-
     postUpdateResult = await harness.run(POST_UPDATE_TRIGGER_COMMAND, {
-      timeoutMs: POST_UPDATE_CAG_TIMEOUT_MS,
+      timeoutMs: PRODUCTION_CDN_DOWNLOAD_TIMEOUT_MS,
     });
   });
 
@@ -117,79 +94,15 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
     expect(stdout).toContain(build);
   });
 
-  it('bumps state.config.cliVersion past the seeded stale value', () => {
+  it('records the installed CAG dependency and bumps cliVersion', () => {
     const state = harness.stateJsonFile.asJson() as CliState;
     expect(state.config.cliVersion).not.toBe(STALE_CLI_VERSION);
-  });
-
-  it('refreshes the declarative CAG dependency and migrates the recorded resource', () => {
-    const state = harness.stateJsonFile.asJson() as CliState;
     expect(findRecordedCagDependency(state)?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
-
-    const feature = findRecordedCagFeature(
-      state,
-      ({ integrationId, feature: installedFeature }) =>
-        integrationId === CLAUDE_INTEGRATION_ID && installedFeature.targetRoot === harness.cwd.path,
-    );
-    expect(feature, 'expected a recorded declarative CAG feature in state.json').toBeDefined();
-    if (!feature) {
-      throw new Error('Expected a recorded declarative Claude CAG feature');
-    }
-    expect(findRecordedSessionStartScriptResource(feature)?.path).toBe(
-      sessionStartScriptPath(harness.cwd.path, 'claude'),
-    );
-    expect(findRecordedCagSkillResource(feature)).toBeUndefined();
   });
 
   it('forwards `sonar context --help` to the real binary without requiring auth', async () => {
     const result = await harness.run('context --help', { timeoutMs: HELP_TIMEOUT_MS });
     expect(result.exitCode, result.stderr).toBe(0);
     expect(result.stdout.length + result.stderr.length).toBeGreaterThan(0);
-  });
-
-  it('deletes the retired agent SKILL.md and installs the session-start hook', () => {
-    expect(existsSync(seededSkillPath)).toBe(false);
-    expectSessionStartHookRefreshed(harness.cwd.path, 'claude');
-  });
-
-  describe('a second self-update (rewound state) reinstalls the hook script', () => {
-    let refreshResult: { exitCode: number; stdout: string; stderr: string };
-    let scriptPath: string;
-    let preMutationContent: string;
-
-    beforeAll(async () => {
-      scriptPath = sessionStartScriptPath(harness.cwd.path, 'claude');
-      preMutationContent = readFileSync(scriptPath, 'utf-8');
-
-      // Simulate a fresh CLI upgrade landing on the same machine: rewind the
-      // persisted CLI version so `runPostUpdateActions()` fires again.
-      const state = harness.stateJsonFile.asJson() as CliState;
-      state.config.cliVersion = STALE_CLI_VERSION;
-      writeFileSync(harness.stateJsonFile.path, JSON.stringify(state, null, 2), 'utf-8');
-
-      // Delete the hook script so the rerun has to write it again — proves
-      // the refresh re-applied the declarative resource rather than only
-      // bumping state.
-      rmSync(scriptPath);
-
-      refreshResult = await harness.run(POST_UPDATE_TRIGGER_COMMAND, {
-        timeoutMs: POST_UPDATE_CAG_TIMEOUT_MS,
-      });
-    });
-
-    it('the simulated self-update exits successfully', () => {
-      expect(refreshResult.exitCode, refreshResult.stderr).toBe(0);
-    });
-
-    it('recreates the hook script that was deleted before the rerun', () => {
-      expect(existsSync(scriptPath)).toBe(true);
-      const restored = readFileSync(scriptPath, 'utf-8');
-      expect(restored).toEqual(preMutationContent);
-    });
-
-    it('re-bumps state.config.cliVersion past the rewound stale value', () => {
-      const state = harness.stateJsonFile.asJson() as CliState;
-      expect(state.config.cliVersion).not.toBe(STALE_CLI_VERSION);
-    });
   });
 });

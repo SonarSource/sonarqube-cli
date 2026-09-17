@@ -29,9 +29,6 @@ import { ENV_TELEMETRY_EGRESS, TELEMETRY_EGRESS_OFF } from '@/core/telemetry/egr
  */
 export const POST_UPDATE_TRIGGER_COMMAND = '';
 
-/** Ceiling for a post-update run whose migration re-downloads the CAG binary. */
-export const POST_UPDATE_CAG_TIMEOUT_MS = 150_000;
-
 /**
  * Both switches are needed: a test asserting on telemetry must re-enable consent
  * (DO_NOT_TRACK), so only the egress mode keeps its fixtures off the production backend.

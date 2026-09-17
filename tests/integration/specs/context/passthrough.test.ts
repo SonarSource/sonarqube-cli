@@ -371,6 +371,20 @@ describe('sonar context passthrough', () => {
   );
 
   it(
+    'propagates a non-zero CAG exit code',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      harness.withAuth(server.baseUrl(), 'tok');
+      harness.state().withContextAugmentationBinaryInstalled({ initExitCode: 7 });
+
+      const result = await harness.run('context tool status');
+
+      expect(result.exitCode).toBe(7);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'fails with a helpful message when the CAG binary is not installed',
     async () => {
       const server = await harness.newFakeServer().start();

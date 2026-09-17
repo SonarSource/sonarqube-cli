@@ -32,10 +32,7 @@ import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
-import {
-  POST_UPDATE_CAG_TIMEOUT_MS,
-  POST_UPDATE_TRIGGER_COMMAND,
-} from '../../_common/isolated-cli-env.js';
+import { POST_UPDATE_TRIGGER_COMMAND } from '../../_common/isolated-cli-env.js';
 import { IS_WINDOWS, TestHarness } from '../../integration/harness';
 import {
   ALLOWLISTED_CAG_ORG_KEY,
@@ -192,10 +189,7 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
             SONARQUBE_CLI_ORG: ALLOWLISTED_CAG_ORG_KEY,
           };
 
-          const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND, {
-            extraEnv,
-            timeoutMs: POST_UPDATE_CAG_TIMEOUT_MS,
-          });
+          const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND, { extraEnv });
           expect(result.exitCode, result.stderr).toBe(0);
         });
 

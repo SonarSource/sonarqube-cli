@@ -575,7 +575,7 @@ describe('integrate claude — Context Augmentation', () => {
       expect(installed).toBeDefined();
       expect(installed?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
     },
-    { timeout: 60000 },
+    { timeout: 30000 },
   );
 
   it(
@@ -1040,6 +1040,35 @@ describe('integrate cursor — Context Augmentation', () => {
         scaEnabled: false,
         serverUrl,
       });
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'skips CAG entirely on a SonarQube Server connection',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(PROJECT_KEY)
+        .start();
+      harness.withAuth(server.baseUrl(), TOKEN);
+      harness.state().withContextAugmentationBinaryInstalled();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, `sonar.projectKey=${PROJECT_KEY}`].join('\n'),
+      );
+
+      const result = await harness.run('integrate cursor --non-interactive');
+
+      expect(result.exitCode, result.stderr).toBe(0);
+      const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
+      expect(nonProbe).toEqual([]);
+      expect(result.stdout).toContain(
+        'Vortex requires SonarQube Server 2026.5 Enterprise or later.',
+      );
+      expect(findRecordedCagFeature(loadState(harness))).toBeUndefined();
+      expectVortexHookAbsent(harness.cwd, 'cursor');
     },
     { timeout: 30000 },
   );
