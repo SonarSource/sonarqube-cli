@@ -195,7 +195,7 @@ function createSqaaHookSubfeature(): SubfeatureDeclaration<CodexIntegrationOptio
   return {
     id: SQAA_HOOK_FEATURE_ID,
     displayName: 'Vortex analysis hook',
-    shouldInstall: ({ options }) => vortexInstallDecision(options.vortexDisposition),
+    shouldInstall: (invocation) => vortexInstallDecision(invocation),
     resources: [
       wholeFile({
         id: 'posttool-sqaa-script',
