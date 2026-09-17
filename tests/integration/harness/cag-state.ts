@@ -140,10 +140,13 @@ export function seedState(harness: TestHarness, options: SeedStateOptions = {}):
       updatedAt: SEEDED_UPDATED_AT,
     });
   }
-  const builder = harness.state().withRawState(JSON.stringify(state, null, 2));
+  const stateJson = JSON.stringify(state, null, 2);
   if (options.installCagStub) {
-    builder.withContextAugmentationBinaryInstalled();
+    harness.state().withContextAugmentationBinaryInstalled().withRawState(stateJson);
+    return;
   }
+  mkdirSync(dirname(harness.stateJsonFile.path), { recursive: true });
+  writeFileSync(harness.stateJsonFile.path, stateJson, 'utf-8');
 }
 
 function seedDeclarativeContextAugmentationFeature(state: CliState, skill: SeedSkillOptions): void {
