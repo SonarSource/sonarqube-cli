@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -727,6 +727,43 @@ describe('declarative integration framework - remove and undo', () => {
 
       expect(order).toEqual(['third', 'second', 'first']);
     });
+
+    it.skipIf(process.platform === 'win32')(
+      'skips a symlinked resource and continues removing the rest',
+      async () => {
+        const state = getDefaultState('test');
+        const console = new FakeConsole();
+        const context = { ...makeContext(state, tempDir), console };
+        const linkedPath = join(tempDir, 'linked.txt');
+        const outsidePath = join(tempDir, 'outside.txt');
+        const regularPath = join(tempDir, 'regular.txt');
+        const removedResources: string[] = [];
+        const skippedResources: string[] = [];
+        await writeFile(outsidePath, 'user content\n');
+        symlinkSync(outsidePath, linkedPath);
+        await writeFile(regularPath, '#!/bin/sh\n');
+
+        const feature: FeatureDeclaration = {
+          id: 'feature',
+          displayName: 'Feature',
+          resources: [
+            wholeFile({ id: 'linked', targetPath: linkedPath, content: 'managed\n' }),
+            wholeFile({ id: 'regular', targetPath: regularPath, content: '#!/bin/sh\n' }),
+          ],
+        };
+
+        await installer.removeFeature(context, feature, {
+          onResourceRemoved: (resource) => removedResources.push(resource.id),
+          onResourceSkipped: (resource) => skippedResources.push(resource.id),
+        });
+
+        expect(existsSync(regularPath)).toBe(false);
+        expect(await readFile(outsidePath, 'utf-8')).toBe('user content\n');
+        expect(skippedResources).toEqual(['linked']);
+        expect(removedResources).toEqual(['regular']);
+        expect(console.findCall('warn', 'Skipping removal of linked')).toBeDefined();
+      },
+    );
   });
 });
 

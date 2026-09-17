@@ -18,11 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, lstatSync } from 'node:fs';
 import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { EOL } from 'node:os';
-import { dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
+
+import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 
 import type { AppliedResource, IntegrationContext, MaybePromise } from '../features/types.ts';
 
@@ -56,7 +59,9 @@ export async function resolvePath(
   context: IntegrationContext,
   path: PathResolver,
 ): Promise<string> {
-  return typeof path === 'function' ? path(context) : path;
+  const resolvedPath = typeof path === 'function' ? await path(context) : path;
+  assertNotSymlink(resolvedPath, context.targetRoot);
+  return resolvedPath;
 }
 
 export async function writeFileIfChanged(
@@ -65,6 +70,7 @@ export async function writeFileIfChanged(
   executable?: boolean,
 ): Promise<void> {
   const mode = executable ? EXECUTABLE_FILE_MODE : undefined;
+  assertNotSymlink(path);
   if (existsSync(path)) {
     const existing = await readFile(path, 'utf-8');
     if (existing === content) {
@@ -78,7 +84,57 @@ export async function writeFileIfChanged(
   await writeFile(path, content, mode === undefined ? undefined : { mode });
 }
 
+/** Refuse resource access through a symlink at any component below `root`. */
+function assertNotSymlink(path: string, root?: string): void {
+  const resolved = resolve(path);
+  if (root === undefined) {
+    if (isSymbolicLink(resolved)) {
+      throw symlinkRejected(resolved);
+    }
+    return;
+  }
+
+  const stop = canonicalizePath(root);
+  if (!isAncestorOrSelf(stop, canonicalizePath(resolved))) {
+    if (isSymbolicLink(resolved)) {
+      throw symlinkRejected(resolved);
+    }
+    return;
+  }
+
+  let current = resolved;
+  let parent = dirname(current);
+  while (parent !== current) {
+    if (isSymbolicLink(current)) {
+      throw symlinkRejected(current);
+    }
+    if (canonicalizePath(parent) === stop) {
+      return;
+    }
+    current = parent;
+    parent = dirname(current);
+  }
+}
+
+function symlinkRejected(path: string): CommandFailedError {
+  return new CommandFailedError(`Refusing to access symbolic link resource path: ${path}.`, {
+    remediationHint: `Replace the symbolic link at '${path}' with a regular file or directory, then retry.`,
+  });
+}
+
+function isSymbolicLink(path: string): boolean {
+  try {
+    return lstatSync(path).isSymbolicLink();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return false;
+    }
+    throw error;
+  }
+}
+
 export async function readTextFile(path: string): Promise<string | undefined> {
+  assertNotSymlink(path);
   if (!existsSync(path)) {
     return undefined;
   }
