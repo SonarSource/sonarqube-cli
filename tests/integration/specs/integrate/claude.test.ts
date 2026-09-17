@@ -2104,4 +2104,60 @@ describe('integrate claude — keep/remove already-installed features', () => {
     },
     { timeout: 30000 },
   );
+
+  it(
+    'declining a first-time Vortex install tears down a stale sibling hook instead of leaving it in place',
+    async () => {
+      harness.state().withContextAugmentationBinaryInstalled();
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .withVortexEntitlement('my-org', 'test-uuid-1234')
+        .withProject('my-project')
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', 'my-org');
+      // No `vortex` feature recorded — this is a fresh install prompt — but
+      // the PostToolUse container is already installed, simulating drift
+      // (e.g. a leftover from before this fix) that a decline must clean up.
+      harness
+        .state()
+        .withInstalledIntegrationFeature(
+          claudeIntegration,
+          'sonar-secrets-hooks',
+          'global',
+          harness.userHome.path,
+        )
+        .withInstalledIntegrationFeature(
+          claudeIntegration,
+          SQAA_HOOK_FEATURE_ID,
+          'global',
+          harness.userHome.path,
+        )
+        .withInstalledIntegrationFeature(
+          claudeIntegration,
+          'mcp-server',
+          'global',
+          harness.userHome.path,
+        );
+      harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=my-project');
+
+      const session = harness.runInteractive('integrate claude', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+      await session.accept('secret scanning hooks (currently installed)  Keep?');
+      await session.decline('Install Vortex?');
+      await session.accept('MCP server (currently installed)  Keep?');
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      expect(findClaudeFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
+      expect(findClaudeFeature(harness, SQAA_HOOK_FEATURE_ID)).toBeUndefined();
+    },
+    { timeout: 30000 },
+  );
 });
