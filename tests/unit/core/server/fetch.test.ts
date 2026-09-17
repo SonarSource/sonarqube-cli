@@ -297,6 +297,25 @@ describe('fetchAnonymous', () => {
     expect(await res.text()).toBe('ok');
   });
 
+  it('rejects a redirect to a non-http(s) protocol', async () => {
+    const fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(null, {
+        status: 302,
+        headers: { Location: 'file:///etc/passwd' },
+      }),
+    );
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(fetchAnonymous('https://cdn.example.com/file')).rejects.toThrow(
+        'unsupported protocol',
+      );
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
   it('throws after too many redirects', async () => {
     const fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(null, {

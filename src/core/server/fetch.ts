@@ -145,6 +145,12 @@ async function sendAndFollowRedirects(
     }
 
     const redirectUrl = new URL(location, currentUrl);
+    // Native follow rejects file:/data: hops; keep that once we follow redirects ourselves.
+    if (redirectUrl.protocol !== 'http:' && redirectUrl.protocol !== 'https:') {
+      throw new Error(
+        `redirect to unsupported protocol ${redirectUrl.protocol} rejected — only http and https hops are followed`,
+      );
+    }
     onRedirect?.(currentUrl, redirectUrl);
 
     // 301/302/303 downgrade POST → GET, drop the body, and strip Content-Type.
