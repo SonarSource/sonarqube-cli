@@ -19,7 +19,7 @@
  */
 
 /**
- * Production-CDN smoke for sonar-context-augmentation.
+ * Live install of sonar-context-augmentation.
  *
  * Seeds a stale declarative CAG feature so `runPostUpdateActions()` downloads
  * the real archive from `binaries.sonarsource.com`, PGP-verifies it, and
@@ -42,12 +42,12 @@ import { TestHarness } from '../../integration/harness';
 import { findRecordedCagDependency, seedState, STALE_CLI_VERSION } from './_helpers';
 
 const DEFAULT_TIMEOUT_MS = 180_000;
-const PRODUCTION_CDN_DOWNLOAD_TIMEOUT_MS = 150_000;
+const PRODUCTION_DOWNLOAD_TIMEOUT_MS = 150_000;
 const HELP_TIMEOUT_MS = 30_000;
 
 setDefaultTimeout(DEFAULT_TIMEOUT_MS);
 
-describe('sonar-context-augmentation production CDN smoke', () => {
+describe('sonar-context-augmentation', () => {
   let harness: TestHarness;
   let cagBinaryPath: string;
   let postUpdateResult: { exitCode: number; stdout: string; stderr: string };
@@ -64,7 +64,7 @@ describe('sonar-context-augmentation production CDN smoke', () => {
     });
 
     postUpdateResult = await harness.run(POST_UPDATE_TRIGGER_COMMAND, {
-      timeoutMs: PRODUCTION_CDN_DOWNLOAD_TIMEOUT_MS,
+      timeoutMs: PRODUCTION_DOWNLOAD_TIMEOUT_MS,
     });
   });
 
