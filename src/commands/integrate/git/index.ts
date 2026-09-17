@@ -178,7 +178,7 @@ async function integrateGitLocal(
   console.blank();
 
   const integrationId = await resolveGitIntegrationId(gitRoot, 'project');
-  await warnIfLocalHookWouldBeShadowed(integrationId, gitRoot, console);
+  await warnIfLocalHookWouldBeShadowed(gitRoot, console);
 
   const resolvedOptions = await resolveProjectKey(options, gitRoot, auth, console);
   await installGitFeatures(resolvedOptions, gitRoot, 'project', integrationId, auth, ctx);
@@ -187,19 +187,13 @@ async function integrateGitLocal(
 /**
  * `--local` never follows an inherited core.hooksPath (`resolveLocalGitHooksDir`), so it can't
  * overwrite a global install — but git itself still prefers that inherited value over
- * `.git/hooks`, which would leave the hook this installs unreachable. Husky and the pre-commit
- * framework already set their own local override, so `resolveLocalGitHooksDir` matches what git
- * actually uses for them; only the plain-native-git case can diverge.
+ * `.git/hooks`, which would leave the hook this installs unreachable. Gated on the path
+ * comparison alone, not the integration id: Husky's detection requires a matching repo-local
+ * `core.hooksPath`, so it never diverges, but the pre-commit framework writes straight into
+ * `.git/hooks` without touching `core.hooksPath` at all, so it can be shadowed exactly like
+ * plain native git.
  */
-async function warnIfLocalHookWouldBeShadowed(
-  integrationId: GitIntegrationId,
-  gitRoot: string,
-  console: Console,
-): Promise<void> {
-  if (integrationId !== NATIVE_GIT_INTEGRATION_ID) {
-    return;
-  }
-
+async function warnIfLocalHookWouldBeShadowed(gitRoot: string, console: Console): Promise<void> {
   const [localHooksDir, effectiveHooksDir] = await Promise.all([
     resolveLocalGitHooksDir(gitRoot),
     resolveEffectiveGitHooksDir(gitRoot),
