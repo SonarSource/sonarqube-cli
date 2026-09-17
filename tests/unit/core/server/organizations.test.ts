@@ -140,12 +140,12 @@ describe('OrganizationsClient', () => {
 
   describe('isOrganizationAccessible', () => {
     it('returns true when the organization is in the results', async () => {
-      fetchSpy = mockFetch({ organizations: [{ key: 'my-org' }] });
+      fetchSpy = mockFetch([{ id: 'my-org', uuidV4: 'my-org-uuid-v4' }]);
       expect(await client.isOrganizationAccessible('my-org')).toBe(true);
     });
 
     it('returns false when the organization is not in the results', async () => {
-      fetchSpy = mockFetch({ organizations: [{ key: 'other-org' }] });
+      fetchSpy = mockFetch([], { ok: false, status: 404 });
       expect(await client.isOrganizationAccessible('my-org')).toBe(false);
     });
 
@@ -157,15 +157,27 @@ describe('OrganizationsClient', () => {
 
   describe('resolveOrganizationAccess', () => {
     it('reports an organization the server resolves as accessible', async () => {
-      fetchSpy = mockFetch({ organizations: [{ key: 'my-org', name: 'My Org' }] });
+      fetchSpy = mockFetch([{ id: 'my-org', uuidV4: 'my-org-uuid-v4' }]);
 
       expect(await client.resolveOrganizationAccess('my-org')).toEqual({ status: 'accessible' });
     });
 
-    it('reports an empty result as not_found', async () => {
-      fetchSpy = mockFetch({ organizations: [] });
+    it('reports a 404 result as not_found', async () => {
+      fetchSpy = mockFetch([], { ok: false, status: 404 });
 
       expect(await client.resolveOrganizationAccess('my-org')).toEqual({ status: 'not_found' });
+    });
+
+    it('uses the public organizations endpoint with the requested key', async () => {
+      const cloudClient = new OrganizationsClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
+      fetchSpy = mockFetch([{ id: 'my-org', uuidV4: 'my-org-uuid-v4' }]);
+
+      await cloudClient.resolveOrganizationAccess('my-org');
+
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.origin).toBe(SONARCLOUD_API_URL);
+      expect(url.pathname).toBe('/organizations/organizations');
+      expect(url.searchParams.get('organizationKey')).toBe('my-org');
     });
 
     it('reports a server error as check_failed rather than as a missing organization', async () => {
