@@ -545,6 +545,67 @@ describe('list issues', () => {
   );
 
   it(
+    'sends `inNewCodePeriod` query param to an on-premise server when --new-code is provided',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project')
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`list issues --project my-project --new-code`);
+
+      expect(result.exitCode).toBe(0);
+      const issuesReq = server.getRecordedRequests().find((r) => r.path === '/api/issues/search');
+      expect(issuesReq?.query.inNewCodePeriod).toBe('true');
+      expect(issuesReq?.query.sinceLeakPeriod).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'sends `sinceLeakPeriod` query param to SonarQube Cloud when --new-code is provided',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken('test-token')
+        .withProject('my-project')
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`list issues --project my-project --new-code`);
+
+      expect(result.exitCode).toBe(0);
+      const issuesReq = server.getRecordedRequests().find((r) => r.path === '/api/issues/search');
+      expect(issuesReq?.query.sinceLeakPeriod).toBe('true');
+      expect(issuesReq?.query.inNewCodePeriod).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'omits the new-code-period query param when --new-code is not provided',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project')
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(`list issues --project my-project`);
+
+      expect(result.exitCode).toBe(0);
+      const issuesReq = server.getRecordedRequests().find((r) => r.path === '/api/issues/search');
+      expect(issuesReq?.query.inNewCodePeriod).toBeUndefined();
+      expect(issuesReq?.query.sinceLeakPeriod).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'outputs valid JSON with issues array',
     async () => {
       const server = await harness
