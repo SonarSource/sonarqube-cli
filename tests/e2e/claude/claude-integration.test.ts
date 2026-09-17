@@ -32,6 +32,10 @@ import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
+import {
+  POST_UPDATE_CAG_TIMEOUT_MS,
+  POST_UPDATE_TRIGGER_COMMAND,
+} from '../../_common/isolated-cli-env.js';
 import { IS_WINDOWS, TestHarness } from '../../integration/harness';
 import {
   ALLOWLISTED_CAG_ORG_KEY,
@@ -47,7 +51,6 @@ setDefaultTimeout(180_000);
 // sonar-ignore-next-line S6769
 const GITHUB_TEST_TOKEN = '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';
 export const TEST_TOKEN = 'e2e-token';
-const CAG_POST_UPDATE_TIMEOUT_MS = 150_000;
 
 interface IntegrateOptions {
   global?: boolean;
@@ -189,9 +192,9 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
             SONARQUBE_CLI_ORG: ALLOWLISTED_CAG_ORG_KEY,
           };
 
-          const result = await harness.run('--version', {
+          const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND, {
             extraEnv,
-            timeoutMs: CAG_POST_UPDATE_TIMEOUT_MS,
+            timeoutMs: POST_UPDATE_CAG_TIMEOUT_MS,
           });
           expect(result.exitCode, result.stderr).toBe(0);
         });

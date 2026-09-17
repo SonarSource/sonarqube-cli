@@ -44,6 +44,7 @@ import { buildCommandExecutedFact } from '@/core/telemetry/command-executed.ts';
 import { resolveInvocationAuthForTelemetry } from '@/core/telemetry/identity.ts';
 import type { Console } from '@/core/ui/console.ts';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
+import { runPostUpdateActionsSafely } from '@/core/update/post-update.ts';
 
 import { version as VERSION } from '../../package.json';
 import {
@@ -97,9 +98,11 @@ import { gitPrePush } from './hook/git-pre-push.ts';
 import type { HookCommandResult } from './hook/hook-command-result.ts';
 import { importHandler, type ImportOptions } from './import';
 import { collectRepoOption } from './import/repo-option.ts';
+import { supportedIntegrations } from './integrate';
 import type { IntegrateAgentOptions } from './integrate/_common/types.ts';
 import { integrateAntigravity } from './integrate/antigravity';
 import { integrateClaude } from './integrate/claude';
+import { installHooks } from './integrate/claude/hooks.ts';
 import { integrateCodex } from './integrate/codex';
 import { integrateCopilot } from './integrate/copilot';
 import { integrateCursor } from './integrate/cursor';
@@ -901,14 +904,24 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   }
 
   // Defer Sentry initialization until a command action is about to run, so that
-  // non-execution paths like --help, --version, and unknown commands don't pay
-  // for it. The guard avoids re-loading state and re-initializing on nested commands.
+  // --help and --version don't pay for it (unknown commands do reach the root
+  // action). The guard avoids re-loading state and re-initializing on nested commands.
   let sentryInitialized = false;
   COMMAND_TREE.hook('preAction', () => {
     if (sentryInitialized) return;
     sentryInitialized = true;
     const state = tryLoadState();
     if (state) initSentry(state);
+  });
+
+  COMMAND_TREE.hook('preAction', async () => {
+    // Safely: a throw from a Commander hook would abort the user's command.
+    await runPostUpdateActionsSafely({
+      supportedIntegrations,
+      installHooks,
+      console,
+      runtime,
+    });
   });
 
   // Emit handler facts plus CliCommandExecuted in one commit.

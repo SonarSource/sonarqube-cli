@@ -35,6 +35,7 @@ import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
+import { POST_UPDATE_TRIGGER_COMMAND } from '../../../_common/isolated-cli-env.js';
 import {
   type CliResult,
   hookScriptName,
@@ -1666,8 +1667,7 @@ describe.skipIf(IS_WINDOWS)('post-update migration on CLI upgrade', () => {
         ),
       );
 
-      // Run any CLI command — post-update fires automatically when cliVersion < current
-      const result = await harness.run('--version');
+      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
 
       expect(result.exitCode).toBe(0);
 
@@ -1754,8 +1754,7 @@ describe.skipIf(IS_WINDOWS)('post-update migration on CLI upgrade', () => {
         ),
       );
 
-      // Run any CLI command — post-update fires automatically when cliVersion < current
-      const result = await harness.run('--version');
+      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
 
       expect(result.exitCode).toBe(0);
 
