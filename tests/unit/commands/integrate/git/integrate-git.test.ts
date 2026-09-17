@@ -29,7 +29,7 @@ import {
   integrateGit,
   type IntegrateGitOptions,
   isGitHookType,
-  resolveGitHooksDir,
+  resolveLocalGitHooksDir,
 } from '@/commands/integrate/git';
 import {
   getNativeHookMarker,
@@ -82,14 +82,14 @@ describe('hasMarker', () => {
   });
 });
 
-describe('resolveGitHooksDir', () => {
+describe('resolveLocalGitHooksDir', () => {
   it('returns <root>/.git/hooks when .git is a directory and core.hooksPath is not set', async () => {
     mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
 
     const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
 
     try {
-      const result = await resolveGitHooksDir(TEMP_DIR);
+      const result = await resolveLocalGitHooksDir(TEMP_DIR);
       expect(result).toBe(join(TEMP_DIR, '.git', 'hooks'));
     } finally {
       spawnSpy.mockRestore();
@@ -107,7 +107,7 @@ describe('resolveGitHooksDir', () => {
     });
 
     try {
-      const result = await resolveGitHooksDir(TEMP_DIR);
+      const result = await resolveLocalGitHooksDir(TEMP_DIR);
       expect(result).toBe(join(TEMP_DIR, '.husky'));
     } finally {
       spawnSpy.mockRestore();
@@ -128,7 +128,7 @@ describe('resolveGitHooksDir', () => {
 
     try {
       // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-      await expect(resolveGitHooksDir(TEMP_DIR)).rejects.toThrow(
+      await expect(resolveLocalGitHooksDir(TEMP_DIR)).rejects.toThrow(
         'Could not resolve git hooks directory (exit code 128)',
       );
     } finally {
@@ -150,7 +150,7 @@ describe('resolveGitHooksDir', () => {
       }); // git rev-parse
 
     try {
-      const result = await resolveGitHooksDir(TEMP_DIR);
+      const result = await resolveLocalGitHooksDir(TEMP_DIR);
       expect(result).toBe('/abs/.git/worktrees/foo/hooks');
       expect(isAbsolute(result)).toBe(true);
     } finally {
@@ -168,7 +168,7 @@ describe('resolveGitHooksDir', () => {
       .mockResolvedValueOnce({ exitCode: 0, stdout: '.git/worktrees/foo/hooks\n', stderr: '' }); // git rev-parse
 
     try {
-      const result = await resolveGitHooksDir(TEMP_DIR);
+      const result = await resolveLocalGitHooksDir(TEMP_DIR);
       expect(result).toBe(join(TEMP_DIR, '.git/worktrees/foo/hooks'));
     } finally {
       spawnSpy.mockRestore();
@@ -189,7 +189,7 @@ describe('resolveGitHooksDir', () => {
       }); // git rev-parse
 
     try {
-      const result = await resolveGitHooksDir(TEMP_DIR);
+      const result = await resolveLocalGitHooksDir(TEMP_DIR);
       expect(result).toBe('/some/real/.git/worktrees/foo/hooks');
       expect(spawnSpy).toHaveBeenCalledWith('git', ['rev-parse', '--git-path', 'hooks'], {
         cwd: TEMP_DIR,

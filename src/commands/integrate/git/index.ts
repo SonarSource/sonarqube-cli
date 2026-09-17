@@ -29,7 +29,7 @@ import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invo
 import { GLOBAL_HOOKS_DIR } from '@/core/config-constants.ts';
 import { installIntegration } from '@/core/framework/features';
 import { findGitRoot } from '@/core/host/git/discover.ts';
-import { GitRepo, resolveGitHooksDir } from '@/core/host/git/hooks.ts';
+import { GitRepo, resolveLocalGitHooksDir } from '@/core/host/git/hooks.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { yellow } from '@/core/ui/colors.ts';
@@ -78,12 +78,12 @@ interface HookInstallation {
   hooksDir: string;
 }
 
-export { resolveGitHooksDir } from '@/core/host/git/hooks.ts';
+export { resolveLocalGitHooksDir } from '@/core/host/git/hooks.ts';
 
 export async function detectSonarHookInstallation(root: string): Promise<HookInstallation> {
   let hooksDir: string;
   try {
-    hooksDir = await resolveGitHooksDir(root);
+    hooksDir = await resolveLocalGitHooksDir(root);
   } catch {
     hooksDir = join(root, '.git', 'hooks');
   }
@@ -213,8 +213,8 @@ export async function resolveProjectKey(
 
   console.warn(
     'No project key detected — dependency-risks scanning (if installed) will resolve a project ' +
-      'per-repo at commit time instead of a fixed key. Run `sonar integrate git --help` for ways ' +
-      'to define one explicitly.',
+      'per-repo at commit time instead of a fixed key. Set `sonar.projectKey` in ' +
+      'sonar-project.properties at the repository root to bake in a fixed key.',
   );
   return options;
 }

@@ -983,4 +983,35 @@ describe('integrate git --local (CLI-1118)', () => {
     },
     { timeout: 15000 },
   );
+
+  it(
+    'installs into the repo, not the inherited global hooks dir, after a prior global install',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+
+      const globalHookFile = ['.sonar', 'sonarqube-cli', 'hooks', 'pre-commit'];
+      const globalInstall = await harness.run('integrate git --hook pre-commit --non-interactive');
+      expect(globalInstall.exitCode).toBe(0);
+      expect(harness.userHome.exists(...globalHookFile)).toBe(true);
+      const globalHookBefore = harness.userHome.file(...globalHookFile).asText();
+
+      // No repo-local core.hooksPath is set — only the global one from the install above.
+      const localInstall = await harness.run(
+        'integrate git --local --hook pre-commit --non-interactive',
+      );
+
+      expect(localInstall.exitCode).toBe(0);
+      expect(harness.cwd.exists('.git', 'hooks', 'pre-commit')).toBe(true);
+      // The global hook file must be untouched — --local must not follow the inherited
+      // global core.hooksPath and overwrite it with project-scoped content.
+      expect(harness.userHome.file(...globalHookFile).asText()).toBe(globalHookBefore);
+
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const gitIntegration = getInstalledIntegration(state, 'native-git');
+      const projectFeature = gitIntegration.features.find((f) => f.scope === 'project');
+      expect(projectFeature?.targetRoot).toBe(harness.cwd.path);
+    },
+    { timeout: 15000 },
+  );
 });
