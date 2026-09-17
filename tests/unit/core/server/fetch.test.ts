@@ -229,6 +229,91 @@ describe('fetchAnonymous', () => {
       clearNetworkConfigCache();
     }
   });
+
+  it('recomputes NO_PROXY for each redirect hop', async () => {
+    process.env.SONAR_NO_PROXY = 'direct.example.com';
+    clearNetworkConfigCache();
+
+    const captured: Array<Record<string, unknown>> = [];
+    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(((
+      _url: string | URL | Request,
+      options?: RequestInit,
+    ) => {
+      captured.push({ ...(options as Record<string, unknown>) });
+      if (captured.length === 1) {
+        return Promise.resolve(
+          new Response(null, {
+            status: 302,
+            headers: { Location: 'https://direct.example.com/file' },
+          }),
+        );
+      }
+      return Promise.resolve(new Response('ok', { status: 200 }));
+    }) as unknown as typeof fetch);
+
+    try {
+      const res = await fetchAnonymous('https://cdn.example.com/file');
+      expect(res.status).toBe(200);
+      expect(captured[0]?.proxy).toBe('https://https-proxy:8443');
+      expect(fetchSpy.mock.calls[1]?.[0]).toBe('https://direct.example.com/file');
+      expect(captured[1]?.proxy).toBeUndefined();
+    } finally {
+      fetchSpy.mockRestore();
+      delete process.env.SONAR_NO_PROXY;
+      clearNetworkConfigCache();
+    }
+  });
+
+  it('follows a cross-origin redirect', async () => {
+    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(((
+      _url: string | URL | Request,
+    ) => {
+      if (fetchSpy.mock.calls.length === 1) {
+        return Promise.resolve(
+          new Response(null, {
+            status: 302,
+            headers: { Location: 'https://cdn.example.com/artifact' },
+          }),
+        );
+      }
+      return Promise.resolve(new Response('ok', { status: 200 }));
+    }) as unknown as typeof fetch);
+
+    try {
+      const res = await fetchAnonymous('https://binaries.sonarsource.com/file');
+      expect(res.status).toBe(200);
+      expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual([
+        'https://binaries.sonarsource.com/file',
+        'https://cdn.example.com/artifact',
+      ]);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('follows a same-origin redirect to the final response', async () => {
+    const res = await fetchAnonymous(`${base}/redirect-same-origin`);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('ok');
+  });
+
+  it('throws after too many redirects', async () => {
+    const fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(null, {
+        status: 302,
+        headers: { Location: 'https://cdn.example.com/loop' },
+      }),
+    );
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(fetchAnonymous('https://cdn.example.com/loop')).rejects.toThrow(
+        'too many redirects',
+      );
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
 });
 
 const SERVER_URL = 'https://sonarqube.example.com';

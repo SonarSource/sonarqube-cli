@@ -55,9 +55,9 @@ The rest of this documentation loads on demand, never at session start. Content 
 Every HTTP request the CLI issues itself must carry the proxy/TLS configuration resolved by `src/core/host/connectivity/network-config.ts`, so `src/core/server/fetch.ts` is the only module allowed to call the runtime `fetch` — an ESLint `no-restricted-syntax` rule (scoped to `src/**`, disabled in that one file) rejects `fetch(...)` and `<obj>.fetch(...)` anywhere else. It exports two wrappers, both of which resolve `buildFetchNetworkOptions(url)` themselves:
 
 - `fetchAuthenticated(url, init)` — for a request whose headers carry a credential. Applies the network configuration **and** blocks credential leaks through cross-origin redirects (`redirect: 'manual'`, same-origin and HTTP→HTTPS-upgrade hops only). Use it for anything sending a credential header.
-- `fetchAnonymous(url, init)` — applies the network configuration and lets the runtime follow redirects normally. Only for credential-free requests that need to follow a CDN redirect: `downloadBinary` (`core/host/install/sonarsource-releases.ts`), the `stable.version` check (`core/update/check.ts`), and `fetchServerVersion` (`core/server/server-info.ts`). It **throws** when `init.headers` carries `authorization`, `cookie`, `private-token`, or `x-api-key`, since the runtime would follow a cross-origin redirect with that header attached — the ESLint rule cannot tell the two wrappers apart, so this invariant is enforced at runtime instead.
+- `fetchAnonymous(url, init)` — applies the network configuration and follows redirects hop by hop, including cross-origin CDN hops, resolving proxy/TLS/`NO_PROXY` per hop. Only for credential-free requests that need to follow a CDN redirect: `downloadBinary` (`core/host/install/sonarsource-releases.ts`), the `stable.version` check (`core/update/check.ts`), and `fetchServerVersion` (`core/server/server-info.ts`). It **throws** when `init.headers` carries `authorization`, `cookie`, `private-token`, or `x-api-key`, since a credentialed request must go through `fetchAuthenticated` — the ESLint rule cannot tell the two wrappers apart, so this invariant is enforced at runtime instead.
 
-Call sites never pass proxy/TLS options: `buildRequest(method, headers, timeoutMs, body)` deliberately cannot carry them, and both wrappers drop any `proxy`/`tls` keys found on `init` before spreading the resolved ones, so the configuration cannot be overridden locally. `fetchAuthenticated` resolves options **per hop**, so a followed HTTP→HTTPS upgrade never reuses the options computed for the original scheme. An unusable configuration surfaces as `NetworkConfigError` rather than a silent direct connection — `flushTelemetryEvents` aborts the batch on it and requeues every event instead of retrying per event.
+Call sites never pass proxy/TLS options: `buildRequest(method, headers, timeoutMs, body)` deliberately cannot carry them, and both wrappers drop any `proxy`/`tls` keys found on `init` before spreading the resolved ones, so the configuration cannot be overridden locally. Both wrappers resolve options **per hop**, so a followed redirect never reuses the proxy/TLS options computed for the original URL. An unusable configuration surfaces as `NetworkConfigError` rather than a silent direct connection — `flushTelemetryEvents` aborts the batch on it and requeues every event instead of retrying per event.
 
 Known gap: **Sentry** (`src/core/observability/sentry.ts`) transmits through the SDK's own transport, which never sees the `SONAR_*` proxy/CA settings, and the ESLint rule cannot reach into `node_modules`. Behind a mandatory corporate proxy, crash reports do not leave the machine. Anything else that reports outward through a third-party SDK inherits the same gap.
 
@@ -83,6 +83,7 @@ The docs site is generated from the CLI source — do not edit `commands.json`, 
 Keep a fixed `<base href="/sonarqube/cli/">` in the docs HTML so production resolves relative assets and internal links under the public mount point. This is intentionally production-oriented: Netlify deploy previews served from `/` will not work with that fixed base.
 
 <!-- sonar:begin:sonarqube-agentic-analysis-protocol -->
+
 # Vortex analysis protocol
 
 Vortex analysis is the final confirmation layer at the end of every turn in which you wrote to one or more files in the workspace (create, edit, patch, format — any tool call that changed file contents on disk).
@@ -113,4 +114,5 @@ Non-negotiable rules:
 4. If Vortex analysis reports issues on lines you touched in this turn, fix them, then re-run Vortex analysis on the same scope (change set or explicit file list). Repeat until clean (or only pre-existing findings on lines you did not touch remain). Pre-existing findings on untouched lines are out of scope — do not "fix" them unless the user asked.
 5. If Vortex analysis is skipped for any other reason (e.g. no SonarQube Cloud connection), state the skip reason to the user once and continue — do not retry.
 6. Do not suppress, summarize away, or omit Vortex analysis findings from your reply. Surface them verbatim.
+
 <!-- sonar:end:sonarqube-agentic-analysis-protocol -->

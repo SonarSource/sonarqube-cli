@@ -59,30 +59,6 @@ async function sendRequest(url: string, init: RequestInit): Promise<Response> {
 
 const CREDENTIAL_HEADERS = new Set(['authorization', 'cookie', 'private-token', 'x-api-key']);
 
-/**
- * Fetch for a request that carries no credential. Redirects are followed the way the
- * runtime normally would, since there is no token to leak.
- *
- * The caller supplies the headers, so nothing here can tell a credentialed request
- * apart on intent alone: a credential header is rejected outright rather than left to
- * review. Use `fetchAuthenticated` for those.
- */
-export async function fetchAnonymous(url: string, init: RequestInit = {}): Promise<Response> {
-  assertNoCredentialHeaders(init.headers);
-  return sendRequest(url, init);
-}
-
-function assertNoCredentialHeaders(headers: RequestInit['headers']): void {
-  const credential = (headers ? toPairs(headers) : []).find(([key]) =>
-    CREDENTIAL_HEADERS.has(key.toLowerCase()),
-  );
-  if (credential) {
-    throw new Error(
-      `fetchAnonymous does not accept the credential header "${credential[0]}" — use fetchAuthenticated, which blocks cross-origin redirects`,
-    );
-  }
-}
-
 const HTTP_301_MOVED_PERMANENTLY = 301;
 const HTTP_302_FOUND = 302;
 const HTTP_303_SEE_OTHER = 303;
@@ -99,6 +75,31 @@ const REDIRECT_STATUSES = new Set([
 const MAX_REDIRECTS = 5;
 
 /**
+ * Fetch for a request that carries no credential. Redirects are followed hop by
+ * hop, including cross-origin CDN hops, so proxy/TLS/`NO_PROXY` are recomputed
+ * for each URL. There is no token to leak.
+ *
+ * The caller supplies the headers, so nothing here can tell a credentialed request
+ * apart on intent alone: a credential header is rejected outright rather than left to
+ * review. Use `fetchAuthenticated` for those.
+ */
+export async function fetchAnonymous(url: string, init: RequestInit = {}): Promise<Response> {
+  assertNoCredentialHeaders(init.headers);
+  return followRedirects(url, init);
+}
+
+function assertNoCredentialHeaders(headers: RequestInit['headers']): void {
+  const credential = (headers ? toPairs(headers) : []).find(([key]) =>
+    CREDENTIAL_HEADERS.has(key.toLowerCase()),
+  );
+  if (credential) {
+    throw new Error(
+      `fetchAnonymous does not accept the credential header "${credential[0]}" — use fetchAuthenticated, which blocks cross-origin redirects`,
+    );
+  }
+}
+
+/**
  * Fetch for a request whose headers carry a credential. It does not add the credential
  * itself; it makes carrying one safe by preventing token leakage through a redirect.
  *
@@ -113,6 +114,14 @@ const MAX_REDIRECTS = 5;
  * reuses the proxy/TLS options computed for the original scheme.
  */
 export async function fetchAuthenticated(url: string, init: RequestInit): Promise<Response> {
+  return followRedirects(url, init, assertAllowedRedirect);
+}
+
+async function followRedirects(
+  url: string,
+  init: RequestInit,
+  onRedirect?: (fromUrl: string, redirectUrl: URL) => void,
+): Promise<Response> {
   let currentUrl = url;
   let currentInit = init;
 
@@ -136,7 +145,7 @@ export async function fetchAuthenticated(url: string, init: RequestInit): Promis
     }
 
     const redirectUrl = new URL(location, currentUrl);
-    assertAllowedRedirect(currentUrl, redirectUrl);
+    onRedirect?.(currentUrl, redirectUrl);
 
     // 301/302/303 downgrade POST → GET, drop the body, and strip Content-Type.
     // 307/308 preserve method, body, and headers unchanged.
