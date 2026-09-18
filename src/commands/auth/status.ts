@@ -18,11 +18,19 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/auth/auth-resolver.ts';
+import {
+  ENV_ORG,
+  ENV_SERVER,
+  ENV_TOKEN,
+  isSonarQubeCloud,
+  type ResolvedAuth,
+} from '@/core/auth/auth-resolver.ts';
 import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
+import { OrganizationsClient } from '@/core/server/organizations.ts';
 import { getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState } from '@/core/state/state-repository.ts';
 import { NOTE_STYLES } from '@/core/ui/colors.ts';
@@ -60,6 +68,54 @@ function displayTokenStatus(
   }
 }
 
+async function hasMissingOrganizationMembership(
+  serverUrl: string,
+  token: string,
+  orgKey: string | undefined,
+): Promise<boolean> {
+  if (!orgKey || !isSonarQubeCloud(serverUrl)) return false;
+  const membership = await new OrganizationsClient(
+    new SonarHttpClient(serverUrl, token),
+  ).checkMembership(orgKey);
+  return membership.status === 'not_member';
+}
+
+function displayOrganizationMembershipMismatch(
+  console: Console,
+  serverUrl: string,
+  orgKey: string,
+): void {
+  console.note(
+    [
+      ...connectionLines(serverUrl, orgKey),
+      '',
+      'This token resolves no membership for that organization. Either regenerate it',
+      '(My Account > Security > Access Tokens) — a token created before you joined the',
+      'organization stays invalid for it — or ask an organization administrator to add',
+      'your account.',
+    ],
+    `! Connected, but organization '${orgKey}' is not accessible with this token`,
+    NOTE_STYLES.warn,
+  );
+}
+
+async function displayEnvironmentConnectionStatus(
+  console: Console,
+  auth: ResolvedAuth,
+): Promise<void> {
+  let source = `env vars:  ${ENV_TOKEN}, ${ENV_SERVER}`;
+  if (auth.connectionType === 'cloud') {
+    source = process.env[ENV_SERVER]
+      ? `env vars:  ${ENV_TOKEN}, ${ENV_ORG}, ${ENV_SERVER}`
+      : `env vars:  ${ENV_TOKEN}, ${ENV_ORG}`;
+  }
+  if (await hasMissingOrganizationMembership(auth.serverUrl, auth.token, auth.orgKey)) {
+    displayOrganizationMembershipMismatch(console, auth.serverUrl, auth.orgKey!);
+    return;
+  }
+  printConnected(console, auth.serverUrl, source, auth.orgKey);
+}
+
 export async function authStatus(ctx: CommandInvocationContext): Promise<void> {
   const { console } = ctx;
   const authResult = await ctx.resolveAuth();
@@ -69,15 +125,7 @@ export async function authStatus(ctx: CommandInvocationContext): Promise<void> {
   const auth = authResult.value;
 
   if (auth?.comesFromEnv()) {
-    let source: string;
-    if (auth.connectionType === 'cloud') {
-      source = process.env[ENV_SERVER]
-        ? `env vars:  ${ENV_TOKEN}, ${ENV_ORG}, ${ENV_SERVER}`
-        : `env vars:  ${ENV_TOKEN}, ${ENV_ORG}`;
-    } else {
-      source = `env vars:  ${ENV_TOKEN}, ${ENV_SERVER}`;
-    }
-    printConnected(console, auth.serverUrl, source, auth.orgKey);
+    await displayEnvironmentConnectionStatus(console, auth);
     return;
   }
 
@@ -102,7 +150,14 @@ export async function authStatus(ctx: CommandInvocationContext): Promise<void> {
   );
   console.blank();
 
-  displayTokenStatus(console, auth.serverUrl, auth.orgKey, status);
+  if (
+    status.status === 'valid' &&
+    (await hasMissingOrganizationMembership(auth.serverUrl, auth.token, auth.orgKey))
+  ) {
+    displayOrganizationMembershipMismatch(console, auth.serverUrl, auth.orgKey!);
+  } else {
+    displayTokenStatus(console, auth.serverUrl, auth.orgKey, status);
+  }
 
   if (status.status === 'unreachable') {
     const message = status.errorMessage
