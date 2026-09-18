@@ -100,6 +100,35 @@ function normalizeSeverityValues(raw: string): string[] {
   return raw.split(',').map((s) => s.trim().toUpperCase());
 }
 
+function resolveStatuses(statuses: string | undefined): string {
+  if (!statuses) {
+    return DEFAULT_STATUSES.join(',');
+  }
+  const normalized = statuses.split(',').map((s) => s.toUpperCase());
+  if (!normalized.every((s) => VALID_STATUSES.includes(s))) {
+    throw new InvalidOptionError(
+      `Invalid status(es): '${statuses}'. Valid statuses are: ${VALID_STATUSES.join(', ')}`,
+    );
+  }
+  return normalized.join(',');
+}
+
+function validateSeveritiesOption(severities: string | undefined): void {
+  if (!severities) return;
+  const preflightValues = normalizeSeverityValues(severities);
+  if (
+    preflightValues.some(
+      (s) => !VALID_STANDARD_SEVERITIES.includes(s) && !VALID_MQR_SEVERITIES.includes(s),
+    )
+  ) {
+    throw new InvalidOptionError(
+      `Invalid severity(es): '${severities}'. ` +
+        `Multi-Quality Rule (MQR) mode values: ${VALID_MQR_SEVERITIES.join(', ')}. ` +
+        `Standard Experience mode values: ${VALID_STANDARD_SEVERITIES.join(', ')}.`,
+    );
+  }
+}
+
 function parseSeverities(
   raw: string,
   mode: 'mqr' | 'standard',
@@ -146,33 +175,8 @@ export async function listIssues(
     throw new InvalidOptionError(`Invalid --page option: '${page}'. Must be an integer >= 1`);
   }
 
-  let normalizedStatuses = options.statuses;
-  if (normalizedStatuses) {
-    const statuses = normalizedStatuses.split(',').map((s) => s.toUpperCase());
-    if (!statuses.every((s) => VALID_STATUSES.includes(s))) {
-      throw new InvalidOptionError(
-        `Invalid status(es): '${options.statuses}'. Valid statuses are: ${VALID_STATUSES.join(', ')}`,
-      );
-    }
-    normalizedStatuses = statuses.join(',');
-  } else {
-    normalizedStatuses = DEFAULT_STATUSES.join(',');
-  }
-
-  if (options.severities) {
-    const preflightValues = normalizeSeverityValues(options.severities);
-    if (
-      preflightValues.some(
-        (s) => !VALID_STANDARD_SEVERITIES.includes(s) && !VALID_MQR_SEVERITIES.includes(s),
-      )
-    ) {
-      throw new InvalidOptionError(
-        `Invalid severity(es): '${options.severities}'. ` +
-          `Multi-Quality Rule (MQR) mode values: ${VALID_MQR_SEVERITIES.join(', ')}. ` +
-          `Standard Experience mode values: ${VALID_STANDARD_SEVERITIES.join(', ')}.`,
-      );
-    }
-  }
+  const normalizedStatuses = resolveStatuses(options.statuses);
+  validateSeveritiesOption(options.severities);
 
   const projectKey = await resolveProjectKey(options.project, auth, console);
   noteProject(auth, projectKey);
