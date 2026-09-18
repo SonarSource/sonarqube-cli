@@ -43,22 +43,11 @@ import type { CliState, InstalledIntegrationFeature } from '@/core/state/state.t
 
 import { TestHarness } from '../../harness';
 import {
-  type CagInvocation,
   expectVortexHookAbsent,
   expectVortexHookInstalled,
   readCagInvocations as readInvocations,
 } from '../../harness/cag-helpers';
 import { commitFile, git, initGitRepo } from '../hook/git-test-helpers';
-
-function findToolInvocation(invocations: CagInvocation[], subcommand: string): CagInvocation {
-  const match = invocations.find((i) => i.argv[0] === 'tool' && i.argv[1] === subcommand);
-  if (!match) {
-    throw new Error(
-      `Expected sonar-context-augmentation 'tool ${subcommand}' invocation; got: ${JSON.stringify(invocations)}`,
-    );
-  }
-  return match;
-}
 
 function loadState(harness: TestHarness): CliState {
   return harness.stateJsonFile.asJson() as CliState;
@@ -104,7 +93,7 @@ function expectRecordedCagFeature(
   state: CliState,
   args: {
     integrationId: string;
-    projectRoot: string;
+    targetRoot: string;
     scaEnabled: boolean;
     serverUrl: string;
   },
@@ -115,8 +104,8 @@ function expectRecordedCagFeature(
     return;
   }
   expect(entry.integrationId).toBe(args.integrationId);
-  expect(entry.feature.scope).toBe('project');
-  expect(entry.feature.targetRoot).toBe(args.projectRoot);
+  expect(entry.feature.scope).toBe('global');
+  expect(entry.feature.targetRoot).toBe(args.targetRoot);
   expect(entry.feature.attrs).toMatchObject({
     orgKey: ORG_KEY,
     projectKey: PROJECT_KEY,
@@ -125,19 +114,10 @@ function expectRecordedCagFeature(
   });
 }
 
-function expectContextEnv(invocation: CagInvocation, serverUrl: string): void {
-  expect(invocation.env.SONAR_CONTEXT_TOKEN).toBe(TOKEN);
-  expect(invocation.env.SONAR_CONTEXT_URL).toBe(serverUrl);
-  expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe(ORG_KEY);
-  expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe(PROJECT_KEY);
-  expect(invocation.env.SONAR_CONTEXT_INVOCATION_ID).toMatch(UUID_V4_RE);
-}
-
 const PROJECT_KEY = 'my-project';
 const ORG_KEY = 'my-org';
 const ORG_UUID = `${ORG_KEY}-uuid-v4`;
 const TOKEN = 'cloud-token';
-const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 describe('integrate claude — Context Augmentation', () => {
   let harness: TestHarness;
@@ -152,7 +132,7 @@ describe('integrate claude — Context Augmentation', () => {
   });
 
   it(
-    'invokes CAG tool integrate when project key + org are present',
+    'installs the CAG session-start hook globally when project key + org are present',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -177,28 +157,22 @@ describe('integrate claude — Context Augmentation', () => {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
-          SONAR_CONTEXT_ORGANIZATION: 'caller-org',
-          SONAR_CONTEXT_PROJECT: 'caller-project',
-          SONAR_CONTEXT_TOKEN: 'caller-token',
-          SONAR_CONTEXT_URL: 'https://caller.example',
         },
       });
 
       expect(result.exitCode).toBe(0);
-      const integrate = findToolInvocation(readInvocations(harness), 'integrate');
-      expect(integrate.argv).toEqual(['tool', 'integrate', '--invocation-prefix', 'sonar context']);
-      expectContextEnv(integrate, serverUrl);
-      expect(result.stdout).not.toContain('Running: sonar-context-augmentation');
-      expect(result.stdout).toContain(
-        `✓  sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION}`,
-      );
-      expectVortexHookInstalled(harness.cwd, 'claude');
+      // A global install never binds the binary to one project via `tool integrate` —
+      // the hook resolves the project at runtime instead.
+      const invoked = readInvocations(harness).filter((i) => i.argv[1] === 'integrate');
+      expect(invoked).toEqual([]);
+      expectVortexHookInstalled(harness.userHome, 'claude', 'global');
+      expectVortexHookAbsent(harness.cwd, 'claude');
 
       // State records the declarative feature.
       const state = loadState(harness);
       expectRecordedCagFeature(state, {
         integrationId: CLAUDE_INTEGRATION_ID,
-        projectRoot: harness.cwd.path,
+        targetRoot: harness.userHome.path,
         scaEnabled: true,
         serverUrl,
       });
@@ -244,20 +218,20 @@ describe('integrate claude — Context Augmentation', () => {
       });
       expect(integrateResult.exitCode).toBe(0);
 
-      // targetRoot stays the physical worktree (so teardown deletes the files it
-      // wrote there); repoRoot records the stable main working tree, which is the
-      // key `sonar context` matches against from any worktree. (The read side is
-      // covered deterministically in the context passthrough spec — the harness
-      // re-applies its state builder on every run, so an integrate-then-context
-      // flow in one test cannot share state here.)
+      // targetRoot is the global root regardless of worktree; repoRoot records the
+      // stable main working tree, which is the key `sonar context` matches against
+      // from any worktree. (The read side is covered deterministically in the
+      // context passthrough spec — the harness re-applies its state builder on
+      // every run, so an integrate-then-context flow in one test cannot share
+      // state here.)
       const entry = findRecordedCagFeature(loadState(harness), CLAUDE_INTEGRATION_ID);
       expect(entry).toBeDefined();
       const targetRoot = entry?.feature.targetRoot ?? '';
       const repoRoot = entry?.feature.attrs?.repoRoot;
       expect(typeof repoRoot).toBe('string');
-      // Compare full canonical paths (not just basenames): targetRoot resolves to
-      // the physical worktree, repoRoot to the main working tree.
-      expect(pathComparisonKey(targetRoot)).toBe(pathComparisonKey(worktreePath));
+      // Compare full canonical paths (not just basenames): repoRoot resolves to
+      // the main working tree even though integrate ran from the linked worktree.
+      expect(pathComparisonKey(targetRoot)).toBe(pathComparisonKey(harness.userHome.path));
       expect(pathComparisonKey(repoRoot as string)).toBe(pathComparisonKey(harness.cwd.path));
       expect(repoRoot).not.toBe(targetRoot);
     },
@@ -294,14 +268,12 @@ describe('integrate claude — Context Augmentation', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      const integrate = findToolInvocation(readInvocations(harness), 'integrate');
-      expect(integrate.argv).toEqual(['tool', 'integrate', '--invocation-prefix', 'sonar context']);
       expect(result.stderr).toContain('Could not verify SCA availability');
-      expectVortexHookInstalled(harness.cwd, 'claude');
+      expectVortexHookInstalled(harness.userHome, 'claude', 'global');
       const state = loadState(harness);
       expectRecordedCagFeature(state, {
         integrationId: CLAUDE_INTEGRATION_ID,
-        projectRoot: harness.cwd.path,
+        targetRoot: harness.userHome.path,
         scaEnabled: false,
         serverUrl,
       });
@@ -323,7 +295,9 @@ describe('integrate claude — Context Augmentation', () => {
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, TOKEN, ORG_KEY);
       harness.state().withContextAugmentationBinaryInstalled();
-      harness.cwd.writeFile(join(...legacySkillPath), '# stale skill\n');
+      // The container's legacyCleanups run against the actual install target,
+      // which is the global root now that every agent install is global.
+      harness.userHome.writeFile(join(...legacySkillPath), '# stale skill\n');
       harness.cwd.writeFile(
         'sonar-project.properties',
         [
@@ -341,7 +315,7 @@ describe('integrate claude — Context Augmentation', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(harness.cwd.exists(...legacySkillPath)).toBe(false);
+      expect(harness.userHome.exists(...legacySkillPath)).toBe(false);
     },
     { timeout: 30000 },
   );
@@ -359,7 +333,7 @@ describe('integrate claude — Context Augmentation', () => {
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, TOKEN, ORG_KEY);
       harness.state().withContextAugmentationBinaryInstalled();
-      harness.cwd.writeFile('.claude/settings.json', '{ not json');
+      harness.userHome.writeFile('.claude/settings.json', '{ not json');
       harness.cwd.writeFile(
         'sonar-project.properties',
         [
@@ -378,7 +352,7 @@ describe('integrate claude — Context Augmentation', () => {
 
       expect(result.exitCode).not.toBe(0);
       expect(result.stderr).toContain('contains invalid JSON');
-      expectVortexHookAbsent(harness.cwd, 'claude');
+      expectVortexHookAbsent(harness.userHome, 'claude', 'global');
       expect(findRecordedCagFeature(loadState(harness))).toBeUndefined();
     },
     { timeout: 30000 },
@@ -490,7 +464,7 @@ describe('integrate claude — Context Augmentation', () => {
       expect(`${result.stdout}\n${result.stderr}`).toContain('Vortex usage limit has been reached');
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeDefined();
-      expectVortexHookInstalled(harness.cwd, 'claude');
+      expectVortexHookInstalled(harness.userHome, 'claude', 'global');
     },
     { timeout: 30000 },
   );
@@ -616,85 +590,10 @@ describe('integrate claude — Context Augmentation', () => {
     { timeout: 30000 },
   );
 
-  it(
-    'surfaces indented CAG stdout/stderr when tool integrate fails',
-    async () => {
-      const server = await harness
-        .newFakeServer()
-        .withAuthToken(TOKEN)
-        .withProject(PROJECT_KEY)
-        .withVortexEntitlement(ORG_KEY, ORG_UUID)
-        .start();
-      const serverUrl = server.baseUrl();
-      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
-      harness.state().withContextAugmentationBinaryInstalled({
-        initExitCode: 1,
-        stdoutLine: 'cag-stdout-diagnostic',
-        stderrLine: 'cag-stderr-diagnostic',
-      });
-      harness.cwd.writeFile(
-        'sonar-project.properties',
-        [
-          `sonar.host.url=${serverUrl}`,
-          `sonar.projectKey=${PROJECT_KEY}`,
-          `sonar.organization=${ORG_KEY}`,
-        ].join('\n'),
-      );
-
-      const result = await harness.run('integrate claude --non-interactive', {
-        extraEnv: {
-          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
-          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
-        },
-      });
-
-      expect(result.exitCode).toBe(1);
-      expect(result.stdout).toContain('  cag-stdout-diagnostic');
-      expect(result.stderr).toContain('  cag-stderr-diagnostic');
-      expect(result.stderr).toContain('Vortex Context tool integration failed.');
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'does not record the declarative feature when CAG tool integrate fails',
-    async () => {
-      const server = await harness
-        .newFakeServer()
-        .withAuthToken(TOKEN)
-        .withProject(PROJECT_KEY)
-        .withVortexEntitlement(ORG_KEY, ORG_UUID)
-        .start();
-      const serverUrl = server.baseUrl();
-      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
-      harness.state().withContextAugmentationBinaryInstalled({ initExitCode: 1 });
-      harness.cwd.writeFile(
-        'sonar-project.properties',
-        [
-          `sonar.host.url=${serverUrl}`,
-          `sonar.projectKey=${PROJECT_KEY}`,
-          `sonar.organization=${ORG_KEY}`,
-        ].join('\n'),
-      );
-
-      const result = await harness.run('integrate claude --non-interactive', {
-        extraEnv: {
-          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
-          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
-        },
-      });
-
-      expect(result.exitCode).toBe(1);
-      const invocations = readInvocations(harness);
-      const integrate = findToolInvocation(invocations, 'integrate');
-      expect(integrate?.argv[1]).toBe('integrate');
-      const state = loadState(harness);
-      expect(findRecordedCagFeature(state)).toBeUndefined();
-      expectVortexHookInstalled(harness.cwd, 'claude');
-      expect(result.stderr).toContain('Vortex Context tool integration failed.');
-    },
-    { timeout: 30000 },
-  );
+  // `tool integrate` (the eager project-binding step) only ever ran for a
+  // project-scope install with a resolved key. Every agent install is global
+  // now, so that step — and its failure modes — is unreachable; the hook
+  // resolves the project at runtime instead. No replacement test needed.
 
   it(
     'installs CAG on SonarQube Cloud with no project key',
@@ -721,7 +620,7 @@ describe('integrate claude — Context Augmentation', () => {
       expect(invoked).toEqual([]);
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeDefined();
-      expectVortexHookInstalled(harness.cwd, 'claude');
+      expectVortexHookInstalled(harness.userHome, 'claude', 'global');
     },
     { timeout: 30000 },
   );
@@ -772,7 +671,7 @@ describe('integrate copilot — Context Augmentation', () => {
   });
 
   it(
-    'invokes CAG with copilot agent identifier',
+    'installs the CAG session-start hook globally for copilot',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -801,17 +700,17 @@ describe('integrate copilot — Context Augmentation', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      const integrate = findToolInvocation(readInvocations(harness), 'integrate');
-      expect(integrate.argv).toEqual(['tool', 'integrate', '--invocation-prefix', 'sonar context']);
-      expectContextEnv(integrate, serverUrl);
+      const invoked = readInvocations(harness).filter((i) => i.argv[1] === 'integrate');
+      expect(invoked).toEqual([]);
       expect(result.stdout).not.toContain('Running: sonar-context-augmentation');
-      expectVortexHookInstalled(harness.cwd, 'copilot');
+      expectVortexHookInstalled(harness.userHome, 'copilot', 'global');
+      expectVortexHookAbsent(harness.cwd, 'copilot');
 
       // State records the declarative feature under the Copilot integration.
       const state = loadState(harness);
       expectRecordedCagFeature(state, {
         integrationId: COPILOT_INTEGRATION_ID,
-        projectRoot: harness.cwd.path,
+        targetRoot: harness.userHome.path,
         scaEnabled: false,
         serverUrl,
       });
@@ -833,7 +732,7 @@ describe('integrate codex — Context Augmentation', () => {
   });
 
   it(
-    'invokes CAG with codex agent identifier',
+    'installs the CAG session-start hook globally for codex',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -862,16 +761,16 @@ describe('integrate codex — Context Augmentation', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      const integrate = findToolInvocation(readInvocations(harness), 'integrate');
-      expect(integrate.argv).toEqual(['tool', 'integrate', '--invocation-prefix', 'sonar context']);
-      expectContextEnv(integrate, serverUrl);
+      const invoked = readInvocations(harness).filter((i) => i.argv[1] === 'integrate');
+      expect(invoked).toEqual([]);
       expect(result.stdout).not.toContain('Running: sonar-context-augmentation');
-      expectVortexHookInstalled(harness.cwd, 'codex');
+      expectVortexHookInstalled(harness.userHome, 'codex', 'global');
+      expectVortexHookAbsent(harness.cwd, 'codex');
 
       const state = loadState(harness);
       expectRecordedCagFeature(state, {
         integrationId: CODEX_INTEGRATION_ID,
-        projectRoot: harness.cwd.path,
+        targetRoot: harness.userHome.path,
         scaEnabled: false,
         serverUrl,
       });
@@ -979,7 +878,7 @@ describe('integrate codex — Context Augmentation', () => {
       const invoked = readInvocations(harness).filter((i) => i.argv[1] === 'integrate');
       expect(invoked).toEqual([]);
       expect(findRecordedCagFeature(loadState(harness))).toBeDefined();
-      expectVortexHookInstalled(harness.cwd, 'codex');
+      expectVortexHookInstalled(harness.userHome, 'codex', 'global');
     },
     { timeout: 30000 },
   );
@@ -998,7 +897,7 @@ describe('integrate cursor — Context Augmentation', () => {
   });
 
   it(
-    'invokes CAG with cursor agent identifier',
+    'installs the CAG session-start hook globally for cursor',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -1027,16 +926,16 @@ describe('integrate cursor — Context Augmentation', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      const integrate = findToolInvocation(readInvocations(harness), 'integrate');
-      expect(integrate.argv).toEqual(['tool', 'integrate', '--invocation-prefix', 'sonar context']);
-      expectContextEnv(integrate, serverUrl);
+      const invoked = readInvocations(harness).filter((i) => i.argv[1] === 'integrate');
+      expect(invoked).toEqual([]);
       expect(result.stdout).not.toContain('Running: sonar-context-augmentation');
-      expectVortexHookInstalled(harness.cwd, 'cursor');
+      expectVortexHookInstalled(harness.userHome, 'cursor', 'global');
+      expectVortexHookAbsent(harness.cwd, 'cursor');
 
       const state = loadState(harness);
       expectRecordedCagFeature(state, {
         integrationId: CURSOR_INTEGRATION_ID,
-        projectRoot: harness.cwd.path,
+        targetRoot: harness.userHome.path,
         scaEnabled: false,
         serverUrl,
       });
@@ -1045,7 +944,7 @@ describe('integrate cursor — Context Augmentation', () => {
   );
 });
 
-describe('integrate <agent> --global — Context Augmentation', () => {
+describe('integrate <agent> — Context Augmentation (global install, no project)', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -1057,15 +956,15 @@ describe('integrate <agent> --global — Context Augmentation', () => {
     await harness.dispose();
   });
 
-  const GLOBAL_AGENTS = [
-    ['claude', 'integrate claude -g --non-interactive'],
-    ['copilot', 'integrate copilot -g --non-interactive'],
-    ['codex', 'integrate codex -g --non-interactive'],
-    ['cursor', 'integrate cursor -g --non-interactive'],
+  const AGENTS = [
+    ['claude', 'integrate claude --non-interactive'],
+    ['copilot', 'integrate copilot --non-interactive'],
+    ['codex', 'integrate codex --non-interactive'],
+    ['cursor', 'integrate cursor --non-interactive'],
   ] as const;
 
-  it.each(GLOBAL_AGENTS)(
-    'installs CAG under the global root on "integrate %s --global" when the org is entitled',
+  it.each(AGENTS)(
+    'installs CAG under the global root on "integrate %s" when the org is entitled',
     async (agent, command) => {
       const server = await harness
         .newFakeServer()
@@ -1094,8 +993,8 @@ describe('integrate <agent> --global — Context Augmentation', () => {
     { timeout: 30000 },
   );
 
-  it.each(GLOBAL_AGENTS)(
-    'skips CAG entirely on "integrate %s --global" when the org is not entitled',
+  it.each(AGENTS)(
+    'skips CAG entirely on "integrate %s" when the org is not entitled',
     async (agent, command) => {
       // No CAG entitlement configured on the server.
       const server = await harness.newFakeServer().withAuthToken(TOKEN).start();

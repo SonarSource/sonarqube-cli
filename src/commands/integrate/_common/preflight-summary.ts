@@ -36,8 +36,6 @@ export interface AgentPreflightSummaryOptions {
   token: string;
   project: DiscoveredProject;
   projectKey?: string;
-  /** When set, the project key was taken from `--project` rather than a config file. */
-  cliProjectKey?: string;
 }
 
 export async function printAgentPreflightSummary(
@@ -138,10 +136,6 @@ async function buildProjectItems(
 }
 
 function buildConfigSourceItem(options: AgentPreflightSummaryOptions): PhaseItem {
-  if (options.cliProjectKey) {
-    return phaseItem('Config source', 'info', '--project');
-  }
-
   if (options.project.configSources.length > 0) {
     return phaseItem('Config source', 'done', options.project.configSources.join(', '));
   }

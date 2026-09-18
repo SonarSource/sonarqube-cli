@@ -30,7 +30,6 @@ import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { resolveVortexSetup } from '../_common/vortex.ts';
 import { supportedIntegrations } from '../index.ts';
 import { ANTIGRAVITY_INTEGRATION_ID, type AntigravityIntegrationOptions } from './declaration.ts';
-import { detectGlobalSecretsHook } from './hooks.ts';
 import { resolveAntigravityInstallTarget } from './install-target.ts';
 
 export async function integrateAntigravity(
@@ -42,33 +41,18 @@ export async function integrateAntigravity(
     printAgentNonInteractiveAlternativeHint(
       console,
       'sonar integrate antigravity --non-interactive',
-      'sonar integrate antigravity --non-interactive -g',
     );
   }
 
-  const integrateCtx = await displayAgentIntegratePrelude(
-    'Antigravity',
-    'antigravity',
-    options,
-    auth,
-    console,
-  );
+  const integrateCtx = await displayAgentIntegratePrelude('Antigravity', auth, console);
 
   const vortex = await resolveVortexSetup(auth, console);
 
-  const { installRoot: targetRoot, installScope: scope } = resolveAntigravityInstallTarget(
-    integrateCtx.isGlobal,
-    integrateCtx.project.projectRoot,
-  );
-  const existingGlobalHookPath = integrateCtx.isGlobal
-    ? undefined
-    : await detectGlobalSecretsHook(console);
-  const globalSecretsHookExists = existingGlobalHookPath !== undefined;
+  const { installRoot: targetRoot, installScope: scope } = resolveAntigravityInstallTarget();
 
   const integrationOptions: AntigravityIntegrationOptions = {
     ...options,
     projectRoot: integrateCtx.project.projectRoot,
-    globalSecretsHookExists,
     vortexDisposition: vortex.disposition,
   };
 

@@ -46,13 +46,15 @@ import { hookScriptName, TestHarness } from '../../harness';
 import { expectVortexHookAbsent, expectVortexHookInstalled } from '../../harness/cag-helpers';
 import { buildHomeEnv, IS_WINDOWS } from '../../harness/platform';
 import {
-  PROJECT_HOOK_SCRIPT_PATH,
-  PROJECT_PROMPT_SECRETS_RULE_PATH,
+  GLOBAL_GEMINI_MD_PATH,
+  GLOBAL_HOOK_SCRIPT_PATH as ANTIGRAVITY_HOOK_SCRIPT_PATH,
+  GLOBAL_HOOKS_JSON_PATH as ANTIGRAVITY_HOOKS_JSON_PATH,
+  GLOBAL_MCP_CONFIG_PATH as ANTIGRAVITY_MCP_CONFIG_PATH,
 } from '../integrate/antigravity-test-helpers';
 import {
-  PROJECT_HOOK_SCRIPT_PATH as COPILOT_HOOK_SCRIPT_PATH,
-  PROJECT_HOOKS_JSON_PATH as COPILOT_HOOKS_JSON_PATH,
-  PROJECT_INSTRUCTIONS_PATH as COPILOT_INSTRUCTIONS_PATH,
+  GLOBAL_HOOK_SCRIPT_PATH as COPILOT_HOOK_SCRIPT_PATH,
+  GLOBAL_HOOKS_JSON_PATH as COPILOT_HOOKS_JSON_PATH,
+  GLOBAL_INSTRUCTIONS_PATH as COPILOT_INSTRUCTIONS_PATH,
 } from '../integrate/copilot-test-helpers';
 
 const CODEX_SQAA_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-sqaa', 'build-scripts'];
@@ -714,7 +716,8 @@ describe('system reset --force', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(serverUrl, 'cloud-token', testOrg);
 
-      harness.cwd.writeFile(
+      harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${testProject}`);
+      harness.userHome.writeFile(
         '.codex/hooks.json',
         JSON.stringify({
           hooks: {
@@ -730,21 +733,18 @@ describe('system reset --force', () => {
         }),
       );
 
-      const integrateResult = await harness.run(
-        `integrate codex --project ${testProject} --non-interactive`,
-        {
-          extraEnv: {
-            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
-            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
-          },
+      const integrateResult = await harness.run('integrate codex --non-interactive', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
         },
-      );
+      });
 
       expect(integrateResult.exitCode).toBe(0);
       expect(
-        harness.cwd.file(...CODEX_SQAA_SCRIPT_DIRS, hookScriptName('posttool-sqaa')).exists(),
+        harness.userHome.file(...CODEX_SQAA_SCRIPT_DIRS, hookScriptName('posttool-sqaa')).exists(),
       ).toBe(true);
-      expectVortexHookInstalled(harness.cwd, 'codex');
+      expectVortexHookInstalled(harness.userHome, 'codex');
       expect(readState(harness.stateJsonFile.path).integrations.installed.length).toBeGreaterThan(
         0,
       );
@@ -760,11 +760,11 @@ describe('system reset --force', () => {
       expect(result.stdout).toMatch(/Integrations:.*Removed/);
       expect(readState(harness.stateJsonFile.path).integrations.installed).toHaveLength(0);
       expect(
-        harness.cwd.file(...CODEX_SQAA_SCRIPT_DIRS, hookScriptName('posttool-sqaa')).exists(),
+        harness.userHome.file(...CODEX_SQAA_SCRIPT_DIRS, hookScriptName('posttool-sqaa')).exists(),
       ).toBe(false);
-      expectVortexHookAbsent(harness.cwd, 'codex');
+      expectVortexHookAbsent(harness.userHome, 'codex');
 
-      const hooks = harness.cwd.file('.codex', 'hooks.json').asJson() as {
+      const hooks = harness.userHome.file('.codex', 'hooks.json').asJson() as {
         hooks?: {
           PostToolUse?: Array<{ hooks?: Array<{ command?: string }> }>;
         };
@@ -831,7 +831,7 @@ describe('system reset --force', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(serverUrl, 'cloud-token');
 
-      harness.cwd.writeFile(
+      harness.userHome.writeFile(
         '.cursor/hooks.json',
         JSON.stringify({
           version: 1,
@@ -845,7 +845,9 @@ describe('system reset --force', () => {
 
       expect(integrateResult.exitCode).toBe(0);
       expect(
-        harness.cwd.file(...CURSOR_PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')).exists(),
+        harness.userHome
+          .file(...CURSOR_PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets'))
+          .exists(),
       ).toBe(true);
 
       // harness.run() re-seeds state.json from the env builder before each subprocess;
@@ -859,10 +861,12 @@ describe('system reset --force', () => {
       expect(result.stdout).toMatch(/Integrations:.*Removed/);
       expect(readState(harness.stateJsonFile.path).integrations.installed).toHaveLength(0);
       expect(
-        harness.cwd.file(...CURSOR_PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')).exists(),
+        harness.userHome
+          .file(...CURSOR_PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets'))
+          .exists(),
       ).toBe(false);
 
-      const hooks = harness.cwd.file('.cursor', 'hooks.json').asJson() as {
+      const hooks = harness.userHome.file('.cursor', 'hooks.json').asJson() as {
         hooks?: { beforeSubmitPrompt?: Array<{ command?: string }> };
       };
       const commands = hooks.hooks?.beforeSubmitPrompt?.map((entry) => entry.command);
@@ -873,14 +877,15 @@ describe('system reset --force', () => {
   );
 
   it(
-    'undoes an Antigravity project integration and preserves unrelated hooks and MCP servers',
+    'undoes an Antigravity integration and preserves unrelated hooks and MCP servers',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('tok').start();
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(server.baseUrl(), 'tok');
 
-      harness.cwd.writeFile(
-        '.agents/hooks.json',
+      harness.userHome.writeFile(join('.gemini', 'GEMINI.md'), '# pre-existing global rules\n');
+      harness.userHome.writeFile(
+        join(...ANTIGRAVITY_HOOKS_JSON_PATH),
         JSON.stringify({
           'other-hook': {
             PreToolUse: [{ matcher: 'run_command', hooks: [{ command: './lint.sh' }] }],
@@ -888,7 +893,7 @@ describe('system reset --force', () => {
         }),
       );
       harness.userHome.writeFile(
-        join('.gemini', 'config', 'mcp_config.json'),
+        join(...ANTIGRAVITY_MCP_CONFIG_PATH),
         JSON.stringify({
           mcpServers: {
             other: { command: 'other-mcp', args: [] },
@@ -896,12 +901,10 @@ describe('system reset --force', () => {
         }),
       );
 
-      const integrateResult = await harness.run(
-        'integrate antigravity --project my-project --non-interactive',
-      );
+      const integrateResult = await harness.run('integrate antigravity --non-interactive');
 
       expect(integrateResult.exitCode).toBe(0);
-      expect(harness.cwd.exists(...PROJECT_HOOK_SCRIPT_PATH)).toBe(true);
+      expect(harness.userHome.exists(...ANTIGRAVITY_HOOK_SCRIPT_PATH)).toBe(true);
 
       const stateAfterIntegrate = readFileSync(harness.stateJsonFile.path, 'utf-8');
       harness.state().withRawState(stateAfterIntegrate);
@@ -911,28 +914,30 @@ describe('system reset --force', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toMatch(/Integrations:.*Removed/);
       expect(readState(harness.stateJsonFile.path).integrations.installed).toHaveLength(0);
-      expect(harness.cwd.exists(...PROJECT_HOOK_SCRIPT_PATH)).toBe(false);
+      expect(harness.userHome.exists(...ANTIGRAVITY_HOOK_SCRIPT_PATH)).toBe(false);
 
-      const hooks = harness.cwd.file('.agents', 'hooks.json').asJson() as {
+      const hooks = harness.userHome.file(...ANTIGRAVITY_HOOKS_JSON_PATH).asJson() as {
         'sonar-secrets'?: unknown;
         'other-hook'?: unknown;
       };
       expect(hooks['other-hook']).toBeDefined();
       expect(hooks['sonar-secrets']).toBeUndefined();
 
-      const mcp = harness.userHome.file('.gemini', 'config', 'mcp_config.json').asJson() as {
+      const mcp = harness.userHome.file(...ANTIGRAVITY_MCP_CONFIG_PATH).asJson() as {
         mcpServers?: Record<string, unknown>;
       };
       expect(mcp.mcpServers?.other).toBeDefined();
       expect(mcp.mcpServers?.sonarqube).toBeUndefined();
 
-      expect(harness.cwd.exists(...PROJECT_PROMPT_SECRETS_RULE_PATH)).toBe(false);
+      const gemini = harness.userHome.file(...GLOBAL_GEMINI_MD_PATH).asText();
+      expect(gemini).toContain('# pre-existing global rules');
+      expect(gemini).not.toContain('# SonarQube secrets scanning for prompts protocol');
     },
     { timeout: 30000 },
   );
 
   it(
-    'undoes a Copilot project integration and deletes the files it emptied',
+    'undoes a Copilot integration and deletes the files it emptied',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('tok').start();
       harness.state().withSecretsBinaryInstalled();
@@ -943,10 +948,10 @@ describe('system reset --force', () => {
       expect(integrateResult.exitCode).toBe(0);
       // The integration owns each of these files end-to-end (no pre-existing
       // user content), so removal should leave nothing behind to delete.
-      expect(harness.cwd.exists('.mcp.json')).toBe(true);
-      expect(harness.cwd.file(...COPILOT_HOOKS_JSON_PATH).exists()).toBe(true);
-      expect(harness.cwd.file(...COPILOT_INSTRUCTIONS_PATH).exists()).toBe(true);
-      expect(harness.cwd.file(...COPILOT_HOOK_SCRIPT_PATH).exists()).toBe(true);
+      expect(harness.userHome.exists('.copilot', 'mcp-config.json')).toBe(true);
+      expect(harness.userHome.file(...COPILOT_HOOKS_JSON_PATH).exists()).toBe(true);
+      expect(harness.userHome.file(...COPILOT_INSTRUCTIONS_PATH).exists()).toBe(true);
+      expect(harness.userHome.file(...COPILOT_HOOK_SCRIPT_PATH).exists()).toBe(true);
 
       // harness.run() re-seeds state.json from the env builder before each subprocess;
       // preserve the post-integrate snapshot so reset sees the installed features.
@@ -961,10 +966,10 @@ describe('system reset --force', () => {
 
       // Each file held only Sonar-managed content, so removal deletes the file
       // outright rather than leaving an empty husk behind.
-      expect(harness.cwd.exists('.mcp.json')).toBe(false);
-      expect(harness.cwd.file(...COPILOT_HOOKS_JSON_PATH).exists()).toBe(false);
-      expect(harness.cwd.file(...COPILOT_INSTRUCTIONS_PATH).exists()).toBe(false);
-      expect(harness.cwd.file(...COPILOT_HOOK_SCRIPT_PATH).exists()).toBe(false);
+      expect(harness.userHome.exists('.copilot', 'mcp-config.json')).toBe(false);
+      expect(harness.userHome.file(...COPILOT_HOOKS_JSON_PATH).exists()).toBe(false);
+      expect(harness.userHome.file(...COPILOT_INSTRUCTIONS_PATH).exists()).toBe(false);
+      expect(harness.userHome.file(...COPILOT_HOOK_SCRIPT_PATH).exists()).toBe(false);
     },
     { timeout: 30000 },
   );

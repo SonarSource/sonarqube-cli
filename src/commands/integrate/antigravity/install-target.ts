@@ -21,12 +21,10 @@
 import { ANTIGRAVITY_GLOBAL_CONFIG_DIR } from '@/core/config-constants.ts';
 import type { IntegrationScope } from '@/core/state/state.ts';
 
-export function resolveAntigravityInstallTarget(
-  isGlobal: boolean,
-  projectRoot: string,
-): { installRoot: string; installScope: IntegrationScope } {
-  return {
-    installRoot: isGlobal ? ANTIGRAVITY_GLOBAL_CONFIG_DIR : projectRoot,
-    installScope: isGlobal ? 'global' : 'project',
-  };
+/** Antigravity always installs to its global config dir. */
+export function resolveAntigravityInstallTarget(): {
+  installRoot: string;
+  installScope: IntegrationScope;
+} {
+  return { installRoot: ANTIGRAVITY_GLOBAL_CONFIG_DIR, installScope: 'global' };
 }

@@ -24,7 +24,6 @@ import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:te
 
 import type { VortexDisposition } from '@/commands/integrate/_common/types.ts';
 import { integrateClaude } from '@/commands/integrate/claude';
-import * as hooks from '@/commands/integrate/claude/hooks.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import * as token from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
@@ -94,9 +93,6 @@ describe('integrateCommand', () => {
   let installIntegrationSpy: Mock<
     Extract<(typeof registry)['installIntegration'], (...args: any[]) => any>
   >;
-  let detectGlobalSecretsHookSpy: Mock<
-    Extract<(typeof hooks)['detectGlobalSecretsHook'], (...args: any[]) => any>
-  >;
   let getScaEnablementSpy: Mock<
     Extract<(typeof ScaClient.prototype)['getScaEnablement'], (...args: any[]) => any>
   >;
@@ -125,9 +121,6 @@ describe('integrateCommand', () => {
     ).mockResolvedValue(true);
     discoverProjectSpy = spyOn(discovery, 'discoverProject');
     installIntegrationSpy = spyOn(registry, 'installIntegration').mockResolvedValue([]);
-    detectGlobalSecretsHookSpy = spyOn(hooks, 'detectGlobalSecretsHook').mockResolvedValue(
-      undefined,
-    );
 
     mockDiscoveredProject({});
   });
@@ -141,7 +134,6 @@ describe('integrateCommand', () => {
     isOrganizationAccessibleSpy.mockRestore();
     discoverProjectSpy.mockRestore();
     installIntegrationSpy.mockRestore();
-    detectGlobalSecretsHookSpy.mockRestore();
     getScaEnablementSpy.mockRestore();
   });
 
@@ -235,20 +227,6 @@ describe('integrateCommand', () => {
     expect(configSource?.detail).toBe('sonar-project.properties');
   });
 
-  it('shows config source as --project when the CLI flag overrides the key', async () => {
-    mockDiscoveredProject({
-      projectKey: 'discovered-key',
-      configSources: ['sonar-project.properties'],
-    });
-
-    await integrateClaude({ project: 'cli-key' }, SERVER_CTX);
-
-    const configSource = getPhaseItems('Project').find((i) => i.text === 'Config source');
-    expect(configSource?.status).toBe('info');
-    expect(configSource?.detail).toBe('--project');
-    expect(getPhaseItems('Project').find((i) => i.text === 'Key')?.detail).toBe('cli-key');
-  });
-
   it('shows config source as none detected when no config file contributed', async () => {
     await integrateClaude({}, SERVER_CTX);
 
@@ -263,14 +241,6 @@ describe('integrateCommand', () => {
     await integrateClaude({}, SERVER_CTX);
 
     expect(getPhaseItems('Project').find((i) => i.text === 'Key')?.detail).toBe('project');
-  });
-
-  it('project key overrides discovered project key', async () => {
-    mockDiscoveredProject({ projectKey: 'project' });
-
-    await integrateClaude({ project: 'override-project' }, SERVER_CTX);
-
-    expect(getPhaseItems('Project').find((i) => i.text === 'Key')?.detail).toBe('override-project');
   });
 
   it('aborts when token is invalid', async () => {
@@ -311,11 +281,10 @@ describe('integrateCommand', () => {
         auth: CLOUD_AUTH,
         options: expect.objectContaining({
           projectRoot: '/project/root',
-          globalSecretsHookExists: false,
           vortexDisposition: 'install',
         }),
-        scope: 'project',
-        targetRoot: '/project/root',
+        scope: 'global',
+        targetRoot: homedir(),
         attrs: {
           projectKey: 'a-project',
           repoRoot: '/project/root',
@@ -353,12 +322,11 @@ describe('integrateCommand', () => {
     await integrateClaude({}, CLOUD_CTX);
 
     expectClaudeInstallCall({
-      targetRoot: '/project/root',
-      scope: 'project',
+      targetRoot: homedir(),
+      scope: 'global',
       auth: CLOUD_AUTH,
       projectRoot: '/project/root',
       projectKey: 'a-project',
-      globalSecretsHookExists: false,
       vortexDisposition: 'remove',
     });
   });
@@ -389,22 +357,7 @@ describe('integrateCommand', () => {
 
     await integrateClaude({}, CLOUD_CTX);
 
-    assertMigrationAndHookInstallationRan(
-      'a-project',
-      '/project/root',
-      undefined,
-      false,
-      'install',
-    );
-  });
-
-  it('runs migration and installs hooks when global option is set', async () => {
-    mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
-    mockVortexEntitlement(true);
-
-    await integrateClaude({ global: true }, CLOUD_CTX);
-
-    assertMigrationAndHookInstallationRan('a-project', '/project/root', homedir(), true, 'install');
+    assertMigrationAndHookInstallationRan('a-project', '/project/root', 'install');
   });
 
   it('still installs when organization access check fails in the summary', async () => {
@@ -414,13 +367,7 @@ describe('integrateCommand', () => {
 
     await integrateClaude({}, CLOUD_CTX);
 
-    assertMigrationAndHookInstallationRan(
-      'a-project',
-      '/project/root',
-      undefined,
-      false,
-      'install',
-    );
+    assertMigrationAndHookInstallationRan('a-project', '/project/root', 'install');
   });
 
   it('requests Vortex removal when project key is missing and entitlement is lost', async () => {
@@ -429,7 +376,7 @@ describe('integrateCommand', () => {
 
     await integrateClaude({}, CLOUD_CTX);
 
-    assertMigrationAndHookInstallationRan(undefined, '/projectB/root', undefined, false, 'remove');
+    assertMigrationAndHookInstallationRan(undefined, '/projectB/root', 'remove');
   });
 
   it('aborts integration when sonar-secrets installation fails', async () => {
@@ -444,123 +391,6 @@ describe('integrateCommand', () => {
 
     expect((error as Error).message).toBe('Network error');
     expect(installIntegrationSpy).toHaveBeenCalledTimes(1);
-  });
-
-  describe('when a global Claude hook is already configured', () => {
-    const GLOBAL_HOOK_PATH = `${homedir()}/.claude/hooks/sonar-secrets`;
-
-    beforeEach(() => {
-      detectGlobalSecretsHookSpy.mockResolvedValue(GLOBAL_HOOK_PATH);
-    });
-
-    it('forwards skipSecretsHooks: true to migrations and skips the declarative secrets-hooks feature', async () => {
-      mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
-      hasVortexEntitlementSpy.mockResolvedValue({ status: 'not_applicable' });
-
-      await integrateClaude({}, SERVER_CTX);
-
-      expectClaudeInstallCall({
-        targetRoot: '/project/root',
-        scope: 'project',
-        auth: SERVER_AUTH,
-        projectRoot: '/project/root',
-        projectKey: 'a-project',
-        globalSecretsHookExists: true,
-        vortexDisposition: 'remove',
-      });
-    });
-
-    it('still installs project-scoped Vortex when the org is entitled', async () => {
-      mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
-      mockVortexEntitlement(true);
-
-      await integrateClaude({}, CLOUD_CTX);
-
-      expectClaudeInstallCall({
-        targetRoot: '/project/root',
-        scope: 'project',
-        auth: CLOUD_AUTH,
-        projectRoot: '/project/root',
-        projectKey: 'a-project',
-        globalSecretsHookExists: true,
-        vortexDisposition: 'install',
-      });
-    });
-  });
-
-  describe('when no global Claude hook is configured', () => {
-    beforeEach(() => {
-      detectGlobalSecretsHookSpy.mockResolvedValue(undefined);
-    });
-
-    it('falls back to a project-level install (does not skip secrets hooks)', async () => {
-      mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
-      hasVortexEntitlementSpy.mockResolvedValue({ status: 'not_applicable' });
-
-      await integrateClaude({}, SERVER_CTX);
-
-      expectClaudeInstallCall({
-        targetRoot: '/project/root',
-        scope: 'project',
-        auth: SERVER_AUTH,
-        projectRoot: '/project/root',
-        projectKey: 'a-project',
-        globalSecretsHookExists: false,
-        vortexDisposition: 'remove',
-      });
-    });
-  });
-
-  describe('when -g (global) is used', () => {
-    it('does not probe for a pre-existing global hook', async () => {
-      await integrateClaude({ global: true }, SERVER_CTX);
-
-      expect(detectGlobalSecretsHookSpy).not.toHaveBeenCalled();
-    });
-
-    it('does not print the "already configured globally" skip notice (no probe is run)', async () => {
-      await integrateClaude({ global: true }, SERVER_CTX);
-
-      const skipNotice = fake.calls.find(
-        (c) =>
-          c.method === 'info' && String(c.args[0]).includes('already configured for SonarQube'),
-      );
-      expect(skipNotice).toBeUndefined();
-    });
-
-    it('installs Vortex when the org is entitled', async () => {
-      mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
-      mockVortexEntitlement(true);
-
-      await integrateClaude({ global: true }, CLOUD_CTX);
-
-      expectClaudeInstallCall({
-        targetRoot: homedir(),
-        scope: 'global',
-        auth: CLOUD_AUTH,
-        projectRoot: '/project/root',
-        projectKey: 'a-project',
-        globalSecretsHookExists: false,
-        vortexDisposition: 'install',
-      });
-    });
-
-    it('requests Vortex removal when a global run finds the org is not entitled', async () => {
-      mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
-      mockVortexEntitlement(false);
-
-      await integrateClaude({ global: true }, CLOUD_CTX);
-
-      expectClaudeInstallCall({
-        targetRoot: homedir(),
-        scope: 'global',
-        auth: CLOUD_AUTH,
-        projectRoot: '/project/root',
-        projectKey: 'a-project',
-        globalSecretsHookExists: false,
-        vortexDisposition: 'remove',
-      });
-    });
   });
 
   function mockDiscoveredProject(project: Partial<DiscoveredProject>) {
@@ -585,21 +415,15 @@ describe('integrateCommand', () => {
   function assertMigrationAndHookInstallationRan(
     projectKey: string | undefined,
     projectRootDir: string,
-    globalDir: string | undefined,
-    isGlobal: boolean,
     vortexDisposition: VortexDisposition,
     auth: ResolvedAuth = CLOUD_AUTH,
-    skipSecretsHooks = false,
   ): void {
-    const mainTargetRoot = globalDir ?? projectRootDir;
-    const mainScope = isGlobal ? 'global' : 'project';
     expectClaudeInstallCall({
-      targetRoot: mainTargetRoot,
-      scope: mainScope,
+      targetRoot: homedir(),
+      scope: 'global',
       auth,
       projectRoot: projectRootDir,
       projectKey,
-      globalSecretsHookExists: skipSecretsHooks,
       vortexDisposition,
     });
   }
@@ -610,15 +434,13 @@ describe('integrateCommand', () => {
     auth,
     projectRoot,
     projectKey,
-    globalSecretsHookExists,
     vortexDisposition,
   }: {
     targetRoot: string;
-    scope: 'global' | 'project';
+    scope: 'global';
     auth: ResolvedAuth;
     projectRoot: string;
     projectKey?: string;
-    globalSecretsHookExists: boolean;
     vortexDisposition: VortexDisposition;
   }): void {
     // The connection attrs are recorded only when Vortex is installed: its
@@ -638,7 +460,6 @@ describe('integrateCommand', () => {
         auth,
         options: expect.objectContaining({
           projectRoot,
-          globalSecretsHookExists,
           vortexDisposition,
         }),
         scope,
