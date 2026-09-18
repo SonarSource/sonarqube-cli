@@ -40,12 +40,18 @@ import type {
   PostUpdateDependencies,
 } from './post-update.ts';
 
+/** These read Claude's hooks too, so a global install beside Claude Code makes the two conflict. */
+const CLAUDE_ID = 'claude-code';
+const AGENTS_SUPERSEDED_BY_CLAUDE = new Set(['cursor', 'copilot-cli']);
+
 /** One agent to migrate, and every project-scoped install recorded for it. */
 interface AgentMigration {
   declaration: IntegrationDeclaration;
   handler: AgentIntegrationHandler;
   /** Recorded project `targetRoot`s, one per repository the agent was integrated into. */
   integrationTargets: ReadonlySet<string>;
+  /** Only the project artifacts go: the agent is already global, or Claude Code took its place. */
+  skipGlobalInstall: boolean;
 }
 
 export function hasProjectScopedAgentIntegrations(
@@ -76,13 +82,13 @@ export async function migrateAgentIntegrationsToGlobalScope(
     return;
   }
 
-  const agentMigrations = collectAgentMigrations(loadState(), deps);
-  if (agentMigrations.length === 0) {
+  const auth = await resolveAuthOrNull(deps);
+  if (!auth) {
     return;
   }
 
-  const auth = await resolveAuthOrNull(deps);
-  if (!auth) {
+  const agentMigrations = collectAgentMigrations(loadState(), deps);
+  if (agentMigrations.length === 0) {
     return;
   }
 
@@ -91,12 +97,23 @@ export async function migrateAgentIntegrationsToGlobalScope(
 
   for (const agentMigration of agentMigrations) {
     const { displayName } = agentMigration.declaration;
-    deps.console.info(`Migrating the ${displayName} integration to global scope...`);
+    const { skipGlobalInstall } = agentMigration;
+    deps.console.info(
+      skipGlobalInstall
+        ? `Removing the project-scoped ${displayName} integration...`
+        : `Migrating the ${displayName} integration to global scope...`,
+    );
     try {
       await uninstallProjectScopedArtifacts(agentMigration, quietConsole);
-      await installIntegrationAtGlobalScope(agentMigration, auth, quietConsole, deps);
+      if (!skipGlobalInstall) {
+        await installIntegrationAtGlobalScope(agentMigration, auth, quietConsole, deps);
+      }
       pruneProjectScopedRecordsFromState(agentMigration.declaration.id);
-      deps.console.info(`Moved the ${displayName} integration to global scope.`);
+      deps.console.info(
+        skipGlobalInstall
+          ? `Removed the project-scoped ${displayName} integration.`
+          : `Migrated the ${displayName} integration to global scope.`,
+      );
     } catch (error) {
       deps.console.error(
         `Could not move the ${displayName} integration to global scope: ${(error as Error).message}`,
@@ -118,6 +135,10 @@ async function resolveAuthOrNull(deps: PostUpdateDependencies): Promise<Resolved
 
 function collectAgentMigrations(state: CliState, deps: PostUpdateDependencies): AgentMigration[] {
   const agentMigrations: AgentMigration[] = [];
+  // Any recorded Claude integration ends up global: it is either already there or migrated below.
+  const claudeGoesGlobal = state.integrations.installed.some(
+    (integration) => integration.integrationId === CLAUDE_ID,
+  );
   for (const integration of state.integrations.installed) {
     const declaration = deps.supportedIntegrations.get(integration.integrationId);
     if (!declaration || !(integration.integrationId in deps.agentIntegrationHandlers)) {
@@ -130,9 +151,24 @@ function collectAgentMigrations(state: CliState, deps: PostUpdateDependencies): 
         integrationTargets.add(feature.targetRoot);
       }
     }
-    if (integrationTargets.size > 0) {
-      agentMigrations.push({ declaration, handler, integrationTargets });
+    if (integrationTargets.size === 0) {
+      continue;
     }
+    const supersededByClaude = claudeGoesGlobal && AGENTS_SUPERSEDED_BY_CLAUDE.has(declaration.id);
+    if (supersededByClaude) {
+      deps.console.warn(
+        `Skipped the global ${declaration.displayName} integration: you have the Claude Code ` +
+          `integration installed, and ${declaration.displayName} picks up its global hooks, so the ` +
+          `two would conflict.`,
+      );
+    }
+    agentMigrations.push({
+      declaration,
+      handler,
+      integrationTargets,
+      skipGlobalInstall:
+        supersededByClaude || integration.features.some((feature) => feature.scope === 'global'),
+    });
   }
   return agentMigrations;
 }

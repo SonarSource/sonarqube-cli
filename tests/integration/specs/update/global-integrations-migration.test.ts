@@ -28,6 +28,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { antigravityIntegration } from '@/commands/integrate/antigravity/declaration.ts';
 import { claudeIntegration } from '@/commands/integrate/claude/declaration.ts';
 import { codexIntegration } from '@/commands/integrate/codex/declaration.ts';
+import { copilotIntegration } from '@/commands/integrate/copilot/declaration.ts';
 import { cursorIntegration } from '@/commands/integrate/cursor/declaration.ts';
 import { nativeGitIntegration } from '@/commands/integrate/git/tools/native';
 import type { IntegrationDeclaration } from '@/core/framework/features';
@@ -92,9 +93,9 @@ describe('global-integrations migration', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Migrating agent integrations to global scope...');
       expect(result.stdout).toContain('Migrating the Claude Code integration to global scope...');
-      expect(result.stdout).toContain('Moved the Claude Code integration to global scope.');
+      expect(result.stdout).toContain('Migrated the Claude Code integration to global scope.');
       expect(result.stdout).toContain('Migrating the Codex integration to global scope...');
-      expect(result.stdout).toContain('Moved the Codex integration to global scope.');
+      expect(result.stdout).toContain('Migrated the Codex integration to global scope.');
       expect(result.stdout).toContain('Finished migrating agent integrations to global scope.');
       expect(recordedScopes('claude-code')).not.toContain('project');
       expect(recordedScopes('claude-code')).toContain('global');
@@ -134,7 +135,7 @@ describe('global-integrations migration', () => {
       const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('Moved the Claude Code integration to global scope.');
+      expect(result.stdout).toContain('Migrated the Claude Code integration to global scope.');
       expect(result.stdout).not.toContain('Native Git integration to global scope');
       expect(recordedScopes('claude-code')).not.toContain('project');
       expect(recordedScopes('native-git')).toEqual(['project']);
@@ -180,7 +181,7 @@ describe('global-integrations migration', () => {
       const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('Moved the Claude Code integration to global scope.');
+      expect(result.stdout).toContain('Migrated the Claude Code integration to global scope.');
       expect(recordedScopes('claude-code')).not.toContain('project');
       expect(recordedScopes('claude-code')).toContain('global');
     },
@@ -268,9 +269,34 @@ describe('global-integrations migration', () => {
 
       expect(result.exitCode).toBe(0);
       expect(recordedScopes('claude-code')).not.toContain('project');
-      expect(recordedFeatures('claude-code').map((feature) => feature.featureId)).toContain(
+      expect(recordedFeatures('claude-code').map((feature) => feature.featureId)).toEqual([
         'sonar-secrets-hooks',
-      );
+      ]);
+    },
+    { timeout: TEST_TIMEOUT },
+  );
+
+  it(
+    'installs only Claude globally when Cursor and Copilot are migrated alongside it',
+    async () => {
+      await authenticateAgainstFakeServer();
+      seedProjectScopedInstall(claudeIntegration);
+      seedProjectScopedInstall(cursorIntegration);
+      seedProjectScopedInstall(copilotIntegration, 'pre-tool-use-hook');
+      harness.cwd.writeFile('.cursor/rules/sonar-agentic-analysis.mdc', '# stale\n');
+
+      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Migrated the Claude Code integration to global scope.');
+      expect(result.stderr).toContain('Skipped the global Cursor integration');
+      expect(result.stderr).toContain('Skipped the global Copilot integration');
+      // Both give way, project records and artifacts included; only Claude reaches global scope.
+      expect(harness.cwd.exists('.cursor', 'rules', 'sonar-agentic-analysis.mdc')).toBe(false);
+      expect(recordedScopes('cursor')).toEqual([]);
+      expect(recordedScopes('copilot-cli')).toEqual([]);
+      expect(harness.userHome.exists('.copilot')).toBe(false);
+      expect(recordedScopes('claude-code')).toContain('global');
     },
     { timeout: TEST_TIMEOUT },
   );
