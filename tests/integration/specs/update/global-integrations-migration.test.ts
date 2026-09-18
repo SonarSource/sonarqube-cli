@@ -34,6 +34,7 @@ import { nativeGitIntegration } from '@/commands/integrate/git/tools/native';
 import type { IntegrationDeclaration } from '@/core/framework/features';
 import type { CliState, InstalledIntegrationFeature } from '@/core/state/state.ts';
 
+import { version as CURRENT_CLI_VERSION } from '../../../../package.json';
 import { POST_UPDATE_TRIGGER_COMMAND } from '../../../_common/isolated-cli-env.js';
 import { type CliResult, TestHarness } from '../../harness';
 
@@ -237,7 +238,7 @@ describe('global-integrations migration', () => {
       expect(recordedScopes('codex')).toContain('global');
       // The version gate has already been spent, so the user is told how to retry.
       expect(result.stderr).toContain(
-        "Some integrations were left at project scope. Run 'sonar integrate' to retry.",
+        "Some integrations were left at project scope. Run 'sonar update' to retry.",
       );
     },
     { timeout: TEST_TIMEOUT },
@@ -325,24 +326,45 @@ describe('global-integrations migration', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('Migrating agent integrations to global scope');
       expect(result.stderr).toContain('you are not logged in');
-      expect(result.stderr).toContain("Run 'sonar auth login', then 'sonar integrate'");
+      expect(result.stderr).toContain("Run 'sonar auth login', then 'sonar update'");
       expect(recordedScopes('claude-code')).toEqual(['project']);
     },
     { timeout: TEST_TIMEOUT },
   );
 
   it(
-    'retries from an integrate subcommand once the version gate has been spent',
+    'retries from sonar update once the version gate has been spent',
     async () => {
+      // Already on the latest version, so the update installs nothing and no version bump can
+      // re-arm the post-update gate: the retry can only have come from this command's own hook.
+      await harness.newFakeBinariesServer().withStableVersion(CURRENT_CLI_VERSION).start();
       await authenticateAgainstFakeServer();
       seedProjectScopedInstall(claudeIntegration);
 
-      const result = await harness.run('integrate codex --global --non-interactive');
+      const result = await harness.run('update');
 
       expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Already up to date');
       expect(result.stdout).toContain('Migrated the Claude Code integration to global scope.');
       expect(recordedScopes('claude-code')).not.toContain('project');
       expect(recordedScopes('claude-code')).toContain('global');
+    },
+    { timeout: TEST_TIMEOUT },
+  );
+
+  it(
+    'does not migrate during sonar update --status',
+    async () => {
+      // --status only reports a version; it must not rewrite integrations.
+      await harness.newFakeBinariesServer().withStableVersion(CURRENT_CLI_VERSION).start();
+      await authenticateAgainstFakeServer();
+      seedProjectScopedInstall(claudeIntegration);
+
+      const result = await harness.run('update --status');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain('Migrating agent integrations to global scope');
+      expect(recordedScopes('claude-code')).toEqual(['project']);
     },
     { timeout: TEST_TIMEOUT },
   );

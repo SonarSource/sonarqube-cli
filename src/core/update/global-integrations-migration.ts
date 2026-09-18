@@ -41,7 +41,7 @@ const CLAUDE_ID = 'claude-code';
 const AGENTS_SUPERSEDED_BY_CLAUDE = new Set(['cursor', 'copilot-cli']);
 
 /**
- * One attempt per process: `sonar integrate` reruns the migration through its own hook, and the
+ * One attempt per process: `sonar update` reruns the migration through its own hook, and the
  * post-update run may already have tried (and reported) it in the same invocation.
  */
 let attemptedThisProcess = false;
@@ -83,7 +83,7 @@ export async function migrateAgentIntegrationsToGlobalScope(
   if (!auth) {
     deps.console.warn(
       `Could not move your agent integrations to global scope: you are not logged in. ` +
-        `Run 'sonar auth login', then 'sonar integrate', to retry.`,
+        `Run 'sonar auth login', then 'sonar update', to retry.`,
     );
     return;
   }
@@ -120,9 +120,7 @@ export async function migrateAgentIntegrationsToGlobalScope(
   }
 
   if (anyFailed) {
-    deps.console.warn(
-      `Some integrations were left at project scope. Run 'sonar integrate' to retry.`,
-    );
+    deps.console.warn(`Some integrations were left at project scope. Run 'sonar update' to retry.`);
     return;
   }
   deps.console.info('Finished migrating agent integrations to global scope.');
@@ -137,7 +135,7 @@ export async function migrateAgentIntegrationsToGlobalScopeSafely(
   } catch (error) {
     deps.console.warn(
       `Could not move agent integrations to global scope: ${(error as Error).message}. ` +
-        `Run 'sonar integrate' to retry.`,
+        `Run 'sonar update' to retry.`,
     );
   }
 }
