@@ -51,6 +51,7 @@ setDefaultTimeout(180_000);
 // sonar-ignore-next-line S6769
 const GITHUB_TEST_TOKEN = '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';
 export const TEST_TOKEN = 'e2e-token';
+const CAG_ORG_UUID = `${ALLOWLISTED_CAG_ORG_KEY}-uuid-v4`;
 
 describe.skipIf(!isClaudeCodeEnvSetup())(
   'sonar integrate claude with real Claude Code (e2e)',
@@ -164,9 +165,12 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
           mkdirSync(harness.cwd.path, { recursive: true });
           const server = await harness
             .newFakeServer()
+            .asSonarCloud()
             .withAuthToken(TEST_TOKEN)
             .withProject(SEEDED_PROJECT_KEY)
-            .withCagEntitlement(ALLOWLISTED_CAG_ORG_KEY, `${ALLOWLISTED_CAG_ORG_KEY}-uuid-v4`)
+            .withScaEnabled(false)
+            .withSqaaEntitlement(ALLOWLISTED_CAG_ORG_KEY, CAG_ORG_UUID)
+            .withCagEntitlement(ALLOWLISTED_CAG_ORG_KEY, CAG_ORG_UUID)
             .start();
           await harness.withCliInPath().newFakeBinariesServer().start();
           seedState(harness, {
