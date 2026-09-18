@@ -376,7 +376,7 @@ function handleScanSuccess(
   }
   warnScanErrors(console, errors);
   console.blank();
-  console.success(`No issues found · ${scanDurationMs}ms`);
+  console.success(`No secrets found · ${scanDurationMs}ms`);
 }
 
 function displaySecretsFindings(issues: SecretsJsonIssue[], console: Console): void {

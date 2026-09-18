@@ -107,6 +107,7 @@ describe('analyze (no subcommand)', () => {
       });
 
       expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('No secrets found');
       expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
@@ -304,7 +305,7 @@ describe('analyze (no subcommand)', () => {
 
       const output = result.stdout + result.stderr;
       expect(result.exitCode).toBe(0);
-      expect(output).toContain('No issues found');
+      expect(output).toContain('No secrets found');
       expect(output).toContain('Vortex analysis skipped: no project configured');
       expect(output).not.toContain('Usage: sonar analyze');
       const sqaaCalls = server
@@ -339,6 +340,7 @@ describe('analyze (no subcommand)', () => {
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
       expect(output).not.toContain('no project configured');
+      expect(output).toContain('No secrets found');
       expect(output).toContain('No issues found');
 
       const sqaaCalls = server

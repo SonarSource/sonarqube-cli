@@ -79,7 +79,7 @@ describe('analyze secrets', () => {
       const result = await harness.run('analyze secrets clean.js');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('No issues found');
+      expect(result.stdout + result.stderr).toContain('No secrets found');
     },
     { timeout: 30000 },
   );
@@ -110,7 +110,7 @@ describe('analyze secrets', () => {
       const result = await harness.runWithStdin('analyze secrets --stdin', CLEAN_CONTENT);
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('No issues found');
+      expect(result.stdout + result.stderr).toContain('No secrets found');
     },
     { timeout: 30000 },
   );
@@ -144,7 +144,7 @@ describe('analyze secrets', () => {
       const result = await harness.run('analyze secrets clean.js');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('No issues found');
+      expect(result.stdout + result.stderr).toContain('No secrets found');
       expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
         true,
       );
