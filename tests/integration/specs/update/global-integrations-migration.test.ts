@@ -232,7 +232,9 @@ describe('global-integrations migration', () => {
       const result = await runAsUpgrade();
 
       expect(result.exitCode).toBe(0);
-      expect(result.stderr).toContain('Could not move the Claude Code integration to global scope');
+      expect(result.stderr).toContain(
+        'Could not migrate the Claude Code integration to global scope',
+      );
       expect(recordedScopes('claude-code')).toContain('project');
       expect(recordedScopes('codex')).not.toContain('project');
       expect(recordedScopes('codex')).toContain('global');
