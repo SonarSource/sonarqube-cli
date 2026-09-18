@@ -262,7 +262,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .command('issues')
     .description('Search for issues in SonarQube')
     .showUpdateNotification(isTableFormatOption)
-    .requiredOption('-p, --project <project>', 'Project key')
+    .option('-p, --project <project>', 'Project key')
     .option(
       '--statuses <statuses>',
       `Filter by status (comma-separated list of: ${VALID_STATUSES.join(', ')}). Defaults to ${DEFAULT_STATUSES.join(', ')}.`,
@@ -272,8 +272,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       `Filter by severity. Valid values depend on server mode — Multi-Quality Rule (MQR) mode: ${VALID_MQR_SEVERITIES.join(', ')}; Standard Experience mode: ${VALID_STANDARD_SEVERITIES.join(', ')}.`,
     )
     .addOption(listIssuesFormatOption)
-    .option('--branch <branch>', 'Branch name')
-    .option('--pull-request <pull-request>', 'Pull request ID')
+    .option('--branch <branch>', 'Branch name. Cannot be combined with --pull-request.')
+    .option('--pull-request <pull-request>', 'Pull request ID. Cannot be combined with --branch.')
     .option(
       '--file <path>',
       "Limit results to one file, or to a directory's own files (not its subdirectories): a full path from the project root, or just a name if it matches only one",
