@@ -34,15 +34,17 @@ import { QuietConsole } from '@/core/ui/quiet-console.ts';
 import logger from '../observability/logger.ts';
 import type { CliState } from '../state/state.ts';
 import { loadState, saveStateKeepingInstalledDependencies } from '../state/state-repository.ts';
-import type {
-  AgentIntegrationHandler,
-  AgentIntegrationHandlers,
-  PostUpdateDependencies,
-} from './post-update.ts';
+import type { AgentIntegrationHandler, PostUpdateDependencies } from './post-update.ts';
 
 /** These read Claude's hooks too, so a global install beside Claude Code makes the two conflict. */
 const CLAUDE_ID = 'claude-code';
 const AGENTS_SUPERSEDED_BY_CLAUDE = new Set(['cursor', 'copilot-cli']);
+
+/**
+ * One attempt per process: `sonar integrate` reruns the migration through its own hook, and the
+ * post-update run may already have tried (and reported) it in the same invocation.
+ */
+let attemptedThisProcess = false;
 
 /** One agent to migrate, and every project-scoped install recorded for it. */
 interface AgentMigration {
@@ -52,17 +54,6 @@ interface AgentMigration {
   integrationTargets: ReadonlySet<string>;
   /** Only the project artifacts go: the agent is already global, or Claude Code took its place. */
   skipGlobalInstall: boolean;
-}
-
-export function hasProjectScopedAgentIntegrations(
-  state: CliState,
-  handlers: AgentIntegrationHandlers,
-): boolean {
-  return state.integrations.installed.some(
-    (integration) =>
-      integration.integrationId in handlers &&
-      integration.features.some((feature) => feature.scope === 'project'),
-  );
 }
 
 /**
@@ -78,12 +69,7 @@ export function hasProjectScopedAgentIntegrations(
 export async function migrateAgentIntegrationsToGlobalScope(
   deps: PostUpdateDependencies,
 ): Promise<void> {
-  if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {
-    return;
-  }
-
-  const auth = await resolveAuthOrNull(deps);
-  if (!auth) {
+  if (process.env[TELEMETRY_FLUSH_MODE_ENV] || attemptedThisProcess) {
     return;
   }
 
@@ -91,9 +77,20 @@ export async function migrateAgentIntegrationsToGlobalScope(
   if (agentMigrations.length === 0) {
     return;
   }
+  attemptedThisProcess = true;
+
+  const auth = await resolveAuthOrNull(deps);
+  if (!auth) {
+    deps.console.warn(
+      `Could not move your agent integrations to global scope: you are not logged in. ` +
+        `Run 'sonar auth login', then 'sonar integrate', to retry.`,
+    );
+    return;
+  }
 
   const quietConsole = new QuietConsole(deps.console);
   deps.console.info('Migrating agent integrations to global scope...');
+  let anyFailed = false;
 
   for (const agentMigration of agentMigrations) {
     const { displayName } = agentMigration.declaration;
@@ -115,13 +112,34 @@ export async function migrateAgentIntegrationsToGlobalScope(
           : `Migrated the ${displayName} integration to global scope.`,
       );
     } catch (error) {
+      anyFailed = true;
       deps.console.error(
         `Could not move the ${displayName} integration to global scope: ${(error as Error).message}`,
       );
     }
   }
 
+  if (anyFailed) {
+    deps.console.warn(
+      `Some integrations were left at project scope. Run 'sonar integrate' to retry.`,
+    );
+    return;
+  }
   deps.console.info('Finished migrating agent integrations to global scope.');
+}
+
+/** Swallows throws: a failed migration must never abort the command that triggered it. */
+export async function migrateAgentIntegrationsToGlobalScopeSafely(
+  deps: PostUpdateDependencies,
+): Promise<void> {
+  try {
+    await migrateAgentIntegrationsToGlobalScope(deps);
+  } catch (error) {
+    deps.console.warn(
+      `Could not move agent integrations to global scope: ${(error as Error).message}. ` +
+        `Run 'sonar integrate' to retry.`,
+    );
+  }
 }
 
 async function resolveAuthOrNull(deps: PostUpdateDependencies): Promise<ResolvedAuth | null> {
