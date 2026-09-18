@@ -161,6 +161,33 @@ describe('recordConnectionFromAuth', () => {
     getSafeSpy.mockRestore();
   });
 
+  it('refreshIdentity ignores identity inherited from a matching connection', async () => {
+    const state = loadState();
+    const existing = addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
+      orgKey: 'my-org',
+      tokenName: 'browser-token-name',
+    });
+    existing.userUuid = 'old-user';
+    existing.organizationUuidV4 = 'old-org';
+    existing.enterpriseUuid = null;
+    saveState(state);
+
+    const getSafeSpy = mockIdentityGetSafe({
+      user: [{ ok: true, id: 'new-user' }],
+      org: [{ ok: true, uuidV4: 'new-org' }],
+    });
+
+    const connection = await recordConnectionFromAuth(cloudAuth('replacement-token'), {
+      force: true,
+      refreshIdentity: true,
+    });
+
+    expect(connection.tokenName).toBeUndefined();
+    expect(connection.userUuid).toBe('new-user');
+    expect(connection.organizationUuidV4).toBe('new-org');
+    getSafeSpy.mockRestore();
+  });
+
   it('sets organizationUuidV4 only for cloud auth with an org key, and sqsInstallationId only for on-premise', async () => {
     const getSafeSpy = mockIdentityGetSafe({
       user: [{ ok: true, id: 'user-a' }],

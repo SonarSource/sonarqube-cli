@@ -182,6 +182,7 @@ export class EnvironmentBuilder {
   private activeConnectionType: 'cloud' | 'on-premise' = 'on-premise';
   private activeConnectionOrgKey?: string;
   private activeConnectionTokenName?: string;
+  private activeConnectionUserUuid?: string | null;
   private _installSecretsBinary = false;
   private _installCagBinary = false;
   private _cagInitExitCode = 0;
@@ -223,6 +224,12 @@ export class EnvironmentBuilder {
     return this;
   }
 
+  /** Must be called after `withActiveConnection(...)`. */
+  withConnectionUserUuid(userUuid: string | null): this {
+    this.activeConnectionUserUuid = userUuid;
+    return this;
+  }
+
   /**
    * Convenience: sets up both an active connection and a keychain token in one call.
    * Infers the connection type: 'cloud' when org is provided, 'on-premise' otherwise.
@@ -246,6 +253,7 @@ export class EnvironmentBuilder {
     this.activeConnectionType = 'on-premise';
     this.activeConnectionOrgKey = undefined;
     this.activeConnectionTokenName = undefined;
+    this.activeConnectionUserUuid = undefined;
     this.keychainTokens.length = 0;
     return this;
   }
@@ -513,6 +521,7 @@ export class EnvironmentBuilder {
           serverUrl: this.activeConnectionUrl,
           orgKey: this.activeConnectionOrgKey,
           tokenName: this.activeConnectionTokenName,
+          userUuid: this.activeConnectionUserUuid,
           authenticatedAt: new Date().toISOString(),
         },
       ];

@@ -19,8 +19,19 @@
  */
 
 import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
-import { ENV_TOKEN, isSonarQubeCloud, ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { type BrowserAuthResult, generateTokenViaBrowser } from '@/core/auth/token.ts';
+import {
+  ENV_ORG,
+  ENV_SERVER,
+  ENV_TOKEN,
+  isSonarQubeCloud,
+  ResolvedAuth,
+} from '@/core/auth/auth-resolver.ts';
+import {
+  type BrowserAuthResult,
+  checkTokenStatus,
+  generateTokenViaBrowser,
+  readTokenFromStdin,
+} from '@/core/auth/token.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
@@ -30,6 +41,7 @@ import {
   saveToken,
 } from '@/core/host/keychain.ts';
 import { discoverOrganization, discoverServer } from '@/core/project-info.ts';
+import type { HttpClientError } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import {
   type Organization,
@@ -56,6 +68,10 @@ export async function authLogin(
 ): Promise<void> {
   const { console } = ctx;
   validateLoginOptions(options);
+  if (options.withToken) {
+    await authLoginWithToken(options, console);
+    return;
+  }
   const authResult = await ctx.resolveAuth({ silent: true });
   if (authResult.isErr()) {
     throw authResult.error;
@@ -76,37 +92,10 @@ export async function authLogin(
 
     const org = await resolveOrganization(server, isCloud, orgOption, auth, console);
 
-    const state = loadState();
-    await deleteStaleTokens(state.auth.connections, server, org);
-
-    await saveToken(server, token, org);
-    const existingConnection = getActiveConnection(state);
-    const existingTokenName =
-      existingConnection?.serverUrl === server && existingConnection.orgKey === org
-        ? existingConnection.tokenName
-        : undefined;
-    const connectionTokenName = reusedExistingToken ? existingTokenName : tokenName;
-
-    const actualToken = token || (await getKeystoreToken(server, org));
-    if (actualToken) {
-      await recordConnectionFromAuth(
-        new ResolvedAuth({
-          token: actualToken,
-          serverUrl: server,
-          orgKey: org,
-          connectionType: isCloud ? 'cloud' : 'on-premise',
-          source: 'state',
-        }),
-        { tokenName: connectionTokenName, force: true },
-      );
-    } else {
-      addOrUpdateConnection(state, server, isCloud ? 'cloud' : 'on-premise', {
-        orgKey: org,
-        region: cloudRegionFromUrl(server),
-        tokenName: connectionTokenName,
-      });
-      saveState(state);
-    }
+    await persistLoginCredentials(server, isCloud, org, token, {
+      tokenName,
+      reusedExistingToken,
+    });
 
     const displayServer = isCloud ? `${server} (${org})` : server;
     console.success(`Authentication successful for: ${displayServer}`);
@@ -123,6 +112,116 @@ export async function authLogin(
       process.stdin.pause();
     }
   }
+}
+
+async function authLoginWithToken(options: AuthLoginOptions, console: Console): Promise<void> {
+  assertNoEnvironmentAuthentication();
+  if (process.stdin.isTTY) {
+    throw new InvalidOptionError(
+      '--with-token reads a token from standard input.',
+      'Pipe or redirect a token, for example: sonar auth login --with-token --server <url> < token.txt',
+    );
+  }
+
+  let token: string;
+  try {
+    token = await readTokenFromStdin();
+  } catch (error) {
+    throw new CommandFailedError(
+      error instanceof Error ? error.message : 'Failed to read token from standard input.',
+    );
+  }
+
+  const server = options.server;
+  if (server === undefined) {
+    throw new InvalidOptionError('--server is required with --with-token.');
+  }
+  const isCloud = isSonarQubeCloud(server);
+  const org = isCloud ? options.org?.trim() : undefined;
+  const tokenStatus = await checkTokenStatus(server, token);
+  if (tokenStatus.status === 'invalid') {
+    throw new CommandFailedError(`The supplied token is invalid for ${server}.`);
+  }
+  if (tokenStatus.status === 'unreachable') {
+    throw new CommandFailedError(`Could not validate the supplied token against ${server}.`, {
+      remediationHint: 'Check the server URL, network connection, and server status, then retry.',
+    });
+  }
+
+  if (org) {
+    await assertOrganizationAccessible(
+      new OrganizationsClient(new SonarHttpClient(server, token)),
+      org,
+    );
+    console.print(`Using organization: ${org}`);
+  }
+
+  await persistLoginCredentials(server, isCloud, org, token, { refreshIdentity: true });
+
+  const displayServer = isCloud ? `${server} (${org})` : server;
+  console.success(`Authentication successful for: ${displayServer}`);
+}
+
+interface PersistLoginOptions {
+  tokenName?: string;
+  reusedExistingToken?: boolean;
+  refreshIdentity?: boolean;
+}
+
+async function persistLoginCredentials(
+  server: string,
+  isCloud: boolean,
+  org: string | undefined,
+  token: string,
+  options: PersistLoginOptions = {},
+): Promise<void> {
+  const state = loadState();
+  const existingConnection = getActiveConnection(state);
+
+  await deleteStaleTokens(state.auth.connections, server, org);
+  await saveToken(server, token, org);
+
+  const connectionTokenName =
+    options.reusedExistingToken &&
+    existingConnection?.serverUrl === server &&
+    existingConnection.orgKey === org
+      ? existingConnection.tokenName
+      : options.tokenName;
+  const actualToken = token || (await getKeystoreToken(server, org));
+
+  if (actualToken) {
+    await recordConnectionFromAuth(
+      new ResolvedAuth({
+        token: actualToken,
+        serverUrl: server,
+        orgKey: org,
+        connectionType: isCloud ? 'cloud' : 'on-premise',
+        source: 'state',
+      }),
+      {
+        tokenName: connectionTokenName,
+        force: true,
+        refreshIdentity: options.refreshIdentity,
+      },
+    );
+    return;
+  }
+
+  addOrUpdateConnection(state, server, isCloud ? 'cloud' : 'on-premise', {
+    orgKey: org,
+    region: cloudRegionFromUrl(server),
+    tokenName: connectionTokenName,
+  });
+  saveState(state);
+}
+
+function assertNoEnvironmentAuthentication(): void {
+  if (!process.env[ENV_TOKEN] || !(process.env[ENV_SERVER] || process.env[ENV_ORG])) {
+    return;
+  }
+  throw new CommandFailedError('Environment variable authentication is already active.', {
+    remediationHint: `Unset ${ENV_TOKEN} and ${ENV_SERVER}/${ENV_ORG} before using --with-token.`,
+  });
 }
 
 /**
@@ -323,8 +422,8 @@ function listMemberOrganizations(
   client: OrganizationsClient,
 ): Promise<{ organizations: Organization[]; total: number }> {
   return client.listUserOrganizations().match(
-    (result) => result,
-    (error) => {
+    (result: { organizations: Organization[]; total: number }) => result,
+    (error: HttpClientError) => {
       throw new CommandFailedError(`Could not list your organizations: ${error.message}`, {
         remediationHint:
           "Check your network connection and the server status, then rerun 'sonar auth login', or pass -o/--org to select an organization directly.",
@@ -492,9 +591,26 @@ function validateLoginOptions(options: AuthLoginOptions): void {
       'Provide a valid URL (for example https://sonarcloud.io).',
     );
   }
+
+  if (options.withToken && options.server === undefined) {
+    throw new InvalidOptionError('--server is required with --with-token.', 'Use --server <url>.');
+  }
+
+  if (
+    options.withToken &&
+    options.server !== undefined &&
+    isSonarQubeCloud(options.server) &&
+    options.org === undefined
+  ) {
+    throw new InvalidOptionError(
+      '--org is required for SonarQube Cloud with --with-token.',
+      'Use --org <organization-key>.',
+    );
+  }
 }
 
 export interface AuthLoginOptions {
   server?: string;
   org?: string;
+  withToken?: boolean;
 }
