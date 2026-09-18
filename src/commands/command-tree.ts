@@ -402,12 +402,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .rejectUnknownSubcommands()
     .authenticatedAction((ctx, options: IntegrateBareOptions) => integrateBare(ctx, options));
 
-  // Post-update only attempts the move to global scope on a version bump, so `sonar integrate` is
-  // where a user sent back by its retry hint lands. Commander runs this for the subcommands too.
-  integrateCommand.hook('preAction', () =>
-    migrateAgentIntegrationsToGlobalScopeSafely(postUpdateDeps),
-  );
-
   integrateCommand
     .command('git')
     .description(
@@ -723,7 +717,14 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       })
       .option('--status', 'Check for a newer version without installing')
       .option('--force', 'Install the latest version even if already up to date')
-      .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx));
+      .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx))
+      // Retry surface for a global-integrations migration the post-update run could not finish.
+      .hook('preAction', async (thisCommand) => {
+        if (thisCommand.opts().status) {
+          return; // --status only reports a version; it must not write anything.
+        }
+        await migrateAgentIntegrationsToGlobalScopeSafely(postUpdateDeps);
+      });
 
     // Hidden compatibility alias for `sonar update`.
     COMMAND_TREE.command('self-update', { hidden: true })
