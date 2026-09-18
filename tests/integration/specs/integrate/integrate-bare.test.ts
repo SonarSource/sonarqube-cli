@@ -72,6 +72,23 @@ describe('integrate (bare command)', () => {
   );
 
   it(
+    'honors --non-interactive placed before the agent name',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      // Commander parses a flag before the subcommand name onto the parent command; the
+      // preSubcommand hook must forward it, or this silently falls back to interactive mode
+      // (and hangs waiting for input instead of failing loudly).
+      const result = await harness.run('integrate --non-interactive claude');
+
+      expect(result.exitCode).toBe(0);
+      expect(harness.userHome.exists('.claude', 'settings.json')).toBe(true);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'runs only the single selected integration, installing globally',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('test-token').start();
