@@ -53,6 +53,9 @@ function makeDeps(): PostUpdateDependencies {
     installHooks: hooks.installHooks,
     console,
     runtime: createCliRuntime({ authResolver, console, isAlphaEnabled: false }),
+    // Empty: the default state records no integrations, so the global-integrations
+    // migration returns before it would look a handler up.
+    agentIntegrationHandlers: {},
   };
 }
 
@@ -167,26 +170,29 @@ describe('runPostUpdateActions', () => {
   });
 
   it('saves the reloaded state, not the pre-runActions snapshot', async () => {
-    // The version check reads via tryLoadState, so loadState is called 7 times:
+    // The version check reads via tryLoadState, so loadState is called 8 times:
     //   1. inside migrateLegacyTelemetryEvents
     //   2. inside migrateKnownServerProjectMappings
-    //   3. inside migrateDeclarativeIntegrations
-    //   4. inside migrateClaudeCodeHooks
-    //   5. inside updateSecretsBinaryIfNeeded
-    //   6. inside updateScaScannerBinaryIfNeeded
-    //   7. the reload after runActions (the fix being tested)
+    //   3. inside migrateAgentIntegrationsToGlobalScope
+    //   4. inside migrateDeclarativeIntegrations
+    //   5. inside migrateClaudeCodeHooks
+    //   6. inside updateSecretsBinaryIfNeeded
+    //   7. inside updateScaScannerBinaryIfNeeded
+    //   8. the reload after runActions (the fix being tested)
     const reloadedState = makeState();
     loadStateSpy
       .mockReturnValueOnce(makeState()) // call 1: migrateLegacyTelemetryEvents
       .mockReturnValueOnce(makeState()) // call 2: migrateKnownServerProjectMappings
-      .mockReturnValueOnce(makeState()) // call 3: migrateDeclarativeIntegrations
-      .mockReturnValueOnce(makeState()) // call 4: migrateClaudeCodeHooks
-      .mockReturnValueOnce(makeState()) // call 5: updateSecretsBinaryIfNeeded
-      .mockReturnValueOnce(makeState()) // call 6: updateScaScannerBinaryIfNeeded
-      .mockReturnValueOnce(reloadedState); // call 7: reload
+      .mockReturnValueOnce(makeState()) // call 3: migrateAgentIntegrationsToGlobalScope
+      .mockReturnValueOnce(makeState()) // call 4: migrateDeclarativeIntegrations
+      .mockReturnValueOnce(makeState()) // call 5: migrateClaudeCodeHooks
+      .mockReturnValueOnce(makeState()) // call 6: updateSecretsBinaryIfNeeded
+      .mockReturnValueOnce(makeState()) // call 7: updateScaScannerBinaryIfNeeded
+      .mockReturnValueOnce(reloadedState); // call 8: reload
 
     await runPostUpdateActions(makeDeps());
 
+    expect(loadStateSpy).toHaveBeenCalledTimes(8);
     expect(saveStateSpy.mock.calls[0][0]).toBe(reloadedState);
   });
 

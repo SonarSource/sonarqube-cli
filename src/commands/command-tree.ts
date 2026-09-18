@@ -43,7 +43,9 @@ import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
 import { buildCommandExecutedFact } from '@/core/telemetry/command-executed.ts';
 import { resolveInvocationAuthForTelemetry } from '@/core/telemetry/identity.ts';
 import type { Console } from '@/core/ui/console.ts';
+import { migrateAgentIntegrationsToGlobalScopeSafely } from '@/core/update/global-integrations-migration.ts';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
+import type { PostUpdateDependencies } from '@/core/update/post-update.ts';
 import { runPostUpdateActionsSafely } from '@/core/update/post-update.ts';
 
 import { version as VERSION } from '../../package.json';
@@ -108,6 +110,7 @@ import { integrateCopilot } from './integrate/copilot';
 import { integrateCursor } from './integrate/cursor';
 import { integrateGit, type IntegrateGitOptions } from './integrate/git';
 import { integrateBare, type IntegrateBareOptions } from './integrate/integrate-bare.ts';
+import { AGENT_INTEGRATION_HANDLERS } from './integrate/integration-handlers.ts';
 import { link, type LinkOptions } from './link';
 import {
   DEFAULT_STATUSES,
@@ -170,6 +173,14 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   // resolves (env fallback) before telemetry flush.
   let capturedAgentSessionId: string | null = null;
   const COMMAND_TREE = new SonarCommand({ runtime, console });
+
+  const postUpdateDeps: PostUpdateDependencies = {
+    supportedIntegrations,
+    installHooks,
+    console,
+    runtime,
+    agentIntegrationHandlers: AGENT_INTEGRATION_HANDLERS,
+  };
 
   const handleHookInvocation =
     <TArgs extends unknown[]>(
@@ -706,7 +717,14 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       })
       .option('--status', 'Check for a newer version without installing')
       .option('--force', 'Install the latest version even if already up to date')
-      .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx));
+      .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx))
+      // Retry surface for a global-integrations migration the post-update run could not finish.
+      .hook('preAction', async (thisCommand) => {
+        if (thisCommand.opts().status) {
+          return; // --status only reports a version; it must not write anything.
+        }
+        await migrateAgentIntegrationsToGlobalScopeSafely(postUpdateDeps);
+      });
 
     // Hidden compatibility alias for `sonar update`.
     COMMAND_TREE.command('self-update', { hidden: true })
@@ -916,12 +934,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   COMMAND_TREE.hook('preAction', async () => {
     // Safely: a throw from a Commander hook would abort the user's command.
-    await runPostUpdateActionsSafely({
-      supportedIntegrations,
-      installHooks,
-      console,
-      runtime,
-    });
+    await runPostUpdateActionsSafely(postUpdateDeps);
   });
 
   // Emit handler facts plus CliCommandExecuted in one commit.
