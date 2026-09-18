@@ -24,12 +24,18 @@ import * as fsPromises from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { Database } from 'bun:sqlite';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { type CliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { CURSOR_IGNORE_FILE } from '@/core/config-constants.ts';
+import {
+  CURSOR_IGNORE_FILE,
+  ENV_SONAR_USER_HOME,
+  getStatsDir,
+  STATS_DB_FILENAME,
+} from '@/core/config-constants.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 import { okAsync } from '@/core/result.ts';
 
@@ -60,6 +66,40 @@ let runtime: CliRuntime;
 function makeCtx() {
   return new CommandInvocationContext(new FakeConsole(), undefined, runtime);
 }
+
+function readStatsCallerCommands(): string[] {
+  const dbPath = join(getStatsDir(), STATS_DB_FILENAME);
+  if (!fs.existsSync(dbPath)) return [];
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    return (db.prepare('SELECT caller_command FROM stats_events').all() as never[]).map(
+      (row) => (row as { caller_command: string }).caller_command,
+    );
+  } finally {
+    db.close();
+  }
+}
+
+let testSonarUserHome: string;
+const previousSonarUserHome = process.env[ENV_SONAR_USER_HOME];
+
+beforeEach(() => {
+  testSonarUserHome = mkdtempSync(join(tmpdir(), 'cursor-pre-tool-use-stats-'));
+  process.env[ENV_SONAR_USER_HOME] = testSonarUserHome;
+});
+
+afterEach(() => {
+  try {
+    rmSync(testSonarUserHome, { recursive: true, force: true });
+  } catch {
+    // best-effort: a held file handle on Windows must not fail the test
+  }
+  if (previousSonarUserHome === undefined) {
+    delete process.env[ENV_SONAR_USER_HOME];
+  } else {
+    process.env[ENV_SONAR_USER_HOME] = previousSonarUserHome;
+  }
+});
 
 describe('cursorPreToolUse', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;
@@ -126,6 +166,18 @@ describe('cursorPreToolUse', () => {
     expect(output.user_message).toContain(TEST_FILE);
     expect(exitSpy).toHaveBeenCalledWith(2);
     expect(ctx.telemetryFacts()).toHaveLength(1);
+  });
+
+  it('records the stats event before exiting on deny, instead of losing it', async () => {
+    runSecretsBinaryOnTextSpy.mockResolvedValue({
+      exitCode: EXIT_CODE_SECRETS_FOUND,
+      stdout: '',
+      stderr: '',
+    });
+
+    await cursorPreToolUse(makeCtx());
+
+    expect(readStatsCallerCommands()).toEqual(['cursor-pre-tool-use']);
   });
 
   it('returns without scanning when tool_name is not Read', async () => {

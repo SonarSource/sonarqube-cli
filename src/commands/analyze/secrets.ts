@@ -32,6 +32,7 @@ import { installSecretsBinary } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
 import type { SpawnResult, StdioMode } from '@/core/process/process.ts';
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
+import { dedupeAgainstSeen, recordAnalyzerStats, upsertRuleMessages } from '@/core/stats/facts.ts';
 import { green, yellow } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -163,6 +164,58 @@ function buildSecretsAnalysisTelemetryFact(
   };
 }
 
+const SECRETS_STATS_SCOPE = 'sonar-secrets';
+
+export function buildSecretsFingerprint(
+  ruleKey: string,
+  file: string | undefined,
+  startLine: number | undefined,
+  startColumn: number | undefined,
+): string {
+  return `${ruleKey}|${file ?? ''}|${startLine ?? ''}|${startColumn ?? ''}`;
+}
+
+// Upserts rule messages for every issue below, not just newly-deduped ones — rule_descriptions
+// is a lookup table, not a per-run count, so an already-seen finding's message still belongs.
+export function summarizeNewSecretsFindings(issues: readonly SecretsJsonIssue[]): {
+  findingsCount: number;
+  ruleCounts?: Record<string, number>;
+} {
+  if (issues.length === 0) {
+    return { findingsCount: 0 };
+  }
+
+  const ruleMessages: Record<string, string> = {};
+  for (const issue of issues) {
+    ruleMessages[issue.ruleKey] = issue.description;
+  }
+  upsertRuleMessages(ruleMessages);
+
+  const fingerprints = issues.map((issue) =>
+    buildSecretsFingerprint(
+      issue.ruleKey,
+      issue.file,
+      issue.location?.startLine,
+      issue.location?.startColumn,
+    ),
+  );
+  const newFingerprints = dedupeAgainstSeen(SECRETS_STATS_SCOPE, fingerprints);
+
+  const ruleCounts: Record<string, number> = {};
+  const countedFingerprints = new Set<string>();
+  issues.forEach((issue, index) => {
+    const fingerprint = fingerprints[index];
+    if (!newFingerprints.has(fingerprint) || countedFingerprints.has(fingerprint)) return;
+    countedFingerprints.add(fingerprint);
+    ruleCounts[issue.ruleKey] = (ruleCounts[issue.ruleKey] ?? 0) + 1;
+  });
+
+  return {
+    findingsCount: newFingerprints.size,
+    ruleCounts: newFingerprints.size > 0 ? ruleCounts : undefined,
+  };
+}
+
 /**
  * Runs one sonar-secrets spawn and records CliAnalysisCompleted for either outcome:
  *  - the process ran (any exit code) → telemetry via {@link buildSecretsAnalysisTelemetryFact};
@@ -191,6 +244,15 @@ export async function scanAndEmitSecrets(
       auth,
     );
     ctx.recordTelemetry(fact);
+    const { findingsCount, ruleCounts } = summarizeNewSecretsFindings(parsed.issues);
+    recordAnalyzerStats(ctx, {
+      analyzer: 'sonar-secrets',
+      callerCommand,
+      exitCode: fact.payload.exit_code,
+      durationMs: fact.payload.scan_duration_ms,
+      findingsCount,
+      ruleCounts,
+    });
     return { result, parsed };
   } catch (err) {
     const { fact } = buildSecretsAnalysisTelemetryFact(
@@ -200,6 +262,13 @@ export async function scanAndEmitSecrets(
       auth,
     );
     ctx.recordTelemetry(fact);
+    recordAnalyzerStats(ctx, {
+      analyzer: 'sonar-secrets',
+      callerCommand,
+      exitCode: fact.payload.exit_code,
+      durationMs: fact.payload.scan_duration_ms,
+      findingsCount: 0,
+    });
     throw err;
   }
 }

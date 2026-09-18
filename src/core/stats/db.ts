@@ -38,8 +38,11 @@ export function isCorruptionError(error: unknown): boolean {
 function openAndMigrate(dbPath: string): Database {
   const db = new Database(dbPath, { create: true });
   try {
-    db.run('PRAGMA journal_mode = WAL');
+    // busy_timeout must be set before the WAL switch: converting a rollback-journal db to WAL
+    // takes a brief exclusive lock, and without a busy handler yet in place, two CLI processes
+    // opening a freshly created ledger at the same time make the loser fail with SQLITE_BUSY.
     db.run('PRAGMA busy_timeout = 5000');
+    db.run('PRAGMA journal_mode = WAL');
     applyStatsMigrations(db);
     return db;
   } catch (error) {

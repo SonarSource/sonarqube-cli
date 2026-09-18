@@ -62,19 +62,22 @@ const MIGRATIONS: StatsMigration[] = [
 ];
 
 export function applyMigrations(db: Database, migrations: readonly StatsMigration[]): void {
-  const currentVersion =
-    db.prepare<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version ?? 0;
+  // BEGIN IMMEDIATE (not the default deferred transaction) takes the write lock before
+  // reading user_version, so a second process racing to create a brand-new db blocks here
+  // instead of reading the same stale version and colliding on CREATE TABLE.
+  db.transaction(() => {
+    const currentVersion =
+      db.prepare<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version ?? 0;
 
-  const pending = migrations
-    .filter((migration) => migration.version > currentVersion)
-    .sort((a, b) => a.version - b.version);
+    const pending = migrations
+      .filter((migration) => migration.version > currentVersion)
+      .sort((a, b) => a.version - b.version);
 
-  for (const migration of pending) {
-    db.transaction(() => {
+    for (const migration of pending) {
       migration.up(db);
       db.run(`PRAGMA user_version = ${migration.version}`);
-    })();
-  }
+    }
+  }).immediate();
 }
 
 export function applyStatsMigrations(db: Database): void {

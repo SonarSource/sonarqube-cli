@@ -25,6 +25,7 @@ import {
   type CommandInvocationContext,
   TelemetryFact,
 } from '@/core/commands/invocation-context.ts';
+import { recordAnalyzerStats, upsertRuleMessages } from '@/core/stats/facts.ts';
 
 import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
 import type { FileResult, RunTally } from './sqaa-analysis.ts';
@@ -82,6 +83,16 @@ function collectIssuesFromTally(tally: RunTally): SqaaIssue[] {
   return issues;
 }
 
+function collectRuleMessages(
+  issues: ReadonlyArray<Pick<SqaaIssue, 'rule' | 'message'>>,
+): Record<string, string> {
+  const messages: Record<string, string> = {};
+  for (const issue of issues) {
+    messages[issue.rule] = issue.message;
+  }
+  return messages;
+}
+
 /** Builds a RunTally from a SQAA JSON report (change-set / Codex hook path). */
 export function tallyFromSqaaJsonReport(report: SqaaJsonReport): RunTally {
   const allResults: FileResult[] = [];
@@ -129,8 +140,9 @@ export function recordSqaaAnalysisTelemetry(
 ): void {
   const analysisId = randomUUID();
   const findingsCount = tally.totalIssues;
-  const details =
-    findingsCount > 0 ? JSON.stringify(collectRuleCounts(collectIssuesFromTally(tally))) : '';
+  const issues = findingsCount > 0 ? collectIssuesFromTally(tally) : [];
+  const ruleCounts = issues.length > 0 ? collectRuleCounts(issues) : undefined;
+  const details = ruleCounts ? JSON.stringify(ruleCounts) : '';
 
   ctx.recordTelemetry(
     new TelemetryFact(
@@ -149,4 +161,16 @@ export function recordSqaaAnalysisTelemetry(
       { auth },
     ),
   );
+
+  if (issues.length > 0) {
+    upsertRuleMessages(collectRuleMessages(issues));
+  }
+  recordAnalyzerStats(ctx, {
+    analyzer: 'sqaa',
+    callerCommand,
+    exitCode: exitCode ?? null,
+    durationMs,
+    findingsCount,
+    ruleCounts: ruleCounts?.counts_by_rule,
+  });
 }

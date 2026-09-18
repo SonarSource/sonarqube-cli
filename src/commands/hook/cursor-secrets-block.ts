@@ -20,6 +20,9 @@
 
 // Shared deny helpers for Cursor secrets hook handlers.
 
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { commitStatsFacts } from '@/core/stats/facts.ts';
+
 import { EXIT_CODE_SECRETS_FOUND, runSecretsBinaryOnText } from '../analyze/secrets.ts';
 import { appendToCursorIgnore } from './cursor-ignore.ts';
 import type { HookDependencies } from './hook-dependencies.ts';
@@ -45,10 +48,10 @@ export function secretsFoundInScan(result: { exitCode: number | null }): boolean
   return (result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND;
 }
 
-/**
- * Deny a Cursor file-read/tool-use event with `message`, then exit.
- */
-export async function denyCursor(message: string): Promise<never> {
+export async function denyCursor(ctx: CommandInvocationContext, message: string): Promise<never> {
+  // process.exit() below bypasses Commander's postAction hook, so the stats drain that
+  // normally happens there must run here instead — otherwise this run's StatsFact is lost.
+  commitStatsFacts(ctx.statsFacts());
   // process.stdout.write() is buffered and async on pipes; calling process.exit() immediately
   // after can truncate the deny JSON before Cursor reads it. Awaiting the write callback
   // guarantees the payload is fully flushed before the process terminates.
@@ -65,6 +68,7 @@ export async function denyCursor(message: string): Promise<never> {
 
 /** Deny access because secrets were found in `filePath`, adding it to `.cursorignore`. */
 export async function denyCursorFileAccess(
+  ctx: CommandInvocationContext,
   filePath: string | undefined,
   workspaceRoots: string[],
 ): Promise<never> {
@@ -77,5 +81,5 @@ export async function denyCursorFileAccess(
   } else {
     message = `${SECRETS_IN_FILE_MESSAGE}: ${filePath}.`;
   }
-  return denyCursor(message);
+  return denyCursor(ctx, message);
 }
