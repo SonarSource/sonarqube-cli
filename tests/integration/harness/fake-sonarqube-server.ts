@@ -475,7 +475,7 @@ export class FakeSonarQubeServerBuilder {
   private validToken?: string;
   private systemStatusCode = 200;
   private systemVersion = '25.1.0.102122';
-  private memberOrganizations: Organization[] = [];
+  private memberOrganizations?: Organization[];
   private memberOrganizationsTotal?: number;
   private visibleOrganizations: Organization[] = [];
   private readonly dopRepositoriesByOrgId: Map<string, DopRepositoryConfig[]> = new Map();
@@ -566,6 +566,7 @@ export class FakeSonarQubeServerBuilder {
    * of `member=true`.
    */
   withVisibleOrganizations(orgs: Organization[]): this {
+    this.memberOrganizations ??= [];
     this.visibleOrganizations = orgs;
     return this;
   }
@@ -849,7 +850,7 @@ export class FakeSonarQubeServerBuilder {
       systemStatus,
       systemStatusCode,
       systemVersion,
-      memberOrganizations,
+      memberOrganizations: configuredMemberOrganizations,
       memberOrganizationsTotal: rawMemberOrganizationsTotal,
       visibleOrganizations,
       dopRepositoriesByOrgId,
@@ -891,6 +892,12 @@ export class FakeSonarQubeServerBuilder {
       analyzedProjectKeys,
       treatAsCloud,
     } = this;
+    const memberOrganizations: Organization[] =
+      configuredMemberOrganizations ??
+      [...new Set([...sqaaEntitlementOrgs.keys(), ...cagEntitlementOrgs.keys()])].map((key) => ({
+        key,
+        name: key,
+      }));
     const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
     const provisionConcurrency = { current: 0, peak: 0 };

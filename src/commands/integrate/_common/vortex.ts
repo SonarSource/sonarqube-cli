@@ -159,7 +159,7 @@ export async function resolveVortexSetup(
     return settled('remove');
   }
 
-  if (status === 'check_failed') {
+  if (status === 'check_failed' || status === 'organization_not_accessible') {
     console.warn(VORTEX_CHECK_FAILED_MESSAGE);
     return settled('preserve');
   }

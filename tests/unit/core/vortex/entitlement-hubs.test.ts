@@ -223,7 +223,23 @@ describe('VortexEntitlementClient', () => {
     });
 
     it('returns check_failed when org UUID list is empty', async () => {
-      fetchSpy = mockFetch([]);
+      fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(((url: string | URL) => {
+        const pathname = new URL(url).pathname;
+        const body =
+          pathname === '/api/organizations/search'
+            ? {
+                organizations: [{ key: 'my-org' }],
+                paging: { total: 1 },
+              }
+            : [];
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve(body),
+          text: () => Promise.resolve(JSON.stringify(body)),
+        } as Response);
+      }) as typeof fetch);
       expect((await cloudClient.hasVortexEntitlement('my-org')).status).toBe('check_failed');
     });
 
@@ -232,15 +248,20 @@ describe('VortexEntitlementClient', () => {
       fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(((url: string | URL) => {
         const pathname = new URL(url).pathname;
         const body =
-          pathname === '/organizations/organizations'
-            ? [{ id: 'str-id', uuidV4: uuid }]
-            : pathname === `/a3s-analysis/org-entitlement/${uuid}`
-              ? { id: uuid, allowed: true, hasEntitlement: true }
-              : {
-                  allowed: true,
-                  hasEntitlement: true,
-                  consumption: { consumed: 15860, limit: 1000000 },
-                };
+          pathname === '/api/organizations/search'
+            ? {
+                organizations: [{ key: 'my-org' }],
+                paging: { total: 1 },
+              }
+            : pathname === '/organizations/organizations'
+              ? [{ id: 'str-id', uuidV4: uuid }]
+              : pathname === `/a3s-analysis/org-entitlement/${uuid}`
+                ? { id: uuid, allowed: true, hasEntitlement: true }
+                : {
+                    allowed: true,
+                    hasEntitlement: true,
+                    consumption: { consumed: 15860, limit: 1000000 },
+                  };
         return Promise.resolve({
           ok: true,
           status: 200,
@@ -263,15 +284,20 @@ describe('VortexEntitlementClient', () => {
       fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(((url: string | URL) => {
         const pathname = new URL(url).pathname;
         const body =
-          pathname === '/organizations/organizations'
-            ? [{ id: 'str-id', uuidV4: uuid }]
-            : pathname === `/a3s-analysis/org-entitlement/${uuid}`
-              ? { id: uuid, allowed: true, hasEntitlement: true }
-              : {
-                  allowed: false,
-                  hasEntitlement: true,
-                  consumption: { consumed: 1000000, limit: 1000000 },
-                };
+          pathname === '/api/organizations/search'
+            ? {
+                organizations: [{ key: 'my-org' }],
+                paging: { total: 1 },
+              }
+            : pathname === '/organizations/organizations'
+              ? [{ id: 'str-id', uuidV4: uuid }]
+              : pathname === `/a3s-analysis/org-entitlement/${uuid}`
+                ? { id: uuid, allowed: true, hasEntitlement: true }
+                : {
+                    allowed: false,
+                    hasEntitlement: true,
+                    consumption: { consumed: 1000000, limit: 1000000 },
+                  };
         return Promise.resolve({
           ok: true,
           status: 200,
