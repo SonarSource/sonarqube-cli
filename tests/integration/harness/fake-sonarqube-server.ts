@@ -477,6 +477,12 @@ export class FakeSonarQubeServerBuilder {
   private systemVersion = '25.1.0.102122';
   private memberOrganizations: Organization[] = [];
   private memberOrganizationsTotal?: number;
+  // The default Cloud fixture answers `/organizations/organizations` only: it is neither a
+  // membership nor visible to the v1 `organizations=` search, so seeding it leaves every
+  // pre-existing v1 expectation untouched. Other keys return 404 unless a test configures them.
+  private readonly defaultResolvableOrganizations: Organization[] = [
+    { key: 'my-org', name: 'My Org' },
+  ];
   private visibleOrganizations: Organization[] = [];
   private readonly dopRepositoriesByOrgId: Map<string, DopRepositoryConfig[]> = new Map();
   /** Keyed by org legacy id, for `GET /dop-translation/organization-bindings`. */
@@ -496,7 +502,7 @@ export class FakeSonarQubeServerBuilder {
   private agentJobErrorCode?: number;
   private agentJobErrorMessage?: string;
   private remediationAgentEntitlement = { eligible: true, delegateIssuesEnabled: true };
-  private orgsLookupReturnsEmpty = false;
+  private orgsLookupReturnsNotFound = false;
   private orgsLookupErrorCode?: number;
   private organizationsSearchErrorCode?: number;
   private organizationBindingsErrorCode?: number;
@@ -562,8 +568,7 @@ export class FakeSonarQubeServerBuilder {
   /**
    * Seed public organizations: resolvable by key, but not a membership.
    *
-   * They answer `/api/organizations/search?organizations=<key>` like the real API, and stay out
-   * of `member=true`.
+   * They answer the single-key organization lookups. They stay out of `member=true`.
    */
   withVisibleOrganizations(orgs: Organization[]): this {
     this.visibleOrganizations = orgs;
@@ -612,12 +617,9 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
-  /**
-   * Make `/organizations/organizations` return an empty array, simulating an
-   * `organizationKey` that does not match any visible org.
-   */
+  /** Make `/organizations/organizations` answer every lookup with 404, keyed or not. */
   withMissingOrg(): this {
-    this.orgsLookupReturnsEmpty = true;
+    this.orgsLookupReturnsNotFound = true;
     return this;
   }
 
@@ -852,6 +854,7 @@ export class FakeSonarQubeServerBuilder {
       memberOrganizations,
       memberOrganizationsTotal: rawMemberOrganizationsTotal,
       visibleOrganizations,
+      defaultResolvableOrganizations,
       dopRepositoriesByOrgId,
       organizationBindingsByOrgId,
       revokeTokenStatusCode,
@@ -873,7 +876,7 @@ export class FakeSonarQubeServerBuilder {
       agentJobErrorMessage,
       serverMode,
       remediationAgentEntitlement,
-      orgsLookupReturnsEmpty,
+      orgsLookupReturnsNotFound,
       orgsLookupErrorCode,
       organizationsSearchErrorCode,
       organizationBindingsErrorCode,
@@ -1500,8 +1503,9 @@ export class FakeSonarQubeServerBuilder {
               headers: { 'Content-Type': 'application/json' },
             });
           }
-          if (orgsLookupReturnsEmpty) {
-            return new Response(JSON.stringify([]), {
+          if (orgsLookupReturnsNotFound) {
+            return new Response(JSON.stringify({ message: 'Organization is not found' }), {
+              status: 404,
               headers: { 'Content-Type': 'application/json' },
             });
           }
@@ -1518,12 +1522,25 @@ export class FakeSonarQubeServerBuilder {
             );
           }
           if (orgKey) {
-            // Default: return a valid org so the AI remediation pre-flight passes in tests
-            // that don't configure SQAA entitlement. SQAA checks still return false because
-            // /a3s-analysis/org-config/{uuid} returns 404 for unconfigured orgs.
+            const organization = [
+              ...memberOrganizations,
+              ...visibleOrganizations,
+              ...defaultResolvableOrganizations,
+            ].find(({ key }) => key === orgKey);
+            if (!organization) {
+              return new Response(
+                JSON.stringify({ message: `Organization with key ${orgKey} is not found` }),
+                { status: 404, headers: { 'Content-Type': 'application/json' } },
+              );
+            }
             return new Response(
               JSON.stringify([
-                { id: orgKey, uuidV4: `${orgKey}-uuid-v4`, key: orgKey, name: orgKey },
+                {
+                  id: orgKey,
+                  uuidV4: `${orgKey}-uuid-v4`,
+                  key: organization.key,
+                  name: organization.name,
+                },
               ]),
               { headers: { 'Content-Type': 'application/json' } },
             );

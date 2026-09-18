@@ -160,7 +160,7 @@ describe('sonar remediate', () => {
   );
 
   it(
-    'exits with code 0 and shows buy-it message when the org lookup returns an empty array',
+    'exits with code 0 and shows buy-it message when the org lookup returns 404',
     async () => {
       const server = await harness
         .newFakeServer()

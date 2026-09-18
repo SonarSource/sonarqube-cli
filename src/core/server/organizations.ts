@@ -145,22 +145,26 @@ export class OrganizationsClient {
   /**
    * Resolve an organization key.
    *
-   * `/api/organizations/search` answers an unknown key with `200` and an empty list. An error
-   * therefore never means "no such organization", so the two cases are reported apart.
-   *
-   * The `organizations` filter is not limited to the caller's memberships: it also resolves
-   * public organizations. That is why a hand-typed key can be validated with it.
+   * The public organizations API returns `404` for unknown or inaccessible organizations. This
+   * lets a hand-typed key be validated without using the internal organizations search endpoint.
    *
    * Every outcome (accessible, not_found, or check_failed) is folded into a plain value here,
    * so this deliberately resolves to a `Promise`, not a `ResultAsync`: there is no error left to
    * propagate past this point.
    */
   resolveOrganizationAccess(organizationKey: string): Promise<OrganizationAccess> {
-    return this.fetchOrganizationByKey(organizationKey).match(
-      (organization): OrganizationAccess =>
-        organization ? { status: 'accessible' } : { status: 'not_found' },
-      (error): OrganizationAccess => ({ status: 'check_failed', reason: error.message }),
-    );
+    const endpoint = '/organizations/organizations';
+    return this.client
+      .getOrNullIf404<OrganizationRecord[]>(
+        endpoint,
+        { organizationKey, excludeEligibility: 'true' },
+        this.client.apiHostFor(endpoint),
+      )
+      .match(
+        (organizations): OrganizationAccess =>
+          organizations?.[0] ? { status: 'accessible' } : { status: 'not_found' },
+        (error): OrganizationAccess => ({ status: 'check_failed', reason: error.message }),
+      );
   }
 
   /**
