@@ -202,12 +202,12 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
           'Claude receives compressed Gradle output from the CAG PostToolUse hook',
           async () => {
             writeFakeGradleWrapper(harness);
-            const claudeSettings = harness.cwd.file('.claude', 'settings.json').asText();
+            const claudeSettings = harness.userHome.file('.claude', 'settings.json').asText();
             expect(claudeSettings).toContain('sonar-sqaa');
             expect(claudeSettings).toContain('posttool-sqaa');
             expect(claudeSettings).toContain('Bash|PowerShell|Monitor|Read');
             expect(
-              harness.cwd
+              harness.userHome
                 .file('.claude', 'hooks', 'sonar-sqaa', 'build-scripts', 'posttool-sqaa.sh')
                 .asText(),
             ).toContain('sonar hook claude-post-tool-use');
