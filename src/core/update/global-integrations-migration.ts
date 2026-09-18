@@ -57,7 +57,7 @@ interface AgentMigration {
 }
 
 /**
- * Moves every agent integrated into a repository over to global scope: removes the project-scoped
+ * Migrates every agent integrated into a repository to global scope: removes the project-scoped
  * artifacts, reruns the real `sonar integrate <agent>` handler with `--global`, then drops the
  * project records.
  *
@@ -82,7 +82,7 @@ export async function migrateAgentIntegrationsToGlobalScope(
   const auth = await resolveAuthOrNull(deps);
   if (!auth) {
     deps.console.warn(
-      `Could not move your agent integrations to global scope: you are not logged in. ` +
+      `Could not migrate your agent integrations to global scope: you are not logged in. ` +
         `Run 'sonar auth login', then 'sonar update', to retry.`,
     );
     return;
@@ -93,30 +93,10 @@ export async function migrateAgentIntegrationsToGlobalScope(
   let anyFailed = false;
 
   for (const agentMigration of agentMigrations) {
-    const { displayName } = agentMigration.declaration;
-    const { skipGlobalInstall } = agentMigration;
-    deps.console.info(
-      skipGlobalInstall
-        ? `Removing the project-scoped ${displayName} integration...`
-        : `Migrating the ${displayName} integration to global scope...`,
-    );
-    try {
-      await uninstallProjectScopedArtifacts(agentMigration, quietConsole);
-      if (!skipGlobalInstall) {
-        await installIntegrationAtGlobalScope(agentMigration, auth, quietConsole, deps);
-      }
-      pruneProjectScopedRecordsFromState(agentMigration.declaration.id);
-      deps.console.info(
-        skipGlobalInstall
-          ? `Removed the project-scoped ${displayName} integration.`
-          : `Migrated the ${displayName} integration to global scope.`,
-      );
-    } catch (error) {
-      anyFailed = true;
-      deps.console.error(
-        `Could not move the ${displayName} integration to global scope: ${(error as Error).message}`,
-      );
-    }
+    const migrated = agentMigration.skipGlobalInstall
+      ? await removeProjectIntegrations(agentMigration, quietConsole, deps)
+      : await removeProjectIntegrationsAndInstallGlobally(agentMigration, auth, quietConsole, deps);
+    anyFailed = anyFailed || !migrated;
   }
 
   if (anyFailed) {
@@ -134,9 +114,51 @@ export async function migrateAgentIntegrationsToGlobalScopeSafely(
     await migrateAgentIntegrationsToGlobalScope(deps);
   } catch (error) {
     deps.console.warn(
-      `Could not move agent integrations to global scope: ${(error as Error).message}. ` +
+      `Could not migrate agent integrations to global scope: ${(error as Error).message}. ` +
         `Run 'sonar update' to retry.`,
     );
+  }
+}
+
+async function removeProjectIntegrations(
+  agentMigration: AgentMigration,
+  quietConsole: Console,
+  deps: PostUpdateDependencies,
+): Promise<boolean> {
+  const { displayName } = agentMigration.declaration;
+  deps.console.info(`Removing the project-scoped ${displayName} integration...`);
+  try {
+    await uninstallProjectScopedArtifacts(agentMigration, quietConsole);
+    pruneProjectScopedRecordsFromState(agentMigration.declaration.id);
+    deps.console.info(`Removed the project-scoped ${displayName} integration.`);
+    return true;
+  } catch (error) {
+    deps.console.error(
+      `Could not remove the project-scoped ${displayName} integration: ${(error as Error).message}`,
+    );
+    return false;
+  }
+}
+
+async function removeProjectIntegrationsAndInstallGlobally(
+  agentMigration: AgentMigration,
+  auth: ResolvedAuth,
+  quietConsole: Console,
+  deps: PostUpdateDependencies,
+): Promise<boolean> {
+  const { displayName } = agentMigration.declaration;
+  deps.console.info(`Migrating the ${displayName} integration to global scope...`);
+  try {
+    await uninstallProjectScopedArtifacts(agentMigration, quietConsole);
+    await installIntegrationAtGlobalScope(agentMigration, auth, quietConsole, deps);
+    pruneProjectScopedRecordsFromState(agentMigration.declaration.id);
+    deps.console.info(`Migrated the ${displayName} integration to global scope.`);
+    return true;
+  } catch (error) {
+    deps.console.error(
+      `Could not migrate the ${displayName} integration to global scope: ${(error as Error).message}`,
+    );
+    return false;
   }
 }
 
