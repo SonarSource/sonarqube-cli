@@ -1,5 +1,5 @@
 {
-  "version": "1.9.0",
+  "version": "1.8.0",
   "commands": [
     {
       "id": "sonar",
@@ -179,7 +179,7 @@
           "short": "-p",
           "description": "Project key",
           "type": "string",
-          "required": false
+          "required": true
         },
         {
           "flags": "--statuses <statuses>",
@@ -585,10 +585,17 @@
           "required": false
         },
         {
+          "flags": "--dependency-risks",
+          "long": "--dependency-risks",
+          "description": "Also install a pre-commit dependency-risks scan (requires -p, not supported with --global)",
+          "type": "boolean",
+          "required": false
+        },
+        {
           "flags": "-p, --project <project>",
           "long": "--project",
           "short": "-p",
-          "description": "Project key baked into the dependency-risks hook (not supported with --global)",
+          "description": "Project key baked into the dependency-risks hook (required with --dependency-risks)",
           "type": "string",
           "required": false
         }

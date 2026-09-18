@@ -2,7 +2,7 @@
 
 > Code quality and security in your terminal. Scan, integrate, and fix issues — locally or with AI.
 
-- Version: 1.9.0
+- Version: 1.8.0
 - Install (Linux/macOS): curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash
 - Install (Windows): irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
 - Machine-readable schema: https://sonarsource.com/sonarqube/cli/data/commands.json
@@ -128,14 +128,15 @@ Examples:
 
 ### sonar integrate git *
 Install a Git pre-commit hook that scans staged files for secrets and dependency risks before each commit, or a Git pre-push hook that scans committed files for secrets before each push.
-Usage: sonar integrate git [--hook <value>] [--force] [--non-interactive] [--global] [-p <value>]
+Usage: sonar integrate git [--hook <value>] [--force] [--non-interactive] [--global] [--dependency-risks] [-p <value>]
 
 Options:
   --hook  <string>   Hook to install: pre-commit (scan staged files) or pre-push (scan files in unpushed commits)
   --force   Overwrite existing hook if it is not from sonar integrate git
   --non-interactive   Non-interactive mode (no prompts)
   --global   Install hook globally for all repositories (sets git config --global core.hooksPath)
-  --project, -p  <string>   Project key baked into the dependency-risks hook (not supported with --global)
+  --dependency-risks   Also install a pre-commit dependency-risks scan (requires -p, not supported with --global)
+  --project, -p  <string>   Project key baked into the dependency-risks hook (required with --dependency-risks)
 
 Examples:
   sonar integrate git
