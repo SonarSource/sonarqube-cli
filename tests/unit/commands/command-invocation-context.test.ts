@@ -25,10 +25,12 @@ import { type CliRuntime, createCliRuntime } from '@/core/commands/cli-runtime.t
 import {
   CommandAuthenticatedInvocationContext,
   CommandInvocationContext,
+  StatsFact,
   TelemetryFact,
 } from '@/core/commands/invocation-context.ts';
 import type { LifecycleState } from '@/core/commands/sonar-command.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
+import * as statsEnabled from '@/core/stats/enabled.ts';
 
 import { FakeConsole } from '../../_common/fake-console.ts';
 
@@ -122,6 +124,34 @@ describe('CommandInvocationContext stage accessors', () => {
     context.recordTelemetry(fact);
     expect(context.telemetryFacts()).toEqual([fact]);
     expect(context.telemetryFacts()).not.toBe(context.telemetryFacts());
+  });
+});
+
+describe('CommandInvocationContext.recordStats', () => {
+  it('buffers the factory result when stats collection is enabled', () => {
+    const enabledSpy = spyOn(statsEnabled, 'isStatsCollectionEnabled').mockReturnValue(true);
+    const context = ctx();
+    const fact = new StatsFact({ ok: true });
+
+    context.recordStats(() => fact);
+
+    expect(context.statsFacts()).toEqual([fact]);
+    enabledSpy.mockRestore();
+  });
+
+  it('skips the factory entirely when stats collection is disabled', () => {
+    const enabledSpy = spyOn(statsEnabled, 'isStatsCollectionEnabled').mockReturnValue(false);
+    const context = ctx();
+    let factoryCalls = 0;
+
+    context.recordStats(() => {
+      factoryCalls += 1;
+      return new StatsFact({ ok: true });
+    });
+
+    expect(factoryCalls).toBe(0);
+    expect(context.statsFacts()).toEqual([]);
+    enabledSpy.mockRestore();
   });
 });
 

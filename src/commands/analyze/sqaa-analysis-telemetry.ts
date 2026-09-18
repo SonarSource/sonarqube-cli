@@ -161,13 +161,13 @@ export function recordSqaaAnalysisTelemetry(
   );
   ctx.recordTelemetry(fact);
 
-  if (issues.length > 0) {
-    upsertRuleMessages(collectRuleMessages(issues));
-  }
-  ctx.recordStats(
-    buildStatsFromTelemetry(fact, {
+  ctx.recordStats(() => {
+    if (issues.length > 0) {
+      upsertRuleMessages(collectRuleMessages(issues));
+    }
+    return buildStatsFromTelemetry(fact, {
       findingsCount,
       ruleCounts: ruleCounts?.counts_by_rule,
-    }),
-  );
+    });
+  });
 }

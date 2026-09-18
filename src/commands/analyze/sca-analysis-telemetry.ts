@@ -105,7 +105,7 @@ export function recordScaAnalysisTelemetry(
       { auth },
     );
     ctx.recordTelemetry(fact);
-    ctx.recordStats(buildStatsFromTelemetry(fact, { findingsCount: 0 }));
+    ctx.recordStats(() => buildStatsFromTelemetry(fact, { findingsCount: 0 }));
     return;
   }
 
@@ -127,7 +127,7 @@ export function recordScaAnalysisTelemetry(
     { auth },
   );
   ctx.recordTelemetry(fact);
-  ctx.recordStats(
+  ctx.recordStats(() =>
     buildStatsFromTelemetry(fact, {
       findingsCount,
       ruleCounts: findingsCount > 0 ? details.counts_by_rule : undefined,

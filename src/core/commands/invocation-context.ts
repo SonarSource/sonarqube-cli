@@ -24,6 +24,7 @@ import { type LifecycleState, STABLE_LIFECYCLE } from '@/core/commands/stage.ts'
 import logger from '@/core/observability/logger.ts';
 import { okAsync, type ResultAsync } from '@/core/result.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
+import { isStatsCollectionEnabled } from '@/core/stats/enabled.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 /**
@@ -166,9 +167,15 @@ export class CommandInvocationContext {
     return this.telemetryFactsBuffer.slice();
   }
 
-  /** Record stats facts for `postAction` drain. */
-  recordStats(...facts: StatsFact[]): void {
-    this.statsFactsBuffer.push(...facts);
+  /**
+   * Buffer a stats fact for `postAction` drain. `factory` runs only when local stats
+   * collection is enabled.
+   */
+  recordStats(factory: () => StatsFact): void {
+    if (!isStatsCollectionEnabled()) {
+      return;
+    }
+    this.statsFactsBuffer.push(factory());
   }
 
   /** Snapshot of stats facts recorded during this invocation. */

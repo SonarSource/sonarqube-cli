@@ -12,6 +12,7 @@ The state file persists configuration across CLI invocations and stores:
 - **Declarative Integrations**: Generic records of installed integrations, features, resources, and operations
 - **Dependency Metadata**: Installed external binaries like sonar-secrets
 - **Telemetry Data**: Anonymous usage statistics and pending telemetry events
+- **Stats Data**: Consent for local-only stats collection, never transmitted
 
 ## Location
 
@@ -33,6 +34,7 @@ The state file persists configuration across CLI invocations and stores:
 | `tools`           | ToolsState (optional) | Legacy, superseded by `dependencies`                |
 | `dependencies`    | DependenciesState     | Installed binaries shared by declarative features   |
 | `telemetry`       | TelemetryState        | Telemetry configuration and pending events          |
+| `stats`           | StatsState (optional) | Local-only stats collection consent                 |
 | `agentExtensions` | AgentExtension[]      | Installed agent extensions per project/global scope |
 | `integrations`    | IntegrationsState     | Generic declarative integration install records     |
 
@@ -143,6 +145,15 @@ Legacy. Entries are folded into `dependencies.installed` on load and this list i
 | `firstUseDate`   | ISO 8601 timestamp     | When the CLI was first used             |
 | `installationId` | string (optional)      | Stable installation identifier          |
 | `events`         | StoredTelemetryEvent[] | Pending telemetry events not yet sent   |
+
+### Stats Section
+
+Independent of the `telemetry` section above: this data is never transmitted, and is consumed only locally.
+The whole `stats` object is absent until the user explicitly runs `sonar config stats` — collection defaults to enabled either way, so most users' state files never gain this key.
+
+| Field     | Type    | Description                                |
+| --------- | ------- | ------------------------------------------- |
+| `enabled` | boolean | Whether local stats collection is enabled  |
 
 ### Integrations Section
 
