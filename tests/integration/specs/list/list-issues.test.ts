@@ -23,6 +23,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { TestHarness } from '../../harness';
+import { commitFile, git, initGitRepo } from '../hook/git-test-helpers';
 
 describe('list issues', () => {
   let harness: TestHarness;
@@ -944,4 +945,211 @@ describe('list issues — argument validation', () => {
     expect(result.stdout).not.toContain('java:S4444');
     expect(result.stdout).not.toContain('java:S5555');
   });
+});
+
+describe('list issues — branch and pull request resolution', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'auto-detects a pull request for the current git branch when no flags are given',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withPullRequests([{ key: '42', branch: 'feature-x' }]))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'a.txt', 'a');
+      git(['checkout', '-b', 'feature-x'], harness.cwd.path);
+
+      const result = await harness.run(`list issues --project my-project`);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain(
+        'Using pull request 42 (auto-detected from branch feature-x)',
+      );
+      const issuesReq = server.getRecordedRequests().find((r) => r.path === '/api/issues/search');
+      expect(issuesReq?.query.pullRequest).toBe('42');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'leaves branch and pull request unset when no pull request matches the current git branch',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withPullRequests([{ key: '7', branch: 'other-branch' }]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'a.txt', 'a');
+      git(['checkout', '-b', 'feature-x'], harness.cwd.path);
+
+      const result = await harness.run(`list issues --project my-project`);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).not.toContain('auto-detected');
+      const issuesReq = server.getRecordedRequests().find((r) => r.path === '/api/issues/search');
+      expect(issuesReq?.query.pullRequest).toBeUndefined();
+      expect(issuesReq?.query.branch).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'leaves branch and pull request unset when more than one pull request matches the current git branch',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withPullRequests([
+            { key: '1', branch: 'feature-x' },
+            { key: '2', branch: 'feature-x' },
+          ]),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'a.txt', 'a');
+      git(['checkout', '-b', 'feature-x'], harness.cwd.path);
+
+      const result = await harness.run(`list issues --project my-project`);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).not.toContain('auto-detected');
+      const issuesReq = server.getRecordedRequests().find((r) => r.path === '/api/issues/search');
+      expect(issuesReq?.query.pullRequest).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'leaves branch and pull request unset when the server edition does not support pull request analysis',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withPullRequestsUnsupported())
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'a.txt', 'a');
+      git(['checkout', '-b', 'feature-x'], harness.cwd.path);
+
+      const result = await harness.run(`list issues --project my-project`);
+
+      expect(result.exitCode).toBe(0);
+      const issuesReq = server.getRecordedRequests().find((r) => r.path === '/api/issues/search');
+      expect(issuesReq?.query.pullRequest).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'succeeds instead of failing when the pull request lookup errors out',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withPullRequestsError(500))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'a.txt', 'a');
+      git(['checkout', '-b', 'feature-x'], harness.cwd.path);
+
+      const result = await harness.run(`list issues --project my-project`);
+
+      expect(result.exitCode).toBe(0);
+      const issuesReq = server.getRecordedRequests().find((r) => r.path === '/api/issues/search');
+      expect(issuesReq?.query.pullRequest).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'does not look up pull requests when --branch is given explicitly',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withPullRequests([{ key: '42', branch: 'feature-x' }]))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'a.txt', 'a');
+      git(['checkout', '-b', 'feature-x'], harness.cwd.path);
+
+      const result = await harness.run(`list issues --project my-project --branch feature-x`);
+
+      expect(result.exitCode).toBe(0);
+      const issuesReq = server.getRecordedRequests().find((r) => r.path === '/api/issues/search');
+      expect(issuesReq?.query.branch).toBe('feature-x');
+      const pullRequestRequests = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/project_pull_requests/list');
+      expect(pullRequestRequests).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'does not look up pull requests when --pull-request is given explicitly',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withPullRequests([{ key: '42', branch: 'feature-x' }]))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'a.txt', 'a');
+      git(['checkout', '-b', 'feature-x'], harness.cwd.path);
+
+      const result = await harness.run(`list issues --project my-project --pull-request 99`);
+
+      expect(result.exitCode).toBe(0);
+      const issuesReq = server.getRecordedRequests().find((r) => r.path === '/api/issues/search');
+      expect(issuesReq?.query.pullRequest).toBe('99');
+      const pullRequestRequests = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/project_pull_requests/list');
+      expect(pullRequestRequests).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 2 when --branch and --pull-request are combined',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project')
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        `list issues --project my-project --branch feature-x --pull-request 42`,
+      );
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('--branch and --pull-request cannot be used together');
+    },
+    { timeout: 15000 },
+  );
 });

@@ -22,11 +22,12 @@
  * Tests for IssuesClient and issuesSearchCommand
  */
 
-import { beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import * as pullRequestAutoResolve from '@/core/pull-request-auto-resolve.ts';
 import { okAsync, type ResultAsync } from '@/core/result.ts';
 import type { HttpClientError } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
@@ -454,6 +455,7 @@ describe('issuesSearchCommand', () => {
   let fake: FakeConsole;
   let mockCtx: CommandAuthenticatedInvocationContext;
   let httpClient: SonarHttpClient;
+  let autoResolvePullRequestSpy: ReturnType<typeof spyOn>;
 
   const emptyApiResponse = {
     issues: [],
@@ -472,6 +474,16 @@ describe('issuesSearchCommand', () => {
       undefined,
       createCliRuntime({ httpClientFactory: () => httpClient }),
     );
+    // Ensures listIssues() doesn't attempt a real git-branch lookup and network call
+    // whenever a test omits both --branch and --pull-request.
+    autoResolvePullRequestSpy = spyOn(
+      pullRequestAutoResolve,
+      'autoResolvePullRequest',
+    ).mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    autoResolvePullRequestSpy.mockRestore();
   });
 
   it('throws when --format is invalid', async () => {

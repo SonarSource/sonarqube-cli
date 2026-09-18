@@ -26,6 +26,7 @@ import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFileComponentKey } from '@/core/file-component.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
+import { autoResolvePullRequest } from '@/core/pull-request-auto-resolve.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { SystemClient } from '@/core/server/system.ts';
@@ -129,6 +130,10 @@ export async function listIssues(
     );
   }
 
+  if (options.branch && options.pullRequest) {
+    throw new InvalidOptionError('--branch and --pull-request cannot be used together.');
+  }
+
   const ps = options.pageSize;
   if (ps < 1 || ps > MAX_PAGE_SIZE) {
     throw new InvalidOptionError(
@@ -175,13 +180,29 @@ export async function listIssues(
   const client = ctx.connection.httpClient;
   const issuesClient = new IssuesClient(client);
 
+  const { branch } = options;
+  let { pullRequest } = options;
+  if (!branch && !pullRequest) {
+    const autoDetected = await autoResolvePullRequest(client, projectKey);
+    if (autoDetected) {
+      pullRequest = autoDetected.pullRequest;
+      console.print(
+        `     Using pull request ${pullRequest} (auto-detected from branch ${autoDetected.branch})`,
+        'stderr',
+      );
+    }
+  }
+
   let componentKeys: string | undefined;
   if (options.file) {
     ({ componentKey: componentKeys } = await resolveFileComponentKey(
       client,
       projectKey,
       options.file,
-      { branch: options.branch, pullRequest: options.pullRequest },
+      {
+        branch,
+        pullRequest,
+      },
     ));
   }
 
@@ -202,8 +223,8 @@ export async function listIssues(
     issueStatuses: normalizedStatuses,
     rules: options.rule,
     tags: options.tag,
-    branch: options.branch,
-    pullRequest: options.pullRequest,
+    branch,
+    pullRequest,
     resolved: options.resolved,
     ps: options.pageSize,
     p: page,
