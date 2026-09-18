@@ -164,7 +164,7 @@ export async function integrateGit(
   return integrateGitGlobal(options, auth, ctx);
 }
 
-/** Kept for the project-scoped install path CLI-1118 will gate behind `--local`. */
+/** Unused by the global-only flow above; kept so a future project-scoped install path can resolve a project key the same way. */
 export async function resolveProjectKey(
   options: IntegrateGitOptions,
   root: string,
