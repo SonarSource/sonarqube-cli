@@ -35,9 +35,10 @@ import type { IntegrationDeclaration } from '@/core/framework/features';
 import type { CliState, InstalledIntegrationFeature } from '@/core/state/state.ts';
 
 import { POST_UPDATE_TRIGGER_COMMAND } from '../../../_common/isolated-cli-env.js';
-import { TestHarness } from '../../harness';
+import { type CliResult, TestHarness } from '../../harness';
 
 const TEST_TIMEOUT = 60000;
+const STALE_CLI_VERSION = '0.5.0';
 
 describe('global-integrations migration', () => {
   let harness: TestHarness;
@@ -68,6 +69,14 @@ describe('global-integrations migration', () => {
     harness.state().withInstalledIntegrationFeature(integration, featureId, 'project', targetRoot);
   }
 
+  function runAsUpgrade(): Promise<CliResult> {
+    const builder = harness.state();
+    const state = builder.build(join(harness.cliHome.path, 'bin'));
+    state.config.cliVersion = STALE_CLI_VERSION;
+    builder.withRawState(JSON.stringify(state, null, 2));
+    return harness.run(POST_UPDATE_TRIGGER_COMMAND);
+  }
+
   function recordedFeatures(integrationId: string): InstalledIntegrationFeature[] {
     const state = harness.stateJsonFile.asJson() as CliState;
     return (
@@ -88,7 +97,7 @@ describe('global-integrations migration', () => {
       seedProjectScopedInstall(claudeIntegration);
       seedProjectScopedInstall(codexIntegration);
 
-      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+      const result = await runAsUpgrade();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Migrating agent integrations to global scope...');
@@ -116,7 +125,7 @@ describe('global-integrations migration', () => {
       seedProjectScopedInstall(cursorIntegration);
       harness.cwd.writeFile('.cursor/rules/sonar-agentic-analysis.mdc', '# stale instructions\n');
 
-      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+      const result = await runAsUpgrade();
 
       expect(result.exitCode).toBe(0);
       expect(harness.cwd.exists('.cursor', 'rules', 'sonar-agentic-analysis.mdc')).toBe(false);
@@ -132,7 +141,7 @@ describe('global-integrations migration', () => {
       seedProjectScopedInstall(claudeIntegration);
       seedProjectScopedInstall(nativeGitIntegration, 'pre-commit-hook');
 
-      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+      const result = await runAsUpgrade();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Migrated the Claude Code integration to global scope.');
@@ -157,13 +166,12 @@ describe('global-integrations migration', () => {
           harness.userHome.path,
         );
 
-      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+      const result = await runAsUpgrade();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('Migrating agent integrations to global scope');
       expect(recordedScopes('claude-code')).toEqual(['global']);
-      // Nothing was reinstalled: only state was seeded, so the artifact would exist if it had been.
-      expect(harness.userHome.exists('.claude', 'settings.json')).toBe(false);
+      expect(recordedFeatures('claude-code')).toHaveLength(1);
     },
     { timeout: TEST_TIMEOUT },
   );
@@ -178,7 +186,7 @@ describe('global-integrations migration', () => {
         join(harness.cwd.path, 'deleted-repo'),
       );
 
-      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+      const result = await runAsUpgrade();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Migrated the Claude Code integration to global scope.');
@@ -198,7 +206,7 @@ describe('global-integrations migration', () => {
       seedProjectScopedInstall(cursorIntegration);
       seedProjectScopedInstall(cursorIntegration, 'sonar-secrets-hooks', secondRepo);
 
-      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+      const result = await runAsUpgrade();
 
       expect(result.exitCode).toBe(0);
       expect(harness.cwd.exists('.cursor', 'rules', 'sonar-agentic-analysis.mdc')).toBe(false);
@@ -220,14 +228,17 @@ describe('global-integrations migration', () => {
       seedProjectScopedInstall(claudeIntegration);
       seedProjectScopedInstall(codexIntegration);
 
-      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+      const result = await runAsUpgrade();
 
       expect(result.exitCode).toBe(0);
       expect(result.stderr).toContain('Could not move the Claude Code integration to global scope');
       expect(recordedScopes('claude-code')).toContain('project');
       expect(recordedScopes('codex')).not.toContain('project');
       expect(recordedScopes('codex')).toContain('global');
-      expect(result.stdout).toContain('Finished migrating agent integrations to global scope.');
+      // The version gate has already been spent, so the user is told how to retry.
+      expect(result.stderr).toContain(
+        "Some integrations were left at project scope. Run 'sonar integrate' to retry.",
+      );
     },
     { timeout: TEST_TIMEOUT },
   );
@@ -240,7 +251,7 @@ describe('global-integrations migration', () => {
       await authenticateAgainstFakeServer();
       seedProjectScopedInstall(antigravityIntegration, 'mcp-server');
 
-      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+      const result = await runAsUpgrade();
 
       expect(result.exitCode).toBe(0);
       const mcp = harness.userHome.file('.gemini', 'config', 'mcp_config.json').asJson() as {
@@ -265,7 +276,7 @@ describe('global-integrations migration', () => {
         );
       seedProjectScopedInstall(claudeIntegration, 'mcp-server');
 
-      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+      const result = await runAsUpgrade();
 
       expect(result.exitCode).toBe(0);
       expect(recordedScopes('claude-code')).not.toContain('project');
@@ -285,7 +296,7 @@ describe('global-integrations migration', () => {
       seedProjectScopedInstall(copilotIntegration, 'pre-tool-use-hook');
       harness.cwd.writeFile('.cursor/rules/sonar-agentic-analysis.mdc', '# stale\n');
 
-      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+      const result = await runAsUpgrade();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Migrated the Claude Code integration to global scope.');
@@ -302,18 +313,36 @@ describe('global-integrations migration', () => {
   );
 
   it(
-    'keeps the project records when credentials are unavailable, so a later run retries',
+    'keeps the project records when credentials are unavailable, and says how to retry',
     async () => {
       // No fake server and no auth: `harness.cwd` is never created, so pass its path
       // unresolved — `realpathSync` would throw on the missing directory.
       harness.state().clearAuth();
       seedProjectScopedInstall(claudeIntegration, 'sonar-secrets-hooks', harness.cwd.path);
 
-      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+      const result = await runAsUpgrade();
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('Migrating agent integrations to global scope');
+      expect(result.stderr).toContain('you are not logged in');
+      expect(result.stderr).toContain("Run 'sonar auth login', then 'sonar integrate'");
       expect(recordedScopes('claude-code')).toEqual(['project']);
+    },
+    { timeout: TEST_TIMEOUT },
+  );
+
+  it(
+    'retries from an integrate subcommand once the version gate has been spent',
+    async () => {
+      await authenticateAgainstFakeServer();
+      seedProjectScopedInstall(claudeIntegration);
+
+      const result = await harness.run('integrate codex --global --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Migrated the Claude Code integration to global scope.');
+      expect(recordedScopes('claude-code')).not.toContain('project');
+      expect(recordedScopes('claude-code')).toContain('global');
     },
     { timeout: TEST_TIMEOUT },
   );

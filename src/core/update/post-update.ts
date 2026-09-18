@@ -28,7 +28,6 @@ import type { Console } from '@/core/ui/console.ts';
 
 import { version as CURRENT_VERSION } from '../../../package.json';
 import logger from '../observability/logger.ts';
-import type { CliState } from '../state/state.ts';
 import {
   loadState,
   saveState,
@@ -43,10 +42,7 @@ import {
   type InstallHooksFn,
   migrateClaudeCodeHooks,
 } from './claude-hooks-migration.ts';
-import {
-  hasProjectScopedAgentIntegrations,
-  migrateAgentIntegrationsToGlobalScope,
-} from './global-integrations-migration.ts';
+import { migrateAgentIntegrationsToGlobalScope } from './global-integrations-migration.ts';
 import { migrateKnownServerKeyMappingsForProjectLevelFeatures } from './known-project-mappings-migration.ts';
 import { migrateLegacyTelemetryEvents } from './telemetry-migration.ts';
 
@@ -82,7 +78,7 @@ export interface PostUpdateDependencies {
  * Runs any actions that need to happen once after the CLI has been updated.
  *
  * - Skipped entirely when the state file is absent (fresh installation).
- * - Skipped when neither `shouldRunPostUpdateActions` trigger applies.
+ * - Skipped when the persisted version is not older than `CURRENT_VERSION`.
  * - On success the persisted CLI version is bumped to `CURRENT_VERSION` so the
  *   actions are not repeated on the next invocation.
  */
@@ -98,7 +94,7 @@ export async function runPostUpdateActions(deps: PostUpdateDependencies): Promis
   }
   const previousVersion = previousState.config.cliVersion;
 
-  if (!shouldRunPostUpdateActions(previousState, deps)) {
+  if (!isNewerVersion(previousVersion, CURRENT_VERSION)) {
     return;
   }
 
@@ -117,18 +113,6 @@ export async function runPostUpdateActions(deps: PostUpdateDependencies): Promis
   } catch (error) {
     deps.console.warn(`Post-update actions failed: ${(error as Error).message}`);
   }
-}
-
-function shouldRunPostUpdateActions(
-  previousState: CliState,
-  deps: PostUpdateDependencies,
-): boolean {
-  return (
-    isNewerVersion(previousState.config.cliVersion, CURRENT_VERSION) ||
-    // A user who is unauthenticated at upgrade time cannot be migrated, and `cliVersion` is bumped
-    // regardless, so their leftover records are the only thing that can trigger a retry.
-    hasProjectScopedAgentIntegrations(previousState, deps.agentIntegrationHandlers)
-  );
 }
 
 export async function runPostUpdateActionsSafely(deps: PostUpdateDependencies): Promise<void> {

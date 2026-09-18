@@ -43,7 +43,9 @@ import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
 import { buildCommandExecutedFact } from '@/core/telemetry/command-executed.ts';
 import { resolveInvocationAuthForTelemetry } from '@/core/telemetry/identity.ts';
 import type { Console } from '@/core/ui/console.ts';
+import { migrateAgentIntegrationsToGlobalScopeSafely } from '@/core/update/global-integrations-migration.ts';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
+import type { PostUpdateDependencies } from '@/core/update/post-update.ts';
 import { runPostUpdateActionsSafely } from '@/core/update/post-update.ts';
 
 import { version as VERSION } from '../../package.json';
@@ -171,6 +173,14 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   // resolves (env fallback) before telemetry flush.
   let capturedAgentSessionId: string | null = null;
   const COMMAND_TREE = new SonarCommand({ runtime, console });
+
+  const postUpdateDeps: PostUpdateDependencies = {
+    supportedIntegrations,
+    installHooks,
+    console,
+    runtime,
+    agentIntegrationHandlers: AGENT_INTEGRATION_HANDLERS,
+  };
 
   const handleHookInvocation =
     <TArgs extends unknown[]>(
@@ -391,6 +401,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('-g, --global', 'Install integrations globally.')
     .rejectUnknownSubcommands()
     .authenticatedAction((ctx, options: IntegrateBareOptions) => integrateBare(ctx, options));
+
+  // Post-update only attempts the move to global scope on a version bump, so `sonar integrate` is
+  // where a user sent back by its retry hint lands. Commander runs this for the subcommands too.
+  integrateCommand.hook('preAction', () =>
+    migrateAgentIntegrationsToGlobalScopeSafely(postUpdateDeps),
+  );
 
   integrateCommand
     .command('git')
@@ -917,13 +933,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   COMMAND_TREE.hook('preAction', async () => {
     // Safely: a throw from a Commander hook would abort the user's command.
-    await runPostUpdateActionsSafely({
-      supportedIntegrations,
-      installHooks,
-      console,
-      runtime,
-      agentIntegrationHandlers: AGENT_INTEGRATION_HANDLERS,
-    });
+    await runPostUpdateActionsSafely(postUpdateDeps);
   });
 
   // Emit handler facts plus CliCommandExecuted in one commit.
