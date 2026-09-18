@@ -39,14 +39,16 @@ import {
   summarizeScaFindings,
 } from '@/commands/analyze/sca-analysis-telemetry.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { CommandInvocationContext, type StatsFact } from '@/core/commands/invocation-context.ts';
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
+import { type AnalyzerStatsFactPayload, commitStatsFacts } from '@/core/stats/facts.ts';
 import { commitTelemetryFacts } from '@/core/telemetry';
 import * as userModule from '@/core/telemetry/user.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
+import { readStatsEvents } from '../../../_common/stats-helpers.ts';
 import { makeTelemetryState, readAnalysisEvents } from '../../../_common/telemetry-helpers.ts';
 
 const AUTH = new ResolvedAuth({
@@ -56,6 +58,17 @@ const AUTH = new ResolvedAuth({
   token: 'test-token',
   orgKey: 'my-org',
 });
+
+function emitScaAnalysisStats(
+  callerCommand: ScaCallerCommand,
+  response: AnalyzeProjectResponse | null,
+  durationMs: number,
+  exitCode: number | null,
+): readonly StatsFact[] {
+  const ctx = new CommandInvocationContext(new FakeConsole());
+  recordScaAnalysisTelemetry(ctx, AUTH, callerCommand, response, durationMs, exitCode);
+  return ctx.statsFacts();
+}
 
 async function emitScaAnalysisTelemetry(
   callerCommand: ScaCallerCommand,
@@ -338,5 +351,92 @@ describe('recordScaAnalysisTelemetry()', () => {
     );
 
     expect(readAnalysisEvents(testSonarUserHome)).toHaveLength(0);
+  });
+});
+
+describe('recordScaAnalysisTelemetry(): stats', () => {
+  it('records findingsCount 0 and no ruleCounts for a clean run', () => {
+    const response = makeResponse([makeRelease(false, [makeIssue('VULNERABILITY', 'HIGH')])]);
+
+    const facts = emitScaAnalysisStats(
+      SCA_CALLER_COMMANDS.analyzeDependencyRisks,
+      response,
+      123,
+      0,
+    );
+    commitStatsFacts(facts);
+
+    const [event] = readStatsEvents(testSonarUserHome);
+    expect(event.caller_command).toBe('analyze dependency-risks');
+    expect(event.exit_code).toBe(0);
+    expect(event.run_trigger).toBe('manual');
+    expect(event.parsedDetails.analyzer).toBe('sca-scanner-cli');
+    expect(event.parsedDetails.findingsCount).toBe(0);
+    expect(event.parsedDetails.ruleCounts).toBeUndefined();
+  });
+
+  it('records raw (non-deduped) findingsCount and ruleCounts when new findings exist', () => {
+    const response = makeResponse([
+      makeRelease(true, [makeIssue('VULNERABILITY', 'HIGH'), makeIssue('VULNERABILITY', 'HIGH')]),
+    ]);
+
+    const facts = emitScaAnalysisStats(
+      SCA_CALLER_COMMANDS.analyzeDependencyRisks,
+      response,
+      456,
+      51,
+    );
+    commitStatsFacts(facts);
+
+    const [event] = readStatsEvents(testSonarUserHome);
+    expect(event.parsedDetails.findingsCount).toBe(2);
+    expect(event.parsedDetails.ruleCounts).toEqual({ 'VULNERABILITY:HIGH': 2 });
+  });
+
+  it('records findingsCount 0 and run_trigger "hooks" for a failed-to-run scan (response null)', () => {
+    const facts = emitScaAnalysisStats(SCA_CALLER_COMMANDS.gitPreCommit, null, 77, null);
+    commitStatsFacts(facts);
+
+    const [event] = readStatsEvents(testSonarUserHome);
+    expect(event.caller_command).toBe('git-pre-commit');
+    expect(event.exit_code).toBeNull();
+    expect(event.run_trigger).toBe('hooks');
+    expect(event.parsedDetails.analyzer).toBe('sca-scanner-cli');
+    expect(event.parsedDetails.findingsCount).toBe(0);
+  });
+
+  it('re-scanning unchanged findings still reports the same raw count (no dedup for SCA)', () => {
+    const response = makeResponse([makeRelease(true, [makeIssue('VULNERABILITY', 'HIGH')])]);
+
+    commitStatsFacts(
+      emitScaAnalysisStats(SCA_CALLER_COMMANDS.analyzeDependencyRisks, response, 10, 51),
+    );
+    commitStatsFacts(
+      emitScaAnalysisStats(SCA_CALLER_COMMANDS.analyzeDependencyRisks, response, 10, 51),
+    );
+
+    const events = readStatsEvents(testSonarUserHome);
+    expect(events).toHaveLength(2);
+    expect(events[0].parsedDetails.findingsCount).toBe(1);
+    expect(events[1].parsedDetails.findingsCount).toBe(1);
+  });
+
+  it('never throws when the underlying storage write fails (fire-and-forget)', () => {
+    const facts: readonly StatsFact[] = emitScaAnalysisStats(
+      SCA_CALLER_COMMANDS.analyzeDependencyRisks,
+      null,
+      100,
+      null,
+    );
+
+    expect(() => commitStatsFacts(facts)).not.toThrow();
+  });
+
+  it('sanity check: the recorded payload shape matches AnalyzerStatsFactPayload', () => {
+    const [fact] = emitScaAnalysisStats(SCA_CALLER_COMMANDS.analyzeDependencyRisks, null, 5, null);
+    const payload = fact.payload as AnalyzerStatsFactPayload;
+
+    expect(payload.analyzer).toBe('sca-scanner-cli');
+    expect(payload.callerCommand).toBe('analyze dependency-risks');
   });
 });

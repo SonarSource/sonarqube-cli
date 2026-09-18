@@ -25,6 +25,7 @@ import {
   type CommandInvocationContext,
   TelemetryFact,
 } from '@/core/commands/invocation-context.ts';
+import { recordAnalyzerStats } from '@/core/stats/facts.ts';
 
 import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
 import type { AnalyzeProjectResponse } from './dependency-risk-helpers/sca-scanner.ts';
@@ -105,6 +106,13 @@ export function recordScaAnalysisTelemetry(
         { auth },
       ),
     );
+    recordAnalyzerStats(ctx, {
+      analyzer: 'sca-scanner-cli',
+      callerCommand,
+      exitCode,
+      durationMs,
+      findingsCount: 0,
+    });
     return;
   }
 
@@ -127,4 +135,12 @@ export function recordScaAnalysisTelemetry(
       { auth },
     ),
   );
+  recordAnalyzerStats(ctx, {
+    analyzer: 'sca-scanner-cli',
+    callerCommand,
+    exitCode,
+    durationMs,
+    findingsCount,
+    ruleCounts: findingsCount > 0 ? details.counts_by_rule : undefined,
+  });
 }

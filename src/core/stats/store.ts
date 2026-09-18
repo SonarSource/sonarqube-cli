@@ -20,8 +20,13 @@
 
 import type { Database } from 'bun:sqlite';
 
+import logger from '@/core/observability/logger.ts';
+
 import { openStatsDb } from './db.ts';
 
+// Same union as AnalysisTelemetryAnalyzer (src/commands/analyze/analysis-completed.ts).
+// Not imported from there: src/core never imports from src/commands elsewhere in this
+// codebase. Keep the two in sync by hand.
 export type StatsAnalyzer = 'sonar-secrets' | 'sqaa' | 'sca-scanner-cli';
 
 export type StatsTrigger = 'hooks' | 'manual';
@@ -41,10 +46,22 @@ export interface StatsEventEnvelope {
   durationMs?: number | null;
 }
 
-function withDb<T>(fn: (db: Database) => T): T {
-  const db = openStatsDb();
+// Mirrors appendTelemetryEvent's best-effort local append: a locked/read-only/corrupt-on-retry
+// ledger must never fail the analyzer command that triggered the write, so every failure here
+// (open or write) is logged and swallowed in favor of the caller's fallback.
+function withDb<T>(fn: (db: Database) => T, fallback: T): T {
+  let db: Database;
+  try {
+    db = openStatsDb();
+  } catch (error) {
+    logger.debug(`stats ledger unavailable: ${(error as Error).message}`);
+    return fallback;
+  }
   try {
     return fn(db);
+  } catch (error) {
+    logger.debug(`stats ledger write failed: ${(error as Error).message}`);
+    return fallback;
   } finally {
     db.close();
   }
@@ -66,7 +83,7 @@ export function recordStatsEvent(envelope: StatsEventEnvelope, details: StatsEve
       envelope.durationMs ?? null,
       JSON.stringify(details),
     );
-  });
+  }, undefined);
 }
 
 export function upsertRuleMessages(messages: Readonly<Record<string, string>>): void {
@@ -82,7 +99,7 @@ export function upsertRuleMessages(messages: Readonly<Record<string, string>>): 
         upsert.run(ruleKey, message, timestampMs);
       }
     })();
-  });
+  }, undefined);
 }
 
 export function dedupeAgainstSeen(scope: string, fingerprints: readonly string[]): Set<string> {
@@ -99,6 +116,10 @@ export function dedupeAgainstSeen(scope: string, fingerprints: readonly string[]
 
     const notSeenBefore = new Set<string>();
     const dedupedInThisCall = new Set<string>();
+    // IMMEDIATE takes the write lock up front. A deferred transaction here would open on
+    // the SELECT and only try to upgrade to a writer on the first INSERT — which, in WAL
+    // mode, fails with SQLITE_BUSY (snapshot conflict) if another connection committed
+    // since the read, a case the busy_timeout handler does not cover.
     db.transaction(() => {
       for (const fingerprint of fingerprints) {
         if (dedupedInThisCall.has(fingerprint)) {
@@ -111,7 +132,7 @@ export function dedupeAgainstSeen(scope: string, fingerprints: readonly string[]
         }
         upsertSeen.run(scope, fingerprint, timestampMs, timestampMs);
       }
-    })();
+    }).immediate();
     return notSeenBefore;
-  });
+  }, new Set(fingerprints));
 }
