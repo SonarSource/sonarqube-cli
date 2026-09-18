@@ -108,6 +108,7 @@ import { integrateCopilot } from './integrate/copilot';
 import { integrateCursor } from './integrate/cursor';
 import { integrateGit, type IntegrateGitOptions } from './integrate/git';
 import { integrateBare, type IntegrateBareOptions } from './integrate/integrate-bare.ts';
+import { AGENT_INTEGRATION_HANDLERS } from './integrate/integration-handlers.ts';
 import { link, type LinkOptions } from './link';
 import {
   DEFAULT_STATUSES,
@@ -896,6 +897,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       installHooks,
       console,
       runtime,
+      agentIntegrationHandlers: AGENT_INTEGRATION_HANDLERS,
     });
   });
 

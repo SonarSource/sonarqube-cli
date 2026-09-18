@@ -19,6 +19,7 @@
  */
 
 import type { CliRuntime } from '@/core/commands/cli-runtime.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import {
   type IntegrationRegistry,
   reconcileInstalledIntegrations,
@@ -27,6 +28,7 @@ import type { Console } from '@/core/ui/console.ts';
 
 import { version as CURRENT_VERSION } from '../../../package.json';
 import logger from '../observability/logger.ts';
+import type { CliState } from '../state/state.ts';
 import {
   loadState,
   saveState,
@@ -41,8 +43,23 @@ import {
   type InstallHooksFn,
   migrateClaudeCodeHooks,
 } from './claude-hooks-migration.ts';
+import {
+  hasProjectScopedAgentIntegrations,
+  migrateAgentIntegrationsToGlobalScope,
+} from './global-integrations-migration.ts';
 import { migrateKnownServerKeyMappingsForProjectLevelFeatures } from './known-project-mappings-migration.ts';
 import { migrateLegacyTelemetryEvents } from './telemetry-migration.ts';
+
+/**
+ * An agent integrate handler (`sonar integrate claude|codex|…`), narrowed to the only invocation
+ * the global-integrations migration makes.
+ */
+export type AgentIntegrationHandler = (
+  options: { global: true; nonInteractive: true },
+  ctx: CommandAuthenticatedInvocationContext,
+) => Promise<void>;
+
+export type AgentIntegrationHandlers = Readonly<Record<string, AgentIntegrationHandler>>;
 
 /**
  * Command-layer values `post-update` needs but must not import directly
@@ -58,13 +75,14 @@ export interface PostUpdateDependencies {
   console: Console;
   /** Credentials for migrations that need them, via `runtime.authResolver.resolveAuth()`. */
   runtime: CliRuntime;
+  agentIntegrationHandlers: AgentIntegrationHandlers;
 }
 
 /**
  * Runs any actions that need to happen once after the CLI has been updated.
  *
  * - Skipped entirely when the state file is absent (fresh installation).
- * - Skipped when the persisted CLI version matches or exceeds the current binary version.
+ * - Skipped when neither `shouldRunPostUpdateActions` trigger applies.
  * - On success the persisted CLI version is bumped to `CURRENT_VERSION` so the
  *   actions are not repeated on the next invocation.
  */
@@ -80,7 +98,7 @@ export async function runPostUpdateActions(deps: PostUpdateDependencies): Promis
   }
   const previousVersion = previousState.config.cliVersion;
 
-  if (!isNewerVersion(previousVersion, CURRENT_VERSION)) {
+  if (!shouldRunPostUpdateActions(previousState, deps)) {
     return;
   }
 
@@ -101,6 +119,18 @@ export async function runPostUpdateActions(deps: PostUpdateDependencies): Promis
   }
 }
 
+function shouldRunPostUpdateActions(
+  previousState: CliState,
+  deps: PostUpdateDependencies,
+): boolean {
+  return (
+    isNewerVersion(previousState.config.cliVersion, CURRENT_VERSION) ||
+    // A user who is unauthenticated at upgrade time cannot be migrated, and `cliVersion` is bumped
+    // regardless, so their leftover records are the only thing that can trigger a retry.
+    hasProjectScopedAgentIntegrations(previousState, deps.agentIntegrationHandlers)
+  );
+}
+
 export async function runPostUpdateActionsSafely(deps: PostUpdateDependencies): Promise<void> {
   try {
     await runPostUpdateActions(deps);
@@ -113,6 +143,9 @@ async function runActions(deps: PostUpdateDependencies): Promise<void> {
   migrateLegacyTelemetryEvents();
   // Must run before migrateDeclarativeIntegrations
   migrateKnownServerKeyMappingsForProjectLevelFeatures();
+  // After the mappings migration: it is the last read of project-scope attrs.
+  // Before reconciliation: that would re-apply the artifacts this deletes.
+  await migrateAgentIntegrationsToGlobalScope(deps);
   await migrateDeclarativeIntegrations(deps.supportedIntegrations, deps.console);
   await migrateClaudeCodeHooks(deps.installHooks);
   await updateSecretsBinaryIfNeeded(deps.console);
