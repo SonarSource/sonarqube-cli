@@ -221,8 +221,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   auth
     .command('login')
     .description(
-      'Authenticate via browser and save credentials in the system keychain. ' +
-        'Must be run manually — agents cannot authenticate themselves. ' +
+      'Authenticate via browser or an existing token and save credentials in the system keychain. ' +
         'For CI and automation, use environment variables instead: https://docs.sonarsource.com/sonarqube-cli/using-sonarqube-cli/environment-variables',
     )
     .option(
@@ -230,6 +229,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'SonarQube Server URL, SonarQube Cloud EU (https://sonarcloud.io), or SonarQube Cloud US (https://sonarqube.us). Defaults to SonarQube Cloud EU.',
     )
     .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
+    .option('--with-token', 'Read an existing token from standard input')
     .anonymousAction((ctx, options: AuthLoginOptions) => authLogin(options, ctx));
 
   auth
