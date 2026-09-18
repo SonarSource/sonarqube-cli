@@ -29,6 +29,7 @@ const VORTEX_STATUS_LABELS: Record<VortexEntitlementStatus, string> = {
   enabled: 'Active',
   over_consumption: 'Active (quota exhausted)',
   not_entitled: 'Not entitled',
+  organization_not_accessible: 'Configured organization is not accessible with this token',
   check_failed: 'Unknown (check failed)',
   not_applicable: 'Not available',
 };

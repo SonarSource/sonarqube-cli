@@ -31,7 +31,12 @@ import { OrganizationsClient } from '@/core/server/organizations.ts';
  * organization (see `resolveVortexEntitlement`), or a Server missing either hub (HTTP 404).
  */
 export type VortexEntitlementStatus =
-  'enabled' | 'over_consumption' | 'not_entitled' | 'check_failed' | 'not_applicable';
+  | 'enabled'
+  | 'over_consumption'
+  | 'not_entitled'
+  | 'organization_not_accessible'
+  | 'check_failed'
+  | 'not_applicable';
 
 export interface VortexEntitlementResult {
   status: VortexEntitlementStatus;
@@ -117,15 +122,18 @@ export class VortexEntitlementClient {
    * when it cannot be resolved. Server has no organizations; the path still requires
    * `{id}`, so we send {@link SERVER_ORGANIZATION_ID_PLACEHOLDER}.
    */
-  private resolveOrganizationId(
+  private async resolveOrganizationId(
     organizationKey?: string,
   ): Promise<string | VortexEntitlementResult> {
     if (!this.client.isCloud) {
-      return Promise.resolve(SERVER_ORGANIZATION_ID_PLACEHOLDER);
+      return SERVER_ORGANIZATION_ID_PLACEHOLDER;
     }
     if (!organizationKey) {
-      return Promise.resolve({ status: 'not_entitled' });
+      return { status: 'not_entitled' };
     }
+    const membership = await this.organizations.checkMembership(organizationKey);
+    if (membership.status === 'not_member') return { status: 'organization_not_accessible' };
+    if (membership.status === 'check_failed') return { status: 'check_failed' };
     return this.organizations.getOrganizationId(organizationKey).match(
       (uuid) => uuid ?? { status: 'check_failed' },
       () => ({ status: 'check_failed' }),

@@ -25,6 +25,8 @@ import { errAsync, okAsync, type ResultAsync } from '../result.ts';
 import { type HttpClientError, isCriticalFailure } from './errors.ts';
 import type { SonarHttpClient } from './http-client.ts';
 
+const MAX_ORGANIZATIONS_PER_PAGE = 500;
+
 export interface Organization {
   key: string;
   name: string;
@@ -47,6 +49,10 @@ export interface OrganizationRecord {
  */
 export type OrganizationAccess =
   { status: 'accessible' } | { status: 'not_found' } | { status: 'check_failed'; reason: string };
+
+/** Result of checking whether the current token has membership in an organization. */
+export type OrganizationMembership =
+  { status: 'member' } | { status: 'not_member' } | { status: 'check_failed'; reason: string };
 
 export class OrganizationsClient {
   private readonly client: SonarHttpClient;
@@ -140,6 +146,23 @@ export class OrganizationsClient {
         paging: { total: number };
       }>('/api/organizations/search', { member: true, ps, p: page })
       .map((result) => ({ organizations: result.organizations, total: result.paging.total }));
+  }
+
+  /**
+   * Check whether the current token resolves membership for an organization.
+   *
+   * The configured organization can be public without being a token membership. Only the
+   * member-filtered endpoint makes that distinction, so errors must remain distinct from an
+   * absent membership.
+   */
+  checkMembership(organizationKey: string): Promise<OrganizationMembership> {
+    return this.listUserOrganizations(1, MAX_ORGANIZATIONS_PER_PAGE).match(
+      ({ organizations }): OrganizationMembership =>
+        organizations.some((organization) => organization.key === organizationKey)
+          ? { status: 'member' }
+          : { status: 'not_member' },
+      (error): OrganizationMembership => ({ status: 'check_failed', reason: error.message }),
+    );
   }
 
   /**
