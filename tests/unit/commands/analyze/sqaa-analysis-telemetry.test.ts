@@ -84,6 +84,8 @@ function makeTally(overrides: Partial<RunTally> = {}): RunTally {
   };
 }
 
+const IS_WINDOWS = process.platform === 'win32';
+
 let testSonarUserHome: string;
 const previousSonarUserHome = process.env[ENV_SONAR_USER_HOME];
 let loadStateSpy: ReturnType<typeof spyOn>;
@@ -114,7 +116,14 @@ afterEach(async () => {
   getConnectionSpy.mockRestore();
   getUserIdSpy.mockRestore();
 
-  await rm(testSonarUserHome, { recursive: true, force: true });
+  // Windows can hold the just-closed stats db's WAL/SHM handles past our retries;
+  // best-effort only — the OS reclaims the temp dir regardless.
+  await rm(testSonarUserHome, {
+    recursive: true,
+    force: true,
+    maxRetries: IS_WINDOWS ? 15 : 5,
+    retryDelay: IS_WINDOWS ? 200 : 100,
+  }).catch(() => {});
   if (previousSonarUserHome === undefined) {
     delete process.env[ENV_SONAR_USER_HOME];
   } else {
