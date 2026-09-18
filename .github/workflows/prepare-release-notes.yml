@@ -25,7 +25,7 @@ jobs:
 
       - name: Vault Secrets
         id: secrets
-        uses: SonarSource/vault-action-wrapper@881045d830534a70ec3c7c275fa3714412c8ff6e # 3.6.1
+        uses: SonarSource/vault-action-wrapper@a7fa5fd4a4e4e0f2593f6137c0812cac196cf4ce # 3.7.0
         with:
           secrets: |
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
@@ -41,7 +41,7 @@ jobs:
 
       - name: Get release version
         id: version
-        uses: SonarSource/release-github-actions/get-release-version@c0da64503d0438488fda702c33c797678143be4e # 1.9.13
+        uses: SonarSource/release-github-actions/get-release-version@279e14e6c7636163516a5ccb93b0e29005bbd776 # 1.9.15
         with:
           branch: ${{ inputs.branch }}
 
