@@ -89,15 +89,3 @@ export function readStatsRuleDescriptions(
     db.close();
   }
 }
-
-export function readStatsSeenFingerprints(
-  sonarUserHome: string,
-): Array<{ scope: string; fingerprint: string }> {
-  const db = openReadonly(sonarUserHome);
-  if (!db) return [];
-  try {
-    return db.prepare('SELECT scope, fingerprint FROM seen_fingerprints').all() as never;
-  } finally {
-    db.close();
-  }
-}

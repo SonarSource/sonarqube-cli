@@ -18,11 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import {
-  type CommandInvocationContext,
-  StatsFact,
-  type TelemetryFact,
-} from '@/core/commands/invocation-context.ts';
+import { StatsFact, type TelemetryFact } from '@/core/commands/invocation-context.ts';
 import { detectCallerAgent } from '@/core/host/environment/agent-detector.ts';
 
 import type { StatsAnalyzer, StatsTrigger } from './store.ts';
@@ -85,12 +81,13 @@ export function commitStatsFacts(facts: readonly StatsFact[]): void {
   }
 }
 
-/** Records a stats event from an analyzer's own telemetry fact — the envelope is read off
- *  it, so callers only ever supply `details` (their deduped/allowlisted finding counts). */
-export function recordAnalyzerStats(
-  ctx: CommandInvocationContext,
+/** Builds a stats fact from an analyzer's own telemetry fact — the envelope is read off it,
+ *  so callers only ever supply `details` (their deduped/allowlisted finding counts). Callers
+ *  buffer the result themselves via {@link CommandInvocationContext.recordStats}, alongside
+ *  {@link CommandInvocationContext.recordTelemetry} for the telemetry fact it was built from. */
+export function buildStatsFromTelemetry(
   fact: TelemetryFact<AnalysisFactEnvelope>,
   details: AnalyzerStatsDetails,
-): void {
-  ctx.recordStats(new StatsFact<AnalyzerStatsFactPayload>({ envelope: fact.payload, details }));
+): StatsFact<AnalyzerStatsFactPayload> {
+  return new StatsFact<AnalyzerStatsFactPayload>({ envelope: fact.payload, details });
 }

@@ -87,7 +87,7 @@ const DISABLED_RUNTIME: CliRuntime = createCliRuntime({ authResolver: new NullAu
  * must provide. Production passes the process console from `SonarCommand`.
  */
 export class CommandInvocationContext {
-  private readonly facts: TelemetryFact[] = [];
+  private readonly telemetryFactsBuffer: TelemetryFact[] = [];
   private readonly statsFactsBuffer: StatsFact[] = [];
   private pendingConnection?: Promise<SonarConnection | null>;
 
@@ -158,22 +158,16 @@ export class CommandInvocationContext {
 
   /** Record telemetry facts for `postAction` drain. */
   recordTelemetry(...facts: TelemetryFact[]): void {
-    if (facts.length === 0) {
-      return;
-    }
-    this.facts.push(...facts);
+    this.telemetryFactsBuffer.push(...facts);
   }
 
   /** Snapshot of facts recorded during this invocation. */
   telemetryFacts(): readonly TelemetryFact[] {
-    return this.facts.slice();
+    return this.telemetryFactsBuffer.slice();
   }
 
   /** Record stats facts for `postAction` drain. */
   recordStats(...facts: StatsFact[]): void {
-    if (facts.length === 0) {
-      return;
-    }
     this.statsFactsBuffer.push(...facts);
   }
 

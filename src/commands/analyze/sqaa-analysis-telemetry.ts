@@ -25,7 +25,7 @@ import {
   type CommandInvocationContext,
   TelemetryFact,
 } from '@/core/commands/invocation-context.ts';
-import { recordAnalyzerStats, upsertRuleMessages } from '@/core/stats/facts.ts';
+import { buildStatsFromTelemetry, upsertRuleMessages } from '@/core/stats/facts.ts';
 
 import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
 import type { FileResult, RunTally } from './sqaa-analysis.ts';
@@ -164,8 +164,10 @@ export function recordSqaaAnalysisTelemetry(
   if (issues.length > 0) {
     upsertRuleMessages(collectRuleMessages(issues));
   }
-  recordAnalyzerStats(ctx, fact, {
-    findingsCount,
-    ruleCounts: ruleCounts?.counts_by_rule,
-  });
+  ctx.recordStats(
+    buildStatsFromTelemetry(fact, {
+      findingsCount,
+      ruleCounts: ruleCounts?.counts_by_rule,
+    }),
+  );
 }

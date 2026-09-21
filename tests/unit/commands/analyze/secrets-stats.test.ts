@@ -27,7 +27,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   buildSecretsFingerprint,
   summarizeNewSecretsFindings,
-} from '@/commands/analyze/secrets.ts';
+} from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 
 import { removeTestSonarUserHome } from '../../../_common/stats-helpers.ts';
