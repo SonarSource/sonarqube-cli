@@ -81,7 +81,12 @@ export function serializeArgs(args: unknown[]): string {
     ' ' +
     args
       .map((arg) => {
-        if (arg instanceof Error) return arg.stack ?? `${arg.name}: ${arg.message}`;
+        if (arg instanceof Error) {
+          const summary = `${arg.name}: ${arg.message}`;
+          return arg.stack?.includes(summary)
+            ? arg.stack
+            : [summary, arg.stack].filter(Boolean).join('\n');
+        }
         return typeof arg === 'string' ? arg : JSON.stringify(arg);
       })
       .join(' ')

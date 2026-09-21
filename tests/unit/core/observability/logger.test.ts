@@ -127,10 +127,24 @@ describe('Logger', () => {
 });
 
 describe('serializeArgs', () => {
+  it('should preserve existing non-error serialization', () => {
+    expect(serializeArgs([])).toBe('');
+    expect(serializeArgs(['Connection failed', { retries: 3 }])).toBe(
+      ' Connection failed {"retries":3}',
+    );
+  });
+
   it('should serialize an error without a stack', () => {
     const error = new Error('Connection failed');
     error.stack = undefined;
 
     expect(serializeArgs([error])).toBe(' Error: Connection failed');
+  });
+
+  it('should preserve an error stack with its summary', () => {
+    const error = new Error('Connection failed');
+    error.stack = 'at request';
+
+    expect(serializeArgs([error])).toBe(' Error: Connection failed\nat request');
   });
 });
