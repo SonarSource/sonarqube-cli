@@ -881,12 +881,12 @@ describe('integrate git --local (CLI-1118)', () => {
   });
 
   it(
-    'is hidden from --help',
+    'documents --local in --help',
     async () => {
       const result = await harness.run('integrate git --help');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).not.toContain('--local');
+      expect(result.stdout).toContain('--local');
     },
     { timeout: 15000 },
   );

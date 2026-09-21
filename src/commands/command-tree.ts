@@ -415,7 +415,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       new SonarOption(
         '--local',
         'Install the hook for this repository only, instead of globally (workaround for setups where a global hook does not fit, e.g. Husky)',
-      ).hideHelp(),
+      ),
     )
     .authenticatedAction((ctx, options: IntegrateGitOptions) => integrateGit(options, ctx));
 
