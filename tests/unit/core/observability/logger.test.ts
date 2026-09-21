@@ -23,6 +23,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import logger, {
   configureLogger,
   getLogLevelConfig,
+  serializeArgs,
   setMockLogger,
 } from '@/core/observability/logger.ts';
 
@@ -122,5 +123,14 @@ describe('Logger', () => {
 
     logger.info('Message', 'extra', 'args');
     expect(logOutput).toContain('Message');
+  });
+});
+
+describe('serializeArgs', () => {
+  it('should serialize an error without a stack', () => {
+    const error = new Error('Connection failed');
+    error.stack = undefined;
+
+    expect(serializeArgs([error])).toBe(' Error: Connection failed');
   });
 });
