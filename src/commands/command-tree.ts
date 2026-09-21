@@ -685,6 +685,15 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   // Update the CLI to the latest version
   if (CURRENT_DISTRIBUTION.enableSelfUpdate) {
+    // Retry surface for a global-integrations migration the post-update run could not finish.
+    // Shared with the `self-update` alias below so both retry it the same way.
+    const retryGlobalIntegrationsMigration = async (thisCommand: Command): Promise<void> => {
+      if (thisCommand.opts().status) {
+        return; // --status only reports a version; it must not write anything.
+      }
+      await migrateAgentIntegrationsToGlobalScopeSafely(postUpdateDeps);
+    };
+
     COMMAND_TREE.command('update')
       .description('Update SonarQube CLI to the latest version')
       .rootHelp({
@@ -693,13 +702,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       .option('--status', 'Check for a newer version without installing')
       .option('--force', 'Install the latest version even if already up to date')
       .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx))
-      // Retry surface for a global-integrations migration the post-update run could not finish.
-      .hook('preAction', async (thisCommand) => {
-        if (thisCommand.opts().status) {
-          return; // --status only reports a version; it must not write anything.
-        }
-        await migrateAgentIntegrationsToGlobalScopeSafely(postUpdateDeps);
-      });
+      .hook('preAction', retryGlobalIntegrationsMigration);
 
     // Hidden compatibility alias for `sonar update`.
     COMMAND_TREE.command('self-update', { hidden: true })
@@ -707,7 +710,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       .stage(Stage.Deprecated({ sinceVersion: '1.4', replacement: 'sonar update' }))
       .option('--status', 'Check for a newer version without installing')
       .option('--force', 'Install the latest version even if already up to date')
-      .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx));
+      .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx))
+      .hook('preAction', retryGlobalIntegrationsMigration);
   }
 
   const runCommand = COMMAND_TREE.command('run', { hidden: true }).description(
