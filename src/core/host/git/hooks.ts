@@ -31,10 +31,6 @@ import { spawnProcess } from '../../process/process.ts';
 /** Filename used by the `pre-commit` framework (https://pre-commit.com) for its config. */
 export const PRE_COMMIT_CONFIG_FILE = '.pre-commit-config.yaml';
 
-/**
- * Fallback strategy used once no `core.hooksPath` config is found: how to run git and how to
- * turn its output into the hooks dir.
- */
 interface HooksDirFallback {
   command: string[];
   resolveFromOutput: (output: string) => string;
@@ -95,7 +91,7 @@ async function resolveGitHooksDirWithConfigScope(
       return join(dotGit, 'hooks');
     }
   } catch {
-    // .git is a file (worktree/submodule) or missing — resolve via the fallback command
+    // .git is a file (worktree/submodule) or missing
   }
 
   let result;
@@ -150,7 +146,7 @@ export class GitRepo {
     return normalizePath(hooksDir).startsWith(normalizePath(join(this.rootDir, '.husky')));
   }
 
-  /** Resolved local git hooks directory (core.hooksPath or .git/hooks); never an inherited global value. */
+  /** Resolved local git hooks directory. */
   async getHooksDir(): Promise<string> {
     return this.getHooksDirOnce();
   }
