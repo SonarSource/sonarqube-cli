@@ -31,6 +31,7 @@ import {
 } from '../state/state-manager.ts';
 import { loadState, saveState } from '../state/state-repository.ts';
 import {
+  EMPTY_IDENTITY,
   identityFromConnection,
   needsIdentityEnrichment,
   resolveTelemetryIdentity,
@@ -44,6 +45,8 @@ export interface RecordConnectionOptions {
   force?: boolean;
   /** Marks the connection as having no keychain entry behind it. */
   envOnly?: boolean;
+  /** Ignores identity inherited from the active connection and resolves it for this token. */
+  refreshIdentity?: boolean;
 }
 
 /** No-ops when `auth` already matches a fully-enriched active connection. */
@@ -55,7 +58,9 @@ export async function recordConnectionFromAuth(
   const active = getActiveConnection(state);
   const seedConnection =
     active !== undefined && authMatchesConnection(auth, active) ? active : undefined;
-  const seedIdentity = identityFromConnection(seedConnection);
+  const seedIdentity = options.refreshIdentity
+    ? EMPTY_IDENTITY
+    : identityFromConnection(seedConnection);
 
   if (
     !options.force &&

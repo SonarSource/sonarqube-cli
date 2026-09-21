@@ -43,7 +43,9 @@ import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
 import { buildCommandExecutedFact } from '@/core/telemetry/command-executed.ts';
 import { resolveInvocationAuthForTelemetry } from '@/core/telemetry/identity.ts';
 import type { Console } from '@/core/ui/console.ts';
+import { migrateAgentIntegrationsToGlobalScopeSafely } from '@/core/update/global-integrations-migration.ts';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
+import type { PostUpdateDependencies } from '@/core/update/post-update.ts';
 import { runPostUpdateActionsSafely } from '@/core/update/post-update.ts';
 
 import { version as VERSION } from '../../package.json';
@@ -108,6 +110,7 @@ import { integrateCopilot } from './integrate/copilot';
 import { integrateCursor } from './integrate/cursor';
 import { integrateGit, type IntegrateGitOptions } from './integrate/git';
 import { integrateBare, type IntegrateBareOptions } from './integrate/integrate-bare.ts';
+import { AGENT_INTEGRATION_HANDLERS } from './integrate/integration-handlers.ts';
 import { link, type LinkOptions } from './link';
 import {
   DEFAULT_STATUSES,
@@ -171,6 +174,14 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   let capturedAgentSessionId: string | null = null;
   const COMMAND_TREE = new SonarCommand({ runtime, console });
 
+  const postUpdateDeps: PostUpdateDependencies = {
+    supportedIntegrations,
+    installHooks,
+    console,
+    runtime,
+    agentIntegrationHandlers: AGENT_INTEGRATION_HANDLERS,
+  };
+
   const handleHookInvocation =
     <TArgs extends unknown[]>(
       run: (ctx: CommandInvocationContext, ...args: TArgs) => Promise<HookCommandResult>,
@@ -221,8 +232,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   auth
     .command('login')
     .description(
-      'Authenticate via browser and save credentials in the system keychain. ' +
-        'Must be run manually — agents cannot authenticate themselves. ' +
+      'Authenticate via browser or an existing token and save credentials in the system keychain. ' +
         'For CI and automation, use environment variables instead: https://docs.sonarsource.com/sonarqube-cli/using-sonarqube-cli/environment-variables',
     )
     .option(
@@ -230,6 +240,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'SonarQube Server URL, SonarQube Cloud EU (https://sonarcloud.io), or SonarQube Cloud US (https://sonarqube.us). Defaults to SonarQube Cloud EU.',
     )
     .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
+    .option('--with-token', 'Read an existing token from standard input')
     .anonymousAction((ctx, options: AuthLoginOptions) => authLogin(options, ctx));
 
   auth
@@ -411,6 +422,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option('--force', 'Overwrite existing hook if it is not from sonar integrate git')
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
+    .option(
+      '--local',
+      'Install the hook for this repository only, instead of globally (workaround for setups where a global hook does not fit, e.g. Husky)',
+    )
     .authenticatedAction((ctx, options: IntegrateGitOptions) => integrateGit(options, ctx));
 
   integrateCommand
@@ -670,6 +685,15 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   // Update the CLI to the latest version
   if (CURRENT_DISTRIBUTION.enableSelfUpdate) {
+    // Retry surface for a global-integrations migration the post-update run could not finish.
+    // Shared with the `self-update` alias below so both retry it the same way.
+    const retryGlobalIntegrationsMigration = async (thisCommand: Command): Promise<void> => {
+      if (thisCommand.opts().status) {
+        return; // --status only reports a version; it must not write anything.
+      }
+      await migrateAgentIntegrationsToGlobalScopeSafely(postUpdateDeps);
+    };
+
     COMMAND_TREE.command('update')
       .description('Update SonarQube CLI to the latest version')
       .rootHelp({
@@ -677,7 +701,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       })
       .option('--status', 'Check for a newer version without installing')
       .option('--force', 'Install the latest version even if already up to date')
-      .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx));
+      .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx))
+      .hook('preAction', retryGlobalIntegrationsMigration);
 
     // Hidden compatibility alias for `sonar update`.
     COMMAND_TREE.command('self-update', { hidden: true })
@@ -685,7 +710,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       .stage(Stage.Deprecated({ sinceVersion: '1.4', replacement: 'sonar update' }))
       .option('--status', 'Check for a newer version without installing')
       .option('--force', 'Install the latest version even if already up to date')
-      .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx));
+      .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx))
+      .hook('preAction', retryGlobalIntegrationsMigration);
   }
 
   const runCommand = COMMAND_TREE.command('run', { hidden: true }).description(
@@ -887,12 +913,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   COMMAND_TREE.hook('preAction', async () => {
     // Safely: a throw from a Commander hook would abort the user's command.
-    await runPostUpdateActionsSafely({
-      supportedIntegrations,
-      installHooks,
-      console,
-      runtime,
-    });
+    await runPostUpdateActionsSafely(postUpdateDeps);
   });
 
   // Emit handler facts plus CliCommandExecuted in one commit.

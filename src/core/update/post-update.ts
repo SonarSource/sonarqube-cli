@@ -19,6 +19,7 @@
  */
 
 import type { CliRuntime } from '@/core/commands/cli-runtime.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import {
   type IntegrationRegistry,
   reconcileInstalledIntegrations,
@@ -41,8 +42,20 @@ import {
   type InstallHooksFn,
   migrateClaudeCodeHooks,
 } from './claude-hooks-migration.ts';
+import { migrateAgentIntegrationsToGlobalScope } from './global-integrations-migration.ts';
 import { migrateKnownServerKeyMappingsForProjectLevelFeatures } from './known-project-mappings-migration.ts';
 import { migrateLegacyTelemetryEvents } from './telemetry-migration.ts';
+
+/**
+ * An agent integrate handler (`sonar integrate claude|codex|…`), narrowed to the only invocation
+ * the global-integrations migration makes.
+ */
+export type AgentIntegrationHandler = (
+  options: { global: true; nonInteractive: true },
+  ctx: CommandAuthenticatedInvocationContext,
+) => Promise<void>;
+
+export type AgentIntegrationHandlers = Readonly<Record<string, AgentIntegrationHandler>>;
 
 /**
  * Command-layer values `post-update` needs but must not import directly
@@ -58,13 +71,14 @@ export interface PostUpdateDependencies {
   console: Console;
   /** Credentials for migrations that need them, via `runtime.authResolver.resolveAuth()`. */
   runtime: CliRuntime;
+  agentIntegrationHandlers: AgentIntegrationHandlers;
 }
 
 /**
  * Runs any actions that need to happen once after the CLI has been updated.
  *
  * - Skipped entirely when the state file is absent (fresh installation).
- * - Skipped when the persisted CLI version matches or exceeds the current binary version.
+ * - Skipped when the persisted version is not older than `CURRENT_VERSION`.
  * - On success the persisted CLI version is bumped to `CURRENT_VERSION` so the
  *   actions are not repeated on the next invocation.
  */
@@ -113,6 +127,9 @@ async function runActions(deps: PostUpdateDependencies): Promise<void> {
   migrateLegacyTelemetryEvents();
   // Must run before migrateDeclarativeIntegrations
   migrateKnownServerKeyMappingsForProjectLevelFeatures();
+  // After the mappings migration: it is the last read of project-scope attrs.
+  // Before reconciliation: that would re-apply the artifacts this deletes.
+  await migrateAgentIntegrationsToGlobalScope(deps);
   await migrateDeclarativeIntegrations(deps.supportedIntegrations, deps.console);
   await migrateClaudeCodeHooks(deps.installHooks);
   await updateSecretsBinaryIfNeeded(deps.console);
