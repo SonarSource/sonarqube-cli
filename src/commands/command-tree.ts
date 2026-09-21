@@ -411,6 +411,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option('--force', 'Overwrite existing hook if it is not from sonar integrate git')
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
+    .option(
+      '--local',
+      'Install the hook for this repository only, instead of globally (workaround for setups where a global hook does not fit, e.g. Husky)',
+    )
     .authenticatedAction((ctx, options: IntegrateGitOptions) => integrateGit(options, ctx));
 
   integrateCommand
