@@ -17,6 +17,8 @@ The bare `sonar analyze` command accepts `-p, --project <project>` for the agent
 
 `sonar list issues` defaults `--statuses` to `OPEN,CONFIRMED` (`DEFAULT_STATUSES` in `src/commands/list/issues.ts`) when the flag is omitted, so results are actionable issues by default rather than the full history including `FIXED`/`FALSE_POSITIVE`/`ACCEPTED`. Pass `--statuses` explicitly to see other states.
 
+`sonar list issues --new-code` limits results to issues found in the new code period (the "leak period"). It shares its Cloud/Server wire-param split with `quality-gate status`'s issue/security breakdowns, which instead derive the value per condition rather than from a direct flag.
+
 `sonar analyze dependency-risks` accepts an optional `-p, --project <project>`. When omitted, the project key is auto-detected via `discoverProject()`.
 
 `sonar analyze dependency-risks` pre-scans discovered manifest files for secrets (via `sonar-secrets`) before the SCA scan and aborts if any are found. In the `analyze` path the secrets binary is a hard prerequisite (install failure aborts the run); in the git pre-commit hook path the manifest secrets _scan_ fails open on a scan error (skips/warns). See `dependency-risk-helpers/manifest-secrets-guard.ts`. This scan-error fail-open is distinct from the git/agent secrets-hook auth+binary gate: an unauthenticated user or a missing `sonar-secrets` binary blocks the commit/push (git hooks throw `MissingDependenciesError` → exit 1).

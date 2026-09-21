@@ -88,6 +88,7 @@ export interface ListIssuesOptions {
   pullRequest?: string;
   resolved?: boolean;
   file?: string;
+  newCode?: boolean;
   format?: string;
   pageSize: number;
   page: number;
@@ -203,6 +204,7 @@ export async function listIssues(
     branch: options.branch,
     pullRequest: options.pullRequest,
     resolved: options.resolved,
+    sinceLeakPeriod: options.newCode,
     ps: options.pageSize,
     p: page,
   };

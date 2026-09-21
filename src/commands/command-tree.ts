@@ -278,6 +278,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       '--file <path>',
       "Limit results to one file, or to a directory's own files (not its subdirectories): a full path from the project root, or just a name if it matches only one",
     )
+    .option('--new-code', 'Only show issues on new code (the leak period)')
     .addOption(pageSizeOption)
     .addOption(pageOption)
     .authenticatedAction((ctx, options: ListIssuesOptions) => listIssues(options, ctx));
