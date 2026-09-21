@@ -26,7 +26,9 @@ import { openStatsDb } from './db.ts';
 
 // Same union as AnalysisTelemetryAnalyzer (src/commands/analyze/analysis-completed.ts).
 // Not imported from there: src/core never imports from src/commands elsewhere in this
-// codebase. Keep the two in sync by hand.
+// codebase. Widening this is always safe; adding a value to AnalysisTelemetryAnalyzer
+// without adding it here is not — structural typing catches that as a compile error at
+// every recordAnalyzerStats() call site (facts.ts), so drift in that direction can't merge.
 export type StatsAnalyzer = 'sonar-secrets' | 'sqaa' | 'sca-scanner-cli';
 
 export type StatsTrigger = 'hooks' | 'manual';

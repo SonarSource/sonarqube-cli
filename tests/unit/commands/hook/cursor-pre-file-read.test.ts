@@ -24,18 +24,12 @@ import * as fsPromises from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-import { Database } from 'bun:sqlite';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { type CliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import {
-  CURSOR_IGNORE_FILE,
-  ENV_SONAR_USER_HOME,
-  getStatsDir,
-  STATS_DB_FILENAME,
-} from '@/core/config-constants.ts';
+import { CURSOR_IGNORE_FILE, ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 import { okAsync } from '@/core/result.ts';
 
@@ -48,6 +42,7 @@ import {
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 import { mockAuthResolver } from '../../../_common/mock-auth-resolver.ts';
+import { readStatsEvents } from '../../../_common/stats-helpers.ts';
 
 const TEST_FILE = '/sonar-test/secret.ts';
 const SECRET_CONTENT = 'const secret = "ghp_test";';
@@ -68,16 +63,7 @@ function makeCtx() {
 }
 
 function readStatsCallerCommands(): string[] {
-  const dbPath = join(getStatsDir(), STATS_DB_FILENAME);
-  if (!fs.existsSync(dbPath)) return [];
-  const db = new Database(dbPath, { readonly: true });
-  try {
-    return (db.prepare('SELECT caller_command FROM stats_events').all() as never[]).map(
-      (row) => (row as { caller_command: string }).caller_command,
-    );
-  } finally {
-    db.close();
-  }
+  return readStatsEvents(testSonarUserHome).map((event) => event.caller_command);
 }
 
 let testSonarUserHome: string;

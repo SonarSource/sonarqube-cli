@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -30,7 +30,7 @@ import {
 } from '@/commands/analyze/secrets.ts';
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 
-const IS_WINDOWS = process.platform === 'win32';
+import { removeTestSonarUserHome } from '../../../_common/stats-helpers.ts';
 
 let testSonarUserHome: string;
 const previousSonarUserHome = process.env[ENV_SONAR_USER_HOME];
@@ -41,12 +41,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(testSonarUserHome, {
-    recursive: true,
-    force: true,
-    maxRetries: IS_WINDOWS ? 15 : 5,
-    retryDelay: IS_WINDOWS ? 200 : 100,
-  }).catch(() => {});
+  await removeTestSonarUserHome(testSonarUserHome);
   if (previousSonarUserHome === undefined) {
     delete process.env[ENV_SONAR_USER_HOME];
   } else {

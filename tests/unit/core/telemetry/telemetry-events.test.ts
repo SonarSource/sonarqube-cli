@@ -26,7 +26,7 @@
 
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -59,6 +59,7 @@ import * as userModule from '@/core/telemetry/user.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
+import { removeTestSonarUserHome } from '../../../_common/stats-helpers.ts';
 import {
   makeTelemetryState,
   readAnalysisEvents,
@@ -178,8 +179,6 @@ const AGENT_SESSION_ENV_KEYS = [
   'GEMINI_SESSION_ID',
 ] as const;
 
-const IS_WINDOWS = process.platform === 'win32';
-
 let testSonarUserHome: string;
 const previousSonarUserHome = process.env[ENV_SONAR_USER_HOME];
 
@@ -234,14 +233,7 @@ afterEach(async () => {
   detectAgentSpy.mockRestore();
   defaultFetchSpy.mockRestore();
 
-  // Windows can hold the just-closed stats db's WAL/SHM handles past our retries;
-  // best-effort only — the OS reclaims the temp dir regardless.
-  await rm(testSonarUserHome, {
-    recursive: true,
-    force: true,
-    maxRetries: IS_WINDOWS ? 15 : 5,
-    retryDelay: IS_WINDOWS ? 200 : 100,
-  }).catch(() => {});
+  await removeTestSonarUserHome(testSonarUserHome);
   if (previousSonarUserHome === undefined) {
     delete process.env[ENV_SONAR_USER_HOME];
   } else {

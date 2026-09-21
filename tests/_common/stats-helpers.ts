@@ -19,14 +19,30 @@
  */
 
 import { existsSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { Database } from 'bun:sqlite';
 
 import type { StatsEventDetails } from '@/core/stats/store.ts';
 
+const IS_WINDOWS = process.platform === 'win32';
+
 export function statsDbPath(sonarUserHome: string): string {
   return join(sonarUserHome, 'sonarqube-cli', 'db', 'stats', 'stats.db');
+}
+
+/**
+ * Removes a test's temp `SONAR_USER_HOME`, tolerating Windows holding the just-closed stats
+ * db's WAL/SHM handles past our retries — best-effort, the OS reclaims the temp dir regardless.
+ */
+export async function removeTestSonarUserHome(sonarUserHome: string): Promise<void> {
+  await rm(sonarUserHome, {
+    recursive: true,
+    force: true,
+    maxRetries: IS_WINDOWS ? 15 : 5,
+    retryDelay: IS_WINDOWS ? 200 : 100,
+  }).catch(() => {});
 }
 
 export interface StoredStatsEvent {
