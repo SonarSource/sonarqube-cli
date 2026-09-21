@@ -25,7 +25,7 @@ import { dirname, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
+import { isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 
 import type { AppliedResource, IntegrationContext, MaybePromise } from '../features/types.ts';
 
@@ -84,42 +84,44 @@ export async function writeFileIfChanged(
   await writeFile(path, content, mode === undefined ? undefined : { mode });
 }
 
+export class UnsafeResourcePathError extends CommandFailedError {
+  constructor(path: string) {
+    super(`Refusing to access symbolic link resource path: ${path}.`, {
+      remediationHint: `Replace the symbolic link at '${path}' with a regular file or directory, then retry.`,
+    });
+    this.name = 'UnsafeResourcePathError';
+  }
+}
+
 /** Refuse resource access through a symlink at any component below `root`. */
 function assertNotSymlink(path: string, root?: string): void {
   const resolved = resolve(path);
   if (root === undefined) {
     if (isSymbolicLink(resolved)) {
-      throw symlinkRejected(resolved);
+      throw new UnsafeResourcePathError(resolved);
     }
     return;
   }
 
-  const stop = canonicalizePath(root);
-  if (!isAncestorOrSelf(stop, canonicalizePath(resolved))) {
+  const stop = resolve(root);
+  if (!isAncestorOrSelf(stop, resolved)) {
     if (isSymbolicLink(resolved)) {
-      throw symlinkRejected(resolved);
+      throw new UnsafeResourcePathError(resolved);
     }
     return;
   }
 
   let current = resolved;
-  let parent = dirname(current);
-  while (parent !== current) {
+  while (current !== stop) {
     if (isSymbolicLink(current)) {
-      throw symlinkRejected(current);
+      throw new UnsafeResourcePathError(current);
     }
-    if (canonicalizePath(parent) === stop) {
+    const parent = dirname(current);
+    if (parent === current) {
       return;
     }
     current = parent;
-    parent = dirname(current);
   }
-}
-
-function symlinkRejected(path: string): CommandFailedError {
-  return new CommandFailedError(`Refusing to access symbolic link resource path: ${path}.`, {
-    remediationHint: `Replace the symbolic link at '${path}' with a regular file or directory, then retry.`,
-  });
 }
 
 function isSymbolicLink(path: string): boolean {

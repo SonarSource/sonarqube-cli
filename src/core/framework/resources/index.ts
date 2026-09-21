@@ -26,7 +26,7 @@ export type {
   ResourceDeclaration,
   ResourceIdentity,
 } from './common.ts';
-export { RemoveablePatchResource } from './common.ts';
+export { RemoveablePatchResource, UnsafeResourcePathError } from './common.ts';
 export {
   jsonPatch,
   type JsonPatchOptions,

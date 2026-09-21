@@ -764,6 +764,39 @@ describe('declarative integration framework - remove and undo', () => {
         expect(console.findCall('warn', 'Skipping removal of linked')).toBeDefined();
       },
     );
+
+    it('rethrows non-symlink errors during resource removal', async () => {
+      const state = getDefaultState('test');
+      const console = new FakeConsole();
+      const context = { ...makeContext(state, tempDir), console };
+      const regularPath = join(tempDir, 'regular.txt');
+      const removedResources: string[] = [];
+      await writeFile(regularPath, '#!/bin/sh\n');
+
+      const feature: FeatureDeclaration = {
+        id: 'feature',
+        displayName: 'Feature',
+        resources: [
+          wholeFile({ id: 'regular', targetPath: regularPath, content: '#!/bin/sh\n' }),
+          {
+            id: 'broken',
+            resourceType: 'whole-file',
+            apply: () => Promise.resolve({ id: 'broken', resourceType: 'whole-file', path: 'x' }),
+            isApplied: () => Promise.resolve(false),
+            remove: () => Promise.reject(new Error('parse failed')),
+          },
+        ],
+      };
+
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(
+        installer.removeFeature(context, feature, {
+          onResourceRemoved: (resource) => removedResources.push(resource.id),
+        }),
+      ).rejects.toThrow('parse failed');
+      expect(existsSync(regularPath)).toBe(false);
+      expect(removedResources).toEqual(['regular']);
+    });
   });
 });
 

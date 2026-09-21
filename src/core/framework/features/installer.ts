@@ -28,6 +28,7 @@ import type { Console } from '@/core/ui/console.ts';
 
 import type { DependencyDeclaration } from '../dependencies';
 import type { ResourceDeclaration } from '../resources';
+import { UnsafeResourcePathError } from '../resources';
 import {
   findInstalledFeature,
   recordedFeatureOperations,
@@ -264,13 +265,7 @@ export class IntegrationInstaller {
     callbacks: RemoveFeatureCallbacks<TOptions> = {},
   ): Promise<void> {
     for (const resource of resolveAllResources(feature)) {
-      try {
-        await resource.remove(context);
-        callbacks.onResourceRemoved?.(resource);
-      } catch (error) {
-        context.console.warn(`Skipping removal of ${resource.id}: ${(error as Error).message}`);
-        callbacks.onResourceSkipped?.(resource);
-      }
+      await this.removeResourceOrSkip(context, resource, callbacks);
     }
 
     for (const cleanup of feature.legacyCleanups ?? []) {
@@ -282,6 +277,23 @@ export class IntegrationInstaller {
         await operation.undo(context);
         callbacks.onOperationUndone?.(operation);
       }
+    }
+  }
+
+  private async removeResourceOrSkip(
+    context: IntegrationContext,
+    resource: ResourceDeclaration,
+    callbacks: Pick<RemoveFeatureCallbacks, 'onResourceRemoved' | 'onResourceSkipped'> = {},
+  ): Promise<void> {
+    try {
+      await resource.remove(context);
+      callbacks.onResourceRemoved?.(resource);
+    } catch (error) {
+      if (!(error instanceof UnsafeResourcePathError)) {
+        throw error;
+      }
+      context.console.warn(`Skipping removal of ${resource.id}: ${error.message}`);
+      callbacks.onResourceSkipped?.(resource);
     }
   }
 
@@ -363,11 +375,7 @@ export class IntegrationInstaller {
 
     for (const resource of subfeature.resources ?? []) {
       if (recordedResourceIds.has(resource.id)) {
-        try {
-          await resource.remove(context);
-        } catch (error) {
-          context.console.warn(`Skipping removal of ${resource.id}: ${(error as Error).message}`);
-        }
+        await this.removeResourceOrSkip(context, resource);
       }
     }
 

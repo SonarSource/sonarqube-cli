@@ -215,6 +215,32 @@ describe('declarative integration framework - resources and state recording', ()
     },
   );
 
+  it.skipIf(process.platform === 'win32')(
+    'rejects a symlinked parent even when targetRoot itself is a symlink',
+    async () => {
+      const state = getDefaultState('test');
+      const realRoot = join(tempDir, 'real-root');
+      mkdirSync(realRoot);
+      const linkedRoot = join(tempDir, 'linked-root');
+      symlinkSync(realRoot, linkedRoot);
+      const context = makeContext(state, linkedRoot);
+      const outsideDir = join(tempDir, 'outside');
+      mkdirSync(outsideDir);
+      const outsidePath = join(outsideDir, 'settings.json');
+      await writeFile(outsidePath, 'user content\n');
+      symlinkSync(outsideDir, join(linkedRoot, '.claude'));
+      const resource = wholeFile({
+        id: 'managed',
+        targetPath: join(linkedRoot, '.claude', 'settings.json'),
+        content: 'managed content\n',
+      });
+
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(resource.apply(context)).rejects.toThrow('symbolic link resource path');
+      expect(await readFile(outsidePath, 'utf-8')).toBe('user content\n');
+    },
+  );
+
   it('replaces legacy text snippets that only contain the start marker', async () => {
     const state = getDefaultState('test');
     const context = makeContext(state, tempDir);
