@@ -26,15 +26,17 @@
 
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import type { AnalysisCompletedPayload } from '@/commands/analyze/analysis-completed.ts';
-import { scanAndEmitSecrets } from '@/commands/analyze/secrets.ts';
-import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
+import {
+  scanAndEmitSecrets,
+  SECRETS_CALLER_COMMANDS,
+} from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import { SQAA_ANALYZE_AGENTIC_CALLER_COMMAND } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import type { IntegrationConfiguredPayload } from '@/commands/integrate/_common/integrate-telemetry.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
@@ -59,6 +61,7 @@ import * as userModule from '@/core/telemetry/user.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
+import { removeTestSonarUserHome } from '../../../_common/stats-helpers.ts';
 import {
   makeTelemetryState,
   readAnalysisEvents,
@@ -232,7 +235,7 @@ afterEach(async () => {
   detectAgentSpy.mockRestore();
   defaultFetchSpy.mockRestore();
 
-  await rm(testSonarUserHome, { recursive: true, force: true });
+  await removeTestSonarUserHome(testSonarUserHome);
   if (previousSonarUserHome === undefined) {
     delete process.env[ENV_SONAR_USER_HOME];
   } else {

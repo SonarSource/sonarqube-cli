@@ -26,11 +26,13 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
-import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
+import {
+  scanAndEmitSecrets,
+  SECRETS_CALLER_COMMANDS,
+} from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
 
-import { scanAndEmitSecrets } from '../analyze/secrets.ts';
 import {
   denyCursor,
   denyCursorFileAccess,
@@ -74,7 +76,7 @@ export async function cursorPreToolUse(ctx: CommandInvocationContext): Promise<H
     deps = await resolveAuthAndSecrets(ctx);
   } catch (err) {
     if (err instanceof MissingDependenciesError) {
-      await denyCursor(err.message);
+      await denyCursor(ctx, err.message);
       return { agentSessionId };
     }
     throw err;
@@ -88,6 +90,7 @@ export async function cursorPreToolUse(ctx: CommandInvocationContext): Promise<H
       deps.auth,
       () => scanTextForSecrets(deps, content),
       ctx,
+      filePath,
     );
   } catch (err) {
     logger.debug(`cursorPreToolUse secrets scan failed: ${(err as Error).message}`);
@@ -95,7 +98,7 @@ export async function cursorPreToolUse(ctx: CommandInvocationContext): Promise<H
   }
 
   if (secretsFoundInScan(scan.result)) {
-    await denyCursorFileAccess(filePath, workspaceRoots);
+    await denyCursorFileAccess(ctx, filePath, workspaceRoots);
   }
 
   return { agentSessionId };

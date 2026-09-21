@@ -21,7 +21,10 @@
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 
-import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
+import {
+  scanAndEmitSecrets,
+  SECRETS_CALLER_COMMANDS,
+} from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -31,12 +34,7 @@ import type { SecretsInstaller } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
 
 import type { SecretsJsonIssue } from '../secrets.ts';
-import {
-  EXIT_CODE_SECRETS_FOUND,
-  runSecretsBinary,
-  scanAndEmitSecrets,
-  warnScanErrors,
-} from '../secrets.ts';
+import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary, warnScanErrors } from '../secrets.ts';
 import { ScaDiscoverManifestsRunner } from './sca-discover-manifests.ts';
 import type { ScaScannerInvocation } from './sca-scanner-runner-base.ts';
 import type { ScaScannerSpawner } from './sca-scanner-spawner.ts';

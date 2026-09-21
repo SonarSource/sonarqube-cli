@@ -25,6 +25,7 @@ import {
   type CommandInvocationContext,
   TelemetryFact,
 } from '@/core/commands/invocation-context.ts';
+import { buildStatsFromTelemetry } from '@/core/stats/facts.ts';
 
 import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
 import type { AnalyzeProjectResponse } from './dependency-risk-helpers/sca-scanner.ts';
@@ -88,43 +89,48 @@ export function recordScaAnalysisTelemetry(
   const analysisId = randomUUID();
 
   if (!response) {
-    ctx.recordTelemetry(
-      new TelemetryFact(
-        CLI_ANALYSIS_COMPLETED,
-        {
-          caller_command: callerCommand,
-          analyzer: 'sca-scanner-cli',
-          analysis_id: analysisId,
-          findings_count: 0,
-          exit_code: exitCode,
-          errors_count: 0,
-          failures_count: 1,
-          scan_duration_ms: durationMs,
-          details: '',
-        } satisfies AnalysisCompletedPayload,
-        { auth },
-      ),
-    );
-    return;
-  }
-
-  const { findingsCount, details } = summarizeScaFindings(response);
-
-  ctx.recordTelemetry(
-    new TelemetryFact(
+    const fact = new TelemetryFact(
       CLI_ANALYSIS_COMPLETED,
       {
         caller_command: callerCommand,
         analyzer: 'sca-scanner-cli',
         analysis_id: analysisId,
-        findings_count: findingsCount,
+        findings_count: 0,
         exit_code: exitCode,
-        errors_count: response.errors.length,
-        failures_count: 0,
+        errors_count: 0,
+        failures_count: 1,
         scan_duration_ms: durationMs,
-        details: findingsCount > 0 ? JSON.stringify(details) : '',
+        details: '',
       } satisfies AnalysisCompletedPayload,
       { auth },
-    ),
+    );
+    ctx.recordTelemetry(fact);
+    ctx.recordStats(buildStatsFromTelemetry(fact, { findingsCount: 0 }));
+    return;
+  }
+
+  const { findingsCount, details } = summarizeScaFindings(response);
+
+  const fact = new TelemetryFact(
+    CLI_ANALYSIS_COMPLETED,
+    {
+      caller_command: callerCommand,
+      analyzer: 'sca-scanner-cli',
+      analysis_id: analysisId,
+      findings_count: findingsCount,
+      exit_code: exitCode,
+      errors_count: response.errors.length,
+      failures_count: 0,
+      scan_duration_ms: durationMs,
+      details: findingsCount > 0 ? JSON.stringify(details) : '',
+    } satisfies AnalysisCompletedPayload,
+    { auth },
+  );
+  ctx.recordTelemetry(fact);
+  ctx.recordStats(
+    buildStatsFromTelemetry(fact, {
+      findingsCount,
+      ruleCounts: findingsCount > 0 ? details.counts_by_rule : undefined,
+    }),
   );
 }

@@ -25,6 +25,7 @@ import {
   type CommandInvocationContext,
   TelemetryFact,
 } from '@/core/commands/invocation-context.ts';
+import { buildStatsFromTelemetry, upsertRuleMessages } from '@/core/stats/facts.ts';
 
 import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
 import type { FileResult, RunTally } from './sqaa-analysis.ts';
@@ -82,6 +83,16 @@ function collectIssuesFromTally(tally: RunTally): SqaaIssue[] {
   return issues;
 }
 
+function collectRuleMessages(
+  issues: ReadonlyArray<Pick<SqaaIssue, 'rule' | 'message'>>,
+): Record<string, string> {
+  const messages: Record<string, string> = {};
+  for (const issue of issues) {
+    messages[issue.rule] = issue.message;
+  }
+  return messages;
+}
+
 /** Builds a RunTally from a SQAA JSON report (change-set / Codex hook path). */
 export function tallyFromSqaaJsonReport(report: SqaaJsonReport): RunTally {
   const allResults: FileResult[] = [];
@@ -129,24 +140,34 @@ export function recordSqaaAnalysisTelemetry(
 ): void {
   const analysisId = randomUUID();
   const findingsCount = tally.totalIssues;
-  const details =
-    findingsCount > 0 ? JSON.stringify(collectRuleCounts(collectIssuesFromTally(tally))) : '';
+  const issues = findingsCount > 0 ? collectIssuesFromTally(tally) : [];
+  const ruleCounts = issues.length > 0 ? collectRuleCounts(issues) : undefined;
+  const details = ruleCounts ? JSON.stringify(ruleCounts) : '';
 
-  ctx.recordTelemetry(
-    new TelemetryFact(
-      CLI_ANALYSIS_COMPLETED,
-      {
-        caller_command: callerCommand,
-        analyzer: 'sqaa',
-        analysis_id: analysisId,
-        findings_count: findingsCount,
-        exit_code: exitCode ?? null,
-        errors_count: tally.totalErrors,
-        failures_count: tally.totalFailures,
-        scan_duration_ms: durationMs,
-        details,
-      } satisfies AnalysisCompletedPayload,
-      { auth },
-    ),
+  const fact = new TelemetryFact(
+    CLI_ANALYSIS_COMPLETED,
+    {
+      caller_command: callerCommand,
+      analyzer: 'sqaa',
+      analysis_id: analysisId,
+      findings_count: findingsCount,
+      exit_code: exitCode ?? null,
+      errors_count: tally.totalErrors,
+      failures_count: tally.totalFailures,
+      scan_duration_ms: durationMs,
+      details,
+    } satisfies AnalysisCompletedPayload,
+    { auth },
+  );
+  ctx.recordTelemetry(fact);
+
+  if (issues.length > 0) {
+    upsertRuleMessages(collectRuleMessages(issues));
+  }
+  ctx.recordStats(
+    buildStatsFromTelemetry(fact, {
+      findingsCount,
+      ruleCounts: ruleCounts?.counts_by_rule,
+    }),
   );
 }
