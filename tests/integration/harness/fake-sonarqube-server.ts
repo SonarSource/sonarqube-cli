@@ -478,6 +478,7 @@ export class FakeSonarQubeServerBuilder {
   private memberOrganizations: Organization[] = [];
   private memberOrganizationsTotal?: number;
   private visibleOrganizations: Organization[] = [];
+  private currentUserId = 'fake-user-uuid';
   private readonly dopRepositoriesByOrgId: Map<string, DopRepositoryConfig[]> = new Map();
   /** Keyed by org legacy id, for `GET /dop-translation/organization-bindings`. */
   private readonly organizationBindingsByOrgId: Map<string, string> = new Map();
@@ -512,7 +513,7 @@ export class FakeSonarQubeServerBuilder {
     [];
   private hasProvisionProjects = true;
   private boundProjectsStatusCode?: number;
-  private analyzedProjectKeys = new Set<string>();
+  private readonly analyzedProjectKeys = new Set<string>();
 
   private metrics: Metric[] = [];
 
@@ -536,6 +537,11 @@ export class FakeSonarQubeServerBuilder {
 
   withAuthToken(token: string): this {
     this.validToken = token;
+    return this;
+  }
+
+  withCurrentUserId(id: string): this {
+    this.currentUserId = id;
     return this;
   }
 
@@ -852,6 +858,7 @@ export class FakeSonarQubeServerBuilder {
       memberOrganizations,
       memberOrganizationsTotal: rawMemberOrganizationsTotal,
       visibleOrganizations,
+      currentUserId,
       dopRepositoriesByOrgId,
       organizationBindingsByOrgId,
       revokeTokenStatusCode,
@@ -1895,7 +1902,7 @@ export class FakeSonarQubeServerBuilder {
         if (path === '/api/users/current') {
           const global = hasProvisionProjects ? ['provisioning'] : [];
           return new Response(
-            JSON.stringify({ id: 'fake-user-uuid', login: 'fake-user', permissions: { global } }),
+            JSON.stringify({ id: currentUserId, login: 'fake-user', permissions: { global } }),
             { headers: { 'Content-Type': 'application/json' } },
           );
         }
