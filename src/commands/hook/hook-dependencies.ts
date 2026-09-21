@@ -21,6 +21,8 @@
 // Shared guard for hook handlers — resolves auth and binary path, throwing
 // MissingDependenciesError if either is unavailable so handlers fail loudly.
 
+import { createHash } from 'node:crypto';
+
 import type { SecretsCallerCommand } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
@@ -105,11 +107,17 @@ export async function runAndEmitTextSecretsScan(
   text: string,
   ctx: CommandInvocationContext,
 ): Promise<number> {
+  // `--input` scans never carry a `file` on their issues, so two different prompts that trip
+  // the same rule at the same line/column would otherwise collide in the dedup ledger. Hash the
+  // scanned text as the dedup source instead of the raw text, so prompt content never lands in
+  // the ledger.
+  const source = createHash('sha256').update(text).digest('hex');
   const { result } = await scanAndEmitSecrets(
     callerCommand,
     deps.auth,
     () => runSecretsBinaryOnText(deps.binaryPath, text, deps.auth),
     ctx,
+    source,
   );
   return result.exitCode ?? 1;
 }

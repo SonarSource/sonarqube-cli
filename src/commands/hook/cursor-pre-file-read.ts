@@ -86,6 +86,7 @@ export async function cursorPreFileRead(ctx: CommandInvocationContext): Promise<
       deps.auth,
       () => scanTextForSecrets(deps, content),
       ctx,
+      filePath,
     );
   } catch (err) {
     logger.debug(`cursorPreFileRead secrets scan failed: ${(err as Error).message}`);

@@ -135,4 +135,33 @@ describe('summarizeNewSecretsFindings', () => {
     expect(result.findingsCount).toBe(1);
     expect(result.ruleCounts).toEqual({ 'secrets:S6290': 1 });
   });
+
+  it('does not collide two --input scans with no file when their `source` differs', () => {
+    // Same rule/line/column, no `file` — exactly what sonar-secrets reports for stdin/--input
+    // scans. Without a distinguishing `source`, the second prompt's finding would be wrongly
+    // treated as already seen.
+    const issue = {
+      ruleKey: 'secrets:S6290',
+      description: 'AWS Access Key detected',
+      location: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 20 },
+    };
+
+    summarizeNewSecretsFindings([issue], 'prompt-hash-a');
+    const result = summarizeNewSecretsFindings([issue], 'prompt-hash-b');
+
+    expect(result.findingsCount).toBe(1);
+  });
+
+  it('still dedupes an --input scan of the same source on re-scan', () => {
+    const issue = {
+      ruleKey: 'secrets:S6290',
+      description: 'AWS Access Key detected',
+      location: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 20 },
+    };
+
+    summarizeNewSecretsFindings([issue], 'prompt-hash-a');
+    const result = summarizeNewSecretsFindings([issue], 'prompt-hash-a');
+
+    expect(result).toEqual({ findingsCount: 0 });
+  });
 });

@@ -88,6 +88,7 @@ export async function cursorPreToolUse(ctx: CommandInvocationContext): Promise<H
       deps.auth,
       () => scanTextForSecrets(deps, content),
       ctx,
+      filePath,
     );
   } catch (err) {
     logger.debug(`cursorPreToolUse secrets scan failed: ${(err as Error).message}`);

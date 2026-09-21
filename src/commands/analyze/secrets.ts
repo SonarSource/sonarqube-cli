@@ -177,7 +177,17 @@ export function buildSecretsFingerprint(
 
 // Upserts rule messages for every issue below, not just newly-deduped ones — rule_descriptions
 // is a lookup table, not a per-run count, so an already-seen finding's message still belongs.
-export function summarizeNewSecretsFindings(issues: readonly SecretsJsonIssue[]): {
+//
+// `source` disambiguates issues that carry no `file` (every `--input`/stdin scan): without it,
+// the same rule at the same line/column in two different prompts or texts collapses onto the
+// same fingerprint, and the second one is wrongly treated as already seen. Callers that scan a
+// known file through stdin (Cursor hooks) pass that path; callers scanning free-form text
+// (prompt-submit hooks) pass a hash of it instead of the raw text, so ledger rows never carry
+// prompt content.
+export function summarizeNewSecretsFindings(
+  issues: readonly SecretsJsonIssue[],
+  source?: string,
+): {
   findingsCount: number;
   ruleCounts?: Record<string, number>;
 } {
@@ -194,7 +204,7 @@ export function summarizeNewSecretsFindings(issues: readonly SecretsJsonIssue[])
   const fingerprints = issues.map((issue) =>
     buildSecretsFingerprint(
       issue.ruleKey,
-      issue.file,
+      issue.file ?? source,
       issue.location?.startLine,
       issue.location?.startColumn,
     ),
@@ -233,6 +243,7 @@ export async function scanAndEmitSecrets(
   auth: ResolvedAuth,
   run: () => Promise<SpawnResult>,
   ctx: CommandInvocationContext,
+  source?: string,
 ): Promise<{ result: SpawnResult; parsed: SecretsJsonOutput }> {
   const start = performance.now();
   try {
@@ -244,7 +255,7 @@ export async function scanAndEmitSecrets(
       auth,
     );
     ctx.recordTelemetry(fact);
-    const { findingsCount, ruleCounts } = summarizeNewSecretsFindings(parsed.issues);
+    const { findingsCount, ruleCounts } = summarizeNewSecretsFindings(parsed.issues, source);
     recordAnalyzerStats(ctx, fact, { findingsCount, ruleCounts });
     return { result, parsed };
   } catch (err) {
@@ -345,11 +356,16 @@ async function handleCheckCommand(
   const callerCommand = options.telemetryCallerCommand ?? SECRETS_CALLER_COMMANDS.analyzeSecrets;
 
   if (options.stdin) {
+    // Interactive --stdin (`stdio: 'inherit'`) never captures the piped bytes in this process,
+    // so there is no content to hash for dedup. Each manual invocation is its own deliberate
+    // act, not a hook re-scanning the same content — a fresh source per run means findings are
+    // never wrongly suppressed as "already seen".
     const { result, parsed } = await scanAndEmitSecrets(
       callerCommand,
       auth,
       () => runSecretsBinary(binaryPath, ['--input'], auth, 'inherit'),
       ctx,
+      randomUUID(),
     );
     reportScanResult(result, parsed, scanStartTime, { paths: [] }, ctx.console);
   } else {
