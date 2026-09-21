@@ -33,6 +33,7 @@ export type CommandExecutedPayload = {
   result: 'success' | 'failure';
   distribution: Distribution;
   project_uuid: string | null;
+  arguments: string | null;
 };
 
 /**
@@ -41,6 +42,7 @@ export type CommandExecutedPayload = {
  * `result` is derived from `process.exitCode` (`success` when 0 or unset).
  * `project_uuid` is resolved here (async, never rejects). Identity is applied at commit.
  * Command/subcommand come from {@link SonarCommand.commandAndSubcommand}.
+ * `arguments` comes from {@link SonarCommand.describeInvocationArguments}.
  */
 export async function buildCommandExecutedFact(
   command: SonarCommand,
@@ -52,5 +54,6 @@ export async function buildCommandExecutedFact(
     result: (process.exitCode ?? 0) === 0 ? 'success' : 'failure',
     distribution: DISTRIBUTION,
     project_uuid: await currentProjectUuid(),
+    arguments: command.describeInvocationArguments(),
   });
 }
