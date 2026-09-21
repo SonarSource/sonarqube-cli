@@ -18,7 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { type CommandInvocationContext, StatsFact } from '@/core/commands/invocation-context.ts';
+import {
+  type CommandInvocationContext,
+  StatsFact,
+  type TelemetryFact,
+} from '@/core/commands/invocation-context.ts';
 import { detectCallerAgent } from '@/core/host/environment/agent-detector.ts';
 
 import type { StatsAnalyzer, StatsTrigger } from './store.ts';
@@ -26,13 +30,30 @@ import { recordStatsEvent } from './store.ts';
 
 export { dedupeAgainstSeen, upsertRuleMessages } from './store.ts';
 
-export interface AnalyzerStatsFactPayload {
+/**
+ * Base envelope every analyzer's `CliAnalysisCompleted` telemetry fact already carries.
+ * `AnalysisCompletedPayload` (src/commands/analyze/analysis-completed.ts) satisfies this
+ * structurally — not imported, since src/core never imports from src/commands elsewhere
+ * in this codebase.
+ */
+export interface AnalysisFactEnvelope {
+  caller_command: string;
   analyzer: StatsAnalyzer;
-  callerCommand: string;
-  exitCode: number | null;
-  durationMs?: number | null;
+  exit_code: number | null;
+  scan_duration_ms: number;
+}
+
+/** The only bits a stats event needs beyond the shared telemetry envelope. */
+export interface AnalyzerStatsDetails {
   findingsCount: number;
   ruleCounts?: Record<string, number>;
+}
+
+/** Buffered `StatsFact` payload shape; exported so tests can build one without going
+ *  through {@link recordAnalyzerStats}'s telemetry-fact parameter. */
+export interface AnalyzerStatsFactPayload {
+  envelope: AnalysisFactEnvelope;
+  details: AnalyzerStatsDetails;
 }
 
 // Caller-command -> run-trigger classification. Deliberately not imported from
@@ -55,28 +76,37 @@ function resolveTrigger(callerCommand: string): StatsTrigger {
 // on/off flag around this call; do not reintroduce `isTelemetryEnabled(state)` here.
 export function commitStatsFacts(facts: readonly StatsFact[]): void {
   for (const fact of facts) {
-    const payload = fact.payload as AnalyzerStatsFactPayload;
+    const { envelope, details } = fact.payload as AnalyzerStatsFactPayload;
     recordStatsEvent(
       {
-        callerCommand: payload.callerCommand,
-        exitCode: payload.exitCode,
+        callerCommand: envelope.caller_command,
+        exitCode: envelope.exit_code,
         callerAgent: detectCallerAgent() ?? 'unidentified',
-        runTrigger: resolveTrigger(payload.callerCommand),
-        durationMs: payload.durationMs,
+        runTrigger: resolveTrigger(envelope.caller_command),
+        durationMs: envelope.scan_duration_ms,
       },
       {
         eventClass: 'analyzer',
-        analyzer: payload.analyzer,
-        findingsCount: payload.findingsCount,
-        ruleCounts: payload.ruleCounts,
+        analyzer: envelope.analyzer,
+        findingsCount: details.findingsCount,
+        ruleCounts: details.ruleCounts,
       },
     );
   }
 }
 
+/**
+ * Records a stats event from an analyzer's own `CliAnalysisCompleted` telemetry fact —
+ * `caller_command`/`analyzer`/`exit_code`/`scan_duration_ms` are read straight off it, so
+ * callers never rebuild that envelope by hand. `details` carries only what stats needs on
+ * top of telemetry: the deduped/allowlisted finding counts, computed by each analyzer's
+ * own dedup callback (secrets fingerprints against the ledger; SQAA/SCA pass raw counts,
+ * no dedup this iteration — see the CLI-1112 ADR).
+ */
 export function recordAnalyzerStats(
   ctx: CommandInvocationContext,
-  payload: AnalyzerStatsFactPayload,
+  fact: TelemetryFact<AnalysisFactEnvelope>,
+  details: AnalyzerStatsDetails,
 ): void {
-  ctx.recordStats(new StatsFact<AnalyzerStatsFactPayload>(payload));
+  ctx.recordStats(new StatsFact<AnalyzerStatsFactPayload>({ envelope: fact.payload, details }));
 }

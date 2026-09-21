@@ -445,7 +445,7 @@ describe('recordScaAnalysisTelemetry(): stats', () => {
     const [fact] = emitScaAnalysisStats(SCA_CALLER_COMMANDS.analyzeDependencyRisks, null, 5, null);
     const payload = fact.payload as AnalyzerStatsFactPayload;
 
-    expect(payload.analyzer).toBe('sca-scanner-cli');
-    expect(payload.callerCommand).toBe('analyze dependency-risks');
+    expect(payload.envelope.analyzer).toBe('sca-scanner-cli');
+    expect(payload.envelope.caller_command).toBe('analyze dependency-risks');
   });
 });

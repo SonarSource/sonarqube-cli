@@ -55,10 +55,13 @@ function readEvents(): Array<{ caller_command: string; run_trigger: string }> {
 function recordFact(callerCommand: string): void {
   commitStatsFacts([
     new StatsFact<AnalyzerStatsFactPayload>({
-      analyzer: 'sonar-secrets',
-      callerCommand,
-      exitCode: 0,
-      findingsCount: 0,
+      envelope: {
+        analyzer: 'sonar-secrets',
+        caller_command: callerCommand,
+        exit_code: 0,
+        scan_duration_ms: 0,
+      },
+      details: { findingsCount: 0 },
     }),
   ]);
 }

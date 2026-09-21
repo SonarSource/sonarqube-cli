@@ -144,32 +144,27 @@ export function recordSqaaAnalysisTelemetry(
   const ruleCounts = issues.length > 0 ? collectRuleCounts(issues) : undefined;
   const details = ruleCounts ? JSON.stringify(ruleCounts) : '';
 
-  ctx.recordTelemetry(
-    new TelemetryFact(
-      CLI_ANALYSIS_COMPLETED,
-      {
-        caller_command: callerCommand,
-        analyzer: 'sqaa',
-        analysis_id: analysisId,
-        findings_count: findingsCount,
-        exit_code: exitCode ?? null,
-        errors_count: tally.totalErrors,
-        failures_count: tally.totalFailures,
-        scan_duration_ms: durationMs,
-        details,
-      } satisfies AnalysisCompletedPayload,
-      { auth },
-    ),
+  const fact = new TelemetryFact(
+    CLI_ANALYSIS_COMPLETED,
+    {
+      caller_command: callerCommand,
+      analyzer: 'sqaa',
+      analysis_id: analysisId,
+      findings_count: findingsCount,
+      exit_code: exitCode ?? null,
+      errors_count: tally.totalErrors,
+      failures_count: tally.totalFailures,
+      scan_duration_ms: durationMs,
+      details,
+    } satisfies AnalysisCompletedPayload,
+    { auth },
   );
+  ctx.recordTelemetry(fact);
 
   if (issues.length > 0) {
     upsertRuleMessages(collectRuleMessages(issues));
   }
-  recordAnalyzerStats(ctx, {
-    analyzer: 'sqaa',
-    callerCommand,
-    exitCode: exitCode ?? null,
-    durationMs,
+  recordAnalyzerStats(ctx, fact, {
     findingsCount,
     ruleCounts: ruleCounts?.counts_by_rule,
   });

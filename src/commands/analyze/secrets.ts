@@ -245,14 +245,7 @@ export async function scanAndEmitSecrets(
     );
     ctx.recordTelemetry(fact);
     const { findingsCount, ruleCounts } = summarizeNewSecretsFindings(parsed.issues);
-    recordAnalyzerStats(ctx, {
-      analyzer: 'sonar-secrets',
-      callerCommand,
-      exitCode: fact.payload.exit_code,
-      durationMs: fact.payload.scan_duration_ms,
-      findingsCount,
-      ruleCounts,
-    });
+    recordAnalyzerStats(ctx, fact, { findingsCount, ruleCounts });
     return { result, parsed };
   } catch (err) {
     const { fact } = buildSecretsAnalysisTelemetryFact(
@@ -262,13 +255,7 @@ export async function scanAndEmitSecrets(
       auth,
     );
     ctx.recordTelemetry(fact);
-    recordAnalyzerStats(ctx, {
-      analyzer: 'sonar-secrets',
-      callerCommand,
-      exitCode: fact.payload.exit_code,
-      durationMs: fact.payload.scan_duration_ms,
-      findingsCount: 0,
-    });
+    recordAnalyzerStats(ctx, fact, { findingsCount: 0 });
     throw err;
   }
 }

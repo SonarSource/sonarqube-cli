@@ -23,7 +23,7 @@ import { join } from 'node:path';
 
 import { Database } from 'bun:sqlite';
 
-import type { AnalyzerStatsFactPayload } from '@/core/stats/facts.ts';
+import type { StatsEventDetails } from '@/core/stats/store.ts';
 
 export function statsDbPath(sonarUserHome: string): string {
   return join(sonarUserHome, 'sonarqube-cli', 'db', 'stats', 'stats.db');
@@ -41,10 +41,7 @@ export interface StoredStatsEvent {
 }
 
 export type StoredAnalyzerStatsEvent = StoredStatsEvent & {
-  parsedDetails: { eventClass: 'analyzer' } & Pick<
-    AnalyzerStatsFactPayload,
-    'analyzer' | 'findingsCount' | 'ruleCounts'
-  >;
+  parsedDetails: StatsEventDetails;
 };
 
 function openReadonly(sonarUserHome: string): Database | null {
