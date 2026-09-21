@@ -17,7 +17,7 @@ The bare `sonar analyze` command accepts `-p, --project <project>` for the agent
 
 `sonar list issues` defaults `--statuses` to `OPEN,CONFIRMED` (`DEFAULT_STATUSES` in `src/commands/list/issues.ts`) when the flag is omitted, so results are actionable issues by default rather than the full history including `FIXED`/`FALSE_POSITIVE`/`ACCEPTED`. Pass `--statuses` explicitly to see other states.
 
-`sonar list issues --new-code` restricts results to issues raised on new code (the leak period), by setting `sinceLeakPeriod: true` on `IssuesSearchParams`. `IssuesClient` (`src/core/server/issues.ts`) renames that field to the wire param for the current platform — `sinceLeakPeriod` on Cloud, `inNewCodePeriod` on Server — the same mechanism `quality-gate status`'s issue/security breakdowns (`src/commands/quality-gate/status/issues-enrichment.ts`, `security-enrichment.ts`) use, except there the boolean is derived per-condition from `isNewCodeMetric()` rather than a direct user flag.
+`sonar list issues --new-code` limits results to issues found in the new code period (the "leak period"). It shares its Cloud/Server wire-param split with `quality-gate status`'s issue/security breakdowns, which instead derive the value per condition rather than from a direct flag.
 
 `sonar analyze dependency-risks` accepts an optional `-p, --project <project>`. When omitted, the project key is auto-detected via `discoverProject()`.
 
