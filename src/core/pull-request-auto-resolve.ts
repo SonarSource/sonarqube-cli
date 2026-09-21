@@ -19,7 +19,7 @@
  */
 
 // Auto-resolves a pull request for the current git branch — shared by any command taking
-// --branch/--pull-request (quality-gate status today, list issues potentially later).
+// --branch/--pull-request (quality-gate status, list issues).
 
 import { resolveCurrentGitBranch } from '@/core/host/git/branch.ts';
 import logger from '@/core/observability/logger.ts';

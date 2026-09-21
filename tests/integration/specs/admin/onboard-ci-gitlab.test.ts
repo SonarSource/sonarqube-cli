@@ -19,6 +19,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import * as yaml from 'js-yaml';
 
 import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
 
@@ -1030,8 +1031,11 @@ describe('sonar admin onboard-ci gitlab', () => {
 
       const ciYml = gitlabServer.committedFiles.find((f) => f.path === '.gitlab-ci.yml');
       expect(ciYml).toBeDefined();
-      expect(ciYml!.content).toContain(
-        `-Dsonar.projectKey="mycompany_scanner-prop-repo" -Dsonar.scanner.engineJarPath='/path/to/engine.jar' -Dsonar.buildsystem.autoconfig.disabled='false'`,
+      const script = (yaml.load(ciYml!.content) as { 'sonarqube-analysis': { script: string[] } })[
+        'sonarqube-analysis'
+      ].script;
+      expect(script[0]).toBe(
+        "sonar-scanner -Dsonar.projectKey='mycompany_scanner-prop-repo' -Dsonar.scanner.engineJarPath='/path/to/engine.jar' -Dsonar.buildsystem.autoconfig.disabled='false'",
       );
     });
 

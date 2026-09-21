@@ -921,8 +921,10 @@ describe('system status', () => {
   );
 
   it(
-    'shows one entry per project when sonar integrate claude is run in two different directories',
+    'shows a single entry when sonar integrate claude is run from two different directories',
     async () => {
+      // Every install is global now, so a second run from a different directory
+      // reconciles the same global entry rather than adding a new one.
       const server = await harness
         .newFakeServer()
         .withAuthToken('test-token')
@@ -952,14 +954,13 @@ describe('system status', () => {
       });
       expect(resultB.exitCode).toBe(0);
 
-      // Preserve state with both integrations before running system status
+      // Preserve state after the second run before checking system status
       harness.state().withRawState(harness.stateJsonFile.asText());
 
-      // Both installations must appear in system status
       const result = await harness.run('system status --json');
       expect(result.exitCode).toBe(0);
       const json = JSON.parse(result.stdout) as { integrations: Array<{ id: string }> };
-      expect(json.integrations.filter((i) => i.id === 'claude-code')).toHaveLength(2);
+      expect(json.integrations.filter((i) => i.id === 'claude-code')).toHaveLength(1);
     },
     { timeout: 60000 },
   );

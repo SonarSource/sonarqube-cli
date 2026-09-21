@@ -62,10 +62,7 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
 ): Promise<void> {
   const { context, options, auth } = params;
   const vortex = await resolveVortexSetup(auth, params.ctx.console);
-  const { installRoot, installScope } = resolveIntegrateInstallTarget(
-    context.isGlobal,
-    context.project.projectRoot,
-  );
+  const { installRoot, installScope } = resolveIntegrateInstallTarget();
   const attrs = buildRecordedIntegrationAttrs({
     baseAttrs: { projectKey: context.projectKey ?? null },
     projectRoot: context.project.projectRoot,

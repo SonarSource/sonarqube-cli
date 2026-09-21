@@ -27,6 +27,7 @@ import { isSonarQubeCloud } from '@/core/auth/auth-resolver.ts';
 import { openBrowser } from '@/core/host/browser.ts';
 import { startLoopbackServer } from '@/core/host/loopback-server.ts';
 import logger from '@/core/observability/logger.ts';
+import type { HttpClientError } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { fetchServerVersion, isAtLeast } from '@/core/server/server-info.ts';
 import { UsersClient } from '@/core/server/users.ts';
@@ -36,7 +37,7 @@ import type { Console } from '@/core/ui/console.ts';
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_METHOD_NOT_ALLOWED = 405;
 const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
-const MAX_POST_BODY_BYTES = 4096;
+export const MAX_TOKEN_INPUT_BYTES = 4096;
 
 export type TokenStatus = 'valid' | 'invalid' | 'unreachable';
 
@@ -50,14 +51,69 @@ export interface BrowserAuthResult {
   tokenName?: string;
 }
 
+/**
+ * Read an existing token from a pipe or redirected file without ever rendering it.
+ */
+export async function readTokenFromStdin(
+  input: NodeJS.ReadableStream = process.stdin,
+): Promise<string> {
+  return await new Promise<string>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let byteLength = 0;
+    let settled = false;
+
+    const cleanup = () => {
+      input.off('data', onData);
+      input.off('end', onEnd);
+      input.off('error', onError);
+      input.pause();
+    };
+    const fail = (message: string) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(message));
+    };
+    const onData = (chunk: string | Buffer) => {
+      if (settled) return;
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      byteLength += buffer.byteLength;
+      if (byteLength > MAX_TOKEN_INPUT_BYTES) {
+        fail(`Token input exceeds the ${MAX_TOKEN_INPUT_BYTES}-byte limit.`);
+        return;
+      }
+      chunks.push(buffer);
+    };
+    const onEnd = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      const token = Buffer.concat(chunks).toString('utf-8').trim();
+      if (!token) {
+        reject(new Error('No token was provided on standard input.'));
+        return;
+      }
+      resolve(token);
+    };
+    const onError = () => {
+      fail('Failed to read token from standard input.');
+    };
+
+    input.on('data', onData);
+    input.on('end', onEnd);
+    input.on('error', onError);
+    input.resume();
+  });
+}
+
 export function checkTokenStatus(serverURL: string, token: string): Promise<TokenCheckResult> {
   const client = new UsersClient(new SonarHttpClient(serverURL, token));
   return client.checkTokenValidity().match(
-    (status) => ({ status }),
+    (status: 'valid' | 'invalid') => ({ status }),
     // checkTokenValidity() lets HTTP errors propagate — any non-200 response or
     // network failure is treated as a connectivity issue rather than an auth failure,
     // because /api/authentication/validate always returns HTTP 200 per the SonarQube API contract.
-    (err) => {
+    (err: HttpClientError) => {
       logger.debug(`Token validation failed for ${serverURL}: ${err.message}`);
       return { status: 'unreachable' as const, errorMessage: err.message };
     },
@@ -141,8 +197,8 @@ export function handlePostRequest(
   let bodySize = 0;
   req.on('data', (chunk: Buffer) => {
     bodySize += chunk.length;
-    if (bodySize > MAX_POST_BODY_BYTES) {
-      logger.warn(`POST body exceeds ${MAX_POST_BODY_BYTES} bytes limit, rejecting`);
+    if (bodySize > MAX_TOKEN_INPUT_BYTES) {
+      logger.warn(`POST body exceeds ${MAX_TOKEN_INPUT_BYTES} bytes limit, rejecting`);
       res.writeHead(HTTP_STATUS_PAYLOAD_TOO_LARGE);
       res.end('Payload Too Large');
       req.destroy();
@@ -151,7 +207,7 @@ export function handlePostRequest(
     body += chunk.toString();
   });
   req.on('end', () => {
-    if (bodySize > MAX_POST_BODY_BYTES) {
+    if (bodySize > MAX_TOKEN_INPUT_BYTES) {
       return;
     }
     const extractedAuthResult = parseBrowserAuthCallback(body);

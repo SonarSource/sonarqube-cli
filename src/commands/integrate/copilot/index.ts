@@ -25,7 +25,6 @@ import { finalizeAgentInstall } from '../_common/agent-integrate-postlude.ts';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { COPILOT_INTEGRATION_ID, type CopilotIntegrationOptions } from './declaration.ts';
-import { detectGlobalSecretsHook } from './hooks.ts';
 
 export async function integrateCopilot(
   options: IntegrateAgentOptions,
@@ -33,24 +32,10 @@ export async function integrateCopilot(
 ) {
   const { auth, console } = ctx;
   if (!options.nonInteractive) {
-    printAgentNonInteractiveAlternativeHint(
-      console,
-      'sonar integrate copilot --non-interactive',
-      'sonar integrate copilot --non-interactive -g',
-    );
+    printAgentNonInteractiveAlternativeHint(console, 'sonar integrate copilot --non-interactive');
   }
 
-  const integrateCtx = await displayAgentIntegratePrelude(
-    'Copilot',
-    'copilot',
-    options,
-    auth,
-    console,
-  );
-
-  const existingGlobalHookPath = integrateCtx.isGlobal
-    ? undefined
-    : await detectGlobalSecretsHook(console);
+  const integrateCtx = await displayAgentIntegratePrelude('Copilot', auth, console);
 
   await finalizeAgentInstall<CopilotIntegrationOptions>({
     integrationId: COPILOT_INTEGRATION_ID,
@@ -58,8 +43,5 @@ export async function integrateCopilot(
     options,
     auth,
     ctx,
-    featureOptions: {
-      globalSecretsHookExists: existingGlobalHookPath !== undefined,
-    },
   });
 }

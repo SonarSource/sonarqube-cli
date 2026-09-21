@@ -18,19 +18,17 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import * as preflightSummary from '@/commands/integrate/_common/preflight-summary.ts';
 import {
   detectSonarHookInstallation as detectHookInstallation,
   hasMarker,
   integrateGit,
   type IntegrateGitOptions,
   isGitHookType,
-  resolveGitHooksDir,
 } from '@/commands/integrate/git';
 import {
   getNativeHookMarker,
@@ -42,10 +40,9 @@ import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { GLOBAL_HOOKS_DIR } from '@/core/config-constants.ts';
-import * as gitDiscovery from '@/core/host/git/discover.ts';
+import { resolveLocalGitHooksDir } from '@/core/host/git/hooks.ts';
 import * as binaryInstall from '@/core/host/install/binary.ts';
 import * as processLib from '@/core/process/process.ts';
-import * as discovery from '@/core/project-info.ts';
 import { type CliState, getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 
@@ -85,14 +82,14 @@ describe('hasMarker', () => {
   });
 });
 
-describe('resolveGitHooksDir', () => {
+describe('resolveLocalGitHooksDir', () => {
   it('returns <root>/.git/hooks when .git is a directory and core.hooksPath is not set', async () => {
     mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
 
     const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
 
     try {
-      const result = await resolveGitHooksDir(TEMP_DIR);
+      const result = await resolveLocalGitHooksDir(TEMP_DIR);
       expect(result).toBe(join(TEMP_DIR, '.git', 'hooks'));
     } finally {
       spawnSpy.mockRestore();
@@ -110,7 +107,7 @@ describe('resolveGitHooksDir', () => {
     });
 
     try {
-      const result = await resolveGitHooksDir(TEMP_DIR);
+      const result = await resolveLocalGitHooksDir(TEMP_DIR);
       expect(result).toBe(join(TEMP_DIR, '.husky'));
     } finally {
       spawnSpy.mockRestore();
@@ -131,7 +128,7 @@ describe('resolveGitHooksDir', () => {
 
     try {
       // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-      await expect(resolveGitHooksDir(TEMP_DIR)).rejects.toThrow(
+      await expect(resolveLocalGitHooksDir(TEMP_DIR)).rejects.toThrow(
         'Could not resolve git hooks directory (exit code 128)',
       );
     } finally {
@@ -140,21 +137,21 @@ describe('resolveGitHooksDir', () => {
     }
   });
 
-  it('returns absolute path from git rev-parse as-is when it starts with /', async () => {
+  it('returns absolute common dir joined with hooks when it starts with /', async () => {
     mkdirSync(TEMP_DIR, { recursive: true });
     writeFileSync(join(TEMP_DIR, '.git'), 'gitdir: /abs/.git/worktrees/foo\n');
 
     const spawnSpy = spyOn(processLib, 'spawnProcess')
-      .mockResolvedValueOnce(NO_HOOKS_PATH) // git config core.hooksPath → not set
+      .mockResolvedValueOnce(NO_HOOKS_PATH) // git config --local core.hooksPath → not set
       .mockResolvedValueOnce({
         exitCode: 0,
-        stdout: '/abs/.git/worktrees/foo/hooks\n',
+        stdout: '/abs/.git\n',
         stderr: '',
-      }); // git rev-parse
+      }); // git rev-parse --git-common-dir
 
     try {
-      const result = await resolveGitHooksDir(TEMP_DIR);
-      expect(result).toBe('/abs/.git/worktrees/foo/hooks');
+      const result = await resolveLocalGitHooksDir(TEMP_DIR);
+      expect(result).toBe(join('/abs/.git', 'hooks'));
       expect(isAbsolute(result)).toBe(true);
     } finally {
       spawnSpy.mockRestore();
@@ -162,39 +159,40 @@ describe('resolveGitHooksDir', () => {
     }
   });
 
-  it('joins relative path from git rev-parse with root when it does not start with /', async () => {
+  it('joins relative common dir from git rev-parse with root when it does not start with /', async () => {
     mkdirSync(TEMP_DIR, { recursive: true });
     writeFileSync(join(TEMP_DIR, '.git'), 'gitdir: .git/worktrees/foo\n');
 
     const spawnSpy = spyOn(processLib, 'spawnProcess')
-      .mockResolvedValueOnce(NO_HOOKS_PATH) // git config core.hooksPath → not set
-      .mockResolvedValueOnce({ exitCode: 0, stdout: '.git/worktrees/foo/hooks\n', stderr: '' }); // git rev-parse
+      .mockResolvedValueOnce(NO_HOOKS_PATH) // git config --local core.hooksPath → not set
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '.git\n', stderr: '' }); // git rev-parse --git-common-dir
 
     try {
-      const result = await resolveGitHooksDir(TEMP_DIR);
-      expect(result).toBe(join(TEMP_DIR, '.git/worktrees/foo/hooks'));
+      const result = await resolveLocalGitHooksDir(TEMP_DIR);
+      expect(result).toBe(join(TEMP_DIR, '.git', 'hooks'));
     } finally {
       spawnSpy.mockRestore();
       rmSync(TEMP_DIR, { recursive: true, force: true });
     }
   });
 
-  it('returns the path from git rev-parse when .git is a file (worktree)', async () => {
+  it('uses --git-common-dir (never --git-path hooks) when .git is a file (worktree)', async () => {
     mkdirSync(TEMP_DIR, { recursive: true });
     writeFileSync(join(TEMP_DIR, '.git'), 'gitdir: /some/real/.git/worktrees/foo\n');
 
     const spawnSpy = spyOn(processLib, 'spawnProcess')
-      .mockResolvedValueOnce(NO_HOOKS_PATH) // git config core.hooksPath → not set
+      .mockResolvedValueOnce(NO_HOOKS_PATH) // git config --local core.hooksPath → not set
       .mockResolvedValueOnce({
         exitCode: 0,
-        stdout: '/some/real/.git/worktrees/foo/hooks\n',
+        stdout: '/some/real/.git\n',
         stderr: '',
-      }); // git rev-parse
+      }); // git rev-parse --git-common-dir
 
     try {
-      const result = await resolveGitHooksDir(TEMP_DIR);
-      expect(result).toBe('/some/real/.git/worktrees/foo/hooks');
-      expect(spawnSpy).toHaveBeenCalledWith('git', ['rev-parse', '--git-path', 'hooks'], {
+      const result = await resolveLocalGitHooksDir(TEMP_DIR);
+      expect(result).toBe(join('/some/real/.git', 'hooks'));
+      // --git-common-dir never follows an inherited core.hooksPath, unlike --git-path hooks.
+      expect(spawnSpy).toHaveBeenCalledWith('git', ['rev-parse', '--git-common-dir'], {
         cwd: TEMP_DIR,
       });
     } finally {
@@ -347,51 +345,13 @@ let fake: FakeConsole;
 let MOCK_AUTH_CTX: CommandAuthenticatedInvocationContext;
 
 describe('integrateGit', () => {
-  let findGitRootSpy: ReturnType<typeof spyOn>;
-  let discoverProjectSpy: ReturnType<typeof spyOn>;
-  let printGitPreflightSummarySpy: ReturnType<typeof spyOn>;
-  let installBinarySpy: ReturnType<typeof spyOn>;
-  let resolveBinaryPathSpy: ReturnType<typeof spyOn>;
-  let loadStateSpy: ReturnType<typeof spyOn>;
-  let saveStateSpy: ReturnType<typeof spyOn>;
-  let state: CliState;
-
   beforeEach(() => {
     fake = new FakeConsole();
     MOCK_AUTH_CTX = new CommandAuthenticatedInvocationContext(MOCK_AUTH, fake);
-    findGitRootSpy = spyOn(gitDiscovery, 'findGitRoot');
-    discoverProjectSpy = spyOn(discovery, 'discoverProject').mockResolvedValue({
-      repoRoot: TEMP_DIR,
-      projectRoot: TEMP_DIR,
-      projectKey: undefined,
-      configSources: [],
-    });
-    printGitPreflightSummarySpy = spyOn(
-      preflightSummary,
-      'printGitPreflightSummary',
-    ).mockResolvedValue(undefined);
-    installBinarySpy = spyOn(binaryInstall, 'installBinary').mockResolvedValue({
-      binaryPath: '/usr/local/bin/sonar-secrets',
-      freshlyInstalled: true,
-    });
-    resolveBinaryPathSpy = spyOn(binaryInstall, 'resolveBinaryPath').mockReturnValue(null);
-    state = getDefaultState('test');
-    loadStateSpy = spyOn(stateRepository, 'loadState').mockImplementation(() => state);
-    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    findGitRootSpy.mockRestore();
-    discoverProjectSpy.mockRestore();
-    printGitPreflightSummarySpy.mockRestore();
-    installBinarySpy.mockRestore();
-    resolveBinaryPathSpy.mockRestore();
-    loadStateSpy.mockRestore();
-    saveStateSpy.mockRestore();
   });
 
   /* eslint-disable @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable */
-  it('throws InvalidOptionError when --hook is invalid before git checks', async () => {
+  it('throws InvalidOptionError when --hook is invalid', async () => {
     await expect(
       integrateGit(
         { nonInteractive: true, hook: 'typo' } as unknown as IntegrateGitOptions,
@@ -404,190 +364,8 @@ describe('integrateGit', () => {
         MOCK_AUTH_CTX,
       ),
     ).rejects.toThrow('--hook must be pre-commit or pre-push');
-  });
-
-  it('throws InvalidOptionError for invalid --hook on global install before other work', async () => {
-    await expect(
-      integrateGit(
-        {
-          global: true,
-          nonInteractive: true,
-          hook: 'typo',
-        } as unknown as IntegrateGitOptions,
-        MOCK_AUTH_CTX,
-      ),
-    ).rejects.toBeInstanceOf(InvalidOptionError);
-    await expect(
-      integrateGit(
-        {
-          global: true,
-          nonInteractive: true,
-          hook: 'typo',
-        } as unknown as IntegrateGitOptions,
-        MOCK_AUTH_CTX,
-      ),
-    ).rejects.toThrow('--hook must be pre-commit or pre-push');
-  });
-
-  it('throws InvalidOptionError when --global is combined with -p', async () => {
-    await expect(
-      integrateGit({ global: true, nonInteractive: true, project: 'k' }, MOCK_AUTH_CTX),
-    ).rejects.toBeInstanceOf(InvalidOptionError);
-    await expect(
-      integrateGit({ global: true, nonInteractive: true, project: 'k' }, MOCK_AUTH_CTX),
-    ).rejects.toThrow('-p is not supported with --global');
   });
   /* eslint-enable @typescript-eslint/await-thenable */
-
-  it('throws CommandFailedError when not inside a git repository', async () => {
-    findGitRootSpy.mockReturnValue({ gitRoot: '/not-a-repo', isGit: false });
-    /* eslint-disable @typescript-eslint/await-thenable */
-    await expect(integrateGit({ nonInteractive: true }, MOCK_AUTH_CTX)).rejects.toThrow(
-      'No git repository found',
-    );
-    /* eslint-enable @typescript-eslint/await-thenable */
-    expect(discoverProjectSpy).not.toHaveBeenCalled();
-  });
-
-  it('shows repository summary before the scope prompt when in a git repository', async () => {
-    findGitRootSpy.mockReturnValue({ gitRoot: '/my/project', isGit: true });
-    fake.queueResponse('project');
-    fake.queueResponse(null); // user cancels at the hook-type prompt
-    try {
-      await integrateGit({}, MOCK_AUTH_CTX);
-    } catch {
-      // expected cancellation
-    }
-    expect(printGitPreflightSummarySpy).toHaveBeenCalledWith('/my/project', MOCK_AUTH_CTX.console);
-  });
-
-  it('records the husky integration when core.hooksPath points to .husky', async () => {
-    mkdirSync(join(TEMP_DIR, '.husky'), { recursive: true });
-    findGitRootSpy.mockReturnValue({ gitRoot: TEMP_DIR, isGit: true });
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
-      exitCode: 0,
-      stdout: '.husky\n',
-      stderr: '',
-    });
-    try {
-      await integrateGit({ nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH_CTX);
-      const feature = state.integrations.installed[0]?.features[0];
-      expect(state.integrations.installed[0]?.integrationId).toBe('husky');
-      expect(feature).toMatchObject({
-        featureId: 'pre-commit-hook',
-        scope: 'project',
-        targetRoot: TEMP_DIR,
-        dependencies: [],
-        subfeatures: [{ featureId: 'pre-commit-secrets', dependencies: [{ id: 'sonar-secrets' }] }],
-      });
-      expect(
-        feature?.resources.some(
-          (resource) => resource.id === 'hook-file' && resource.resourceType === 'text-snippet',
-        ),
-      ).toBe(true);
-    } finally {
-      spawnSpy.mockRestore();
-      rmSync(TEMP_DIR, { recursive: true, force: true });
-    }
-  });
-
-  it('records the pre-commit integration when .pre-commit-config.yaml is present', async () => {
-    mkdirSync(TEMP_DIR, { recursive: true });
-    writeFileSync(
-      join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE),
-      'repos:\n  - repo: local\n    hooks:\n      - id: some-other-hook\n        entry: echo hello\n        language: system\n',
-    );
-    findGitRootSpy.mockReturnValue({ gitRoot: TEMP_DIR, isGit: true });
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockImplementation((command, args) => {
-      if (command === 'git') {
-        return Promise.resolve(NO_HOOKS_PATH);
-      }
-      if (command === 'pre-commit') {
-        return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
-      }
-      throw new Error(`Unexpected command: ${command} ${args.join(' ')}`);
-    });
-    try {
-      await integrateGit({ nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH_CTX);
-      const feature = state.integrations.installed[0]?.features[0];
-      expect(state.integrations.installed[0]?.integrationId).toBe('pre-commit');
-      expect(feature).toMatchObject({
-        featureId: 'pre-commit-hook',
-        scope: 'project',
-        targetRoot: TEMP_DIR,
-        dependencies: [],
-        subfeatures: [{ featureId: 'pre-commit-secrets', dependencies: [{ id: 'sonar-secrets' }] }],
-      });
-      expect(
-        feature?.resources.some(
-          (resource) => resource.id === 'hook-config' && resource.resourceType === 'yaml-patch',
-        ),
-      ).toBe(true);
-      expect(feature?.operations.some((operation) => operation.id === 'activate-hook')).toBe(true);
-    } finally {
-      spawnSpy.mockRestore();
-      rmSync(TEMP_DIR, { recursive: true, force: true });
-    }
-  });
-
-  it('records the native-git integration when no husky or pre-commit config is present', async () => {
-    mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
-    findGitRootSpy.mockReturnValue({ gitRoot: TEMP_DIR, isGit: true });
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
-    try {
-      await integrateGit({ nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH_CTX);
-      expect(existsSync(join(TEMP_DIR, '.git', 'hooks', 'pre-commit'))).toBe(true);
-      const feature = state.integrations.installed[0]?.features[0];
-      expect(state.integrations.installed[0]?.integrationId).toBe('native-git');
-      expect(feature).toMatchObject({
-        featureId: 'pre-commit-hook',
-        scope: 'project',
-        targetRoot: TEMP_DIR,
-        dependencies: [],
-        subfeatures: [{ featureId: 'pre-commit-secrets', dependencies: [{ id: 'sonar-secrets' }] }],
-      });
-      expect(
-        feature?.resources.some(
-          (resource) => resource.id === 'hook-file' && resource.resourceType === 'whole-file',
-        ),
-      ).toBe(true);
-      expect(feature?.operations).toEqual([]);
-    } finally {
-      spawnSpy.mockRestore();
-      rmSync(TEMP_DIR, { recursive: true, force: true });
-    }
-  });
-
-  it('throws CommandFailedError when user cancels at the dependency-risks prompt', async () => {
-    mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
-    findGitRootSpy.mockReturnValue({ gitRoot: TEMP_DIR, isGit: true });
-    discoverProjectSpy.mockResolvedValue({
-      repoRoot: TEMP_DIR,
-      projectRoot: TEMP_DIR,
-      projectKey: 'my-project',
-      configSources: [],
-    });
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
-    fake.queueResponse('project');
-    fake.queueResponse(true);
-    fake.queueResponse(null);
-    let caughtError: unknown;
-    try {
-      await integrateGit({}, MOCK_AUTH_CTX);
-    } catch (err) {
-      caughtError = err;
-    } finally {
-      spawnSpy.mockRestore();
-      rmSync(TEMP_DIR, { recursive: true, force: true });
-    }
-    expect(discoverProjectSpy).toHaveBeenCalledWith(TEMP_DIR, {
-      auth: MOCK_AUTH,
-      silent: true,
-      console: MOCK_AUTH_CTX.console,
-    });
-    expect(caughtError).toBeInstanceOf(CommandFailedError);
-    expect((caughtError as Error).message).toContain('Installation cancelled');
-  });
 });
 
 describe('integrateGitGlobal', () => {
@@ -621,10 +399,7 @@ describe('integrateGitGlobal', () => {
     fake.queueResponse(null);
     let caughtMessage = '';
     try {
-      await integrateGit(
-        { global: true, nonInteractive: false, hook: 'pre-commit' },
-        MOCK_AUTH_CTX,
-      );
+      await integrateGit({ nonInteractive: false, hook: 'pre-commit' }, MOCK_AUTH_CTX);
     } catch (e) {
       caughtMessage = e instanceof Error ? e.message : '';
     }
@@ -635,7 +410,7 @@ describe('integrateGitGlobal', () => {
     installBinarySpy.mockRejectedValue(new Error('download failed'));
     let caughtMessage = '';
     try {
-      await integrateGit({ global: true, nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH_CTX);
+      await integrateGit({ nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH_CTX);
     } catch (e) {
       caughtMessage = e instanceof Error ? e.message : '';
     }
@@ -649,7 +424,7 @@ describe('integrateGitGlobal', () => {
       stderr: '',
     });
     try {
-      await integrateGit({ global: true, nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH_CTX);
+      await integrateGit({ nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH_CTX);
       const calls = fake.calls;
       const summaryCall = calls.find((c) => c.method === 'phase' && c.args[0] === 'Installed');
       expect(summaryCall).toBeDefined();
@@ -671,10 +446,7 @@ describe('integrateGitGlobal', () => {
     try {
       let caughtError: unknown;
       try {
-        await integrateGit(
-          { global: true, nonInteractive: true, hook: 'pre-commit' },
-          MOCK_AUTH_CTX,
-        );
+        await integrateGit({ nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH_CTX);
       } catch (e) {
         caughtError = e;
       }
@@ -696,10 +468,7 @@ describe('integrateGitGlobal', () => {
     try {
       let caughtError: unknown;
       try {
-        await integrateGit(
-          { global: true, nonInteractive: true, hook: 'pre-commit' },
-          MOCK_AUTH_CTX,
-        );
+        await integrateGit({ nonInteractive: true, hook: 'pre-commit' }, MOCK_AUTH_CTX);
       } catch (e) {
         caughtError = e;
       }

@@ -22,7 +22,7 @@
 
 import { mkdirSync } from 'node:fs';
 
-import { hookScriptName, IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
+import { hookScriptName, IS_WINDOWS, TestHarness } from '../../harness';
 import {
   findInstalledFeature,
   getInstalledIntegration,
@@ -97,39 +97,19 @@ export function findCopilotFeature(
   return findInstalledFeature(harness, 'copilot-cli', featureId, scope);
 }
 
-/** Simulates a previous `sonar integrate copilot -g` run on disk. */
-export function writeExistingGlobalHook(harness: TestHarness): void {
-  const scriptRel = `.copilot/hooks/sonar-secrets/build-scripts/${PRETOOL_SECRETS_SCRIPT}`;
-  harness.userHome.writeFile(scriptRel, '#!/bin/bash\nexit 0\n');
-  const absScriptPath = harness.userHome.file(scriptRel).path;
-  const hooksJson: CopilotHooksJson = {
-    version: 1,
-    hooks: { preToolUse: [makeHookEntry(normalizePath(absScriptPath))] },
-  };
-  harness.userHome.writeFile('.copilot/hooks/hooks.json', JSON.stringify(hooksJson));
-}
-
-/** Simulates a pre-existing global instructions file. */
-export function writeExistingGlobalInstructions(harness: TestHarness): void {
-  harness.userHome.writeFile(
-    '.copilot/instructions/sonarqube.instructions.md',
-    '# pre-existing global instructions\n',
-  );
-}
-
 /**
- * Force the project-level hook configuration update to fail by pre-seeding
+ * Force the global hook configuration update to fail by pre-seeding
  * `hooks.json` with invalid JSON.
  */
 export function obstructHooksJson(harness: TestHarness): void {
-  harness.cwd.writeFile('.github/hooks/hooks.json', '{ invalid json\n');
+  harness.userHome.writeFile('.copilot/hooks/hooks.json', '{ invalid json\n');
 }
 
 /**
- * Force the project-level instructions write to fail by pre-creating the
- * target file path as a directory.
+ * Force the global instructions write to fail by pre-creating the target
+ * file path as a directory.
  */
 export function obstructInstructionsFile(harness: TestHarness): void {
-  mkdirSync(harness.cwd.file('.github', 'instructions').path, { recursive: true });
-  mkdirSync(harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).path);
+  mkdirSync(harness.userHome.file('.copilot', 'instructions').path, { recursive: true });
+  mkdirSync(harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).path);
 }
