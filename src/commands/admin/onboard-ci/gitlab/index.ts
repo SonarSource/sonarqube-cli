@@ -222,6 +222,13 @@ async function preflight(
   gitlabUrl: string;
 }> {
   const { auth, httpClient } = connection;
+  if (/[\r\n]/.test(auth.serverUrl)) {
+    throw new CommandFailedError('The configured SonarQube server URL must be a single line.', {
+      exitCode: 2,
+      remediationHint: "Re-authenticate with 'sonar auth login' or fix SONARQUBE_CLI_SERVER.",
+    });
+  }
+
   assertOnPremiseConnection(auth);
 
   const sqsClient = new OnboardCiSqsClient(httpClient);
