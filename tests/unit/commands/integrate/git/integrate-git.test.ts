@@ -29,7 +29,6 @@ import {
   integrateGit,
   type IntegrateGitOptions,
   isGitHookType,
-  resolveLocalGitHooksDir,
 } from '@/commands/integrate/git';
 import {
   getNativeHookMarker,
@@ -41,6 +40,7 @@ import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { GLOBAL_HOOKS_DIR } from '@/core/config-constants.ts';
+import { resolveLocalGitHooksDir } from '@/core/host/git/hooks.ts';
 import * as binaryInstall from '@/core/host/install/binary.ts';
 import * as processLib from '@/core/process/process.ts';
 import { type CliState, getDefaultState } from '@/core/state/state.ts';

@@ -82,8 +82,6 @@ interface HookInstallation {
   hooksDir: string;
 }
 
-export { resolveLocalGitHooksDir } from '@/core/host/git/hooks.ts';
-
 export async function detectSonarHookInstallation(root: string): Promise<HookInstallation> {
   let hooksDir: string;
   try {
