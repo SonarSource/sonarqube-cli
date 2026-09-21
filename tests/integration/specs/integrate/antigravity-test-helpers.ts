@@ -24,7 +24,7 @@ import { join } from 'node:path';
 
 import { expect } from 'bun:test';
 
-import { hookScriptName, IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
+import { hookScriptName, TestHarness } from '../../harness';
 import { findInstalledFeature, type InstalledIntegrationFeature } from './state-helpers';
 
 export type { InstalledIntegration, InstalledIntegrationFeature } from './state-helpers';
@@ -88,82 +88,9 @@ export function findAntigravityFeature(
   return findInstalledFeature(harness, 'antigravity', featureId, scope);
 }
 
-export function makeAntigravitySecretsBlock(command: string): AntigravityHooksJson {
-  return {
-    'sonar-secrets': {
-      enabled: true,
-      PreToolUse: [
-        {
-          matcher: 'view_file',
-          hooks: [{ type: 'command', command, timeout: 60 }],
-        },
-      ],
-    },
-  };
-}
-
-/** Simulates a previous global Antigravity secrets hook install on disk. */
-export function writeExistingGlobalHook(harness: TestHarness): void {
-  const scriptRel = join('.gemini', 'config', 'sonar', 'hooks', PRETOOL_SECRETS_SCRIPT);
-  harness.userHome.writeFile(scriptRel, '#!/bin/bash\nexit 0\n');
-  const absScriptPath = normalizePath(join(harness.userHome.path, scriptRel));
-  const command = IS_WINDOWS
-    ? `powershell -NoProfile -File "${absScriptPath}"`
-    : `bash "${absScriptPath}"`;
-  harness.userHome.writeFile(
-    join('.gemini', 'config', 'hooks.json'),
-    JSON.stringify(makeAntigravitySecretsBlock(command)),
-  );
-}
-
-/** Simulates a disabled global sonar-secrets block (hook entry present but not active). */
-export function writeDisabledGlobalHook(harness: TestHarness): void {
-  const scriptRel = join('.gemini', 'config', 'sonar', 'hooks', PRETOOL_SECRETS_SCRIPT);
-  harness.userHome.writeFile(scriptRel, '#!/bin/bash\nexit 0\n');
-  const absScriptPath = normalizePath(join(harness.userHome.path, scriptRel));
-  const command = IS_WINDOWS
-    ? `powershell -NoProfile -File "${absScriptPath}"`
-    : `bash "${absScriptPath}"`;
-  harness.userHome.writeFile(
-    join('.gemini', 'config', 'hooks.json'),
-    JSON.stringify({
-      'sonar-secrets': {
-        enabled: false,
-        PreToolUse: [
-          {
-            matcher: 'view_file',
-            hooks: [{ type: 'command', command, timeout: 60 }],
-          },
-        ],
-      },
-    }),
-  );
-}
-
 /** Simulates a pre-existing global Sonar rules snippet in GEMINI.md. */
 export function writeExistingGlobalGeminiRules(harness: TestHarness): void {
   harness.userHome.writeFile(join('.gemini', 'GEMINI.md'), '# pre-existing global rules\n');
-}
-
-/** Simulates a pre-existing legacy global instructions file. */
-export function writeExistingGlobalInstructions(harness: TestHarness): void {
-  harness.userHome.writeFile(
-    join('.gemini', 'config', 'instructions', 'sonarqube.instructions.md'),
-    '# pre-existing global instructions\n',
-  );
-}
-
-/** Simulates a global hooks.json entry whose backing script file was removed. */
-export function writeOrphanedGlobalHookConfig(harness: TestHarness): void {
-  const scriptRel = join('.gemini', 'config', 'sonar', 'hooks', PRETOOL_SECRETS_SCRIPT);
-  const absScriptPath = normalizePath(join(harness.userHome.path, scriptRel));
-  const command = IS_WINDOWS
-    ? `powershell -NoProfile -File "${absScriptPath}"`
-    : `bash "${absScriptPath}"`;
-  harness.userHome.writeFile(
-    join('.gemini', 'config', 'hooks.json'),
-    JSON.stringify(makeAntigravitySecretsBlock(command)),
-  );
 }
 
 export function expectAntigravityAlwaysOnRule(body: string): void {

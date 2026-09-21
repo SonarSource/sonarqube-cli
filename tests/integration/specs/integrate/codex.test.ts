@@ -21,7 +21,9 @@
 // Integration tests for `sonar integrate codex`.
 // The codex-prompt-submit hook handler is exhaustively covered by
 // hook-agent-prompt-submit.test.ts; this spec only exercises the integrate
-// command — script + hooks.json layout, scope semantics, and idempotency.
+// command — script + hooks.json layout and idempotency. `sonar integrate
+// codex` always installs globally under `~/.codex/` — there is no
+// project-scoped install mode and no `-p`/`-g` flags.
 
 import { cpSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
@@ -35,7 +37,6 @@ import {
   SQAA_INSTRUCTIONS_SUBFEATURE_ID,
 } from '../../../../src/commands/integrate/_common/features/sqaa-instructions-feature';
 import { VORTEX_FEATURE_ID } from '../../../../src/commands/integrate/_common/vortex';
-import { codexIntegration } from '../../../../src/commands/integrate/codex/declaration';
 import { ENV_SONAR_USER_HOME } from '../../../../src/core/config-constants.ts';
 import {
   expectAgentPromptHint,
@@ -45,7 +46,6 @@ import {
   type CliResult,
   hookScriptName,
   hookScriptPath,
-  IS_WINDOWS,
   normalizePath,
   TestHarness,
 } from '../../harness';
@@ -93,15 +93,16 @@ describe('integrate codex', () => {
     await harness.dispose();
   });
 
-  describe('project-level install (default)', () => {
+  describe('install (default: global)', () => {
     it(
-      'writes an executable prompt-submit script and a hooks.json entry under .codex/',
+      'writes script + hooks.json under $HOME/.codex/ with an absolute command path',
       async () => {
         const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(0);
+        expect(harness.cwd.exists('.codex')).toBe(false);
 
-        const scriptFile = harness.cwd.file(
+        const scriptFile = harness.userHome.file(
           ...PROMPT_SCRIPT_DIRS,
           hookScriptName('prompt-secrets'),
         );
@@ -109,57 +110,19 @@ describe('integrate codex', () => {
         expect(scriptFile.isExecutable).toBe(true);
         expect(scriptFile.asText()).toContain('sonar hook codex-prompt-submit');
 
-        const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
+        const hooks: CodexHooksFile = harness.userHome.file(...HOOKS_JSON_DIRS).asJson();
         const entry = hooks.hooks?.UserPromptSubmit?.[0];
         expect(entry?.matcher).toBe('*');
         expect(entry?.hooks?.[0]?.type).toBe('command');
         expect(entry?.hooks?.[0]?.command).toContain('sonar-secrets');
+        const command = hookScriptPath(String(entry?.hooks?.[0]?.command));
+        expect(isAbsolute(command)).toBe(true);
+        expect(command.startsWith(normalizePath(harness.userHome.path))).toBe(true);
 
         // Completion summary
         expect(result.stdout).toContain('Installed');
         expect(result.stdout).toContain('Setup complete!');
         expect(result.stdout).toContain('paste this into Codex');
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'uses a project-relative command path so the config is portable',
-      async () => {
-        await harness.run('integrate codex --non-interactive');
-
-        const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
-        const command = hookScriptPath(
-          String(hooks.hooks?.UserPromptSubmit?.[0]?.hooks?.[0]?.command),
-        );
-        expect(isAbsolute(command)).toBe(false);
-        expect(command.startsWith('.codex/')).toBe(true);
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'quotes the hook command so it survives a project directory containing a space',
-      async () => {
-        const spacedDir = harness.cwd.dir('dir with space', 'myproj');
-        spacedDir.writeFile('sonar-project.properties', 'sonar.projectKey=my-project');
-
-        const result = await harness.run('integrate codex --non-interactive', {
-          cwd: spacedDir.path,
-        });
-
-        expect(result.exitCode).toBe(0);
-        const hooks: CodexHooksFile = spacedDir.file(...HOOKS_JSON_DIRS).asJson();
-        const command = String(hooks.hooks?.UserPromptSubmit?.[0]?.hooks?.[0]?.command);
-        // Project scope emits a relative, fully-quoted path (double quotes on
-        // Windows, single quotes on Unix) — deterministic regardless of the
-        // spaced project directory, so assert the exact command.
-        const scriptRel = '.codex/hooks/sonar-secrets/build-scripts/prompt-secrets';
-        expect(command).toBe(
-          IS_WINDOWS
-            ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptRel}.ps1"`
-            : `'${scriptRel}.sh'`,
-        );
       },
       { timeout: 30000 },
     );
@@ -171,7 +134,7 @@ describe('integrate codex', () => {
         const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
+        const hooks: CodexHooksFile = harness.userHome.file(...HOOKS_JSON_DIRS).asJson();
         expect(hooks.hooks?.UserPromptSubmit).toHaveLength(1);
       },
       { timeout: 30000 },
@@ -180,7 +143,7 @@ describe('integrate codex', () => {
     it(
       'preserves pre-existing non-Sonar entries in hooks.json across re-install',
       async () => {
-        harness.cwd.writeFile(
+        harness.userHome.writeFile(
           '.codex/hooks.json',
           JSON.stringify({
             hooks: {
@@ -199,7 +162,7 @@ describe('integrate codex', () => {
         const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
+        const hooks: CodexHooksFile = harness.userHome.file(...HOOKS_JSON_DIRS).asJson();
         const commands = hooks.hooks?.UserPromptSubmit?.flatMap(
           (entry) => entry.hooks?.map((hook) => hook.command) ?? [],
         );
@@ -210,130 +173,15 @@ describe('integrate codex', () => {
     );
   });
 
-  describe('global install (-g)', () => {
-    it(
-      'writes script + hooks.json under $HOME/.codex/ with an absolute command path',
-      async () => {
-        const result = await harness.run('integrate codex -g --non-interactive');
-
-        expect(result.exitCode).toBe(0);
-        expect(harness.cwd.exists('.codex')).toBe(false);
-
-        expect(
-          harness.userHome.exists(...PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')),
-        ).toBe(true);
-
-        const hooks: CodexHooksFile = harness.userHome.file(...HOOKS_JSON_DIRS).asJson();
-        const command = hookScriptPath(
-          String(hooks.hooks?.UserPromptSubmit?.[0]?.hooks?.[0]?.command),
-        );
-        expect(isAbsolute(command)).toBe(true);
-        expect(command.startsWith(normalizePath(harness.userHome.path))).toBe(true);
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'skips the project-level secrets hook when a global Codex hook is already recorded',
-      async () => {
-        // Seed a previously-installed global secrets hook so the state probe
-        // (isFeatureInstalledGloballyForProject) fires for the project run.
-        harness
-          .state()
-          .withInstalledIntegrationFeature(codexIntegration, 'sonar-secrets-hooks', 'global');
-
-        const result = await harness.run('integrate codex --non-interactive');
-
-        expect(result.exitCode).toBe(0);
-        expect(`${result.stdout}\n${result.stderr}`).toContain(
-          'A global secrets scanning hook is already configured. Skipping project-level secrets hooks to avoid duplicate execution.',
-        );
-        // No project-level hook artifacts were written.
-        expect(harness.cwd.exists('.codex', 'hooks')).toBe(false);
-        expect(harness.cwd.exists(...HOOKS_JSON_DIRS)).toBe(false);
-        expect(findCodexFeature(harness, 'sonar-secrets-hooks', 'project')).toBeUndefined();
-        // The remaining project features still install.
-        expect(harness.cwd.file(...PROJECT_AGENTS_MD_DIRS).asText()).toContain(SECRETS_HEADING);
-        expect(harness.cwd.exists(...CONFIG_TOML_DIRS)).toBe(true);
-      },
-      { timeout: 30000 },
-    );
-  });
-
   describe('MCP server config', () => {
     it(
-      'writes [mcp_servers.sonarqube] to .codex/config.toml at project scope',
+      'writes [mcp_servers.sonarqube] to $HOME/.codex/config.toml, project-agnostic even when a key is discovered',
       async () => {
+        // A global config is shared across every project on the machine, so
+        // it never bakes in a --project arg, even when one is discoverable.
         harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=my-project\n');
 
         const result = await harness.run('integrate codex --non-interactive');
-
-        // Assert on the result and the file contents
-        expect(result.exitCode).toBe(0);
-        expect(harness.cwd.exists(...CONFIG_TOML_DIRS)).toBe(true);
-        const tomlBody = harness.cwd.file(...CONFIG_TOML_DIRS).asText();
-        expect(tomlBody).toContain('[mcp_servers.sonarqube]');
-        expect(tomlBody).toContain('run');
-        expect(tomlBody).toContain('mcp');
-        expect(tomlBody).toContain('--project');
-        expect(tomlBody).toContain('my-project');
-        expect(tomlBody).not.toContain('[mcp_servers.sonarqube.env]');
-
-        // Assert on the state
-        const state = harness.stateJsonFile.asJson();
-        const codex = state.integrations.installed.find(
-          (entry: { integrationId: string }) => entry.integrationId === 'codex',
-        );
-        const mcpFeature = codex?.features?.find(
-          (feature: { featureId: string }) => feature.featureId === 'mcp-server',
-        );
-        expect(mcpFeature).toMatchObject({
-          resources: [
-            {
-              id: 'mcp-config',
-              resourceType: 'toml-patch',
-              path: harness.cwd.file(...CONFIG_TOML_DIRS).path,
-            },
-          ],
-        });
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'forwards SONAR_USER_HOME into [mcp_servers.sonarqube.env] and refreshes a prior entry',
-      async () => {
-        harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=my-project\n');
-
-        const first = await harness.run('integrate codex --non-interactive');
-        expect(first.exitCode).toBe(0);
-        expect(harness.cwd.file(...CONFIG_TOML_DIRS).asText()).not.toContain(
-          '[mcp_servers.sonarqube.env]',
-        );
-
-        // Distinct from $HOME/.sonar. Copy cliHome because harness.run() always
-        // writes state there, and the child with a custom home must still find auth.
-        const customHome = join(harness.userHome.path, 'custom-sonar');
-        cpSync(harness.cliHome.path, join(customHome, 'sonarqube-cli'), { recursive: true });
-        const result = await harness.run('integrate codex --non-interactive', {
-          extraEnv: { [ENV_SONAR_USER_HOME]: customHome },
-        });
-
-        expect(result.exitCode).toBe(0);
-        const tomlBody = harness.cwd.file(...CONFIG_TOML_DIRS).asText();
-        expect(tomlBody).toContain('[mcp_servers.sonarqube.env]');
-        const parsed = parseToml(tomlBody) as {
-          mcp_servers?: { sonarqube?: { env?: Record<string, string> } };
-        };
-        expect(parsed.mcp_servers?.sonarqube?.env?.[ENV_SONAR_USER_HOME]).toBe(customHome);
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'writes the MCP config to $HOME/.codex/config.toml for global installs',
-      async () => {
-        const result = await harness.run('integrate codex -g --non-interactive');
 
         // Assert on the result and the file contents
         expect(result.exitCode).toBe(0);
@@ -343,6 +191,8 @@ describe('integrate codex', () => {
         expect(tomlBody).toContain('[mcp_servers.sonarqube]');
         expect(tomlBody).toContain('run');
         expect(tomlBody).toContain('mcp');
+        expect(tomlBody).not.toContain('--project');
+        expect(tomlBody).not.toContain('[mcp_servers.sonarqube.env]');
 
         // Assert on the state
         const state = harness.stateJsonFile.asJson();
@@ -366,15 +216,43 @@ describe('integrate codex', () => {
     );
 
     it(
+      'forwards SONAR_USER_HOME into [mcp_servers.sonarqube.env] and refreshes a prior entry',
+      async () => {
+        const first = await harness.run('integrate codex --non-interactive');
+        expect(first.exitCode).toBe(0);
+        expect(harness.userHome.file(...CONFIG_TOML_DIRS).asText()).not.toContain(
+          '[mcp_servers.sonarqube.env]',
+        );
+
+        // Distinct from $HOME/.sonar. Copy cliHome because harness.run() always
+        // writes state there, and the child with a custom home must still find auth.
+        const customHome = join(harness.userHome.path, 'custom-sonar');
+        cpSync(harness.cliHome.path, join(customHome, 'sonarqube-cli'), { recursive: true });
+        const result = await harness.run('integrate codex --non-interactive', {
+          extraEnv: { [ENV_SONAR_USER_HOME]: customHome },
+        });
+
+        expect(result.exitCode).toBe(0);
+        const tomlBody = harness.userHome.file(...CONFIG_TOML_DIRS).asText();
+        expect(tomlBody).toContain('[mcp_servers.sonarqube.env]');
+        const parsed = parseToml(tomlBody) as {
+          mcp_servers?: { sonarqube?: { env?: Record<string, string> } };
+        };
+        expect(parsed.mcp_servers?.sonarqube?.env?.[ENV_SONAR_USER_HOME]).toBe(customHome);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
       're-running does not change the config.toml or duplicate [mcp_servers.sonarqube]',
       async () => {
         await harness.run('integrate codex --non-interactive');
-        const firstBody = harness.cwd.file(...CONFIG_TOML_DIRS).asText();
+        const firstBody = harness.userHome.file(...CONFIG_TOML_DIRS).asText();
 
         const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        expect(harness.cwd.file(...CONFIG_TOML_DIRS).asText()).toBe(firstBody);
+        expect(harness.userHome.file(...CONFIG_TOML_DIRS).asText()).toBe(firstBody);
       },
       { timeout: 30000 },
     );
@@ -382,8 +260,7 @@ describe('integrate codex', () => {
     it(
       'overwrites an existing [mcp_servers.sonarqube] entry with the canonical config',
       async () => {
-        harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=my-project\n');
-        harness.cwd.writeFile(
+        harness.userHome.writeFile(
           '.codex/config.toml',
           '[mcp_servers.sonarqube]\ncommand = "custom-sonar"\nargs = ["custom", "args"]\n',
         );
@@ -391,10 +268,11 @@ describe('integrate codex', () => {
         const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        const body = harness.cwd.file(...CONFIG_TOML_DIRS).asText();
+        const body = harness.userHome.file(...CONFIG_TOML_DIRS).asText();
         expect(body).not.toContain('custom-sonar');
         expect(body).toContain('[mcp_servers.sonarqube]');
-        expect(body).toContain('my-project');
+        expect(body).toContain('"run"');
+        expect(body).toContain('"mcp"');
       },
       { timeout: 30000 },
     );
@@ -402,7 +280,7 @@ describe('integrate codex', () => {
     it(
       'fails when the existing config.toml contains invalid TOML',
       async () => {
-        harness.cwd.writeFile('.codex/config.toml', '= not valid toml =');
+        harness.userHome.writeFile('.codex/config.toml', '= not valid toml =');
 
         const result = await harness.run('integrate codex --non-interactive');
 
@@ -420,7 +298,7 @@ describe('integrate codex', () => {
         const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        const tomlBody = harness.cwd.file(...CONFIG_TOML_DIRS).asText();
+        const tomlBody = harness.userHome.file(...CONFIG_TOML_DIRS).asText();
         expect(tomlBody).toContain('[mcp_servers.sonarqube]');
         expect(tomlBody).not.toContain('--project');
       },
@@ -430,7 +308,7 @@ describe('integrate codex', () => {
     it(
       'merges the sonarqube entry alongside pre-existing Codex config without touching unrelated tables',
       async () => {
-        harness.cwd.writeFile(
+        harness.userHome.writeFile(
           '.codex/config.toml',
           [
             'model = "gpt-5.3-codex"',
@@ -449,7 +327,7 @@ describe('integrate codex', () => {
         const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        const tomlBody = harness.cwd.file(...CONFIG_TOML_DIRS).asText();
+        const tomlBody = harness.userHome.file(...CONFIG_TOML_DIRS).asText();
         expect(tomlBody).toContain('model = "gpt-5.3-codex"');
         expect(tomlBody).toContain('model_reasoning_effort = "medium"');
         expect(tomlBody).toContain('[plugins."browser-use@openai-bundled"]');
@@ -460,31 +338,26 @@ describe('integrate codex', () => {
     );
   });
 
-  describe('option validation', () => {
-    it('rejects --global combined with --project', async () => {
-      const result = await harness.run('integrate codex -g -p some-project --non-interactive');
-
-      expect(result.exitCode).toBe(2);
-      expect(result.stderr).toContain('mutually exclusive');
-    });
-  });
-
   describe('AGENTS.md instructions', () => {
     const TEST_ORG = 'my-org';
     const TEST_PROJECT = 'my-project';
 
     it(
-      'writes the secrets-on-read section to <repo>/AGENTS.md at project scope (no Vortex without entitlement)',
+      'writes ~/.codex/AGENTS.md (and nothing project-side), showing the Vortex promotion when not entitled',
       async () => {
         const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        const body = harness.cwd.file(...PROJECT_AGENTS_MD_DIRS).asText();
+        expect(harness.cwd.exists(...PROJECT_AGENTS_MD_DIRS)).toBe(false);
+        const body = harness.userHome.file(...GLOBAL_AGENTS_MD_DIRS).asText();
 
         expect(body).toContain('<!-- sonar:begin:codex-secrets-on-read -->');
         expect(body).toContain('<!-- sonar:end:codex-secrets-on-read -->');
         expect(body).toContain(SECRETS_HEADING);
         expect(body).toContain('sonar analyze secrets');
+        expect(body).not.toContain(SQAA_HEADING);
+        const output = `${result.stdout}\n${result.stderr}`;
+        expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
       },
       { timeout: 30000 },
     );
@@ -503,18 +376,15 @@ describe('integrate codex', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
 
-        const result = await harness.run(
-          `integrate codex --project ${TEST_PROJECT} --non-interactive`,
-          {
-            extraEnv: {
-              SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
-              SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
-            },
+        const result = await harness.run('integrate codex --non-interactive', {
+          extraEnv: {
+            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
           },
-        );
+        });
 
         expect(result.exitCode).toBe(0);
-        const body = harness.cwd.file(...PROJECT_AGENTS_MD_DIRS).asText();
+        const body = harness.userHome.file(...GLOBAL_AGENTS_MD_DIRS).asText();
         expect(body).toContain('<!-- sonar:begin:codex-secrets-on-read -->');
         expect(body).toContain('<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->');
         expect(body).toContain(SQAA_HEADING);
@@ -528,19 +398,67 @@ describe('integrate codex', () => {
           ),
         ).toBeDefined();
 
-        const sqaaScript = harness.cwd.file(...SQAA_SCRIPT_DIRS, hookScriptName('posttool-sqaa'));
+        const sqaaScript = harness.userHome.file(
+          ...SQAA_SCRIPT_DIRS,
+          hookScriptName('posttool-sqaa'),
+        );
         expect(sqaaScript.exists()).toBe(true);
         expect(sqaaScript.isExecutable).toBe(true);
         expect(sqaaScript.asText()).toContain('sonar hook codex-post-tool-use');
         // The handler resolves the project at run time, so the key is not baked in.
         expect(sqaaScript.asText()).not.toContain('--project');
 
-        const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
+        const hooks: CodexHooksFile = harness.userHome.file(...HOOKS_JSON_DIRS).asJson();
         const postTool = hooks.hooks?.PostToolUse?.find((e) =>
           e.hooks?.some((h) => h.command?.includes('sonar-sqaa')),
         );
         expect(postTool?.matcher).toBe('apply_patch');
         expect(postTool?.hooks?.[0]?.command).toContain('sonar-sqaa');
+        expect(harness.cwd.exists(...SQAA_SCRIPT_DIRS)).toBe(false);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'writes SQAA into the global AGENTS.md when a project key is discovered from sonar-project.properties',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('cloud-token')
+          .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
+          .withVortexEntitlement(TEST_ORG, 'test-uuid-1234')
+          .withProject(TEST_PROJECT)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
+        harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
+
+        const result = await harness.run('integrate codex --non-interactive', {
+          extraEnv: {
+            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+          },
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(harness.cwd.exists(...PROJECT_AGENTS_MD_DIRS)).toBe(false);
+
+        const globalBody = harness.userHome.file(...GLOBAL_AGENTS_MD_DIRS).asText();
+        expect(globalBody).toContain(SECRETS_HEADING);
+        expect(globalBody).toContain(SQAA_HEADING);
+
+        const sqaaScript = harness.userHome.file(
+          ...SQAA_SCRIPT_DIRS,
+          hookScriptName('posttool-sqaa'),
+        );
+        expect(sqaaScript.exists()).toBe(true);
+        expect(sqaaScript.asText()).toContain('sonar hook codex-post-tool-use');
+        const hooks: CodexHooksFile = harness.userHome.file(...HOOKS_JSON_DIRS).asJson();
+        expect(
+          hooks.hooks?.PostToolUse?.find((e) =>
+            e.hooks?.some((h) => h.command?.includes('sonar-sqaa')),
+          )?.matcher,
+        ).toBe('apply_patch');
       },
       { timeout: 30000 },
     );
@@ -551,9 +469,9 @@ describe('integrate codex', () => {
         const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
+        const hooks: CodexHooksFile = harness.userHome.file(...HOOKS_JSON_DIRS).asJson();
         expect(hooks.hooks?.PostToolUse).toBeUndefined();
-        const body = harness.cwd.file(...PROJECT_AGENTS_MD_DIRS).asText();
+        const body = harness.userHome.file(...GLOBAL_AGENTS_MD_DIRS).asText();
         expect(body).not.toContain('sonarqube-agentic-analysis-protocol');
       },
       { timeout: 30000 },
@@ -573,24 +491,15 @@ describe('integrate codex', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
 
-        await harness.run(`integrate codex --project ${TEST_PROJECT} --non-interactive`, {
-          extraEnv: {
-            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
-            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
-          },
-        });
-        const result = await harness.run(
-          `integrate codex --project ${TEST_PROJECT} --non-interactive`,
-          {
-            extraEnv: {
-              SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
-              SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
-            },
-          },
-        );
+        const extraEnv = {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        };
+        await harness.run('integrate codex --non-interactive', { extraEnv });
+        const result = await harness.run('integrate codex --non-interactive', { extraEnv });
 
         expect(result.exitCode).toBe(0);
-        const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
+        const hooks: CodexHooksFile = harness.userHome.file(...HOOKS_JSON_DIRS).asJson();
         const sqaaEntries = hooks.hooks?.PostToolUse?.filter((e) =>
           e.hooks?.some((h) => h.command?.includes('sonar-sqaa')),
         );
@@ -613,7 +522,7 @@ describe('integrate codex', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
 
-        harness.cwd.writeFile(
+        harness.userHome.writeFile(
           '.codex/hooks.json',
           JSON.stringify({
             hooks: {
@@ -629,58 +538,7 @@ describe('integrate codex', () => {
           }),
         );
 
-        const result = await harness.run(
-          `integrate codex --project ${TEST_PROJECT} --non-interactive`,
-          {
-            extraEnv: {
-              SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
-              SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
-            },
-          },
-        );
-
-        expect(result.exitCode).toBe(0);
-        const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
-        const commands = hooks.hooks?.PostToolUse?.flatMap(
-          (entry) => entry.hooks?.map((hook) => hook.command) ?? [],
-        );
-        expect(commands?.some((command) => command?.includes('other-tool'))).toBe(true);
-        expect(commands?.some((command) => command?.includes('sonar-sqaa'))).toBe(true);
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'writes ~/.codex/AGENTS.md (and nothing project-side) at global scope without Vortex entitlement, showing the promotion',
-      async () => {
-        const result = await harness.run('integrate codex -g --non-interactive');
-
-        expect(result.exitCode).toBe(0);
-        expect(harness.cwd.exists(...PROJECT_AGENTS_MD_DIRS)).toBe(false);
-        const body = harness.userHome.file(...GLOBAL_AGENTS_MD_DIRS).asText();
-        expect(body).toContain(SECRETS_HEADING);
-        expect(body).not.toContain(SQAA_HEADING);
-        const output = `${result.stdout}\n${result.stderr}`;
-        expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'on global install, writes SQAA into the global AGENTS.md and nothing project-side when the org is entitled',
-      async () => {
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('cloud-token')
-          .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
-          .withVortexEntitlement(TEST_ORG, 'test-uuid-1234')
-          .withProject(TEST_PROJECT)
-          .start();
-        const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
-        harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
-
-        const result = await harness.run('integrate codex -g --non-interactive', {
+        const result = await harness.run('integrate codex --non-interactive', {
           extraEnv: {
             SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
             SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
@@ -688,26 +546,12 @@ describe('integrate codex', () => {
         });
 
         expect(result.exitCode).toBe(0);
-        expect(harness.cwd.exists(...PROJECT_AGENTS_MD_DIRS)).toBe(false);
-
-        const globalBody = harness.userHome.file(...GLOBAL_AGENTS_MD_DIRS).asText();
-        expect(globalBody).toContain(SECRETS_HEADING);
-        expect(globalBody).toContain(SQAA_HEADING);
-
-        // The post-tool-use hook lands under the global root too.
-        const sqaaScript = harness.userHome.file(
-          ...SQAA_SCRIPT_DIRS,
-          hookScriptName('posttool-sqaa'),
-        );
-        expect(sqaaScript.exists()).toBe(true);
-        expect(sqaaScript.asText()).toContain('sonar hook codex-post-tool-use');
         const hooks: CodexHooksFile = harness.userHome.file(...HOOKS_JSON_DIRS).asJson();
-        expect(
-          hooks.hooks?.PostToolUse?.find((e) =>
-            e.hooks?.some((h) => h.command?.includes('sonar-sqaa')),
-          )?.matcher,
-        ).toBe('apply_patch');
-        expect(harness.cwd.exists(...SQAA_SCRIPT_DIRS)).toBe(false);
+        const commands = hooks.hooks?.PostToolUse?.flatMap(
+          (entry) => entry.hooks?.map((hook) => hook.command) ?? [],
+        );
+        expect(commands?.some((command) => command?.includes('other-tool'))).toBe(true);
+        expect(commands?.some((command) => command?.includes('sonar-sqaa'))).toBe(true);
       },
       { timeout: 30000 },
     );
@@ -719,9 +563,8 @@ describe('integrate codex', () => {
       async () => {
         // Default beforeEach is on-premise with no entitlement stubs, so Vortex
         // is not_applicable. The three remaining features
-        // (secrets hook, secrets instructions, MCP) each ask after the scope prompt.
+        // (secrets hook, secrets instructions, MCP) each ask.
         const session = harness.runInteractive('integrate codex');
-        await session.accept('Where should SonarQube be integrated?');
         await session.accept('Install secret scanning hooks?');
         await session.accept('Install secrets-on-read instructions?');
         await session.accept('Install MCP server?');
@@ -737,14 +580,14 @@ describe('integrate codex', () => {
         expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
         // Accepted features are installed on disk.
         expect(
-          harness.cwd.file(...PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')).exists(),
+          harness.userHome.file(...PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')).exists(),
         ).toBe(true);
-        expect(harness.cwd.exists(...HOOKS_JSON_DIRS)).toBe(true);
-        const agentsMd = harness.cwd.file(...PROJECT_AGENTS_MD_DIRS).asText();
+        expect(harness.userHome.exists(...HOOKS_JSON_DIRS)).toBe(true);
+        const agentsMd = harness.userHome.file(...GLOBAL_AGENTS_MD_DIRS).asText();
         expect(agentsMd).toContain(SECRETS_HEADING);
         // No SQAA marker block was written (Server hubs absent).
         expect(agentsMd).not.toContain(SQAA_HEADING);
-        expect(harness.cwd.exists(...CONFIG_TOML_DIRS)).toBe(true);
+        expect(harness.userHome.exists(...CONFIG_TOML_DIRS)).toBe(true);
         // Declarative state records only the accepted features.
         expect(findCodexFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
         expect(findCodexFeature(harness, 'secrets-instructions')).toBeDefined();
@@ -760,7 +603,7 @@ describe('integrate codex', () => {
       [false, true, false],
       [false, false, false],
     ])(
-      'prints a non-interactive hint with --non-interactive plus -p/-g examples only for a detected AI agent without --non-interactive (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
+      'prints a non-interactive hint only for a detected AI agent without --non-interactive (isAgent=%s, isInteractive=%s, expectedShownPrompt=%s)',
       async (isAgent, isInteractive, expectedShownPrompt) => {
         const extraEnv: Record<string, string> = isAgent
           ? { CODEX_SANDBOX_NETWORK_DISABLED: '1' }
@@ -768,7 +611,6 @@ describe('integrate codex', () => {
         let result: CliResult;
         if (isInteractive) {
           const session = harness.runInteractive('integrate codex', { extraEnv });
-          await session.accept('Where should SonarQube be integrated?');
           await session.accept('Install secret scanning hooks?');
           await session.accept('Install secrets-on-read instructions?');
           await session.accept('Install MCP server?');
@@ -779,11 +621,7 @@ describe('integrate codex', () => {
 
         expect(result.exitCode).toBe(0);
         if (expectedShownPrompt) {
-          expectAgentPromptHint(
-            result.stdout,
-            'sonar integrate codex --non-interactive',
-            'sonar integrate codex --non-interactive -g',
-          );
+          expectAgentPromptHint(result.stdout, 'sonar integrate codex --non-interactive');
         } else {
           expectNoAgentPromptHint(result.stdout);
         }
@@ -795,7 +633,6 @@ describe('integrate codex', () => {
       'skips a feature when the user declines its prompt',
       async () => {
         const session = harness.runInteractive('integrate codex');
-        await session.accept('Where should SonarQube be integrated?');
         await session.decline('Install secret scanning hooks?');
         await session.accept('Install secrets-on-read instructions?');
         await session.accept('Install MCP server?');
@@ -803,47 +640,14 @@ describe('integrate codex', () => {
 
         expect(result.exitCode).toBe(0);
         // Hook was declined: no hook artifacts and no state entry.
-        expect(harness.cwd.exists('.codex', 'hooks')).toBe(false);
-        expect(harness.cwd.exists(...HOOKS_JSON_DIRS)).toBe(false);
+        expect(harness.userHome.exists('.codex', 'hooks')).toBe(false);
+        expect(harness.userHome.exists(...HOOKS_JSON_DIRS)).toBe(false);
         expect(findCodexFeature(harness, 'sonar-secrets-hooks')).toBeUndefined();
         // The accepted features are still installed.
-        expect(harness.cwd.file(...PROJECT_AGENTS_MD_DIRS).asText()).toContain(SECRETS_HEADING);
-        expect(harness.cwd.exists(...CONFIG_TOML_DIRS)).toBe(true);
+        expect(harness.userHome.file(...GLOBAL_AGENTS_MD_DIRS).asText()).toContain(SECRETS_HEADING);
+        expect(harness.userHome.exists(...CONFIG_TOML_DIRS)).toBe(true);
         expect(findCodexFeature(harness, 'secrets-instructions')).toBeDefined();
         expect(findCodexFeature(harness, 'mcp-server')).toBeDefined();
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'asks a custom question for secrets instructions when global instructions already exist',
-      async () => {
-        // Seed a previously-installed global secrets-instructions feature so the
-        // state probe (isFeatureInstalledGloballyForProject) fires for the project run.
-        harness
-          .state()
-          .withInstalledIntegrationFeature(codexIntegration, 'secrets-instructions', 'global');
-
-        // Project install hits the state-probe branch: the secrets-instructions
-        // feature asks a custom "project-local copy" question instead of the
-        // default one.
-        const session = harness.runInteractive('integrate codex');
-        await session.accept('Where should SonarQube be integrated?');
-        await session.accept('Install secret scanning hooks?');
-        await session.accept(
-          'Global Codex instructions already exist. Do you also want to create a project-local copy for this repo?',
-        );
-        await session.accept('Install MCP server?');
-        const result = await session.waitFinish();
-
-        expect(result.exitCode).toBe(0);
-        const output = `${result.stdout}\n${result.stderr}`;
-        expect(output).toContain(
-          'Global Codex instructions already exist. Do you also want to create a project-local copy for this repo?',
-        );
-        // Accepting writes the project-local copy and records the project-scope feature.
-        expect(harness.cwd.file(...PROJECT_AGENTS_MD_DIRS).asText()).toContain(SECRETS_HEADING);
-        expect(findCodexFeature(harness, 'secrets-instructions', 'project')).toBeDefined();
       },
       { timeout: 30000 },
     );
@@ -863,7 +667,7 @@ describe('integrate codex', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'cloud-token', testOrg);
 
-        const session = harness.runInteractive(`integrate codex --project ${testProject}`, {
+        const session = harness.runInteractive('integrate codex', {
           extraEnv: {
             SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
             SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
@@ -880,7 +684,7 @@ describe('integrate codex', () => {
         const output = `${result.stdout}\n${result.stderr}`;
         expect(output).toContain('Install Vortex?');
         expect(
-          harness.cwd.file(...SQAA_SCRIPT_DIRS, hookScriptName('posttool-sqaa')).exists(),
+          harness.userHome.file(...SQAA_SCRIPT_DIRS, hookScriptName('posttool-sqaa')).exists(),
         ).toBe(true);
         expect(
           findInstalledSubfeature(harness, 'codex', VORTEX_FEATURE_ID, SQAA_HOOK_FEATURE_ID),

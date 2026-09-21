@@ -60,7 +60,7 @@ describe('integrate claude — Vortex entitlement', () => {
 
   /** SQAA and CAG ship together as Vortex, so one probe covers both. */
   function isVortexInstalled(): boolean {
-    const settingsFile = harness.cwd.file('.claude', 'settings.json');
+    const settingsFile = harness.userHome.file('.claude', 'settings.json');
     const sqaaHook = settingsFile.exists()
       ? Boolean(settingsFile.asJson().hooks?.PostToolUse)
       : false;
@@ -74,19 +74,19 @@ describe('integrate claude — Vortex entitlement', () => {
           ),
       ),
     );
-    return sqaaHook && recordedCag && isVortexHookInstalled(harness.cwd, 'claude');
+    return sqaaHook && recordedCag && isVortexHookInstalled(harness.userHome, 'claude');
   }
 
   /** Hook entries are owned by the marker appearing in their command (see `ownsHookEntry`). */
   function postToolUseHooks(): string {
-    const settingsFile = harness.cwd.file('.claude', 'settings.json');
+    const settingsFile = harness.userHome.file('.claude', 'settings.json');
     return settingsFile.exists()
       ? JSON.stringify(settingsFile.asJson().hooks?.PostToolUse ?? [])
       : '';
   }
 
   function sqaaHookScriptExists(): boolean {
-    return harness.cwd.exists(
+    return harness.userHome.exists(
       '.claude',
       'hooks',
       'sonar-sqaa',
@@ -180,7 +180,9 @@ describe('integrate claude — Vortex entitlement', () => {
 
       expect(result.exitCode).toBe(0);
       expect(isVortexInstalled()).toBe(true);
-      expect(harness.cwd.file('CLAUDE.md').asText()).toContain('# Vortex analysis protocol');
+      expect(harness.userHome.file('.claude', 'CLAUDE.md').asText()).toContain(
+        '# Vortex analysis protocol',
+      );
     },
     { timeout: 30000 },
   );
@@ -282,7 +284,9 @@ describe('integrate claude — Vortex entitlement', () => {
 
       expect(result.exitCode).toBe(0);
       expect(isVortexInstalled()).toBe(true);
-      expect(harness.cwd.file('CLAUDE.md').asText()).toContain('# Vortex analysis protocol');
+      expect(harness.userHome.file('.claude', 'CLAUDE.md').asText()).toContain(
+        '# Vortex analysis protocol',
+      );
       expect(postToolUseHooks()).toContain('sonar-sqaa');
       expect(sqaaHookScriptExists()).toBe(true);
     },
@@ -304,8 +308,8 @@ describe('integrate claude — Vortex entitlement', () => {
 
       expect(result.exitCode).toBe(0);
       expect(isVortexInstalled()).toBe(false);
-      expectVortexHookAbsent(harness.cwd, 'claude');
-      expect(harness.cwd.file('CLAUDE.md').exists()).toBe(false);
+      expectVortexHookAbsent(harness.userHome, 'claude');
+      expect(harness.userHome.file('.claude', 'CLAUDE.md').exists()).toBe(false);
       expect(postToolUseHooks()).not.toContain('sonar-sqaa');
       expect(sqaaHookScriptExists()).toBe(false);
       expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_SERVER_UNAVAILABLE_MESSAGE);
@@ -332,8 +336,8 @@ describe('integrate claude — Vortex entitlement', () => {
       expect(isVortexInstalled()).toBe(false);
       expect(postToolUseHooks()).not.toContain('sonar-sqaa');
       expect(sqaaHookScriptExists()).toBe(false);
-      expect(harness.cwd.file('CLAUDE.md').exists()).toBe(false);
-      expectVortexHookAbsent(harness.cwd, 'claude');
+      expect(harness.userHome.file('.claude', 'CLAUDE.md').exists()).toBe(false);
+      expectVortexHookAbsent(harness.userHome, 'claude');
       expect(`${repointed.stdout}\n${repointed.stderr}`).toContain(VORTEX_UNINSTALL_MESSAGE);
     },
     { timeout: 30000 },
@@ -372,9 +376,9 @@ describe('integrate claude — Vortex entitlement', () => {
           (dependency) => dependency.id === CONTEXT_AUGMENTATION_BINARY_NAME,
         ),
       ).toBe(true);
-      expectVortexHookAbsent(harness.cwd, 'claude');
+      expectVortexHookAbsent(harness.userHome, 'claude');
       expect(
-        harness.cwd.file('.claude', 'settings.json').asJson().hooks?.PostToolUse,
+        harness.userHome.file('.claude', 'settings.json').asJson().hooks?.PostToolUse,
       ).toBeUndefined();
     },
     { timeout: 60000 },

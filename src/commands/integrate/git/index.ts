@@ -28,7 +28,6 @@ import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { GLOBAL_HOOKS_DIR } from '@/core/config-constants.ts';
 import { installIntegration } from '@/core/framework/features';
-import { findGitRoot } from '@/core/host/git/discover.ts';
 import { GitRepo, resolveGitHooksDir } from '@/core/host/git/hooks.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import { discoverProject } from '@/core/project-info.ts';
@@ -36,9 +35,7 @@ import { yellow } from '@/core/ui/colors.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 import { type Console, phaseItem } from '@/core/ui/console.ts';
 
-import { resolveIntegrateScope } from '../_common/integrate-scope.ts';
 import { recordIntegrationConfigured } from '../_common/integrate-telemetry.ts';
-import { printGitPreflightSummary } from '../_common/preflight-summary.ts';
 import { supportedIntegrations } from '../index.ts';
 import type { GitHookType, IntegrateGitOptions } from './options.ts';
 import {
@@ -154,10 +151,6 @@ export async function integrateGit(
   const { auth, console } = ctx;
   validateHookOption(options.hook);
 
-  if (options.global && options.project) {
-    throw new InvalidOptionError('-p is not supported with --global.');
-  }
-
   if (!options.nonInteractive) {
     printAgentNonInteractiveAlternativeHint(console, 'sonar integrate git --non-interactive');
   }
@@ -168,39 +161,11 @@ export async function integrateGit(
   );
   console.info(yellow('Some scan types may be unavailable for certain hook types.'));
 
-  if (options.global) {
-    return integrateGitGlobal(options, auth, ctx);
-  }
-
-  const { gitRoot, isGit } = findGitRoot(process.cwd());
-  if (isGit) {
-    await printGitPreflightSummary(gitRoot, console);
-    console.blank();
-  }
-
-  const scope = await resolveIntegrateScope({
-    ...options,
-    projectKey: options.project,
-    projectRoot: isGit ? gitRoot : process.cwd(),
-    console,
-  });
-  if (scope === 'global') {
-    return integrateGitGlobal(options, auth, ctx);
-  }
-
-  if (!isGit) {
-    throw new CommandFailedError('No git repository found.', {
-      remediationHint:
-        'Run this command from inside a git repository, or use --global to install a global hook.',
-    });
-  }
-
-  const resolvedOptions = await resolveProjectKey(options, gitRoot, auth, console);
-
-  await installGitFeatures(resolvedOptions, gitRoot, 'project', auth, ctx);
+  return integrateGitGlobal(options, auth, ctx);
 }
 
-async function resolveProjectKey(
+/** Unused by the global-only flow above; kept so a future project-scoped install path can resolve a project key the same way. */
+export async function resolveProjectKey(
   options: IntegrateGitOptions,
   root: string,
   auth: ResolvedAuth,
