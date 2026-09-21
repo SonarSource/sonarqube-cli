@@ -75,9 +75,22 @@ function shouldLog(level: LogLevel): boolean {
   return LOG_LEVELS[level] >= LOG_LEVELS[getLogLevel()];
 }
 
-function serializeArgs(args: unknown[]): string {
+export function serializeArgs(args: unknown[]): string {
   if (args.length === 0) return '';
-  return ' ' + args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+  return (
+    ' ' +
+    args
+      .map((arg) => {
+        if (arg instanceof Error) {
+          const summary = `${arg.name}: ${arg.message}`;
+          return arg.stack?.includes(summary)
+            ? arg.stack
+            : [summary, arg.stack].filter(Boolean).join('\n');
+        }
+        return typeof arg === 'string' ? arg : JSON.stringify(arg);
+      })
+      .join(' ')
+  );
 }
 
 function writeToFile(level: LogLevel, message: string, args: unknown[]): void {
