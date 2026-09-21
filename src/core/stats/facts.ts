@@ -30,12 +30,8 @@ import { recordStatsEvent } from './store.ts';
 
 export { dedupeAgainstSeen, upsertRuleMessages } from './store.ts';
 
-/**
- * Base envelope every analyzer's `CliAnalysisCompleted` telemetry fact already carries.
- * `AnalysisCompletedPayload` (src/commands/analyze/analysis-completed.ts) satisfies this
- * structurally — not imported, since src/core never imports from src/commands elsewhere
- * in this codebase.
- */
+/** Envelope every analyzer's `CliAnalysisCompleted` fact carries; satisfied structurally
+ *  by `AnalysisCompletedPayload`, not imported (src/core can't import src/commands). */
 export interface AnalysisFactEnvelope {
   caller_command: string;
   analyzer: StatsAnalyzer;
@@ -56,10 +52,6 @@ export interface AnalyzerStatsFactPayload {
   details: AnalyzerStatsDetails;
 }
 
-// Caller-command -> run-trigger classification. Deliberately not imported from
-// SECRETS_CALLER_COMMANDS / SQAA_*_CALLER_COMMAND / SCA_CALLER_COMMANDS (all under
-// src/commands/analyze/): src/core never imports from src/commands elsewhere in this
-// codebase. Keep this list in sync by hand with those constants.
 const MANUAL_CALLER_COMMANDS: ReadonlySet<string> = new Set([
   'analyze',
   'analyze secrets',
@@ -72,8 +64,6 @@ function resolveTrigger(callerCommand: string): StatsTrigger {
   return MANUAL_CALLER_COMMANDS.has(callerCommand) ? 'manual' : 'hooks';
 }
 
-// Deliberately not gated on telemetry consent — CLI-1114 will add a dedicated stats
-// on/off flag around this call; do not reintroduce `isTelemetryEnabled(state)` here.
 export function commitStatsFacts(facts: readonly StatsFact[]): void {
   for (const fact of facts) {
     const { envelope, details } = fact.payload as AnalyzerStatsFactPayload;
@@ -95,14 +85,8 @@ export function commitStatsFacts(facts: readonly StatsFact[]): void {
   }
 }
 
-/**
- * Records a stats event from an analyzer's own `CliAnalysisCompleted` telemetry fact —
- * `caller_command`/`analyzer`/`exit_code`/`scan_duration_ms` are read straight off it, so
- * callers never rebuild that envelope by hand. `details` carries only what stats needs on
- * top of telemetry: the deduped/allowlisted finding counts, computed by each analyzer's
- * own dedup callback (secrets fingerprints against the ledger; SQAA/SCA pass raw counts,
- * no dedup this iteration — see the CLI-1112 ADR).
- */
+/** Records a stats event from an analyzer's own telemetry fact — the envelope is read off
+ *  it, so callers only ever supply `details` (their deduped/allowlisted finding counts). */
 export function recordAnalyzerStats(
   ctx: CommandInvocationContext,
   fact: TelemetryFact<AnalysisFactEnvelope>,

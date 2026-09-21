@@ -175,15 +175,8 @@ export function buildSecretsFingerprint(
   return `${ruleKey}|${file ?? ''}|${startLine ?? ''}|${startColumn ?? ''}`;
 }
 
-// Upserts rule messages for every issue below, not just newly-deduped ones — rule_descriptions
-// is a lookup table, not a per-run count, so an already-seen finding's message still belongs.
-//
-// `source` disambiguates issues that carry no `file` (every `--input`/stdin scan): without it,
-// the same rule at the same line/column in two different prompts or texts collapses onto the
-// same fingerprint, and the second one is wrongly treated as already seen. Callers that scan a
-// known file through stdin (Cursor hooks) pass that path; callers scanning free-form text
-// (prompt-submit hooks) pass a hash of it instead of the raw text, so ledger rows never carry
-// prompt content.
+// rule_descriptions is a lookup, so upsert runs for every issue, not just newly-deduped ones.
+// `source` disambiguates issues with no `file`, so different --input scans don't collide.
 export function summarizeNewSecretsFindings(
   issues: readonly SecretsJsonIssue[],
   source?: string,
@@ -356,10 +349,7 @@ async function handleCheckCommand(
   const callerCommand = options.telemetryCallerCommand ?? SECRETS_CALLER_COMMANDS.analyzeSecrets;
 
   if (options.stdin) {
-    // Interactive --stdin (`stdio: 'inherit'`) never captures the piped bytes in this process,
-    // so there is no content to hash for dedup. Each manual invocation is its own deliberate
-    // act, not a hook re-scanning the same content — a fresh source per run means findings are
-    // never wrongly suppressed as "already seen".
+    // Interactive stdin can't hash piped bytes; a fresh source per run is fine here.
     const { result, parsed } = await scanAndEmitSecrets(
       callerCommand,
       auth,

@@ -62,9 +62,7 @@ const MIGRATIONS: StatsMigration[] = [
 ];
 
 export function applyMigrations(db: Database, migrations: readonly StatsMigration[]): void {
-  // BEGIN IMMEDIATE (not the default deferred transaction) takes the write lock before
-  // reading user_version, so a second process racing to create a brand-new db blocks here
-  // instead of reading the same stale version and colliding on CREATE TABLE.
+  // .immediate(): avoids two racing processes reading the same stale user_version.
   db.transaction(() => {
     const currentVersion =
       db.prepare<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version ?? 0;

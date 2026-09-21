@@ -61,6 +61,12 @@ export class TelemetryFact<TPayload = unknown> {
   }
 }
 
+/**
+ * Buffered stats observation recorded by a command handler, mirroring {@link TelemetryFact}.
+ *
+ * @param payload Business data recorded into the local stats ledger at `postAction`; typed
+ *   at the producer, opaque here.
+ */
 export class StatsFact<TPayload = unknown> {
   constructor(readonly payload: TPayload) {}
 }
@@ -163,6 +169,7 @@ export class CommandInvocationContext {
     return this.facts.slice();
   }
 
+  /** Record stats facts for `postAction` drain. */
   recordStats(...facts: StatsFact[]): void {
     if (facts.length === 0) {
       return;
@@ -170,6 +177,7 @@ export class CommandInvocationContext {
     this.statsFactsBuffer.push(...facts);
   }
 
+  /** Snapshot of stats facts recorded during this invocation. */
   statsFacts(): readonly StatsFact[] {
     return this.statsFactsBuffer.slice();
   }

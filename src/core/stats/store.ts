@@ -24,11 +24,7 @@ import logger from '@/core/observability/logger.ts';
 
 import { openStatsDb } from './db.ts';
 
-// Same union as AnalysisTelemetryAnalyzer (src/commands/analyze/analysis-completed.ts).
-// Not imported from there: src/core never imports from src/commands elsewhere in this
-// codebase. Widening this is always safe; adding a value to AnalysisTelemetryAnalyzer
-// without adding it here is not — structural typing catches that as a compile error at
-// every recordAnalyzerStats() call site (facts.ts), so drift in that direction can't merge.
+// Mirrors AnalysisTelemetryAnalyzer; not imported — drift is a compile error in facts.ts instead.
 export type StatsAnalyzer = 'sonar-secrets' | 'sqaa' | 'sca-scanner-cli';
 
 export type StatsTrigger = 'hooks' | 'manual';
@@ -48,9 +44,7 @@ export interface StatsEventEnvelope {
   durationMs?: number | null;
 }
 
-// Mirrors appendTelemetryEvent's best-effort local append: a locked/read-only/corrupt-on-retry
-// ledger must never fail the analyzer command that triggered the write, so every failure here
-// (open or write) is logged and swallowed in favor of the caller's fallback.
+// Best-effort like appendTelemetryEvent: a ledger failure must never fail the caller's command.
 function withDb<T>(fn: (db: Database) => T, fallback: T): T {
   let db: Database;
   try {
@@ -118,10 +112,7 @@ export function dedupeAgainstSeen(scope: string, fingerprints: readonly string[]
 
     const notSeenBefore = new Set<string>();
     const dedupedInThisCall = new Set<string>();
-    // IMMEDIATE takes the write lock up front. A deferred transaction here would open on
-    // the SELECT and only try to upgrade to a writer on the first INSERT — which, in WAL
-    // mode, fails with SQLITE_BUSY (snapshot conflict) if another connection committed
-    // since the read, a case the busy_timeout handler does not cover.
+    // .immediate(): avoids an uncoverable SQLITE_BUSY on a deferred writer upgrade.
     db.transaction(() => {
       for (const fingerprint of fingerprints) {
         if (dedupedInThisCall.has(fingerprint)) {

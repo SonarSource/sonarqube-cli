@@ -49,8 +49,7 @@ export function secretsFoundInScan(result: { exitCode: number | null }): boolean
 }
 
 export async function denyCursor(ctx: CommandInvocationContext, message: string): Promise<never> {
-  // process.exit() below bypasses Commander's postAction hook, so the stats drain that
-  // normally happens there must run here instead — otherwise this run's StatsFact is lost.
+  // process.exit() bypasses postAction, so drain stats here or this run's StatsFact is lost.
   commitStatsFacts(ctx.statsFacts());
   // process.stdout.write() is buffered and async on pipes; calling process.exit() immediately
   // after can truncate the deny JSON before Cursor reads it. Awaiting the write callback
