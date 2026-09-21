@@ -21,9 +21,10 @@
 import { join } from 'node:path';
 
 import { Database } from 'bun:sqlite';
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 
 import { getStatsDir, STATS_DB_FILENAME } from '@/core/config-constants.ts';
+import * as dbModule from '@/core/stats/db.ts';
 import { dedupeAgainstSeen, recordStatsEvent, upsertRuleMessages } from '@/core/stats/store.ts';
 
 import { useTempSonarUserHome } from './_helpers.ts';
@@ -144,5 +145,55 @@ describe('dedupeAgainstSeen', () => {
   it('keeps different scopes independent', () => {
     expect(dedupeAgainstSeen('scope-x', ['shared'])).toEqual(new Set(['shared']));
     expect(dedupeAgainstSeen('scope-y', ['shared'])).toEqual(new Set(['shared']));
+  });
+});
+
+describe('withDb: best-effort like telemetry, never breaks the calling command', () => {
+  it('recordStatsEvent swallows a ledger-open failure instead of throwing', () => {
+    const spy = spyOn(dbModule, 'openStatsDb').mockImplementation(() => {
+      throw new Error('disk full');
+    });
+
+    expect(() =>
+      recordStatsEvent(
+        { callerCommand: 'analyze', exitCode: 0, callerAgent: 'claude', runTrigger: 'manual' },
+        { eventClass: 'analyzer', analyzer: 'sonar-secrets', findingsCount: 0 },
+      ),
+    ).not.toThrow();
+
+    spy.mockRestore();
+  });
+
+  it('upsertRuleMessages swallows a ledger-open failure instead of throwing', () => {
+    const spy = spyOn(dbModule, 'openStatsDb').mockImplementation(() => {
+      throw new Error('disk full');
+    });
+
+    expect(() => upsertRuleMessages({ 'java:S2259': 'Null pointer dereference' })).not.toThrow();
+
+    spy.mockRestore();
+  });
+
+  it('dedupeAgainstSeen falls back to "everything is new" on a ledger-open failure', () => {
+    const spy = spyOn(dbModule, 'openStatsDb').mockImplementation(() => {
+      throw new Error('disk full');
+    });
+
+    expect(dedupeAgainstSeen('scope', ['fp1', 'fp2'])).toEqual(new Set(['fp1', 'fp2']));
+
+    spy.mockRestore();
+  });
+
+  it('closes the connection and swallows the error when the write itself fails', () => {
+    const closeSpy = spyOn(Database.prototype, 'close');
+    const prepareSpy = spyOn(Database.prototype, 'prepare').mockImplementation(() => {
+      throw new Error('malformed database schema');
+    });
+
+    expect(() => upsertRuleMessages({ 'java:S2259': 'Null pointer dereference' })).not.toThrow();
+    expect(closeSpy).toHaveBeenCalled();
+
+    prepareSpy.mockRestore();
+    closeSpy.mockRestore();
   });
 });

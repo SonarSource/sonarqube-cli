@@ -20,8 +20,11 @@
 
 import type { Database } from 'bun:sqlite';
 
+import logger from '@/core/observability/logger.ts';
+
 import { openStatsDb } from './db.ts';
 
+// Mirrors AnalysisTelemetryAnalyzer; not imported — drift is a compile error in facts.ts instead.
 export type StatsAnalyzer = 'sonar-secrets' | 'sqaa' | 'sca-scanner-cli';
 
 export type StatsTrigger = 'hooks' | 'manual';
@@ -41,10 +44,20 @@ export interface StatsEventEnvelope {
   durationMs?: number | null;
 }
 
-function withDb<T>(fn: (db: Database) => T): T {
-  const db = openStatsDb();
+// Best-effort like appendTelemetryEvent: a ledger failure must never fail the caller's command.
+function withDb<T>(fn: (db: Database) => T, fallback: T): T {
+  let db: Database;
+  try {
+    db = openStatsDb();
+  } catch (error) {
+    logger.debug(`stats ledger unavailable: ${(error as Error).message}`);
+    return fallback;
+  }
   try {
     return fn(db);
+  } catch (error) {
+    logger.debug(`stats ledger write failed: ${(error as Error).message}`);
+    return fallback;
   } finally {
     db.close();
   }
@@ -66,7 +79,7 @@ export function recordStatsEvent(envelope: StatsEventEnvelope, details: StatsEve
       envelope.durationMs ?? null,
       JSON.stringify(details),
     );
-  });
+  }, undefined);
 }
 
 export function upsertRuleMessages(messages: Readonly<Record<string, string>>): void {
@@ -82,7 +95,7 @@ export function upsertRuleMessages(messages: Readonly<Record<string, string>>): 
         upsert.run(ruleKey, message, timestampMs);
       }
     })();
-  });
+  }, undefined);
 }
 
 export function dedupeAgainstSeen(scope: string, fingerprints: readonly string[]): Set<string> {
@@ -99,6 +112,7 @@ export function dedupeAgainstSeen(scope: string, fingerprints: readonly string[]
 
     const notSeenBefore = new Set<string>();
     const dedupedInThisCall = new Set<string>();
+    // .immediate(): avoids an uncoverable SQLITE_BUSY on a deferred writer upgrade.
     db.transaction(() => {
       for (const fingerprint of fingerprints) {
         if (dedupedInThisCall.has(fingerprint)) {
@@ -111,7 +125,7 @@ export function dedupeAgainstSeen(scope: string, fingerprints: readonly string[]
         }
         upsertSeen.run(scope, fingerprint, timestampMs, timestampMs);
       }
-    })();
+    }).immediate();
     return notSeenBefore;
-  });
+  }, new Set(fingerprints));
 }

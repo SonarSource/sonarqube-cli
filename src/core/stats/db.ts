@@ -38,8 +38,9 @@ export function isCorruptionError(error: unknown): boolean {
 function openAndMigrate(dbPath: string): Database {
   const db = new Database(dbPath, { create: true });
   try {
-    db.run('PRAGMA journal_mode = WAL');
+    // Must precede journal_mode=WAL: the WAL conversion's brief lock isn't covered otherwise.
     db.run('PRAGMA busy_timeout = 5000');
+    db.run('PRAGMA journal_mode = WAL');
     applyStatsMigrations(db);
     return db;
   } catch (error) {

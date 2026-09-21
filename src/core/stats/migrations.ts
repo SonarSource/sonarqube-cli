@@ -62,19 +62,20 @@ const MIGRATIONS: StatsMigration[] = [
 ];
 
 export function applyMigrations(db: Database, migrations: readonly StatsMigration[]): void {
-  const currentVersion =
-    db.prepare<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version ?? 0;
+  // .immediate(): avoids two racing processes reading the same stale user_version.
+  db.transaction(() => {
+    const currentVersion =
+      db.prepare<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version ?? 0;
 
-  const pending = migrations
-    .filter((migration) => migration.version > currentVersion)
-    .sort((a, b) => a.version - b.version);
+    const pending = migrations
+      .filter((migration) => migration.version > currentVersion)
+      .sort((a, b) => a.version - b.version);
 
-  for (const migration of pending) {
-    db.transaction(() => {
+    for (const migration of pending) {
       migration.up(db);
       db.run(`PRAGMA user_version = ${migration.version}`);
-    })();
-  }
+    }
+  }).immediate();
 }
 
 export function applyStatsMigrations(db: Database): void {

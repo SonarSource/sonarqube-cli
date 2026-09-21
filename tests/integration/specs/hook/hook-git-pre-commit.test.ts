@@ -32,6 +32,7 @@ import {
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
 
+import { readStatsEvents } from '../../../_common/stats-helpers.ts';
 import { readCommandEvents } from '../../../_common/telemetry-helpers.ts';
 import { TestHarness } from '../../harness';
 import { initGitRepo, stageFile } from './git-test-helpers';
@@ -145,6 +146,24 @@ describe('sonar hook git-pre-commit', () => {
       const result = await harness.run('hook git-pre-commit');
 
       expect(result.exitCode).toBe(1);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'records the stats event with run_trigger "hooks", unlike a manual `analyze secrets` run',
+    async () => {
+      initGitRepo(harness.cwd.path);
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(FAKE_SERVER, VALID_TOKEN);
+      stageFile(harness.cwd.path, 'secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+
+      const result = await harness.run('hook git-pre-commit');
+
+      expect(result.exitCode).toBe(1);
+      const [event] = readStatsEvents(harness.sonarUserHome.path);
+      expect(event.caller_command).toBe('git-pre-commit');
+      expect(event.run_trigger).toBe('hooks');
     },
     { timeout: 30000 },
   );

@@ -35,11 +35,15 @@ import {
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
 
+import { readStatsEvents } from '../../../_common/stats-helpers.ts';
 import { TestHarness } from '../../harness';
 
 // Hardcoded test token — intentional fixture for secret detection, not a real credential
 // sonar-ignore-next-line S6769
 const GITHUB_TEST_TOKEN = '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';
+// Second fixture, same length/prefix position as GITHUB_TEST_TOKEN above (only the value differs)
+// sonar-ignore-next-line S6769
+const OTHER_TEST_TOKEN = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef1234';
 
 // Unreachable server — binary handles connection-refused gracefully and proceeds with scan
 const FAKE_SERVER = 'http://localhost:19999';
@@ -75,6 +79,35 @@ describe('sonar hook claude-prompt-submit', () => {
       const output = JSON.parse(blockLine ?? '{}');
       expect(output.decision).toBe('block');
       expect(output.reason).toContain('secrets');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'records a separate stats finding for a different prompt with a secret at the same position',
+    async () => {
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(FAKE_SERVER, 'fake-token');
+
+      // Same rule, same line/column (identical "my token is " prefix) — different prompts.
+      // sonar-secrets reports no `file` for --input scans, so without hashing the prompt text
+      // as a dedup source, the second scan would wrongly collide with the first and report 0.
+      const first = await harness.runWithStdin(
+        'hook claude-prompt-submit',
+        JSON.stringify({ prompt: `my token is ${GITHUB_TEST_TOKEN}` }),
+      );
+      expect(first.exitCode).toBe(0);
+
+      const second = await harness.runWithStdin(
+        'hook claude-prompt-submit',
+        JSON.stringify({ prompt: `my token is ${OTHER_TEST_TOKEN}` }),
+      );
+      expect(second.exitCode).toBe(0);
+
+      const events = readStatsEvents(harness.sonarUserHome.path);
+      expect(events).toHaveLength(2);
+      expect(events[0].parsedDetails.findingsCount).toBe(1);
+      expect(events[1].parsedDetails.findingsCount).toBe(1);
     },
     { timeout: 30000 },
   );
