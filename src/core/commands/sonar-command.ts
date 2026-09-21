@@ -201,6 +201,7 @@ class SonarHelp extends Help {
  *  - addOption()           accepts {@link SonarOption} only; omits Alpha/Private Beta options
  *                          the caller is not entitled to use
  *  - commandAndSubcommand() top-level command + remainder (passthrough override when set)
+ *  - describeInvocationArguments() flat description of flags/args used, for telemetry
  */
 export class SonarCommand extends Command {
   // Valid because Commander declares `options` as readonly (covariant), so we can narrow Option to SonarOption.
@@ -344,6 +345,38 @@ export class SonarCommand extends Command {
   setPassthroughSubcommand(subcommand: string | null): this {
     this._passthroughSubcommand = subcommand;
     return this;
+  }
+
+  /**
+   * Flat, space-separated description of the flags/options/positional
+   * arguments actually used in this invocation, for the CliCommandExecuted
+   * `arguments` telemetry field. Only this command's own declared options and
+   * arguments are considered — never a parent's or a child's.
+   *
+   * Never records a free-form value: a `.choices()`-restricted option is
+   * rendered as `--flag=value`, everything else (boolean flags, free-valued
+   * options, positional arguments) by name only. `null` when nothing was used.
+   */
+  describeInvocationArguments(): string | null {
+    const tokens: string[] = [];
+
+    for (const option of this.options) {
+      if (this.getOptionValueSource(option.attributeName()) !== 'cli') {
+        continue;
+      }
+      const flag = option.long ?? option.flags;
+      tokens.push(
+        option.argChoices ? `${flag}=${this.getOptionValue(option.attributeName())}` : flag,
+      );
+    }
+
+    this.registeredArguments.forEach((argument, index) => {
+      if (index < this.args.length) {
+        tokens.push(argument.name());
+      }
+    });
+
+    return tokens.length > 0 ? tokens.join(' ') : null;
   }
 
   /**

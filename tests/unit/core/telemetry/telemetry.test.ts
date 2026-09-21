@@ -37,7 +37,7 @@ import {
   ENV_TOKEN,
   ResolvedAuth,
 } from '@/core/auth/auth-resolver.ts';
-import { SonarCommand } from '@/core/commands/sonar-command.ts';
+import { SonarCommand, SonarOption } from '@/core/commands/sonar-command.ts';
 import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import { DISTRIBUTION } from '@/core/host/distribution.ts';
 import * as agentDetector from '@/core/host/environment/agent-detector.ts';
@@ -355,6 +355,133 @@ describe('CliCommandExecuted', () => {
       await commitCommandExecuted(makeCommand('auth login'));
 
       expect(readCommandEvents(testDir)[0].metadata.source.domain).toBe('CLI');
+    });
+  });
+
+  describe('arguments', () => {
+    it('is null when no options or positional arguments were used', async () => {
+      const command = makeCommand('quality-gate status');
+      command.option('--all', 'desc').argument('[file]', 'desc');
+
+      await commitCommandExecuted(command);
+
+      expect(readCommandEvents(testDir)[0].event_payload.arguments).toBeNull();
+    });
+
+    it('renders a boolean flag by name only', async () => {
+      const command = makeCommand('quality-gate status');
+      command.option('--all', 'desc');
+      command.setOptionValueWithSource('all', true, 'cli');
+
+      await commitCommandExecuted(command);
+
+      expect(readCommandEvents(testDir)[0].event_payload.arguments).toBe('--all');
+    });
+
+    it('renders a free-form-valued option by name only, never its value', async () => {
+      const command = makeCommand('list issues');
+      command.option('-p, --project <project>', 'desc');
+      command.setOptionValueWithSource('project', 'super-secret-project', 'cli');
+
+      await commitCommandExecuted(command);
+
+      const args = readCommandEvents(testDir)[0].event_payload.arguments;
+      expect(args).toBe('--project');
+      expect(args).not.toContain('super-secret-project');
+    });
+
+    it('renders a choice-restricted option with its value', async () => {
+      const command = makeCommand('quality-gate status');
+      command.addOption(new SonarOption('--format <format>', 'desc').choices(['json', 'table']));
+      command.setOptionValueWithSource('format', 'json', 'cli');
+
+      await commitCommandExecuted(command);
+
+      expect(readCommandEvents(testDir)[0].event_payload.arguments).toBe('--format=json');
+    });
+
+    it('excludes an option whose value came from a default, not the CLI', async () => {
+      const command = makeCommand('quality-gate status');
+      command.addOption(
+        new SonarOption('--format <format>', 'desc').choices(['json', 'table']).default('table'),
+      );
+      command.setOptionValueWithSource('format', 'table', 'default');
+
+      await commitCommandExecuted(command);
+
+      expect(readCommandEvents(testDir)[0].event_payload.arguments).toBeNull();
+    });
+
+    it('renders a positional argument by name, never its value', async () => {
+      const command = makeCommand('link');
+      command.argument('<projectKey>', 'desc');
+      command.args = ['super-secret-key'];
+
+      await commitCommandExecuted(command);
+
+      const args = readCommandEvents(testDir)[0].event_payload.arguments;
+      expect(args).toBe('projectKey');
+      expect(args).not.toContain('super-secret-key');
+    });
+
+    it('excludes an optional positional argument that was not supplied', async () => {
+      const command = makeCommand('quality-gate status');
+      command.argument('[file]', 'desc');
+      command.args = [];
+
+      await commitCommandExecuted(command);
+
+      expect(readCommandEvents(testDir)[0].event_payload.arguments).toBeNull();
+    });
+
+    it('includes an optional positional argument that was supplied', async () => {
+      const command = makeCommand('quality-gate status');
+      command.argument('[file]', 'desc');
+      command.args = ['src/index.ts'];
+
+      await commitCommandExecuted(command);
+
+      expect(readCommandEvents(testDir)[0].event_payload.arguments).toBe('file');
+    });
+
+    it('renders a variadic positional argument once regardless of value count', async () => {
+      const command = makeCommand('analyze secrets');
+      command.argument('[paths...]', 'desc');
+      command.args = ['a.ts', 'b.ts', 'c.ts'];
+
+      await commitCommandExecuted(command);
+
+      expect(readCommandEvents(testDir)[0].event_payload.arguments).toBe('paths');
+    });
+
+    it('renders a repeatable option once even when passed multiple times', async () => {
+      const command = makeCommand('analyze agentic');
+      command.option('--file <path>', 'desc', (value: string, previous: string[] = []) => [
+        ...previous,
+        value,
+      ]);
+      command.setOptionValueWithSource('file', ['a.ts', 'b.ts'], 'cli');
+
+      await commitCommandExecuted(command);
+
+      expect(readCommandEvents(testDir)[0].event_payload.arguments).toBe('--file');
+    });
+
+    it('combines options and positional arguments in declaration order', async () => {
+      const command = makeCommand('quality-gate status');
+      command
+        .addOption(new SonarOption('--format <format>', 'desc').choices(['json', 'table']))
+        .option('--all', 'desc')
+        .argument('[file]', 'desc');
+      command.setOptionValueWithSource('format', 'json', 'cli');
+      command.setOptionValueWithSource('all', true, 'cli');
+      command.args = ['src/index.ts'];
+
+      await commitCommandExecuted(command);
+
+      expect(readCommandEvents(testDir)[0].event_payload.arguments).toBe(
+        '--format=json --all file',
+      );
     });
   });
 
