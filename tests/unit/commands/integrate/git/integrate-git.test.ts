@@ -151,7 +151,7 @@ describe('resolveLocalGitHooksDir', () => {
 
     try {
       const result = await resolveLocalGitHooksDir(TEMP_DIR);
-      expect(result).toBe('/abs/.git/hooks');
+      expect(result).toBe(join('/abs/.git', 'hooks'));
       expect(isAbsolute(result)).toBe(true);
     } finally {
       spawnSpy.mockRestore();
@@ -190,7 +190,7 @@ describe('resolveLocalGitHooksDir', () => {
 
     try {
       const result = await resolveLocalGitHooksDir(TEMP_DIR);
-      expect(result).toBe('/some/real/.git/hooks');
+      expect(result).toBe(join('/some/real/.git', 'hooks'));
       // --git-common-dir never follows an inherited core.hooksPath, unlike --git-path hooks.
       expect(spawnSpy).toHaveBeenCalledWith('git', ['rev-parse', '--git-common-dir'], {
         cwd: TEMP_DIR,
