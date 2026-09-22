@@ -93,7 +93,6 @@ export async function installIntegration<TOptions>({
     attrs,
     nonInteractive,
     state,
-    resolvedFeatureDecisions: new Map(),
   };
   const applications = await buildApplications(invocation, integration.features);
   const { toInstall, toRemove, declined } = await selectFeaturesForInvocation(

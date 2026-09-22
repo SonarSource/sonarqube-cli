@@ -21,10 +21,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.js';
-import { SQAA_HOOK_FEATURE_ID } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
 import {
+  CLAUDE_VORTEX_FEATURE_ID,
   VORTEX_CHECK_FAILED_MESSAGE,
-  VORTEX_FEATURE_ID,
   VORTEX_OVER_CONSUMPTION_MESSAGE,
   VORTEX_PROMOTION_MESSAGE,
   VORTEX_SERVER_UNAVAILABLE_MESSAGE,
@@ -68,7 +67,7 @@ describe('integrate claude — Vortex entitlement', () => {
     const recordedCag = state.integrations.installed.some((integration) =>
       integration.features.some(
         (feature) =>
-          feature.featureId === VORTEX_FEATURE_ID &&
+          feature.featureId === CLAUDE_VORTEX_FEATURE_ID &&
           (feature.subfeatures ?? []).some(
             (subfeature) => subfeature.featureId === CONTEXT_AUGMENTATION_FEATURE_ID,
           ),
@@ -364,12 +363,9 @@ describe('integrate claude — Vortex entitlement', () => {
       const claude = state.integrations.installed.find(
         (integration) => integration.integrationId === 'claude-code',
       );
-      expect(claude?.features.some((feature) => feature.featureId === VORTEX_FEATURE_ID)).toBe(
-        false,
-      );
-      expect(claude?.features.some((feature) => feature.featureId === SQAA_HOOK_FEATURE_ID)).toBe(
-        false,
-      );
+      expect(
+        claude?.features.some((feature) => feature.featureId === CLAUDE_VORTEX_FEATURE_ID),
+      ).toBe(false);
       expect(claude?.features.some((feature) => feature.featureId === 'mcp-server')).toBe(true);
       expect(
         state.dependencies.installed.some(

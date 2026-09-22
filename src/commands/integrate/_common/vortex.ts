@@ -27,7 +27,7 @@ import type {
   IntegrationInvocation,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { askUser, install, skip, uninstall } from '@/core/framework/features';
+import { askUser, skip, uninstall } from '@/core/framework/features';
 import { wholeFileRemover } from '@/core/framework/resources';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
@@ -41,22 +41,42 @@ import { VORTEX_FEATURE_BENEFIT, VORTEX_FEATURE_PREVIEW } from './feature-consta
 import type { IntegrateAgentOptions, VortexDisposition } from './types.ts';
 
 export const VORTEX_FEATURE_ID = 'vortex';
+/**
+ * Claude's own vortex container id. It absorbs two predecessors at once — the
+ * old `vortex` container and the old standalone `sonar-sqaa-hook`
+ * `PostToolUse` dispatch container — so it needs an id neither of them had
+ * recorded yet for `replacedIds`' migration to actually fire (see
+ * `createVortexFeature`'s doc comment below).
+ */
+export const CLAUDE_VORTEX_FEATURE_ID = 'vortex-claude';
 export const CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID = 'context-augmentation-skill-file'; // retired, removal only
 
+const KNOWN_VORTEX_FEATURE_IDS = new Set([VORTEX_FEATURE_ID, CLAUDE_VORTEX_FEATURE_ID]);
+
 export function isVortexFeature(feature: InstalledIntegrationFeature): boolean {
-  return feature.featureId === VORTEX_FEATURE_ID;
+  return KNOWN_VORTEX_FEATURE_IDS.has(feature.featureId);
 }
 
 /**
  * Builds an agent's Vortex container from the capabilities it supports. The
  * subfeature ids are the ids those capabilities had as standalone features, so
- * `replacedIds` migrates installs recorded before the unification into this one.
+ * `replacedIds` migrates installs recorded before the unification into this
+ * one.
  *
- * Declare this feature *before* any sibling top-level feature that reads its
- * outcome via `vortexInstallDecision` (e.g. Claude's `PostToolUse` dispatch
- * container — see that function's doc comment) — `shouldInstall` here is the
- * one place that actually asks the user, and siblings need that resolved
- * answer to already exist in `invocation.resolvedFeatureDecisions`.
+ * A subfeature's `shouldInstall` only ever runs once its container has
+ * already resolved to `install` (`selectActiveSubfeatures` in
+ * `core/framework/features/selection.ts` is only reached on that outcome), so
+ * a subfeature with no condition of its own beyond "the container installed
+ * me" can just unconditionally `install()` — it never needs to re-derive
+ * anything from raw entitlement.
+ *
+ * An agent whose vortex container absorbs a formerly-standalone *sibling*
+ * top-level feature (not just formerly-standalone subfeatures) can't reuse
+ * `VORTEX_FEATURE_ID` for that — the migration would be a no-op for every
+ * already-installed user of that agent. Instead, spread this call's result
+ * and override `id`/`replacedIds`/`resources` with a fresh id and the extra
+ * predecessor ids folded in (see `CLAUDE_VORTEX_FEATURE_ID` above and
+ * `claudeVortexFeature` in `claude/declaration.ts` for a worked example).
  */
 export function createVortexFeature<TOptions extends IntegrateAgentOptions>(
   subfeatures: SubfeatureDeclaration<TOptions>[],
@@ -116,59 +136,6 @@ export const VORTEX_SCA_CHECK_FAILED_MESSAGE =
 export interface ResolvedVortexSetup {
   disposition: VortexDisposition;
   scaEnabled?: boolean;
-}
-
-/**
- * Install decision for anything gated on Vortex *other than* the `vortex`
- * container's own top-level feature (that one is `vortexShouldInstall`,
- * above — it's the one that actually asks).
- *
- * Prefers the `vortex` feature's own resolved outcome from
- * `invocation.resolvedFeatureDecisions` over raw `vortexDisposition` so a
- * sibling top-level feature evaluated later in the same integration's
- * `features` array (Claude's `PostToolUse`/SQAA hook dispatch container is
- * the one case that needs this — see `createClaudeHookEventContainer`)
- * agrees with whatever the umbrella feature's Keep/Remove ask just resolved
- * to, instead of independently re-deriving from entitlement alone and
- * silently reinstalling something the user just declined. A subfeature of
- * the `vortex` container itself (the common case) always finds this
- * populated too, since subfeatures only evaluate after their own
- * container's decision does. Falls back to raw disposition only when
- * nothing has resolved 'vortex' yet in this invocation (shouldn't happen
- * given the declaration-order requirement above, but fails toward the
- * pre-existing entitlement-only behavior rather than crashing).
- */
-export function vortexInstallDecision<TOptions extends IntegrateAgentOptions>(
-  invocation: Pick<IntegrationInvocation<TOptions>, 'options' | 'resolvedFeatureDecisions'>,
-): InstallDecision {
-  const resolved = invocation.resolvedFeatureDecisions?.get(VORTEX_FEATURE_ID);
-  if (resolved === 'install') {
-    return install();
-  }
-  // A first-time 'declined' answer means Vortex itself was never installed —
-  // but a sibling like Claude's PostToolUse container can still hold a stale
-  // record from before this fix (or any other drift), so treat it the same
-  // as 'uninstall' to tear that down. `uninstall()` is already a no-op with
-  // no message when the sibling was never installed (selection.ts).
-  if (resolved === 'uninstall' || resolved === 'declined') {
-    return uninstall();
-  }
-  if (resolved === 'skip') {
-    return skip();
-  }
-  return vortexInstallDecisionFromDisposition(invocation.options.vortexDisposition);
-}
-
-function vortexInstallDecisionFromDisposition(
-  disposition: VortexDisposition | undefined,
-): InstallDecision {
-  if (disposition === 'install') {
-    return install();
-  }
-  if (disposition === 'remove') {
-    return uninstall();
-  }
-  return skip();
 }
 
 async function resolveScaEnabled(

@@ -20,7 +20,7 @@
 
 import type { SessionStartAgent } from '@/commands/hook/agent-session-start/types.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import { skip } from '@/core/framework/features/selection.ts';
+import { install, skip } from '@/core/framework/features/selection.ts';
 import type { IntegrationContext, SubfeatureDeclaration } from '@/core/framework/features/types.ts';
 import type { ResourceDeclaration } from '@/core/framework/resources';
 import { wholeFile } from '@/core/framework/resources';
@@ -31,7 +31,6 @@ import { isContextAugmentationSkipped, runToolIntegrateCommand } from '../contex
 import { contextAugmentationBinaryDependency } from '../context-augmentation-dependency.ts';
 import { buildUnixHookScript, buildWindowsHookScript } from '../hooks.ts';
 import type { IntegrateAgentOptions } from '../types.ts';
-import { vortexInstallDecision } from '../vortex.ts';
 
 export const CONTEXT_AUGMENTATION_FEATURE_ID = 'context-augmentation';
 export const CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID =
@@ -53,8 +52,7 @@ export function createContextAugmentationSubfeature<TOptions extends IntegrateAg
   return {
     id: CONTEXT_AUGMENTATION_FEATURE_ID,
     displayName: 'Vortex Context',
-    shouldInstall: (invocation) =>
-      isContextAugmentationSkipped() ? skip() : vortexInstallDecision(invocation),
+    shouldInstall: () => (isContextAugmentationSkipped() ? skip() : install()),
     dependencies: [contextAugmentationBinaryDependency],
     resources: [createHookScriptResource(options), options.hookConfigResource],
     operations: [

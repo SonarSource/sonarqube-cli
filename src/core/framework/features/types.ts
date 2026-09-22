@@ -51,9 +51,6 @@ export function isContainerIntegrationContext(
   return 'activeSubfeatures' in ctx;
 }
 
-/** Outcome of a top-level feature's resolved (post-ask) selection decision. */
-export type FeatureSelectionOutcome = 'install' | 'skip' | 'uninstall' | 'declined';
-
 export interface IntegrationInvocation<TOptions = Record<string, unknown>> {
   options: TOptions;
   targetRoot: string;
@@ -63,16 +60,6 @@ export interface IntegrationInvocation<TOptions = Record<string, unknown>> {
   attrs?: Record<string, IntegrationStateAttribute>;
   nonInteractive?: boolean;
   state: CliState;
-  /**
-   * Populated as each top-level feature's decision resolves during this
-   * invocation's selection pass (keyed by feature id) — lets a feature
-   * declared *later* in the integration's `features` array read an earlier
-   * sibling's resolved outcome instead of independently re-deriving it and
-   * risking disagreement (see `vortexInstallDecision` in
-   * `integrate/_common/vortex.ts`). Not populated yet for the feature whose
-   * own `shouldInstall` is currently being evaluated.
-   */
-  resolvedFeatureDecisions?: Map<string, FeatureSelectionOutcome>;
 }
 
 export type FeatureTargetRoot<TOptions = Record<string, unknown>> =

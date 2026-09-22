@@ -18,31 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import {
-  install,
-  type InstallDecision,
-  jsonPatch,
-  skip,
-  uninstall,
-  wholeFile,
-} from '@/core/framework/features';
-import { normalizeDecision } from '@/core/framework/features/selection.ts';
-import type {
-  FeatureContainer,
-  FeaturePreview,
-  FeatureScope,
-  FeatureTargetRoot,
-  IntegrationContext,
-  IntegrationInvocation,
-  SubfeatureDeclaration,
-} from '@/core/framework/features/types.ts';
+import { jsonPatch, wholeFile } from '@/core/framework/features';
+import type { IntegrationContext, SubfeatureDeclaration } from '@/core/framework/features/types.ts';
 import { isContainerIntegrationContext } from '@/core/framework/features/types.ts';
-import type {
-  RemovableResource,
-  ResourceDeclaration,
-  ResourceIdentity,
-  WholeFileContent,
-} from '@/core/framework/resources';
+import type { ResourceDeclaration, WholeFileContent } from '@/core/framework/resources';
 
 import {
   createAgentHookEntry,
@@ -58,12 +37,9 @@ export interface ClaudeHookSubfeature<
   matcher: string;
 }
 
-export interface ClaudeHookEventContainerConfig<TOptions = Record<string, unknown>> {
+export interface PostToolUseDispatchConfig<TOptions = Record<string, unknown>> {
   id: string;
   displayName: string;
-  benefitDescription?: string;
-  previewDescription?: FeaturePreview;
-  event: 'PostToolUse';
   configDir: string;
   marker: string;
   scriptPath: string;
@@ -71,38 +47,20 @@ export interface ClaudeHookEventContainerConfig<TOptions = Record<string, unknow
   scriptContent: WholeFileContent;
   settingsPath: (context: IntegrationContext) => string;
   subfeatures: ClaudeHookSubfeature<TOptions>[];
-  defaultInstallSubfeatureIds: string[];
-  targetRoot?: FeatureTargetRoot<TOptions>;
-  scope?: FeatureScope<TOptions>;
-  legacyCleanups?: (ResourceIdentity & RemovableResource)[];
 }
 
 /**
- * The container owns one marked settings entry whose matcher is the union of its
- * active subfeatures, so it cannot partially uninstall. Any subfeature voting
- * uninstall, with none voting install, therefore tears the whole entry down —
- * skipping instead would leave the previous matcher in place untouched.
+ * Container-level resources for a Claude `PostToolUse` hook shared by
+ * multiple subfeatures: one script plus one settings.json entry whose
+ * matcher is the union of whichever of `config.subfeatures` end up active.
+ * Meant to be passed as `createVortexFeature`'s subfeatures' sibling
+ * container resources (see `claudeVortexFeature` in `claude/declaration.ts`)
+ * — the subfeatures themselves (with their own `shouldInstall`) are declared
+ * alongside the other Vortex subfeatures, not nested under these resources.
  */
-async function resolveContainerInstallDecision<TOptions>(
-  subfeatures: SubfeatureDeclaration<TOptions>[],
-  invocation: IntegrationInvocation<TOptions>,
-): Promise<InstallDecision> {
-  let uninstallCount = 0;
-  for (const subfeature of subfeatures) {
-    const decision = normalizeDecision(await subfeature.shouldInstall?.(invocation));
-    if (decision.action === 'install' || decision.action === 'ask') {
-      return install();
-    }
-    if (decision.action === 'uninstall') {
-      uninstallCount += 1;
-    }
-  }
-  return uninstallCount > 0 ? uninstall() : skip();
-}
-
-export function createClaudeHookEventContainer<TOptions = Record<string, unknown>>(
-  config: ClaudeHookEventContainerConfig<TOptions>,
-): FeatureContainer<TOptions> {
+export function createPostToolUseDispatchResources<TOptions = Record<string, unknown>>(
+  config: PostToolUseDispatchConfig<TOptions>,
+): ResourceDeclaration[] {
   const matcherBySubfeatureId = new Map(config.subfeatures.map((s) => [s.id, s.matcher]));
 
   function resolveUnionMatcher(context: IntegrationContext): string {
@@ -136,7 +94,7 @@ export function createClaudeHookEventContainer<TOptions = Record<string, unknown
         createAgentHookEntry(
           context,
           config.configDir,
-          config.event,
+          'PostToolUse',
           matcher,
           config.marker,
           config.scriptPath,
@@ -149,17 +107,5 @@ export function createClaudeHookEventContainer<TOptions = Record<string, unknown
     removePatch: (document) => removeAgentHooks(document, [config.marker]),
   });
 
-  return {
-    id: config.id,
-    displayName: config.displayName,
-    benefitDescription: config.benefitDescription,
-    previewDescription: config.previewDescription,
-    shouldInstall: (invocation) => resolveContainerInstallDecision(config.subfeatures, invocation),
-    targetRoot: config.targetRoot,
-    scope: config.scope,
-    resources: [scriptResource, settingsResource],
-    subfeatures: config.subfeatures.map(({ matcher: _matcher, ...subfeature }) => subfeature),
-    defaultInstallSubfeatureIds: config.defaultInstallSubfeatureIds,
-    legacyCleanups: config.legacyCleanups,
-  };
+  return [scriptResource, settingsResource];
 }

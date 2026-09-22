@@ -30,7 +30,10 @@ import {
   SQAA_HOOK_FEATURE_ID,
   SQAA_INSTRUCTIONS_SUBFEATURE_ID,
 } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
-import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
+import {
+  CLAUDE_VORTEX_FEATURE_ID,
+  VORTEX_FEATURE_ID,
+} from '@/commands/integrate/_common/vortex.ts';
 import { CONTEXT_AUGMENTATION_HOOK_FEATURE_ID } from '@/commands/integrate/claude/declaration.ts';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalCagBinaryName } from '@/core/host/install/context-augmentation.ts';
@@ -103,22 +106,21 @@ describe('post-update migration', () => {
     const claude = state.integrations.installed.find(
       (integration) => integration.integrationId === 'claude-code',
     );
+    // Claude folds what used to be two independent top-level containers (the
+    // `vortex` umbrella and the standalone `sonar-sqaa-hook` PostToolUse
+    // dispatch container) into one `vortex-claude` container.
     expect(claude?.features.map((feature) => feature.featureId)).toEqual([
-      SQAA_HOOK_FEATURE_ID,
-      VORTEX_FEATURE_ID,
+      CLAUDE_VORTEX_FEATURE_ID,
     ]);
-    const postToolUseContainer = claude?.features.find(
-      (feature) => feature.featureId === SQAA_HOOK_FEATURE_ID,
+    const vortex = claude?.features.find(
+      (feature) => feature.featureId === CLAUDE_VORTEX_FEATURE_ID,
     );
-    expect(postToolUseContainer?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
-      'sqaa-posttooluse',
-      'cag-posttooluse',
-    ]);
-    const vortex = claude?.features.find((feature) => feature.featureId === VORTEX_FEATURE_ID);
     expect(vortex?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
       SQAA_INSTRUCTIONS_SUBFEATURE_ID,
       CONTEXT_AUGMENTATION_FEATURE_ID,
       CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
+      'sqaa-posttooluse',
+      'cag-posttooluse',
     ]);
     expect(harness.cwd.file('.claude', 'settings.json').asJson().hooks?.PostToolUse).toBeDefined();
     expect(harness.cwd.file('CLAUDE.md').asText()).toContain('# Vortex analysis protocol');
@@ -460,16 +462,13 @@ describe('post-update migration', () => {
       const claude = state.integrations.installed.find(
         (integration) => integration.integrationId === 'claude-code',
       );
-      const postToolUseContainer = claude?.features.find(
-        (feature) => feature.featureId === SQAA_HOOK_FEATURE_ID,
+      const vortex = claude?.features.find(
+        (feature) => feature.featureId === CLAUDE_VORTEX_FEATURE_ID,
       );
-      expect(postToolUseContainer?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
-        'sqaa-posttooluse',
-      ]);
-      const vortex = claude?.features.find((feature) => feature.featureId === VORTEX_FEATURE_ID);
       expect(vortex?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
         SQAA_INSTRUCTIONS_SUBFEATURE_ID,
         CONTEXT_AUGMENTATION_FEATURE_ID,
+        'sqaa-posttooluse',
       ]);
     },
     { timeout: 30000 },
@@ -492,18 +491,22 @@ describe('post-update migration', () => {
       const claude = state.integrations.installed.find(
         (integration) => integration.integrationId === 'claude-code',
       );
-      const vortex = claude?.features.find((feature) => feature.featureId === VORTEX_FEATURE_ID);
+      const vortex = claude?.features.find(
+        (feature) => feature.featureId === CLAUDE_VORTEX_FEATURE_ID,
+      );
       expect(vortex?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
         SQAA_INSTRUCTIONS_SUBFEATURE_ID,
         CONTEXT_AUGMENTATION_FEATURE_ID,
         CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
+        'sqaa-posttooluse',
+        'cag-posttooluse',
       ]);
     },
     { timeout: 30000 },
   );
 
   it(
-    'installs every subfeature of the PostToolUse hook container when migrating a bare pre-unification SQAA hook',
+    'installs every subfeature when migrating a bare pre-unification SQAA hook container',
     async () => {
       seedPreUnificationFeatures('claude-code', [SQAA_HOOK_FEATURE_ID], CAG_HOOK_ALLOWED_ORG_KEY);
       harness.state().withContextAugmentationBinaryInstalled();
@@ -515,13 +518,90 @@ describe('post-update migration', () => {
       const claude = state.integrations.installed.find(
         (integration) => integration.integrationId === 'claude-code',
       );
-      const postToolUseContainer = claude?.features.find(
-        (feature) => feature.featureId === SQAA_HOOK_FEATURE_ID,
+      const vortex = claude?.features.find(
+        (feature) => feature.featureId === CLAUDE_VORTEX_FEATURE_ID,
       );
-      expect(postToolUseContainer?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
+      expect(vortex?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
+        SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+        CONTEXT_AUGMENTATION_FEATURE_ID,
+        CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
         'sqaa-posttooluse',
         'cag-posttooluse',
       ]);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'merges two already-containerized legacy Vortex records into the single vortex-claude container',
+    async () => {
+      // Simulates a user who already went through the original vortex/sonar-sqaa-hook
+      // unification (both containers independently fully installed, each with its own
+      // recorded subfeatures) before this fix shipped — as opposed to the much older
+      // pre-container flat records `seedPreUnificationFeatures` simulates above.
+      const now = new Date().toISOString();
+      const legacyContainer = (featureId: string, subfeatureIds: string[]) => ({
+        featureId,
+        scope: 'project' as const,
+        targetRoot: harness.cwd.path,
+        installedByCliVersion: '0.5.0',
+        installedAt: now,
+        updatedByCliVersion: '0.5.0',
+        updatedAt: now,
+        dependencies: [],
+        resources: [],
+        operations: [],
+        attrs: {
+          orgKey: CAG_HOOK_ALLOWED_ORG_KEY,
+          projectKey: 'p',
+          serverUrl: 'https://sonarcloud.io',
+          scaEnabled: false,
+        },
+        subfeatures: subfeatureIds.map((subfeatureId) => ({
+          featureId: subfeatureId,
+          dependencies: [],
+          resources: [],
+          operations: [],
+        })),
+      });
+
+      harness.state().withRawState(
+        JSON.stringify({
+          version: '1.0',
+          lastUpdated: now,
+          auth: { isAuthenticated: false, connections: [] },
+          agents: {},
+          config: { cliVersion: '0.5.0' },
+          telemetry: { enabled: false, firstUseDate: now, events: [] },
+          agentExtensions: [],
+          integrations: {
+            installed: [
+              {
+                id: randomUUID(),
+                integrationId: 'claude-code',
+                installedByCliVersion: '0.5.0',
+                installedAt: now,
+                updatedByCliVersion: '0.5.0',
+                updatedAt: now,
+                features: [
+                  legacyContainer(VORTEX_FEATURE_ID, [
+                    SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+                    CONTEXT_AUGMENTATION_FEATURE_ID,
+                    CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
+                  ]),
+                  legacyContainer(SQAA_HOOK_FEATURE_ID, ['sqaa-posttooluse', 'cag-posttooluse']),
+                ],
+              },
+            ],
+          },
+        }),
+      );
+      harness.state().withContextAugmentationBinaryInstalled();
+
+      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+
+      expect(result.exitCode).toBe(0);
+      expectFullClaudeVortexMigration();
     },
     { timeout: 30000 },
   );
@@ -668,7 +748,9 @@ describe('post-update migration', () => {
       expect(claudeFeatures.map((feature) => feature.featureId).sort()).toEqual(
         [...deprecatedFeatureIds].sort(),
       );
-      expect(claudeFeatures.some((feature) => feature.featureId === VORTEX_FEATURE_ID)).toBe(false);
+      expect(claudeFeatures.some((feature) => feature.featureId === CLAUDE_VORTEX_FEATURE_ID)).toBe(
+        false,
+      );
     },
     { timeout: 30000 },
   );

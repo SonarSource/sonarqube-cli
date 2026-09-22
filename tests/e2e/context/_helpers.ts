@@ -33,6 +33,7 @@ import {
 import { SQAA_HOOK_FEATURE_ID } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
 import {
   CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
+  isVortexFeature,
   VORTEX_FEATURE_ID,
 } from '@/commands/integrate/_common/vortex.ts';
 import { ANTIGRAVITY_INTEGRATION_ID } from '@/commands/integrate/antigravity/declaration.ts';
@@ -268,7 +269,7 @@ export function findRecordedCagFeature(
   for (const integration of state.integrations.installed) {
     for (const feature of integration.features) {
       const cagSubfeature = findCagSubfeature(feature);
-      if (feature.featureId !== VORTEX_FEATURE_ID || !cagSubfeature) {
+      if (!isVortexFeature(feature) || !cagSubfeature) {
         continue;
       }
       const entry = {

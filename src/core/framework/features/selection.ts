@@ -27,7 +27,6 @@ import type {
   FeatureApplication,
   FeatureContainer,
   FeatureDeclaration,
-  FeatureSelectionOutcome,
   FeatureSelectionResult,
   IntegrationDeclaration,
   IntegrationInvocation,
@@ -102,7 +101,6 @@ export async function selectFeaturesForInvocation<TOptions>(
     const feature = application.feature;
     const installed = isFeatureInstalled(integration, invocation, application);
     const outcome = await shouldInstallFeature(feature, invocation, console, installed);
-    invocation.resolvedFeatureDecisions?.set(feature.id, outcome);
     if (outcome === 'install') {
       toInstall.push(await materializeApplication(application, invocation, declined, console));
     } else if (outcome === 'uninstall' && installed) {
@@ -170,6 +168,8 @@ async function shouldRemoveInstalledFeature<TOptions>(
 function warnFeatureRemoval(console: Console, message: string): void {
   console.text(`  ${red('✗')}  ${message}`);
 }
+
+type FeatureSelectionOutcome = 'install' | 'skip' | 'uninstall' | 'declined';
 
 /**
  * For a container application, narrow its subfeatures to those whose
