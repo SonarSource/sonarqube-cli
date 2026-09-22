@@ -904,7 +904,7 @@ describe('auth login — organization validation', () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken('my-token')
-        .withOrganizationsSearchError(500)
+        .withOrgsLookupError(500)
         .start();
 
       harness.cwd.writeFile(
@@ -929,7 +929,7 @@ describe('auth login — organization validation', () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken('my-token')
-        .withOrganizationsSearchError(500)
+        .withOrgsLookupError(500)
         .start();
 
       const result = await harness.run(`auth login --org my-org --server ${server.baseUrl()}`, {
