@@ -208,6 +208,9 @@ describe('initSentry', () => {
         expect.objectContaining({
           headers: { 'X-Sentry-Auth': 'Sentry sentry_key=key' },
           method: 'POST',
+          // Without a signal a stalled endpoint outlives the command, because the flush
+          // timeout stops us waiting without cancelling the upload.
+          signal: expect.any(AbortSignal),
         }),
       );
       expect(result).toEqual({
