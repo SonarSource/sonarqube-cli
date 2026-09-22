@@ -87,7 +87,7 @@ export class SonarHttpClient {
   /**
    * The API host serving `endpoint`. On Cloud several endpoint families live on a
    * region-specific host rather than on the connection URL; on Server it is the
-   * connection URL itself. Pass the result as `baseUrl` to `get` / `post`.
+   * connection URL itself. HTTP methods use it as their default host.
    */
   apiHostFor(endpoint: string): string {
     return resolveFromEndpoint(this.serverURL, endpoint);

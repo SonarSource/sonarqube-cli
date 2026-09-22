@@ -78,7 +78,7 @@ export class RemediateApiClient {
     return this.client
       .get<{
         codeReviewAgent: { organizationEligible: boolean; delegateIssuesEnabled?: boolean };
-      }>(configEndpoint, undefined, this.client.apiHostFor(configEndpoint))
+      }>(configEndpoint)
       .map((config): { status: AiRemediationEntitlement } => {
         if (!config.codeReviewAgent.organizationEligible) return { status: 'not_eligible' };
         if (!config.codeReviewAgent.delegateIssuesEnabled) return { status: 'not_enabled' };
