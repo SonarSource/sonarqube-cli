@@ -70,6 +70,9 @@ function migrateState(raw: Record<string, unknown>): CliState {
   if (!raw.dependencies) {
     raw.dependencies = { installed: [] };
   }
+  if (!raw.agents) {
+    raw.agents = {};
+  }
   migrateLegacyToolRecords(raw);
   backfillInstalledFeatureArrays(raw);
   if (!raw.auth) {

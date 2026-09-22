@@ -378,6 +378,22 @@ describe('system status', () => {
   );
 
   it(
+    'shows the diagnostic overview for legacy state without agents',
+    async () => {
+      const state = baseState();
+      delete state.agents;
+      harness.state().withRawState(JSON.stringify(state));
+
+      const result = await harness.run('system status');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('AUTHENTICATION');
+      expect(result.stdout).toContain('NETWORK');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'outputs binary info in JSON when sonar-secrets is installed',
     async () => {
       harness.state().withSecretsBinaryInstalled();
