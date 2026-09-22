@@ -209,7 +209,10 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
             const claudeSettings = harness.userHome.file('.claude', 'settings.json').asText();
             expect(claudeSettings).toContain('sonar-sqaa');
             expect(claudeSettings).toContain('posttool-sqaa');
-            expect(claudeSettings).toContain('Bash|PowerShell|Monitor|Read');
+            // The seed only had `cag-posttooluse` active, but migrating into the
+            // merged container re-derives the full eligible default set, so
+            // `sqaa-posttooluse` ends up active too.
+            expect(claudeSettings).toContain('Edit|Write|Bash|PowerShell|Monitor|Read');
             expect(
               harness.userHome
                 .file('.claude', 'hooks', 'sonar-sqaa', 'build-scripts', 'posttool-sqaa.sh')

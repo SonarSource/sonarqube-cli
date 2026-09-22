@@ -22,13 +22,15 @@ import { join } from 'node:path';
 
 import { CONTEXT_AUGMENTATION_TOOL_MATCHER } from '@/commands/hook/context-augmentation-hook-subscriber.ts';
 import type {
+  FeatureContainer,
   InstallDecision,
   IntegrationContext,
   IntegrationDeclaration,
+  IntegrationInvocation,
   ResourceDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { jsonPatch, skip, wholeFile } from '@/core/framework/features';
+import { install, jsonPatch, skip, wholeFile } from '@/core/framework/features';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 
 import { isCagHookOrgAllowed } from '../_common/context-augmentation.ts';
@@ -58,8 +60,13 @@ import {
   upsertAgentHooks,
 } from '../_common/hooks.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
-import { createVortexFeature, vortexInstallDecision } from '../_common/vortex.ts';
-import { createClaudeHookEventContainer } from './hook-container-feature.ts';
+import {
+  CLAUDE_VORTEX_FEATURE_ID,
+  createVortexFeature,
+  VORTEX_FEATURE_ID,
+} from '../_common/vortex.ts';
+import type { ClaudeHookSubfeature } from './hook-container-feature.ts';
+import { createPostToolUseDispatchResources } from './hook-container-feature.ts';
 import { CLAUDE_PROJECT_DIR_PLACEHOLDER } from './hooks.ts';
 
 const CLAUDE_CONFIG_DIR = '.claude';
@@ -77,6 +84,67 @@ const CLAUDE_DISPLAY_NAME = 'Claude Code';
 export interface ClaudeIntegrationOptions extends IntegrateAgentOptions {
   globalSecretsHookExists?: boolean;
 }
+
+const sqaaPostToolUseSubfeature: ClaudeHookSubfeature<ClaudeIntegrationOptions> = {
+  id: 'sqaa-posttooluse',
+  displayName: 'Vortex analysis',
+  matcher: 'Edit|Write',
+  shouldInstall: () => install(),
+};
+
+const cagPostToolUseSubfeature: ClaudeHookSubfeature<ClaudeIntegrationOptions> = {
+  id: 'cag-posttooluse',
+  displayName: 'Vortex context augmentation hook',
+  matcher: CONTEXT_AUGMENTATION_TOOL_MATCHER,
+  dependencies: [contextAugmentationBinaryDependency],
+  shouldInstall: (invocation) => shouldInstallCagHook(invocation),
+  migrationEligible: isCagHookAllowedForAttrs,
+};
+
+const claudePostToolUseDispatchResources = createPostToolUseDispatchResources({
+  id: SQAA_HOOK_FEATURE_ID,
+  displayName: 'Vortex analysis hook',
+  configDir: CLAUDE_CONFIG_DIR,
+  marker: 'sonar-sqaa',
+  scriptPath: 'sonar-sqaa/build-scripts/posttool-sqaa',
+  scriptDisplayName: 'Claude PostToolUse hook script',
+  scriptContent: {
+    unix: buildUnixHookScript('claude-post-tool-use'),
+    windows: buildWindowsHookScript('claude-post-tool-use'),
+  },
+  settingsPath: resolveClaudeSettingsPath,
+  subfeatures: [sqaaPostToolUseSubfeature, cagPostToolUseSubfeature],
+});
+
+/**
+ * Starts from the shared default (`createVortexFeature`) and overrides
+ * `id`/`replacedIds`/`resources` to also absorb the old standalone
+ * `sonar-sqaa-hook` container — see `CLAUDE_VORTEX_FEATURE_ID`.
+ */
+const claudeVortexFeature: FeatureContainer<ClaudeIntegrationOptions> = (() => {
+  const defaultVortex = createVortexFeature<ClaudeIntegrationOptions>(
+    [
+      createSqaaInstructionsSubfeature([createSqaaInstructionsSnippet(resolveClaudeMdPath)]),
+      createContextAugmentationSubfeature<ClaudeIntegrationOptions>({
+        agent: 'claude',
+        scriptPath: (context) =>
+          resolveAgentHookScriptPath(context, CLAUDE_CONFIG_DIR, SESSION_START_SCRIPT_REL),
+        hookConfigResource: createCagHookConfigResource(),
+      }),
+      createContextAugmentationFailureHookSubfeature(),
+      sqaaPostToolUseSubfeature,
+      cagPostToolUseSubfeature,
+    ],
+    resolveClaudeSkillPath,
+  );
+
+  return {
+    ...defaultVortex,
+    id: CLAUDE_VORTEX_FEATURE_ID,
+    replacedIds: [...(defaultVortex.replacedIds ?? []), VORTEX_FEATURE_ID, SQAA_HOOK_FEATURE_ID],
+    resources: claudePostToolUseDispatchResources,
+  };
+})();
 
 export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions> = {
   id: CLAUDE_INTEGRATION_ID,
@@ -126,50 +194,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
         },
       ],
     }),
-    createClaudeHookEventContainer<ClaudeIntegrationOptions>({
-      id: SQAA_HOOK_FEATURE_ID,
-      displayName: 'Vortex analysis hook',
-      event: 'PostToolUse',
-      configDir: CLAUDE_CONFIG_DIR,
-      marker: 'sonar-sqaa',
-      scriptPath: 'sonar-sqaa/build-scripts/posttool-sqaa',
-      scriptDisplayName: 'Claude PostToolUse hook script',
-      scriptContent: {
-        unix: buildUnixHookScript('claude-post-tool-use'),
-        windows: buildWindowsHookScript('claude-post-tool-use'),
-      },
-      settingsPath: resolveClaudeSettingsPath,
-      subfeatures: [
-        {
-          id: 'sqaa-posttooluse',
-          displayName: 'Vortex analysis',
-          matcher: 'Edit|Write',
-          shouldInstall: ({ options }) => vortexInstallDecision(options.vortexDisposition),
-        },
-        {
-          id: 'cag-posttooluse',
-          displayName: 'Vortex context augmentation hook',
-          matcher: CONTEXT_AUGMENTATION_TOOL_MATCHER,
-          dependencies: [contextAugmentationBinaryDependency],
-          shouldInstall: ({ options, attrs }) => shouldInstallCagHook(options, attrs),
-          migrationEligible: isCagHookAllowedForAttrs,
-        },
-      ],
-      defaultInstallSubfeatureIds: ['sqaa-posttooluse', 'cag-posttooluse'],
-    }),
-    createVortexFeature<ClaudeIntegrationOptions>(
-      [
-        createSqaaInstructionsSubfeature([createSqaaInstructionsSnippet(resolveClaudeMdPath)]),
-        createContextAugmentationSubfeature<ClaudeIntegrationOptions>({
-          agent: 'claude',
-          scriptPath: (context) =>
-            resolveAgentHookScriptPath(context, CLAUDE_CONFIG_DIR, SESSION_START_SCRIPT_REL),
-          hookConfigResource: createCagHookConfigResource(),
-        }),
-        createContextAugmentationFailureHookSubfeature(),
-      ],
-      resolveClaudeSkillPath,
-    ),
+    claudeVortexFeature,
     createMcpServerFeature<ClaudeIntegrationOptions>({
       resolveConfigPath: resolveClaudeMcpConfigPath,
     }),
@@ -184,14 +209,16 @@ function isCagHookAllowedForAttrs(
 }
 
 function shouldInstallCagHook(
-  options: ClaudeIntegrationOptions,
-  attrs: Record<string, IntegrationStateAttribute> | undefined,
+  invocation: IntegrationInvocation<ClaudeIntegrationOptions>,
 ): InstallDecision {
   // The allowlist only withholds a new install; it never tears an existing hook down.
-  if (options.vortexDisposition === 'install' && !isCagHookAllowedForAttrs(attrs)) {
+  if (
+    invocation.options.vortexDisposition === 'install' &&
+    !isCagHookAllowedForAttrs(invocation.attrs)
+  ) {
     return skip();
   }
-  return vortexInstallDecision(options.vortexDisposition);
+  return install();
 }
 
 function createCagHookConfigResource(): ResourceDeclaration {
@@ -229,7 +256,7 @@ function createContextAugmentationFailureHookSubfeature(): SubfeatureDeclaration
   return {
     id: CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
     displayName: 'Vortex context augmentation hook',
-    shouldInstall: ({ options, attrs }) => shouldInstallCagHook(options, attrs),
+    shouldInstall: (invocation) => shouldInstallCagHook(invocation),
     migrationEligible: isCagHookAllowedForAttrs,
     dependencies: [contextAugmentationBinaryDependency],
     resources: [
