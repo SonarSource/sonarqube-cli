@@ -209,4 +209,17 @@ describe('authLogin organization prompt', () => {
 
     expect(textPrompts()).toHaveLength(1);
   });
+
+  it('rejects a multiline server discovered from project configuration before token generation', async () => {
+    spyOn(projectInfo, 'discoverServer').mockResolvedValue(
+      'https://example.org\nhttps://other.example',
+    );
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+    await expect(authLogin({}, new CommandInvocationContext(fake))).rejects.toThrow(
+      'The SonarQube server URL must be a single line.',
+    );
+
+    expect(tokenModule.generateTokenViaBrowser).not.toHaveBeenCalled();
+  });
 });

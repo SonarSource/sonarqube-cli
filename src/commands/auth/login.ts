@@ -20,6 +20,7 @@
 
 import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
 import {
+  assertSingleLineServerUrl,
   ENV_ORG,
   ENV_SERVER,
   ENV_TOKEN,
@@ -563,14 +564,15 @@ async function selectServerFromPrompt(console: Console): Promise<string> {
 }
 
 async function resolveServer(options: AuthLoginOptions, console: Console): Promise<string> {
+  let server: string;
   if (options.server) {
-    return options.server;
+    server = options.server;
+  } else {
+    const configServer = await discoverServer(console);
+    server = configServer ?? (await selectServerFromPrompt(console));
   }
-  const configServer = await discoverServer(console);
-  if (configServer) {
-    return configServer;
-  }
-  return selectServerFromPrompt(console);
+  assertSingleLineServerUrl(server);
+  return server;
 }
 
 function validateLoginOptions(options: AuthLoginOptions): void {

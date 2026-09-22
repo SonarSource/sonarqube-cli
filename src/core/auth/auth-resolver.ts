@@ -43,7 +43,7 @@ export const ENV_TOKEN = 'SONARQUBE_CLI_TOKEN';
 export const ENV_SERVER = 'SONARQUBE_CLI_SERVER';
 export const ENV_ORG = 'SONARQUBE_CLI_ORG';
 
-function assertSingleLineServerUrl(serverUrl: string): void {
+export function assertSingleLineServerUrl(serverUrl: string): void {
   if (!/[\r\n]/.test(serverUrl)) {
     return;
   }

@@ -243,7 +243,7 @@ export async function resolveProjectKey(
   });
 }
 
-function assertSingleLineProjectKey(projectKey: string): void {
+export function assertSingleLineProjectKey(projectKey: string): void {
   if (!/[\r\n]/.test(projectKey)) {
     return;
   }

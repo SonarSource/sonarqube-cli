@@ -39,7 +39,7 @@ import {
 } from '@/core/host/install/sca-scanner.ts';
 import { ResolveOnlySecretsInstaller } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
-import { discoverProject } from '@/core/project-info.ts';
+import { assertSingleLineProjectKey, discoverProject } from '@/core/project-info.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -73,6 +73,7 @@ export interface DepRisksStageOptions {
 
 async function resolveProjectKey(options: DepRisksStageOptions): Promise<string | undefined> {
   if (options.project) {
+    assertSingleLineProjectKey(options.project);
     return options.project;
   }
   const discovered = await discoverProject(process.cwd(), {
@@ -80,6 +81,9 @@ async function resolveProjectKey(options: DepRisksStageOptions): Promise<string 
     silent: true,
     console: options.ctx.console,
   });
+  if (discovered.projectKey) {
+    assertSingleLineProjectKey(discovered.projectKey);
+  }
   return discovered.projectKey;
 }
 

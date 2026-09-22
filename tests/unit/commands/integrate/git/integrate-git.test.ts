@@ -30,6 +30,7 @@ import {
   type IntegrateGitOptions,
   isGitHookType,
 } from '@/commands/integrate/git';
+import { resolveProjectKey } from '@/commands/integrate/git/index.ts';
 import {
   getNativeHookMarker,
   getRecognizedNativeMarkers,
@@ -348,6 +349,13 @@ describe('integrateGit', () => {
   beforeEach(() => {
     fake = new FakeConsole();
     MOCK_AUTH_CTX = new CommandAuthenticatedInvocationContext(MOCK_AUTH, fake);
+  });
+
+  it('rejects a multiline project key before installing project hooks', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+    await expect(
+      resolveProjectKey({ project: 'first\nsecond' }, TEMP_DIR, MOCK_AUTH, fake),
+    ).rejects.toThrow('The project key must be a single line.');
   });
 
   /* eslint-disable @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable */
