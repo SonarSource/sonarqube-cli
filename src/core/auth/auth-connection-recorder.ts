@@ -21,6 +21,8 @@
 // Records a resolved auth into state.auth.connections like `sonar auth login` does, minus saveToken().
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { getToken } from '@/core/host/keychain.ts';
+import logger from '@/core/observability/logger.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 
 import type { AuthConnection } from '../state/state.ts';
@@ -61,12 +63,21 @@ export async function recordConnectionFromAuth(
   const seedIdentity = options.refreshIdentity
     ? EMPTY_IDENTITY
     : identityFromConnection(seedConnection);
+  // Logout treats envOnly as already logged out, so never stamp it on a
+  // keychain-backed (login-created) connection — that would leave the stored
+  // token behind, unrevoked. A keychain we cannot read (headless CI, no
+  // libsecret) must not break env-var recording, so it degrades to "unknown".
+  const envOnly = options.envOnly === true && !(await hasStoredToken(auth));
 
   if (
     !options.force &&
     seedConnection &&
     !needsIdentityEnrichment(seedIdentity, auth.connectionType, seedConnection)
   ) {
+    if (envOnly && seedConnection.envOnly !== true) {
+      seedConnection.envOnly = true;
+      saveState(state);
+    }
     return seedConnection;
   }
 
@@ -74,7 +85,7 @@ export async function recordConnectionFromAuth(
     orgKey: auth.orgKey,
     region: cloudRegionFromUrl(auth.serverUrl),
     tokenName: options.tokenName,
-    envOnly: options.envOnly,
+    envOnly,
   });
 
   const identity = await resolveTelemetryIdentity(auth, seedIdentity);
@@ -82,6 +93,15 @@ export async function recordConnectionFromAuth(
 
   saveState(state);
   return connection;
+}
+
+async function hasStoredToken(auth: ResolvedAuth): Promise<boolean> {
+  try {
+    return (await getToken(auth.serverUrl, auth.orgKey)) !== null;
+  } catch (err) {
+    logger.debug(`Keychain unavailable while recording connection: ${(err as Error).message}`);
+    return true;
+  }
 }
 
 /** Applies fetched identity fields to the connection, per connection type. */

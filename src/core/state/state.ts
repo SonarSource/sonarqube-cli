@@ -80,11 +80,11 @@ export interface AuthConnection {
   /** Installation ID of the SonarQube Server (fetched at auth time, SQS only) */
   sqsInstallationId?: string | null;
   /**
-   * True when this connection was recorded from env-var auth (see
-   * `recordConnectionFromAuth`), not `sonar auth login`. `resolveAuth()` always
-   * prefers env vars when set, so an env-recorded connection is never the one
-   * actually used to fetch a keychain token — even if a keychain entry happens
-   * to exist for the same server/org from an earlier login.
+   * Set only when this connection was recorded from env-var auth and no
+   * keychain token was found. Not set for `sonar auth login`, when a keychain
+   * token exists, or when the keychain cannot be read. Logout treats envOnly
+   * as already logged out, so this must not be stamped onto a keychain-backed
+   * connection.
    */
   envOnly?: boolean;
 }
