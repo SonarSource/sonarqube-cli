@@ -38,7 +38,7 @@
         "istanbul-lib-report": "3.0.1",
         "istanbul-reports": "3.2.0",
         "lint-staged": "16.4.0",
-        "prettier": "3.9.6",
+        "prettier": "3.9.7",
         "typescript": "6.0.3",
         "typescript-eslint": "8.69.0",
       },
@@ -514,7 +514,7 @@
 
     "prelude-ls": ["prelude-ls@1.2.1", "https://repox.jfrog.io/artifactory/api/npm/npm/prelude-ls/-/prelude-ls-1.2.1.tgz", {}, "sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g=="],
 
-    "prettier": ["prettier@3.9.6", "https://repox.jfrog.io/artifactory/api/npm/npm/prettier/-/prettier-3.9.6.tgz", { "bin": { "prettier": "bin/prettier.cjs" } }, "sha512-OpN0zzVdiaiAhxpuuj5efpIS4sY9j7bY6uR5mnj5yPzGkdkjNKSJeUThPb60Jw29QuAZgA4o+/iB49kFiaBX6g=="],
+    "prettier": ["prettier@3.9.7", "https://repox.jfrog.io/artifactory/api/npm/npm/prettier/-/prettier-3.9.7.tgz", { "bin": { "prettier": "bin/prettier.cjs" } }, "sha512-T3mF5P7HFzZVLDQuCUNtJj6WK1pcpLMweMNUVwGb01bLNkH9AkKxtZvmInw8K6bnn2O3d6/5RHl6zSHiBAD0Og=="],
 
     "progress": ["progress@2.0.3", "https://repox.jfrog.io/artifactory/api/npm/npm/progress/-/progress-2.0.3.tgz", {}, "sha512-7PiHtLll5LdnKIMw100I+8xJXR5gW2QwWYkT6iJva0bXitZKa/XMrSbdmg3r2Xnaidz9Qumd0VPaMrZlF9V9sA=="],
 
