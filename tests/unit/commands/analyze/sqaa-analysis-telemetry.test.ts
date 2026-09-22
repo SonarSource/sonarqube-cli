@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -44,6 +44,7 @@ import { commitTelemetryFacts } from '@/core/telemetry';
 import * as userModule from '@/core/telemetry/user.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
+import { removeTestSonarUserHome } from '../../../_common/stats-helpers.ts';
 import { makeTelemetryState, readAnalysisEvents } from '../../../_common/telemetry-helpers.ts';
 
 const AUTH = new ResolvedAuth({
@@ -114,7 +115,7 @@ afterEach(async () => {
   getConnectionSpy.mockRestore();
   getUserIdSpy.mockRestore();
 
-  await rm(testSonarUserHome, { recursive: true, force: true });
+  await removeTestSonarUserHome(testSonarUserHome);
   if (previousSonarUserHome === undefined) {
     delete process.env[ENV_SONAR_USER_HOME];
   } else {

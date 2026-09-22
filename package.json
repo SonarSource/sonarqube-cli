@@ -74,7 +74,7 @@
       ]
     },
     "sonar-context-augmentation": {
-      "version": "0.21.0.4676",
+      "version": "0.22.0.4777",
       "binaryPath": "Distribution/sonar-context-augmentation",
       "archive": "tar.gz",
       "platformNaming": "x64",
@@ -100,10 +100,10 @@
   },
   "dependencies": {
     "@clack/core": "1.4.3",
-    "@sentry/bun": "10.73.0",
+    "@sentry/bun": "10.74.0",
     "@toon-format/toon": "2.3.1",
     "commander": "15.0.0",
-    "js-yaml": "5.4.1",
+    "js-yaml": "5.4.2",
     "launchdarkly-node-client-sdk": "3.4.3",
     "neverthrow": "8.2.0",
     "node-forge": "1.4.0",
@@ -132,9 +132,9 @@
     "istanbul-lib-report": "3.0.1",
     "istanbul-reports": "3.2.0",
     "lint-staged": "16.4.0",
-    "prettier": "3.9.6",
+    "prettier": "3.9.7",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.69.0"
+    "typescript-eslint": "8.70.0"
   },
   "overrides": {
     "flatted": "3.4.4"

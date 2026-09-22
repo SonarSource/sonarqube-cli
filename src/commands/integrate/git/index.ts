@@ -29,14 +29,17 @@ import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invo
 import { GLOBAL_HOOKS_DIR } from '@/core/config-constants.ts';
 import { installIntegration } from '@/core/framework/features';
 import { findGitRoot } from '@/core/host/git/discover.ts';
-import { GitRepo, resolveGitHooksDir } from '@/core/host/git/hooks.ts';
+import {
+  GitRepo,
+  resolveEffectiveGitHooksDir,
+  resolveLocalGitHooksDir,
+} from '@/core/host/git/hooks.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { yellow } from '@/core/ui/colors.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 import { type Console, phaseItem } from '@/core/ui/console.ts';
 
-import { resolveIntegrateScope } from '../_common/integrate-scope.ts';
 import { recordIntegrationConfigured } from '../_common/integrate-telemetry.ts';
 import { printGitPreflightSummary } from '../_common/preflight-summary.ts';
 import { supportedIntegrations } from '../index.ts';
@@ -79,12 +82,10 @@ interface HookInstallation {
   hooksDir: string;
 }
 
-export { resolveGitHooksDir } from '@/core/host/git/hooks.ts';
-
 export async function detectSonarHookInstallation(root: string): Promise<HookInstallation> {
   let hooksDir: string;
   try {
-    hooksDir = await resolveGitHooksDir(root);
+    hooksDir = await resolveLocalGitHooksDir(root);
   } catch {
     hooksDir = join(root, '.git', 'hooks');
   }
@@ -144,7 +145,67 @@ async function integrateGitGlobal(
   }
   console.blank();
 
-  await installGitFeatures(options, GLOBAL_HOOKS_DIR, 'global', auth, ctx);
+  await installGitFeatures(
+    options,
+    GLOBAL_HOOKS_DIR,
+    'global',
+    NATIVE_GIT_INTEGRATION_ID,
+    auth,
+    ctx,
+  );
+}
+
+/**
+ * `--local` workaround for setups where a global hook doesn't fit (e.g. an
+ * existing Husky config): installs the hook for the current repository only.
+ */
+async function integrateGitLocal(
+  options: IntegrateGitOptions,
+  auth: ResolvedAuth,
+  ctx: CommandAuthenticatedInvocationContext,
+): Promise<void> {
+  const { console } = ctx;
+  const { gitRoot, isGit } = findGitRoot(process.cwd());
+  if (!isGit) {
+    throw new CommandFailedError('No git repository found.', {
+      remediationHint: 'Run this command from inside a git repository, or omit --local.',
+    });
+  }
+
+  await printGitPreflightSummary(gitRoot, console);
+  console.blank();
+
+  const integrationId = await resolveGitIntegrationId(gitRoot, 'project');
+  await warnIfLocalHookWouldBeShadowed(gitRoot, console);
+
+  const resolvedOptions = await resolveProjectKey(options, gitRoot, auth, console);
+  await installGitFeatures(resolvedOptions, gitRoot, 'project', integrationId, auth, ctx);
+}
+
+/**
+ * `--local` never follows an inherited core.hooksPath (`resolveLocalGitHooksDir`), so it can't
+ * overwrite a global install — but git itself still prefers that inherited value over
+ * `.git/hooks`, which would leave the hook this installs unreachable. Gated on the path
+ * comparison alone, not the integration id: Husky's detection requires a matching repo-local
+ * `core.hooksPath`, so it never diverges, but the pre-commit framework writes straight into
+ * `.git/hooks` without touching `core.hooksPath` at all, so it can be shadowed exactly like
+ * plain native git.
+ */
+async function warnIfLocalHookWouldBeShadowed(gitRoot: string, console: Console): Promise<void> {
+  const [localHooksDir, effectiveHooksDir] = await Promise.all([
+    resolveLocalGitHooksDir(gitRoot),
+    resolveEffectiveGitHooksDir(gitRoot),
+  ]);
+  if (normalizePath(localHooksDir) === normalizePath(effectiveHooksDir)) {
+    return;
+  }
+
+  console.warn(
+    `An inherited core.hooksPath (${effectiveHooksDir}) takes precedence over ${localHooksDir}, ` +
+      'so the hook --local installs here will not run until this repository overrides it:',
+  );
+  console.text(`    git config --local core.hooksPath ${localHooksDir}`);
+  console.blank();
 }
 
 export async function integrateGit(
@@ -153,10 +214,6 @@ export async function integrateGit(
 ): Promise<void> {
   const { auth, console } = ctx;
   validateHookOption(options.hook);
-
-  if (options.global && options.project) {
-    throw new InvalidOptionError('-p is not supported with --global.');
-  }
 
   if (!options.nonInteractive) {
     printAgentNonInteractiveAlternativeHint(console, 'sonar integrate git --non-interactive');
@@ -168,39 +225,14 @@ export async function integrateGit(
   );
   console.info(yellow('Some scan types may be unavailable for certain hook types.'));
 
-  if (options.global) {
-    return integrateGitGlobal(options, auth, ctx);
+  if (options.local) {
+    return integrateGitLocal(options, auth, ctx);
   }
 
-  const { gitRoot, isGit } = findGitRoot(process.cwd());
-  if (isGit) {
-    await printGitPreflightSummary(gitRoot, console);
-    console.blank();
-  }
-
-  const scope = await resolveIntegrateScope({
-    ...options,
-    projectKey: options.project,
-    projectRoot: isGit ? gitRoot : process.cwd(),
-    console,
-  });
-  if (scope === 'global') {
-    return integrateGitGlobal(options, auth, ctx);
-  }
-
-  if (!isGit) {
-    throw new CommandFailedError('No git repository found.', {
-      remediationHint:
-        'Run this command from inside a git repository, or use --global to install a global hook.',
-    });
-  }
-
-  const resolvedOptions = await resolveProjectKey(options, gitRoot, auth, console);
-
-  await installGitFeatures(resolvedOptions, gitRoot, 'project', auth, ctx);
+  return integrateGitGlobal(options, auth, ctx);
 }
 
-async function resolveProjectKey(
+export async function resolveProjectKey(
   options: IntegrateGitOptions,
   root: string,
   auth: ResolvedAuth,
@@ -218,9 +250,8 @@ async function resolveProjectKey(
   }
 
   console.warn(
-    'No project key detected — dependency-risks scanning (if installed) will resolve a project ' +
-      'per-repo at commit time instead of a fixed key. Run `sonar integrate git --help` for ways ' +
-      'to define one explicitly.',
+    "No project key detected — run 'sonar link <projectKey>' to link one to this repository " +
+      'for dependency-risks scanning (if installed).',
   );
   return options;
 }
@@ -229,10 +260,10 @@ async function installGitFeatures(
   options: IntegrateGitOptions,
   targetRoot: string,
   scope: 'project' | 'global',
+  integrationId: GitIntegrationId,
   auth: ResolvedAuth,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const integrationId = await resolveGitIntegrationId(targetRoot, scope);
   await installIntegration({
     registry: supportedIntegrations,
     integrationId,

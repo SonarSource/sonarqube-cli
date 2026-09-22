@@ -194,7 +194,7 @@ describe('secretCheckCommand: successful scan', () => {
     const successes = fake.calls
       .filter((c) => c.method === 'success')
       .map((c) => String(c.args[0]));
-    expect(successes.some((m) => m.includes('No issues found'))).toBe(true);
+    expect(successes.some((m) => m.includes('No secrets found'))).toBe(true);
   });
 
   it('succeeds and shows clean file row when scan returns no issues', async () => {
@@ -232,7 +232,7 @@ describe('secretCheckCommand: successful scan', () => {
     const successes = fake.calls
       .filter((c) => c.method === 'success')
       .map((c) => String(c.args[0]));
-    expect(successes.some((m) => m.includes('No issues found'))).toBe(true);
+    expect(successes.some((m) => m.includes('No secrets found'))).toBe(true);
   });
 
   it('succeeds and shows clean file row when JSON has no issues field', async () => {
@@ -252,7 +252,7 @@ describe('secretCheckCommand: successful scan', () => {
     const successes = fake.calls
       .filter((c) => c.method === 'success')
       .map((c) => String(c.args[0]));
-    expect(successes.some((m) => m.includes('No issues found'))).toBe(true);
+    expect(successes.some((m) => m.includes('No secrets found'))).toBe(true);
   });
 
   it('emits a warning for each entry in the errors field when exit code is 0', async () => {
@@ -564,7 +564,7 @@ describe('secretCheckCommand: stdin scan', () => {
     const successes = fake.calls
       .filter((c) => c.method === 'success')
       .map((c) => String(c.args[0]));
-    expect(successes.some((m) => m.includes('No issues found'))).toBe(true);
+    expect(successes.some((m) => m.includes('No secrets found'))).toBe(true);
   });
 
   it('throws when binary exits 51 during stdin scan (secrets found)', async () => {

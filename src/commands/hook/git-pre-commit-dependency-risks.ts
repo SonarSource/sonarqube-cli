@@ -89,7 +89,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
   if (!binaryPath) {
     logger.warn('Dependency-risks hook: sca-scanner binary not installed, skipping.');
     console.warn(
-      "Dependency-risks scan skipped: sca-scanner binary not installed; commit not blocked. Re-run 'sonar integrate git -p <project>' to restore it.",
+      "Dependency-risks scan skipped: sca-scanner binary not installed; commit not blocked. Re-run 'sonar integrate git' to restore it.",
     );
     return;
   }
@@ -103,7 +103,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
     logger.warn('Dependency-risks hook: no project key resolved, skipping.');
     console.warn(
       'Dependency-risks scan skipped: no SonarQube project resolved for this repo; ' +
-        "commit not blocked. Re-run 'sonar integrate git -p <project>' to set one explicitly.",
+        "commit not blocked. Run 'sonar link <projectKey>' to link one to this repository.",
     );
     return;
   }

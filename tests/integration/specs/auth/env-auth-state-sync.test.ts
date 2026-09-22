@@ -119,6 +119,37 @@ describe('env-var auth — state sync', () => {
   );
 
   it(
+    'does not mark a keychain-backed connection envOnly when env vars match the same server',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('login-token').start();
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl())
+        .withTokenName('cli-login-token')
+        .withKeychainToken(server.baseUrl(), 'login-token');
+
+      const envResult = await harness.run('system status', {
+        extraEnv: { [ENV_TOKEN]: 'env-auth-token', [ENV_SERVER]: server.baseUrl() },
+      });
+      expect(envResult.exitCode).toBe(0);
+      expect(
+        (harness.stateJsonFile.asJson() as StoredState).auth.connections[0].envOnly,
+      ).toBeUndefined();
+
+      const logoutResult = await harness.run('auth logout');
+      expect(logoutResult.exitCode).toBe(0);
+      expect(logoutResult.stdout).toContain('Logged out from:');
+      expect(logoutResult.stdout).not.toContain('You are already logged out.');
+
+      const state = harness.stateJsonFile.asJson() as StoredState;
+      expect(state.auth.isAuthenticated).toBe(false);
+      expect(state.auth.connections).toHaveLength(0);
+      expect(readKeychainTokens(harness.keychainJsonFile)).toEqual({});
+    },
+    { timeout: 20000 },
+  );
+
+  it(
     'does not touch the keychain when env vars override an existing keychain-based connection',
     async () => {
       const loginServer = await harness.newFakeServer().withAuthToken('login-token').start();

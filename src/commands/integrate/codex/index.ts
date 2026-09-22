@@ -34,14 +34,10 @@ export async function integrateCodex(
 ): Promise<void> {
   const { auth, console } = ctx;
   if (!options.nonInteractive) {
-    printAgentNonInteractiveAlternativeHint(
-      console,
-      'sonar integrate codex --non-interactive',
-      'sonar integrate codex --non-interactive -g',
-    );
+    printAgentNonInteractiveAlternativeHint(console, 'sonar integrate codex --non-interactive');
   }
 
-  const integrateCtx = await displayAgentIntegratePrelude('Codex', 'codex', options, auth, console);
+  const integrateCtx = await displayAgentIntegratePrelude('Codex', auth, console);
 
   await finalizeAgentInstall<CodexIntegrationOptions>({
     integrationId: CODEX_INTEGRATION_ID,

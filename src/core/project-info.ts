@@ -237,7 +237,7 @@ export async function resolveProjectKey(
 
   throw new CommandFailedError('Could not determine project key.', {
     remediationHint:
-      'Use --project <key>, add sonar.projectKey to sonar-project.properties, or configure a .sonarlint/ binding.',
+      "Use --project <key>, or run 'sonar link <projectKey>' to link one to this repository.",
   });
 }
 

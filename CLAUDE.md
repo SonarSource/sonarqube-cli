@@ -42,7 +42,8 @@ The rest of this documentation loads on demand, never at session start. Content 
 - `src/commands/integrate/CLAUDE.md` — agent secrets hooks and Vortex (SQAA + Context Augmentation) across Claude, Codex, Cursor, Copilot and Antigravity.
 - `src/commands/quality-gate/CLAUDE.md` — `quality-gate status`, including file/directory scoping.
 - `src/core/framework/CLAUDE.md` — the declarative integration engine behind `sonar integrate`.
-- `src/core/telemetry/CLAUDE.md` — events, egress, identity resolution, `project_uuid`.
+- `src/core/telemetry/CLAUDE.md` — events, egress, identity resolution, `project_uuid`, `arguments`.
+- `src/core/stats/CLAUDE.md` — the local-only analyzer-accuracy ledger (secrets/SQAA/SCA), its fact lifecycle mirroring telemetry, and its SQLite concurrency constraints.
 - `src/core/update/CLAUDE.md` — the self-update lifecycle and its migrations.
 - `tests/CLAUDE.md` — test philosophy, harness usage, coverage.
 - `.claude/rules/state-and-auth.md` — `state.json`, the keychain, auth resolution, project discovery (`discoverProject()`). Its callers are `src/core/state/`, `src/core/auth/`, four top-level `src/core/` modules, four under `src/core/host/` (the keychain, the lookup-path and recorded-feature resolvers, the caller-agent detector) and the `auth` / `link` commands.

@@ -53,12 +53,14 @@ The SonarQube CLI integrates enterprise-grade static analysis into your developm
 The SonarQube CLI is designed for three distinct use cases:
 
 1. **🤖 Agentic Use** — Built-in support for AI coding agents (Claude Code, GitHub Copilot CLI, Codex, Cursor, and Antigravity) with safeguards that prevent secrets from being sent to LLM providers
+
    ```bash
-   sonar integrate claude -g
+   sonar integrate claude
    # Now Claude Code will automatically scan for secrets before processing your code
    ```
 
 2. **🖥️ Interactive CLI** — Run commands directly in your terminal to scan code, check issues, and manage SonarQube projects manually
+
    ```bash
    sonar list issues --project my-app
    sonar analyze --file file.ext
@@ -255,19 +257,11 @@ sonar analyze --branch feature-xyz          # Set branch context
 
 ### Claude Code Integration
 
-**Global setup** (hooks apply to all Claude Code sessions):
+Hooks apply to all Claude Code sessions on this machine:
 
 ```bash
 sonar auth login
-sonar integrate claude -g
-```
-
-**Project-specific setup** (hooks apply only to this project):
-
-```bash
-cd your-project
-sonar auth login
-sonar integrate claude --project my-org_my-project
+sonar integrate claude
 ```
 
 This installs:
@@ -277,6 +271,8 @@ This installs:
 - **Model Context Protocol (MCP) server** — Access SonarQube data directly from Claude Code
 
 ### Git Hooks
+
+Hooks apply to all repositories on this machine:
 
 **Pre-commit hook** (scan staged files before each commit):
 
@@ -290,12 +286,6 @@ sonar integrate git --hook pre-commit
 sonar integrate git --hook pre-push
 ```
 
-**Global git hooks** (apply to all repositories):
-
-```bash
-sonar integrate git --hook pre-commit --global
-```
-
 **For CI/CD or automation** (non-interactive mode):
 
 ```bash
@@ -305,19 +295,11 @@ sonar integrate git --hook pre-commit --non-interactive
 
 ### GitHub Copilot CLI Integration
 
-**Global setup:**
+Hooks apply to all Copilot CLI sessions on this machine:
 
 ```bash
 sonar auth login
-sonar integrate copilot -g
-```
-
-**Project-specific setup:**
-
-```bash
-cd your-project
-sonar auth login
-sonar integrate copilot --project my-org_my-project
+sonar integrate copilot
 ```
 
 This installs:
@@ -487,12 +469,14 @@ For SonarQube Cloud, ensure you're using the correct region:
 **Solution:**
 
 1. Check the hook file exists and is executable:
+
    ```bash
    ls -la .git/hooks/pre-commit
    chmod +x .git/hooks/pre-commit
    ```
 
 2. Test the hook manually:
+
    ```bash
    .git/hooks/pre-commit
    ```
@@ -552,13 +536,14 @@ For SonarQube Cloud, ensure you're using the correct region:
 Secrets scanning is intentionally sensitive to avoid missing real credentials. For test files:
 
 1. **Use obviously fake values:**
+
    ```javascript
    // ✅ Won't be flagged:
-   const API_KEY = "test_fake_key_for_unit_tests";
-   const TOKEN = "dummy-token-12345";
+   const API_KEY = 'test_fake_key_for_unit_tests';
+   const TOKEN = 'dummy-token-12345';
 
    // ❌ Might be flagged:
-   const API_KEY = "sk_live_abc123xyz789";
+   const API_KEY = 'sk_live_abc123xyz789';
    ```
 
 2. **Store test secrets in ignored files:**

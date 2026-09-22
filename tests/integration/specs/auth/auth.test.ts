@@ -107,6 +107,47 @@ describe('auth login', () => {
   );
 
   it(
+    'ignores an invalid browser callback and accepts a valid manual token',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-login-token').start();
+      const session = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
+        extraEnv: { CI: 'false' },
+        browserToken: 'invalid-browser-token',
+      });
+
+      await session.accept('Connect to:');
+      await session.waitText('Waiting for authorization');
+      session.write('my-login-token');
+      session.keyEnter();
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Authentication successful');
+      expect(
+        server
+          .getRecordedRequests()
+          .filter((request) => request.path === '/api/authentication/validate').length,
+      ).toBeGreaterThanOrEqual(2);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 1 in CI when the browser callback token is invalid',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-login-token').start();
+
+      const result = await confirmTrust(harness, `auth login --server ${server.baseUrl()}`, {
+        browserToken: 'invalid-browser-token',
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('The token delivered by the browser could not be validated.');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'persists tokenName returned by the browser auth callback',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('browser-login-token').start();
@@ -353,6 +394,196 @@ describe('auth login', () => {
     },
     { timeout: 15000 },
   );
+});
+
+describe('auth login --with-token', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  const cloudEnv = (baseUrl: string, region: 'eu' | 'us' = 'eu'): Record<string, string> =>
+    region === 'eu'
+      ? {
+          SONARQUBE_CLI_SONARCLOUD_URL: baseUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: baseUrl,
+        }
+      : {
+          SONARQUBE_CLI_SONARCLOUD_US_URL: baseUrl,
+          SONARQUBE_CLI_SONARCLOUD_US_API_URL: baseUrl,
+        };
+
+  it('imports a SonarQube Server token without starting the browser flow', async () => {
+    const server = await harness.newFakeServer().withAuthToken('imported-token').start();
+
+    const result = await harness.runWithStdin(
+      `auth login --with-token --server ${server.baseUrl()}`,
+      '  imported-token\r\n',
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Authentication successful');
+    expect(result.stdout + result.stderr).not.toContain('imported-token');
+    expect(result.stdout + result.stderr).not.toContain('Obtaining access token');
+    expect(result.stdout + result.stderr).not.toContain('Connect to:');
+    expect(
+      readKeychainToken(harness.keychainJsonFile, generateKeychainAccount(server.baseUrl())),
+    ).toBe('imported-token');
+  });
+
+  it.each([
+    ['eu' as const, 'eu-org'],
+    ['us' as const, 'us-org'],
+  ])('imports a SonarQube Cloud %s token for an explicit organization', async (region, org) => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken('cloud-token')
+      .withOrganizations([{ key: org, name: 'Cloud Org' }])
+      .start();
+
+    const result = await harness.runWithStdin(
+      `auth login --with-token --server ${server.baseUrl()} --org ${org}`,
+      'cloud-token\n',
+      { extraEnv: cloudEnv(server.baseUrl(), region) },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(`Authentication successful for: ${server.baseUrl()} (${org})`);
+    const connection = harness.stateJsonFile.asJson().auth.connections[0] as {
+      orgKey?: string;
+      region?: string;
+    };
+    expect(connection.orgKey).toBe(org);
+    expect(connection.region).toBe(region);
+  });
+
+  it('replaces an existing token, clears its token name, and refreshes the user identity', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken('replacement-token')
+      .withCurrentUserId('replacement-user')
+      .start();
+    harness
+      .state()
+      .withActiveConnection(server.baseUrl())
+      .withTokenName('browser-token-name')
+      .withConnectionUserUuid('previous-user')
+      .withKeychainToken(server.baseUrl(), 'previous-token');
+
+    const result = await harness.runWithStdin(
+      `auth login --with-token --server ${server.baseUrl()}`,
+      'replacement-token',
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(
+      readKeychainToken(harness.keychainJsonFile, generateKeychainAccount(server.baseUrl())),
+    ).toBe('replacement-token');
+    const connection = harness.stateJsonFile.asJson().auth.connections[0] as {
+      tokenName?: string;
+      userUuid?: string;
+    };
+    expect(connection.tokenName).toBeUndefined();
+    expect(connection.userUuid).toBe('replacement-user');
+  });
+
+  it('preserves existing credentials when the supplied token is invalid', async () => {
+    const server = await harness.newFakeServer().withAuthToken('valid-token').start();
+    harness
+      .state()
+      .withActiveConnection(server.baseUrl())
+      .withTokenName('browser-token-name')
+      .withKeychainToken(server.baseUrl(), 'previous-token');
+
+    const result = await harness.runWithStdin(
+      `auth login --with-token --server ${server.baseUrl()}`,
+      'invalid-token',
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('The supplied token is invalid');
+    expect(result.stdout + result.stderr).not.toContain('invalid-token');
+    expect(
+      readKeychainToken(harness.keychainJsonFile, generateKeychainAccount(server.baseUrl())),
+    ).toBe('previous-token');
+    expect(harness.stateJsonFile.asJson().auth.connections[0].tokenName).toBe('browser-token-name');
+  });
+
+  it('preserves existing credentials and does not revoke the token when the organization is inaccessible', async () => {
+    const server = await harness.newFakeServer().withAuthToken('replacement-token').start();
+    harness
+      .state()
+      .withActiveConnection(server.baseUrl(), 'cloud', 'missing-org')
+      .withTokenName('browser-token-name')
+      .withKeychainToken(server.baseUrl(), 'previous-token', 'missing-org');
+
+    const result = await harness.runWithStdin(
+      `auth login --with-token --server ${server.baseUrl()} --org missing-org`,
+      'replacement-token',
+      { extraEnv: cloudEnv(server.baseUrl()) },
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("Organization 'missing-org' not found or not accessible");
+    expect(result.stdout + result.stderr).not.toContain('replacement-token');
+    expect(
+      readKeychainToken(
+        harness.keychainJsonFile,
+        generateKeychainAccount(server.baseUrl(), 'missing-org'),
+      ),
+    ).toBe('previous-token');
+    expect(
+      server.getRecordedRequests().filter((request) => request.path === '/api/user_tokens/revoke'),
+    ).toHaveLength(0);
+  });
+
+  it('reports a validation failure when the server is unreachable', async () => {
+    const server = await harness.newFakeServer().start();
+    const serverUrl = server.baseUrl();
+    await server.stop();
+    harness
+      .state()
+      .withActiveConnection(serverUrl)
+      .withTokenName('browser-token-name')
+      .withKeychainToken(serverUrl, 'previous-token');
+
+    const result = await harness.runWithStdin(
+      `auth login --with-token --server ${serverUrl}`,
+      'unreachable-token',
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('Could not validate the supplied token');
+    expect(result.stdout + result.stderr).not.toContain('unreachable-token');
+    expect(readKeychainToken(harness.keychainJsonFile, generateKeychainAccount(serverUrl))).toBe(
+      'previous-token',
+    );
+    expect(harness.stateJsonFile.asJson().auth.connections[0].tokenName).toBe('browser-token-name');
+  });
+
+  it('removes an imported token locally without a server revocation request', async () => {
+    const server = await harness.newFakeServer().withAuthToken('imported-token').start();
+    const login = await harness.runWithStdin(
+      `auth login --with-token --server ${server.baseUrl()}`,
+      'imported-token',
+    );
+    expect(login.exitCode).toBe(0);
+
+    const logout = await harness.run('auth logout');
+
+    expect(logout.exitCode).toBe(0);
+    expect(
+      server.getRecordedRequests().filter((request) => request.path === '/api/user_tokens/revoke'),
+    ).toHaveLength(0);
+    expect(
+      readKeychainToken(harness.keychainJsonFile, generateKeychainAccount(server.baseUrl())),
+    ).toBeUndefined();
+  });
 });
 
 const LARGE_ORG_TOTAL = 200;
@@ -1520,6 +1751,37 @@ describe('auth status', () => {
       expect(result.stdout).toContain(
         `[✓ Connected]\nServer  ${server.baseUrl()}\nSource  OS Keychain`,
       );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports a configured organization that the token cannot access',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('status-token')
+        .withVisibleOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .start();
+      harness.state().withAuth(server.baseUrl(), 'status-token', 'my-org');
+
+      const result = await harness.run('auth status', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(
+        "Connected, but organization 'my-org' is not accessible with this token",
+      );
+      expect(result.stdout).toContain('This token resolves no membership for that organization.');
+      expect(result.stdout).toContain('Either regenerate it');
+      // The remediation path is the actionable part of this message, and it was wrong until
+      // review caught it. Assert it so the next UI change breaks a test rather than a user.
+      expect(result.stdout).toContain('My Account > Access Tokens');
+      expect(result.stdout).toContain('or ask an organization administrator to add');
     },
     { timeout: 15000 },
   );

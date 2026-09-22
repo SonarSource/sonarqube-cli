@@ -28,14 +28,17 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
+import * as keychainModule from '@/core/host/keychain.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
 
+import { createKeychainTestHandle } from '../host/keychain-test-handle.ts';
 import { mockIdentityGetSafe } from '../telemetry/identity-api-mock.ts';
 
 function serverAuth(token: string, serverUrl = 'https://sq.example.com'): ResolvedAuth {
@@ -53,13 +56,16 @@ function cloudAuth(token: string, orgKey = 'my-org'): ResolvedAuth {
 }
 
 let testDir: string;
+const keychain = createKeychainTestHandle();
 
 beforeEach(() => {
   testDir = mkdtempSync(join(tmpdir(), 'auth-connection-recorder-test-'));
   process.env[ENV_SONAR_USER_HOME] = testDir;
+  keychain.setup();
 });
 
 afterEach(() => {
+  keychain.teardown();
   delete process.env[ENV_SONAR_USER_HOME];
   rmSync(testDir, { recursive: true, force: true });
 });
@@ -161,6 +167,33 @@ describe('recordConnectionFromAuth', () => {
     getSafeSpy.mockRestore();
   });
 
+  it('refreshIdentity ignores identity inherited from a matching connection', async () => {
+    const state = loadState();
+    const existing = addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
+      orgKey: 'my-org',
+      tokenName: 'browser-token-name',
+    });
+    existing.userUuid = 'old-user';
+    existing.organizationUuidV4 = 'old-org';
+    existing.enterpriseUuid = null;
+    saveState(state);
+
+    const getSafeSpy = mockIdentityGetSafe({
+      user: [{ ok: true, id: 'new-user' }],
+      org: [{ ok: true, uuidV4: 'new-org' }],
+    });
+
+    const connection = await recordConnectionFromAuth(cloudAuth('replacement-token'), {
+      force: true,
+      refreshIdentity: true,
+    });
+
+    expect(connection.tokenName).toBeUndefined();
+    expect(connection.userUuid).toBe('new-user');
+    expect(connection.organizationUuidV4).toBe('new-org');
+    getSafeSpy.mockRestore();
+  });
+
   it('sets organizationUuidV4 only for cloud auth with an org key, and sqsInstallationId only for on-premise', async () => {
     const getSafeSpy = mockIdentityGetSafe({
       user: [{ ok: true, id: 'user-a' }],
@@ -184,10 +217,79 @@ describe('recordConnectionFromAuth', () => {
     getSafeSpy.mockRestore();
   });
 
+  it('updates a matching complete connection with the envOnly marker', async () => {
+    const state = loadState();
+    const existing = addOrUpdateConnection(state, 'https://sq.example.com', 'on-premise');
+    existing.userUuid = null;
+    existing.sqsInstallationId = 'sqs-existing';
+    saveState(state);
+    const getSafeSpy = mockIdentityGetSafe();
+
+    const connection = await recordConnectionFromAuth(serverAuth('t7'), { envOnly: true });
+
+    expect(connection.envOnly).toBe(true);
+    expect(connection.sqsInstallationId).toBe('sqs-existing');
+    expect(getSafeSpy).not.toHaveBeenCalled();
+    getSafeSpy.mockRestore();
+  });
+
+  it('does not stamp envOnly on a matching complete connection that has a keychain token', async () => {
+    const state = loadState();
+    const existing = addOrUpdateConnection(state, 'https://sq.example.com', 'on-premise');
+    existing.userUuid = null;
+    existing.sqsInstallationId = 'sqs-existing';
+    saveState(state);
+    await keychain.seedToken('https://sq.example.com', 'login-token');
+    const getSafeSpy = mockIdentityGetSafe();
+
+    const connection = await recordConnectionFromAuth(serverAuth('t7-keychain'), { envOnly: true });
+
+    expect(connection.envOnly).toBeUndefined();
+    expect(connection.sqsInstallationId).toBe('sqs-existing');
+    expect(getSafeSpy).not.toHaveBeenCalled();
+    getSafeSpy.mockRestore();
+  });
+
+  it('does not stamp envOnly on a keychain-backed connection that still needs identity', async () => {
+    const state = loadState();
+    addOrUpdateConnection(state, 'https://sq.example.com', 'on-premise');
+    saveState(state);
+    await keychain.seedToken('https://sq.example.com', 'login-token');
+    const getSafeSpy = mockIdentityGetSafe({ status: [{ ok: true, id: 'sqs-enriched' }] });
+
+    const connection = await recordConnectionFromAuth(serverAuth('t-env-keychain'), {
+      envOnly: true,
+    });
+
+    expect(connection.envOnly).toBeUndefined();
+    expect(connection.sqsInstallationId).toBe('sqs-enriched');
+    getSafeSpy.mockRestore();
+  });
+
+  it('still records the connection when the keychain is unreachable, without stamping envOnly', async () => {
+    const getTokenSpy = spyOn(keychainModule, 'getToken').mockRejectedValue(
+      new CommandFailedError('Failed to access the system keychain.'),
+    );
+    const getSafeSpy = mockIdentityGetSafe({ status: [{ ok: true, id: 'sqs-no-keychain' }] });
+
+    try {
+      const connection = await recordConnectionFromAuth(serverAuth('t-unreachable'), {
+        envOnly: true,
+      });
+
+      expect(connection.serverUrl).toBe('https://sq.example.com');
+      expect(connection.envOnly).toBeUndefined();
+      expect(getActiveConnection(loadState())?.serverUrl).toBe('https://sq.example.com');
+    } finally {
+      getTokenSpy.mockRestore();
+      getSafeSpy.mockRestore();
+    }
+  });
+
   it('leaves envOnly unset for a login-style call (no envOnly option)', async () => {
     const getSafeSpy = mockIdentityGetSafe({ status: [{ ok: true, id: 'sqs-login' }] });
 
-    const connection = await recordConnectionFromAuth(serverAuth('t7'), {
+    const connection = await recordConnectionFromAuth(serverAuth('t8'), {
       tokenName: 'cli-token',
       force: true,
     });

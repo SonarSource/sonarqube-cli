@@ -25,10 +25,13 @@ import { encode as encodeToToon } from '@toon-format/toon';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFileComponentKey } from '@/core/file-component.ts';
+import { resolveProjectKey } from '@/core/project-info.ts';
+import { autoResolvePullRequest } from '@/core/pull-request-auto-resolve.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { SystemClient } from '@/core/server/system.ts';
 import type { IssuesSearchParams, SonarQubeIssue } from '@/core/server/types.ts';
+import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { columnFormatting } from '@/core/ui/formatter/column-formatting.ts';
 import { formatCSV } from '@/core/ui/formatter/csv.ts';
 
@@ -88,6 +91,7 @@ export interface ListIssuesOptions {
   pullRequest?: string;
   resolved?: boolean;
   file?: string;
+  newCode?: boolean;
   format?: string;
   pageSize: number;
   page: number;
@@ -95,6 +99,35 @@ export interface ListIssuesOptions {
 
 function normalizeSeverityValues(raw: string): string[] {
   return raw.split(',').map((s) => s.trim().toUpperCase());
+}
+
+function resolveStatuses(statuses: string | undefined): string {
+  if (!statuses) {
+    return DEFAULT_STATUSES.join(',');
+  }
+  const normalized = statuses.split(',').map((s) => s.toUpperCase());
+  if (!normalized.every((s) => VALID_STATUSES.includes(s))) {
+    throw new InvalidOptionError(
+      `Invalid status(es): '${statuses}'. Valid statuses are: ${VALID_STATUSES.join(', ')}`,
+    );
+  }
+  return normalized.join(',');
+}
+
+function validateSeveritiesOption(severities: string | undefined): void {
+  if (!severities) return;
+  const preflightValues = normalizeSeverityValues(severities);
+  if (
+    preflightValues.some(
+      (s) => !VALID_STANDARD_SEVERITIES.includes(s) && !VALID_MQR_SEVERITIES.includes(s),
+    )
+  ) {
+    throw new InvalidOptionError(
+      `Invalid severity(es): '${severities}'. ` +
+        `Multi-Quality Rule (MQR) mode values: ${VALID_MQR_SEVERITIES.join(', ')}. ` +
+        `Standard Experience mode values: ${VALID_STANDARD_SEVERITIES.join(', ')}.`,
+    );
+  }
 }
 
 function parseSeverities(
@@ -119,15 +152,16 @@ export async function listIssues(
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   const { auth, console } = ctx;
-  if (!options.project) {
-    throw new InvalidOptionError('--project is required.', 'Add --project <key>.');
-  }
 
   const format = options.format ?? 'json';
   if (!VALID_FORMATS.includes(format.toLowerCase())) {
     throw new InvalidOptionError(
       `Invalid format: '${format}'. Must be one of: ${VALID_FORMATS.join(', ')}`,
     );
+  }
+
+  if (options.branch && options.pullRequest) {
+    throw new InvalidOptionError('--branch and --pull-request cannot be used together.');
   }
 
   const ps = options.pageSize;
@@ -142,44 +176,38 @@ export async function listIssues(
     throw new InvalidOptionError(`Invalid --page option: '${page}'. Must be an integer >= 1`);
   }
 
-  let normalizedStatuses = options.statuses;
-  if (normalizedStatuses) {
-    const statuses = normalizedStatuses.split(',').map((s) => s.toUpperCase());
-    if (!statuses.every((s) => VALID_STATUSES.includes(s))) {
-      throw new InvalidOptionError(
-        `Invalid status(es): '${options.statuses}'. Valid statuses are: ${VALID_STATUSES.join(', ')}`,
-      );
-    }
-    normalizedStatuses = statuses.join(',');
-  } else {
-    normalizedStatuses = DEFAULT_STATUSES.join(',');
-  }
+  const normalizedStatuses = resolveStatuses(options.statuses);
+  validateSeveritiesOption(options.severities);
 
-  if (options.severities) {
-    const preflightValues = normalizeSeverityValues(options.severities);
-    if (
-      preflightValues.some(
-        (s) => !VALID_STANDARD_SEVERITIES.includes(s) && !VALID_MQR_SEVERITIES.includes(s),
-      )
-    ) {
-      throw new InvalidOptionError(
-        `Invalid severity(es): '${options.severities}'. ` +
-          `Multi-Quality Rule (MQR) mode values: ${VALID_MQR_SEVERITIES.join(', ')}. ` +
-          `Standard Experience mode values: ${VALID_STANDARD_SEVERITIES.join(', ')}.`,
-      );
-    }
-  }
+  const projectKey = await resolveProjectKey(options.project, auth, console);
+  noteProject(auth, projectKey);
 
   const client = ctx.connection.httpClient;
   const issuesClient = new IssuesClient(client);
+
+  const { branch } = options;
+  let { pullRequest } = options;
+  if (!branch && !pullRequest) {
+    const autoDetected = await autoResolvePullRequest(client, projectKey);
+    if (autoDetected) {
+      pullRequest = autoDetected.pullRequest;
+      console.print(
+        `     Using pull request ${pullRequest} (auto-detected from branch ${autoDetected.branch})`,
+        'stderr',
+      );
+    }
+  }
 
   let componentKeys: string | undefined;
   if (options.file) {
     ({ componentKey: componentKeys } = await resolveFileComponentKey(
       client,
-      options.project,
+      projectKey,
       options.file,
-      { branch: options.branch, pullRequest: options.pullRequest },
+      {
+        branch,
+        pullRequest,
+      },
     ));
   }
 
@@ -192,7 +220,7 @@ export async function listIssues(
       : {};
 
   const params: IssuesSearchParams = {
-    projects: componentKeys ?? options.project,
+    projects: componentKeys ?? projectKey,
     organization: auth.orgKey,
     severities: normalizedSeverities,
     impactSeverities: normalizedImpactSeverities,
@@ -200,9 +228,10 @@ export async function listIssues(
     issueStatuses: normalizedStatuses,
     rules: options.rule,
     tags: options.tag,
-    branch: options.branch,
-    pullRequest: options.pullRequest,
+    branch,
+    pullRequest,
     resolved: options.resolved,
+    sinceLeakPeriod: options.newCode,
     ps: options.pageSize,
     p: page,
   };

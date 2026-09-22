@@ -418,7 +418,7 @@ The state file is managed automatically by the CLI. Direct manual editing is not
 sonar auth login -s https://sonarcloud.io -o my-org
 
 # Configure Claude Code integration
-sonar integrate claude --project my-project
+sonar integrate claude
 
 # Install a Git hook integration
 sonar integrate git --hook pre-commit

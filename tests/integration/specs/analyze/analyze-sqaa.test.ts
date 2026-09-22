@@ -37,6 +37,7 @@ import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
+import { readStatsEvents, readStatsRuleDescriptions } from '../../../_common/stats-helpers.ts';
 import type { StoredAnalysisCompletedEvent } from '../../../_common/telemetry-helpers';
 import { readAnalysisEvents, readCommandEvents } from '../../../_common/telemetry-helpers';
 import { type CliResult, TestHarness } from '../../harness';
@@ -107,6 +108,7 @@ describe('analyze (no subcommand)', () => {
       });
 
       expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('No secrets found');
       expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
@@ -304,7 +306,7 @@ describe('analyze (no subcommand)', () => {
 
       const output = result.stdout + result.stderr;
       expect(result.exitCode).toBe(0);
-      expect(output).toContain('No issues found');
+      expect(output).toContain('No secrets found');
       expect(output).toContain('Vortex analysis skipped: no project configured');
       expect(output).not.toContain('Usage: sonar analyze');
       const sqaaCalls = server
@@ -339,6 +341,7 @@ describe('analyze (no subcommand)', () => {
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
       expect(output).not.toContain('no project configured');
+      expect(output).toContain('No secrets found');
       expect(output).toContain('No issues found');
 
       const sqaaCalls = server
@@ -1208,6 +1211,46 @@ describe('analyze agentic — analysis telemetry', () => {
         rule_keys: ['typescript:S1234'],
         counts_by_rule: { 'typescript:S1234': 2 },
       });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'records exactly one stats event and upserts rule messages when issues are found',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({
+          issues: [
+            { rule: 'typescript:S1234', message: 'Fix this', startLine: 1 },
+            { rule: 'typescript:S1234', message: 'Fix that', startLine: 2 },
+          ],
+        })
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;\nconst y = 2;\n');
+
+      const result = await harness.run('analyze agentic --file src/index.ts');
+
+      expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+      const events = readStatsEvents(harness.sonarUserHome.path);
+      expect(events).toHaveLength(1);
+      const [event] = events;
+      expect(event.caller_command).toBe(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND);
+      expect(event.run_trigger).toBe('manual');
+      expect(event.parsedDetails.analyzer).toBe('sqaa');
+      expect(event.parsedDetails.findingsCount).toBe(2);
+      expect(event.parsedDetails.ruleCounts).toEqual({ 'typescript:S1234': 2 });
+
+      const ruleDescriptions = readStatsRuleDescriptions(harness.sonarUserHome.path);
+      expect(ruleDescriptions).toHaveLength(1);
+      expect(ruleDescriptions[0].rule_key).toBe('typescript:S1234');
     },
     { timeout: 15000 },
   );

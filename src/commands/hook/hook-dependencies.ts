@@ -21,18 +21,19 @@
 // Shared guard for hook handlers — resolves auth and binary path, throwing
 // MissingDependenciesError if either is unavailable so handlers fail loudly.
 
-import type { SecretsCallerCommand } from '@/commands/analyze/secrets-analysis-telemetry.ts';
+import { createHash } from 'node:crypto';
+
+import {
+  scanAndEmitSecrets,
+  type SecretsCallerCommand,
+} from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import {
-  runSecretsBinary,
-  runSecretsBinaryOnText,
-  scanAndEmitSecrets,
-} from '../analyze/secrets.ts';
+import { runSecretsBinary, runSecretsBinaryOnText } from '../analyze/secrets.ts';
 
 export interface HookDependencies {
   auth: ResolvedAuth;
@@ -105,11 +106,14 @@ export async function runAndEmitTextSecretsScan(
   text: string,
   ctx: CommandInvocationContext,
 ): Promise<number> {
+  // Hash, not the raw text, so prompt content never lands in the ledger.
+  const source = createHash('sha256').update(text).digest('hex');
   const { result } = await scanAndEmitSecrets(
     callerCommand,
     deps.auth,
     () => runSecretsBinaryOnText(deps.binaryPath, text, deps.auth),
     ctx,
+    source,
   );
   return result.exitCode ?? 1;
 }

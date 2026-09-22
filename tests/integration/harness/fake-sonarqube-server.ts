@@ -475,7 +475,7 @@ export class FakeSonarQubeServerBuilder {
   private validToken?: string;
   private systemStatusCode = 200;
   private systemVersion = '25.1.0.102122';
-  private memberOrganizations: Organization[] = [];
+  private memberOrganizations?: Organization[];
   private memberOrganizationsTotal?: number;
   // The default Cloud fixture answers `/organizations/organizations` only: it is neither a
   // membership nor visible to the v1 `organizations=` search, so seeding it leaves every
@@ -484,6 +484,7 @@ export class FakeSonarQubeServerBuilder {
     { key: 'my-org', name: 'My Org' },
   ];
   private visibleOrganizations: Organization[] = [];
+  private currentUserId = 'fake-user-uuid';
   private readonly dopRepositoriesByOrgId: Map<string, DopRepositoryConfig[]> = new Map();
   /** Keyed by org legacy id, for `GET /dop-translation/organization-bindings`. */
   private readonly organizationBindingsByOrgId: Map<string, string> = new Map();
@@ -518,7 +519,7 @@ export class FakeSonarQubeServerBuilder {
     [];
   private hasProvisionProjects = true;
   private boundProjectsStatusCode?: number;
-  private analyzedProjectKeys = new Set<string>();
+  private readonly analyzedProjectKeys = new Set<string>();
 
   private metrics: Metric[] = [];
 
@@ -542,6 +543,11 @@ export class FakeSonarQubeServerBuilder {
 
   withAuthToken(token: string): this {
     this.validToken = token;
+    return this;
+  }
+
+  withCurrentUserId(id: string): this {
+    this.currentUserId = id;
     return this;
   }
 
@@ -571,6 +577,7 @@ export class FakeSonarQubeServerBuilder {
    * They answer the single-key organization lookups. They stay out of `member=true`.
    */
   withVisibleOrganizations(orgs: Organization[]): this {
+    this.memberOrganizations ??= [];
     this.visibleOrganizations = orgs;
     return this;
   }
@@ -851,10 +858,11 @@ export class FakeSonarQubeServerBuilder {
       systemStatus,
       systemStatusCode,
       systemVersion,
-      memberOrganizations,
+      memberOrganizations: configuredMemberOrganizations,
       memberOrganizationsTotal: rawMemberOrganizationsTotal,
       visibleOrganizations,
       defaultResolvableOrganizations,
+      currentUserId,
       dopRepositoriesByOrgId,
       organizationBindingsByOrgId,
       revokeTokenStatusCode,
@@ -894,6 +902,12 @@ export class FakeSonarQubeServerBuilder {
       analyzedProjectKeys,
       treatAsCloud,
     } = this;
+    const memberOrganizations: Organization[] =
+      configuredMemberOrganizations ??
+      [...new Set([...sqaaEntitlementOrgs.keys(), ...cagEntitlementOrgs.keys()])].map((key) => ({
+        key,
+        name: key,
+      }));
     const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
     const provisionConcurrency = { current: 0, peak: 0 };
@@ -1912,7 +1926,7 @@ export class FakeSonarQubeServerBuilder {
         if (path === '/api/users/current') {
           const global = hasProvisionProjects ? ['provisioning'] : [];
           return new Response(
-            JSON.stringify({ id: 'fake-user-uuid', login: 'fake-user', permissions: { global } }),
+            JSON.stringify({ id: currentUserId, login: 'fake-user', permissions: { global } }),
             { headers: { 'Content-Type': 'application/json' } },
           );
         }

@@ -38,12 +38,15 @@ import { initSentry } from '@/core/observability/sentry.ts';
 import { GENERIC_HTTP_METHODS } from '@/core/server/http-client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { tryLoadState } from '@/core/state/state-repository.ts';
+import { commitStatsFacts } from '@/core/stats/facts.ts';
 import { commitTelemetryFacts, flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
 import { buildCommandExecutedFact } from '@/core/telemetry/command-executed.ts';
 import { resolveInvocationAuthForTelemetry } from '@/core/telemetry/identity.ts';
 import type { Console } from '@/core/ui/console.ts';
+import { migrateAgentIntegrationsToGlobalScopeSafely } from '@/core/update/global-integrations-migration.ts';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
+import type { PostUpdateDependencies } from '@/core/update/post-update.ts';
 import { runPostUpdateActionsSafely } from '@/core/update/post-update.ts';
 
 import { version as VERSION } from '../../package.json';
@@ -108,6 +111,7 @@ import { integrateCopilot } from './integrate/copilot';
 import { integrateCursor } from './integrate/cursor';
 import { integrateGit, type IntegrateGitOptions } from './integrate/git';
 import { integrateBare, type IntegrateBareOptions } from './integrate/integrate-bare.ts';
+import { AGENT_INTEGRATION_HANDLERS } from './integrate/integration-handlers.ts';
 import { link, type LinkOptions } from './link';
 import {
   DEFAULT_STATUSES,
@@ -171,6 +175,14 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   let capturedAgentSessionId: string | null = null;
   const COMMAND_TREE = new SonarCommand({ runtime, console });
 
+  const postUpdateDeps: PostUpdateDependencies = {
+    supportedIntegrations,
+    installHooks,
+    console,
+    runtime,
+    agentIntegrationHandlers: AGENT_INTEGRATION_HANDLERS,
+  };
+
   const handleHookInvocation =
     <TArgs extends unknown[]>(
       run: (ctx: CommandInvocationContext, ...args: TArgs) => Promise<HookCommandResult>,
@@ -221,8 +233,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   auth
     .command('login')
     .description(
-      'Authenticate via browser and save credentials in the system keychain. ' +
-        'Must be run manually — agents cannot authenticate themselves. ' +
+      'Authenticate via browser or an existing token and save credentials in the system keychain. ' +
         'For CI and automation, use environment variables instead: https://docs.sonarsource.com/sonarqube-cli/using-sonarqube-cli/environment-variables',
     )
     .option(
@@ -230,6 +241,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'SonarQube Server URL, SonarQube Cloud EU (https://sonarcloud.io), or SonarQube Cloud US (https://sonarqube.us). Defaults to SonarQube Cloud EU.',
     )
     .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
+    .option('--with-token', 'Read an existing token from standard input')
     .anonymousAction((ctx, options: AuthLoginOptions) => authLogin(options, ctx));
 
   auth
@@ -262,7 +274,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .command('issues')
     .description('Search for issues in SonarQube')
     .showUpdateNotification(isTableFormatOption)
-    .requiredOption('-p, --project <project>', 'Project key')
+    .option('-p, --project <project>', 'Project key')
     .option(
       '--statuses <statuses>',
       `Filter by status (comma-separated list of: ${VALID_STATUSES.join(', ')}). Defaults to ${DEFAULT_STATUSES.join(', ')}.`,
@@ -272,12 +284,13 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       `Filter by severity. Valid values depend on server mode — Multi-Quality Rule (MQR) mode: ${VALID_MQR_SEVERITIES.join(', ')}; Standard Experience mode: ${VALID_STANDARD_SEVERITIES.join(', ')}.`,
     )
     .addOption(listIssuesFormatOption)
-    .option('--branch <branch>', 'Branch name')
-    .option('--pull-request <pull-request>', 'Pull request ID')
+    .option('--branch <branch>', 'Branch name. Cannot be combined with --pull-request.')
+    .option('--pull-request <pull-request>', 'Pull request ID. Cannot be combined with --branch.')
     .option(
       '--file <path>',
       "Limit results to one file, or to a directory's own files (not its subdirectories): a full path from the project root, or just a name if it matches only one",
     )
+    .option('--new-code', 'Only show issues on new code (the leak period)')
     .addOption(pageSizeOption)
     .addOption(pageOption)
     .authenticatedAction((ctx, options: ListIssuesOptions) => listIssues(options, ctx));
@@ -386,9 +399,17 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       category: 'integrate',
     })
     .showUpdateNotification((opts) => !opts.nonInteractive)
-    .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
-    .option('-g, --global', 'Install integrations globally.')
+    .option('--non-interactive', 'Non-interactive mode (no prompts); requires an explicit agent')
+    .enablePositionalOptions()
     .rejectUnknownSubcommands()
+    // `--non-interactive` before the agent name (e.g. `integrate --non-interactive claude`) is
+    // parsed onto this command, not the subcommand it dispatches to; forward it explicitly so
+    // placement doesn't silently fall back to interactive mode.
+    .hook('preSubcommand', (thisCommand, subCommand) => {
+      if (thisCommand.opts().nonInteractive) {
+        subCommand.setOptionValueWithSource('nonInteractive', true, 'cli');
+      }
+    })
     .authenticatedAction((ctx, options: IntegrateBareOptions) => integrateBare(ctx, options));
 
   integrateCommand
@@ -403,12 +424,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('--force', 'Overwrite existing hook if it is not from sonar integrate git')
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
     .option(
-      '--global',
-      'Install hook globally for all repositories (sets git config --global core.hooksPath)',
-    )
-    .option(
-      '-p, --project <project>',
-      'Project key baked into the dependency-risks hook (not supported with --global)',
+      '--local',
+      'Install the hook for this repository only, instead of globally (workaround for setups where a global hook does not fit, e.g. Husky)',
     )
     .authenticatedAction((ctx, options: IntegrateGitOptions) => integrateGit(options, ctx));
 
@@ -417,13 +434,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description(
       'Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.',
     )
-    .option('-p, --project <project>', 'Project key. Ignored when --global is used.')
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
-    .option(
-      '-g, --global',
-      'Install hooks and config globally to ~/.claude instead of project directory',
-    )
-    .addHelpText('after', projectKeyExtraHelp)
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateClaude(options, ctx));
 
   integrateCommand
@@ -431,13 +442,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description(
       'Setup SonarQube integration for GitHub Copilot CLI. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.',
     )
-    .option(
-      '-g, --global',
-      'Install hooks and config globally to ~/.copilot instead of project directory',
-    )
-    .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
-    .addHelpText('after', projectKeyExtraHelp)
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCopilot(options, ctx));
 
   // `sonar context` — passthrough wrapper for sonar-context-augmentation.
@@ -469,13 +474,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description(
       'Setup SonarQube integration for Codex. This will install a UserPromptSubmit hook that scans prompts for secrets before they are sent.',
     )
-    .option(
-      '-g, --global',
-      'Install hook and config globally to ~/.codex instead of project directory',
-    )
-    .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
-    .addHelpText('after', projectKeyExtraHelp)
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCodex(options, ctx));
 
   integrateCommand
@@ -483,13 +482,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description(
       'Setup SonarQube integration for Antigravity. Installs secrets scanning hooks, prompt-secrets instructions, and Vortex Context.',
     )
-    .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
-    .option(
-      '-g, --global',
-      'Install hooks and config globally under ~/.gemini/config instead of the project .agents/ directory',
-    )
-    .addHelpText('after', projectKeyExtraHelp)
     .authenticatedAction((ctx, options: IntegrateAgentOptions) =>
       integrateAntigravity(options, ctx),
     );
@@ -497,15 +490,9 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   integrateCommand
     .command('cursor')
     .description(
-      'Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure Vortex analysis.',
+      "Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure Vortex analysis. Note: Cursor's cloud/background agents only pick up project-level hooks, not global ones.",
     )
-    .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
-    .option(
-      '-g, --global',
-      "Install config globally to ~/.cursor instead of project directory. Note: Cursor's cloud/background agents only pick up project-level hooks, not global ones.",
-    )
-    .addHelpText('after', projectKeyExtraHelp)
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCursor(options, ctx));
 
   // Analyze code for quality and security issues
@@ -699,6 +686,15 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   // Update the CLI to the latest version
   if (CURRENT_DISTRIBUTION.enableSelfUpdate) {
+    // Retry surface for a global-integrations migration the post-update run could not finish.
+    // Shared with the `self-update` alias below so both retry it the same way.
+    const retryGlobalIntegrationsMigration = async (thisCommand: Command): Promise<void> => {
+      if (thisCommand.opts().status) {
+        return; // --status only reports a version; it must not write anything.
+      }
+      await migrateAgentIntegrationsToGlobalScopeSafely(postUpdateDeps);
+    };
+
     COMMAND_TREE.command('update')
       .description('Update SonarQube CLI to the latest version')
       .rootHelp({
@@ -706,7 +702,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       })
       .option('--status', 'Check for a newer version without installing')
       .option('--force', 'Install the latest version even if already up to date')
-      .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx));
+      .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx))
+      .hook('preAction', retryGlobalIntegrationsMigration);
 
     // Hidden compatibility alias for `sonar update`.
     COMMAND_TREE.command('self-update', { hidden: true })
@@ -714,7 +711,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       .stage(Stage.Deprecated({ sinceVersion: '1.4', replacement: 'sonar update' }))
       .option('--status', 'Check for a newer version without installing')
       .option('--force', 'Install the latest version even if already up to date')
-      .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx));
+      .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx))
+      .hook('preAction', retryGlobalIntegrationsMigration);
   }
 
   const runCommand = COMMAND_TREE.command('run', { hidden: true }).description(
@@ -916,17 +914,13 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   COMMAND_TREE.hook('preAction', async () => {
     // Safely: a throw from a Commander hook would abort the user's command.
-    await runPostUpdateActionsSafely({
-      supportedIntegrations,
-      installHooks,
-      console,
-      runtime,
-    });
+    await runPostUpdateActionsSafely(postUpdateDeps);
   });
 
   // Emit handler facts plus CliCommandExecuted in one commit.
   COMMAND_TREE.hook('postAction', async (_thisCommand, actionCommand) => {
     const command = actionCommand as SonarCommand;
+    commitStatsFacts(command.invocationContext?.statsFacts() ?? []);
     const handlerFacts = command.invocationContext?.telemetryFacts() ?? [];
     await commitTelemetryFacts([...handlerFacts, await buildCommandExecutedFact(command)], {
       agentSessionId: resolveAgentSessionId(capturedAgentSessionId),

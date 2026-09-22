@@ -64,19 +64,22 @@ describe('recheckVortexEntitlement', () => {
     expect(entitlementSpy).toHaveBeenCalledWith('acme');
   });
 
-  it.each<VortexEntitlementStatus>(['enabled', 'over_consumption', 'not_entitled', 'check_failed'])(
-    'passes through the %s verdict',
-    async (verdict) => {
-      entitlementSpy = spyOn(
-        VortexEntitlementClient.prototype,
-        'hasVortexEntitlement',
-      ).mockResolvedValue({
-        status: verdict,
-      });
+  it.each<VortexEntitlementStatus>([
+    'enabled',
+    'over_consumption',
+    'not_entitled',
+    'organization_not_accessible',
+    'check_failed',
+  ])('passes through the %s verdict', async (verdict) => {
+    entitlementSpy = spyOn(
+      VortexEntitlementClient.prototype,
+      'hasVortexEntitlement',
+    ).mockResolvedValue({
+      status: verdict,
+    });
 
-      expect(await recheckVortexEntitlement(connection(cloudAuth()))).toBe(verdict);
-    },
-  );
+    expect(await recheckVortexEntitlement(connection(cloudAuth()))).toBe(verdict);
+  });
 });
 
 function serverAuth(): ResolvedAuth {

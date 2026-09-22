@@ -28,6 +28,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
 
+import { readStatsEvents, readStatsRuleDescriptions } from '../../../_common/stats-helpers.ts';
 import { readAnalysisEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
 
@@ -79,7 +80,7 @@ describe('analyze secrets', () => {
       const result = await harness.run('analyze secrets clean.js');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('No issues found');
+      expect(result.stdout + result.stderr).toContain('No secrets found');
     },
     { timeout: 30000 },
   );
@@ -110,7 +111,7 @@ describe('analyze secrets', () => {
       const result = await harness.runWithStdin('analyze secrets --stdin', CLEAN_CONTENT);
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('No issues found');
+      expect(result.stdout + result.stderr).toContain('No secrets found');
     },
     { timeout: 30000 },
   );
@@ -144,7 +145,7 @@ describe('analyze secrets', () => {
       const result = await harness.run('analyze secrets clean.js');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('No issues found');
+      expect(result.stdout + result.stderr).toContain('No secrets found');
       expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
         true,
       );
@@ -294,6 +295,55 @@ describe('analyze secrets', () => {
       };
       expect(Object.keys(details.counts_by_rule).length).toBeGreaterThanOrEqual(1);
       expect(details.source).toBe('files');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'records exactly one stats event per scan, with details and rule messages',
+    async () => {
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(FAKE_SERVER, 'fake-token');
+      harness.cwd.writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+
+      const result = await harness.run('analyze secrets secrets.js');
+      expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+
+      const events = readStatsEvents(harness.sonarUserHome.path);
+      expect(events).toHaveLength(1);
+      const [event] = events;
+      expect(event.caller_command).toBe('analyze secrets');
+      expect(event.run_trigger).toBe('manual');
+      expect(event.parsedDetails.analyzer).toBe('sonar-secrets');
+      expect(event.parsedDetails.findingsCount).toBeGreaterThanOrEqual(1);
+      expect(event.parsedDetails.ruleCounts).toBeDefined();
+
+      const ruleDescriptions = readStatsRuleDescriptions(harness.sonarUserHome.path);
+      expect(ruleDescriptions.length).toBeGreaterThanOrEqual(1);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'dedupes findings against the stats ledger on a re-scan of the same unchanged file',
+    async () => {
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(FAKE_SERVER, 'fake-token');
+      harness.cwd.writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+
+      const first = await harness.run('analyze secrets secrets.js');
+      expect(first.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+      const second = await harness.run('analyze secrets secrets.js');
+      // The CLI still reports the same finding on stdout/exit code every run —
+      // only the local stats count is deduped.
+      expect(second.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+
+      const events = readStatsEvents(harness.sonarUserHome.path);
+      expect(events).toHaveLength(2);
+      const [firstEvent, secondEvent] = events;
+      expect(firstEvent.parsedDetails.findingsCount).toBeGreaterThanOrEqual(1);
+      expect(secondEvent.parsedDetails.findingsCount).toBe(0);
+      expect(secondEvent.parsedDetails.ruleCounts).toBeUndefined();
     },
     { timeout: 30000 },
   );

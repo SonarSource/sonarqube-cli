@@ -29,7 +29,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { type CliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { CURSOR_IGNORE_FILE } from '@/core/config-constants.ts';
+import { CURSOR_IGNORE_FILE, ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 import { okAsync } from '@/core/result.ts';
 
@@ -42,6 +42,7 @@ import {
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 import { mockAuthResolver } from '../../../_common/mock-auth-resolver.ts';
+import { readStatsEvents } from '../../../_common/stats-helpers.ts';
 
 const TEST_FILE = '/sonar-test/secret.ts';
 const SECRET_CONTENT = 'const secret = "ghp_test";';
@@ -60,6 +61,31 @@ let runtime: CliRuntime;
 function makeCtx() {
   return new CommandInvocationContext(new FakeConsole(), undefined, runtime);
 }
+
+function readStatsCallerCommands(): string[] {
+  return readStatsEvents(testSonarUserHome).map((event) => event.caller_command);
+}
+
+let testSonarUserHome: string;
+const previousSonarUserHome = process.env[ENV_SONAR_USER_HOME];
+
+beforeEach(() => {
+  testSonarUserHome = mkdtempSync(join(tmpdir(), 'cursor-pre-file-read-stats-'));
+  process.env[ENV_SONAR_USER_HOME] = testSonarUserHome;
+});
+
+afterEach(() => {
+  try {
+    rmSync(testSonarUserHome, { recursive: true, force: true });
+  } catch {
+    // best-effort: a held file handle on Windows must not fail the test
+  }
+  if (previousSonarUserHome === undefined) {
+    delete process.env[ENV_SONAR_USER_HOME];
+  } else {
+    process.env[ENV_SONAR_USER_HOME] = previousSonarUserHome;
+  }
+});
 
 describe('cursorPreFileRead', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;
@@ -129,6 +155,18 @@ describe('cursorPreFileRead', () => {
     expect(output.permission).toBe('deny');
     expect(exitSpy).toHaveBeenCalledWith(2);
     expect(ctx.telemetryFacts()).toHaveLength(1);
+  });
+
+  it('records the stats event before exiting on deny, instead of losing it', async () => {
+    runSecretsBinaryOnTextSpy.mockResolvedValue({
+      exitCode: EXIT_CODE_SECRETS_FOUND,
+      stdout: '',
+      stderr: '',
+    });
+
+    await cursorPreFileRead(makeCtx());
+
+    expect(readStatsCallerCommands()).toEqual(['cursor-pre-file-read']);
   });
 
   it('returns without scanning when file path and content are missing', async () => {

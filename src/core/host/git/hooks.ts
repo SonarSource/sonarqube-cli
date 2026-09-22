@@ -31,13 +31,50 @@ import { spawnProcess } from '../../process/process.ts';
 /** Filename used by the `pre-commit` framework (https://pre-commit.com) for its config. */
 export const PRE_COMMIT_CONFIG_FILE = '.pre-commit-config.yaml';
 
+interface HooksDirFallback {
+  command: string[];
+  resolveFromOutput: (output: string) => string;
+}
+
 /**
- * Resolves the directory git uses for hooks (core.hooksPath or .git/hooks).
+ * Resolves the directory git uses for hooks, from the repository's own config only
+ * (core.hooksPath or .git/hooks) — never an inherited global/system core.hooksPath, since a
+ * repo-scoped install must not follow (or overwrite) a hooks path configured for every repo.
  */
-export async function resolveGitHooksDir(root: string): Promise<string> {
+export async function resolveLocalGitHooksDir(root: string): Promise<string> {
+  return resolveGitHooksDirWithConfigScope(root, ['config', '--local', 'core.hooksPath'], {
+    // In a linked worktree or submodule, `.git` is a file rather than a directory, so the
+    // statSync-based fast path below can't apply — the fallback command matters there.
+    // `--git-path hooks` (used by the effective resolver below) follows an inherited
+    // core.hooksPath, which would leak the global value back in exactly the case this
+    // function exists to avoid; `--git-common-dir` never does, and hooks always live under
+    // the *common* dir (shared by every worktree of the same repo), never a per-worktree one.
+    command: ['rev-parse', '--git-common-dir'],
+    resolveFromOutput: (commonDir) => join(commonDir, 'hooks'),
+  });
+}
+
+/**
+ * Resolves the directory git will *actually* use for hooks in this repo right now — the
+ * effective `core.hooksPath` (local, else inherited global/system), else `.git/hooks`. Only
+ * for diagnostics (e.g. warning that a `--local` install is shadowed by an inherited value);
+ * installing a hook must always target {@link resolveLocalGitHooksDir} instead.
+ */
+export async function resolveEffectiveGitHooksDir(root: string): Promise<string> {
+  return resolveGitHooksDirWithConfigScope(root, ['config', 'core.hooksPath'], {
+    command: ['rev-parse', '--git-path', 'hooks'],
+    resolveFromOutput: (output) => output,
+  });
+}
+
+async function resolveGitHooksDirWithConfigScope(
+  root: string,
+  configCommand: string[],
+  fallback: HooksDirFallback,
+): Promise<string> {
   let configResult;
   try {
-    configResult = await spawnProcess('git', ['config', 'core.hooksPath'], { cwd: root });
+    configResult = await spawnProcess('git', configCommand, { cwd: root });
   } catch {
     configResult = null;
   }
@@ -54,12 +91,12 @@ export async function resolveGitHooksDir(root: string): Promise<string> {
       return join(dotGit, 'hooks');
     }
   } catch {
-    // .git is a file (worktree) or missing — use git rev-parse
+    // .git is a file (worktree/submodule) or missing
   }
 
   let result;
   try {
-    result = await spawnProcess('git', ['rev-parse', '--git-path', 'hooks'], { cwd: root });
+    result = await spawnProcess('git', fallback.command, { cwd: root });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new CommandFailedError(`Failed to run git [${message}]`, {
@@ -77,7 +114,7 @@ export async function resolveGitHooksDir(root: string): Promise<string> {
       },
     );
   }
-  const resolved = result.stdout.trim();
+  const resolved = fallback.resolveFromOutput(result.stdout.trim());
   return isAbsolute(resolved) ? resolved : join(root, resolved);
 }
 
@@ -99,7 +136,7 @@ export class GitRepo {
   }
 
   private async getHooksDirOnce(): Promise<string> {
-    this._hooksDir ??= resolveGitHooksDir(this.rootDir);
+    this._hooksDir ??= resolveLocalGitHooksDir(this.rootDir);
     return this._hooksDir;
   }
 
@@ -109,7 +146,7 @@ export class GitRepo {
     return normalizePath(hooksDir).startsWith(normalizePath(join(this.rootDir, '.husky')));
   }
 
-  /** Resolved git hooks directory (core.hooksPath or .git/hooks). */
+  /** Resolved local git hooks directory. */
   async getHooksDir(): Promise<string> {
     return this.getHooksDirOnce();
   }
