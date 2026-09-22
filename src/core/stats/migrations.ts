@@ -36,7 +36,6 @@ interface StoredAnalyzerEventRow {
   details: string;
 }
 
-/** One-time rollup of pre-existing `analyzer`-class rows so upgrading doesn't reset all-time totals. */
 function backfillAggregatesFromExistingEvents(db: Database): void {
   const rows = db
     .prepare<StoredAnalyzerEventRow, []>(
@@ -64,7 +63,6 @@ function backfillAggregatesFromExistingEvents(db: Database): void {
   }
 }
 
-/** Exported so tests can apply a subset (e.g. just v1) to set up pre-migration fixtures. */
 export const STATS_MIGRATIONS: readonly StatsMigration[] = [
   {
     version: 1,

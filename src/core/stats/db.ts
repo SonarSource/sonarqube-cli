@@ -32,8 +32,6 @@ const CORRUPTION_ERROR_CODE_PREFIXES = ['SQLITE_NOTADB', 'SQLITE_CORRUPT'];
 
 const DAY_MS = 86_400_000;
 
-// Their contribution already lives in stats_aggregates (updated at write time, per row) —
-// deleting raw rows here needs no recomputation.
 function purgeOldStatsEvents(db: Database): void {
   const cutoffMs = Date.now() - STATS_RETENTION_DAYS * DAY_MS;
   db.prepare('DELETE FROM stats_events WHERE timestamp_ms < ?').run(cutoffMs);

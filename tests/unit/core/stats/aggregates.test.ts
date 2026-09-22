@@ -82,17 +82,14 @@ describe('applyAnalyzerEventToAggregates', () => {
       db,
       baseEvent({ analyzer: 'sonar-secrets', exitCode: 51, callerCommand: 'git-pre-commit' }),
     );
-    // Manual analyze secrets run: not a "stop point" caller command, even with the same exit code.
     applyAnalyzerEventToAggregates(
       db,
       baseEvent({ analyzer: 'sonar-secrets', exitCode: 51, callerCommand: 'analyze secrets' }),
     );
-    // Right caller command, wrong analyzer.
     applyAnalyzerEventToAggregates(
       db,
       baseEvent({ analyzer: 'sqaa', exitCode: 51, callerCommand: 'git-pre-commit' }),
     );
-    // Right caller command and analyzer, clean exit.
     applyAnalyzerEventToAggregates(
       db,
       baseEvent({ analyzer: 'sonar-secrets', exitCode: 0, callerCommand: 'git-pre-commit' }),
@@ -181,8 +178,6 @@ describe('applyAnalyzerEventToAggregates', () => {
 });
 
 describe('isSecretsBlocked classification (drift protection)', () => {
-  // Typed over keyof typeof SECRETS_CALLER_COMMANDS so a new caller command fails to compile
-  // here until classified, catching drift against the hand-maintained set in aggregates.ts.
   const EXPECTED_BLOCKED: Record<keyof typeof SECRETS_CALLER_COMMANDS, boolean> = {
     analyze: false,
     analyzeSecrets: false,

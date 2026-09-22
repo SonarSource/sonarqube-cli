@@ -165,7 +165,6 @@ describe('v2 migration: stats_aggregates backfill', () => {
 
     applyStatsMigrations(db);
 
-    // Inserted directly, bypassing recordStatsEvent's own aggregate write.
     expect(readAggregate(db, 'global', '')).toBeNull();
   });
 });

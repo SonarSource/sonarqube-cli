@@ -98,7 +98,6 @@ export interface StoredStatsAggregate {
   first_seen_ms: number | null;
 }
 
-/** Reads one `stats_aggregates` row from an already-open db handle (e.g. a `:memory:` test db). */
 export function readStatsAggregateFromDb(
   db: Database,
   dimension: string,
@@ -111,7 +110,6 @@ export function readStatsAggregateFromDb(
     .get(dimension, key);
 }
 
-/** Reads one `stats_aggregates` row from the real file-backed ledger under `sonarUserHome`. */
 export function readStatsAggregate(
   sonarUserHome: string,
   dimension: string,

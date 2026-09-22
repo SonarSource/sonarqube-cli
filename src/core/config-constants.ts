@@ -261,7 +261,6 @@ export function getStatsDir(): string {
 
 export const STATS_DB_FILENAME = 'stats.db';
 
-/** Raw `stats_events` rows older than this are purged — see CLI-1115. */
 export const STATS_RETENTION_DAYS = 365;
 
 // ---------------------------------------------------------------------------

@@ -20,12 +20,8 @@
 
 import type { Database } from 'bun:sqlite';
 
-// Mirrors EXIT_CODE_SECRETS_FOUND in src/commands/analyze/secrets.ts — not imported, since
-// src/core never imports src/commands.
 const SECRETS_BLOCKED_EXIT_CODE = 51;
 
-// Hand-synced against SECRETS_CALLER_COMMANDS in src/commands/analyze/secrets-analysis-telemetry.ts,
-// for the same import-direction reason.
 const SECRETS_BLOCKED_CALLER_COMMANDS: ReadonlySet<string> = new Set([
   'git-pre-commit',
   'git-pre-push',
@@ -38,7 +34,6 @@ const SECRETS_BLOCKED_CALLER_COMMANDS: ReadonlySet<string> = new Set([
   'cursor-pre-tool-use',
 ]);
 
-/** Input for {@link applyAnalyzerEventToAggregates}; a self-contained shape to avoid an import cycle. */
 export interface AnalyzerAggregateEvent {
   timestampMs: number;
   callerCommand: string;
@@ -92,7 +87,6 @@ function upsertGlobalRow(db: Database, event: AnalyzerAggregateEvent): void {
   );
 }
 
-/** Folds one `analyzer`-class event into the all-time counters, so it survives purging the raw row later. */
 export function applyAnalyzerEventToAggregates(db: Database, event: AnalyzerAggregateEvent): void {
   upsertGlobalRow(db, event);
   upsertCounterRow(db, 'analyzer', event.analyzer, 1, event.findingsCount);
