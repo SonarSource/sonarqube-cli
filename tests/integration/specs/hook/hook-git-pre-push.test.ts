@@ -22,6 +22,7 @@
 // ref parsing, graceful skips, and end-to-end scan with a real local git repo.
 
 import { chmodSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -33,7 +34,7 @@ import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
 
 import { TestHarness } from '../../harness';
-import { commitFile, initGitRepo } from './git-test-helpers';
+import { addBareRemote, commitFile, git, initGitRepo, publishRef } from './git-test-helpers';
 
 // Hardcoded test token — intentional fixture for secret detection, not a real credential
 // sonar-ignore-next-line S6769
@@ -275,6 +276,120 @@ describe('sonar hook git-pre-push', () => {
     },
     { timeout: 30000 },
   );
+
+  describe('scan scope against a real remote', () => {
+    const BARE_REMOTE = '.bare-remote.git';
+
+    function repoWithRemote(): string {
+      initGitRepo(harness.cwd.path);
+      addBareRemote(harness.cwd.path, join(harness.cwd.path, BARE_REMOTE));
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(FAKE_SERVER, VALID_TOKEN);
+      return harness.cwd.path;
+    }
+
+    it(
+      'does not scan anything when the pushed ref adds no commits to the remote',
+      async () => {
+        const cwd = repoWithRemote();
+        const sha = commitFile(cwd, 'leak.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+        publishRef(cwd, 'HEAD:refs/heads/master');
+
+        // Same commit, new ref name: nothing is transferred, so the already-published
+        // secret must not block the push.
+        const result = await harness.runWithStdin(
+          'hook git-pre-push',
+          pushRefLine(sha, GIT_NULL_OID, 'refs/heads/release-1.0'),
+        );
+
+        expect(result.exitCode).toBe(0);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'does not scan anything when tagging an already-pushed commit',
+      async () => {
+        const cwd = repoWithRemote();
+        const sha = commitFile(cwd, 'leak.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+        publishRef(cwd, 'HEAD:refs/heads/master');
+
+        const result = await harness.runWithStdin(
+          'hook git-pre-push',
+          pushRefLine(sha, GIT_NULL_OID, 'refs/tags/v1.0'),
+        );
+
+        expect(result.exitCode).toBe(0);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'scans only the new commits, not the already-published base',
+      async () => {
+        const cwd = repoWithRemote();
+        commitFile(cwd, 'leak.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+        publishRef(cwd, 'HEAD:refs/heads/master');
+        const localSha = commitFile(cwd, 'clean.js', CLEAN_CONTENT);
+
+        const result = await harness.runWithStdin(
+          'hook git-pre-push',
+          pushRefLine(localSha, GIT_NULL_OID, 'refs/heads/feature'),
+        );
+
+        expect(result.exitCode).toBe(0);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'does not scan upstream files pulled in by a rebase before a force-push',
+      async () => {
+        const cwd = repoWithRemote();
+        commitFile(cwd, 'base.js', CLEAN_CONTENT);
+        publishRef(cwd, 'HEAD:refs/heads/master');
+
+        git(['switch', '-c', 'feature'], cwd);
+        const firstPush = commitFile(cwd, 'mine.js', CLEAN_CONTENT);
+        publishRef(cwd, 'feature:refs/heads/feature');
+
+        git(['switch', 'master'], cwd);
+        commitFile(cwd, 'upstream-leak.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+        publishRef(cwd, 'master:refs/heads/master');
+
+        git(['switch', 'feature'], cwd);
+        git(['rebase', 'master'], cwd);
+        const rebased = git(['rev-parse', 'HEAD'], cwd);
+
+        const result = await harness.runWithStdin(
+          'hook git-pre-push',
+          pushRefLine(rebased, firstPush, 'refs/heads/feature'),
+        );
+
+        expect(result.exitCode).toBe(0);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'still scans when the remote tip is absent from the local object database',
+      async () => {
+        const cwd = repoWithRemote();
+        commitFile(cwd, 'base.js', CLEAN_CONTENT);
+        publishRef(cwd, 'HEAD:refs/heads/master');
+        const localSha = commitFile(cwd, 'leak.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+
+        // Well-formed SHA that this clone has never seen — as after a colleague's push.
+        const result = await harness.runWithStdin(
+          'hook git-pre-push',
+          pushRefLine(localSha, 'a'.repeat(40), 'refs/heads/master'),
+        );
+
+        expect(result.exitCode).toBe(1);
+      },
+      { timeout: 30000 },
+    );
+  });
 
   describe('files mode (pre-commit framework)', () => {
     it(

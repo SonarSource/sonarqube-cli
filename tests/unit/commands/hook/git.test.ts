@@ -77,6 +77,13 @@ const SECRETS_RESULT_WITH_ISSUES = {
   stderr: '',
 };
 
+/** Args of the first `git <subcommand>` spawn recorded by the spy, if any. */
+function gitArgsFor(spy: ReturnType<typeof spyOn>, subcommand: string): string[] | undefined {
+  const calls = spy.mock.calls as unknown as unknown[][];
+  const call = calls.find((c) => c[0] === 'git' && (c[1] as string[])[0] === subcommand);
+  return call?.[1] as string[] | undefined;
+}
+
 describe('gitPreCommit', () => {
   let resolveAuthSpy: ReturnType<typeof spyOn>;
   let spawnProcessSpy: ReturnType<typeof spyOn>;
@@ -412,18 +419,19 @@ describe('gitPrePush', () => {
     }
   });
 
-  it('proceeds normally when git mktree throws (falls back to null OID as empty tree)', async () => {
-    spawnProcessSpy.mockRejectedValueOnce(new Error('mktree failed'));
-    // subsequent calls use the beforeEach default — rev-list + diff-tree return files
+  it('does not fall back to a full scan when no commits are new to the remote', async () => {
+    spawnProcessSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }); // rev-list: none
 
     await gitPrePush([], makeCtx());
 
-    expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
+    expect(runSecretsBinarySpy).not.toHaveBeenCalled();
+    // rev-list only: any extra call would mean a fallback crept back in.
+    expect(spawnProcessSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('scans diff between remoteSha and localSha for an existing-branch push', async () => {
+  it('scans the range between the remote tip and the pushed tip for an existing-branch push', async () => {
     readGitPushRefsSpy.mockResolvedValue([EXISTING_BRANCH_REF]);
-    // spawnProcess: mktree (call 1) then git diff (call 2) — both use beforeEach default
+    // spawnProcess: cat-file (1), rev-list (2), diff-tree per commit (3+) — beforeEach default
 
     await gitPrePush([], makeCtx());
 
@@ -432,35 +440,55 @@ describe('gitPrePush', () => {
     expect(files).toEqual(['src/foo.ts', 'src/bar.ts']);
   });
 
-  it('skips scan when git diff throws during existing-branch push', async () => {
+  it('excludes the remote tip from the range when it exists locally', async () => {
+    readGitPushRefsSpy.mockResolvedValue([EXISTING_BRANCH_REF]);
+
+    await gitPrePush([], makeCtx());
+
+    expect(gitArgsFor(spawnProcessSpy, 'rev-list')).toEqual([
+      'rev-list',
+      EXISTING_BRANCH_REF.localSha,
+      '--not',
+      EXISTING_BRANCH_REF.remoteSha,
+      '--remotes',
+    ]);
+  });
+
+  it('omits a remote tip absent from the local object database', async () => {
     readGitPushRefsSpy.mockResolvedValue([EXISTING_BRANCH_REF]);
     spawnProcessSpy
-      .mockResolvedValueOnce({ exitCode: 0, stdout: 'abc123tree', stderr: '' }) // mktree
-      .mockRejectedValueOnce(new Error('git diff failed')); // diff remoteSha..localSha
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: '' }) // cat-file: unknown commit
+      .mockResolvedValue({ exitCode: 0, stdout: 'src/foo.ts', stderr: '' });
+
+    await gitPrePush([], makeCtx());
+
+    expect(gitArgsFor(spawnProcessSpy, 'rev-list')).toEqual([
+      'rev-list',
+      EXISTING_BRANCH_REF.localSha,
+      '--not',
+      '--remotes',
+    ]);
+  });
+
+  it('does not probe the object database when the remote ref does not exist yet', async () => {
+    await gitPrePush([], makeCtx());
+
+    expect(gitArgsFor(spawnProcessSpy, 'cat-file')).toBeUndefined();
+  });
+
+  it('skips scan when rev-list fails during an existing-branch push', async () => {
+    readGitPushRefsSpy.mockResolvedValue([EXISTING_BRANCH_REF]);
+    spawnProcessSpy
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'deadbeef', stderr: '' }) // cat-file
+      .mockRejectedValueOnce(new Error('rev-list failed'));
 
     await gitPrePush([], makeCtx());
 
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });
 
-  it('scans via empty-tree diff when rev-list finds no new commits', async () => {
-    spawnProcessSpy
-      .mockResolvedValueOnce({ exitCode: 0, stdout: 'abc123tree', stderr: '' }) // mktree
-      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }) // rev-list: no commits
-      .mockResolvedValue({ exitCode: 0, stdout: 'src/new.ts', stderr: '' }); // diff vs empty tree
-
-    await gitPrePush([], makeCtx());
-
-    expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
-    const [, files] = runSecretsBinarySpy.mock.calls[0] as [string, string[], unknown];
-    expect(files).toEqual(['src/new.ts']);
-  });
-
-  it('skips scan when empty-tree diff throws (no new commits path)', async () => {
-    spawnProcessSpy
-      .mockResolvedValueOnce({ exitCode: 0, stdout: 'abc123tree', stderr: '' }) // mktree
-      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }) // rev-list: no commits
-      .mockRejectedValue(new Error('git diff failed')); // empty-tree diff throws
+  it('skips a deletion ref whose null OID is SHA-256 width', async () => {
+    readGitPushRefsSpy.mockResolvedValue([{ ...FAKE_REF, localSha: '0'.repeat(64) }]);
 
     await gitPrePush([], makeCtx());
 
