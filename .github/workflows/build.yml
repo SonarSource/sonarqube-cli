@@ -24,6 +24,9 @@ jobs:
   prepare:
     name: Prepare Build
     runs-on: sonar-xs
+    permissions:
+      id-token: write
+      contents: write # get-build-number v2 claims refs/build-number/<N>
     outputs:
       BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
       PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
@@ -525,6 +528,9 @@ jobs:
   promote:
     runs-on: sonar-xs
     name: Promote
+    permissions:
+      id-token: write
+      contents: write # promote embeds get-build-number v2
     needs:
       - prepare
       - build-binaries
