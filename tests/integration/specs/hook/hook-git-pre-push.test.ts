@@ -389,6 +389,74 @@ describe('sonar hook git-pre-push', () => {
       },
       { timeout: 30000 },
     );
+
+    it(
+      'scans content a merge introduced itself during conflict resolution',
+      async () => {
+        const cwd = repoWithRemote();
+        commitFile(cwd, 'base.js', CLEAN_CONTENT);
+        publishRef(cwd, 'HEAD:refs/heads/master');
+
+        git(['switch', '-c', 'side'], cwd);
+        commitFile(cwd, 'side.js', CLEAN_CONTENT);
+        publishRef(cwd, 'side:refs/heads/side');
+
+        git(['switch', 'master'], cwd);
+        const remoteTip = commitFile(cwd, 'main.js', CLEAN_CONTENT);
+        publishRef(cwd, 'master:refs/heads/master');
+
+        // Evil merge: the secret lives in the merge commit alone, in neither parent.
+        git(['merge', '--no-commit', '--no-ff', 'side'], cwd);
+        const merged = commitFile(cwd, 'evil.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+
+        const result = await harness.runWithStdin(
+          'hook git-pre-push',
+          pushRefLine(merged, remoteTip, 'refs/heads/master'),
+        );
+
+        expect(result.exitCode).toBe(1);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'ignores a push target that is a URL rather than a configured remote',
+      async () => {
+        const cwd = repoWithRemote();
+        commitFile(cwd, 'leak.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+        publishRef(cwd, 'HEAD:refs/heads/master');
+        const localSha = commitFile(cwd, 'clean.js', CLEAN_CONTENT);
+
+        // `--remotes=<url>` matches no refs, which would leave the published secret in scope.
+        const result = await harness.runWithStdin(
+          'hook git-pre-push',
+          pushRefLine(localSha, GIT_NULL_OID, 'refs/heads/feature'),
+          { extraEnv: { SONAR_PRE_PUSH_REMOTE_NAME: join(cwd, BARE_REMOTE) } },
+        );
+
+        expect(result.exitCode).toBe(0);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'scopes to a configured remote name taken from the environment',
+      async () => {
+        const cwd = repoWithRemote();
+        commitFile(cwd, 'leak.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+        publishRef(cwd, 'HEAD:refs/heads/master');
+        const localSha = commitFile(cwd, 'clean.js', CLEAN_CONTENT);
+
+        const result = await harness.runWithStdin(
+          'hook git-pre-push',
+          pushRefLine(localSha, GIT_NULL_OID, 'refs/heads/feature'),
+          { extraEnv: { SONAR_PRE_PUSH_REMOTE_NAME: 'origin' } },
+        );
+
+        expect(result.exitCode).toBe(0);
+      },
+      { timeout: 30000 },
+    );
   });
 
   describe('files mode (pre-commit framework)', () => {

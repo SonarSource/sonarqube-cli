@@ -32,8 +32,11 @@ import { readGitPushRefs } from './stdin.ts';
 // Zero-OID width follows the repository hash algorithm: 40 under SHA-1, 64 under SHA-256.
 const NULL_OID_PATTERN = /^0+$/;
 
+/** Set by the generated hook. An env var, not a flag, so an older CLI ignores it instead of failing. */
+export const REMOTE_NAME_ENV = 'SONAR_PRE_PUSH_REMOTE_NAME';
+
 export interface GitPrePushOptions {
-  /** Remote git is pushing to, forwarded from the hook's first argument. */
+  /** Remote git is pushing to; overrides `SONAR_PRE_PUSH_REMOTE_NAME`. */
   remoteName?: string;
 }
 
@@ -42,7 +45,10 @@ export async function gitPrePush(
   files: string[],
   ctx: CommandInvocationContext,
 ): Promise<void> {
-  const fileGroups = await getFileGroupsToScan(files, resolveRemotesExclusion(options.remoteName));
+  const fileGroups = await getFileGroupsToScan(
+    files,
+    await resolveRemotesExclusion(options.remoteName),
+  );
   if (fileGroups === null) return;
 
   const auth = await ctx.resolveAuthOrNull();
@@ -55,13 +61,12 @@ export async function gitPrePush(
   }
 }
 
-/**
- * Scoping to the push target keeps an unrelated remote's tracking refs from hiding a commit that
- * remote has never seen. Hooks installed before the name was forwarded fall back to every remote.
- */
-function resolveRemotesExclusion(remoteName: string | undefined): string {
-  const name = remoteName?.trim();
-  return name ? `--remotes=${name}` : '--remotes';
+/** Git passes a URL when the push names no remote, and `--remotes=<url>` matches no refs. */
+async function resolveRemotesExclusion(remoteName: string | undefined): Promise<string> {
+  const name = (remoteName ?? process.env[REMOTE_NAME_ENV])?.trim();
+  if (!name) return '--remotes';
+  const configured = (await tryRunGitLines(['remote'], process.cwd())) ?? [];
+  return configured.includes(name) ? `--remotes=${name}` : '--remotes';
 }
 
 async function getFileGroupsToScan(
@@ -98,34 +103,22 @@ async function collectFilesForRefs(
   return out;
 }
 
+/** Files the push would transfer; `-c` also catches content a merge introduced itself. */
 async function getFilesForRef(ref: PushRef, remotesExclusion: string): Promise<string[]> {
-  const files = new Set<string>();
-  for (const commit of await listCommitsToPush(ref, remotesExclusion)) {
-    for (const file of await listFilesInCommit(commit)) {
-      files.add(file);
-    }
-  }
-  return Array.from(files);
-}
-
-/** Commits this push would transfer; empty means the remote already holds all of them. */
-async function listCommitsToPush(ref: PushRef, remotesExclusion: string): Promise<string[]> {
   const knownRemoteTip = (await isKnownCommit(ref.remoteSha)) ? [ref.remoteSha] : [];
-  const args = ['rev-list', ref.localSha, '--not', ...knownRemoteTip, remotesExclusion];
-  return (await tryRunGitLines(args, process.cwd())) ?? [];
-}
-
-async function listFilesInCommit(commit: string): Promise<string[]> {
   const args = [
-    'diff-tree',
-    '--root',
-    '--no-commit-id',
-    '-r',
+    'log',
+    '--format=',
     '--name-only',
     '--diff-filter=ACMR',
-    commit,
+    '-c',
+    '--root',
+    ref.localSha,
+    '--not',
+    ...knownRemoteTip,
+    remotesExclusion,
   ];
-  return (await tryRunGitLines(args, process.cwd())) ?? [];
+  return Array.from(new Set((await tryRunGitLines(args, process.cwd())) ?? []));
 }
 
 /** A remote tip this clone never fetched cannot narrow the range. */

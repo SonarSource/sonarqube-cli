@@ -25,7 +25,7 @@ import type { GitHookType } from '../../options.ts';
 import {
   LEGACY_HOOK_MARKER,
   resolveDepRisksArgs,
-  resolveRemoteNameArg,
+  resolveRemoteNameEnvPrefix,
   resolveSonarHookCommand,
   SONAR_HOOK_SKIP_SECRETS_MESSAGE,
 } from '../shared.ts';
@@ -109,7 +109,7 @@ function nativeChainBlock(hook: GitHookType, stdinFromCache: boolean): string {
 /** Returns the hook script; bakes `--dependency-risks [-p <key>]` when that subfeature is active. */
 export function getHookScript(hook: GitHookType, context: IntegrationContext): string {
   const depRisksArgs = hook === 'pre-commit' ? resolveDepRisksArgs(context) : '';
-  const remoteNameArg = resolveRemoteNameArg(hook);
+  const remoteEnv = resolveRemoteNameEnvPrefix(hook);
   const chains = context.scope === 'global';
   // Only pre-push reads stdin, so only pre-push needs the capture-and-replay dance.
   const needsStdinCapture = chains && hook === 'pre-push';
@@ -120,8 +120,8 @@ export function getHookScript(hook: GitHookType, context: IntegrationContext): s
     ...(chains ? [nativeChainBlock(hook, needsStdinCapture)] : []),
     nativeBinBlock(),
     needsStdinCapture
-      ? `"$SONAR_BIN" hook ${resolveSonarHookCommand(hook)}${depRisksArgs}${remoteNameArg} < "$SONAR_STDIN_CACHE"`
-      : `"$SONAR_BIN" hook ${resolveSonarHookCommand(hook)}${depRisksArgs}${remoteNameArg}`,
+      ? `${remoteEnv}"$SONAR_BIN" hook ${resolveSonarHookCommand(hook)}${depRisksArgs} < "$SONAR_STDIN_CACHE"`
+      : `${remoteEnv}"$SONAR_BIN" hook ${resolveSonarHookCommand(hook)}${depRisksArgs}`,
     '',
   ].join('\n');
 }

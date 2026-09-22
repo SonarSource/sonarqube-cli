@@ -30,7 +30,7 @@ import { okAsync } from '@/core/result.ts';
 
 import * as analyzeSecrets from '../../../../src/commands/analyze/secrets.ts';
 import { gitPreCommit } from '../../../../src/commands/hook/git-pre-commit.ts';
-import { gitPrePush } from '../../../../src/commands/hook/git-pre-push.ts';
+import { gitPrePush, REMOTE_NAME_ENV } from '../../../../src/commands/hook/git-pre-push.ts';
 import {
   HOOK_INACTIVE_UNAUTHENTICATED,
   MissingDependenciesError,
@@ -82,6 +82,21 @@ function gitArgsFor(spy: ReturnType<typeof spyOn>, subcommand: string): string[]
   const calls = spy.mock.calls as unknown as unknown[][];
   const call = calls.find((c) => c[0] === 'git' && (c[1] as string[])[0] === subcommand);
   return call?.[1] as string[] | undefined;
+}
+
+/** The `git log` invocation `getFilesForRef` builds, for assertion against the spy. */
+function logArgs(localSha: string, ...exclusions: string[]): string[] {
+  return [
+    'log',
+    '--format=',
+    '--name-only',
+    '--diff-filter=ACMR',
+    '-c',
+    '--root',
+    localSha,
+    '--not',
+    ...exclusions,
+  ];
 }
 
 describe('gitPreCommit', () => {
@@ -420,18 +435,17 @@ describe('gitPrePush', () => {
   });
 
   it('does not fall back to a full scan when no commits are new to the remote', async () => {
-    spawnProcessSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }); // rev-list: none
+    spawnProcessSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
 
     await gitPrePush({}, [], makeCtx());
 
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
-    // rev-list only: any extra call would mean a fallback crept back in.
+    // One git call only: any extra would mean a fallback crept back in.
     expect(spawnProcessSpy).toHaveBeenCalledTimes(1);
   });
 
   it('scans the range between the remote tip and the pushed tip for an existing-branch push', async () => {
     readGitPushRefsSpy.mockResolvedValue([EXISTING_BRANCH_REF]);
-    // spawnProcess: cat-file (1), rev-list (2), diff-tree per commit (3+) — beforeEach default
 
     await gitPrePush({}, [], makeCtx());
 
@@ -445,13 +459,9 @@ describe('gitPrePush', () => {
 
     await gitPrePush({}, [], makeCtx());
 
-    expect(gitArgsFor(spawnProcessSpy, 'rev-list')).toEqual([
-      'rev-list',
-      EXISTING_BRANCH_REF.localSha,
-      '--not',
-      EXISTING_BRANCH_REF.remoteSha,
-      '--remotes',
-    ]);
+    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(
+      logArgs(EXISTING_BRANCH_REF.localSha, EXISTING_BRANCH_REF.remoteSha, '--remotes'),
+    );
   });
 
   it('omits a remote tip absent from the local object database', async () => {
@@ -462,12 +472,9 @@ describe('gitPrePush', () => {
 
     await gitPrePush({}, [], makeCtx());
 
-    expect(gitArgsFor(spawnProcessSpy, 'rev-list')).toEqual([
-      'rev-list',
-      EXISTING_BRANCH_REF.localSha,
-      '--not',
-      '--remotes',
-    ]);
+    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(
+      logArgs(EXISTING_BRANCH_REF.localSha, '--remotes'),
+    );
   });
 
   it('does not probe the object database when the remote ref does not exist yet', async () => {
@@ -476,11 +483,11 @@ describe('gitPrePush', () => {
     expect(gitArgsFor(spawnProcessSpy, 'cat-file')).toBeUndefined();
   });
 
-  it('skips scan when rev-list fails during an existing-branch push', async () => {
+  it('skips scan when the file listing fails during an existing-branch push', async () => {
     readGitPushRefsSpy.mockResolvedValue([EXISTING_BRANCH_REF]);
     spawnProcessSpy
       .mockResolvedValueOnce({ exitCode: 0, stdout: 'deadbeef', stderr: '' }) // cat-file
-      .mockRejectedValueOnce(new Error('rev-list failed'));
+      .mockRejectedValueOnce(new Error('git log failed'));
 
     await gitPrePush({}, [], makeCtx());
 
@@ -495,36 +502,56 @@ describe('gitPrePush', () => {
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });
 
-  it('scopes the exclusion to the named remote when the hook forwards it', async () => {
+  it('scopes the exclusion to the remote when it is one of the configured remotes', async () => {
+    spawnProcessSpy
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'origin\nupstream', stderr: '' }) // git remote
+      .mockResolvedValue({ exitCode: 0, stdout: 'src/foo.ts', stderr: '' });
+
     await gitPrePush({ remoteName: 'origin' }, [], makeCtx());
 
-    expect(gitArgsFor(spawnProcessSpy, 'rev-list')).toEqual([
-      'rev-list',
-      FAKE_REF.localSha,
-      '--not',
-      '--remotes=origin',
-    ]);
+    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(
+      logArgs(FAKE_REF.localSha, '--remotes=origin'),
+    );
+  });
+
+  it('falls back to every remote when the push target is a URL rather than a remote name', async () => {
+    spawnProcessSpy
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'origin', stderr: '' }) // git remote
+      .mockResolvedValue({ exitCode: 0, stdout: 'src/foo.ts', stderr: '' });
+
+    await gitPrePush({ remoteName: 'https://host/repo.git' }, [], makeCtx());
+
+    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(logArgs(FAKE_REF.localSha, '--remotes'));
   });
 
   it('falls back to every remote when no remote name is forwarded', async () => {
     await gitPrePush({}, [], makeCtx());
 
-    expect(gitArgsFor(spawnProcessSpy, 'rev-list')).toEqual([
-      'rev-list',
-      FAKE_REF.localSha,
-      '--not',
-      '--remotes',
-    ]);
+    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(logArgs(FAKE_REF.localSha, '--remotes'));
+    // No remote name means no need to ask git which remotes exist.
+    expect(gitArgsFor(spawnProcessSpy, 'remote')).toBeUndefined();
   });
 
   it('ignores a blank remote name from a manually invoked hook', async () => {
     await gitPrePush({ remoteName: '  ' }, [], makeCtx());
 
-    expect(gitArgsFor(spawnProcessSpy, 'rev-list')).toEqual([
-      'rev-list',
-      FAKE_REF.localSha,
-      '--not',
-      '--remotes',
-    ]);
+    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(logArgs(FAKE_REF.localSha, '--remotes'));
+  });
+
+  it('reads the remote name from the environment when no flag is passed', async () => {
+    process.env[REMOTE_NAME_ENV] = 'origin';
+    spawnProcessSpy
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'origin', stderr: '' }) // git remote
+      .mockResolvedValue({ exitCode: 0, stdout: 'src/foo.ts', stderr: '' });
+
+    try {
+      await gitPrePush({}, [], makeCtx());
+    } finally {
+      delete process.env[REMOTE_NAME_ENV];
+    }
+
+    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(
+      logArgs(FAKE_REF.localSha, '--remotes=origin'),
+    );
   });
 });
