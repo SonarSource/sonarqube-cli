@@ -250,9 +250,8 @@ export async function resolveProjectKey(
   }
 
   console.warn(
-    'No project key detected — dependency-risks scanning (if installed) will resolve a project ' +
-      'per-repo at commit time instead of a fixed key. Set `sonar.projectKey` in ' +
-      'sonar-project.properties at the repository root to bake in a fixed key.',
+    "No project key detected — run 'sonar link <projectKey>' to bake one in for " +
+      'dependency-risks scanning (if installed).',
   );
   return options;
 }
