@@ -159,6 +159,7 @@ async function respondToUnauthenticatedInitialize(): Promise<void> {
         error: { code: INTERNAL_ERROR_CODE, message: AUTHENTICATION_ERROR_MESSAGE },
       })}\n`,
     );
+    input.close();
     process.exitCode = 1;
     return;
   }

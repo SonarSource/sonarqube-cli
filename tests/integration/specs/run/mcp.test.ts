@@ -338,6 +338,26 @@ describe('run mcp', () => {
   );
 
   it(
+    'exits after the unauthenticated initialize response while stdin remains open',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl(), 'cloud')
+        .withKeychainToken(server.baseUrl(), 'test-token');
+      const session = harness.runInteractive('run mcp');
+
+      session.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize' })}\n`);
+      await session.waitText("Not authenticated. Run 'sonar auth login' to authenticate.");
+
+      const result = await session.waitForExit();
+
+      expect(result.exitCode).toBe(1);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'does not write CLI log output to stdout (stdout must be clean for MCP transport)',
     async () => {
       const server = await harness

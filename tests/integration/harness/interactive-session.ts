@@ -275,7 +275,12 @@ export class InteractiveSession {
   }
 
   async waitFinish(): Promise<CliResult> {
-    this.resultPromise ??= this.collectResult();
+    this.resultPromise ??= this.collectResult(true);
+    return this.resultPromise;
+  }
+
+  async waitForExit(): Promise<CliResult> {
+    this.resultPromise ??= this.collectResult(false);
     return this.resultPromise;
   }
 
@@ -293,8 +298,10 @@ export class InteractiveSession {
     this.endStdin();
   }
 
-  private async collectResult(): Promise<CliResult> {
-    this.endStdin();
+  private async collectResult(endStdin: boolean): Promise<CliResult> {
+    if (endStdin) {
+      this.endStdin();
+    }
     const [exitCode] = await Promise.all([this.proc.exited, this.readersDone]);
     clearTimeout(this.timer);
     if (this.timedOut) {
