@@ -1,4 +1,4 @@
-npx lint-staged
+bun x lint-staged
 
 # Sonar secrets scan - installed by sonar integrate git
 CLEAN_PATH=$(echo "$PATH" | tr ':' '\n' | grep -v node_modules | tr '\n' ':' | sed 's/:$//')
