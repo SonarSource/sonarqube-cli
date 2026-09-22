@@ -20,19 +20,14 @@
 
 import type { Database } from 'bun:sqlite';
 
-import { EXIT_CODE_SECRETS_FOUND, SECRETS_CALLER_COMMANDS } from '@/core/config-constants.ts';
+import {
+  EXIT_CODE_SECRETS_FOUND,
+  SECRETS_STOP_POINT_BY_CALLER_COMMAND,
+} from '@/core/config-constants.ts';
 
-const SECRETS_BLOCKED_CALLER_COMMANDS: ReadonlySet<string> = new Set([
-  SECRETS_CALLER_COMMANDS.gitPreCommit,
-  SECRETS_CALLER_COMMANDS.gitPrePush,
-  SECRETS_CALLER_COMMANDS.agentPromptSubmit,
-  SECRETS_CALLER_COMMANDS.cursorPromptSubmit,
-  SECRETS_CALLER_COMMANDS.claudePreToolUse,
-  SECRETS_CALLER_COMMANDS.copilotPreToolUse,
-  SECRETS_CALLER_COMMANDS.antigravityPreToolUse,
-  SECRETS_CALLER_COMMANDS.cursorPreFileRead,
-  SECRETS_CALLER_COMMANDS.cursorPreToolUse,
-]);
+const SECRETS_BLOCKED_CALLER_COMMANDS: ReadonlySet<string> = new Set(
+  Object.keys(SECRETS_STOP_POINT_BY_CALLER_COMMAND),
+);
 
 export interface AnalyzerAggregateEvent {
   timestampMs: number;

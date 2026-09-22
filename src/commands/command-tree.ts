@@ -131,6 +131,7 @@ import {
 } from './quality-gate/status';
 import { remediate, type RemediateOptions } from './remediate';
 import { runMcp } from './run/mcp.ts';
+import { sonarStats, STATS_SINCE_CHOICES, type StatsOptions } from './stats/index.ts';
 import { systemReset, type SystemResetOptions } from './system/reset.ts';
 import { systemStatus, type SystemStatusOptions } from './system/status.ts';
 import { updateVersion, type UpdateVersionOptions } from './update';
@@ -657,6 +658,18 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('--enabled', 'Enable collection of anonymous usage statistics')
     .option('--disabled', 'Disable collection of anonymous usage statistics')
     .anonymousAction((ctx, options: ConfigureTelemetryOptions) => configureTelemetry(options, ctx));
+
+  // CLI-848/CLI-1113: local usage/value ledger. Alpha — not in public docs (see admin above).
+  COMMAND_TREE.command('stats')
+    .stage(Stage.Alpha)
+    .description('Show what the CLI has caught or prevented for you')
+    .addOption(
+      new SonarOption('--since <window>', 'Time window: 7d|14d|30d|all')
+        .choices(STATS_SINCE_CHOICES)
+        .default('30d'),
+    )
+    .option('--json', 'Output as JSON for machine consumption')
+    .anonymousAction((ctx, options: StatsOptions) => sonarStats(options, ctx));
 
   // System diagnostics and maintenance
   const system = COMMAND_TREE.command('system')

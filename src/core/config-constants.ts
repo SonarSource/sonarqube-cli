@@ -296,6 +296,23 @@ export const SECRETS_CALLER_COMMANDS = {
 export type SecretsCallerCommand =
   (typeof SECRETS_CALLER_COMMANDS)[keyof typeof SECRETS_CALLER_COMMANDS];
 
+/**
+ * Where in the workflow a blocked sonar-secrets run stopped the user, keyed by the
+ * caller commands above that gate on a hook/agent interception point. `analyze`,
+ * `analyzeSecrets` and `analyzeDependencyRisks` are manual runs with no stop point.
+ */
+export const SECRETS_STOP_POINT_BY_CALLER_COMMAND: Readonly<Record<string, string>> = {
+  [SECRETS_CALLER_COMMANDS.gitPreCommit]: 'commit',
+  [SECRETS_CALLER_COMMANDS.gitPrePush]: 'push',
+  [SECRETS_CALLER_COMMANDS.agentPromptSubmit]: 'prompt',
+  [SECRETS_CALLER_COMMANDS.cursorPromptSubmit]: 'prompt',
+  [SECRETS_CALLER_COMMANDS.claudePreToolUse]: 'file-read',
+  [SECRETS_CALLER_COMMANDS.copilotPreToolUse]: 'file-read',
+  [SECRETS_CALLER_COMMANDS.antigravityPreToolUse]: 'file-read',
+  [SECRETS_CALLER_COMMANDS.cursorPreFileRead]: 'file-read',
+  [SECRETS_CALLER_COMMANDS.cursorPreToolUse]: 'file-read',
+};
+
 // ---------------------------------------------------------------------------
 // Sentry
 // ---------------------------------------------------------------------------

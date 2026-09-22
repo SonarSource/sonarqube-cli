@@ -123,3 +123,13 @@ export function readStatsAggregate(
     db.close();
   }
 }
+
+/** Rewrites every `stats_events` row's timestamp, to simulate history older than the ledger's actual age. */
+export function backdateStatsEvents(sonarUserHome: string, timestampMs: number): void {
+  const db = new Database(statsDbPath(sonarUserHome));
+  try {
+    db.prepare('UPDATE stats_events SET timestamp_ms = ?').run(timestampMs);
+  } finally {
+    db.close();
+  }
+}
