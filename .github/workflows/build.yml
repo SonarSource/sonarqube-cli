@@ -41,9 +41,6 @@ jobs:
 
       - uses: SonarSource/ci-github-actions/get-build-number@21206070b4306949454171904b8d2b4ec349b0c5 # 2.0.1
         id: get-build-number
-        env:
-          # PR merge SHAs that change workflow files cannot be used as create-ref targets (GitHub 403).
-          GITHUB_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
 
       - name: Update package.json version with build number
         id: project_version
@@ -547,8 +544,5 @@ jobs:
         env:
           PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
-          BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
-          # Same create-ref restriction as get-build-number if this job has to claim.
-          GITHUB_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
         with:
           promote-pull-request: true
