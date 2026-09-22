@@ -28,7 +28,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
 
-import { readStatsEvents, readStatsRuleDescriptions } from '../../../_common/stats-helpers.ts';
+import {
+  readStatsAggregate,
+  readStatsEvents,
+  readStatsRuleDescriptions,
+} from '../../../_common/stats-helpers.ts';
 import { readAnalysisEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
 
@@ -320,6 +324,16 @@ describe('analyze secrets', () => {
 
       const ruleDescriptions = readStatsRuleDescriptions(harness.sonarUserHome.path);
       expect(ruleDescriptions.length).toBeGreaterThanOrEqual(1);
+
+      const globalAggregate = readStatsAggregate(harness.sonarUserHome.path, 'global', '');
+      expect(globalAggregate?.runs).toBe(1);
+      expect(globalAggregate?.findings).toBe(event.parsedDetails.findingsCount);
+      const analyzerAggregate = readStatsAggregate(
+        harness.sonarUserHome.path,
+        'analyzer',
+        'sonar-secrets',
+      );
+      expect(analyzerAggregate?.runs).toBe(1);
     },
     { timeout: 30000 },
   );

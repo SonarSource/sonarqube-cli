@@ -26,6 +26,7 @@ import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { EXIT_CODE_SECRETS_FOUND } from '@/core/config-constants.ts';
 import type { SecretsInstaller } from '@/core/host/install/secrets.ts';
 import type { SpawnResult } from '@/core/process/process.ts';
 
@@ -34,9 +35,8 @@ import type { ScaScannerSpawner } from '../../../../../src/commands/analyze/depe
 // process. Re-register the module with a stable wrapper that delegates to a
 import { FakeConsole } from '../../../../_common/fake-console.ts';
 import { makeScaInvocation as makeInvocation, okScaInstaller } from './_helpers.ts';
-// swappable impl; the real exports (e.g. EXIT_CODE_SECRETS_FOUND) are preserved.
+// swappable impl; the real exports are preserved.
 const secretsModule = await import('../../../../../src/commands/analyze/secrets.ts');
-const { EXIT_CODE_SECRETS_FOUND } = secretsModule;
 
 type RunSecretsBinary = (
   binaryPath: string,

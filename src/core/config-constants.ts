@@ -261,6 +261,41 @@ export function getStatsDir(): string {
 
 export const STATS_DB_FILENAME = 'stats.db';
 
+export const STATS_RETENTION_DAYS = 365;
+
+// ---------------------------------------------------------------------------
+// sonar-secrets analyzer contract
+// ---------------------------------------------------------------------------
+// Shared between src/commands/analyze (producer) and src/core/stats (aggregate
+// classification) so both sides read the same values instead of each keeping
+// their own copy in sync by hand.
+
+export const EXIT_CODE_SECRETS_FOUND = 51;
+
+/**
+ * The `caller_command` value recorded on every sonar-secrets analysis event, one per
+ * call site. `agentPromptSubmit` is shared by the Claude and Codex prompt-submit hooks
+ * (they are distinguished by `caller_agent`, not `caller_command`).
+ */
+export const SECRETS_CALLER_COMMANDS = {
+  analyze: 'analyze',
+  analyzeSecrets: 'analyze secrets',
+  analyzeDependencyRisks: 'analyze dependency-risks',
+  gitPreCommit: 'git-pre-commit',
+  gitPrePush: 'git-pre-push',
+  agentPromptSubmit: 'agent-prompt-submit',
+  cursorPromptSubmit: 'cursor-prompt-submit',
+  claudePreToolUse: 'claude-pre-tool-use',
+  copilotPreToolUse: 'copilot-pre-tool-use',
+  antigravityPreToolUse: 'antigravity-pre-tool-use',
+  cursorPreFileRead: 'cursor-pre-file-read',
+  cursorPreToolUse: 'cursor-pre-tool-use',
+} as const;
+
+/** Union of the valid sonar-secrets `caller_command` values. */
+export type SecretsCallerCommand =
+  (typeof SECRETS_CALLER_COMMANDS)[keyof typeof SECRETS_CALLER_COMMANDS];
+
 // ---------------------------------------------------------------------------
 // Sentry
 // ---------------------------------------------------------------------------

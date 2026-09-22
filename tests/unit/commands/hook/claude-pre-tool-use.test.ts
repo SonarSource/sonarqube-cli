@@ -25,6 +25,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { type CliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { EXIT_CODE_SECRETS_FOUND } from '@/core/config-constants.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 import { okAsync } from '@/core/result.ts';
 
@@ -39,7 +40,6 @@ import { FakeConsole } from '../../../_common/fake-console.ts';
 import { mockAuthResolver } from '../../../_common/mock-auth-resolver.ts';
 
 const TEST_FILE = '/sonar-test/test.ts';
-const { EXIT_CODE_SECRETS_FOUND } = analyzeSecrets;
 
 const FAKE_AUTH = new ResolvedAuth({
   token: 'tok',
