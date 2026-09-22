@@ -26,6 +26,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { ENV_DO_NOT_TRACK } from '@/core/config-constants.ts';
 import { flushSentry, initSentry } from '@/core/observability/sentry.ts';
+import * as fetchModule from '@/core/server/fetch.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import { ENV_TELEMETRY_EGRESS } from '@/core/telemetry/egress.ts';
 import * as userModule from '@/core/telemetry/user.ts';
@@ -67,6 +68,7 @@ let setUserSpy: ReturnType<typeof spyOn>;
 let getUserIdSpy: ReturnType<typeof spyOn>;
 let flushSpy: ReturnType<typeof spyOn>;
 let getClientSpy: ReturnType<typeof spyOn>;
+let fetchAuthenticatedSpy: ReturnType<typeof spyOn>;
 let savedEgress: string | undefined;
 
 beforeEach(() => {
@@ -79,6 +81,15 @@ beforeEach(() => {
   getUserIdSpy = spyOn(userModule, 'getOrCreateUserId').mockReturnValue('test-machine-id');
   flushSpy = spyOn(Sentry, 'flush').mockResolvedValue(true);
   getClientSpy = spyOn(Sentry, 'getClient').mockReturnValue(undefined);
+  fetchAuthenticatedSpy = spyOn(fetchModule, 'fetchAuthenticated').mockResolvedValue(
+    new Response(undefined, {
+      headers: {
+        'Retry-After': '60',
+        'X-Sentry-Rate-Limits': 'error:60:organization',
+      },
+      status: 200,
+    }),
+  );
   delete process.env[ENV_DO_NOT_TRACK];
 });
 
@@ -88,6 +99,7 @@ afterEach(() => {
   getUserIdSpy.mockRestore();
   flushSpy.mockRestore();
   getClientSpy.mockRestore();
+  fetchAuthenticatedSpy.mockRestore();
   delete process.env['SONARSOURCE_DOGFOODING'];
   process.env[ENV_DO_NOT_TRACK] = '1';
   restoreEnv(ENV_TELEMETRY_EGRESS, savedEgress);
@@ -171,6 +183,40 @@ describe('initSentry', () => {
       initSentry(getDefaultState('1.0.0'));
 
       expect(setUserSpy).toHaveBeenCalledWith({ id: 'my-machine-id' });
+    });
+
+    it('sends envelopes through the authenticated fetch wrapper', async () => {
+      initSentry(getDefaultState('1.0.0'));
+
+      const options = initSpy.mock.calls[0][0] as Sentry.BunOptions;
+      if (!options.transport) {
+        throw new Error('Expected Sentry transport to be configured');
+      }
+      const transport = options.transport({
+        headers: { 'X-Sentry-Auth': 'Sentry sentry_key=key' },
+        recordDroppedEvent: () => {},
+        url: 'https://sentry.example/api/123/envelope/',
+      });
+
+      const result = await transport.send([
+        { event_id: 'a'.repeat(32), sent_at: '2026-09-22T12:00:00.000Z' },
+        [[{ type: 'event' }, { message: 'test event' }]],
+      ] as never);
+
+      expect(fetchAuthenticatedSpy).toHaveBeenCalledWith(
+        'https://sentry.example/api/123/envelope/',
+        expect.objectContaining({
+          headers: { 'X-Sentry-Auth': 'Sentry sentry_key=key' },
+          method: 'POST',
+        }),
+      );
+      expect(result).toEqual({
+        headers: {
+          'retry-after': '60',
+          'x-sentry-rate-limits': 'error:60:organization',
+        },
+        statusCode: 200,
+      });
     });
   });
 });

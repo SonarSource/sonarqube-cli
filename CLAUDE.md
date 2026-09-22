@@ -60,7 +60,7 @@ Every HTTP request the CLI issues itself must carry the proxy/TLS configuration 
 
 Call sites never pass proxy/TLS options: `buildRequest(method, headers, timeoutMs, body)` deliberately cannot carry them, and both wrappers drop any `proxy`/`tls` keys found on `init` before spreading the resolved ones, so the configuration cannot be overridden locally. Both wrappers resolve options **per hop**, so a followed redirect never reuses the proxy/TLS options computed for the original URL. An unusable configuration surfaces as `NetworkConfigError` rather than a silent direct connection — `flushTelemetryEvents` aborts the batch on it and requeues every event instead of retrying per event.
 
-Known gap: **Sentry** (`src/core/observability/sentry.ts`) transmits through the SDK's own transport, which never sees the `SONAR_*` proxy/CA settings, and the ESLint rule cannot reach into `node_modules`. Behind a mandatory corporate proxy, crash reports do not leave the machine. Anything else that reports outward through a third-party SDK inherits the same gap.
+**Sentry** (`src/core/observability/sentry.ts`) uses a custom transport that sends envelopes through `fetchAuthenticated`. The wrapper resolves the `SONAR_*` proxy and TLS settings for each request and blocks unsafe redirects. Any future third-party SDK that reports outward must use the same path or an equivalent transport.
 
 ## Error handling
 

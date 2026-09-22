@@ -23,6 +23,7 @@ import { homedir } from 'node:os';
 import type { ErrorEvent, EventHint } from '@sentry/bun';
 import * as Sentry from '@sentry/bun';
 
+import { fetchAuthenticated } from '@/core/server/fetch.ts';
 import { resolveTelemetryEgress } from '@/core/telemetry/egress.ts';
 import { isTelemetryEnabled } from '@/core/telemetry/enabled.ts';
 import { getOrCreateUserId } from '@/core/telemetry/user.ts';
@@ -45,9 +46,30 @@ export function initSentry(state: CliState): void {
     environment,
     sendDefaultPii: false,
     beforeSend: scrubPii,
+    transport: createSentryTransport,
   });
 
   Sentry.setUser({ id: getOrCreateUserId() });
+}
+
+function createSentryTransport(
+  options: Parameters<NonNullable<Sentry.BunOptions['transport']>>[0],
+) {
+  return Sentry.createTransport(options, async (request) => {
+    const response = await fetchAuthenticated(options.url, {
+      body: request.body,
+      headers: options.headers,
+      method: 'POST',
+    });
+
+    return {
+      statusCode: response.status,
+      headers: {
+        'retry-after': response.headers.get('Retry-After'),
+        'x-sentry-rate-limits': response.headers.get('X-Sentry-Rate-Limits'),
+      },
+    };
+  });
 }
 
 /**
