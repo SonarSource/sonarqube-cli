@@ -286,9 +286,12 @@ describe('run mcp', () => {
     { timeout: 15000 },
   );
 
-  it(
-    'returns a JSON-RPC authentication error after an unauthenticated initialize request',
-    async () => {
+  it.each([
+    ['an initialize request', ''],
+    ['an initialize request after malformed input', 'not-json\n'],
+  ])(
+    'returns a JSON-RPC authentication error after %s',
+    async (_description, prefix) => {
       const server = await harness.newFakeServer().start();
       harness
         .state()
@@ -297,7 +300,7 @@ describe('run mcp', () => {
 
       const result = await harness.runWithStdin(
         'run mcp',
-        `${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize' })}\n`,
+        `${prefix}${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize' })}\n`,
       );
 
       expect(result.exitCode).toBe(1);
