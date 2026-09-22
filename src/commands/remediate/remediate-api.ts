@@ -92,8 +92,6 @@ export class RemediateApiClient {
    */
   scheduleAgentJob(request: AgentJobRequest): Promise<AgentJobResponse> {
     const endpoint = '/fix-suggestions/ai-agent-scheduled-jobs';
-    return this.client
-      .post<AgentJobResponse>(endpoint, request, this.client.apiHostFor(endpoint))
-      .orThrow();
+    return this.client.post<AgentJobResponse>(endpoint, request).orThrow();
   }
 }

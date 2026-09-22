@@ -73,7 +73,7 @@ export class ImportApiClient {
       .get<{
         repositories: DopRepository[];
         page: { total: number };
-      }>(endpoint, { organizationId, pageIndex, pageSize }, this.client.apiHostFor(endpoint))
+      }>(endpoint, { organizationId, pageIndex, pageSize })
       .orThrow();
     return { repositories: result.repositories, total: result.page.total };
   }

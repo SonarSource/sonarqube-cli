@@ -84,11 +84,7 @@ export class ProjectBindingsClient {
   ): ResultAsync<string | null, HttpClientError> {
     const endpoint = `/dop-translation/project-bindings?url=${encodeURIComponent(remoteUrl)}`;
     return this.client
-      .getSafe<{ bindings: Array<{ projectId: string }> }>(
-        endpoint,
-        undefined,
-        this.client.apiHostFor(endpoint),
-      )
+      .getSafe<{ bindings: Array<{ projectId: string }> }>(endpoint)
       .map((result) => {
         if (!result.response.ok) {
           return null;

@@ -217,7 +217,7 @@ export class SonarHttpClient {
   get<T>(
     endpoint: string,
     params?: QueryParams,
-    baseUrl?: string,
+    baseUrl: string = this.apiHostFor(endpoint),
   ): ResultAsync<T, HttpClientError> {
     return this.getSafe<T>(endpoint, params, baseUrl).andThen((result) => this.toGetResult(result));
   }
@@ -231,7 +231,7 @@ export class SonarHttpClient {
   getOrNullIf404<T>(
     endpoint: string,
     params?: QueryParams,
-    baseUrl?: string,
+    baseUrl: string = this.apiHostFor(endpoint),
     timeoutMs?: number,
   ): ResultAsync<T | null, HttpClientError> {
     return this.getSafe<T>(endpoint, params, baseUrl, timeoutMs).andThen((result) => {
@@ -275,7 +275,7 @@ export class SonarHttpClient {
   getSafe<TValue>(
     endpoint: string,
     params?: QueryParams,
-    baseUrl?: string,
+    baseUrl: string = this.apiHostFor(endpoint),
     timeoutMs: number = GET_REQUEST_TIMEOUT_MS,
   ): ResultAsync<SafeGetResult<TValue>, HttpClientError> {
     return ResultAsync.fromPromise(
@@ -308,7 +308,7 @@ export class SonarHttpClient {
   post<T>(
     endpoint: string,
     body: unknown,
-    baseUrl?: string,
+    baseUrl: string = this.apiHostFor(endpoint),
     extraHeaders?: Record<string, string>,
   ): ResultAsync<T, HttpClientError> {
     const url = `${baseUrl ?? this.serverURL}${endpoint}`;

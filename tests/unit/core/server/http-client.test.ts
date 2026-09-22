@@ -51,6 +51,13 @@ describe('SonarHttpClient', () => {
       expect(lastFetchUrl(fetchSpy)).toBe(`${SERVER_URL}/api/authentication/validate`);
     });
 
+    it('uses the regional API host for a Cloud endpoint by default', async () => {
+      const cloudClient = new SonarHttpClient(SONARCLOUD_URL, TOKEN);
+      fetchSpy = mockFetch({ organizations: [] });
+      await cloudClient.get('/organizations');
+      expect(lastFetchUrl(fetchSpy)).toBe(`${SONARCLOUD_API_URL}/organizations`);
+    });
+
     it('strips trailing slash from serverURL', async () => {
       const clientWithSlash = new SonarHttpClient(`${SERVER_URL}/`, TOKEN);
       fetchSpy = mockFetch({ valid: true });

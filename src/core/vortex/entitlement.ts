@@ -66,26 +66,24 @@ export function checkHubEntitlement(
   client: SonarHttpClient,
   endpoint: string,
 ): Promise<VortexEntitlementResult> {
-  return client
-    .getSafe<HubEntitlementResponse>(endpoint, undefined, client.apiHostFor(endpoint))
-    .match(
-      ({ response, value }): VortexEntitlementResult => {
-        if (response.status === HTTP_STATUS_NOT_FOUND && !client.isCloud) {
-          return { status: 'not_applicable' };
-        }
-        if (!response.ok || value === undefined) {
-          return { status: 'check_failed' };
-        }
-        if (value.allowed) {
-          return { status: 'enabled', consumption: value.consumption };
-        }
-        return {
-          status: value.hasEntitlement ? 'over_consumption' : 'not_entitled',
-          consumption: value.consumption,
-        };
-      },
-      (): VortexEntitlementResult => ({ status: 'check_failed' }),
-    );
+  return client.getSafe<HubEntitlementResponse>(endpoint).match(
+    ({ response, value }): VortexEntitlementResult => {
+      if (response.status === HTTP_STATUS_NOT_FOUND && !client.isCloud) {
+        return { status: 'not_applicable' };
+      }
+      if (!response.ok || value === undefined) {
+        return { status: 'check_failed' };
+      }
+      if (value.allowed) {
+        return { status: 'enabled', consumption: value.consumption };
+      }
+      return {
+        status: value.hasEntitlement ? 'over_consumption' : 'not_entitled',
+        consumption: value.consumption,
+      };
+    },
+    (): VortexEntitlementResult => ({ status: 'check_failed' }),
+  );
 }
 
 export class VortexEntitlementClient {
