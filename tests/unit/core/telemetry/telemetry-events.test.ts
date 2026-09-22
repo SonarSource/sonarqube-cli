@@ -33,10 +33,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import type { AnalysisCompletedPayload } from '@/commands/analyze/analysis-completed.ts';
-import {
-  scanAndEmitSecrets,
-  SECRETS_CALLER_COMMANDS,
-} from '@/commands/analyze/secrets-analysis-telemetry.ts';
+import { scanAndEmitSecrets } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import { SQAA_ANALYZE_AGENTIC_CALLER_COMMAND } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import type { IntegrationConfiguredPayload } from '@/commands/integrate/_common/integrate-telemetry.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
@@ -44,6 +41,7 @@ import { CommandInvocationContext } from '@/core/commands/invocation-context.ts'
 import {
   ENV_SONAR_USER_HOME,
   getTelemetryDir,
+  SECRETS_CALLER_COMMANDS,
   TELEMETRY_ENDPOINT,
 } from '@/core/config-constants.ts';
 import { NetworkConfigError } from '@/core/errors.ts';

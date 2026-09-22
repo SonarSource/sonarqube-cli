@@ -21,7 +21,7 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, it } from 'bun:test';
 
-import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
+import { SECRETS_CALLER_COMMANDS } from '@/core/config-constants.ts';
 import {
   type AnalyzerAggregateEvent,
   applyAnalyzerEventToAggregates,

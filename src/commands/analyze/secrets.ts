@@ -23,7 +23,11 @@ import { existsSync } from 'node:fs';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { EXIT_CODE_SECRETS_FOUND } from '@/core/config-constants.ts';
+import {
+  EXIT_CODE_SECRETS_FOUND,
+  SECRETS_CALLER_COMMANDS,
+  type SecretsCallerCommand,
+} from '@/core/config-constants.ts';
 import { buildSubprocessNetworkEnv } from '@/core/host/connectivity/network-config.ts';
 import { installSecretsBinary } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
@@ -32,11 +36,7 @@ import { spawnProcessWithTimeout } from '@/core/process/process.ts';
 import { green, yellow } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import {
-  scanAndEmitSecrets,
-  SECRETS_CALLER_COMMANDS,
-  type SecretsCallerCommand,
-} from './secrets-analysis-telemetry.ts';
+import { scanAndEmitSecrets } from './secrets-analysis-telemetry.ts';
 
 export interface AnalyzeSecretsOptions {
   paths?: string[];
@@ -109,9 +109,6 @@ export async function analyzeSecrets(
 ): Promise<void> {
   return handleCheckCommand(options, ctx).catch(handleScanError);
 }
-
-// Re-exported for backward compatibility (canonical definition moved to config-constants.ts).
-export { EXIT_CODE_SECRETS_FOUND };
 
 // Env var names expected by the sonar-secrets binary
 const BINARY_AUTH_URL_ENV = 'SONAR_SECRETS_AUTH_URL';

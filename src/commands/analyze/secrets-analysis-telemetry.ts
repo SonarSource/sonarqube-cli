@@ -42,9 +42,6 @@ import {
 import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
 import { parseSecretsJson, type SecretsJsonIssue, type SecretsJsonOutput } from './secrets.ts';
 
-// Re-exported for backward compatibility (canonical definitions moved to config-constants.ts).
-export { SECRETS_CALLER_COMMANDS, type SecretsCallerCommand } from '@/core/config-constants.ts';
-
 /**
  * Builds one CliAnalysisCompleted fact for a sonar-secrets run (`details` is a
  * JSON blob when findings were reported, `""` otherwise).

@@ -30,11 +30,10 @@
 
 import { existsSync } from 'node:fs';
 
-import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { EXIT_CODE_SECRETS_FOUND, SECRETS_CALLER_COMMANDS } from '@/core/config-constants.ts';
 import logger from '@/core/observability/logger.ts';
 
-import { EXIT_CODE_SECRETS_FOUND } from '../analyze/secrets.ts';
 import {
   type HookDependencies,
   MissingDependenciesError,

@@ -18,23 +18,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import {
-  scanAndEmitSecrets,
-  SECRETS_CALLER_COMMANDS,
-} from '@/commands/analyze/secrets-analysis-telemetry.ts';
+import { scanAndEmitSecrets } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import { SQAA_ANALYZE_CALLER_COMMAND } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import { EXIT_CODE_SECRETS_FOUND, SECRETS_CALLER_COMMANDS } from '@/core/config-constants.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import type { SecretsJsonIssue } from './secrets.ts';
-import {
-  analyzeSecrets,
-  EXIT_CODE_SECRETS_FOUND,
-  parseSecretsJson,
-  runSecretsBinary,
-} from './secrets.ts';
+import { analyzeSecrets, parseSecretsJson, runSecretsBinary } from './secrets.ts';
 import type { OutputFormat } from './sqaa.ts';
 import { analyzeSqaa, buildSqaaJsonReport } from './sqaa.ts';
 import { resolveChangeSet } from './sqaa-changeset.ts';
