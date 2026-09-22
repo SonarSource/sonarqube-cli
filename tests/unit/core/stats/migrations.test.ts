@@ -24,11 +24,38 @@ import { describe, expect, it } from 'bun:test';
 import {
   applyMigrations,
   applyStatsMigrations,
+  STATS_MIGRATIONS,
   type StatsMigration,
 } from '@/core/stats/migrations.ts';
 
+import { readStatsAggregateFromDb as readAggregate } from '../../../_common/stats-helpers.ts';
+
 function userVersion(db: Database): number {
   return (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+}
+
+function insertAnalyzerEvent(
+  db: Database,
+  row: {
+    timestampMs: number;
+    callerCommand: string;
+    exitCode: number | null;
+    callerAgent: string;
+    runTrigger: 'hooks' | 'manual';
+    details: object;
+  },
+): void {
+  db.prepare(
+    `INSERT INTO stats_events (timestamp_ms, event_class, caller_command, exit_code, caller_agent, run_trigger, details)
+     VALUES (?, 'analyzer', ?, ?, ?, ?, ?)`,
+  ).run(
+    row.timestampMs,
+    row.callerCommand,
+    row.exitCode,
+    row.callerAgent,
+    row.runTrigger,
+    JSON.stringify(row.details),
+  );
 }
 
 describe('applyStatsMigrations', () => {
@@ -42,7 +69,12 @@ describe('applyStatsMigrations', () => {
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
       .all()
       .map((row) => (row as { name: string }).name);
-    expect(tables).toEqual(['rule_descriptions', 'seen_fingerprints', 'stats_events']);
+    expect(tables).toEqual([
+      'rule_descriptions',
+      'seen_fingerprints',
+      'stats_aggregates',
+      'stats_events',
+    ]);
   });
 
   it('is a no-op when the database is already at the latest version', () => {
@@ -68,6 +100,72 @@ describe('applyStatsMigrations', () => {
       db.prepare('SELECT COUNT(*) as count FROM stats_events').get() as { count: number }
     ).count;
     expect(count).toBe(1);
+  });
+});
+
+describe('v2 migration: stats_aggregates backfill', () => {
+  it('rolls up pre-existing v1 analyzer rows into stats_aggregates', () => {
+    const db = new Database(':memory:');
+    applyMigrations(
+      db,
+      STATS_MIGRATIONS.filter((m) => m.version === 1),
+    );
+
+    insertAnalyzerEvent(db, {
+      timestampMs: 1000,
+      callerCommand: 'analyze secrets',
+      exitCode: 51,
+      callerAgent: 'claude',
+      runTrigger: 'manual',
+      details: {
+        eventClass: 'analyzer',
+        analyzer: 'sonar-secrets',
+        findingsCount: 0,
+      },
+    });
+    insertAnalyzerEvent(db, {
+      timestampMs: 500,
+      callerCommand: 'git-pre-commit',
+      exitCode: 51,
+      callerAgent: 'unidentified',
+      runTrigger: 'hooks',
+      details: {
+        eventClass: 'analyzer',
+        analyzer: 'sonar-secrets',
+        findingsCount: 1,
+        ruleCounts: { 'secrets:aws-key': 1 },
+      },
+    });
+
+    applyStatsMigrations(db);
+
+    expect(readAggregate(db, 'global', '')).toEqual({
+      runs: 2,
+      findings: 1,
+      runs_with_findings: 1,
+      blocked: 1,
+      first_seen_ms: 500,
+    });
+    expect(readAggregate(db, 'analyzer', 'sonar-secrets')?.runs).toBe(2);
+    expect(readAggregate(db, 'agent', 'claude')?.runs).toBe(1);
+    expect(readAggregate(db, 'rule', 'sonar-secrets:secrets:aws-key')?.findings).toBe(1);
+  });
+
+  it('does not re-run the backfill when already at the latest version', () => {
+    const db = new Database(':memory:');
+    applyStatsMigrations(db);
+    insertAnalyzerEvent(db, {
+      timestampMs: Date.now(),
+      callerCommand: 'analyze secrets',
+      exitCode: 0,
+      callerAgent: 'claude',
+      runTrigger: 'manual',
+      details: { eventClass: 'analyzer', analyzer: 'sonar-secrets', findingsCount: 0 },
+    });
+
+    applyStatsMigrations(db);
+
+    expect(readAggregate(db, 'global', '')).toBeNull();
   });
 });
 

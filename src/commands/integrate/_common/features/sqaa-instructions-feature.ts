@@ -23,12 +23,11 @@ import type {
   ResourceDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { skip, textSnippet, wholeFile } from '@/core/framework/features';
+import { install, skip, textSnippet, wholeFile } from '@/core/framework/features';
 import type { IntegrationScope } from '@/core/state/state.ts';
 
 import { sonarBeginMarker, sonarEndMarker } from '../instructions-templates.ts';
 import type { IntegrateAgentOptions } from '../types.ts';
-import { vortexInstallDecision } from '../vortex.ts';
 
 export const SQAA_HOOK_FEATURE_ID = 'sonar-sqaa-hook';
 export const SQAA_INSTRUCTIONS_SUBFEATURE_ID = 'sqaa-instructions';
@@ -77,10 +76,8 @@ export function createSqaaInstructionsSubfeature<TOptions extends IntegrateAgent
   return {
     id: globalOnly ? SQAA_INSTRUCTIONS_GLOBAL_SUBFEATURE_ID : SQAA_INSTRUCTIONS_SUBFEATURE_ID,
     displayName: 'Vortex analysis instructions',
-    shouldInstall: ({ options, scope }) =>
-      onlyScope !== undefined && scope !== onlyScope
-        ? skip()
-        : vortexInstallDecision(options.vortexDisposition),
+    shouldInstall: (invocation) =>
+      onlyScope !== undefined && invocation.scope !== onlyScope ? skip() : install(),
     migrationEligible: () => !globalOnly,
     resources,
   };

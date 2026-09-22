@@ -34,13 +34,10 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { EXIT_CODE_SECRETS_FOUND } from '@/core/config-constants.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
 
-import {
-  EXIT_CODE_SECRETS_FOUND,
-  parseSecretsJson,
-  runSecretsBinary,
-} from '../../src/commands/analyze/secrets.ts';
+import { parseSecretsJson, runSecretsBinary } from '../../src/commands/analyze/secrets.ts';
 import { FakeSonarQubeServerBuilder } from '../integration/harness';
 
 const TEST_TIMEOUT_MS = 30_000;

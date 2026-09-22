@@ -25,7 +25,6 @@ import { Database } from 'bun:sqlite';
 import { describe, expect, it } from 'bun:test';
 
 import { SCA_CALLER_COMMANDS } from '@/commands/analyze/sca-analysis-telemetry.ts';
-import { SECRETS_CALLER_COMMANDS } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import {
   SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
   SQAA_ANALYZE_CALLER_COMMAND,
@@ -34,7 +33,11 @@ import {
   SQAA_VERIFY_CALLER_COMMAND,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import { StatsFact } from '@/core/commands/invocation-context.ts';
-import { getStatsDir, STATS_DB_FILENAME } from '@/core/config-constants.ts';
+import {
+  getStatsDir,
+  SECRETS_CALLER_COMMANDS,
+  STATS_DB_FILENAME,
+} from '@/core/config-constants.ts';
 import { type AnalyzerStatsFactPayload, commitStatsFacts } from '@/core/stats/facts.ts';
 
 import { useTempSonarUserHome } from './_helpers.ts';

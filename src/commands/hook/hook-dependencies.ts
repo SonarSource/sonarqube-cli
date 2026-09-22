@@ -23,13 +23,11 @@
 
 import { createHash } from 'node:crypto';
 
-import {
-  scanAndEmitSecrets,
-  type SecretsCallerCommand,
-} from '@/commands/analyze/secrets-analysis-telemetry.ts';
+import { scanAndEmitSecrets } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import type { SecretsCallerCommand } from '@/core/config-constants.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
 import type { Console } from '@/core/ui/console.ts';
 

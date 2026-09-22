@@ -89,3 +89,37 @@ export function readStatsRuleDescriptions(
     db.close();
   }
 }
+
+export interface StoredStatsAggregate {
+  runs: number;
+  findings: number;
+  runs_with_findings: number;
+  blocked: number;
+  first_seen_ms: number | null;
+}
+
+export function readStatsAggregateFromDb(
+  db: Database,
+  dimension: string,
+  key: string,
+): StoredStatsAggregate | null {
+  return db
+    .prepare<StoredStatsAggregate, [string, string]>(
+      'SELECT runs, findings, runs_with_findings, blocked, first_seen_ms FROM stats_aggregates WHERE dimension = ? AND key = ?',
+    )
+    .get(dimension, key);
+}
+
+export function readStatsAggregate(
+  sonarUserHome: string,
+  dimension: string,
+  key: string,
+): StoredStatsAggregate | null {
+  const db = openReadonly(sonarUserHome);
+  if (!db) return null;
+  try {
+    return readStatsAggregateFromDb(db, dimension, key);
+  } finally {
+    db.close();
+  }
+}

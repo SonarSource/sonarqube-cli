@@ -32,7 +32,9 @@ import {
 } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
 import { SQAA_HOOK_FEATURE_ID } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
 import {
+  CLAUDE_VORTEX_FEATURE_ID,
   CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
+  isVortexFeature,
   VORTEX_FEATURE_ID,
 } from '@/commands/integrate/_common/vortex.ts';
 import { ANTIGRAVITY_INTEGRATION_ID } from '@/commands/integrate/antigravity/declaration.ts';
@@ -173,7 +175,7 @@ function seedDeclarativeContextAugmentationFeature(state: CliState, skill: SeedS
   };
 
   const feature: InstalledIntegrationFeature = {
-    featureId: VORTEX_FEATURE_ID,
+    featureId: resolveVortexFeatureId(skill.agentId),
     scope: 'project',
     targetRoot: skill.projectRoot,
     installedByCliVersion: STALE_CLI_VERSION,
@@ -218,6 +220,12 @@ function seedDeclarativeContextAugmentationFeature(state: CliState, skill: SeedS
       ],
     });
   }
+}
+
+// Claude's own vortex container carries a different id (CLAUDE_VORTEX_FEATURE_ID);
+// every other agent still uses the shared VORTEX_FEATURE_ID.
+function resolveVortexFeatureId(agentId: SeedSkillOptions['agentId']): string {
+  return agentId === 'claude' ? CLAUDE_VORTEX_FEATURE_ID : VORTEX_FEATURE_ID;
 }
 
 function resolveIntegrationId(agentId: SeedSkillOptions['agentId']): string {
@@ -268,7 +276,7 @@ export function findRecordedCagFeature(
   for (const integration of state.integrations.installed) {
     for (const feature of integration.features) {
       const cagSubfeature = findCagSubfeature(feature);
-      if (feature.featureId !== VORTEX_FEATURE_ID || !cagSubfeature) {
+      if (!isVortexFeature(feature) || !cagSubfeature) {
         continue;
       }
       const entry = {

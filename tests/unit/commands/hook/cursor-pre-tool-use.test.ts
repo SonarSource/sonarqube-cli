@@ -29,7 +29,11 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { type CliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { CURSOR_IGNORE_FILE, ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
+import {
+  CURSOR_IGNORE_FILE,
+  ENV_SONAR_USER_HOME,
+  EXIT_CODE_SECRETS_FOUND,
+} from '@/core/config-constants.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 import { okAsync } from '@/core/result.ts';
 
@@ -46,7 +50,6 @@ import { readStatsEvents } from '../../../_common/stats-helpers.ts';
 
 const TEST_FILE = '/sonar-test/secret.ts';
 const SECRET_CONTENT = 'const secret = "ghp_test";';
-const { EXIT_CODE_SECRETS_FOUND } = analyzeSecrets;
 
 const FAKE_AUTH = new ResolvedAuth({
   token: 'tok',

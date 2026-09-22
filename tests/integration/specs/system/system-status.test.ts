@@ -29,7 +29,7 @@ import { ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR_FROM_AGENTS } from '@/core/config-c
 import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
 
 import { version as CLI_VERSION } from '../../../../package.json';
-import { VORTEX_FEATURE_ID } from '../../../../src/commands/integrate/_common/vortex';
+import { CLAUDE_VORTEX_FEATURE_ID } from '../../../../src/commands/integrate/_common/vortex';
 import {
   formatAntigravityHookCommand,
   hookScriptName,
@@ -1517,7 +1517,7 @@ describe('system status', () => {
           .state()
           .withInstalledIntegrationFeature(
             claudeIntegration,
-            VORTEX_FEATURE_ID,
+            CLAUDE_VORTEX_FEATURE_ID,
             'project',
             harness.cwd.path,
           );

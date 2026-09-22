@@ -23,6 +23,11 @@ import { existsSync } from 'node:fs';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import {
+  EXIT_CODE_SECRETS_FOUND,
+  SECRETS_CALLER_COMMANDS,
+  type SecretsCallerCommand,
+} from '@/core/config-constants.ts';
 import { buildSubprocessNetworkEnv } from '@/core/host/connectivity/network-config.ts';
 import { installSecretsBinary } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
@@ -31,11 +36,7 @@ import { spawnProcessWithTimeout } from '@/core/process/process.ts';
 import { green, yellow } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import {
-  scanAndEmitSecrets,
-  SECRETS_CALLER_COMMANDS,
-  type SecretsCallerCommand,
-} from './secrets-analysis-telemetry.ts';
+import { scanAndEmitSecrets } from './secrets-analysis-telemetry.ts';
 
 export interface AnalyzeSecretsOptions {
   paths?: string[];
@@ -114,8 +115,6 @@ const BINARY_AUTH_URL_ENV = 'SONAR_SECRETS_AUTH_URL';
 const BINARY_AUTH_TOKEN_ENV = 'SONAR_SECRETS_TOKEN';
 
 const SCAN_TIMEOUT_MS = 30000;
-
-export const EXIT_CODE_SECRETS_FOUND = 51;
 
 /**
  * Run sonar-secrets binary on the given files. Returns the full spawn result.

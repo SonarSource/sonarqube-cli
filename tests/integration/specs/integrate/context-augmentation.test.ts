@@ -27,10 +27,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.js';
-import {
-  VORTEX_FEATURE_ID,
-  VORTEX_PROMOTION_MESSAGE,
-} from '@/commands/integrate/_common/vortex.js';
+import { isVortexFeature, VORTEX_PROMOTION_MESSAGE } from '@/commands/integrate/_common/vortex.js';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.js';
 import { CODEX_INTEGRATION_ID } from '@/commands/integrate/codex/declaration.js';
 import { COPILOT_INTEGRATION_ID } from '@/commands/integrate/copilot/declaration.js';
@@ -61,7 +58,7 @@ interface RecordedCagFeature {
 function providesContextAugmentation(feature: InstalledIntegrationFeature): boolean {
   return (
     feature.featureId === CONTEXT_AUGMENTATION_FEATURE_ID ||
-    (feature.featureId === VORTEX_FEATURE_ID &&
+    (isVortexFeature(feature) &&
       (feature.subfeatures ?? []).some(
         (subfeature) => subfeature.featureId === CONTEXT_AUGMENTATION_FEATURE_ID,
       ))

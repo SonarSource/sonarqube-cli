@@ -21,9 +21,10 @@
 // Shared deny helpers for Cursor secrets hook handlers.
 
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { EXIT_CODE_SECRETS_FOUND } from '@/core/config-constants.ts';
 import { commitStatsFacts } from '@/core/stats/facts.ts';
 
-import { EXIT_CODE_SECRETS_FOUND, runSecretsBinaryOnText } from '../analyze/secrets.ts';
+import { runSecretsBinaryOnText } from '../analyze/secrets.ts';
 import { appendToCursorIgnore } from './cursor-ignore.ts';
 import type { HookDependencies } from './hook-dependencies.ts';
 
