@@ -38,12 +38,17 @@ import { CONTEXT_AUGMENTATION_HOOK_FEATURE_ID } from '@/commands/integrate/claud
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalCagBinaryName } from '@/core/host/install/context-augmentation.ts';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
-import type { CliState, InstalledIntegrationFeature } from '@/core/state/state.ts';
+import type {
+  CliState,
+  InstalledIntegrationFeature,
+  IntegrationScope,
+} from '@/core/state/state.ts';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
 import { POST_UPDATE_TRIGGER_COMMAND } from '../../../_common/isolated-cli-env.js';
 import { hookScriptName, IS_WINDOWS, TestHarness } from '../../harness';
 import { expectVortexHookInstalled, readCagInvocations } from '../../harness/cag-helpers';
+import type { Dir } from '../../harness/dir';
 
 const CAG_HOOK_ALLOWED_ORG_KEY = 'denis-troller-sonar';
 
@@ -101,7 +106,10 @@ describe('post-update migration', () => {
     );
   }
 
-  function expectFullClaudeVortexMigration(): InstalledIntegrationFeature | undefined {
+  function expectFullClaudeVortexMigration(
+    options: { scope?: IntegrationScope; root?: Dir } = {},
+  ): InstalledIntegrationFeature | undefined {
+    const { scope = 'project', root = harness.cwd } = options;
     const state = harness.stateJsonFile.asJson() as CliState;
     const claude = state.integrations.installed.find(
       (integration) => integration.integrationId === 'claude-code',
@@ -121,9 +129,13 @@ describe('post-update migration', () => {
       'sqaa-posttooluse',
       'cag-posttooluse',
     ]);
-    expect(harness.cwd.file('.claude', 'settings.json').asJson().hooks?.PostToolUse).toBeDefined();
-    expect(harness.cwd.file('CLAUDE.md').asText()).toContain('# Vortex analysis protocol');
-    expectVortexHookInstalled(harness.cwd, 'claude');
+    // Both subfeatures active means the dispatch entry's matcher is the full union.
+    expect(root.file('.claude', 'settings.json').asJson().hooks?.PostToolUse).toEqual([
+      expect.objectContaining({ matcher: 'Edit|Write|Bash|PowerShell|Monitor|Read' }),
+    ]);
+    const claudeMdPath = scope === 'global' ? ['.claude', 'CLAUDE.md'] : ['CLAUDE.md'];
+    expect(root.file(...claudeMdPath).asText()).toContain('# Vortex analysis protocol');
+    expectVortexHookInstalled(root, 'claude', scope);
     return vortex;
   }
 
@@ -469,6 +481,10 @@ describe('post-update migration', () => {
         CONTEXT_AUGMENTATION_FEATURE_ID,
         'sqaa-posttooluse',
       ]);
+      // Only SQAA's own matcher — CAG never contributed to the union.
+      expect(harness.cwd.file('.claude', 'settings.json').asJson().hooks?.PostToolUse).toEqual([
+        expect.objectContaining({ matcher: 'Edit|Write' }),
+      ]);
     },
     { timeout: 30000 },
   );
@@ -531,68 +547,153 @@ describe('post-update migration', () => {
     { timeout: 30000 },
   );
 
-  it(
-    'merges two already-containerized legacy Vortex records into the single vortex-claude container',
-    async () => {
-      // Two fully-installed containers, each with its own recorded subfeatures —
-      // contrast with the older pre-container flat records seeded above.
-      const now = new Date().toISOString();
-      const legacyContainer = (featureId: string, subfeatureIds: string[]) => ({
-        featureId,
-        scope: 'project' as const,
-        targetRoot: harness.cwd.path,
-        installedByCliVersion: '0.5.0',
-        installedAt: now,
-        updatedByCliVersion: '0.5.0',
-        updatedAt: now,
+  /**
+   * Seeds two fully-installed legacy containers, each with its own recorded
+   * subfeatures — contrast with the flat pre-container records
+   * `seedPreUnificationFeatures` seeds above.
+   */
+  function seedContainerizedLegacyVortexFeatures(options: {
+    scope?: IntegrationScope;
+    targetRoot?: string;
+    orgKey?: string;
+    vortexSubfeatureIds?: string[];
+    sqaaHookSubfeatureIds?: string[];
+  }): void {
+    const scope = options.scope ?? 'project';
+    const targetRoot =
+      options.targetRoot ?? (scope === 'global' ? harness.userHome.path : harness.cwd.path);
+    const orgKey = options.orgKey ?? CAG_HOOK_ALLOWED_ORG_KEY;
+    const vortexSubfeatureIds = options.vortexSubfeatureIds ?? [
+      SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+      CONTEXT_AUGMENTATION_FEATURE_ID,
+      CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
+    ];
+    const sqaaHookSubfeatureIds = options.sqaaHookSubfeatureIds ?? [
+      'sqaa-posttooluse',
+      'cag-posttooluse',
+    ];
+    const now = new Date().toISOString();
+    const legacyContainer = (featureId: string, subfeatureIds: string[]) => ({
+      featureId,
+      scope,
+      targetRoot,
+      installedByCliVersion: '0.5.0',
+      installedAt: now,
+      updatedByCliVersion: '0.5.0',
+      updatedAt: now,
+      dependencies: [],
+      resources: [],
+      operations: [],
+      attrs: {
+        orgKey,
+        projectKey: 'p',
+        serverUrl: 'https://sonarcloud.io',
+        scaEnabled: false,
+      },
+      subfeatures: subfeatureIds.map((subfeatureId) => ({
+        featureId: subfeatureId,
         dependencies: [],
         resources: [],
         operations: [],
-        attrs: {
-          orgKey: CAG_HOOK_ALLOWED_ORG_KEY,
-          projectKey: 'p',
-          serverUrl: 'https://sonarcloud.io',
-          scaEnabled: false,
-        },
-        subfeatures: subfeatureIds.map((subfeatureId) => ({
-          featureId: subfeatureId,
-          dependencies: [],
-          resources: [],
-          operations: [],
-        })),
-      });
+      })),
+    });
 
-      harness.state().withRawState(
-        JSON.stringify({
-          version: '1.0',
-          lastUpdated: now,
-          auth: { isAuthenticated: false, connections: [] },
-          agents: {},
-          config: { cliVersion: '0.5.0' },
-          telemetry: { enabled: false, firstUseDate: now, events: [] },
-          agentExtensions: [],
-          integrations: {
-            installed: [
-              {
-                id: randomUUID(),
-                integrationId: 'claude-code',
-                installedByCliVersion: '0.5.0',
-                installedAt: now,
-                updatedByCliVersion: '0.5.0',
-                updatedAt: now,
-                features: [
-                  legacyContainer(VORTEX_FEATURE_ID, [
-                    SQAA_INSTRUCTIONS_SUBFEATURE_ID,
-                    CONTEXT_AUGMENTATION_FEATURE_ID,
-                    CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
-                  ]),
-                  legacyContainer(SQAA_HOOK_FEATURE_ID, ['sqaa-posttooluse', 'cag-posttooluse']),
-                ],
-              },
-            ],
-          },
-        }),
+    harness.state().withRawState(
+      JSON.stringify({
+        version: '1.0',
+        lastUpdated: now,
+        auth: { isAuthenticated: false, connections: [] },
+        agents: {},
+        config: { cliVersion: '0.5.0' },
+        telemetry: { enabled: false, firstUseDate: now, events: [] },
+        agentExtensions: [],
+        integrations: {
+          installed: [
+            {
+              id: randomUUID(),
+              integrationId: 'claude-code',
+              installedByCliVersion: '0.5.0',
+              installedAt: now,
+              updatedByCliVersion: '0.5.0',
+              updatedAt: now,
+              features: [
+                legacyContainer(VORTEX_FEATURE_ID, vortexSubfeatureIds),
+                legacyContainer(SQAA_HOOK_FEATURE_ID, sqaaHookSubfeatureIds),
+              ],
+            },
+          ],
+        },
+      }),
+    );
+  }
+
+  it(
+    'merges two already-containerized legacy Vortex records into the single vortex-claude container',
+    async () => {
+      seedContainerizedLegacyVortexFeatures({});
+      harness.state().withContextAugmentationBinaryInstalled();
+
+      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+
+      expect(result.exitCode).toBe(0);
+      expectFullClaudeVortexMigration();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'merges two already-containerized legacy Vortex records at global scope',
+    async () => {
+      seedContainerizedLegacyVortexFeatures({ scope: 'global' });
+      harness.state().withContextAugmentationBinaryInstalled();
+
+      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+
+      expect(result.exitCode).toBe(0);
+      expectFullClaudeVortexMigration({ scope: 'global', root: harness.userHome });
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'excludes the CAG PostToolUse and PostToolUseFailure hooks when merging two already-containerized records for a non-allowlisted org',
+    async () => {
+      seedContainerizedLegacyVortexFeatures({ orgKey: 'o' });
+      harness.state().withContextAugmentationBinaryInstalled();
+
+      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+
+      expect(result.exitCode).toBe(0);
+      const state = harness.stateJsonFile.asJson() as CliState;
+      const claude = state.integrations.installed.find(
+        (integration) => integration.integrationId === 'claude-code',
       );
+      const vortex = claude?.features.find(
+        (feature) => feature.featureId === CLAUDE_VORTEX_FEATURE_ID,
+      );
+      expect(vortex?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
+        SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+        CONTEXT_AUGMENTATION_FEATURE_ID,
+        'sqaa-posttooluse',
+      ]);
+      expect(harness.cwd.file('.claude', 'settings.json').asJson().hooks?.PostToolUse).toEqual([
+        expect.objectContaining({ matcher: 'Edit|Write' }),
+      ]);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    "recomputes from current eligibility rather than preserving a predecessor's own excluded subfeature",
+    async () => {
+      // `sonar-sqaa-hook` only had `sqaa-posttooluse` recorded (as if the CAG hook
+      // had been excluded for this org in the past) for an org that IS currently
+      // allowlisted. migrateReplacedFeatures/createFeatureApplication always pass
+      // subfeatureIds: undefined for a replacement migration and never read a
+      // predecessor's own `.subfeatures`, so the merge re-derives from
+      // defaultInstallSubfeatureIds + current migrationEligible instead of
+      // carrying over that exclusion — cag-posttooluse ends up active again.
+      seedContainerizedLegacyVortexFeatures({ sqaaHookSubfeatureIds: ['sqaa-posttooluse'] });
       harness.state().withContextAugmentationBinaryInstalled();
 
       const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);

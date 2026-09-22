@@ -101,6 +101,21 @@ const cagPostToolUseSubfeature: ClaudeHookSubfeature<ClaudeIntegrationOptions> =
   migrationEligible: isCagHookAllowedForAttrs,
 };
 
+const claudePostToolUseDispatchResources = createPostToolUseDispatchResources({
+  id: SQAA_HOOK_FEATURE_ID,
+  displayName: 'Vortex analysis hook',
+  configDir: CLAUDE_CONFIG_DIR,
+  marker: 'sonar-sqaa',
+  scriptPath: 'sonar-sqaa/build-scripts/posttool-sqaa',
+  scriptDisplayName: 'Claude PostToolUse hook script',
+  scriptContent: {
+    unix: buildUnixHookScript('claude-post-tool-use'),
+    windows: buildWindowsHookScript('claude-post-tool-use'),
+  },
+  settingsPath: resolveClaudeSettingsPath,
+  subfeatures: [sqaaPostToolUseSubfeature, cagPostToolUseSubfeature],
+});
+
 /**
  * Starts from the shared default (`createVortexFeature`) and overrides
  * `id`/`replacedIds`/`resources` to also absorb the old standalone
@@ -127,20 +142,7 @@ const claudeVortexFeature: FeatureContainer<ClaudeIntegrationOptions> = (() => {
     ...defaultVortex,
     id: CLAUDE_VORTEX_FEATURE_ID,
     replacedIds: [...(defaultVortex.replacedIds ?? []), VORTEX_FEATURE_ID, SQAA_HOOK_FEATURE_ID],
-    resources: createPostToolUseDispatchResources({
-      id: SQAA_HOOK_FEATURE_ID,
-      displayName: 'Vortex analysis hook',
-      configDir: CLAUDE_CONFIG_DIR,
-      marker: 'sonar-sqaa',
-      scriptPath: 'sonar-sqaa/build-scripts/posttool-sqaa',
-      scriptDisplayName: 'Claude PostToolUse hook script',
-      scriptContent: {
-        unix: buildUnixHookScript('claude-post-tool-use'),
-        windows: buildWindowsHookScript('claude-post-tool-use'),
-      },
-      settingsPath: resolveClaudeSettingsPath,
-      subfeatures: [sqaaPostToolUseSubfeature, cagPostToolUseSubfeature],
-    }),
+    resources: claudePostToolUseDispatchResources,
   };
 })();
 
