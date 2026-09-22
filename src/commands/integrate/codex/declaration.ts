@@ -28,6 +28,7 @@ import type {
 } from '@/core/framework/features';
 import {
   askUser,
+  install,
   isFeatureInstalledGloballyForProject,
   jsonPatch,
   textSnippet,
@@ -62,7 +63,7 @@ import {
 } from '../_common/hooks.ts';
 import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
-import { createVortexFeature, vortexInstallDecision } from '../_common/vortex.ts';
+import { createVortexFeature } from '../_common/vortex.ts';
 import { SECRETS_ON_READ_BODY } from './instructions-templates.ts';
 
 const CODEX_CONFIG_DIR = '.codex';
@@ -195,7 +196,7 @@ function createSqaaHookSubfeature(): SubfeatureDeclaration<CodexIntegrationOptio
   return {
     id: SQAA_HOOK_FEATURE_ID,
     displayName: 'Vortex analysis hook',
-    shouldInstall: ({ options }) => vortexInstallDecision(options.vortexDisposition),
+    shouldInstall: () => install(),
     resources: [
       wholeFile({
         id: 'posttool-sqaa-script',

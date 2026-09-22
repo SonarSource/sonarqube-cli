@@ -27,7 +27,7 @@ import type {
   IntegrationInvocation,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { askUser, install, skip, uninstall } from '@/core/framework/features';
+import { askUser, skip, uninstall } from '@/core/framework/features';
 import { wholeFileRemover } from '@/core/framework/resources';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
@@ -41,16 +41,34 @@ import { VORTEX_FEATURE_BENEFIT, VORTEX_FEATURE_PREVIEW } from './feature-consta
 import type { IntegrateAgentOptions, VortexDisposition } from './types.ts';
 
 export const VORTEX_FEATURE_ID = 'vortex';
+/**
+ * Claude's own vortex container id — it absorbs the old standalone
+ * `sonar-sqaa-hook` container in addition to `vortex`'s own subfeatures, so
+ * it can't reuse `VORTEX_FEATURE_ID` (that migration would be a no-op for
+ * every user already on the plain `vortex` id).
+ */
+export const CLAUDE_VORTEX_FEATURE_ID = 'vortex-claude';
 export const CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID = 'context-augmentation-skill-file'; // retired, removal only
 
+const KNOWN_VORTEX_FEATURE_IDS = new Set([VORTEX_FEATURE_ID, CLAUDE_VORTEX_FEATURE_ID]);
+
 export function isVortexFeature(feature: InstalledIntegrationFeature): boolean {
-  return feature.featureId === VORTEX_FEATURE_ID;
+  return KNOWN_VORTEX_FEATURE_IDS.has(feature.featureId);
 }
 
 /**
  * Builds an agent's Vortex container from the capabilities it supports. The
  * subfeature ids are the ids those capabilities had as standalone features, so
  * `replacedIds` migrates installs recorded before the unification into this one.
+ *
+ * A subfeature only evaluates once its container has resolved to `install`
+ * (`selectActiveSubfeatures` in `core/framework/features/selection.ts`), so a
+ * subfeature with no condition of its own can just unconditionally `install()`.
+ *
+ * An agent absorbing a formerly-standalone *sibling* top-level feature (not
+ * just standalone subfeatures) needs a fresh id instead of `VORTEX_FEATURE_ID`
+ * — see `CLAUDE_VORTEX_FEATURE_ID` above and `claudeVortexFeature` in
+ * `claude/declaration.ts`.
  */
 export function createVortexFeature<TOptions extends IntegrateAgentOptions>(
   subfeatures: SubfeatureDeclaration<TOptions>[],
@@ -76,7 +94,7 @@ export function createVortexFeature<TOptions extends IntegrateAgentOptions>(
   };
 }
 
-export function vortexShouldInstall<TOptions extends IntegrateAgentOptions>({
+function vortexShouldInstall<TOptions extends IntegrateAgentOptions>({
   options,
 }: IntegrationInvocation<TOptions>): InstallDecision {
   if (options.vortexDisposition === 'install') {
@@ -110,17 +128,6 @@ export const VORTEX_SCA_CHECK_FAILED_MESSAGE =
 export interface ResolvedVortexSetup {
   disposition: VortexDisposition;
   scaEnabled?: boolean;
-}
-
-/** Maps the container disposition onto a subfeature install decision. */
-export function vortexInstallDecision(disposition: VortexDisposition | undefined): InstallDecision {
-  if (disposition === 'install') {
-    return install();
-  }
-  if (disposition === 'remove') {
-    return uninstall();
-  }
-  return skip();
 }
 
 async function resolveScaEnabled(

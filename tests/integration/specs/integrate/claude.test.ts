@@ -26,7 +26,7 @@ import { isAbsolute } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { SQAA_INSTRUCTIONS_SUBFEATURE_ID } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
-import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
+import { CLAUDE_VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
 import { claudeIntegration } from '@/commands/integrate/claude/declaration.ts';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
@@ -629,7 +629,7 @@ describe('integrate claude — Vortex entitlement guard', () => {
       const instructions = harness.userHome.file('.claude', 'CLAUDE.md').asText();
       expect(instructions).toContain('# Vortex analysis protocol');
       expect(instructions).not.toContain('--project');
-      expect(findClaudeFeature(harness, VORTEX_FEATURE_ID)?.scope).toBe('global');
+      expect(findClaudeFeature(harness, CLAUDE_VORTEX_FEATURE_ID)?.scope).toBe('global');
     },
     { timeout: 30000 },
   );
@@ -765,7 +765,7 @@ describe('integrate claude — Vortex entitlement guard', () => {
 
       expect(result.exitCode).toBe(0);
 
-      const vortexFeature = findClaudeFeature(harness, VORTEX_FEATURE_ID, 'global');
+      const vortexFeature = findClaudeFeature(harness, CLAUDE_VORTEX_FEATURE_ID, 'global');
       expect(vortexFeature).toBeDefined();
       expect(vortexFeature?.attrs?.projectKey).toBe('my-project');
     },
@@ -889,7 +889,7 @@ describe('integrate claude — Vortex entitlement guard', () => {
       const settings = harness.userHome.file('.claude', 'settings.json').asJson();
       expect(settings.hooks?.PostToolUse).toBeDefined();
 
-      expect(findClaudeFeature(harness, VORTEX_FEATURE_ID)?.scope).toBe('global');
+      expect(findClaudeFeature(harness, CLAUDE_VORTEX_FEATURE_ID)?.scope).toBe('global');
     },
     { timeout: 30000 },
   );
@@ -1113,7 +1113,7 @@ describe('integrate claude — file placement (local vs global)', () => {
         expect(findClaudeFeature(harness, 'sonar-secrets-hooks', 'global')).toBeDefined();
 
         // This connection has no Vortex entitlement, so nothing Vortex is recorded.
-        expect(findClaudeFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
+        expect(findClaudeFeature(harness, CLAUDE_VORTEX_FEATURE_ID)).toBeUndefined();
       },
       { timeout: 30000 },
     );
@@ -1645,7 +1645,7 @@ describe('integrate claude — interactive feature selection', () => {
       // Declarative state records only the accepted features.
       expect(findClaudeFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
       expect(findClaudeFeature(harness, 'mcp-server')).toBeDefined();
-      expect(findClaudeFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
+      expect(findClaudeFeature(harness, CLAUDE_VORTEX_FEATURE_ID)).toBeUndefined();
     },
     { timeout: 30000 },
   );
@@ -1753,12 +1753,12 @@ describe('integrate claude — interactive feature selection', () => {
           hookScriptName('posttool-sqaa'),
         ),
       ).toBe(true);
-      expect(findClaudeFeature(harness, VORTEX_FEATURE_ID)).toBeDefined();
+      expect(findClaudeFeature(harness, CLAUDE_VORTEX_FEATURE_ID)).toBeDefined();
       expect(harness.userHome.file('.claude', 'CLAUDE.md').asText()).toContain(
         '# Vortex analysis protocol',
       );
       expect(
-        findClaudeFeature(harness, VORTEX_FEATURE_ID)?.subfeatures?.map((s) => s.featureId),
+        findClaudeFeature(harness, CLAUDE_VORTEX_FEATURE_ID)?.subfeatures?.map((s) => s.featureId),
       ).toContain(SQAA_INSTRUCTIONS_SUBFEATURE_ID);
     },
     { timeout: 30000 },
@@ -1796,7 +1796,7 @@ describe('integrate claude — interactive feature selection', () => {
       const output = `${result.stdout}\n${result.stderr}`;
       expect(output).toContain('Could not determine Vortex entitlement');
       expect(output).not.toContain('Install Vortex?');
-      expect(findClaudeFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
+      expect(findClaudeFeature(harness, CLAUDE_VORTEX_FEATURE_ID)).toBeUndefined();
     },
     { timeout: 30000 },
   );
@@ -2030,6 +2030,107 @@ describe('integrate claude — keep/remove already-installed features', () => {
       expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
         true,
       );
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'declining to keep an installed Vortex removes the whole merged container in one shot',
+    async () => {
+      harness.state().withContextAugmentationBinaryInstalled();
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .withVortexEntitlement('my-org', 'test-uuid-1234')
+        .withProject('my-project')
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', 'my-org');
+      // The container's five subfeatures (SQAA instructions/hook, CAG
+      // session-start/hook) install and remove together as one unit.
+      harness
+        .state()
+        .withInstalledIntegrationFeature(
+          claudeIntegration,
+          'sonar-secrets-hooks',
+          'global',
+          harness.userHome.path,
+        )
+        .withInstalledIntegrationFeature(
+          claudeIntegration,
+          CLAUDE_VORTEX_FEATURE_ID,
+          'global',
+          harness.userHome.path,
+        )
+        .withInstalledIntegrationFeature(
+          claudeIntegration,
+          'mcp-server',
+          'global',
+          harness.userHome.path,
+        );
+      harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=my-project');
+
+      const session = harness.runInteractive('integrate claude', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+      await session.accept('secret scanning hooks (currently installed)  Keep?');
+      await session.decline('Vortex (currently installed)  Keep?');
+      await session.accept('Proceed with removal?');
+      await session.accept('MCP server (currently installed)  Keep?');
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      const output = `${result.stdout}\n${result.stderr}`;
+      // SQAA/CAG's PostToolUse hook shares Vortex's container, so there is
+      // exactly one Keep/Remove ask for all of it.
+      expect(output).not.toContain('Vortex analysis hook (currently installed)');
+      expect(output).toContain('Removing Vortex');
+      expect(output).toContain('Removed');
+
+      // The single merged container — and everything nested under it — is gone.
+      expect(findClaudeFeature(harness, CLAUDE_VORTEX_FEATURE_ID)).toBeUndefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'declining a first-time Vortex install leaves none of its parts installed',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .withVortexEntitlement('my-org', 'test-uuid-1234')
+        .withProject('my-project')
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', 'my-org');
+      harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=my-project');
+
+      const session = harness.runInteractive('integrate claude', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+      await session.accept('Install secret scanning hooks?');
+      await session.decline('Install Vortex?');
+      await session.accept('Install MCP server?');
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      // Declining the single ask must not leave any of Vortex's subfeatures
+      // (the PostToolUse hook included) installed independently — with one
+      // merged container, they can only ever activate together.
+      expect(findClaudeFeature(harness, CLAUDE_VORTEX_FEATURE_ID)).toBeUndefined();
+      expect(harness.userHome.exists('.claude', 'hooks', 'sonar-sqaa')).toBe(false);
+      expect(
+        harness.userHome.file('.claude', 'settings.json').asJson().hooks?.PostToolUse,
+      ).toBeUndefined();
     },
     { timeout: 30000 },
   );

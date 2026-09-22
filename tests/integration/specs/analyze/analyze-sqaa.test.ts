@@ -30,7 +30,7 @@ import {
   SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
   SQAA_ANALYZE_CALLER_COMMAND,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
-import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
+import { CLAUDE_VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
 import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
 
 import {
@@ -732,7 +732,7 @@ describe('analyze agentic', () => {
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
         .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl(), {
-          featureId: VORTEX_FEATURE_ID,
+          featureId: CLAUDE_VORTEX_FEATURE_ID,
         });
 
       harness.cwd.writeFile('index.ts', 'const x = 1;');
