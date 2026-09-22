@@ -23,13 +23,18 @@ import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
 import { describe, expect, it, spyOn } from 'bun:test';
 
-import { getStatsDir, STATS_DB_FILENAME } from '@/core/config-constants.ts';
+import { ENV_SONAR_USER_HOME, getStatsDir, STATS_DB_FILENAME } from '@/core/config-constants.ts';
 import * as dbModule from '@/core/stats/db.ts';
 import { dedupeAgainstSeen, recordStatsEvent, upsertRuleMessages } from '@/core/stats/store.ts';
 
+import { readStatsAggregate } from '../../../_common/stats-helpers.ts';
 import { useTempSonarUserHome } from './_helpers.ts';
 
 useTempSonarUserHome('cli-stats-store-test-');
+
+function readAggregate(dimension: string, key: string): { runs: number; findings: number } | null {
+  return readStatsAggregate(process.env[ENV_SONAR_USER_HOME] as string, dimension, key);
+}
 
 function readEvents(): Array<{
   timestamp_ms: number;
@@ -80,6 +85,33 @@ describe('recordStatsEvent', () => {
       findingsCount: 3,
       ruleCounts: { 'java:S2259': 3 },
     });
+  });
+
+  it('rolls the event into stats_aggregates alongside the raw row', () => {
+    recordStatsEvent(
+      {
+        callerCommand: 'analyze agentic',
+        exitCode: 0,
+        callerAgent: 'claude',
+        runTrigger: 'manual',
+      },
+      {
+        eventClass: 'analyzer',
+        analyzer: 'sqaa',
+        findingsCount: 3,
+        ruleCounts: { 'java:S2259': 3 },
+      },
+    );
+
+    expect(readAggregate('global', '')).toMatchObject({ runs: 1, findings: 3 });
+    expect(readAggregate('analyzer', 'sqaa')).toMatchObject({ runs: 1, findings: 3 });
+    expect(readAggregate('agent', 'claude')).toMatchObject({ runs: 1, findings: 3 });
+    expect(readAggregate('trigger', 'manual')).toMatchObject({ runs: 1, findings: 0 });
+    expect(readAggregate('caller_command', 'analyze agentic')).toMatchObject({
+      runs: 1,
+      findings: 0,
+    });
+    expect(readAggregate('rule', 'sqaa:java:S2259')).toMatchObject({ runs: 0, findings: 3 });
   });
 
   it('defaults an omitted durationMs to null', () => {

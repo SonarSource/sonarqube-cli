@@ -22,6 +22,7 @@ import type { Database } from 'bun:sqlite';
 
 import logger from '@/core/observability/logger.ts';
 
+import { applyAnalyzerEventToAggregates } from './aggregates.ts';
 import { openStatsDb } from './db.ts';
 
 // Mirrors AnalysisTelemetryAnalyzer; not imported — drift is a compile error in facts.ts instead.
@@ -64,21 +65,35 @@ function withDb<T>(fn: (db: Database) => T, fallback: T): T {
 }
 
 export function recordStatsEvent(envelope: StatsEventEnvelope, details: StatsEventDetails): void {
+  const timestampMs = Date.now();
   withDb((db) => {
-    db.prepare(
-      `INSERT INTO stats_events
-         (timestamp_ms, event_class, caller_command, exit_code, caller_agent, run_trigger, duration_ms, details)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      Date.now(),
-      details.eventClass,
-      envelope.callerCommand,
-      envelope.exitCode,
-      envelope.callerAgent,
-      envelope.runTrigger,
-      envelope.durationMs ?? null,
-      JSON.stringify(details),
-    );
+    db.transaction(() => {
+      db.prepare(
+        `INSERT INTO stats_events
+           (timestamp_ms, event_class, caller_command, exit_code, caller_agent, run_trigger, duration_ms, details)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        timestampMs,
+        details.eventClass,
+        envelope.callerCommand,
+        envelope.exitCode,
+        envelope.callerAgent,
+        envelope.runTrigger,
+        envelope.durationMs ?? null,
+        JSON.stringify(details),
+      );
+
+      applyAnalyzerEventToAggregates(db, {
+        timestampMs,
+        callerCommand: envelope.callerCommand,
+        exitCode: envelope.exitCode,
+        callerAgent: envelope.callerAgent,
+        runTrigger: envelope.runTrigger,
+        analyzer: details.analyzer,
+        findingsCount: details.findingsCount,
+        ruleCounts: details.ruleCounts,
+      });
+    })();
   }, undefined);
 }
 

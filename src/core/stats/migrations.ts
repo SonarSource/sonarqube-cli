@@ -20,12 +20,52 @@
 
 import type { Database } from 'bun:sqlite';
 
+import { applyAnalyzerEventToAggregates } from './aggregates.ts';
+
 export interface StatsMigration {
   version: number;
   up: (db: Database) => void;
 }
 
-const MIGRATIONS: StatsMigration[] = [
+interface StoredAnalyzerEventRow {
+  timestamp_ms: number;
+  caller_command: string;
+  exit_code: number | null;
+  caller_agent: string;
+  run_trigger: 'hooks' | 'manual';
+  details: string;
+}
+
+/** One-time rollup of pre-existing `analyzer`-class rows so upgrading doesn't reset all-time totals. */
+function backfillAggregatesFromExistingEvents(db: Database): void {
+  const rows = db
+    .prepare<StoredAnalyzerEventRow, []>(
+      `SELECT timestamp_ms, caller_command, exit_code, caller_agent, run_trigger, details
+       FROM stats_events WHERE event_class = 'analyzer'`,
+    )
+    .all();
+
+  for (const row of rows) {
+    const details = JSON.parse(row.details) as {
+      analyzer: string;
+      findingsCount: number;
+      ruleCounts?: Record<string, number>;
+    };
+    applyAnalyzerEventToAggregates(db, {
+      timestampMs: row.timestamp_ms,
+      callerCommand: row.caller_command,
+      exitCode: row.exit_code,
+      callerAgent: row.caller_agent,
+      runTrigger: row.run_trigger,
+      analyzer: details.analyzer,
+      findingsCount: details.findingsCount,
+      ruleCounts: details.ruleCounts,
+    });
+  }
+}
+
+/** Exported so tests can apply a subset (e.g. just v1) to set up pre-migration fixtures. */
+export const STATS_MIGRATIONS: readonly StatsMigration[] = [
   {
     version: 1,
     up: (db) => {
@@ -59,6 +99,24 @@ const MIGRATIONS: StatsMigration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    up: (db) => {
+      db.run(`
+        CREATE TABLE stats_aggregates (
+          dimension TEXT NOT NULL,
+          key TEXT NOT NULL,
+          runs INTEGER NOT NULL DEFAULT 0,
+          findings INTEGER NOT NULL DEFAULT 0,
+          runs_with_findings INTEGER NOT NULL DEFAULT 0,
+          blocked INTEGER NOT NULL DEFAULT 0,
+          first_seen_ms INTEGER,
+          PRIMARY KEY (dimension, key)
+        );
+      `);
+      backfillAggregatesFromExistingEvents(db);
+    },
+  },
 ];
 
 export function applyMigrations(db: Database, migrations: readonly StatsMigration[]): void {
@@ -79,5 +137,5 @@ export function applyMigrations(db: Database, migrations: readonly StatsMigratio
 }
 
 export function applyStatsMigrations(db: Database): void {
-  applyMigrations(db, MIGRATIONS);
+  applyMigrations(db, STATS_MIGRATIONS);
 }

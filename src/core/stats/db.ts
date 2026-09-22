@@ -23,12 +23,21 @@ import { join } from 'node:path';
 
 import { Database } from 'bun:sqlite';
 
-import { getStatsDir, STATS_DB_FILENAME } from '@/core/config-constants.ts';
+import { getStatsDir, STATS_DB_FILENAME, STATS_RETENTION_DAYS } from '@/core/config-constants.ts';
 import logger from '@/core/observability/logger.ts';
 
 import { applyStatsMigrations } from './migrations.ts';
 
 const CORRUPTION_ERROR_CODE_PREFIXES = ['SQLITE_NOTADB', 'SQLITE_CORRUPT'];
+
+const DAY_MS = 86_400_000;
+
+// Their contribution already lives in stats_aggregates (updated at write time, per row) —
+// deleting raw rows here needs no recomputation.
+function purgeOldStatsEvents(db: Database): void {
+  const cutoffMs = Date.now() - STATS_RETENTION_DAYS * DAY_MS;
+  db.prepare('DELETE FROM stats_events WHERE timestamp_ms < ?').run(cutoffMs);
+}
 
 export function isCorruptionError(error: unknown): boolean {
   const code = (error as { code?: string }).code ?? '';
@@ -42,6 +51,7 @@ function openAndMigrate(dbPath: string): Database {
     db.run('PRAGMA busy_timeout = 5000');
     db.run('PRAGMA journal_mode = WAL');
     applyStatsMigrations(db);
+    purgeOldStatsEvents(db);
     return db;
   } catch (error) {
     // Windows can't rename/delete a file with an open handle — release ours before the
