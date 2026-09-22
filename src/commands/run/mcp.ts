@@ -65,9 +65,7 @@ export async function runMcp(
   }
   if (!authResult.value) {
     if (process.stdin.isTTY || process.stdout.isTTY) {
-      throw new CommandFailedError('Not authenticated.', {
-        remediationHint: "Run 'sonar auth login' to authenticate.",
-      });
+      throw unauthenticatedError();
     }
     await respondToUnauthenticatedInitialize();
     return;
@@ -164,6 +162,13 @@ async function respondToUnauthenticatedInitialize(): Promise<void> {
     process.exitCode = 1;
     return;
   }
+  throw unauthenticatedError();
+}
+
+function unauthenticatedError(): CommandFailedError {
+  return new CommandFailedError('Not authenticated.', {
+    remediationHint: "Run 'sonar auth login' to authenticate.",
+  });
 }
 
 function parseInitializeRequest(line: string): { id: unknown } | undefined {
