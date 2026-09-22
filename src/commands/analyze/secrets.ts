@@ -23,6 +23,7 @@ import { existsSync } from 'node:fs';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import { EXIT_CODE_SECRETS_FOUND } from '@/core/config-constants.ts';
 import { buildSubprocessNetworkEnv } from '@/core/host/connectivity/network-config.ts';
 import { installSecretsBinary } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
@@ -109,13 +110,14 @@ export async function analyzeSecrets(
   return handleCheckCommand(options, ctx).catch(handleScanError);
 }
 
+// Re-exported for backward compatibility (canonical definition moved to config-constants.ts).
+export { EXIT_CODE_SECRETS_FOUND };
+
 // Env var names expected by the sonar-secrets binary
 const BINARY_AUTH_URL_ENV = 'SONAR_SECRETS_AUTH_URL';
 const BINARY_AUTH_TOKEN_ENV = 'SONAR_SECRETS_TOKEN';
 
 const SCAN_TIMEOUT_MS = 30000;
-
-export const EXIT_CODE_SECRETS_FOUND = 51;
 
 /**
  * Run sonar-secrets binary on the given files. Returns the full spawn result.

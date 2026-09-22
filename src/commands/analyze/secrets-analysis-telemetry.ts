@@ -31,6 +31,7 @@ import {
   type CommandInvocationContext,
   TelemetryFact,
 } from '@/core/commands/invocation-context.ts';
+import { EXIT_CODE_SECRETS_FOUND, type SecretsCallerCommand } from '@/core/config-constants.ts';
 import type { SpawnResult } from '@/core/process/process.ts';
 import {
   buildStatsFromTelemetry,
@@ -39,36 +40,10 @@ import {
 } from '@/core/stats/facts.ts';
 
 import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
-import {
-  EXIT_CODE_SECRETS_FOUND,
-  parseSecretsJson,
-  type SecretsJsonIssue,
-  type SecretsJsonOutput,
-} from './secrets.ts';
+import { parseSecretsJson, type SecretsJsonIssue, type SecretsJsonOutput } from './secrets.ts';
 
-/**
- * The `caller_command` value recorded on every sonar-secrets analysis event, one per
- * call site. `agentPromptSubmit` is shared by the Claude and Codex prompt-submit hooks
- * (they are distinguished by `caller_agent`, not `caller_command`).
- */
-export const SECRETS_CALLER_COMMANDS = {
-  analyze: 'analyze',
-  analyzeSecrets: 'analyze secrets',
-  analyzeDependencyRisks: 'analyze dependency-risks',
-  gitPreCommit: 'git-pre-commit',
-  gitPrePush: 'git-pre-push',
-  agentPromptSubmit: 'agent-prompt-submit',
-  cursorPromptSubmit: 'cursor-prompt-submit',
-  claudePreToolUse: 'claude-pre-tool-use',
-  copilotPreToolUse: 'copilot-pre-tool-use',
-  antigravityPreToolUse: 'antigravity-pre-tool-use',
-  cursorPreFileRead: 'cursor-pre-file-read',
-  cursorPreToolUse: 'cursor-pre-tool-use',
-} as const;
-
-/** Union of the valid sonar-secrets `caller_command` values. */
-export type SecretsCallerCommand =
-  (typeof SECRETS_CALLER_COMMANDS)[keyof typeof SECRETS_CALLER_COMMANDS];
+// Re-exported for backward compatibility (canonical definitions moved to config-constants.ts).
+export { SECRETS_CALLER_COMMANDS, type SecretsCallerCommand } from '@/core/config-constants.ts';
 
 /**
  * Builds one CliAnalysisCompleted fact for a sonar-secrets run (`details` is a

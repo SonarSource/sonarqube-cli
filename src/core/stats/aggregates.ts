@@ -20,18 +20,18 @@
 
 import type { Database } from 'bun:sqlite';
 
-const SECRETS_BLOCKED_EXIT_CODE = 51;
+import { EXIT_CODE_SECRETS_FOUND, SECRETS_CALLER_COMMANDS } from '@/core/config-constants.ts';
 
 const SECRETS_BLOCKED_CALLER_COMMANDS: ReadonlySet<string> = new Set([
-  'git-pre-commit',
-  'git-pre-push',
-  'agent-prompt-submit',
-  'cursor-prompt-submit',
-  'claude-pre-tool-use',
-  'copilot-pre-tool-use',
-  'antigravity-pre-tool-use',
-  'cursor-pre-file-read',
-  'cursor-pre-tool-use',
+  SECRETS_CALLER_COMMANDS.gitPreCommit,
+  SECRETS_CALLER_COMMANDS.gitPrePush,
+  SECRETS_CALLER_COMMANDS.agentPromptSubmit,
+  SECRETS_CALLER_COMMANDS.cursorPromptSubmit,
+  SECRETS_CALLER_COMMANDS.claudePreToolUse,
+  SECRETS_CALLER_COMMANDS.copilotPreToolUse,
+  SECRETS_CALLER_COMMANDS.antigravityPreToolUse,
+  SECRETS_CALLER_COMMANDS.cursorPreFileRead,
+  SECRETS_CALLER_COMMANDS.cursorPreToolUse,
 ]);
 
 export interface AnalyzerAggregateEvent {
@@ -48,7 +48,7 @@ export interface AnalyzerAggregateEvent {
 function isSecretsBlocked(event: AnalyzerAggregateEvent): boolean {
   return (
     event.analyzer === 'sonar-secrets' &&
-    event.exitCode === SECRETS_BLOCKED_EXIT_CODE &&
+    event.exitCode === EXIT_CODE_SECRETS_FOUND &&
     SECRETS_BLOCKED_CALLER_COMMANDS.has(event.callerCommand)
   );
 }
