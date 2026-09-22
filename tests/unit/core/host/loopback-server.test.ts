@@ -169,10 +169,20 @@ describe('loopback-server', () => {
     it('should skip a port reserved on IPv6 loopback', async () => {
       const reservedPort = AUTH_PORT_START;
       const ipv6Reservation = createServer();
-      await new Promise<void>((resolve, reject) => {
-        ipv6Reservation.once('error', reject);
-        ipv6Reservation.listen(reservedPort, '::1', resolve);
+      const ipv6Available = await new Promise<boolean>((resolve, reject) => {
+        ipv6Reservation.once('error', (error: NodeJS.ErrnoException) => {
+          if (error.code === 'EADDRNOTAVAIL' || error.code === 'EAFNOSUPPORT') {
+            resolve(false);
+            return;
+          }
+          reject(error);
+        });
+        ipv6Reservation.listen(reservedPort, '::1', () => resolve(true));
       });
+
+      if (!ipv6Available) {
+        return;
+      }
 
       try {
         server = await startLoopbackServer((_req, res) => {

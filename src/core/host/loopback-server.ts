@@ -114,9 +114,7 @@ export interface LoopbackServerOptions {
  * Returns null when either address has already reserved the port.
  * Uses only IPv4 when the host has no IPv6 loopback interface.
  */
-async function tryBindPort(
-  port: number,
-): Promise<{
+async function tryBindPort(port: number): Promise<{
   serverV4: ReturnType<typeof createServer>;
   serverV6: ReturnType<typeof createServer> | null;
 } | null> {
