@@ -70,8 +70,11 @@ function migrateState(raw: Record<string, unknown>): CliState {
   if (!raw.dependencies) {
     raw.dependencies = { installed: [] };
   }
-  if (!raw.agents) {
-    raw.agents = {};
+  const defaultAgents = getDefaultState(VERSION).agents;
+  if (!raw.agents || typeof raw.agents !== 'object' || Array.isArray(raw.agents)) {
+    raw.agents = defaultAgents;
+  } else if (!(raw.agents as Record<string, unknown>)['claude-code']) {
+    (raw.agents as Record<string, unknown>)['claude-code'] = defaultAgents['claude-code'];
   }
   migrateLegacyToolRecords(raw);
   backfillInstalledFeatureArrays(raw);
