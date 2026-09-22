@@ -280,7 +280,7 @@ export class SonarHttpClient {
   ): ResultAsync<SafeGetResult<TValue>, HttpClientError> {
     return ResultAsync.fromPromise(
       (async (): Promise<Response> => {
-        const url = new URL(`${baseUrl ?? this.serverURL}${endpoint}`);
+        const url = new URL(`${baseUrl}${endpoint}`);
         if (params) {
           Object.entries(params).forEach(([key, value]) => {
             url.searchParams.append(key, String(value));
@@ -311,7 +311,7 @@ export class SonarHttpClient {
     baseUrl: string = this.apiHostFor(endpoint),
     extraHeaders?: Record<string, string>,
   ): ResultAsync<T, HttpClientError> {
-    const url = `${baseUrl ?? this.serverURL}${endpoint}`;
+    const url = `${baseUrl}${endpoint}`;
     const headers = { ...this.commonHeaders('json'), ...extraHeaders };
 
     return ResultAsync.fromPromise(
