@@ -1432,8 +1432,14 @@ describe('system status', () => {
         hasEntitlement?: boolean;
         consumption?: { consumed: number; limit: number };
       };
+      member?: boolean;
     }): Promise<{ extraEnv: Record<string, string> }> {
       const builder = harness.newFakeServer().withAuthToken(TOKEN);
+      if (options.member !== false) {
+        builder.withOrganizations([{ key: ORG_KEY, name: 'My Org' }]);
+      } else {
+        builder.withVisibleOrganizations([{ key: ORG_KEY, name: 'My Org' }]);
+      }
       if (options.sqaa) {
         builder.withSqaaEntitlement(ORG_KEY, ORG_UUID, options.sqaa);
       }
@@ -1473,6 +1479,29 @@ describe('system status', () => {
         };
         expect(json.vortex).toEqual({ applicable: true, status: 'not_entitled' });
         expect(json.healthy).toBe(true);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'reports an organization membership mismatch instead of a failed Vortex check',
+      async () => {
+        const { extraEnv } = await setupVortex({ member: false });
+
+        const result = await harness.run('system status', { extraEnv });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('VORTEX');
+        expect(result.stdout).toContain(
+          'Configured organization is not accessible with this token',
+        );
+        expect(result.stdout).not.toContain('Unknown (check failed)');
+
+        const jsonResult = await harness.run('system status --json', { extraEnv });
+        const json = JSON.parse(jsonResult.stdout) as {
+          vortex: { applicable: boolean; status: string };
+        };
+        expect(json.vortex).toEqual({ applicable: true, status: 'organization_not_accessible' });
       },
       { timeout: 15000 },
     );

@@ -25,6 +25,8 @@ import { errAsync, okAsync, type ResultAsync } from '../result.ts';
 import { type HttpClientError, isCriticalFailure } from './errors.ts';
 import type { SonarHttpClient } from './http-client.ts';
 
+const MAX_ORGANIZATIONS_PER_PAGE = 500;
+
 export interface Organization {
   key: string;
   name: string;
@@ -47,6 +49,10 @@ export interface OrganizationRecord {
  */
 export type OrganizationAccess =
   { status: 'accessible' } | { status: 'not_found' } | { status: 'check_failed'; reason: string };
+
+/** Result of checking whether the current token has membership in an organization. */
+export type OrganizationMembership =
+  { status: 'member' } | { status: 'not_member' } | { status: 'check_failed'; reason: string };
 
 export class OrganizationsClient {
   private readonly client: SonarHttpClient;
@@ -140,6 +146,28 @@ export class OrganizationsClient {
         paging: { total: number };
       }>('/api/organizations/search', { member: true, ps, p: page })
       .map((result) => ({ organizations: result.organizations, total: result.paging.total }));
+  }
+
+  /**
+   * Check whether the current token resolves membership for an organization.
+   *
+   * The configured organization can be public without being a token membership. Only the
+   * member-filtered endpoint makes that distinction, so errors must remain distinct from an
+   * absent membership.
+   */
+  async checkMembership(organizationKey: string): Promise<OrganizationMembership> {
+    for (let page = 1; ; page += 1) {
+      const result = await this.listUserOrganizations(page, MAX_ORGANIZATIONS_PER_PAGE);
+      if (result.isErr()) return { status: 'check_failed', reason: result.error.message };
+
+      const { organizations, total } = result.value;
+      if (organizations.some((organization) => organization.key === organizationKey)) {
+        return { status: 'member' };
+      }
+      if (organizations.length === 0 || page * MAX_ORGANIZATIONS_PER_PAGE >= total) {
+        return { status: 'not_member' };
+      }
+    }
   }
 
   /**

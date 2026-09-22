@@ -30,7 +30,13 @@ import logger from '@/core/observability/logger.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 
-import { lastFetchUrl, mockFetch } from '../../helpers/mock-fetch.ts';
+import {
+  fakeResponse,
+  lastFetchUrl,
+  mockFetch,
+  mockFetchSeq,
+  nthFetchUrl,
+} from '../../helpers/mock-fetch.ts';
 
 const SERVER_URL = 'https://sonarqube.example.com';
 const TOKEN = 'squ_test_token';
@@ -152,6 +158,18 @@ describe('OrganizationsClient', () => {
     it('returns false on error', async () => {
       fetchSpy = mockFetch({}, { ok: false, status: 500 });
       expect(await client.isOrganizationAccessible('my-org')).toBe(false);
+    });
+  });
+
+  describe('checkMembership', () => {
+    it('checks later pages when the organization is not in the first page', async () => {
+      fetchSpy = mockFetchSeq(
+        fakeResponse({ organizations: [{ key: 'other-org' }], paging: { total: 501 } }),
+        fakeResponse({ organizations: [{ key: 'my-org' }], paging: { total: 501 } }),
+      );
+
+      expect(await client.checkMembership('my-org')).toEqual({ status: 'member' });
+      expect(new URL(nthFetchUrl(fetchSpy, 1)).searchParams.get('p')).toBe('2');
     });
   });
 

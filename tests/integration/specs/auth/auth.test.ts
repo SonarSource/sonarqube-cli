@@ -1756,6 +1756,37 @@ describe('auth status', () => {
   );
 
   it(
+    'reports a configured organization that the token cannot access',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('status-token')
+        .withVisibleOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .start();
+      harness.state().withAuth(server.baseUrl(), 'status-token', 'my-org');
+
+      const result = await harness.run('auth status', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(
+        "Connected, but organization 'my-org' is not accessible with this token",
+      );
+      expect(result.stdout).toContain('This token resolves no membership for that organization.');
+      expect(result.stdout).toContain('Either regenerate it');
+      // The remediation path is the actionable part of this message, and it was wrong until
+      // review caught it. Assert it so the next UI change breaks a test rather than a user.
+      expect(result.stdout).toContain('My Account > Access Tokens');
+      expect(result.stdout).toContain('or ask an organization administrator to add');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'reports connected when SQS credentials are set via environment variables',
     async () => {
       const result = await harness.run('auth status', {
