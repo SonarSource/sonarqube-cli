@@ -103,8 +103,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
     logger.warn('Dependency-risks hook: no project key resolved, skipping.');
     console.warn(
       'Dependency-risks scan skipped: no SonarQube project resolved for this repo; ' +
-        'commit not blocked. Add sonar.projectKey to sonar-project.properties at the ' +
-        'repository root to set one explicitly.',
+        "commit not blocked. Run 'sonar link <projectKey>' to link one to this repository.",
     );
     return;
   }
