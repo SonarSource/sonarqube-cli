@@ -209,12 +209,9 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
             const claudeSettings = harness.userHome.file('.claude', 'settings.json').asText();
             expect(claudeSettings).toContain('sonar-sqaa');
             expect(claudeSettings).toContain('posttool-sqaa');
-            // The seeded legacy `sonar-sqaa-hook` record only had `cag-posttooluse` active,
-            // but that id no longer names a live top-level feature, so post-update migrates
-            // it into the merged `vortex-claude` container via `replacedIds` — which installs
-            // every currently-eligible default subfeature, `sqaa-posttooluse` included, rather
-            // than preserving the exact prior (and, for this pairing, unreachable via any real
-            // `shouldInstall` combination) partial selection.
+            // The seed only had `cag-posttooluse` active, but migrating into the
+            // merged container re-derives the full eligible default set, so
+            // `sqaa-posttooluse` ends up active too.
             expect(claudeSettings).toContain('Edit|Write|Bash|PowerShell|Monitor|Read');
             expect(
               harness.userHome

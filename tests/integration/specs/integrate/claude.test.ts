@@ -2047,9 +2047,8 @@ describe('integrate claude — keep/remove already-installed features', () => {
         .start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
-      // A single seed for the merged container records all five of its
-      // subfeatures (SQAA instructions/hook, CAG session-start/hook) as
-      // installed — there is no separate sibling record to seed anymore.
+      // The container's five subfeatures (SQAA instructions/hook, CAG
+      // session-start/hook) install and remove together as one unit.
       harness
         .state()
         .withInstalledIntegrationFeature(
@@ -2086,9 +2085,8 @@ describe('integrate claude — keep/remove already-installed features', () => {
 
       expect(result.exitCode).toBe(0);
       const output = `${result.stdout}\n${result.stderr}`;
-      // SQAA/CAG's PostToolUse hook used to be a separate top-level container
-      // with its own independent ask; it is now folded into Vortex's own
-      // subfeatures, so there is exactly one Keep/Remove ask for all of it.
+      // SQAA/CAG's PostToolUse hook shares Vortex's container, so there is
+      // exactly one Keep/Remove ask for all of it.
       expect(output).not.toContain('Vortex analysis hook (currently installed)');
       expect(output).toContain('Removing Vortex');
       expect(output).toContain('Removed');

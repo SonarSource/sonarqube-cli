@@ -106,9 +106,8 @@ describe('post-update migration', () => {
     const claude = state.integrations.installed.find(
       (integration) => integration.integrationId === 'claude-code',
     );
-    // Claude folds what used to be two independent top-level containers (the
-    // `vortex` umbrella and the standalone `sonar-sqaa-hook` PostToolUse
-    // dispatch container) into one `vortex-claude` container.
+    // Claude's SQAA/CAG PostToolUse dispatch merges into the same container
+    // as the rest of Vortex, so there is a single `vortex-claude` feature.
     expect(claude?.features.map((feature) => feature.featureId)).toEqual([
       CLAUDE_VORTEX_FEATURE_ID,
     ]);
@@ -535,10 +534,8 @@ describe('post-update migration', () => {
   it(
     'merges two already-containerized legacy Vortex records into the single vortex-claude container',
     async () => {
-      // Simulates a user who already went through the original vortex/sonar-sqaa-hook
-      // unification (both containers independently fully installed, each with its own
-      // recorded subfeatures) before this fix shipped — as opposed to the much older
-      // pre-container flat records `seedPreUnificationFeatures` simulates above.
+      // Two fully-installed containers, each with its own recorded subfeatures —
+      // contrast with the older pre-container flat records seeded above.
       const now = new Date().toISOString();
       const legacyContainer = (featureId: string, subfeatureIds: string[]) => ({
         featureId,

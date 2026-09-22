@@ -102,15 +102,9 @@ const cagPostToolUseSubfeature: ClaudeHookSubfeature<ClaudeIntegrationOptions> =
 };
 
 /**
- * Claude's vortex container starts from the shared default (id
- * `VORTEX_FEATURE_ID`, `replacedIds` covering only its own subfeature ids)
- * and then overrides `id`/`replacedIds`/`resources`: it absorbs two
- * predecessors at once — the old `vortex` container and the old standalone
- * `sonar-sqaa-hook` `PostToolUse` dispatch container — so it needs a fresh id
- * (`CLAUDE_VORTEX_FEATURE_ID`) that neither predecessor had recorded yet for
- * `replacedIds`' migration to actually fire (see `createVortexFeature`'s doc
- * comment), plus the `PostToolUse` dispatch resources that used to live on
- * that standalone container.
+ * Starts from the shared default (`createVortexFeature`) and overrides
+ * `id`/`replacedIds`/`resources` to also absorb the old standalone
+ * `sonar-sqaa-hook` container — see `CLAUDE_VORTEX_FEATURE_ID`.
  */
 const claudeVortexFeature: FeatureContainer<ClaudeIntegrationOptions> = (() => {
   const defaultVortex = createVortexFeature<ClaudeIntegrationOptions>(

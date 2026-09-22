@@ -53,10 +53,9 @@ export interface PostToolUseDispatchConfig<TOptions = Record<string, unknown>> {
  * Container-level resources for a Claude `PostToolUse` hook shared by
  * multiple subfeatures: one script plus one settings.json entry whose
  * matcher is the union of whichever of `config.subfeatures` end up active.
- * Meant to be passed as `createVortexFeature`'s subfeatures' sibling
- * container resources (see `claudeVortexFeature` in `claude/declaration.ts`)
- * — the subfeatures themselves (with their own `shouldInstall`) are declared
- * alongside the other Vortex subfeatures, not nested under these resources.
+ * The subfeatures themselves are declared separately, alongside the rest of
+ * the Vortex container's subfeatures — see `claudeVortexFeature` in
+ * `claude/declaration.ts`.
  */
 export function createPostToolUseDispatchResources<TOptions = Record<string, unknown>>(
   config: PostToolUseDispatchConfig<TOptions>,

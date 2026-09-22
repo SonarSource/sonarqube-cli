@@ -42,11 +42,10 @@ import type { IntegrateAgentOptions, VortexDisposition } from './types.ts';
 
 export const VORTEX_FEATURE_ID = 'vortex';
 /**
- * Claude's own vortex container id. It absorbs two predecessors at once — the
- * old `vortex` container and the old standalone `sonar-sqaa-hook`
- * `PostToolUse` dispatch container — so it needs an id neither of them had
- * recorded yet for `replacedIds`' migration to actually fire (see
- * `createVortexFeature`'s doc comment below).
+ * Claude's own vortex container id — it absorbs the old standalone
+ * `sonar-sqaa-hook` container in addition to `vortex`'s own subfeatures, so
+ * it can't reuse `VORTEX_FEATURE_ID` (that migration would be a no-op for
+ * every user already on the plain `vortex` id).
  */
 export const CLAUDE_VORTEX_FEATURE_ID = 'vortex-claude';
 export const CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID = 'context-augmentation-skill-file'; // retired, removal only
@@ -60,23 +59,16 @@ export function isVortexFeature(feature: InstalledIntegrationFeature): boolean {
 /**
  * Builds an agent's Vortex container from the capabilities it supports. The
  * subfeature ids are the ids those capabilities had as standalone features, so
- * `replacedIds` migrates installs recorded before the unification into this
- * one.
+ * `replacedIds` migrates installs recorded before the unification into this one.
  *
- * A subfeature's `shouldInstall` only ever runs once its container has
- * already resolved to `install` (`selectActiveSubfeatures` in
- * `core/framework/features/selection.ts` is only reached on that outcome), so
- * a subfeature with no condition of its own beyond "the container installed
- * me" can just unconditionally `install()` — it never needs to re-derive
- * anything from raw entitlement.
+ * A subfeature only evaluates once its container has resolved to `install`
+ * (`selectActiveSubfeatures` in `core/framework/features/selection.ts`), so a
+ * subfeature with no condition of its own can just unconditionally `install()`.
  *
- * An agent whose vortex container absorbs a formerly-standalone *sibling*
- * top-level feature (not just formerly-standalone subfeatures) can't reuse
- * `VORTEX_FEATURE_ID` for that — the migration would be a no-op for every
- * already-installed user of that agent. Instead, spread this call's result
- * and override `id`/`replacedIds`/`resources` with a fresh id and the extra
- * predecessor ids folded in (see `CLAUDE_VORTEX_FEATURE_ID` above and
- * `claudeVortexFeature` in `claude/declaration.ts` for a worked example).
+ * An agent absorbing a formerly-standalone *sibling* top-level feature (not
+ * just standalone subfeatures) needs a fresh id instead of `VORTEX_FEATURE_ID`
+ * — see `CLAUDE_VORTEX_FEATURE_ID` above and `claudeVortexFeature` in
+ * `claude/declaration.ts`.
  */
 export function createVortexFeature<TOptions extends IntegrateAgentOptions>(
   subfeatures: SubfeatureDeclaration<TOptions>[],
