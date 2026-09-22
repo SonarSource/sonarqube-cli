@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { createServer } from 'node:http';
+
 import { afterEach, describe, expect, it } from 'bun:test';
 
 import { AUTH_PORT_COUNT, AUTH_PORT_START } from '@/core/config-constants.ts';
@@ -162,6 +164,28 @@ describe('loopback-server', () => {
 
       const response = await fetch(`http://[::1]:${server.port}`);
       expect(response.status).toBe(HTTP_STATUS_OK);
+    });
+
+    it('should skip a port reserved on IPv6 loopback', async () => {
+      const reservedPort = AUTH_PORT_START;
+      const ipv6Reservation = createServer();
+      await new Promise<void>((resolve, reject) => {
+        ipv6Reservation.once('error', reject);
+        ipv6Reservation.listen(reservedPort, '::1', resolve);
+      });
+
+      try {
+        server = await startLoopbackServer((_req, res) => {
+          res.writeHead(HTTP_STATUS_OK);
+          res.end('OK');
+        });
+
+        expect(server.port).not.toBe(reservedPort);
+      } finally {
+        await new Promise<void>((resolve) => {
+          ipv6Reservation.close(() => resolve());
+        });
+      }
     });
 
     it('should include security headers in response', async () => {
