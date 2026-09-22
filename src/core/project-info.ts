@@ -221,6 +221,7 @@ export async function resolveProjectKey(
   silent = false,
 ): Promise<string> {
   if (explicitProject) {
+    assertSingleLineProjectKey(explicitProject);
     if (!silent) {
       console.print(`     Using project key: ${explicitProject}`, 'stderr');
     }
@@ -229,6 +230,7 @@ export async function resolveProjectKey(
 
   const discovered = await discoverProject(process.cwd(), { auth, silent: true, console });
   if (discovered.projectKey) {
+    assertSingleLineProjectKey(discovered.projectKey);
     if (!silent) {
       console.print(`     Using auto-detected project key: ${discovered.projectKey}`, 'stderr');
     }
@@ -238,6 +240,16 @@ export async function resolveProjectKey(
   throw new CommandFailedError('Could not determine project key.', {
     remediationHint:
       "Use --project <key>, or run 'sonar link <projectKey>' to link one to this repository.",
+  });
+}
+
+function assertSingleLineProjectKey(projectKey: string): void {
+  if (!/[\r\n]/.test(projectKey)) {
+    return;
+  }
+  throw new CommandFailedError('The project key must be a single line.', {
+    exitCode: 2,
+    remediationHint: 'Use --project <key> with a single-line project key.',
   });
 }
 

@@ -585,6 +585,13 @@ function validateLoginOptions(options: AuthLoginOptions): void {
     );
   }
 
+  if (options.server !== undefined && /[\r\n]/.test(options.server)) {
+    throw new InvalidOptionError(
+      '--server value must be a single line.',
+      'Use --server <url> with a single-line URL, or run sonar auth login without --server.',
+    );
+  }
+
   if (options.server !== undefined && !isValidUrl(options.server)) {
     throw new InvalidOptionError(
       `Invalid server URL: '${options.server}'.`,

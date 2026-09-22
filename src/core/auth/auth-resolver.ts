@@ -21,6 +21,7 @@
 // Centralized auth resolver - resolves token + serverUrl from env vars, state, or keychain
 
 import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { getToken } from '@/core/host/keychain.ts';
 import { okAsync, ResultAsync } from '@/core/result.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -41,6 +42,16 @@ export {
 export const ENV_TOKEN = 'SONARQUBE_CLI_TOKEN';
 export const ENV_SERVER = 'SONARQUBE_CLI_SERVER';
 export const ENV_ORG = 'SONARQUBE_CLI_ORG';
+
+function assertSingleLineServerUrl(serverUrl: string): void {
+  if (!/[\r\n]/.test(serverUrl)) {
+    return;
+  }
+  throw new CommandFailedError('The SonarQube server URL must be a single line.', {
+    exitCode: 2,
+    remediationHint: `Run 'sonar auth login' again or set ${ENV_SERVER} to a single-line URL.`,
+  });
+}
 
 export type ResolvedAuthSource = 'env' | 'state';
 
@@ -124,6 +135,9 @@ export class AuthResolver {
     // 1. Both SONARQUBE_CLI_TOKEN + SONARQUBE_CLI_ORG present → assume SQC, but get serverUrl from env in case of SQC US
     if (envToken && envOrg) {
       logger.debug('Using environment variable authentication (SQC)');
+      if (envServer) {
+        assertSingleLineServerUrl(envServer);
+      }
       return new ResolvedAuth({
         token: envToken,
         serverUrl: envServer ?? SONARCLOUD_URL,
@@ -136,6 +150,7 @@ export class AuthResolver {
     // 2. Both SONARQUBE_CLI_TOKEN + SONARQUBE_CLI_SERVER env vars present → use them immediately
     if (envToken && envServer) {
       logger.debug('Using environment variable authentication (SQS)');
+      assertSingleLineServerUrl(envServer);
       return new ResolvedAuth({
         token: envToken,
         serverUrl: envServer,
@@ -174,6 +189,7 @@ export class AuthResolver {
     if (!serverUrl) {
       return null;
     }
+    assertSingleLineServerUrl(serverUrl);
 
     const orgKey = connection.orgKey;
     const connectionType = connection.type;

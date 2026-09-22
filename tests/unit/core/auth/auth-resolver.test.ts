@@ -26,6 +26,7 @@ import * as authConnectionRecorder from '@/core/auth/auth-connection-recorder.ts
 import {
   AuthResolver,
   cloudRegionFromUrl,
+  ENV_ORG,
   ENV_SERVER,
   ENV_TOKEN,
   normalizeCloudV2Endpoint,
@@ -65,6 +66,7 @@ describe('AuthResolver', () => {
     handle.setup(); // Ensure env vars are clean
     delete process.env[ENV_TOKEN];
     delete process.env[ENV_SERVER];
+    delete process.env[ENV_ORG];
     // These tests exercise AuthResolver's env-vs-state priority, not the state-sync
     // side effect (covered by auth-connection-recorder.test.ts) — stub it out so env-auth
     // tests never touch the real state.json or make a real network call.
@@ -78,6 +80,7 @@ describe('AuthResolver', () => {
     handle.teardown();
     delete process.env[ENV_TOKEN];
     delete process.env[ENV_SERVER];
+    delete process.env[ENV_ORG];
     recordConnectionSpy.mockRestore();
   });
 
@@ -107,6 +110,16 @@ describe('AuthResolver', () => {
       } finally {
         loadStateSpy.mockRestore();
       }
+    });
+
+    it('rejects a server URL that contains a line break', async () => {
+      process.env[ENV_SERVER] = 'https://sonarcloud.io\ninvalid';
+
+      const result = await new AuthResolver().resolveAuth();
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toBe(
+        'The SonarQube server URL must be a single line.',
+      );
     });
 
     it('records the connection as envOnly', async () => {
@@ -232,6 +245,31 @@ describe('AuthResolver', () => {
         expect(result!.orgKey).toBe('my-org');
         expect(result!.source).toBe('state');
         expect(result!.comesFromEnv()).toBe(false);
+      } finally {
+        loadStateSpy.mockRestore();
+      }
+    });
+
+    it('rejects a saved server URL that contains a line break', async () => {
+      const state = getDefaultState('test');
+      state.auth.connections = [
+        {
+          id: 'conn-1',
+          type: 'on-premise',
+          serverUrl: 'https://sonarqube.example.com\ninvalid',
+          authenticatedAt: new Date().toISOString(),
+        },
+      ];
+      state.auth.activeConnectionId = 'conn-1';
+      state.auth.isAuthenticated = true;
+      const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(state);
+
+      try {
+        const result = await new AuthResolver().resolveAuth();
+        expect(result.isErr()).toBe(true);
+        expect(result._unsafeUnwrapErr().message).toBe(
+          'The SonarQube server URL must be a single line.',
+        );
       } finally {
         loadStateSpy.mockRestore();
       }
