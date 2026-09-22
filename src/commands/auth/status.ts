@@ -90,7 +90,7 @@ function displayOrganizationMembershipMismatch(
       ...connectionLines(serverUrl, orgKey),
       '',
       'This token resolves no membership for that organization. Either regenerate it',
-      '(My Account > Security > Access Tokens) — a token created before you joined the',
+      '(My Account > Access Tokens) — a token created before you joined the',
       'organization stays invalid for it — or ask an organization administrator to add',
       'your account.',
     ],
