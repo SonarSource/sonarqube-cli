@@ -97,6 +97,7 @@ import { cursorPreFileRead } from './hook/cursor-pre-file-read.ts';
 import { cursorPreToolUse } from './hook/cursor-pre-tool-use.ts';
 import { cursorPromptSubmit } from './hook/cursor-prompt-submit.ts';
 import { gitPreCommit, type GitPreCommitOptions } from './hook/git-pre-commit.ts';
+import type { GitPrePushOptions } from './hook/git-pre-push.ts';
 import { gitPrePush } from './hook/git-pre-push.ts';
 import type { HookCommandResult } from './hook/hook-command-result.ts';
 import { importHandler, type ImportOptions } from './import';
@@ -850,8 +851,14 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   hookCommand
     .command('git-pre-push')
     .description('git pre-push handler: scan files in new commits for secrets')
+    .option(
+      '--remote-name <name>',
+      "Remote being pushed to (git's first hook argument); scopes which commits count as already pushed",
+    )
     .argument('[files...]', 'Changed files passed by pre-commit (pass_filenames: true)')
-    .anonymousAction((ctx, files: string[] | undefined) => gitPrePush(files ?? [], ctx));
+    .anonymousAction((ctx, files: string[] | undefined, options: GitPrePushOptions) =>
+      gitPrePush(options, files ?? [], ctx),
+    );
 
   COMMAND_TREE.command('admin')
     .stage(Stage.Alpha)

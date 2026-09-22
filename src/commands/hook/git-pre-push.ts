@@ -32,8 +32,17 @@ import { readGitPushRefs } from './stdin.ts';
 // Zero-OID width follows the repository hash algorithm: 40 under SHA-1, 64 under SHA-256.
 const NULL_OID_PATTERN = /^0+$/;
 
-export async function gitPrePush(files: string[], ctx: CommandInvocationContext): Promise<void> {
-  const fileGroups = await getFileGroupsToScan(files);
+export interface GitPrePushOptions {
+  /** Remote git is pushing to, forwarded from the hook's first argument. */
+  remoteName?: string;
+}
+
+export async function gitPrePush(
+  options: GitPrePushOptions,
+  files: string[],
+  ctx: CommandInvocationContext,
+): Promise<void> {
+  const fileGroups = await getFileGroupsToScan(files, resolveRemotesExclusion(options.remoteName));
   if (fileGroups === null) return;
 
   const auth = await ctx.resolveAuthOrNull();
@@ -46,7 +55,19 @@ export async function gitPrePush(files: string[], ctx: CommandInvocationContext)
   }
 }
 
-async function getFileGroupsToScan(files: string[]): Promise<string[][] | null> {
+/**
+ * Scoping to the push target keeps an unrelated remote's tracking refs from hiding a commit that
+ * remote has never seen. Hooks installed before the name was forwarded fall back to every remote.
+ */
+function resolveRemotesExclusion(remoteName: string | undefined): string {
+  const name = remoteName?.trim();
+  return name ? `--remotes=${name}` : '--remotes';
+}
+
+async function getFileGroupsToScan(
+  files: string[],
+  remotesExclusion: string,
+): Promise<string[][] | null> {
   if (files.length > 0) {
     /*
      * pre-commit framework pre-chunks files before calling our tool in parallel.
@@ -61,22 +82,25 @@ async function getFileGroupsToScan(files: string[]): Promise<string[][] | null> 
   if (refs.length === 0) return null;
 
   const nonDeletionRefs = refs.filter((ref) => !NULL_OID_PATTERN.test(ref.localSha));
-  const filesByRef = await collectFilesForRefs(nonDeletionRefs);
+  const filesByRef = await collectFilesForRefs(nonDeletionRefs, remotesExclusion);
   const groups = Array.from(filesByRef.values()).filter((g) => g.length > 0);
   return groups.length > 0 ? groups : null;
 }
 
-async function collectFilesForRefs(refs: PushRef[]): Promise<Map<PushRef, string[]>> {
+async function collectFilesForRefs(
+  refs: PushRef[],
+  remotesExclusion: string,
+): Promise<Map<PushRef, string[]>> {
   const out = new Map<PushRef, string[]>();
   for (const ref of refs) {
-    out.set(ref, await getFilesForRef(ref));
+    out.set(ref, await getFilesForRef(ref, remotesExclusion));
   }
   return out;
 }
 
-async function getFilesForRef(ref: PushRef): Promise<string[]> {
+async function getFilesForRef(ref: PushRef, remotesExclusion: string): Promise<string[]> {
   const files = new Set<string>();
-  for (const commit of await listCommitsToPush(ref)) {
+  for (const commit of await listCommitsToPush(ref, remotesExclusion)) {
     for (const file of await listFilesInCommit(commit)) {
       files.add(file);
     }
@@ -85,9 +109,9 @@ async function getFilesForRef(ref: PushRef): Promise<string[]> {
 }
 
 /** Commits this push would transfer; empty means the remote already holds all of them. */
-async function listCommitsToPush(ref: PushRef): Promise<string[]> {
+async function listCommitsToPush(ref: PushRef, remotesExclusion: string): Promise<string[]> {
   const knownRemoteTip = (await isKnownCommit(ref.remoteSha)) ? [ref.remoteSha] : [];
-  const args = ['rev-list', ref.localSha, '--not', ...knownRemoteTip, '--remotes'];
+  const args = ['rev-list', ref.localSha, '--not', ...knownRemoteTip, remotesExclusion];
   return (await tryRunGitLines(args, process.cwd())) ?? [];
 }
 

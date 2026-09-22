@@ -135,3 +135,11 @@ function gitBothHooksExample(): PostInstallExample {
     ],
   };
 }
+
+/**
+ * Forwards git's first pre-push argument so the scan can tell which remote it is pushing to.
+ * Always passed (empty when the hook is run by hand), which the handler treats as unscoped.
+ */
+export function resolveRemoteNameArg(hook: GitHookType): string {
+  return hook === 'pre-push' ? ' --remote-name "$1"' : '';
+}
