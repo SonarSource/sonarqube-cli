@@ -250,8 +250,8 @@ export async function resolveProjectKey(
   }
 
   console.warn(
-    "No project key detected — run 'sonar link <projectKey>' to bake one in for " +
-      'dependency-risks scanning (if installed).',
+    "No project key detected — run 'sonar link <projectKey>' to bind one to this repository " +
+      'for dependency-risks scanning (if installed).',
   );
   return options;
 }
