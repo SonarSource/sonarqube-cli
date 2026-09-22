@@ -440,20 +440,22 @@ describe('sonar hook git-pre-push', () => {
     );
 
     it(
-      'scopes to a configured remote name taken from the environment',
+      'scopes to the remote named in the environment, not every remote',
       async () => {
         const cwd = repoWithRemote();
+        addBareRemote(cwd, join(cwd, '.other-remote.git'), 'other');
         commitFile(cwd, 'leak.js', `const token = "${GITHUB_TEST_TOKEN}";`);
-        publishRef(cwd, 'HEAD:refs/heads/master');
+        publishRef(cwd, 'HEAD:refs/heads/master', 'other');
         const localSha = commitFile(cwd, 'clean.js', CLEAN_CONTENT);
 
+        // `origin` has never held the leak; only an unscoped exclusion would drop it via `other`.
         const result = await harness.runWithStdin(
           'hook git-pre-push',
           pushRefLine(localSha, GIT_NULL_OID, 'refs/heads/feature'),
           { extraEnv: { SONAR_PRE_PUSH_REMOTE_NAME: 'origin' } },
         );
 
-        expect(result.exitCode).toBe(0);
+        expect(result.exitCode).toBe(1);
       },
       { timeout: 30000 },
     );
