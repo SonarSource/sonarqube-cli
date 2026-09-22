@@ -23,9 +23,10 @@
 import { spawn } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { createInterface } from 'node:readline';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { getNetworkConfigOrThrow } from '@/core/host/connectivity/network-config.ts';
 import type { ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
 import { detectContainerRuntime } from '@/core/host/environment/tool-detector.ts';
@@ -45,17 +46,35 @@ export interface McpRunOptions {
   project?: string;
 }
 
+const AUTHENTICATION_ERROR_MESSAGE = "Not authenticated. Run 'sonar auth login' to authenticate.";
+const INTERNAL_ERROR_CODE = -32000;
+
 function debugLog(message: string): void {
   logger.debug(message);
   process.stderr.write(`[sonarqube-cli] DEBUG ${message}\n`);
 }
 
 export async function runMcp(
-  ctx: CommandAuthenticatedInvocationContext,
+  ctx: CommandInvocationContext,
   options: McpRunOptions = {},
   network: ResolvedNetworkConfig = getNetworkConfigOrThrow(),
 ): Promise<void> {
-  const { auth, console } = ctx;
+  const authResult = await ctx.resolveAuth();
+  if (authResult.isErr()) {
+    throw authResult.error;
+  }
+  if (!authResult.value) {
+    if (process.stdin.isTTY || process.stdout.isTTY) {
+      throw new CommandFailedError('Not authenticated.', {
+        remediationHint: "Run 'sonar auth login' to authenticate.",
+      });
+    }
+    await respondToUnauthenticatedInitialize();
+    return;
+  }
+
+  const auth = authResult.value;
+  const { console } = ctx;
   const detection = await detectContainerRuntime();
   if (!detection.runtime) {
     throw new CommandFailedError('A container runtime (Docker/Podman/Nerdctl) is required.', {
@@ -125,4 +144,39 @@ export async function runMcp(
       }
     }
   }
+}
+
+async function respondToUnauthenticatedInitialize(): Promise<void> {
+  const input = createInterface({ input: process.stdin, crlfDelay: Infinity });
+  for await (const line of input) {
+    const request = parseInitializeRequest(line);
+    if (request === undefined) {
+      continue;
+    }
+
+    process.stdout.write(
+      `${JSON.stringify({
+        jsonrpc: '2.0',
+        id: request.id,
+        error: { code: INTERNAL_ERROR_CODE, message: AUTHENTICATION_ERROR_MESSAGE },
+      })}\n`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+}
+
+function parseInitializeRequest(line: string): { id: unknown } | undefined {
+  try {
+    const request: unknown = JSON.parse(line);
+    if (typeof request === 'object' && request !== null) {
+      const requestRecord = request as Record<string, unknown>;
+      if ('id' in requestRecord && requestRecord.method === 'initialize') {
+        return { id: requestRecord.id };
+      }
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }

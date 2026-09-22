@@ -287,7 +287,7 @@ describe('run mcp', () => {
   );
 
   it(
-    'exits with code 1 when the saved connection is SonarQube Cloud but has no organization key',
+    'returns a JSON-RPC authentication error after an unauthenticated initialize request',
     async () => {
       const server = await harness.newFakeServer().start();
       harness
@@ -295,10 +295,21 @@ describe('run mcp', () => {
         .withActiveConnection(server.baseUrl(), 'cloud')
         .withKeychainToken(server.baseUrl(), 'test-token');
 
-      const result = await harness.run('run mcp');
+      const result = await harness.runWithStdin(
+        'run mcp',
+        `${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize' })}\n`,
+      );
 
       expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('Not authenticated');
+      expect(JSON.parse(result.stdout)).toEqual({
+        jsonrpc: '2.0',
+        id: 1,
+        error: {
+          code: -32000,
+          message: "Not authenticated. Run 'sonar auth login' to authenticate.",
+        },
+      });
+      expect(result.stderr).toBe('');
     },
     { timeout: 15000 },
   );
