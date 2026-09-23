@@ -131,7 +131,7 @@ import {
 } from './quality-gate/status';
 import { remediate, type RemediateOptions } from './remediate';
 import { runMcp } from './run/mcp.ts';
-import { sonarStats, STATS_SINCE_CHOICES, type StatsOptions } from './stats/index.ts';
+import { stats, STATS_SINCE_CHOICES, type StatsOptions } from './stats/index.ts';
 import { systemReset, type SystemResetOptions } from './system/reset.ts';
 import { systemStatus, type SystemStatusOptions } from './system/status.ts';
 import { updateVersion, type UpdateVersionOptions } from './update';
@@ -669,7 +669,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
         .default('30d'),
     )
     .option('--json', 'Output as JSON for machine consumption')
-    .anonymousAction((ctx, options: StatsOptions) => sonarStats(options, ctx));
+    .anonymousAction((ctx, options: StatsOptions) => stats(options, ctx));
 
   // System diagnostics and maintenance
   const system = COMMAND_TREE.command('system')

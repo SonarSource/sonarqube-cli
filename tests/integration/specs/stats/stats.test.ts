@@ -221,8 +221,29 @@ describe('sonar stats', () => {
 
       const jsonResult = await harness.run('stats --json');
       expect(jsonResult.exitCode).toBe(0);
-      const json = JSON.parse(jsonResult.stdout) as { entitlement: { scaNotEnabled: boolean } };
-      expect(json.entitlement.scaNotEnabled).toBe(true);
+      const json = JSON.parse(jsonResult.stdout) as { entitlement: { sca: string } };
+      expect(json.entitlement.sca).toBe('not_enabled');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'reports not_applicable entitlement when there is history but no active connection',
+    async () => {
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(FAKE_SERVER, VALID_TOKEN);
+      harness.cwd.writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+
+      const scan = await harness.run('analyze secrets secrets.js');
+      expect(scan.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+
+      harness.clearAuth();
+
+      const result = await harness.run('stats --json');
+      expect(result.exitCode).toBe(0);
+      const json = JSON.parse(result.stdout) as { entitlement: { vortex: string; sca: string } };
+      expect(json.entitlement.vortex).toBe('not_applicable');
+      expect(json.entitlement.sca).toBe('not_applicable');
     },
     { timeout: 30000 },
   );

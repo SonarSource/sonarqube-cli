@@ -200,6 +200,21 @@ describe('queryStatsSummary', () => {
     ]);
   });
 
+  it('--since all sums a shared rule key across analyzers instead of one overwriting the other', () => {
+    const db = openStatsDb();
+    insertRuleMessage(db, 'shared:S6290', 'Shared rule message');
+    // Neither row alone reaches TOP_RULES_MIN_COUNT (10); only their sum does.
+    insertAggregate(db, 'rule', 'sonar-secrets:shared:S6290', { findings: 6 });
+    insertAggregate(db, 'rule', 'sqaa:shared:S6290', { findings: 6 });
+    db.close();
+
+    const summary = queryStatsSummary('all');
+
+    expect(summary.topRules).toEqual([
+      { ruleKey: 'shared:S6290', count: 12, message: 'Shared rule message' },
+    ]);
+  });
+
   it('known gap: at --since all, `stopped` reflects only surviving rows, unlike allTime.secretsBlockedTotal', () => {
     const db = openStatsDb();
     insertAggregate(db, 'global', '', { blocked: 40 });
