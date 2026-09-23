@@ -61,6 +61,7 @@ export async function cursorPreFileRead(ctx: CommandInvocationContext): Promise<
   }
 
   const agentSessionId = payload.conversation_id ?? null;
+  ctx.setAgentSessionId(agentSessionId);
 
   const filePath = payload.file_path;
   const content = await resolveFileContent(payload, filePath);
