@@ -163,6 +163,30 @@ export async function runSecretsBinaryOnText(
   );
 }
 
+/**
+ * Scans a batch of files handed over on stdin, each carrying its own path. The caller encodes the batch; this layer
+ * only needs to know that the analyzer reads it from stdin.
+ */
+export async function runSecretsBinaryOnBatch(
+  binaryPath: string,
+  batch: Buffer,
+  auth: ResolvedAuth,
+): Promise<SpawnResult> {
+  return spawnProcessWithTimeout(
+    binaryPath,
+    ['--non-interactive', '--json', '--input-batch'],
+    {
+      stdin: 'pipe',
+      stdinData: batch,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: await buildAuthEnv(auth),
+    },
+    SCAN_TIMEOUT_MS,
+    `Scan timed out after ${SCAN_TIMEOUT_MS}ms`,
+  );
+}
+
 async function buildAuthEnv(auth: ResolvedAuth): Promise<Record<string, string>> {
   return {
     ...(await buildSubprocessNetworkEnv()),

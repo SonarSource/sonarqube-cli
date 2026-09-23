@@ -83,12 +83,13 @@ function gitArgsFor(spy: ReturnType<typeof spyOn>, subcommand: string): string[]
   return call?.[1] as string[] | undefined;
 }
 
-/** The `git log` invocation `getFilesForRef` builds, for assertion against the spy. */
+/** The `git log` invocation `getCommitBlobsForRef` builds, for assertion against the spy. */
 function logArgs(localSha: string, ...exclusions: string[]): string[] {
   return [
     'log',
-    '--format=',
-    '--name-only',
+    '--format=%H',
+    '--raw',
+    '--no-abbrev',
     '--diff-filter=ACMR',
     '-c',
     '--root',
@@ -250,9 +251,15 @@ describe('gitPreCommit', () => {
 describe('gitPrePush', () => {
   let resolveAuthSpy: ReturnType<typeof spyOn>;
   let spawnProcessSpy: ReturnType<typeof spyOn>;
+  let catFileSpy: ReturnType<typeof spyOn>;
   let resolveSecretsBinaryPathSpy: ReturnType<typeof spyOn>;
-  let runSecretsBinarySpy: ReturnType<typeof spyOn>;
+  let runSecretsBinaryOnBatchSpy: ReturnType<typeof spyOn>;
   let readGitPushRefsSpy: ReturnType<typeof spyOn>;
+
+  const COMMIT_A = 'a'.repeat(40);
+  const COMMIT_B = 'b'.repeat(40);
+  const BLOB_A = '1'.repeat(40);
+  const BLOB_B = '2'.repeat(40);
 
   const FAKE_REF = {
     localRef: 'refs/heads/main',
@@ -266,6 +273,38 @@ describe('gitPrePush', () => {
     remoteSha: 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
   };
 
+  interface FakeCommit {
+    commit: string;
+    blobs: Array<{ oid: string; path: string }>;
+  }
+
+  /** `git log --format=%H --raw --no-abbrev` output: a commit line, then one change line per blob. */
+  function logOutput(...commits: FakeCommit[]): string {
+    return commits
+      .flatMap(({ commit, blobs }) => [
+        commit,
+        ...blobs.map((blob) => `:000000 100644 ${'0'.repeat(40)} ${blob.oid} A\t${blob.path}`),
+      ])
+      .join('\n');
+  }
+
+  /** `git cat-file --batch` output for the given contents, in request order. */
+  function catFileOutput(...contents: string[]): Buffer {
+    return Buffer.concat(
+      contents.map((content) =>
+        Buffer.from(`${BLOB_A} blob ${Buffer.byteLength(content)}\n${content}\n`),
+      ),
+    );
+  }
+
+  /** The encoded batch handed to the analyzer for the nth scan. */
+  function batchOf(index: number): string {
+    const [, batch] = runSecretsBinaryOnBatchSpy.mock.calls[index] as [string, Buffer, unknown];
+    return batch.toString('utf-8');
+  }
+
+  const ONE_COMMIT = logOutput({ commit: COMMIT_A, blobs: [{ oid: BLOB_A, path: 'src/foo.ts' }] });
+
   beforeEach(() => {
     fake = new FakeConsole();
     const mocked = mockAuthResolver(FAKE_AUTH);
@@ -273,34 +312,51 @@ describe('gitPrePush', () => {
     resolveAuthSpy = mocked.resolveAuthSpy;
     spawnProcessSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
       exitCode: 0,
-      stdout: 'src/foo.ts\nsrc/bar.ts',
+      stdout: ONE_COMMIT,
+      stderr: '',
+    });
+    catFileSpy = spyOn(processLib, 'spawnProcessCapturingBytes').mockResolvedValue({
+      exitCode: 0,
+      stdout: catFileOutput('const a = 1;'),
       stderr: '',
     });
     resolveSecretsBinaryPathSpy = spyOn(installSecrets, 'resolveSecretsBinaryPath').mockReturnValue(
       '/usr/bin/sonar-secrets',
     );
-    runSecretsBinarySpy = spyOn(analyzeSecrets, 'runSecretsBinary').mockResolvedValue(OK_RESULT);
+    runSecretsBinaryOnBatchSpy = spyOn(analyzeSecrets, 'runSecretsBinaryOnBatch').mockResolvedValue(
+      OK_RESULT,
+    );
     readGitPushRefsSpy = spyOn(stdinModule, 'readGitPushRefs').mockResolvedValue([FAKE_REF]);
   });
 
   afterEach(() => {
     resolveAuthSpy.mockRestore();
     spawnProcessSpy.mockRestore();
+    catFileSpy.mockRestore();
     resolveSecretsBinaryPathSpy.mockRestore();
-    runSecretsBinarySpy.mockRestore();
+    runSecretsBinaryOnBatchSpy.mockRestore();
     readGitPushRefsSpy.mockRestore();
   });
 
-  it('scans files from the pushed ref', async () => {
+  it('scans the blobs the push would transfer, keyed by their paths', async () => {
     await gitPrePush({}, [], makeCtx());
 
-    expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
-    const [, files] = runSecretsBinarySpy.mock.calls[0] as [string, string[], unknown];
-    expect(files).toEqual(['src/foo.ts', 'src/bar.ts']);
+    expect(runSecretsBinaryOnBatchSpy).toHaveBeenCalledTimes(1);
+    expect(batchOf(0)).toBe('12 src/foo.ts\nconst a = 1;\n');
   });
 
-  it('throws CommandFailedError when secrets are found', async () => {
-    runSecretsBinarySpy.mockResolvedValue(SECRETS_RESULT);
+  it('reads blob content out of git rather than the working tree', async () => {
+    await gitPrePush({}, [], makeCtx());
+
+    const [command, args] = catFileSpy.mock.calls[0] as [string, string[], { stdinData: string }];
+    expect(command).toBe('git');
+    expect(args).toEqual(['cat-file', '--batch']);
+    const [, , options] = catFileSpy.mock.calls[0] as [string, string[], { stdinData: string }];
+    expect(options.stdinData).toBe(`${BLOB_A}\n`);
+  });
+
+  it('throws CommandFailedError naming the offending commit when secrets are found', async () => {
+    runSecretsBinaryOnBatchSpy.mockResolvedValue(SECRETS_RESULT);
 
     let thrown: unknown;
     try {
@@ -309,24 +365,129 @@ describe('gitPrePush', () => {
       thrown = e;
     }
     expect(thrown).toBeInstanceOf(CommandFailedError);
-    expect((thrown as CommandFailedError).message).toBe('Secrets detected in pushed commits.');
+    expect((thrown as CommandFailedError).message).toBe('Secrets detected in aaaaaaaa.');
   });
 
-  it('prints finding detail (file, line, masked secret) when secrets are found', async () => {
-    runSecretsBinarySpy.mockResolvedValue(SECRETS_RESULT_WITH_ISSUES);
+  it('prints the commit alongside the finding detail when secrets are found', async () => {
+    runSecretsBinaryOnBatchSpy.mockResolvedValue(SECRETS_RESULT_WITH_ISSUES);
 
     await gitPrePush({}, [], makeCtx()).catch(() => undefined);
 
     const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+    expect(prints.some((m) => m.includes(`commit ${COMMIT_A}`))).toBe(true);
     expect(prints.some((m) => m.includes('src/config.ts:12'))).toBe(true);
     expect(prints.some((m) => m.includes('AWS key detected'))).toBe(true);
     expect(prints.some((m) => m.includes('AKIA****'))).toBe(true);
   });
 
+  it('names every offending commit when more than one carries a secret', async () => {
+    readGitPushRefsSpy.mockResolvedValue([FAKE_REF]);
+    spawnProcessSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: logOutput(
+        { commit: COMMIT_A, blobs: [{ oid: BLOB_A, path: 'a.ts' }] },
+        { commit: COMMIT_B, blobs: [{ oid: BLOB_B, path: 'b.ts' }] },
+      ),
+      stderr: '',
+    });
+    runSecretsBinaryOnBatchSpy.mockResolvedValue(SECRETS_RESULT);
+
+    let thrown: unknown;
+    try {
+      await gitPrePush({}, [], makeCtx());
+    } catch (e) {
+      thrown = e;
+    }
+    // `git log` walks newest first, so the oldest commit is reported first.
+    expect((thrown as CommandFailedError).message).toBe('Secrets detected in bbbbbbbb, aaaaaaaa.');
+  });
+
+  it('calls the analyzer once per commit', async () => {
+    spawnProcessSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: logOutput(
+        { commit: COMMIT_A, blobs: [{ oid: BLOB_A, path: 'a.ts' }] },
+        { commit: COMMIT_B, blobs: [{ oid: BLOB_B, path: 'b.ts' }] },
+      ),
+      stderr: '',
+    });
+
+    await gitPrePush({}, [], makeCtx());
+
+    expect(runSecretsBinaryOnBatchSpy).toHaveBeenCalledTimes(2);
+    expect(batchOf(0)).toContain('b.ts');
+    expect(batchOf(1)).toContain('a.ts');
+  });
+
+  it('attributes a blob to the oldest commit carrying it rather than scanning it twice', async () => {
+    spawnProcessSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: logOutput(
+        { commit: COMMIT_A, blobs: [{ oid: BLOB_A, path: 'same.ts' }] },
+        { commit: COMMIT_B, blobs: [{ oid: BLOB_A, path: 'same.ts' }] },
+      ),
+      stderr: '',
+    });
+
+    await gitPrePush({}, [], makeCtx());
+
+    expect(runSecretsBinaryOnBatchSpy).toHaveBeenCalledTimes(1);
+    expect(batchOf(0)).toContain('same.ts');
+  });
+
+  it('refuses the push when blob content cannot be read', async () => {
+    catFileSpy.mockResolvedValue({ exitCode: 128, stdout: Buffer.alloc(0), stderr: 'bad object' });
+
+    let thrown: unknown;
+    try {
+      await gitPrePush({}, [], makeCtx());
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeInstanceOf(CommandFailedError);
+    expect((thrown as CommandFailedError).message).toContain('was not scanned');
+    expect(runSecretsBinaryOnBatchSpy).not.toHaveBeenCalled();
+  });
+
+  it('refuses the push when git returns fewer blobs than requested', async () => {
+    spawnProcessSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: logOutput({
+        commit: COMMIT_A,
+        blobs: [
+          { oid: BLOB_A, path: 'a.ts' },
+          { oid: BLOB_B, path: 'b.ts' },
+        ],
+      }),
+      stderr: '',
+    });
+
+    let thrown: unknown;
+    try {
+      await gitPrePush({}, [], makeCtx());
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeInstanceOf(CommandFailedError);
+    expect(runSecretsBinaryOnBatchSpy).not.toHaveBeenCalled();
+  });
+
+  it('skips a path that cannot be expressed in the batch header', async () => {
+    spawnProcessSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: logOutput({ commit: COMMIT_A, blobs: [{ oid: BLOB_A, path: 'odd\rname.ts' }] }),
+      stderr: '',
+    });
+
+    await gitPrePush({}, [], makeCtx());
+
+    expect(runSecretsBinaryOnBatchSpy).not.toHaveBeenCalled();
+  });
+
   it('resolves without throwing when no secrets found', async () => {
     await gitPrePush({}, [], makeCtx());
 
-    expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
+    expect(runSecretsBinaryOnBatchSpy).toHaveBeenCalledTimes(1);
     expect(fake.calls.filter((c) => c.method === 'print')).toHaveLength(0);
     expect(fake.findCall('warn', 'Secrets scan failed')).toBeUndefined();
   });
@@ -336,7 +497,7 @@ describe('gitPrePush', () => {
 
     await gitPrePush({}, [], makeCtx());
 
-    expect(runSecretsBinarySpy).not.toHaveBeenCalled();
+    expect(runSecretsBinaryOnBatchSpy).not.toHaveBeenCalled();
   });
 
   it('throws MissingDependenciesError when auth is unavailable', async () => {
@@ -350,7 +511,7 @@ describe('gitPrePush', () => {
     }
     expect(thrown).toBeInstanceOf(MissingDependenciesError);
     expect((thrown as MissingDependenciesError).message).toBe(SECRETS_INACTIVE_UNAUTHENTICATED);
-    expect(runSecretsBinarySpy).not.toHaveBeenCalled();
+    expect(runSecretsBinaryOnBatchSpy).not.toHaveBeenCalled();
   });
 
   it('throws MissingDependenciesError when binary is not installed', async () => {
@@ -364,7 +525,7 @@ describe('gitPrePush', () => {
     }
     expect(thrown).toBeInstanceOf(MissingDependenciesError);
     expect((thrown as MissingDependenciesError).message).toBe(SECRETS_INACTIVE_BINARY_MISSING);
-    expect(runSecretsBinarySpy).not.toHaveBeenCalled();
+    expect(runSecretsBinaryOnBatchSpy).not.toHaveBeenCalled();
   });
 
   it('skips ref when localSha is the null OID (branch deletion)', async () => {
@@ -374,19 +535,27 @@ describe('gitPrePush', () => {
 
     await gitPrePush({}, [], makeCtx());
 
-    expect(runSecretsBinarySpy).not.toHaveBeenCalled();
+    expect(runSecretsBinaryOnBatchSpy).not.toHaveBeenCalled();
   });
 
-  it('skips ref when no files are returned for it', async () => {
+  it('skips a deletion ref whose null OID is SHA-256 width', async () => {
+    readGitPushRefsSpy.mockResolvedValue([{ ...FAKE_REF, localSha: '0'.repeat(64) }]);
+
+    await gitPrePush({}, [], makeCtx());
+
+    expect(runSecretsBinaryOnBatchSpy).not.toHaveBeenCalled();
+  });
+
+  it('skips ref when no blobs are returned for it', async () => {
     spawnProcessSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
 
     await gitPrePush({}, [], makeCtx());
 
-    expect(runSecretsBinarySpy).not.toHaveBeenCalled();
+    expect(runSecretsBinaryOnBatchSpy).not.toHaveBeenCalled();
   });
 
   it('throws CommandFailedError when scan throws with env-based auth (CI mode)', async () => {
-    runSecretsBinarySpy.mockRejectedValue(new Error('binary crashed'));
+    runSecretsBinaryOnBatchSpy.mockRejectedValue(new Error('binary crashed'));
     resolveAuthSpy.mockReturnValue(
       okAsync(
         new ResolvedAuth({
@@ -409,28 +578,15 @@ describe('gitPrePush', () => {
   });
 
   it('resolves without throwing when scan fails with keychain auth (fail soft)', async () => {
-    runSecretsBinarySpy.mockRejectedValue(new Error('binary crashed'));
+    runSecretsBinaryOnBatchSpy.mockRejectedValue(new Error('binary crashed'));
 
     await gitPrePush({}, [], makeCtx());
 
-    expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
+    expect(runSecretsBinaryOnBatchSpy).toHaveBeenCalledTimes(1);
     expect(
       fake.findCall('warn', 'Push is not blocked, but secrets were not checked'),
     ).toBeDefined();
     expect(fake.findCall('warn', 'Reason: binary crashed')).toBeDefined();
-  });
-
-  it('calls the secrets binary once per ref group', async () => {
-    const secondRef = { ...FAKE_REF, localSha: 'def456' };
-    readGitPushRefsSpy.mockResolvedValue([FAKE_REF, secondRef]);
-
-    await gitPrePush({}, [], makeCtx());
-
-    expect(runSecretsBinarySpy).toHaveBeenCalledTimes(2);
-    for (const call of runSecretsBinarySpy.mock.calls) {
-      const [, files] = call as [string, string[], unknown];
-      expect(files).toEqual(['src/foo.ts', 'src/bar.ts']);
-    }
   });
 
   it('does not fall back to a full scan when no commits are new to the remote', async () => {
@@ -438,19 +594,10 @@ describe('gitPrePush', () => {
 
     await gitPrePush({}, [], makeCtx());
 
-    expect(runSecretsBinarySpy).not.toHaveBeenCalled();
+    expect(runSecretsBinaryOnBatchSpy).not.toHaveBeenCalled();
     // One git call only: any extra would mean a fallback crept back in.
     expect(spawnProcessSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it('scans the range between the remote tip and the pushed tip for an existing-branch push', async () => {
-    readGitPushRefsSpy.mockResolvedValue([EXISTING_BRANCH_REF]);
-
-    await gitPrePush({}, [], makeCtx());
-
-    expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
-    const [, files] = runSecretsBinarySpy.mock.calls[0] as [string, string[], unknown];
-    expect(files).toEqual(['src/foo.ts', 'src/bar.ts']);
+    expect(catFileSpy).not.toHaveBeenCalled();
   });
 
   it('excludes the remote tip from the range when it exists locally', async () => {
@@ -467,7 +614,7 @@ describe('gitPrePush', () => {
     readGitPushRefsSpy.mockResolvedValue([EXISTING_BRANCH_REF]);
     spawnProcessSpy
       .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: '' }) // cat-file: unknown commit
-      .mockResolvedValue({ exitCode: 0, stdout: 'src/foo.ts', stderr: '' });
+      .mockResolvedValue({ exitCode: 0, stdout: ONE_COMMIT, stderr: '' });
 
     await gitPrePush({}, [], makeCtx());
 
@@ -482,7 +629,7 @@ describe('gitPrePush', () => {
     expect(gitArgsFor(spawnProcessSpy, 'cat-file')).toBeUndefined();
   });
 
-  it('skips scan when the file listing fails during an existing-branch push', async () => {
+  it('skips scan when the commit listing fails during an existing-branch push', async () => {
     readGitPushRefsSpy.mockResolvedValue([EXISTING_BRANCH_REF]);
     spawnProcessSpy
       .mockResolvedValueOnce({ exitCode: 0, stdout: 'deadbeef', stderr: '' }) // cat-file
@@ -490,21 +637,13 @@ describe('gitPrePush', () => {
 
     await gitPrePush({}, [], makeCtx());
 
-    expect(runSecretsBinarySpy).not.toHaveBeenCalled();
-  });
-
-  it('skips a deletion ref whose null OID is SHA-256 width', async () => {
-    readGitPushRefsSpy.mockResolvedValue([{ ...FAKE_REF, localSha: '0'.repeat(64) }]);
-
-    await gitPrePush({}, [], makeCtx());
-
-    expect(runSecretsBinarySpy).not.toHaveBeenCalled();
+    expect(runSecretsBinaryOnBatchSpy).not.toHaveBeenCalled();
   });
 
   it('scopes the exclusion to the remote when it is one of the configured remotes', async () => {
     spawnProcessSpy
       .mockResolvedValueOnce({ exitCode: 0, stdout: 'origin\nupstream', stderr: '' }) // git remote
-      .mockResolvedValue({ exitCode: 0, stdout: 'src/foo.ts', stderr: '' });
+      .mockResolvedValue({ exitCode: 0, stdout: ONE_COMMIT, stderr: '' });
 
     await gitPrePush({ remoteName: 'origin' }, [], makeCtx());
 
@@ -516,7 +655,7 @@ describe('gitPrePush', () => {
   it('falls back to every remote when the push target is a URL rather than a remote name', async () => {
     spawnProcessSpy
       .mockResolvedValueOnce({ exitCode: 0, stdout: 'origin', stderr: '' }) // git remote
-      .mockResolvedValue({ exitCode: 0, stdout: 'src/foo.ts', stderr: '' });
+      .mockResolvedValue({ exitCode: 0, stdout: ONE_COMMIT, stderr: '' });
 
     await gitPrePush({ remoteName: 'https://host/repo.git' }, [], makeCtx());
 
@@ -541,7 +680,7 @@ describe('gitPrePush', () => {
     process.env[REMOTE_NAME_ENV] = 'origin';
     spawnProcessSpy
       .mockResolvedValueOnce({ exitCode: 0, stdout: 'origin', stderr: '' }) // git remote
-      .mockResolvedValue({ exitCode: 0, stdout: 'src/foo.ts', stderr: '' });
+      .mockResolvedValue({ exitCode: 0, stdout: ONE_COMMIT, stderr: '' });
 
     try {
       await gitPrePush({}, [], makeCtx());
