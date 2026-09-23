@@ -570,9 +570,16 @@ async function resolveServer(options: AuthLoginOptions, console: Console): Promi
     server = options.server;
   } else {
     const configServer = await discoverServer(console);
-    server = configServer ?? (await selectServerFromPrompt(console));
+    if (configServer) {
+      assertSingleLineServerUrl(
+        configServer,
+        'Fix serverUrl in .sonar-config.json or pass --server <url>.',
+      );
+      return configServer;
+    }
+    server = await selectServerFromPrompt(console);
   }
-  assertSingleLineServerUrl(server);
+  assertSingleLineServerUrl(server, "Run 'sonar auth login' again and enter a single-line URL.");
   return server;
 }
 

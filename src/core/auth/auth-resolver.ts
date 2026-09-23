@@ -47,13 +47,13 @@ export function isSingleLineServerUrl(serverUrl: string): boolean {
   return !/[\r\n]/.test(serverUrl);
 }
 
-export function assertSingleLineServerUrl(serverUrl: string): void {
+export function assertSingleLineServerUrl(serverUrl: string, remediationHint: string): void {
   if (isSingleLineServerUrl(serverUrl)) {
     return;
   }
   throw new CommandFailedError('The SonarQube server URL must be a single line.', {
     exitCode: 2,
-    remediationHint: `Run 'sonar auth login' again or set ${ENV_SERVER} to a single-line URL.`,
+    remediationHint,
   });
 }
 
@@ -140,7 +140,7 @@ export class AuthResolver {
     if (envToken && envOrg) {
       logger.debug('Using environment variable authentication (SQC)');
       if (envServer) {
-        assertSingleLineServerUrl(envServer);
+        assertSingleLineServerUrl(envServer, `Set ${ENV_SERVER} to a single-line URL.`);
       }
       return new ResolvedAuth({
         token: envToken,
@@ -154,7 +154,7 @@ export class AuthResolver {
     // 2. Both SONARQUBE_CLI_TOKEN + SONARQUBE_CLI_SERVER env vars present → use them immediately
     if (envToken && envServer) {
       logger.debug('Using environment variable authentication (SQS)');
-      assertSingleLineServerUrl(envServer);
+      assertSingleLineServerUrl(envServer, `Set ${ENV_SERVER} to a single-line URL.`);
       return new ResolvedAuth({
         token: envToken,
         serverUrl: envServer,
@@ -193,7 +193,7 @@ export class AuthResolver {
     if (!serverUrl) {
       return null;
     }
-    assertSingleLineServerUrl(serverUrl);
+    assertSingleLineServerUrl(serverUrl, "Run 'sonar auth logout', then 'sonar auth login'.");
 
     const orgKey = connection.orgKey;
     const connectionType = connection.type;

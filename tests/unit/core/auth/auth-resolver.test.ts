@@ -120,6 +120,9 @@ describe('AuthResolver', () => {
       expect(result._unsafeUnwrapErr().message).toBe(
         'The SonarQube server URL must be a single line.',
       );
+      expect(result._unsafeUnwrapErr()).toMatchObject({
+        remediationHint: 'Set SONARQUBE_CLI_SERVER to a single-line URL.',
+      });
     });
 
     it('records the connection as envOnly', async () => {
@@ -270,6 +273,9 @@ describe('AuthResolver', () => {
         expect(result._unsafeUnwrapErr().message).toBe(
           'The SonarQube server URL must be a single line.',
         );
+        expect(result._unsafeUnwrapErr()).toMatchObject({
+          remediationHint: "Run 'sonar auth logout', then 'sonar auth login'.",
+        });
       } finally {
         loadStateSpy.mockRestore();
       }

@@ -216,9 +216,10 @@ describe('authLogin organization prompt', () => {
     );
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-    await expect(authLogin({}, new CommandInvocationContext(fake))).rejects.toThrow(
-      'The SonarQube server URL must be a single line.',
-    );
+    await expect(authLogin({}, new CommandInvocationContext(fake))).rejects.toMatchObject({
+      message: 'The SonarQube server URL must be a single line.',
+      remediationHint: 'Fix serverUrl in .sonar-config.json or pass --server <url>.',
+    });
 
     expect(tokenModule.generateTokenViaBrowser).not.toHaveBeenCalled();
   });
