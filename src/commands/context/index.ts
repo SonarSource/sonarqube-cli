@@ -117,7 +117,12 @@ async function resolveContextToken(
     return auth.token;
   }
 
-  const token = await getToken(serverUrl, organization);
+  let token: string | null = null;
+  try {
+    token = await getToken(serverUrl, organization);
+  } catch {
+    // Environment authentication can still authenticate the current connection.
+  }
   if (token) {
     return token;
   }
