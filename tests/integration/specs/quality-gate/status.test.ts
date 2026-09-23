@@ -734,6 +734,31 @@ describe('quality-gate status', () => {
   );
 
   it(
+    'keeps the default branch scope when it is checked out and has no matching pull request',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) => p.withProjectStatus('OK'))
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'a.txt', 'a');
+      git(['branch', '-M', 'main'], harness.cwd.path);
+
+      const result = await harness.run(`quality-gate status --project my-project --format table`);
+
+      expect(result.stdout).toContain('Branch:       main (default)');
+      const requests = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/qualitygates/project_status');
+      expect(requests).toHaveLength(1);
+      expect(requests[0].query.branch).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'auto-detects an analyzed current git branch when no pull request matches',
     async () => {
       const server = await harness

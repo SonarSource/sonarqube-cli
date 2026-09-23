@@ -71,11 +71,11 @@ export async function resolveQualityGateScope(
   }
 
   const branchesClient = new BranchesClient(client);
-  const [autoDetected, branches, currentBranch] = await Promise.all([
-    autoResolvePullRequest(client, projectKey),
-    branchesClient.listBranches(projectKey).orThrow(),
+  const [currentBranch, branches] = await Promise.all([
     resolveCurrentGitBranch(process.cwd()),
+    branchesClient.listBranches(projectKey).orThrow(),
   ]);
+  const autoDetected = await autoResolvePullRequest(client, projectKey, currentBranch);
   if (autoDetected) {
     return {
       queryParams: { pullRequest: autoDetected.pullRequest },
@@ -87,7 +87,7 @@ export async function resolveQualityGateScope(
     };
   }
 
-  if (currentBranch && branches.some((branch) => branch.name === currentBranch)) {
+  if (currentBranch && branches.some((branch) => branch.name === currentBranch && !branch.isMain)) {
     return {
       queryParams: { branch: currentBranch },
       scope: { kind: 'branchAuto', value: currentBranch },
