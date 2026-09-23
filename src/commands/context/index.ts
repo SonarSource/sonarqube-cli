@@ -27,6 +27,7 @@ import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
 import { getToken } from '@/core/host/keychain.ts';
+import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -120,8 +121,9 @@ async function resolveContextToken(
   let token: string | null = null;
   try {
     token = await getToken(serverUrl, organization);
-  } catch {
-    // Environment authentication can still authenticate the current connection.
+  } catch (err) {
+    // Treat an unavailable keychain as no stored token so the recorded-connection error below surfaces.
+    logger.debug(`Keychain lookup failed for ${serverUrl}: ${(err as Error).message}`);
   }
   if (token) {
     return token;

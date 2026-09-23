@@ -23,6 +23,7 @@ import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as keychain from '@/core/host/keychain.ts';
+import { configureLogger, setMockLogger } from '@/core/observability/logger.ts';
 import * as projectInfo from '@/core/project-info.ts';
 
 import {
@@ -33,6 +34,8 @@ import {
 afterEach(() => {
   spyOn(keychain, 'getToken').mockRestore();
   spyOn(projectInfo, 'discoverProject').mockRestore();
+  setMockLogger(null);
+  configureLogger({ level: 'INFO' });
 });
 
 describe('derivePassthroughSubcommand', () => {
@@ -85,6 +88,16 @@ describe('derivePassthroughSubcommand', () => {
 
 describe('runContextPassthrough', () => {
   it('uses the recorded-connection error when the keychain is unavailable', async () => {
+    const debugMessages: string[] = [];
+    configureLogger({ level: 'DEBUG' });
+    setMockLogger({
+      debug: (message) => debugMessages.push(message),
+      error: () => {},
+      info: () => {},
+      log: () => {},
+      success: () => {},
+      warn: () => {},
+    });
     spyOn(projectInfo, 'discoverProject').mockResolvedValue({
       organization: 'recorded-org',
       projectKey: 'project-key',
@@ -119,5 +132,8 @@ describe('runContextPassthrough', () => {
     expect((error as Error).message).toContain(
       'Not authenticated for the recorded Vortex Context connection',
     );
+    expect(debugMessages).toEqual([
+      'Keychain lookup failed for https://regional.sonarcloud.io: Failed to access the system keychain.',
+    ]);
   });
 });
