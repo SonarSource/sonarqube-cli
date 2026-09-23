@@ -23,6 +23,7 @@ import { homedir } from 'node:os';
 import type { ErrorEvent, EventHint } from '@sentry/bun';
 import * as Sentry from '@sentry/bun';
 
+import { buildRequest, fetchAuthenticated } from '@/core/server/fetch.ts';
 import { resolveTelemetryEgress } from '@/core/telemetry/egress.ts';
 import { isTelemetryEnabled } from '@/core/telemetry/enabled.ts';
 import { getOrCreateUserId } from '@/core/telemetry/user.ts';
@@ -45,9 +46,44 @@ export function initSentry(state: CliState): void {
     environment,
     sendDefaultPii: false,
     beforeSend: scrubPii,
+    transport: createSentryTransport,
   });
 
   Sentry.setUser({ id: getOrCreateUserId() });
+}
+
+/**
+ * Bounds a single envelope upload. `SENTRY_FLUSH_TIMEOUT_MS` only stops us waiting; it does
+ * not cancel the request, so without this a stalled endpoint keeps the process alive after
+ * the command has finished. Longer than the flush window so a slow proxy handshake still
+ * completes, short enough that nothing lingers noticeably.
+ *
+ * Declared here rather than in `config-constants.ts` with the other Sentry values, because
+ * that file carries a pre-existing secrets finding with no working suppression (CLI-1140),
+ * which makes any change to it fail the pre-commit scan.
+ */
+const SENTRY_REQUEST_TIMEOUT_MS = 2_000;
+
+function createSentryTransport(
+  options: Parameters<NonNullable<Sentry.BunOptions['transport']>>[0],
+) {
+  return Sentry.createTransport(options, async (request) => {
+    const response = await fetchAuthenticated(options.url, {
+      // buildRequest is what attaches the abort signal, and using it here keeps this call
+      // site consistent with every other one. The body is assigned separately because an
+      // envelope can be a Uint8Array, which buildRequest's signature does not describe.
+      ...buildRequest('POST', options.headers ?? {}, SENTRY_REQUEST_TIMEOUT_MS, undefined),
+      body: request.body,
+    });
+
+    return {
+      statusCode: response.status,
+      headers: {
+        'retry-after': response.headers.get('Retry-After'),
+        'x-sentry-rate-limits': response.headers.get('X-Sentry-Rate-Limits'),
+      },
+    };
+  });
 }
 
 /**
