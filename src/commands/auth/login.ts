@@ -24,6 +24,7 @@ import {
   ENV_ORG,
   ENV_SERVER,
   ENV_TOKEN,
+  isSingleLineServerUrl,
   isSonarQubeCloud,
   ResolvedAuth,
 } from '@/core/auth/auth-resolver.ts';
@@ -587,7 +588,7 @@ function validateLoginOptions(options: AuthLoginOptions): void {
     );
   }
 
-  if (options.server !== undefined && /[\r\n]/.test(options.server)) {
+  if (options.server !== undefined && !isSingleLineServerUrl(options.server)) {
     throw new InvalidOptionError(
       '--server value must be a single line.',
       'Use --server <url> with a single-line URL, or run sonar auth login without --server.',
