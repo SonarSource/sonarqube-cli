@@ -89,6 +89,12 @@ describe('projectsSearchCommand', () => {
         'SonarQube API error: 401 Unauthorized',
       );
     });
+
+    it('returns an error result for an invalid format', async () => {
+      expect(await listProjects({ ...DEFAULT_OPTIONS, format: 'xml' }, mockCtx)).toBeErrWith(
+        "Invalid format: 'xml'. Must be one of: json, table",
+      );
+    });
   });
 
   describe('successful execution', () => {
@@ -156,6 +162,31 @@ describe('projectsSearchCommand', () => {
         .filter((c) => c.method === 'print')
         .map((c) => JSON.parse(String(c.args[0])) as Record<string, unknown>);
       expect((prints[0] as { paging: { hasNextPage: boolean } }).paging.hasNextPage).toBe(false);
+    });
+
+    it('prints a table when format is table', async () => {
+      getSpy.mockReturnValue(
+        makeProjectsResponse([
+          { key: 'proj-1', name: 'Project One' },
+          { key: 'proj-2', name: 'Project Two' },
+        ]),
+      );
+
+      await listProjects({ ...DEFAULT_OPTIONS, format: 'table' }, mockCtx);
+
+      const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+      expect(prints).toHaveLength(1);
+      expect(prints[0]).toContain('KEY');
+      expect(prints[0]).toContain('NAME');
+      expect(prints[0]).toContain('proj-1');
+      expect(prints[0]).toContain('Project One');
+    });
+
+    it('prints "No projects found" for an empty table result', async () => {
+      await listProjects({ ...DEFAULT_OPTIONS, format: 'table' }, mockCtx);
+
+      const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+      expect(prints).toEqual(['No projects found']);
     });
 
     it('passes query option to the API', async () => {
