@@ -122,7 +122,11 @@ import {
   VALID_STANDARD_SEVERITIES,
   VALID_STATUSES,
 } from './list/issues.ts';
-import { listProjects, type ListProjectsOptions } from './list/projects.ts';
+import {
+  listProjects,
+  type ListProjectsOptions,
+  VALID_FORMATS as PROJECTS_VALID_FORMATS,
+} from './list/projects.ts';
 import {
   DEFAULT_TOP as QUALITY_GATE_DEFAULT_TOP,
   qualityGateStatus,
@@ -295,11 +299,15 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .addOption(pageOption)
     .authenticatedAction((ctx, options: ListIssuesOptions) => listIssues(options, ctx));
 
+  const listProjectsFormatOption = new SonarOption('--format <format>', 'Output format')
+    .choices(PROJECTS_VALID_FORMATS)
+    .default('json');
   list
     .command('projects')
     .description('Search for projects in SonarQube')
-    .showUpdateNotification()
+    .showUpdateNotification(isTableFormatOption)
     .option('-q, --query <query>', 'Search query to filter projects by name or key')
+    .addOption(listProjectsFormatOption)
     .addOption(pageOption)
     .addOption(pageSizeOption)
     .authenticatedAction((ctx, options: ListProjectsOptions) => listProjects(options, ctx));

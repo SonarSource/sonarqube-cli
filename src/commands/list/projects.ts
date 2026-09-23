@@ -24,11 +24,40 @@ import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { errAsync, type ResultAsync } from '@/core/result.ts';
 import { MAX_PAGE_SIZE, ProjectsClient } from '@/core/server/projects.ts';
+import { columnFormatting } from '@/core/ui/formatter/column-formatting.ts';
+
+const MIN_KEY_WIDTH = 20;
+
+export const VALID_FORMATS = ['json', 'table'];
 
 export interface ListProjectsOptions {
   query?: string;
+  format?: string;
   pageSize: number;
   page: number;
+}
+
+interface ProjectSummary {
+  key: string;
+  name: string;
+}
+
+function formatTable(projects: ProjectSummary[]): string {
+  if (projects.length === 0) {
+    return 'No projects found';
+  }
+
+  const [keyWidth] = columnFormatting([projects.map((p) => p.key)], [MIN_KEY_WIDTH]);
+
+  const header = ['KEY'.padEnd(keyWidth), 'NAME'].join(' | ');
+  const separator = '-'.repeat(header.length);
+
+  const lines = [header, separator];
+  for (const project of projects) {
+    lines.push([project.key.padEnd(keyWidth), project.name].join(' | '));
+  }
+
+  return lines.join('\n');
 }
 
 /**
@@ -39,6 +68,16 @@ export function listProjects(
   ctx: CommandAuthenticatedInvocationContext,
 ): ResultAsync<void, Error> {
   const { auth, console } = ctx;
+
+  const format = options.format ?? 'json';
+  if (!VALID_FORMATS.includes(format.toLowerCase())) {
+    return errAsync(
+      new InvalidOptionError(
+        `Invalid format: '${format}'. Must be one of: ${VALID_FORMATS.join(', ')}`,
+      ),
+    );
+  }
+
   const pageSize = options.pageSize;
   if (pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
     return errAsync(
@@ -66,10 +105,16 @@ export function listProjects(
     })
     .map((result) => {
       const hasNextPage = result.paging.pageIndex * result.paging.pageSize < result.paging.total;
+      const projects = result.components.map((c) => ({ key: c.key, name: c.name }));
+
+      if (format.toLowerCase() === 'table') {
+        console.print(formatTable(projects));
+        return;
+      }
 
       console.print(
         JSON.stringify({
-          projects: result.components.map((c) => ({ key: c.key, name: c.name })),
+          projects,
           paging: {
             pageIndex: result.paging.pageIndex,
             pageSize: result.paging.pageSize,
