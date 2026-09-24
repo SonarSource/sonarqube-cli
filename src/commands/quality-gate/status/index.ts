@@ -22,6 +22,7 @@
 
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import { resolveFormatOption } from '@/core/commands/parsing.ts';
 import { resolveFileComponentKey } from '@/core/file-component.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
@@ -46,7 +47,7 @@ import { formatQualityGateTable } from './format-table.ts';
 import { type QualityGateScope, resolveQualityGateScope } from './scope.ts';
 import { exitCodeFor, type FileQualityGateVerdict, toFileVerdict, toVerdict } from './verdict.ts';
 
-export const VALID_FORMATS = ['json', 'table'];
+export const VALID_FORMATS = ['json', 'table'] as const;
 
 export const VALID_CATEGORIES = IMPLEMENTED_CATEGORIES;
 
@@ -88,7 +89,7 @@ export async function qualityGateStatus(
 ): Promise<void> {
   const { auth, console } = ctx;
   const top = options.top ?? DEFAULT_TOP;
-  const format = options.format ?? 'table';
+  const format = resolveFormatOption(options.format, VALID_FORMATS, 'table');
   if (top < 1 || top > MAX_PAGE_SIZE) {
     throw new InvalidOptionError(
       `Invalid --top option: '${top}'. Must be an integer between 1 and ${MAX_PAGE_SIZE}`,

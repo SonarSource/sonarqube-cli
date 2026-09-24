@@ -20,12 +20,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { ScaScanOrchestrator } from '@/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
+import type { AnalyzeProjectResponse } from '@/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
+import { analyzeDependencyRisks } from '@/commands/analyze/dependency-risks.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 
-import { ScaScanOrchestrator } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
-import type { AnalyzeProjectResponse } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
-import { analyzeDependencyRisks } from '../../../../src/commands/analyze/dependency-risks.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
 const FAKE_AUTH = new ResolvedAuth({
@@ -287,5 +287,15 @@ describe('analyzeDependencyRisks - output format', () => {
     );
 
     expect(getPrinted()).toBe(EXPECTED_TABLE);
+  });
+
+  it('rejects an invalid --format value', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(
+      analyzeDependencyRisks(
+        { project: 'my-project', format: 'xml', statuses: 'all' },
+        FAKE_AUTHENTICATED_CONTEXT,
+      ),
+    ).rejects.toThrow("Invalid format: 'xml'. Must be one of: json, toon, table");
   });
 });
