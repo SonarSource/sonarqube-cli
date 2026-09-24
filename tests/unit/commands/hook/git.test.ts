@@ -275,7 +275,13 @@ describe('gitPrePush', () => {
 
   interface FakeCommit {
     commit: string;
-    blobs: Array<{ oid: string; path: string; mode?: string }>;
+    blobs: Array<{
+      oid: string;
+      path: string;
+      mode?: string;
+      status?: string;
+      sourcePath?: string;
+    }>;
   }
 
   /** `git log --format=%H --raw --no-abbrev` output: a commit line, then one change line per blob. */
@@ -283,10 +289,10 @@ describe('gitPrePush', () => {
     return commits
       .flatMap(({ commit, blobs }) => [
         commit,
-        ...blobs.map(
-          (blob) =>
-            `:000000 ${blob.mode ?? '100644'} ${'0'.repeat(40)} ${blob.oid} A\t${blob.path}`,
-        ),
+        ...blobs.map((blob) => {
+          const paths = blob.sourcePath ? `${blob.sourcePath}\t${blob.path}` : blob.path;
+          return `:000000 ${blob.mode ?? '100644'} ${'0'.repeat(40)} ${blob.oid} ${blob.status ?? 'A'}\t${paths}`;
+        }),
       ])
       .join('\n');
   }
@@ -501,6 +507,48 @@ describe('gitPrePush', () => {
     await gitPrePush({}, [], makeCtx());
 
     expect(runSecretsBinaryOnBatchSpy).not.toHaveBeenCalled();
+  });
+
+  it('unquotes the path git escaped before handing it to the analyzer', async () => {
+    spawnProcessSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: logOutput({
+        commit: COMMIT_A,
+        blobs: [{ oid: BLOB_A, path: '"src/caf\\303\\251.ts"' }],
+      }),
+      stderr: '',
+    });
+
+    await gitPrePush({}, [], makeCtx());
+
+    expect(batchOf(0)).toBe('12 src/café.ts\nconst a = 1;\n');
+  });
+
+  it('scans a path it cannot unquote under the name git printed', async () => {
+    spawnProcessSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: logOutput({ commit: COMMIT_A, blobs: [{ oid: BLOB_A, path: '"src/\\377.ts"' }] }),
+      stderr: '',
+    });
+
+    await gitPrePush({}, [], makeCtx());
+
+    expect(batchOf(0)).toBe('12 "src/\\377.ts"\nconst a = 1;\n');
+  });
+
+  it('scans a rename under its destination path', async () => {
+    spawnProcessSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: logOutput({
+        commit: COMMIT_A,
+        blobs: [{ oid: BLOB_A, path: 'src/new.ts', status: 'R100', sourcePath: 'src/old.ts' }],
+      }),
+      stderr: '',
+    });
+
+    await gitPrePush({}, [], makeCtx());
+
+    expect(batchOf(0)).toBe('12 src/new.ts\nconst a = 1;\n');
   });
 
   it('skips a submodule pointer and scans the rest of the commit', async () => {
