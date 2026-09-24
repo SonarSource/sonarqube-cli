@@ -431,7 +431,7 @@ sonar list issues --project my-org_my-project
 1. Go to SonarQube → My Account → Security → Generate Token
 2. Copy the generated token
 3. Use following environment variables (set them globally before running commands from a new terminal):
-   ```
+   ```bash
    SONARQUBE_CLI_TOKEN=YOUR_TOKEN
    SONARQUBE_CLI_SERVER=https://sonarcloud.io  # or your SonarQube Server URL
    SONARQUBE_CLI_ORG=your-org-key              # SonarQube Cloud only
