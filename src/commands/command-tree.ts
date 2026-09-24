@@ -432,7 +432,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .addOption(
       new SonarOption(
         '-g, --global',
-        'Install the hook globally (already the default; no effect)',
+        'Backwards compatibility; the hook is installed globally by default',
       ).stage(Stage.Deprecated({ sinceVersion: '1.9.0', replacement: 'sonar integrate git' })),
     )
     .authenticatedAction((ctx, options: IntegrateGitOptions) => integrateGit(options, ctx));
@@ -446,7 +446,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .addOption(
       new SonarOption(
         '-g, --global',
-        'Install integrations globally (already the default; no effect)',
+        'Backwards compatibility; integrations are installed globally by default',
       ).stage(Stage.Deprecated({ sinceVersion: '1.9.0', replacement: 'sonar integrate claude' })),
     )
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateClaude(options, ctx));
@@ -460,7 +460,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .addOption(
       new SonarOption(
         '-g, --global',
-        'Install integrations globally (already the default; no effect)',
+        'Backwards compatibility; integrations are installed globally by default',
       ).stage(Stage.Deprecated({ sinceVersion: '1.9.0', replacement: 'sonar integrate copilot' })),
     )
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCopilot(options, ctx));
@@ -498,7 +498,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .addOption(
       new SonarOption(
         '-g, --global',
-        'Install integrations globally (already the default; no effect)',
+        'Backwards compatibility; integrations are installed globally by default',
       ).stage(Stage.Deprecated({ sinceVersion: '1.9.0', replacement: 'sonar integrate codex' })),
     )
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCodex(options, ctx));
@@ -512,7 +512,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .addOption(
       new SonarOption(
         '-g, --global',
-        'Install integrations globally (already the default; no effect)',
+        'Backwards compatibility; integrations are installed globally by default',
       ).stage(
         Stage.Deprecated({ sinceVersion: '1.9.0', replacement: 'sonar integrate antigravity' }),
       ),
@@ -530,7 +530,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .addOption(
       new SonarOption(
         '-g, --global',
-        'Install integrations globally (already the default; no effect)',
+        'Backwards compatibility; integrations are installed globally by default',
       ).stage(Stage.Deprecated({ sinceVersion: '1.9.0', replacement: 'sonar integrate cursor' })),
     )
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCursor(options, ctx));
