@@ -82,9 +82,10 @@ export function commitStatsFacts(facts: readonly StatsFact[]): void {
 }
 
 /** Builds a stats fact from an analyzer's own telemetry fact — the envelope is read off it,
- *  so callers only ever supply `details` (their deduped/allowlisted finding counts). Callers
- *  buffer the result themselves via {@link CommandInvocationContext.recordStats}, alongside
- *  {@link CommandInvocationContext.recordTelemetry} for the telemetry fact it was built from. */
+ *  so callers only ever supply `details` (their deduped/allowlisted finding counts). Call this
+ *  inside the factory passed to {@link CommandInvocationContext.recordStats}, paired with an
+ *  eager {@link CommandInvocationContext.recordTelemetry} for the telemetry fact it was built
+ *  from. */
 export function buildStatsFromTelemetry(
   fact: TelemetryFact<AnalysisFactEnvelope>,
   details: AnalyzerStatsDetails,

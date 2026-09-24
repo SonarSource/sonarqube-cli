@@ -418,6 +418,19 @@ describe('loadState: migration', () => {
     expect(state.telemetry.installationId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
+  it('does not backfill stats when absent in state file', () => {
+    // Unlike telemetry, stats consent is not imposed on existing users who never touch it:
+    // isStatsEnabled() treats absence as enabled, so migration deliberately leaves it unset.
+    const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
+    delete raw['stats'];
+    mkdirSync(testCliDir, { recursive: true });
+    writeFileSync(testStateFile, JSON.stringify(raw), 'utf-8');
+
+    const state = loadState('0.1.0');
+
+    expect(state.stats).toBeUndefined();
+  });
+
   it('adopts a legacy tools entry whose binary is still on disk', () => {
     mkdirSync(testCliDir, { recursive: true });
     const binaryPath = join(testCliDir, 'sonar-secrets-1.2.3.4-linux-x86-64');

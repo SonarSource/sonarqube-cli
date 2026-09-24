@@ -82,6 +82,7 @@ import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './api/api.
 import { authLogin, type AuthLoginOptions } from './auth/login.ts';
 import { authLogout } from './auth/logout.ts';
 import { authStatus } from './auth/status.ts';
+import { configureStats, type ConfigureStatsOptions } from './config/stats.ts';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
 import { agentPostToolUse } from './hook/agent-post-tool-use.ts';
@@ -697,6 +698,13 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('--disabled', 'Disable collection of anonymous usage statistics')
     .anonymousAction((ctx, options: ConfigureTelemetryOptions) => configureTelemetry(options, ctx));
 
+  configure
+    .command('stats')
+    .description('Configure local stats collection settings')
+    .option('--enabled', 'Enable local stats collection')
+    .option('--disabled', 'Disable local stats collection')
+    .anonymousAction((ctx, options: ConfigureStatsOptions) => configureStats(options, ctx));
+
   // CLI-848/CLI-1113: local usage/value ledger. Alpha — not in public docs (see admin above).
   COMMAND_TREE.command('stats')
     .stage(Stage.Alpha)
@@ -726,8 +734,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   system
     .command('reset')
     .description(
-      'Reset the CLI to factory defaults: remove tokens, binaries, integrations, and cached files. ' +
-        'Telemetry settings are preserved.',
+      'Reset the CLI to factory defaults: remove tokens, binaries, integrations, cached files, ' +
+        'and local stats data. Telemetry settings are preserved.',
     )
     .option(
       '--force',

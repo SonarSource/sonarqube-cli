@@ -339,6 +339,23 @@ describe('analyze secrets', () => {
   );
 
   it(
+    'records no stats event when local stats collection is disabled',
+    async () => {
+      harness.state().withSecretsBinaryInstalled().withStatsDisabled();
+      harness.withAuth(FAKE_SERVER, 'fake-token');
+      harness.cwd.writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+
+      const result = await harness.run('analyze secrets secrets.js');
+      expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+
+      expect(readStatsEvents(harness.sonarUserHome.path)).toHaveLength(0);
+      expect(readStatsRuleDescriptions(harness.sonarUserHome.path)).toHaveLength(0);
+      expect(readStatsAggregate(harness.sonarUserHome.path, 'global', '')).toBeNull();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'dedupes findings against the stats ledger on a re-scan of the same unchanged file',
     async () => {
       harness.state().withSecretsBinaryInstalled();

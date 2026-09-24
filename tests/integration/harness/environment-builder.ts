@@ -195,6 +195,7 @@ export class EnvironmentBuilder {
   private _installScaScannerBinary = false;
   private _rawStateJson?: string;
   private _telemetryEnabled = false;
+  private _statsDisabled = false;
   private _dockerMockRunning?: boolean;
   private _dockerMockBinDir?: string;
   private readonly keychainTokens: Array<{ serverURL: string; token: string; org?: string }> = [];
@@ -375,6 +376,12 @@ export class EnvironmentBuilder {
     return this;
   }
 
+  /** Opts out of local stats collection, equivalent to `sonar config stats --disabled`. */
+  withStatsDisabled(): this {
+    this._statsDisabled = true;
+    return this;
+  }
+
   /**
    * Installs a fake `docker` binary in the isolated test environment.
    * When called, `detectContainerRuntime()` will find it and MCP running-status
@@ -510,6 +517,10 @@ export class EnvironmentBuilder {
 
     // Telemetry is off by default for integration tests; opt in via withTelemetryEnabled().
     state.telemetry.enabled = this._telemetryEnabled;
+
+    if (this._statsDisabled) {
+      state.stats = { enabled: false };
+    }
 
     if (this.activeConnectionUrl) {
       const connectionId = 'test-connection-id';

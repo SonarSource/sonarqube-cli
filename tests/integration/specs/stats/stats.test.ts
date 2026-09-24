@@ -21,6 +21,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
+import { ENV_DO_NOT_TRACK } from '@/core/config-constants.ts';
 
 import { backdateStatsEvents } from '../../../_common/stats-helpers';
 import { TestHarness } from '../../harness';
@@ -277,6 +278,53 @@ describe('sonar stats', () => {
 
       expect(result.exitCode).not.toBe(0);
       expect(result.stderr).toContain('Allowed choices are 7d, 14d, 30d, all');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows a local-only disclaimer when DO_NOT_TRACK is set',
+    async () => {
+      harness.withExtraEnv({ [ENV_DO_NOT_TRACK]: '1' });
+
+      const result = await harness.run('stats');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain(
+        'DO_NOT_TRACK is set — sonar stats is unaffected: this data never leaves your machine.',
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'omits the DO_NOT_TRACK disclaimer when it is explicitly unset',
+    async () => {
+      // Test isolation defaults every spawn to DO_NOT_TRACK=1 (isolated-cli-env.ts); explicitly
+      // clear it here to exercise the "not set" path this command actually checks.
+      harness.withExtraEnv({ [ENV_DO_NOT_TRACK]: '0' });
+
+      const result = await harness.run('stats');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).not.toContain('DO_NOT_TRACK');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'prints the DO_NOT_TRACK disclaimer to stderr, leaving --json output on stdout parseable',
+    async () => {
+      harness.withExtraEnv({ [ENV_DO_NOT_TRACK]: '1' });
+
+      const result = await harness.run('stats --json');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain('DO_NOT_TRACK');
+      expect(result.stdout).not.toContain('DO_NOT_TRACK');
+      expect(() => {
+        JSON.parse(result.stdout);
+      }).not.toThrow();
     },
     { timeout: 15000 },
   );
