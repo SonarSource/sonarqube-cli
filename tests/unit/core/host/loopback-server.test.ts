@@ -18,7 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { afterEach, describe, expect, it } from 'bun:test';
+import * as nodeHttp from 'node:http';
+import { createServer } from 'node:http';
+
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { AUTH_PORT_COUNT, AUTH_PORT_START } from '@/core/config-constants.ts';
 import {
@@ -129,12 +132,97 @@ describe('loopback-server', () => {
 
   describe('startLoopbackServer', () => {
     let server: LoopbackServerResult | null = null;
+    let bindStub: { mockRestore: () => void } | null = null;
+
+    /**
+     * Makes a bind attempt on the named addresses fail with the given errno, so a host
+     * condition can be stated rather than waited for. Every other address gets a real
+     * server, which keeps the assertions about something genuinely listening.
+     */
+    function failBindOn(failures: Record<string, string>, onlyPort?: number): void {
+      const realCreateServer = nodeHttp.createServer;
+      bindStub = spyOn(nodeHttp, 'createServer').mockImplementation(((
+        ...args: Parameters<typeof nodeHttp.createServer>
+      ) => {
+        const created = realCreateServer(...args);
+        const realListen = created.listen.bind(created);
+        created.listen = ((port?: unknown, host?: unknown, callback?: unknown) => {
+          const code = typeof host === 'string' ? failures[host] : undefined;
+          const portMatches = onlyPort === undefined || port === onlyPort;
+          if (code !== undefined && portMatches) {
+            const error: NodeJS.ErrnoException = new Error(`listen ${code} ${String(host)}`);
+            error.code = code;
+            queueMicrotask(() => created.emit('error', error));
+            return created;
+          }
+          return realListen(port as number, host as string, callback as () => void);
+        }) as typeof created.listen;
+        return created;
+      }) as typeof nodeHttp.createServer);
+    }
 
     afterEach(async () => {
       if (server) {
         await server.close();
         server = null;
       }
+      if (bindStub) {
+        bindStub.mockRestore();
+        bindStub = null;
+      }
+    });
+
+    it('moves to the next port when IPv6 loopback already holds the first one', async () => {
+      failBindOn({ '::1': 'EADDRINUSE' }, AUTH_PORT_START);
+
+      server = await startLoopbackServer((_req, res) => {
+        res.writeHead(HTTP_STATUS_OK);
+        res.end('OK');
+      });
+
+      // The port-squatting hole this change closes: an attacker holding only [::1] must not
+      // be able to make the CLI serve on that port over IPv4. Asserting it moved past the
+      // first candidate specifically, rather than merely landing elsewhere, since the loop
+      // walks the range in order from AUTH_PORT_START.
+      expect(server.port).toBeGreaterThan(AUTH_PORT_START);
+      expect(server.port).toBeLessThan(AUTH_PORT_START + AUTH_PORT_COUNT);
+    });
+
+    it('fails loudly when the IPv6 bind fails for an unexpected reason', async () => {
+      failBindOn({ '::1': 'EACCES' });
+
+      // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+      await expect(
+        startLoopbackServer((_req, res) => {
+          res.writeHead(HTTP_STATUS_OK);
+          res.end('OK');
+        }),
+      ).rejects.toThrow(/EACCES/);
+    });
+
+    it('fails loudly when the IPv4 bind fails for an unexpected reason', async () => {
+      failBindOn({ [LOOPBACK_HOST]: 'EACCES' });
+
+      // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+      await expect(
+        startLoopbackServer((_req, res) => {
+          res.writeHead(HTTP_STATUS_OK);
+          res.end('OK');
+        }),
+      ).rejects.toThrow(/EACCES/);
+    });
+
+    it('serves on IPv4 alone when the host has no IPv6 loopback', async () => {
+      failBindOn({ '::1': 'EAFNOSUPPORT' });
+
+      server = await startLoopbackServer((_req, res) => {
+        res.writeHead(HTTP_STATUS_OK);
+        res.end('OK');
+      });
+
+      expect(server.port).toBeGreaterThanOrEqual(AUTH_PORT_START);
+      const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}/`);
+      expect(response.status).toBe(HTTP_STATUS_OK);
     });
 
     it('should start a server on a port in the SonarLint range', async () => {
@@ -162,6 +250,38 @@ describe('loopback-server', () => {
 
       const response = await fetch(`http://[::1]:${server.port}`);
       expect(response.status).toBe(HTTP_STATUS_OK);
+    });
+
+    it('should skip a port reserved on IPv6 loopback', async () => {
+      const reservedPort = AUTH_PORT_START;
+      const ipv6Reservation = createServer();
+      const ipv6Available = await new Promise<boolean>((resolve, reject) => {
+        ipv6Reservation.once('error', (error: NodeJS.ErrnoException) => {
+          if (error.code === 'EADDRNOTAVAIL' || error.code === 'EAFNOSUPPORT') {
+            resolve(false);
+            return;
+          }
+          reject(error);
+        });
+        ipv6Reservation.listen(reservedPort, '::1', () => resolve(true));
+      });
+
+      if (!ipv6Available) {
+        return;
+      }
+
+      try {
+        server = await startLoopbackServer((_req, res) => {
+          res.writeHead(HTTP_STATUS_OK);
+          res.end('OK');
+        });
+
+        expect(server.port).not.toBe(reservedPort);
+      } finally {
+        await new Promise<void>((resolve) => {
+          ipv6Reservation.close(() => resolve());
+        });
+      }
     });
 
     it('should include security headers in response', async () => {
