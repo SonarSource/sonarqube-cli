@@ -652,6 +652,29 @@ describe('gitPrePush', () => {
     expect(fake.findCall('warn', 'Reason: binary crashed')).toBeDefined();
   });
 
+  it('stops after the first failed scan instead of retrying it for every commit', async () => {
+    spawnProcessSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: logOutput(
+        { commit: COMMIT_A, blobs: [{ oid: BLOB_A, path: 'a.ts' }] },
+        { commit: COMMIT_B, blobs: [{ oid: BLOB_B, path: 'b.ts' }] },
+      ),
+      stderr: '',
+    });
+    runSecretsBinaryOnBatchSpy.mockRejectedValue(new Error('binary crashed'));
+
+    await gitPrePush({}, [], makeCtx());
+
+    expect(runSecretsBinaryOnBatchSpy).toHaveBeenCalledTimes(1);
+    const warnings = fake.calls.filter(
+      (c) =>
+        c.method === 'warn' &&
+        typeof c.args[0] === 'string' &&
+        c.args[0].includes('secrets were not checked'),
+    );
+    expect(warnings).toHaveLength(1);
+  });
+
   it('does not fall back to a full scan when no commits are new to the remote', async () => {
     spawnProcessSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
 
