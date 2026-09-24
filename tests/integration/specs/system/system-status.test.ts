@@ -378,7 +378,7 @@ describe('system status', () => {
   );
 
   it(
-    'shows the diagnostic overview for legacy state without agents',
+    'returns no legacy integrations for legacy state without agents',
     async () => {
       const state = baseState();
       delete state.agents;
@@ -389,6 +389,11 @@ describe('system status', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('AUTHENTICATION');
       expect(result.stdout).toContain('NETWORK');
+
+      const jsonResult = await harness.run('system status --json');
+      expect(jsonResult.exitCode).toBe(0);
+      const json = JSON.parse(jsonResult.stdout) as { integrations: unknown[] };
+      expect(json.integrations).toEqual([]);
     },
     { timeout: 15000 },
   );

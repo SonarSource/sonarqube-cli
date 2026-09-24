@@ -320,7 +320,8 @@ function getInstalledIntegrations(state: CliState): IntegrationInfo[] {
 
   // Legacy agents not already covered by declarative state.
   const declarativeIds = new Set(state.integrations.installed.map((i) => i.integrationId));
-  for (const [agentId, config] of Object.entries(state.agents)) {
+  const legacyAgents = (state as Partial<CliState>).agents;
+  for (const [agentId, config] of Object.entries(legacyAgents ?? {})) {
     if (config.configured && !declarativeIds.has(agentId)) {
       const name = supportedIntegrations.get(agentId)?.displayName ?? agentId;
       // Legacy agents don't have MCP info, so leave mcp undefined
