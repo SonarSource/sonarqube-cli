@@ -25,6 +25,7 @@ import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline';
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { getNetworkConfigOrThrow } from '@/core/host/connectivity/network-config.ts';
 import type { ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
@@ -56,16 +57,18 @@ function debugLog(message: string): void {
 export async function runMcp(
   ctx: CommandInvocationContext,
   options: McpRunOptions = {},
-  network: ResolvedNetworkConfig = getNetworkConfigOrThrow(),
+  network?: ResolvedNetworkConfig,
 ): Promise<void> {
+  let resolvedNetwork: ResolvedNetworkConfig | undefined;
   try {
+    resolvedNetwork = network ?? getNetworkConfigOrThrow();
     const authResult = await ctx.resolveAuth();
     if (authResult.isErr()) {
-      await respondToInitializeWithError(authResult.error.message);
+      await failStartup(authResult.error);
       return;
     }
     if (!authResult.value) {
-      await respondToInitializeWithError(AUTHENTICATION_ERROR_MESSAGE);
+      await failStartup(new CommandFailedError(AUTHENTICATION_ERROR_MESSAGE));
       return;
     }
 
@@ -73,8 +76,10 @@ export async function runMcp(
     const { console } = ctx;
     const detection = await detectContainerRuntime();
     if (!detection.runtime) {
-      await respondToInitializeWithError(
-        'A container runtime (Docker/Podman/Nerdctl) is required. Install and start Docker, Podman, or Nerdctl, then rerun this command.',
+      await failStartup(
+        new CommandFailedError('A container runtime (Docker/Podman/Nerdctl) is required.', {
+          remediationHint: 'Install and start Docker, Podman, or Nerdctl, then rerun this command.',
+        }),
       );
       return;
     }
@@ -105,7 +110,7 @@ export async function runMcp(
       ? { withFsMount: true, projectRoot, projectKey }
       : { withFsMount: false, projectKey };
 
-    const config = resolveMcpContainerCommand(auth, detection, context, options, network);
+    const config = resolveMcpContainerCommand(auth, detection, context, options, resolvedNetwork);
 
     if (options.debug) {
       debugLog(`runtime: ${detection.runtime}${detection.viaWsl ? ' (via WSL)' : ''}`);
@@ -127,11 +132,22 @@ export async function runMcp(
       });
     });
   } catch (error) {
-    await respondToInitializeWithError(
-      error instanceof Error ? error.message : 'An unexpected error occurred.',
-    );
+    await failStartup(error);
   } finally {
-    cleanup(network);
+    if (resolvedNetwork) {
+      cleanup(resolvedNetwork);
+    }
+  }
+
+  async function failStartup(error: unknown): Promise<void> {
+    const startupError = asStartupError(error);
+    if (process.stdin.isTTY) {
+      throw startupError;
+    }
+    const message = startupError.remediationHint
+      ? `${startupError.message} ${startupError.remediationHint}`
+      : startupError.message;
+    await respondToInitializeWithError(message);
   }
 
   function cleanup(network: ResolvedNetworkConfig) {
@@ -144,6 +160,16 @@ export async function runMcp(
       }
     }
   }
+}
+
+function asStartupError(error: unknown): CommandFailedError {
+  if (error instanceof CommandFailedError) {
+    return error;
+  }
+  return new CommandFailedError(
+    error instanceof Error ? error.message : 'An unexpected error occurred.',
+    { cause: error },
+  );
 }
 
 async function respondToInitializeWithError(message: string): Promise<void> {

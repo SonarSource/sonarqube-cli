@@ -31,8 +31,11 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { runMcp } from '@/commands/run/mcp.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '@/core/config-constants.ts';
+import { NetworkConfigError } from '@/core/errors.ts';
+import * as networkConfig from '@/core/host/connectivity/network-config.ts';
 import type { ProxyGroup, ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
 import type { ClientCertConfig } from '@/core/host/connectivity/types.ts';
 import * as pkcs12Module from '@/core/host/crypto/pkcs12.ts';
@@ -101,6 +104,21 @@ function makeFakeChild(exitCode = 0): childProcess.ChildProcess {
   return emitter as unknown as childProcess.ChildProcess;
 }
 
+function initializeRequest(): string {
+  return JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize' });
+}
+
+function readlineInput(line?: string) {
+  return {
+    close: () => undefined,
+    *[Symbol.iterator]() {
+      if (line) {
+        yield line;
+      }
+    },
+  } as never;
+}
+
 describe('runMcp', () => {
   let detectRuntimeSpy: ReturnType<typeof spyOn>;
   let discoverProjectSpy: ReturnType<typeof spyOn>;
@@ -108,6 +126,8 @@ describe('runMcp', () => {
   let homeDirSpy: ReturnType<typeof spyOn>;
   let cwdSpy: ReturnType<typeof spyOn>;
   let createInterfaceSpy: ReturnType<typeof spyOn>;
+  let networkConfigSpy: ReturnType<typeof spyOn>;
+  let stdinIsTtyDescriptor: PropertyDescriptor | undefined;
 
   beforeEach(() => {
     discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
@@ -125,17 +145,71 @@ describe('runMcp', () => {
     homeDirSpy?.mockRestore();
     cwdSpy?.mockRestore();
     createInterfaceSpy?.mockRestore();
+    networkConfigSpy?.mockRestore();
+    if (stdinIsTtyDescriptor) {
+      Object.defineProperty(process.stdin, 'isTTY', stdinIsTtyDescriptor);
+    } else {
+      Reflect.deleteProperty(process.stdin, 'isTTY');
+    }
   });
 
-  it('returns after no container runtime is available', async () => {
+  it('throws the standard error for no container runtime in a terminal', async () => {
     detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
       runtime: null,
       viaWsl: false,
     });
+    stdinIsTtyDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+    Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: true });
 
-    const result = await runMcp(FAKE_CTX, {}, NO_NETWORK);
+    // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+    await expect(runMcp(FAKE_CTX, {}, NO_NETWORK)).rejects.toBeInstanceOf(CommandFailedError);
+  });
 
-    expect(result).toBeUndefined();
+  it('returns the no-runtime error through MCP for non-terminal input', async () => {
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: null,
+      viaWsl: false,
+    });
+    createInterfaceSpy = spyOn(readline, 'createInterface').mockReturnValue(
+      readlineInput(initializeRequest()),
+    );
+    const stdoutSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    const initialExitCode = process.exitCode;
+    try {
+      await runMcp(FAKE_CTX, {}, NO_NETWORK);
+
+      expect(stdoutSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Install and start Docker, Podman, or Nerdctl, then rerun this command.',
+        ),
+      );
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = initialExitCode;
+      stdoutSpy.mockRestore();
+    }
+  });
+
+  it('returns network configuration errors through MCP', async () => {
+    networkConfigSpy = spyOn(networkConfig, 'getNetworkConfigOrThrow').mockImplementation(() => {
+      throw new NetworkConfigError('Invalid proxy configuration.');
+    });
+    createInterfaceSpy = spyOn(readline, 'createInterface').mockReturnValue(
+      readlineInput(initializeRequest()),
+    );
+    const stdoutSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    const initialExitCode = process.exitCode;
+    try {
+      await runMcp(FAKE_CTX);
+
+      expect(stdoutSpy).toHaveBeenCalledWith(
+        expect.stringContaining('You can also check current network configuration'),
+      );
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = initialExitCode;
+      stdoutSpy.mockRestore();
+    }
   });
 
   it.each(['docker', 'podman', 'nerdctl'] as const)(
@@ -242,10 +316,7 @@ describe('runMcp', () => {
       viaWsl: false,
     });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
-    createInterfaceSpy = spyOn(readline, 'createInterface').mockReturnValue({
-      close: () => undefined,
-      async *[Symbol.asyncIterator]() {},
-    } as never);
+    createInterfaceSpy = spyOn(readline, 'createInterface').mockReturnValue(readlineInput());
 
     const initialExitCode = process.exitCode;
     try {
