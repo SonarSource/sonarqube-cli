@@ -41,6 +41,8 @@ const COMMIT_LINE_PATTERN = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
 /** In a `git log --raw` change line, the destination object name sits immediately before the status field. */
 const DESTINATION_OID_OFFSET = -2;
 
+const GITLINK_MODE = '160000';
+
 const SHORT_SHA_LENGTH = 8;
 
 /** Set by the generated hook. An env var, not a flag, so an older CLI ignores it instead of failing. */
@@ -191,15 +193,18 @@ function dedupeAcrossCommits(groups: CommitBlobs[]): CommitBlobs[] {
 }
 
 /**
- * Parses one `git log --raw` change line: modes and object names, a status, then a tab and the path, with a leading
- * `::` rather than `:` for the combined diff of a merge. The path is the last tab-separated field, which is what makes
- * a rename report its new name.
+ * Parses one `git log --raw` change line: one source mode per parent then the destination mode, the matching object
+ * names, a status, then a tab and the path, with a leading `::` rather than `:` for the combined diff of a merge. The
+ * path is the last tab-separated field, which is what makes a rename report its new name.
  */
 function parseRawBlobLine(line: string): GitBlobRef | null {
   if (!line.startsWith(':')) return null;
   const fields = line.split('\t');
   if (fields.length < 2) return null;
-  const meta = fields[0].replace(/^:+/, '').split(' ');
+  const parentCount = /^:+/.exec(line)?.[0].length ?? 1;
+  const meta = fields[0].slice(parentCount).split(' ');
+  // A gitlink's object name is a commit in the submodule's own repository, which `git cat-file` cannot read from here.
+  if (meta[parentCount] === GITLINK_MODE) return null;
   const oid = meta.at(DESTINATION_OID_OFFSET);
   if (!oid || NULL_OID_PATTERN.test(oid)) return null;
   const path = fields.at(-1);
