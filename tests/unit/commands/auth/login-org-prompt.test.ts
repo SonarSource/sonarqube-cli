@@ -219,7 +219,7 @@ describe('authLogin organization prompt', () => {
     await expect(authLogin({}, new CommandInvocationContext(fake))).rejects.toMatchObject({
       message:
         'The SonarQube server URL must be an absolute HTTP(S) URL with a host and no control characters.',
-      remediationHint: 'Fix the configured server URL or pass --server <url>.',
+      remediationHint: 'Fix serverUrl in .sonar-config.json or pass --server <url>.',
     });
 
     expect(tokenModule.generateTokenViaBrowser).not.toHaveBeenCalled();

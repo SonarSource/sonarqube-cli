@@ -562,7 +562,10 @@ async function resolveServer(options: AuthLoginOptions, console: Console): Promi
   } else {
     const configServer = await discoverServer(console);
     if (configServer) {
-      assertValidServerUrl(configServer, 'Fix the configured server URL or pass --server <url>.');
+      assertValidServerUrl(
+        configServer,
+        'Fix serverUrl in .sonar-config.json or pass --server <url>.',
+      );
       return configServer;
     }
     server = await selectServerFromPrompt(console);
