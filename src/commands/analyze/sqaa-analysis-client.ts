@@ -41,7 +41,7 @@ export class SqaaAnalysisClient {
     const endpoint = this.client.isCloud ? '/a3s-analysis/analyses' : '/api/v2/a3s/analyses';
     return (
       this.client
-        .post<SqaaAnalysisResponse>(endpoint, request, undefined, {
+        .post<SqaaAnalysisResponse>(endpoint, request, {
           [SONAR_INVOCATION_ID_HEADER]: INVOCATION_ID,
         })
         // 403 on this endpoint means Agentic Pack entitlement was revoked.

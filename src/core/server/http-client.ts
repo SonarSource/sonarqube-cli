@@ -89,7 +89,7 @@ export class SonarHttpClient {
    * region-specific host rather than on the connection URL; on Server it is the
    * connection URL itself. HTTP methods use it as their default host.
    */
-  apiHostFor(endpoint: string): string {
+  private apiHostFor(endpoint: string): string {
     return resolveFromEndpoint(this.serverURL, endpoint);
   }
 
@@ -214,12 +214,8 @@ export class SonarHttpClient {
   /**
    * Make GET request to SonarQube API
    */
-  get<T>(
-    endpoint: string,
-    params?: QueryParams,
-    baseUrl: string = this.apiHostFor(endpoint),
-  ): ResultAsync<T, HttpClientError> {
-    return this.getSafe<T>(endpoint, params, baseUrl).andThen((result) => this.toGetResult(result));
+  get<T>(endpoint: string, params?: QueryParams): ResultAsync<T, HttpClientError> {
+    return this.getSafe<T>(endpoint, params).andThen((result) => this.toGetResult(result));
   }
 
   /**
@@ -231,10 +227,9 @@ export class SonarHttpClient {
   getOrNullIf404<T>(
     endpoint: string,
     params?: QueryParams,
-    baseUrl: string = this.apiHostFor(endpoint),
     timeoutMs?: number,
   ): ResultAsync<T | null, HttpClientError> {
-    return this.getSafe<T>(endpoint, params, baseUrl, timeoutMs).andThen((result) => {
+    return this.getSafe<T>(endpoint, params, timeoutMs).andThen((result) => {
       if (result.response.status === HTTP_STATUS_NOT_FOUND) {
         return okAsync(null);
       }
@@ -275,12 +270,11 @@ export class SonarHttpClient {
   getSafe<TValue>(
     endpoint: string,
     params?: QueryParams,
-    baseUrl: string = this.apiHostFor(endpoint),
     timeoutMs: number = GET_REQUEST_TIMEOUT_MS,
   ): ResultAsync<SafeGetResult<TValue>, HttpClientError> {
     return ResultAsync.fromPromise(
       (async (): Promise<Response> => {
-        const url = new URL(`${baseUrl}${endpoint}`);
+        const url = new URL(`${this.apiHostFor(endpoint)}${endpoint}`);
         if (params) {
           Object.entries(params).forEach(([key, value]) => {
             url.searchParams.append(key, String(value));
@@ -308,10 +302,9 @@ export class SonarHttpClient {
   post<T>(
     endpoint: string,
     body: unknown,
-    baseUrl: string = this.apiHostFor(endpoint),
     extraHeaders?: Record<string, string>,
   ): ResultAsync<T, HttpClientError> {
-    const url = `${baseUrl}${endpoint}`;
+    const url = `${this.apiHostFor(endpoint)}${endpoint}`;
     const headers = { ...this.commonHeaders('json'), ...extraHeaders };
 
     return ResultAsync.fromPromise(

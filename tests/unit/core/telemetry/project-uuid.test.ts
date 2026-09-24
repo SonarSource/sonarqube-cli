@@ -153,9 +153,9 @@ describe('resolveProjectUuid()', () => {
     expect(first).toBeNull();
     expect(second).toBe('AV-after-provisioning');
     expect(getSafeSpy).toHaveBeenCalledTimes(2);
-    // RESOLVE_BUDGET_MS, forwarded through ComponentsClient.getComponentId() to getSafe's 4th
+    // RESOLVE_BUDGET_MS, forwarded through ComponentsClient.getComponentId() to getSafe's 3rd
     // argument, so this call keeps its tight budget instead of the default 30s GET timeout.
-    expect(getSafeSpy.mock.calls[0]?.[3]).toBe(3_000);
+    expect(getSafeSpy.mock.calls[0]?.[2]).toBe(3_000);
     getSafeSpy.mockRestore();
   });
 

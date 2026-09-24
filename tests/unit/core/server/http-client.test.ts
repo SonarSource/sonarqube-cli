@@ -94,14 +94,6 @@ describe('SonarHttpClient', () => {
       });
     });
 
-    it('uses the provided baseUrl instead of serverURL', async () => {
-      fetchSpy = mockFetch({ id: 'org-uuid' });
-      await client.get('/organizations', { organizationKey: 'my-org' }, SONARCLOUD_API_URL);
-      expect(lastFetchUrl(fetchSpy)).toBe(
-        `${SONARCLOUD_API_URL}/organizations?organizationKey=my-org`,
-      );
-    });
-
     it('returns an error result when response is not ok', async () => {
       fetchSpy = mockFetch({}, { ok: false, status: 401 });
       const result = await client.get('/api/authentication/validate');
@@ -256,12 +248,6 @@ describe('SonarHttpClient', () => {
       await client.getSafe('/api/settings/values', { component: 'demo' });
       const url = new URL(lastFetchUrl(fetchSpy));
       expect(url.searchParams.get('component')).toBe('demo');
-    });
-
-    it('uses provided baseUrl instead of serverURL', async () => {
-      fetchSpy = mockFetch({});
-      await client.getSafe('/foo', undefined, SONARCLOUD_API_URL);
-      expect(lastFetchUrl(fetchSpy)).toBe(`${SONARCLOUD_API_URL}/foo`);
     });
   });
 
