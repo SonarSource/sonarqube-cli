@@ -22,7 +22,11 @@ import { createServer } from 'node:http';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { assertTokenCheckSucceeded, generateTokenViaBrowser } from '@/core/auth/token.ts';
+import {
+  assertTokenCheckSucceeded,
+  generateTokenViaBrowser,
+  openBrowserWithFallback,
+} from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { SONARCLOUD_URL } from '@/core/config-constants.ts';
 
@@ -122,6 +126,35 @@ describe('assertTokenCheckSucceeded', () => {
       expect((err as CommandFailedError).remediationHint).toBe(
         'Generate a new user token and try again.',
       );
+    }
+  });
+});
+
+describe('openBrowserWithFallback', () => {
+  it('does not open a browser when disabled outside CI', async () => {
+    const previousCi = process.env.CI;
+    const previousDisableBrowser = process.env.SONARQUBE_CLI_DISABLE_BROWSER;
+    process.env.CI = 'false';
+    process.env.SONARQUBE_CLI_DISABLE_BROWSER = 'true';
+    const openedUrls: string[] = [];
+
+    try {
+      await openBrowserWithFallback('http://example.test/auth', new FakeConsole(), (url) => {
+        openedUrls.push(url);
+        return Promise.resolve();
+      });
+      expect(openedUrls).toEqual([]);
+    } finally {
+      if (previousCi === undefined) {
+        delete process.env.CI;
+      } else {
+        process.env.CI = previousCi;
+      }
+      if (previousDisableBrowser === undefined) {
+        delete process.env.SONARQUBE_CLI_DISABLE_BROWSER;
+      } else {
+        process.env.SONARQUBE_CLI_DISABLE_BROWSER = previousDisableBrowser;
+      }
     }
   });
 });
