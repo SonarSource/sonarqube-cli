@@ -21,9 +21,10 @@
 import { describe, expect, it, spyOn } from 'bun:test';
 
 import { authStatus } from '@/commands/auth/status.ts';
-import { AuthResolver } from '@/core/auth/auth-resolver.ts';
+import { AuthResolver, ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import * as token from '@/core/auth/token.ts';
 import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { okAsync } from '@/core/result.ts';
 import { getDefaultState } from '@/core/state/state.ts';
@@ -43,12 +44,82 @@ describe('authStatus with FakeConsole', () => {
     const ctx = new CommandInvocationContext(fake, undefined, createCliRuntime({ authResolver }));
 
     try {
-      await authStatus(ctx);
+      await authStatus({}, ctx);
       expect.unreachable('authStatus should reject when nothing is stored');
     } catch (err) {
       expect(err).toBeInstanceOf(CommandFailedError);
     }
     expect(fake.findCall('print', 'No saved connection')).toBeDefined();
+    loadStateSpy.mockRestore();
+  });
+
+  it('rejects an invalid --format value before resolving auth', async () => {
+    const authResolver = new AuthResolver();
+    const resolveAuthSpy = spyOn(authResolver, 'resolveAuth');
+    const fake = new FakeConsole();
+    const ctx = new CommandInvocationContext(fake, undefined, createCliRuntime({ authResolver }));
+
+    try {
+      await authStatus({ format: 'xml' }, ctx);
+      expect.unreachable('authStatus should reject an invalid format');
+    } catch (err) {
+      expect(err).toBeInstanceOf(InvalidOptionError);
+      expect((err as Error).message).toBe("Invalid format: 'xml'. Must be one of: text, json");
+    }
+    expect(resolveAuthSpy).not.toHaveBeenCalled();
+  });
+
+  it('prints a JSON payload when --format json and connected', async () => {
+    const auth = new ResolvedAuth({
+      token: 'test-token',
+      serverUrl: 'https://sonar.example.com',
+      connectionType: 'on-premise',
+      source: 'state' as const,
+    });
+    const authResolver = new AuthResolver();
+    spyOn(authResolver, 'resolveAuth').mockReturnValue(okAsync(auth));
+    const checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({
+      status: 'valid',
+    });
+
+    const fake = new FakeConsole();
+    const ctx = new CommandInvocationContext(fake, undefined, createCliRuntime({ authResolver }));
+
+    await authStatus({ format: 'json' }, ctx);
+
+    const printed = fake.calls.find((c) => c.method === 'print');
+    expect(printed).toBeDefined();
+    expect(JSON.parse(String(printed?.args[0]))).toEqual({
+      status: 'connected',
+      server: 'https://sonar.example.com',
+      source: 'OS Keychain',
+    });
+    checkTokenStatusSpy.mockRestore();
+  });
+
+  it('prints a JSON payload and sets a failing exit code without throwing when nothing is stored', async () => {
+    const authResolver = new AuthResolver();
+    spyOn(authResolver, 'resolveAuth').mockReturnValue(okAsync(null));
+    const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(
+      getDefaultState('1.0.0'),
+    );
+
+    const fake = new FakeConsole();
+    const ctx = new CommandInvocationContext(fake, undefined, createCliRuntime({ authResolver }));
+
+    const originalExitCode = process.exitCode;
+    process.exitCode = 0;
+    try {
+      // JSON mode must not throw: the shared command framework would otherwise print
+      // its own `❌`/`💡` error text alongside the JSON
+      await authStatus({ format: 'json' }, ctx);
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = originalExitCode;
+    }
+    const printed = fake.calls.find((c) => c.method === 'print');
+    expect(printed).toBeDefined();
+    expect(JSON.parse(String(printed?.args[0]))).toEqual({ status: 'not_authenticated' });
     loadStateSpy.mockRestore();
   });
 });
