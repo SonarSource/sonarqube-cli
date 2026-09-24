@@ -830,7 +830,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   hookCommand
     .command('cursor-prompt-submit')
-    .description('beforeSubmitPrompt handler for Cursor: scan prompts for secrets before sending')
+    .description('Cursor beforeSubmitPrompt handler: scan prompts for secrets before sending')
     .anonymousAction(handleHookInvocation(cursorPromptSubmit));
 
   hookCommand
@@ -901,7 +901,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   hookCommand
     .command('git-pre-push')
-    .description('git pre-push handler: scan files in new commits for secrets')
+    .description('Git pre-push handler: scan files in new commits for secrets')
     .option(
       '--remote-name <name>',
       "Remote being pushed to (git's first hook argument); scopes which commits count as already pushed",
