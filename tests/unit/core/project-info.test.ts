@@ -35,6 +35,7 @@ import {
   discoverProject,
   discoverServer,
   KNOWN_SERVER_PROJECT_MAPPING_SOURCE,
+  resolveProjectKey,
   SHARED_PROJECT_CONFIG_SOURCE,
 } from '@/core/project-info.ts';
 import * as discoverByRemote from '@/core/server/discover-project-by-remote.ts';
@@ -108,6 +109,16 @@ function mockKnownMappings(
   });
 }
 
+async function expectProjectKeyFailure(promise: Promise<string>): Promise<void> {
+  try {
+    await promise;
+    expect.unreachable('Expected project key resolution to fail');
+  } catch (error) {
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe('The project key must be a single line.');
+  }
+}
+
 describe('discoverProject', () => {
   let testDir: string;
   let loadStateSpy: Mock<typeof stateRepository.loadState>;
@@ -154,6 +165,26 @@ describe('discoverProject', () => {
     expect(
       (await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH })).projectRoot,
     ).toBe(canonicalizePath(testDir));
+  });
+
+  it('rejects an explicit project key that contains a line break', async () => {
+    await expectProjectKeyFailure(resolveProjectKey('project\nkey', MOCK_AUTH, new FakeConsole()));
+  });
+
+  it('rejects a discovered project key that contains a line break', async () => {
+    fakeFs.mkdir(join(testDir, '.git'));
+    getGitRemoteSpy.mockResolvedValue('https://github.com/example/repository.git');
+    remoteSpy.mockResolvedValue({
+      projectKey: 'project\nkey',
+      serverUrl: 'https://sonarcloud.io',
+    });
+    const cwdSpy = spyOn(process, 'cwd').mockReturnValue(testDir);
+
+    try {
+      await expectProjectKeyFailure(resolveProjectKey(undefined, MOCK_AUTH, new FakeConsole()));
+    } finally {
+      cwdSpy.mockRestore();
+    }
   });
 
   it('defaults projectRoot to the invocation directory, not repoRoot, even inside a git repo', async () => {

@@ -20,9 +20,11 @@
 
 import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
 import {
+  assertSingleLineServerUrl,
   ENV_ORG,
   ENV_SERVER,
   ENV_TOKEN,
+  isSingleLineServerUrl,
   isSonarQubeCloud,
   ResolvedAuth,
 } from '@/core/auth/auth-resolver.ts';
@@ -563,14 +565,22 @@ async function selectServerFromPrompt(console: Console): Promise<string> {
 }
 
 async function resolveServer(options: AuthLoginOptions, console: Console): Promise<string> {
+  let server: string;
   if (options.server) {
-    return options.server;
+    server = options.server;
+  } else {
+    const configServer = await discoverServer(console);
+    if (configServer) {
+      assertSingleLineServerUrl(
+        configServer,
+        'Fix serverUrl in .sonar-config.json or pass --server <url>.',
+      );
+      return configServer;
+    }
+    server = await selectServerFromPrompt(console);
   }
-  const configServer = await discoverServer(console);
-  if (configServer) {
-    return configServer;
-  }
-  return selectServerFromPrompt(console);
+  assertSingleLineServerUrl(server, "Run 'sonar auth login' again and enter a single-line URL.");
+  return server;
 }
 
 function validateLoginOptions(options: AuthLoginOptions): void {
@@ -582,6 +592,13 @@ function validateLoginOptions(options: AuthLoginOptions): void {
     throw new InvalidOptionError(
       '--server value cannot be empty.',
       'Use --server <url> (for example https://sonarcloud.io).',
+    );
+  }
+
+  if (options.server !== undefined && !isSingleLineServerUrl(options.server)) {
+    throw new InvalidOptionError(
+      '--server value must be a single line.',
+      'Use --server <url> with a single-line URL, or run sonar auth login without --server.',
     );
   }
 

@@ -233,6 +233,21 @@ describe('runMcp', () => {
     expect(discoverProjectSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('rejects a multiline project key before launching the container', async () => {
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: 'docker',
+      viaWsl: false,
+    });
+    spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+    await expect(runMcp(FAKE_CTX, { project: 'first\nsecond' }, NO_NETWORK)).rejects.toThrow(
+      'The project key must be a single line.',
+    );
+
+    expect(spawnSpy).not.toHaveBeenCalled();
+  });
+
   it('adds fs mount when --project is set and discovered root is a git repo', async () => {
     discoverProjectSpy.mockResolvedValue({
       projectKey: undefined,

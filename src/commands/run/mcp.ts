@@ -36,7 +36,7 @@ import {
 } from '@/core/host/mcp/mcp-helper.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
-import { discoverProject } from '@/core/project-info.ts';
+import { assertSingleLineProjectKey, discoverProject } from '@/core/project-info.ts';
 
 export interface McpRunOptions {
   debug?: boolean;
@@ -73,6 +73,9 @@ export async function runMcp(
   // CliCommandExecuted is only emitted from the postAction hook once it exits — or never, if
   // the process is killed. Attaching project_uuid to an event that unreliable buys nothing.
   const projectKey = options.project || discovered?.projectKey;
+  if (projectKey) {
+    assertSingleLineProjectKey(projectKey);
+  }
   if (!projectKey) {
     console.warn(
       'No project key found - project-scoped tools will be unavailable. Run sonar run mcp --help for ways to define a project.',

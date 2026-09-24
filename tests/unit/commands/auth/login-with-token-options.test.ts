@@ -72,6 +72,13 @@ describe('auth login --with-token option validation', () => {
     await expectLoginFailure({ withToken: true }, '--server is required with --with-token.');
   });
 
+  it('rejects a server URL that contains a line break', async () => {
+    await expectLoginFailure(
+      { server: 'https://sonarqube.example.com\ninvalid' },
+      '--server value must be a single line.',
+    );
+  });
+
   it('requires an explicit organization for SonarQube Cloud', async () => {
     await expectLoginFailure(
       { withToken: true, server: SONARCLOUD_URL },
