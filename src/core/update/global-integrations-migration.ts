@@ -89,7 +89,9 @@ export async function migrateAgentIntegrationsToGlobalScope(
   }
 
   const quietConsole = new QuietConsole(deps.console);
-  deps.console.info('Migrating agent integrations to global scope...');
+  deps.console.info(
+    'Removing your project-level agent integrations and reinstalling them globally...',
+  );
   let anyFailed = false;
 
   for (const agentMigration of agentMigrations) {
@@ -103,7 +105,9 @@ export async function migrateAgentIntegrationsToGlobalScope(
     deps.console.warn(`Some integrations were left at project scope. Run 'sonar update' to retry.`);
     return;
   }
-  deps.console.info('Finished migrating agent integrations to global scope.');
+  deps.console.info(
+    "Done — your integrations are now global. Run 'sonar integrate' anytime to add or remove one.",
+  );
 }
 
 /** Swallows throws: a failed migration must never abort the command that triggered it. */
@@ -195,9 +199,8 @@ function collectAgentMigrations(state: CliState, deps: PostUpdateDependencies): 
     const supersededByClaude = claudeGoesGlobal && AGENTS_SUPERSEDED_BY_CLAUDE.has(declaration.id);
     if (supersededByClaude) {
       deps.console.warn(
-        `Skipped the global ${declaration.displayName} integration: you have the Claude Code ` +
-          `integration installed, and ${declaration.displayName} picks up its global hooks, so the ` +
-          `two would conflict.`,
+        `Skipped the global ${declaration.displayName} integration — it would conflict with Claude Code, ` +
+          `already installed globally. Run 'sonar integrate' to add or remove either one.`,
       );
     }
     agentMigrations.push({

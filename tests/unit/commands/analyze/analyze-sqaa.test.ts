@@ -182,7 +182,7 @@ describe('analyzeSqaa: auth resolution', () => {
       .map((c) => String(c.args[0]))
       .join('\n');
     expect(output).toContain(
-      'Vortex analysis skipped: no project configured. Specify one with --project or run: sonar integrate',
+      "Vortex analysis skipped: no project configured. Specify one with --project, or run 'sonar link <projectKey>' to link one to this repository.",
     );
   });
 });
