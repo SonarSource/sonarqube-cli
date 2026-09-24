@@ -27,8 +27,9 @@ import {
 } from '@/core/auth/auth-resolver.ts';
 import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
-import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { resolveFormatOption } from '@/core/commands/parsing.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 import { getActiveConnection } from '@/core/state/state-manager.ts';
@@ -36,8 +37,8 @@ import { loadState } from '@/core/state/state-repository.ts';
 import { NOTE_STYLES } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-export const VALID_FORMATS = ['text', 'json'];
-type AuthStatusFormat = 'text' | 'json';
+export const VALID_FORMATS = ['text', 'json'] as const;
+type AuthStatusFormat = (typeof VALID_FORMATS)[number];
 
 export interface AuthStatusOptions {
   format?: string;
@@ -169,16 +170,6 @@ function displayOrganizationMembershipMismatch(
   );
 }
 
-function resolveAuthStatusFormat(options: AuthStatusOptions): AuthStatusFormat {
-  const format = (options.format ?? 'text').toLowerCase();
-  if (!VALID_FORMATS.includes(format)) {
-    throw new InvalidOptionError(
-      `Invalid format: '${format}'. Must be one of: ${VALID_FORMATS.join(', ')}`,
-    );
-  }
-  return format as AuthStatusFormat;
-}
-
 /**
  * Text mode throws so the shared command framework renders its `❌`/`💡` error
  * presentation. JSON mode has already printed the status object at this point, so it
@@ -248,7 +239,7 @@ export async function authStatus(
   ctx: CommandInvocationContext,
 ): Promise<void> {
   const { console } = ctx;
-  const authStatusFormat = resolveAuthStatusFormat(options);
+  const authStatusFormat = resolveFormatOption(options.format, VALID_FORMATS, 'text');
 
   const authResult = await ctx.resolveAuth();
   if (authResult.isErr()) {
