@@ -318,7 +318,7 @@ describe('run mcp', () => {
   );
 
   it(
-    'returns the standard authentication error when an unauthenticated session ends before initialize',
+    'exits without a response when an unauthenticated session ends before initialize',
     async () => {
       const server = await harness.newFakeServer().start();
       harness
@@ -330,9 +330,7 @@ describe('run mcp', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toBe('');
-      expect(result.stderr).toContain(
-        "❌ Not authenticated.\n  → Run 'sonar auth login' to authenticate.",
-      );
+      expect(result.stderr).toBe('');
     },
     { timeout: 15000 },
   );

@@ -30,7 +30,6 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { runMcp } from '@/commands/run/mcp.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '@/core/config-constants.ts';
 import type { ProxyGroup, ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
@@ -125,14 +124,15 @@ describe('runMcp', () => {
     cwdSpy?.mockRestore();
   });
 
-  it('throws CommandFailedError when no container runtime is available', async () => {
+  it('returns after no container runtime is available', async () => {
     detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
       runtime: null,
       viaWsl: false,
     });
 
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-    await expect(runMcp(FAKE_CTX, {}, NO_NETWORK)).rejects.toBeInstanceOf(CommandFailedError);
+    const result = await runMcp(FAKE_CTX, {}, NO_NETWORK);
+
+    expect(result).toBeUndefined();
   });
 
   it.each(['docker', 'podman', 'nerdctl'] as const)(
