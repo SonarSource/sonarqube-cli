@@ -149,8 +149,7 @@ const isTableFormatOption: UpdateNotificationCondition = (opts) => {
 };
 
 const projectKeyExtraHelp = `
-Instead of providing an explicit --project, you can add sonar.projectKey to sonar-project.properties at the repository root.
-Alternatively, add SonarQube for IDE shared binding JSON under .sonarlint/ (for example .sonarlint/connectedMode.json) that includes projectKey.
+Instead of providing an explicit --project, run 'sonar link <projectKey>' to link one to this repository.
 `;
 
 const dependencyRisksExtraHelp = `
