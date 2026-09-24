@@ -192,7 +192,11 @@ export async function openBrowserWithFallback(
   console: Console,
   browserOpener: (url: string) => Promise<void> = openBrowser,
 ): Promise<void> {
-  if (process.env.CI === 'true' || process.env.SONARQUBE_CLI_DISABLE_BROWSER === 'true') {
+  if (process.env.CI === 'true') {
+    return;
+  }
+  if (process.env.SONARQUBE_CLI_DISABLE_BROWSER === 'true') {
+    console.print('Automatic browser opening is disabled; copy the URL above and open it manually');
     return;
   }
   try {
@@ -376,7 +380,9 @@ export async function generateTokenViaBrowser(
 
   console.print('🔑 Obtaining access token from SonarQube...');
   console.print(`URL: ${blue(authURL)}`);
-  await console.pressEnterKeyPrompt('Press Enter to open the browser');
+  if (process.env.SONARQUBE_CLI_DISABLE_BROWSER !== 'true') {
+    await console.pressEnterKeyPrompt('Press Enter to open the browser');
+  }
   await openBrowserFn(authURL);
 
   let authResult: BrowserAuthResult | undefined;
