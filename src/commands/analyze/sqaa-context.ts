@@ -75,12 +75,12 @@ export function resolveSqaaContext(
           'Vortex analysis requires a project, but none is configured for this directory.',
           {
             remediationHint:
-              "Specify one with --project, or run 'sonar integrate' to configure this project.",
+              "Specify one with --project, or run 'sonar link <projectKey>' to link one to this repository.",
           },
         );
       }
       console.warn(
-        'Vortex analysis skipped: no project configured. Specify one with --project or run: sonar integrate',
+        "Vortex analysis skipped: no project configured. Specify one with --project, or run 'sonar link <projectKey>' to link one to this repository.",
       );
       return null;
   }
