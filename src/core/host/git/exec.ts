@@ -18,8 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Shared low-level git process runner used by every helper in this folder:
-// runs `git <args>` in `cwd` and returns stdout on success, or `undefined`
+// Shared low-level git process runners used by every helper in this folder:
+// run `git <args>` in `cwd` and return its output on success, or `undefined`
 // when git is unavailable or exits non-zero.
 
 import { spawnProcess } from '../../process/process.ts';
@@ -32,4 +32,10 @@ export async function tryRunGit(args: string[], cwd: string): Promise<string | u
   } catch {
     return undefined;
   }
+}
+
+/** Non-empty lines of stdout. Distinct from `[]`, which means git ran and printed nothing. */
+export async function tryRunGitLines(args: string[], cwd: string): Promise<string[] | undefined> {
+  const stdout = await tryRunGit(args, cwd);
+  return stdout?.split(/\r?\n/).filter(Boolean);
 }

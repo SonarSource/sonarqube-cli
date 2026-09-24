@@ -22,17 +22,33 @@
 // Replaces the shell logic that was previously embedded in the git hook script.
 
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { spawnProcess } from '@/core/process/process.ts';
+import { tryRunGit, tryRunGitLines } from '@/core/host/git/exec.ts';
 
 import { runSecretsStage } from './git-pre-push-secrets.ts';
 import { MissingDependenciesError, SECRETS_INACTIVE_UNAUTHENTICATED } from './hook-dependencies.ts';
 import type { PushRef } from './stdin.ts';
 import { readGitPushRefs } from './stdin.ts';
 
-export const GIT_NULL_OID = '0000000000000000000000000000000000000000';
+// Zero-OID width follows the repository hash algorithm: 40 under SHA-1, 64 under SHA-256.
+const NULL_OID_PATTERN = /^0+$/;
 
-export async function gitPrePush(files: string[], ctx: CommandInvocationContext): Promise<void> {
-  const fileGroups = await getFileGroupsToScan(files);
+/** Set by the generated hook. An env var, not a flag, so an older CLI ignores it instead of failing. */
+export const REMOTE_NAME_ENV = 'SONAR_PRE_PUSH_REMOTE_NAME';
+
+export interface GitPrePushOptions {
+  /** Remote git is pushing to; overrides `SONAR_PRE_PUSH_REMOTE_NAME`. */
+  remoteName?: string;
+}
+
+export async function gitPrePush(
+  options: GitPrePushOptions,
+  files: string[],
+  ctx: CommandInvocationContext,
+): Promise<void> {
+  const fileGroups = await getFileGroupsToScan(
+    files,
+    await resolveRemotesExclusion(options.remoteName),
+  );
   if (fileGroups === null) return;
 
   const auth = await ctx.resolveAuthOrNull();
@@ -45,7 +61,18 @@ export async function gitPrePush(files: string[], ctx: CommandInvocationContext)
   }
 }
 
-async function getFileGroupsToScan(files: string[]): Promise<string[][] | null> {
+/** Git passes a URL when the push names no remote, and `--remotes=<url>` matches no refs. */
+async function resolveRemotesExclusion(remoteName: string | undefined): Promise<string> {
+  const name = (remoteName ?? process.env[REMOTE_NAME_ENV])?.trim();
+  if (!name) return '--remotes';
+  const configured = (await tryRunGitLines(['remote'], process.cwd())) ?? [];
+  return configured.includes(name) ? `--remotes=${name}` : '--remotes';
+}
+
+async function getFileGroupsToScan(
+  files: string[],
+  remotesExclusion: string,
+): Promise<string[][] | null> {
   if (files.length > 0) {
     /*
      * pre-commit framework pre-chunks files before calling our tool in parallel.
@@ -59,86 +86,43 @@ async function getFileGroupsToScan(files: string[]): Promise<string[][] | null> 
   const refs = await readGitPushRefs();
   if (refs.length === 0) return null;
 
-  const emptyTree = await getEmptyTree();
-  const nonDeletionRefs = refs.filter((ref) => ref.localSha !== GIT_NULL_OID);
-  const filesByRef = await collectFilesForRefs(nonDeletionRefs, emptyTree);
+  const nonDeletionRefs = refs.filter((ref) => !NULL_OID_PATTERN.test(ref.localSha));
+  const filesByRef = await collectFilesForRefs(nonDeletionRefs, remotesExclusion);
   const groups = Array.from(filesByRef.values()).filter((g) => g.length > 0);
   return groups.length > 0 ? groups : null;
 }
 
-async function getEmptyTree(): Promise<string> {
-  try {
-    const result = await spawnProcess('git', ['mktree'], { stdin: 'pipe', stdinData: '' });
-    return result.stdout.trim() || GIT_NULL_OID;
-  } catch {
-    return GIT_NULL_OID;
-  }
-}
-
 async function collectFilesForRefs(
   refs: PushRef[],
-  emptyTree: string,
+  remotesExclusion: string,
 ): Promise<Map<PushRef, string[]>> {
   const out = new Map<PushRef, string[]>();
   for (const ref of refs) {
-    out.set(ref, await getFilesForRef(ref, emptyTree));
+    out.set(ref, await getFilesForRef(ref, remotesExclusion));
   }
   return out;
 }
 
-async function getFilesForRef(ref: PushRef, emptyTree: string): Promise<string[]> {
-  try {
-    if (ref.remoteSha === GIT_NULL_OID) {
-      return await getFilesForNewBranch(ref.localSha, emptyTree);
-    }
-    const result = await spawnProcess('git', [
-      'diff',
-      '--name-only',
-      '--diff-filter=ACMR',
-      ref.remoteSha,
-      ref.localSha,
-    ]);
-    return result.stdout.trim().split('\n').filter(Boolean);
-  } catch {
-    return [];
-  }
+/** Files the push would transfer; `-c` also catches content a merge introduced itself. */
+async function getFilesForRef(ref: PushRef, remotesExclusion: string): Promise<string[]> {
+  const knownRemoteTip = (await isKnownCommit(ref.remoteSha)) ? [ref.remoteSha] : [];
+  const args = [
+    'log',
+    '--format=',
+    '--name-only',
+    '--diff-filter=ACMR',
+    '-c',
+    '--root',
+    ref.localSha,
+    '--not',
+    ...knownRemoteTip,
+    remotesExclusion,
+  ];
+  return Array.from(new Set((await tryRunGitLines(args, process.cwd())) ?? []));
 }
 
-async function getFilesForNewBranch(localSha: string, emptyTree: string): Promise<string[]> {
-  try {
-    const commitsResult = await spawnProcess('git', ['rev-list', localSha, '--not', '--remotes']);
-    const commits = commitsResult.stdout.trim().split('\n').filter(Boolean);
-
-    if (commits.length > 0) {
-      const fileSet = new Set<string>();
-      for (const commit of commits) {
-        const result = await spawnProcess('git', [
-          'diff-tree',
-          '--root',
-          '--no-commit-id',
-          '-r',
-          '--name-only',
-          '--diff-filter=ACMR',
-          commit,
-        ]);
-        result.stdout
-          .trim()
-          .split('\n')
-          .filter(Boolean)
-          .forEach((f) => fileSet.add(f));
-      }
-      return Array.from(fileSet);
-    }
-
-    const result = await spawnProcess('git', [
-      'diff',
-      '--name-only',
-      '--diff-filter=ACMR',
-      emptyTree,
-      localSha,
-    ]);
-    return result.stdout.trim().split('\n').filter(Boolean);
-  } catch {
-    return [];
-  }
+/** A remote tip this clone never fetched cannot narrow the range. */
+async function isKnownCommit(oid: string): Promise<boolean> {
+  if (NULL_OID_PATTERN.test(oid)) return false;
+  return (await tryRunGit(['cat-file', '-e', `${oid}^{commit}`], process.cwd())) !== undefined;
 }

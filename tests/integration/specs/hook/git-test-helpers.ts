@@ -69,6 +69,8 @@ export function initGitRepo(cwd: string): void {
   git(['init'], cwd);
   git(['config', 'user.email', 'test@example.com'], cwd);
   git(['config', 'user.name', 'Test User'], cwd);
+  // A developer-global core.hooksPath would otherwise fire real hooks on commit/push.
+  git(['config', 'core.hooksPath', join(cwd, '.git', 'hooks-disabled')], cwd);
 }
 
 /** Write a file, stage + commit it, and return the commit SHA. */
@@ -83,4 +85,17 @@ export function commitFile(cwd: string, filename: string, content: string): stri
 export function stageFile(cwd: string, filename: string, content: string): void {
   writeFileSync(join(cwd, filename), content, 'utf-8');
   git(['add', filename], cwd);
+}
+
+/** Create a bare repo at `remotePath` and register it as `name` for the repo in `cwd`. */
+export function addBareRemote(cwd: string, remotePath: string, name = 'origin'): void {
+  mkdirSync(remotePath, { recursive: true });
+  git(['init', '--bare'], remotePath);
+  git(['remote', 'add', name, remotePath], cwd);
+}
+
+/** Push `refspec` to `name`, then refresh remote-tracking refs so `--remotes` sees it. */
+export function publishRef(cwd: string, refspec: string, name = 'origin'): void {
+  git(['push', name, refspec], cwd);
+  git(['fetch', name], cwd);
 }

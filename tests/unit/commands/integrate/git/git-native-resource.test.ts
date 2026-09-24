@@ -165,7 +165,9 @@ describe('native git hook chaining to a pre-existing local hook', () => {
     expect(script).toContain('SONAR_STDIN_CACHE=$(mktemp 2>/dev/null || :)');
     expect(script).toContain('cat > "$SONAR_STDIN_CACHE"');
     expect(script).toContain('"$SONAR_LOCAL_HOOK" "$@" < "$SONAR_STDIN_CACHE" || exit $?');
-    expect(script).toContain('hook git-pre-push < "$SONAR_STDIN_CACHE"');
+    expect(script).toContain(
+      'SONAR_PRE_PUSH_REMOTE_NAME="$1" "$SONAR_BIN" hook git-pre-push < "$SONAR_STDIN_CACHE"',
+    );
   });
 
   it('does not add stdin capture for pre-commit, which reads no stdin', () => {

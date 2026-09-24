@@ -24,6 +24,7 @@ import type { GitHookType } from '../../options.ts';
 import {
   LEGACY_HOOK_MARKER,
   resolveDepRisksArgs,
+  resolveRemoteNameEnvPrefix,
   resolveSonarHookCommand,
   SONAR_HOOK_SKIP_SECRETS_MESSAGE,
 } from '../shared.ts';
@@ -49,9 +50,10 @@ function huskyBinBlock(): string {
 
 export function getHuskySnippetContent(hook: GitHookType, context: IntegrationContext): string {
   const depRisksArgs = hook === 'pre-commit' ? resolveDepRisksArgs(context) : '';
+  const remoteEnv = resolveRemoteNameEnvPrefix(hook);
   return [
     huskyBinBlock(),
-    `"$SONAR_BIN" hook ${resolveSonarHookCommand(hook)}${depRisksArgs}`,
+    `${remoteEnv}"$SONAR_BIN" hook ${resolveSonarHookCommand(hook)}${depRisksArgs}`,
     '',
   ].join('\n');
 }

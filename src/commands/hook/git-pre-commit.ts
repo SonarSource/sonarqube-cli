@@ -23,7 +23,7 @@
 // Replaces the shell logic that was previously embedded in the git hook script.
 
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { spawnProcess } from '@/core/process/process.ts';
+import { tryRunGitLines } from '@/core/host/git/exec.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
 import { runDepRisksStage } from './git-pre-commit-dependency-risks.ts';
@@ -65,16 +65,6 @@ export async function gitPreCommit(
 }
 
 async function getStagedFiles(): Promise<string[]> {
-  try {
-    const result = await spawnProcess('git', [
-      'diff',
-      '--cached',
-      '--name-only',
-      '--diff-filter=ACMR',
-    ]);
-    if (result.exitCode !== 0) return [];
-    return result.stdout.trim().split('\n').filter(Boolean);
-  } catch {
-    return [];
-  }
+  const args = ['diff', '--cached', '--name-only', '--diff-filter=ACMR'];
+  return (await tryRunGitLines(args, process.cwd())) ?? [];
 }

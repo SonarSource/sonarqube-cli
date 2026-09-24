@@ -31,7 +31,7 @@ import { okAsync } from '@/core/result.ts';
 
 import * as analyzeSecrets from '../../../../src/commands/analyze/secrets.ts';
 import { gitPreCommit } from '../../../../src/commands/hook/git-pre-commit.ts';
-import { gitPrePush } from '../../../../src/commands/hook/git-pre-push.ts';
+import { gitPrePush, REMOTE_NAME_ENV } from '../../../../src/commands/hook/git-pre-push.ts';
 import {
   HOOK_INACTIVE_UNAUTHENTICATED,
   MissingDependenciesError,
@@ -75,6 +75,28 @@ const SECRETS_RESULT_WITH_ISSUES = {
   }),
   stderr: '',
 };
+
+/** Args of the first `git <subcommand>` spawn recorded by the spy, if any. */
+function gitArgsFor(spy: ReturnType<typeof spyOn>, subcommand: string): string[] | undefined {
+  const calls = spy.mock.calls as unknown as unknown[][];
+  const call = calls.find((c) => c[0] === 'git' && (c[1] as string[])[0] === subcommand);
+  return call?.[1] as string[] | undefined;
+}
+
+/** The `git log` invocation `getFilesForRef` builds, for assertion against the spy. */
+function logArgs(localSha: string, ...exclusions: string[]): string[] {
+  return [
+    'log',
+    '--format=',
+    '--name-only',
+    '--diff-filter=ACMR',
+    '-c',
+    '--root',
+    localSha,
+    '--not',
+    ...exclusions,
+  ];
+}
 
 describe('gitPreCommit', () => {
   let resolveAuthSpy: ReturnType<typeof spyOn>;
@@ -270,7 +292,7 @@ describe('gitPrePush', () => {
   });
 
   it('scans files from the pushed ref', async () => {
-    await gitPrePush([], makeCtx());
+    await gitPrePush({}, [], makeCtx());
 
     expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
     const [, files] = runSecretsBinarySpy.mock.calls[0] as [string, string[], unknown];
@@ -282,7 +304,7 @@ describe('gitPrePush', () => {
 
     let thrown: unknown;
     try {
-      await gitPrePush([], makeCtx());
+      await gitPrePush({}, [], makeCtx());
     } catch (e) {
       thrown = e;
     }
@@ -293,7 +315,7 @@ describe('gitPrePush', () => {
   it('prints finding detail (file, line, masked secret) when secrets are found', async () => {
     runSecretsBinarySpy.mockResolvedValue(SECRETS_RESULT_WITH_ISSUES);
 
-    await gitPrePush([], makeCtx()).catch(() => undefined);
+    await gitPrePush({}, [], makeCtx()).catch(() => undefined);
 
     const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
     expect(prints.some((m) => m.includes('src/config.ts:12'))).toBe(true);
@@ -302,7 +324,7 @@ describe('gitPrePush', () => {
   });
 
   it('resolves without throwing when no secrets found', async () => {
-    await gitPrePush([], makeCtx());
+    await gitPrePush({}, [], makeCtx());
 
     expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
     expect(fake.calls.filter((c) => c.method === 'print')).toHaveLength(0);
@@ -312,7 +334,7 @@ describe('gitPrePush', () => {
   it('skips scan when refs are empty', async () => {
     readGitPushRefsSpy.mockResolvedValue([]);
 
-    await gitPrePush([], makeCtx());
+    await gitPrePush({}, [], makeCtx());
 
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });
@@ -322,7 +344,7 @@ describe('gitPrePush', () => {
 
     let thrown: unknown;
     try {
-      await gitPrePush([], makeCtx());
+      await gitPrePush({}, [], makeCtx());
     } catch (e) {
       thrown = e;
     }
@@ -336,7 +358,7 @@ describe('gitPrePush', () => {
 
     let thrown: unknown;
     try {
-      await gitPrePush([], makeCtx());
+      await gitPrePush({}, [], makeCtx());
     } catch (e) {
       thrown = e;
     }
@@ -350,7 +372,7 @@ describe('gitPrePush', () => {
       { ...FAKE_REF, localSha: '0000000000000000000000000000000000000000' },
     ]);
 
-    await gitPrePush([], makeCtx());
+    await gitPrePush({}, [], makeCtx());
 
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });
@@ -358,7 +380,7 @@ describe('gitPrePush', () => {
   it('skips ref when no files are returned for it', async () => {
     spawnProcessSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
 
-    await gitPrePush([], makeCtx());
+    await gitPrePush({}, [], makeCtx());
 
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });
@@ -378,7 +400,7 @@ describe('gitPrePush', () => {
 
     let thrown: unknown;
     try {
-      await gitPrePush([], makeCtx());
+      await gitPrePush({}, [], makeCtx());
     } catch (e) {
       thrown = e;
     }
@@ -389,7 +411,7 @@ describe('gitPrePush', () => {
   it('resolves without throwing when scan fails with keychain auth (fail soft)', async () => {
     runSecretsBinarySpy.mockRejectedValue(new Error('binary crashed'));
 
-    await gitPrePush([], makeCtx());
+    await gitPrePush({}, [], makeCtx());
 
     expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
     expect(
@@ -402,7 +424,7 @@ describe('gitPrePush', () => {
     const secondRef = { ...FAKE_REF, localSha: 'def456' };
     readGitPushRefsSpy.mockResolvedValue([FAKE_REF, secondRef]);
 
-    await gitPrePush([], makeCtx());
+    await gitPrePush({}, [], makeCtx());
 
     expect(runSecretsBinarySpy).toHaveBeenCalledTimes(2);
     for (const call of runSecretsBinarySpy.mock.calls) {
@@ -411,58 +433,124 @@ describe('gitPrePush', () => {
     }
   });
 
-  it('proceeds normally when git mktree throws (falls back to null OID as empty tree)', async () => {
-    spawnProcessSpy.mockRejectedValueOnce(new Error('mktree failed'));
-    // subsequent calls use the beforeEach default — rev-list + diff-tree return files
+  it('does not fall back to a full scan when no commits are new to the remote', async () => {
+    spawnProcessSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
 
-    await gitPrePush([], makeCtx());
+    await gitPrePush({}, [], makeCtx());
 
-    expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
+    expect(runSecretsBinarySpy).not.toHaveBeenCalled();
+    // One git call only: any extra would mean a fallback crept back in.
+    expect(spawnProcessSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('scans diff between remoteSha and localSha for an existing-branch push', async () => {
+  it('scans the range between the remote tip and the pushed tip for an existing-branch push', async () => {
     readGitPushRefsSpy.mockResolvedValue([EXISTING_BRANCH_REF]);
-    // spawnProcess: mktree (call 1) then git diff (call 2) — both use beforeEach default
 
-    await gitPrePush([], makeCtx());
+    await gitPrePush({}, [], makeCtx());
 
     expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
     const [, files] = runSecretsBinarySpy.mock.calls[0] as [string, string[], unknown];
     expect(files).toEqual(['src/foo.ts', 'src/bar.ts']);
   });
 
-  it('skips scan when git diff throws during existing-branch push', async () => {
+  it('excludes the remote tip from the range when it exists locally', async () => {
+    readGitPushRefsSpy.mockResolvedValue([EXISTING_BRANCH_REF]);
+
+    await gitPrePush({}, [], makeCtx());
+
+    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(
+      logArgs(EXISTING_BRANCH_REF.localSha, EXISTING_BRANCH_REF.remoteSha, '--remotes'),
+    );
+  });
+
+  it('omits a remote tip absent from the local object database', async () => {
     readGitPushRefsSpy.mockResolvedValue([EXISTING_BRANCH_REF]);
     spawnProcessSpy
-      .mockResolvedValueOnce({ exitCode: 0, stdout: 'abc123tree', stderr: '' }) // mktree
-      .mockRejectedValueOnce(new Error('git diff failed')); // diff remoteSha..localSha
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: '' }) // cat-file: unknown commit
+      .mockResolvedValue({ exitCode: 0, stdout: 'src/foo.ts', stderr: '' });
 
-    await gitPrePush([], makeCtx());
+    await gitPrePush({}, [], makeCtx());
+
+    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(
+      logArgs(EXISTING_BRANCH_REF.localSha, '--remotes'),
+    );
+  });
+
+  it('does not probe the object database when the remote ref does not exist yet', async () => {
+    await gitPrePush({}, [], makeCtx());
+
+    expect(gitArgsFor(spawnProcessSpy, 'cat-file')).toBeUndefined();
+  });
+
+  it('skips scan when the file listing fails during an existing-branch push', async () => {
+    readGitPushRefsSpy.mockResolvedValue([EXISTING_BRANCH_REF]);
+    spawnProcessSpy
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'deadbeef', stderr: '' }) // cat-file
+      .mockRejectedValueOnce(new Error('git log failed'));
+
+    await gitPrePush({}, [], makeCtx());
 
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });
 
-  it('scans via empty-tree diff when rev-list finds no new commits', async () => {
-    spawnProcessSpy
-      .mockResolvedValueOnce({ exitCode: 0, stdout: 'abc123tree', stderr: '' }) // mktree
-      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }) // rev-list: no commits
-      .mockResolvedValue({ exitCode: 0, stdout: 'src/new.ts', stderr: '' }); // diff vs empty tree
+  it('skips a deletion ref whose null OID is SHA-256 width', async () => {
+    readGitPushRefsSpy.mockResolvedValue([{ ...FAKE_REF, localSha: '0'.repeat(64) }]);
 
-    await gitPrePush([], makeCtx());
-
-    expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
-    const [, files] = runSecretsBinarySpy.mock.calls[0] as [string, string[], unknown];
-    expect(files).toEqual(['src/new.ts']);
-  });
-
-  it('skips scan when empty-tree diff throws (no new commits path)', async () => {
-    spawnProcessSpy
-      .mockResolvedValueOnce({ exitCode: 0, stdout: 'abc123tree', stderr: '' }) // mktree
-      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }) // rev-list: no commits
-      .mockRejectedValue(new Error('git diff failed')); // empty-tree diff throws
-
-    await gitPrePush([], makeCtx());
+    await gitPrePush({}, [], makeCtx());
 
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
+  });
+
+  it('scopes the exclusion to the remote when it is one of the configured remotes', async () => {
+    spawnProcessSpy
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'origin\nupstream', stderr: '' }) // git remote
+      .mockResolvedValue({ exitCode: 0, stdout: 'src/foo.ts', stderr: '' });
+
+    await gitPrePush({ remoteName: 'origin' }, [], makeCtx());
+
+    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(
+      logArgs(FAKE_REF.localSha, '--remotes=origin'),
+    );
+  });
+
+  it('falls back to every remote when the push target is a URL rather than a remote name', async () => {
+    spawnProcessSpy
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'origin', stderr: '' }) // git remote
+      .mockResolvedValue({ exitCode: 0, stdout: 'src/foo.ts', stderr: '' });
+
+    await gitPrePush({ remoteName: 'https://host/repo.git' }, [], makeCtx());
+
+    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(logArgs(FAKE_REF.localSha, '--remotes'));
+  });
+
+  it('falls back to every remote when no remote name is forwarded', async () => {
+    await gitPrePush({}, [], makeCtx());
+
+    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(logArgs(FAKE_REF.localSha, '--remotes'));
+    // No remote name means no need to ask git which remotes exist.
+    expect(gitArgsFor(spawnProcessSpy, 'remote')).toBeUndefined();
+  });
+
+  it('ignores a blank remote name from a manually invoked hook', async () => {
+    await gitPrePush({ remoteName: '  ' }, [], makeCtx());
+
+    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(logArgs(FAKE_REF.localSha, '--remotes'));
+  });
+
+  it('reads the remote name from the environment when no flag is passed', async () => {
+    process.env[REMOTE_NAME_ENV] = 'origin';
+    spawnProcessSpy
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'origin', stderr: '' }) // git remote
+      .mockResolvedValue({ exitCode: 0, stdout: 'src/foo.ts', stderr: '' });
+
+    try {
+      await gitPrePush({}, [], makeCtx());
+    } finally {
+      delete process.env[REMOTE_NAME_ENV];
+    }
+
+    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(
+      logArgs(FAKE_REF.localSha, '--remotes=origin'),
+    );
   });
 });

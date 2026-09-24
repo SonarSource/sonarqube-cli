@@ -20,6 +20,7 @@
 
 import { platform } from 'node:os';
 
+import { REMOTE_NAME_ENV } from '@/commands/hook/git-pre-push.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type {
   InstallDecision,
@@ -134,4 +135,9 @@ function gitBothHooksExample(): PostInstallExample {
       'To skip a hook: git commit --no-verify  /  git push --no-verify',
     ],
   };
+}
+
+/** Forwards git's first pre-push arg; an env var so a CLI predating it ignores rather than rejects it. */
+export function resolveRemoteNameEnvPrefix(hook: GitHookType): string {
+  return hook === 'pre-push' ? `${REMOTE_NAME_ENV}="$1" ` : '';
 }
