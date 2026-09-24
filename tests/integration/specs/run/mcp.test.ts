@@ -286,8 +286,39 @@ describe('run mcp', () => {
     { timeout: 15000 },
   );
 
+  it.each([
+    ['an initialize request', ''],
+    ['an initialize request after malformed input', 'not-json\n'],
+  ])(
+    'returns a JSON-RPC authentication error after %s',
+    async (_description, prefix) => {
+      const server = await harness.newFakeServer().start();
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl(), 'cloud')
+        .withKeychainToken(server.baseUrl(), 'test-token');
+
+      const result = await harness.runWithStdin(
+        'run mcp',
+        `${prefix}${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize' })}\n`,
+      );
+
+      expect(result.exitCode).toBe(1);
+      expect(JSON.parse(result.stdout)).toEqual({
+        jsonrpc: '2.0',
+        id: 1,
+        error: {
+          code: -32000,
+          message: "Not authenticated. Run 'sonar auth login' to authenticate.",
+        },
+      });
+      expect(result.stderr).toBe('');
+    },
+    { timeout: 15000 },
+  );
+
   it(
-    'exits with code 1 when the saved connection is SonarQube Cloud but has no organization key',
+    'exits without a response when an unauthenticated session ends before initialize',
     async () => {
       const server = await harness.newFakeServer().start();
       harness
@@ -298,7 +329,28 @@ describe('run mcp', () => {
       const result = await harness.run('run mcp');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('Not authenticated');
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toBe('');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits after the unauthenticated initialize response while stdin remains open',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl(), 'cloud')
+        .withKeychainToken(server.baseUrl(), 'test-token');
+      const session = harness.runInteractive('run mcp');
+
+      session.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize' })}\n`);
+      await session.waitText("Not authenticated. Run 'sonar auth login' to authenticate.");
+
+      const result = await session.waitForExit();
+
+      expect(result.exitCode).toBe(1);
     },
     { timeout: 15000 },
   );
