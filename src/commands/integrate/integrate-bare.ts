@@ -102,7 +102,7 @@ function warnAboutConflictingAgents(detected: DetectedAgentId[], console: Consol
   for (const [first, second] of CONFLICTING_AGENT_PAIRS) {
     if (detected.includes(first) && detected.includes(second)) {
       console.warn(
-        `Both ${agentDisplayName(first)} and ${agentDisplayName(second)} were detected on this machine. Integrating with both may cause conflicts in hook execution.`,
+        `Both ${agentDisplayName(first)} and ${agentDisplayName(second)} were detected on this machine — integrating both can conflict at the hook level. Run 'sonar integrate' again anytime to add or remove one.`,
       );
     }
   }
