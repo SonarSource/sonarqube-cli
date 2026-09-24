@@ -199,9 +199,8 @@ function collectAgentMigrations(state: CliState, deps: PostUpdateDependencies): 
     const supersededByClaude = claudeGoesGlobal && AGENTS_SUPERSEDED_BY_CLAUDE.has(declaration.id);
     if (supersededByClaude) {
       deps.console.warn(
-        `Skipped the global ${declaration.displayName} integration: you have the Claude Code ` +
-          `integration installed, and ${declaration.displayName} picks up its global hooks, so the ` +
-          `two would conflict.`,
+        `Skipped the global ${declaration.displayName} integration — it would conflict with Claude Code, ` +
+          `already installed globally. Run 'sonar integrate' to add or remove either one.`,
       );
     }
     agentMigrations.push({
