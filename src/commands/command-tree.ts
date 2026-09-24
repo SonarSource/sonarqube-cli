@@ -829,21 +829,17 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   hookCommand
     .command('cursor-prompt-submit')
-    .description('beforeSubmitPrompt handler for Cursor: scan prompts for secrets before sending')
+    .description('Cursor beforeSubmitPrompt handler: scan prompts for secrets before sending')
     .anonymousAction(handleHookInvocation(cursorPromptSubmit));
 
   hookCommand
     .command('cursor-pre-file-read')
-    .description(
-      'beforeReadFile handler for Cursor: scan files for secrets before agent reads them',
-    )
+    .description('Cursor beforeReadFile handler: scan files for secrets before agent reads them')
     .anonymousAction(handleHookInvocation(cursorPreFileRead));
 
   hookCommand
     .command('cursor-pre-tool-use')
-    .description(
-      'preToolUse handler for Cursor: scan Read tool targets for secrets before execution',
-    )
+    .description('Cursor preToolUse handler: scan Read tool targets for secrets before execution')
     .anonymousAction(handleHookInvocation(cursorPreToolUse));
 
   hookCommand
@@ -883,7 +879,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   hookCommand
     .command('git-pre-commit')
     .description(
-      'git pre-commit handler: scan staged files for secrets, optionally scan dependency manifests for risks',
+      'Git pre-commit handler: scan staged files for secrets, optionally scan dependency manifests for risks',
     )
     .option(
       '-p, --project <project>',
@@ -900,7 +896,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   hookCommand
     .command('git-pre-push')
-    .description('git pre-push handler: scan files in new commits for secrets')
+    .description('Git pre-push handler: scan files in new commits for secrets')
     .option(
       '--remote-name <name>',
       "Remote being pushed to (git's first hook argument); scopes which commits count as already pushed",
