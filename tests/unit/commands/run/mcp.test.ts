@@ -25,12 +25,12 @@ import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import * as os from 'node:os';
 import { join } from 'node:path';
+import * as readline from 'node:readline';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { runMcp } from '@/commands/run/mcp.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '@/core/config-constants.ts';
 import type { ProxyGroup, ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
@@ -107,6 +107,7 @@ describe('runMcp', () => {
   let spawnSpy: ReturnType<typeof spyOn>;
   let homeDirSpy: ReturnType<typeof spyOn>;
   let cwdSpy: ReturnType<typeof spyOn>;
+  let createInterfaceSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
@@ -123,16 +124,18 @@ describe('runMcp', () => {
     spawnSpy?.mockRestore();
     homeDirSpy?.mockRestore();
     cwdSpy?.mockRestore();
+    createInterfaceSpy?.mockRestore();
   });
 
-  it('throws CommandFailedError when no container runtime is available', async () => {
+  it('returns after no container runtime is available', async () => {
     detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
       runtime: null,
       viaWsl: false,
     });
 
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-    await expect(runMcp(FAKE_CTX, {}, NO_NETWORK)).rejects.toBeInstanceOf(CommandFailedError);
+    const result = await runMcp(FAKE_CTX, {}, NO_NETWORK);
+
+    expect(result).toBeUndefined();
   });
 
   it.each(['docker', 'podman', 'nerdctl'] as const)(
@@ -233,19 +236,26 @@ describe('runMcp', () => {
     expect(discoverProjectSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects a multiline project key before launching the container', async () => {
+  it('returns an MCP error for a multiline project key before launching the container', async () => {
     detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
       runtime: 'docker',
       viaWsl: false,
     });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
+    createInterfaceSpy = spyOn(readline, 'createInterface').mockReturnValue({
+      close: () => undefined,
+      async *[Symbol.asyncIterator]() {},
+    } as never);
 
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-    await expect(runMcp(FAKE_CTX, { project: 'first\nsecond' }, NO_NETWORK)).rejects.toThrow(
-      'The project key must be a single line.',
-    );
+    const initialExitCode = process.exitCode;
+    try {
+      await runMcp(FAKE_CTX, { project: 'first\nsecond' }, NO_NETWORK);
 
-    expect(spawnSpy).not.toHaveBeenCalled();
+      expect(process.exitCode).toBe(1);
+      expect(spawnSpy).not.toHaveBeenCalled();
+    } finally {
+      process.exitCode = initialExitCode;
+    }
   });
 
   it('adds fs mount when --project is set and discovered root is a git repo', async () => {
