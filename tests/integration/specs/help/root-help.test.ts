@@ -61,7 +61,7 @@ function getExpectedRootHelp(): string {
     '    integrate <git|claude|copilot|codex|antigravity|cursor>  Setup SonarQube integration for AI coding agents, git and others.',
     '',
     '    auth <login|logout|status>                               Manage authentication tokens and credentials',
-    '    config <telemetry>                                       Configure CLI settings',
+    '    config <telemetry|stats>                                 Configure CLI settings',
     '    system <status|reset>                                    System diagnostics and maintenance commands for the SonarQube CLI installation.',
     '    update                                                   Update SonarQube CLI to the latest version',
     '',

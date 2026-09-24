@@ -507,6 +507,11 @@ export interface TelemetryState {
   events?: StoredTelemetryEvent[];
 }
 
+export interface StatsState {
+  /** Whether local stats collection is enabled */
+  enabled: boolean;
+}
+
 /**
  * Complete state structure for ~/.sonar/sonarqube-cli/state.json
  */
@@ -527,6 +532,8 @@ export interface CliState {
   dependencies: DependenciesState;
   /** Telemetry configuration and pending event batch */
   telemetry: TelemetryState;
+  /** Local stats collection consent, absent until explicitly toggled */
+  stats?: StatsState;
   /** Registry of all agent extensions (hooks, skills) installed per project */
   agentExtensions: AgentExtension[];
   /** Registry of all declarative integrations installed per project */

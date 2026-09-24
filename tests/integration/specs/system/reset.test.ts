@@ -202,7 +202,7 @@ describe('system reset --force', () => {
   });
 
   it(
-    'succeeds on an empty environment and prints all four status lines',
+    'succeeds on an empty environment and prints reset status lines',
     async () => {
       const result = await harness.run('system reset --force');
 
@@ -460,6 +460,34 @@ describe('system reset --force', () => {
       expect(result.stdout).toMatch(/Filesystem:.*Cleared CLI cache and logs/);
       expect(existsSync(tmpDir)).toBe(false);
       expect(CLI_TMP_DIR).toContain('cli-tmp');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'clears the local stats database',
+    async () => {
+      const statsDir = join(harness.cliHome.path, 'db', 'stats');
+      mkdirSync(statsDir, { recursive: true });
+      writeFileSync(join(statsDir, 'stats.db'), 'fake sqlite content', 'utf-8');
+      writeFileSync(join(statsDir, 'stats.db-wal'), 'fake wal content', 'utf-8');
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Stats:.*Cleared local stats database/);
+      expect(existsSync(statsDir)).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports nothing to clear when no local stats database exists',
+    async () => {
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Stats:.*Nothing to clear/);
     },
     { timeout: 15000 },
   );

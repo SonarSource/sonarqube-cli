@@ -187,8 +187,9 @@ export async function scanAndEmitSecrets(
       auth,
     );
     ctx.recordTelemetry(fact);
-    const { findingsCount, ruleCounts } = summarizeNewSecretsFindings(parsed.issues, source);
-    ctx.recordStats(buildStatsFromTelemetry(fact, { findingsCount, ruleCounts }));
+    ctx.recordStats(() =>
+      buildStatsFromTelemetry(fact, summarizeNewSecretsFindings(parsed.issues, source)),
+    );
     return { result, parsed };
   } catch (err) {
     const { fact } = buildSecretsAnalysisTelemetryFact(
@@ -198,7 +199,7 @@ export async function scanAndEmitSecrets(
       auth,
     );
     ctx.recordTelemetry(fact);
-    ctx.recordStats(buildStatsFromTelemetry(fact, { findingsCount: 0 }));
+    ctx.recordStats(() => buildStatsFromTelemetry(fact, { findingsCount: 0 }));
     throw err;
   }
 }

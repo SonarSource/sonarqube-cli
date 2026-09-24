@@ -30,6 +30,7 @@ import { purgeAuth } from './reset-auth.ts';
 import { removeBinaries } from './reset-binaries.ts';
 import { clearFilesystem } from './reset-filesystem.ts';
 import { removeAllIntegrations } from './reset-integrations.ts';
+import { clearStats } from './reset-stats.ts';
 
 export interface SystemResetOptions {
   force?: boolean;
@@ -65,7 +66,7 @@ function mergeCleanedFields(fields: CleanedFields[]): CleanedFields {
 
 /**
  * Reset the CLI to factory defaults: remove tokens, binaries, integrations,
- * and cached files. Telemetry settings are preserved.
+ * cached files, and the local stats database. Telemetry settings are preserved.
  */
 export async function systemReset(
   options: SystemResetOptions,
@@ -107,6 +108,9 @@ export async function systemReset(
 
     const filesystemResult = clearFilesystem();
     results.push({ item: filesystemResult.item, cleaned: emptyCleanedFields() });
+
+    const statsResult = clearStats();
+    results.push({ item: statsResult.item, cleaned: emptyCleanedFields() });
   } finally {
     if (results.length > 0) {
       console.phase(

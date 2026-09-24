@@ -20,6 +20,7 @@
 
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { queryStatsSummary } from '@/core/stats/stats-queries.ts';
+import { isDoNotTrackRequested } from '@/core/telemetry/enabled.ts';
 
 import { resolveStatsEntitlement } from './entitlement.ts';
 import { renderTextSummary } from './text-report.ts';
@@ -32,15 +33,24 @@ export interface StatsOptions {
   json?: boolean;
 }
 
+const DO_NOT_TRACK_DISCLAIMER =
+  'DO_NOT_TRACK is set — sonar stats is unaffected: this data never leaves your machine.';
+
 export async function stats(options: StatsOptions, ctx: CommandInvocationContext): Promise<void> {
   const since = options.since ?? '30d';
   const summary = queryStatsSummary(since);
 
   if (options.json) {
+    if (isDoNotTrackRequested()) {
+      ctx.console.info(DO_NOT_TRACK_DISCLAIMER, 'stderr');
+    }
     const entitlement = summary.allTime.totalRuns > 0 ? await resolveStatsEntitlement(ctx) : null;
     ctx.console.print(JSON.stringify({ ...summary, entitlement }, null, 2));
     return;
   }
 
+  if (isDoNotTrackRequested()) {
+    ctx.console.info(DO_NOT_TRACK_DISCLAIMER);
+  }
   await renderTextSummary(summary, since, ctx);
 }
