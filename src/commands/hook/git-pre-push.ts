@@ -105,7 +105,9 @@ async function scanCommits(
       );
     }
     const outcome = await scanBatch(encodeBatch(contents), auth, ctx);
-    if (!outcome?.secretsFound) continue;
+    // A failed scan has already warned and let the push through; retrying it per commit only repeats the wait.
+    if (outcome === null) break;
+    if (!outcome.secretsFound) continue;
     ctx.console.print(`  commit ${commit}`);
     printSecretsFindingsOrStderr(outcome.issues, outcome.stderr, ctx.console);
     offending.push(commit);
