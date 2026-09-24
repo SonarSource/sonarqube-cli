@@ -15,7 +15,7 @@ The state file persists configuration across CLI invocations and stores:
 
 ## Location
 
-```json
+```text
 ~/.sonar/sonarqube-cli/state.json
 ```
 
