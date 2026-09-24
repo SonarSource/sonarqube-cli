@@ -25,6 +25,7 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { tryRunGit, tryRunGitLines } from '@/core/host/git/exec.ts';
+import { decodeGitPath } from '@/core/host/git/quoted-path.ts';
 
 import type { GitBlobRef } from './git-blob-batch.ts';
 import { encodeBatch, isEncodablePath, readBlobContents } from './git-blob-batch.ts';
@@ -102,7 +103,7 @@ async function scanCommits(
       );
     }
     const outcome = await scanBatch(encodeBatch(contents), auth, ctx);
-    // A failed scan has already warned and let the push through; retrying it per commit only repeats the wait.
+    // The failure is already warned and the push already allowed; retrying it per commit only repeats the wait.
     if (outcome === null) break;
     if (!outcome.secretsFound) continue;
     ctx.console.print(`  commit ${commit}`);
@@ -135,11 +136,8 @@ async function resolveRemotesExclusion(remoteName: string | undefined): Promise<
 }
 
 /**
- * Groups the blobs the push would transfer by the commit that introduced them, oldest first. One walk covers every
- * pushed ref, so a commit two refs share is scanned once and content the remote already holds on any of its refs
- * narrows the range. `-c` also catches content a merge introduced itself, and because `--raw` names one blob per
- * change, a secret added and later removed inside the pushed range is still scanned, attributed to the commit that
- * added it.
+ * Groups the blobs the push would transfer by the commit that introduced them, oldest first. One walk over every
+ * pushed ref, so a commit two refs share is scanned once. `-c` also catches content a merge introduced itself.
  */
 async function getPushedCommitBlobs(
   refs: PushRef[],
@@ -198,9 +196,8 @@ function dedupeAcrossCommits(groups: CommitBlobs[]): CommitBlobs[] {
 }
 
 /**
- * Parses one `git log --raw` change line: one source mode per parent then the destination mode, the matching object
- * names, a status, then a tab and the path, with a leading `::` rather than `:` for the combined diff of a merge. The
- * path is the last tab-separated field, which is what makes a rename report its new name.
+ * Parses one `git log --raw` change line: a source mode per parent then the destination mode, the matching object
+ * names, a status, then tab-separated paths — the last of which is a rename's new name. Merges lead with `::`.
  */
 function parseRawBlobLine(line: string): GitBlobRef | null {
   if (!line.startsWith(':')) return null;
@@ -208,12 +205,12 @@ function parseRawBlobLine(line: string): GitBlobRef | null {
   if (fields.length < 2) return null;
   const parentCount = /^:+/.exec(line)?.[0].length ?? 1;
   const meta = fields[0].slice(parentCount).split(' ');
-  // A gitlink's object name is a commit in the submodule's own repository, which `git cat-file` cannot read from here.
+  // A gitlink names a commit in the submodule's repository, not a blob here.
   if (meta[parentCount] === GITLINK_MODE) return null;
   const oid = meta.at(DESTINATION_OID_OFFSET);
   if (!oid || NULL_OID_PATTERN.test(oid)) return null;
   const path = fields.at(-1);
-  return path ? { oid, path } : null;
+  return path ? { oid, path: decodeGitPath(path) } : null;
 }
 
 async function knownRemoteTips(refs: PushRef[]): Promise<string[]> {
