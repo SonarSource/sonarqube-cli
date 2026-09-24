@@ -27,6 +27,7 @@ import { parse as parseToml } from 'smol-toml';
 import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
+import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { getBanner } from '@/core/commands/root-help.ts';
 import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '@/core/config-constants.ts';
@@ -102,8 +103,26 @@ const BINARY_DISPLAY_NAMES: Record<string, string> = {
   'sca-scanner-cli': 'Dependency Risks Scanner',
 };
 
+export const VALID_FORMATS = ['text', 'json'];
+type SystemStatusFormat = 'text' | 'json';
+
 export interface SystemStatusOptions {
+  format?: string;
+  /** Deprecated CLI flag, kept working as an alias for `format: 'json'`. */
   json?: boolean;
+}
+
+/** `--json` is deprecated but still honored when `--format` is not given. */
+function resolveSystemStatusFormat(options: SystemStatusOptions): SystemStatusFormat {
+  // `--format` carries a Commander-level default of 'text', so it is always set even
+  // when only the deprecated `--json` flag was passed — `--json` must be checked first
+  const format = (options.json ? 'json' : (options.format ?? 'text')).toLowerCase();
+  if (!VALID_FORMATS.includes(format)) {
+    throw new InvalidOptionError(
+      `Invalid format: '${format}'. Must be one of: ${VALID_FORMATS.join(', ')}`,
+    );
+  }
+  return format as SystemStatusFormat;
 }
 
 type IntegrationConfigStatus = 'configured' | 'invalid' | 'not_configured';
@@ -402,6 +421,7 @@ export async function systemStatus(
   ctx: CommandInvocationContext,
 ): Promise<void> {
   const { console } = ctx;
+  const format = resolveSystemStatusFormat(options);
   const state = loadState();
   const integrations = getInstalledIntegrations(state);
   const vortexInstalled = state.integrations.installed.some((integration) =>
@@ -479,7 +499,7 @@ export async function systemStatus(
     recommendations,
   };
 
-  if (options.json) {
+  if (format === 'json') {
     printJsonStatus(VERSION, data, console);
     return;
   }

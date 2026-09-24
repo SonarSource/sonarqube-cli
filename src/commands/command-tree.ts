@@ -140,7 +140,11 @@ import {
 import { remediate, type RemediateOptions } from './remediate';
 import { runMcp } from './run/mcp.ts';
 import { systemReset, type SystemResetOptions } from './system/reset.ts';
-import { systemStatus, type SystemStatusOptions } from './system/status.ts';
+import {
+  systemStatus,
+  type SystemStatusOptions,
+  VALID_FORMATS as SYSTEM_STATUS_VALID_FORMATS,
+} from './system/status.ts';
 import { updateVersion, type UpdateVersionOptions } from './update';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
@@ -152,6 +156,19 @@ const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
 const isTableFormatOption: UpdateNotificationCondition = (opts) => {
   const format = typeof opts.format === 'string' ? opts.format : 'json';
   return format.toLowerCase() === 'table';
+};
+
+/**
+ * `system status` condition: suppress the notice for `--format json`, and for the
+ * deprecated `--json` boolean when `--format` was not also given.
+ */
+const isSystemStatusTextFormat: UpdateNotificationCondition = (opts) => {
+  // `--format` carries a Commander-level default of 'text', so it is always set even
+  // when only the deprecated `--json` flag was passed — `--json` must be checked first
+  if (opts.json) {
+    return false;
+  }
+  return typeof opts.format !== 'string' || opts.format.toLowerCase() !== 'json';
 };
 
 const projectKeyExtraHelp = `
@@ -685,8 +702,17 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   system
     .command('status')
     .description('Show overall system status: authentication, installed binaries, and integrations')
-    .showUpdateNotification((opts) => !opts.json)
-    .option('--json', 'Output as JSON for machine consumption')
+    .showUpdateNotification(isSystemStatusTextFormat)
+    .addOption(
+      new SonarOption('--format <format>', 'Output format')
+        .choices(SYSTEM_STATUS_VALID_FORMATS)
+        .default('text'),
+    )
+    .addOption(
+      new SonarOption('--json', 'Output as JSON for machine consumption').stage(
+        Stage.Deprecated({ sinceVersion: '1.9', replacement: '--format json' }),
+      ),
+    )
     .anonymousAction((ctx, options: SystemStatusOptions) => systemStatus(options, ctx));
 
   system

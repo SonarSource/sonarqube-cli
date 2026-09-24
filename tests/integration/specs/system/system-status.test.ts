@@ -25,16 +25,16 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { CLAUDE_VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
+import {
+  formatAntigravityHookCommand,
+  hookScriptName,
+} from '@/commands/integrate/antigravity/hooks.ts';
+import { claudeIntegration } from '@/commands/integrate/claude/declaration.ts';
 import { ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR_FROM_AGENTS } from '@/core/config-constants.ts';
 import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
 
 import { version as CLI_VERSION } from '../../../../package.json';
-import { CLAUDE_VORTEX_FEATURE_ID } from '../../../../src/commands/integrate/_common/vortex';
-import {
-  formatAntigravityHookCommand,
-  hookScriptName,
-} from '../../../../src/commands/integrate/antigravity/hooks';
-import { claudeIntegration } from '../../../../src/commands/integrate/claude/declaration';
 import { IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
 
 function baseState(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -328,6 +328,60 @@ describe('system status', () => {
       expect(json.auth.status).toBe('unauthenticated');
       expect(json.binaries).toEqual([]);
       expect(json.integrations).toEqual([]);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'outputs the same JSON with --format json as with the deprecated --json flag',
+    async () => {
+      const jsonFlagResult = await harness.run('system status --json');
+      const formatFlagResult = await harness.run('system status --format json');
+
+      expect(formatFlagResult.exitCode).toBe(jsonFlagResult.exitCode);
+      expect(JSON.parse(formatFlagResult.stdout)).toEqual(JSON.parse(jsonFlagResult.stdout));
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'warns that --json is deprecated in favor of --format json, on stderr only',
+    async () => {
+      const result = await harness.run('system status --json');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain(
+        "'--json' is deprecated since 1.9 and will be removed in a future version.",
+      );
+      expect(result.stderr).toContain("Use '--format json' instead.");
+      // The deprecation notice must never land on stdout — it would corrupt the JSON.
+      expect(() => {
+        JSON.parse(result.stdout);
+      }).not.toThrow();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'does not warn when using --format json instead of the deprecated --json flag',
+    async () => {
+      const result = await harness.run('system status --format json');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).not.toContain('deprecated');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 1 for an invalid --format value',
+    async () => {
+      const result = await harness.run('system status --format xml');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        "option '--format <format>' argument 'xml' is invalid",
+      );
     },
     { timeout: 15000 },
   );
