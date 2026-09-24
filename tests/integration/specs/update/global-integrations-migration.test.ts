@@ -101,12 +101,16 @@ describe('global-integrations migration', () => {
       const result = await runAsUpgrade();
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('Migrating agent integrations to global scope...');
+      expect(result.stdout).toContain(
+        'Removing your project-level agent integrations and reinstalling them globally...',
+      );
       expect(result.stdout).toContain('Migrating the Claude Code integration to global scope...');
       expect(result.stdout).toContain('Migrated the Claude Code integration to global scope.');
       expect(result.stdout).toContain('Migrating the Codex integration to global scope...');
       expect(result.stdout).toContain('Migrated the Codex integration to global scope.');
-      expect(result.stdout).toContain('Finished migrating agent integrations to global scope.');
+      expect(result.stdout).toContain(
+        "Done — your integrations are now global. Run 'sonar integrate' anytime to add or remove one.",
+      );
       expect(recordedScopes('claude-code')).not.toContain('project');
       expect(recordedScopes('claude-code')).toContain('global');
       expect(recordedScopes('codex')).not.toContain('project');
@@ -170,7 +174,7 @@ describe('global-integrations migration', () => {
       const result = await runAsUpgrade();
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).not.toContain('Migrating agent integrations to global scope');
+      expect(result.stdout).not.toContain('Removing your project-level agent integrations');
       expect(recordedScopes('claude-code')).toEqual(['global']);
       expect(recordedFeatures('claude-code')).toHaveLength(1);
     },
@@ -326,7 +330,7 @@ describe('global-integrations migration', () => {
       const result = await runAsUpgrade();
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).not.toContain('Migrating agent integrations to global scope');
+      expect(result.stdout).not.toContain('Removing your project-level agent integrations');
       expect(result.stderr).toContain('you are not logged in');
       expect(result.stderr).toContain("Run 'sonar auth login', then 'sonar update'");
       expect(recordedScopes('claude-code')).toEqual(['project']);
@@ -365,7 +369,7 @@ describe('global-integrations migration', () => {
       const result = await harness.run('update --status');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).not.toContain('Migrating agent integrations to global scope');
+      expect(result.stdout).not.toContain('Removing your project-level agent integrations');
       expect(recordedScopes('claude-code')).toEqual(['project']);
     },
     { timeout: TEST_TIMEOUT },

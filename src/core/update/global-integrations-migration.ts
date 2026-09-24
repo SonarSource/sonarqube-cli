@@ -89,7 +89,9 @@ export async function migrateAgentIntegrationsToGlobalScope(
   }
 
   const quietConsole = new QuietConsole(deps.console);
-  deps.console.info('Migrating agent integrations to global scope...');
+  deps.console.info(
+    'Removing your project-level agent integrations and reinstalling them globally...',
+  );
   let anyFailed = false;
 
   for (const agentMigration of agentMigrations) {
@@ -103,7 +105,9 @@ export async function migrateAgentIntegrationsToGlobalScope(
     deps.console.warn(`Some integrations were left at project scope. Run 'sonar update' to retry.`);
     return;
   }
-  deps.console.info('Finished migrating agent integrations to global scope.');
+  deps.console.info(
+    "Done — your integrations are now global. Run 'sonar integrate' anytime to add or remove one.",
+  );
 }
 
 /** Swallows throws: a failed migration must never abort the command that triggered it. */
