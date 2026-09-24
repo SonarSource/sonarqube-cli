@@ -247,9 +247,15 @@ describe('runMcp', () => {
       async *[Symbol.asyncIterator]() {},
     } as never);
 
-    await runMcp(FAKE_CTX, { project: 'first\nsecond' }, NO_NETWORK);
+    const initialExitCode = process.exitCode;
+    try {
+      await runMcp(FAKE_CTX, { project: 'first\nsecond' }, NO_NETWORK);
 
-    expect(spawnSpy).not.toHaveBeenCalled();
+      expect(process.exitCode).toBe(1);
+      expect(spawnSpy).not.toHaveBeenCalled();
+    } finally {
+      process.exitCode = initialExitCode;
+    }
   });
 
   it('adds fs mount when --project is set and discovered root is a git repo', async () => {
