@@ -835,16 +835,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   hookCommand
     .command('cursor-pre-file-read')
-    .description(
-      'beforeReadFile handler for Cursor: scan files for secrets before agent reads them',
-    )
+    .description('Cursor beforeReadFile handler: scan files for secrets before agent reads them')
     .anonymousAction(handleHookInvocation(cursorPreFileRead));
 
   hookCommand
     .command('cursor-pre-tool-use')
-    .description(
-      'preToolUse handler for Cursor: scan Read tool targets for secrets before execution',
-    )
+    .description('Cursor preToolUse handler: scan Read tool targets for secrets before execution')
     .anonymousAction(handleHookInvocation(cursorPreToolUse));
 
   hookCommand
@@ -884,7 +880,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   hookCommand
     .command('git-pre-commit')
     .description(
-      'git pre-commit handler: scan staged files for secrets, optionally scan dependency manifests for risks',
+      'Git pre-commit handler: scan staged files for secrets, optionally scan dependency manifests for risks',
     )
     .option(
       '-p, --project <project>',
