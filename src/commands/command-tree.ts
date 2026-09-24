@@ -81,7 +81,11 @@ import { collectSqaaFileOption } from './analyze/sqaa-file-arg.ts';
 import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './api/api.ts';
 import { authLogin, type AuthLoginOptions } from './auth/login.ts';
 import { authLogout } from './auth/logout.ts';
-import { authStatus } from './auth/status.ts';
+import {
+  authStatus,
+  type AuthStatusOptions,
+  VALID_FORMATS as AUTH_STATUS_VALID_FORMATS,
+} from './auth/status.ts';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
 import { agentPostToolUse } from './hook/agent-post-tool-use.ts';
@@ -256,7 +260,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   auth
     .command('status')
     .description('Show active authentication connection with token verification')
-    .anonymousAction((ctx) => authStatus(ctx));
+    .addOption(
+      new SonarOption('--format <format>', 'Output format')
+        .choices(AUTH_STATUS_VALID_FORMATS)
+        .default('text'),
+    )
+    .anonymousAction((ctx, options: AuthStatusOptions) => authStatus(options, ctx));
 
   // List Sonar resources
   const list = COMMAND_TREE.command('list')

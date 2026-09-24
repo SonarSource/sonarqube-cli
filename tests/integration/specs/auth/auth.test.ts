@@ -1881,4 +1881,117 @@ describe('auth status', () => {
     },
     { timeout: 15000 },
   );
+
+  it(
+    'exits with code 2 for an invalid --format value',
+    async () => {
+      const result = await harness.run('auth status --format xml');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        "option '--format <format>' argument 'xml' is invalid",
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'prints a JSON payload when connected and --format json is passed',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('status-token').start();
+
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl())
+        .withKeychainToken(server.baseUrl(), 'status-token');
+
+      const result = await harness.run('auth status --format json');
+
+      expect(result.exitCode).toBe(0);
+      // No spinner, no decorative output on either stream — just the JSON payload.
+      expect(result.stderr).toBe('');
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed).toEqual({
+        status: 'connected',
+        server: server.baseUrl(),
+        source: 'OS Keychain',
+      });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'prints a not_authenticated JSON payload and exits 1 when no connection exists, with no error text on stderr',
+    async () => {
+      const result = await harness.run('auth status --format json');
+
+      expect(result.exitCode).toBe(1);
+      expect(JSON.parse(result.stdout)).toEqual({ status: 'not_authenticated' });
+      // JSON mode never falls back to the framework's ❌/💡 error presentation — the
+      // JSON payload above is the only signal a caller should need.
+      expect(result.stderr).toBe('');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'prints a token_invalid JSON payload when the server rejects the token, with no error text on stderr',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('valid-token').start();
+
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl())
+        .withKeychainToken(server.baseUrl(), 'wrong-token');
+
+      const result = await harness.run('auth status --format json');
+
+      expect(result.exitCode).toBe(1);
+      expect(JSON.parse(result.stdout)).toEqual({
+        status: 'token_invalid',
+        server: server.baseUrl(),
+      });
+      expect(result.stderr).toBe('');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'prints an unreachable JSON payload when the server is not running, with no error text on stderr',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      const baseUrl = server.baseUrl();
+      await server.stop();
+
+      harness.state().withActiveConnection(baseUrl).withKeychainToken(baseUrl, 'any-token');
+
+      const result = await harness.run('auth status --format json');
+
+      expect(result.exitCode).toBe(1);
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.status).toBe('unreachable');
+      expect(parsed.server).toBe(baseUrl);
+      expect(typeof parsed.message).toBe('string');
+      expect(result.stderr).toBe('');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'prints a token_missing JSON payload when a connection exists but no keychain token, with no error text on stderr',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      harness.state().withActiveConnection(server.baseUrl());
+
+      const result = await harness.run('auth status --format json');
+
+      expect(result.exitCode).toBe(1);
+      expect(JSON.parse(result.stdout)).toEqual({
+        status: 'token_missing',
+        server: server.baseUrl(),
+      });
+      expect(result.stderr).toBe('');
+    },
+    { timeout: 15000 },
+  );
 });
