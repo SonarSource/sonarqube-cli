@@ -83,8 +83,8 @@ function gitArgsFor(spy: ReturnType<typeof spyOn>, subcommand: string): string[]
   return call?.[1] as string[] | undefined;
 }
 
-/** The `git log` invocation `getCommitBlobsForRef` builds, for assertion against the spy. */
-function logArgs(localSha: string, ...exclusions: string[]): string[] {
+/** The `git log` invocation `getPushedCommitBlobs` builds, for assertion against the spy. */
+function logArgs(localShas: string[], ...exclusions: string[]): string[] {
   return [
     'log',
     '--format=%H',
@@ -93,7 +93,7 @@ function logArgs(localSha: string, ...exclusions: string[]): string[] {
     '--diff-filter=ACMR',
     '-c',
     '--root',
-    localSha,
+    ...localShas,
     '--not',
     ...exclusions,
   ];
@@ -702,7 +702,57 @@ describe('gitPrePush', () => {
     await gitPrePush({}, [], makeCtx());
 
     expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(
-      logArgs(EXISTING_BRANCH_REF.localSha, EXISTING_BRANCH_REF.remoteSha, '--remotes'),
+      logArgs([EXISTING_BRANCH_REF.localSha], EXISTING_BRANCH_REF.remoteSha, '--remotes'),
+    );
+  });
+
+  it('excludes the remote tip of every pushed ref', async () => {
+    const OTHER_TIP = 'f'.repeat(40);
+    readGitPushRefsSpy.mockResolvedValue([
+      EXISTING_BRANCH_REF,
+      { ...EXISTING_BRANCH_REF, localSha: 'def456', remoteSha: OTHER_TIP },
+    ]);
+
+    await gitPrePush({}, [], makeCtx());
+
+    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(
+      logArgs(
+        [EXISTING_BRANCH_REF.localSha, 'def456'],
+        EXISTING_BRANCH_REF.remoteSha,
+        OTHER_TIP,
+        '--remotes',
+      ),
+    );
+  });
+
+  it('walks every pushed ref in a single pass', async () => {
+    readGitPushRefsSpy.mockResolvedValue([FAKE_REF, { ...FAKE_REF, localSha: 'def456' }]);
+
+    await gitPrePush({}, [], makeCtx());
+
+    const logCalls = (spawnProcessSpy.mock.calls as unknown as unknown[][]).filter(
+      (c) => c[0] === 'git' && (c[1] as string[])[0] === 'log',
+    );
+    expect(logCalls).toHaveLength(1);
+    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(
+      logArgs([FAKE_REF.localSha, 'def456'], '--remotes'),
+    );
+  });
+
+  it('names a commit carried by two pushed refs only once', async () => {
+    readGitPushRefsSpy.mockResolvedValue([FAKE_REF, { ...FAKE_REF, localSha: 'def456' }]);
+    runSecretsBinaryOnBatchSpy.mockResolvedValue(SECRETS_RESULT);
+
+    let thrown: unknown;
+    try {
+      await gitPrePush({}, [], makeCtx());
+    } catch (e) {
+      thrown = e;
+    }
+
+    expect(runSecretsBinaryOnBatchSpy).toHaveBeenCalledTimes(1);
+    expect((thrown as CommandFailedError).message).toBe(
+      `Secrets detected in ${COMMIT_A.slice(0, 8)}.`,
     );
   });
 
@@ -715,7 +765,7 @@ describe('gitPrePush', () => {
     await gitPrePush({}, [], makeCtx());
 
     expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(
-      logArgs(EXISTING_BRANCH_REF.localSha, '--remotes'),
+      logArgs([EXISTING_BRANCH_REF.localSha], '--remotes'),
     );
   });
 
@@ -744,7 +794,7 @@ describe('gitPrePush', () => {
     await gitPrePush({ remoteName: 'origin' }, [], makeCtx());
 
     expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(
-      logArgs(FAKE_REF.localSha, '--remotes=origin'),
+      logArgs([FAKE_REF.localSha], '--remotes=origin'),
     );
   });
 
@@ -755,13 +805,13 @@ describe('gitPrePush', () => {
 
     await gitPrePush({ remoteName: 'https://host/repo.git' }, [], makeCtx());
 
-    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(logArgs(FAKE_REF.localSha, '--remotes'));
+    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(logArgs([FAKE_REF.localSha], '--remotes'));
   });
 
   it('falls back to every remote when no remote name is forwarded', async () => {
     await gitPrePush({}, [], makeCtx());
 
-    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(logArgs(FAKE_REF.localSha, '--remotes'));
+    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(logArgs([FAKE_REF.localSha], '--remotes'));
     // No remote name means no need to ask git which remotes exist.
     expect(gitArgsFor(spawnProcessSpy, 'remote')).toBeUndefined();
   });
@@ -769,7 +819,7 @@ describe('gitPrePush', () => {
   it('ignores a blank remote name from a manually invoked hook', async () => {
     await gitPrePush({ remoteName: '  ' }, [], makeCtx());
 
-    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(logArgs(FAKE_REF.localSha, '--remotes'));
+    expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(logArgs([FAKE_REF.localSha], '--remotes'));
   });
 
   it('reads the remote name from the environment when no flag is passed', async () => {
@@ -785,7 +835,7 @@ describe('gitPrePush', () => {
     }
 
     expect(gitArgsFor(spawnProcessSpy, 'log')).toEqual(
-      logArgs(FAKE_REF.localSha, '--remotes=origin'),
+      logArgs([FAKE_REF.localSha], '--remotes=origin'),
     );
   });
 });

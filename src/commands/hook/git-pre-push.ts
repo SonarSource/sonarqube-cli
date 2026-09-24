@@ -80,10 +80,7 @@ export async function gitPrePush(
   if (refs.length === 0) return;
 
   const remotesExclusion = await resolveRemotesExclusion(options.remoteName);
-  const commits: CommitBlobs[] = [];
-  for (const ref of refs.filter((pushed) => !NULL_OID_PATTERN.test(pushed.localSha))) {
-    commits.push(...(await getCommitBlobsForRef(ref, remotesExclusion)));
-  }
+  const commits = await getPushedCommitBlobs(refs, remotesExclusion);
   if (commits.length === 0) return;
 
   await scanCommits(commits, await resolveAuth(ctx), ctx);
@@ -138,15 +135,21 @@ async function resolveRemotesExclusion(remoteName: string | undefined): Promise<
 }
 
 /**
- * Groups the blobs the push would transfer by the commit that introduced them, oldest first. `-c` also catches content
- * a merge introduced itself, and because `--raw` names one blob per change, a secret added and later removed inside
- * the pushed range is still scanned, attributed to the commit that added it.
+ * Groups the blobs the push would transfer by the commit that introduced them, oldest first. One walk covers every
+ * pushed ref, so a commit two refs share is scanned once and content the remote already holds on any of its refs
+ * narrows the range. `-c` also catches content a merge introduced itself, and because `--raw` names one blob per
+ * change, a secret added and later removed inside the pushed range is still scanned, attributed to the commit that
+ * added it.
  */
-async function getCommitBlobsForRef(
-  ref: PushRef,
+async function getPushedCommitBlobs(
+  refs: PushRef[],
   remotesExclusion: string,
 ): Promise<CommitBlobs[]> {
-  const knownRemoteTip = (await isKnownCommit(ref.remoteSha)) ? [ref.remoteSha] : [];
+  const localShas = [
+    ...new Set(refs.map((ref) => ref.localSha).filter((sha) => !NULL_OID_PATTERN.test(sha))),
+  ];
+  if (localShas.length === 0) return [];
+
   const args = [
     'log',
     '--format=%H',
@@ -155,9 +158,9 @@ async function getCommitBlobsForRef(
     '--diff-filter=ACMR',
     '-c',
     '--root',
-    ref.localSha,
+    ...localShas,
     '--not',
-    ...knownRemoteTip,
+    ...(await knownRemoteTips(refs)),
     remotesExclusion,
   ];
   const lines = (await tryRunGitLines(args, process.cwd())) ?? [];
@@ -211,6 +214,14 @@ function parseRawBlobLine(line: string): GitBlobRef | null {
   if (!oid || NULL_OID_PATTERN.test(oid)) return null;
   const path = fields.at(-1);
   return path ? { oid, path } : null;
+}
+
+async function knownRemoteTips(refs: PushRef[]): Promise<string[]> {
+  const tips: string[] = [];
+  for (const sha of new Set(refs.map((ref) => ref.remoteSha))) {
+    if (await isKnownCommit(sha)) tips.push(sha);
+  }
+  return tips;
 }
 
 /** A remote tip this clone never fetched cannot narrow the range. */
