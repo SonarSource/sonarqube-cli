@@ -525,22 +525,15 @@ describe('loadState: migration', () => {
     expect(state.integrations.installed[1].features).toEqual([]);
   });
 
-  it('backfills missing legacy agent state and Claude Code configuration', () => {
+  it('preserves missing legacy agent state', () => {
     const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
     delete raw['agents'];
     mkdirSync(testCliDir, { recursive: true });
     writeFileSync(testStateFile, JSON.stringify(raw), 'utf-8');
 
-    let state = loadState('0.1.0');
+    const state = loadState('0.1.0');
 
-    expect(state.agents['claude-code'].configured).toBe(false);
-
-    raw['agents'] = {};
-    writeFileSync(testStateFile, JSON.stringify(raw), 'utf-8');
-
-    state = loadState('0.1.0');
-
-    expect(state.agents['claude-code'].hooks.installed).toEqual([]);
+    expect(state.agents).toBeUndefined();
   });
 
   it('removes legacy keystoreKey field from connections', () => {
