@@ -26,6 +26,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { analyzeSqaa, buildSqaaJsonReport } from '@/commands/analyze/sqaa.ts';
 import { SqaaAnalysisClient } from '@/commands/analyze/sqaa-analysis-client.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
@@ -37,7 +38,6 @@ import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 
-import { analyzeSqaa, buildSqaaJsonReport } from '../../../../src/commands/analyze/sqaa.ts';
 import * as changesetModule from '../../../../src/commands/analyze/sqaa-changeset.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
@@ -394,6 +394,15 @@ describe('analyzeSqaa: depth option', () => {
     await analyzeSqaa({ file: ['src/index.ts'], depth: 'DEEP' }, FAKE_AUTHENTICATED_CONTEXT);
 
     expect(createAnalysisSpy.mock.calls[0][0].analysisDepth).toBe('DEEP');
+  });
+});
+
+describe('analyzeSqaa: format option', () => {
+  it('rejects an invalid --format value', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(
+      analyzeSqaa({ file: ['src/index.ts'], format: 'xml' as never }, FAKE_AUTHENTICATED_CONTEXT),
+    ).rejects.toThrow("Invalid format: 'xml'. Must be one of: text, json");
   });
 });
 

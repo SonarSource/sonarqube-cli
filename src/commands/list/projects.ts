@@ -22,13 +22,14 @@
 
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import { resolveFormatOption } from '@/core/commands/parsing.ts';
 import { errAsync, type ResultAsync } from '@/core/result.ts';
 import { MAX_PAGE_SIZE, ProjectsClient } from '@/core/server/projects.ts';
 import { columnFormatting } from '@/core/ui/formatter/column-formatting.ts';
 
 const MIN_KEY_WIDTH = 20;
 
-export const VALID_FORMATS = ['json', 'table'];
+export const VALID_FORMATS = ['json', 'table'] as const;
 
 export interface ListProjectsOptions {
   query?: string;
@@ -69,13 +70,11 @@ export function listProjects(
 ): ResultAsync<void, Error> {
   const { auth, console } = ctx;
 
-  const format = options.format ?? 'json';
-  if (!VALID_FORMATS.includes(format.toLowerCase())) {
-    return errAsync(
-      new InvalidOptionError(
-        `Invalid format: '${format}'. Must be one of: ${VALID_FORMATS.join(', ')}`,
-      ),
-    );
+  let format: (typeof VALID_FORMATS)[number];
+  try {
+    format = resolveFormatOption(options.format, VALID_FORMATS, 'json');
+  } catch (err) {
+    return errAsync(err as InvalidOptionError);
   }
 
   const pageSize = options.pageSize;
@@ -107,7 +106,7 @@ export function listProjects(
       const hasNextPage = result.paging.pageIndex * result.paging.pageSize < result.paging.total;
       const projects = result.components.map((c) => ({ key: c.key, name: c.name }));
 
-      if (format.toLowerCase() === 'table') {
+      if (format === 'table') {
         console.print(formatTable(projects));
         return;
       }

@@ -23,6 +23,7 @@ import type {
   CommandAuthenticatedInvocationContext,
   CommandInvocationContext,
 } from '@/core/commands/invocation-context.ts';
+import { resolveFormatOption } from '@/core/commands/parsing.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 
 import {
@@ -48,6 +49,7 @@ import type {
   OutputFormat,
   SqaaBatchRunOptions,
 } from './sqaa-types.ts';
+import { VALID_FORMATS } from './sqaa-types.ts';
 import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
 export { buildSqaaJsonReport } from './sqaa-json-report.ts';
@@ -73,10 +75,11 @@ export async function analyzeSqaa(
     branch,
     project,
     force,
-    format = 'text',
+    format: rawFormat,
     depth: rawDepth,
     forcedDepth,
   } = options;
+  const format = resolveFormatOption(rawFormat, VALID_FORMATS, 'text');
 
   if (staged && base !== undefined) {
     throw new InvalidOptionError('--staged and --base cannot be used together');

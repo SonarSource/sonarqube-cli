@@ -158,18 +158,12 @@ const isTableFormatOption: UpdateNotificationCondition = (opts) => {
   return format.toLowerCase() === 'table';
 };
 
-/**
- * `system status` condition: suppress the notice for `--format json`, and for the
- * deprecated `--json` boolean when `--format` was not also given.
- */
-const isSystemStatusTextFormat: UpdateNotificationCondition = (opts) => {
-  // `--format` carries a Commander-level default of 'text', so it is always set even
-  // when only the deprecated `--json` flag was passed — `--json` must be checked first
-  if (opts.json) {
-    return false;
-  }
-  return typeof opts.format !== 'string' || opts.format.toLowerCase() !== 'json';
-};
+/** Declares the `--format <format>` option shared by every data-returning command. */
+function formatOption(choices: readonly string[], defaultValue: string): SonarOption {
+  return new SonarOption('--format <format>', 'Output format')
+    .choices(choices)
+    .default(defaultValue);
+}
 
 const projectKeyExtraHelp = `
 Instead of providing an explicit --project, you can add sonar.projectKey to sonar-project.properties at the repository root.
@@ -277,11 +271,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   auth
     .command('status')
     .description('Show active authentication connection with token verification')
-    .addOption(
-      new SonarOption('--format <format>', 'Output format')
-        .choices(AUTH_STATUS_VALID_FORMATS)
-        .default('text'),
-    )
+    .addOption(formatOption(AUTH_STATUS_VALID_FORMATS, 'text'))
     .anonymousAction((ctx, options: AuthStatusOptions) => authStatus(options, ctx));
 
   // List Sonar resources
@@ -297,9 +287,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   const pageSizeOption = new SonarOption('--page-size <page-size>', 'Page size (1-500)')
     .default(DEFAULT_PAGE_SIZE)
     .argParser(parseInteger);
-  const listIssuesFormatOption = new SonarOption('--format <format>', 'Output format')
-    .choices(VALID_FORMATS)
-    .default('json');
+  const listIssuesFormatOption = formatOption(VALID_FORMATS, 'json');
   list
     .command('issues')
     .description('Search for issues in SonarQube')
@@ -325,9 +313,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .addOption(pageOption)
     .authenticatedAction((ctx, options: ListIssuesOptions) => listIssues(options, ctx));
 
-  const listProjectsFormatOption = new SonarOption('--format <format>', 'Output format')
-    .choices(PROJECTS_VALID_FORMATS)
-    .default('json');
+  const listProjectsFormatOption = formatOption(PROJECTS_VALID_FORMATS, 'json');
   list
     .command('projects')
     .description('Search for projects in SonarQube')
@@ -354,11 +340,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .showUpdateNotification(isTableFormatOption)
     .option('-p, --project <project>', 'Project key')
-    .addOption(
-      new SonarOption('--format <format>', 'Output format')
-        .choices(QUALITY_GATE_VALID_FORMATS)
-        .default('table'),
-    )
+    .addOption(formatOption(QUALITY_GATE_VALID_FORMATS, 'table'))
     .option('--branch <branch>', 'Branch name. Cannot be combined with --pull-request.')
     .option('--pull-request <pull-request>', 'Pull request ID. Cannot be combined with --branch.')
     .option('--all', 'Also show passing conditions. By default only failing conditions are shown.')
@@ -550,9 +532,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     );
 
   // Shared option set for `analyze agentic` and `verify`.
-  const sqaaFormatOption = new SonarOption('--format <format>', 'Output format')
-    .choices(SQAA_FORMATS)
-    .default('text');
+  const sqaaFormatOption = formatOption(SQAA_FORMATS, 'text');
 
   const sqaaDepthOption = new SonarOption(
     '--depth <depth>',
@@ -592,9 +572,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     analyzeAll(options, ctx),
   );
 
-  const dependencyRisksFormatOption = new SonarOption('--format <format>', 'Output format')
-    .choices(DEPENDENCY_RISKS_FORMATS)
-    .default('table');
+  const dependencyRisksFormatOption = formatOption(DEPENDENCY_RISKS_FORMATS, 'table');
 
   const dependencyRisksStatusFilterOption = new SonarOption(
     '--statuses <statuses>',
@@ -702,12 +680,13 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   system
     .command('status')
     .description('Show overall system status: authentication, installed binaries, and integrations')
-    .showUpdateNotification(isSystemStatusTextFormat)
-    .addOption(
-      new SonarOption('--format <format>', 'Output format')
-        .choices(SYSTEM_STATUS_VALID_FORMATS)
-        .default('text'),
+    // `--format` carries a Commander-level default of 'text', so it is always set even
+    // when only the deprecated `--json` flag was passed — `--json` flag should be checked first
+    .showUpdateNotification(
+      (opts) =>
+        !opts.json && (typeof opts.format !== 'string' || opts.format.toLowerCase() !== 'json'),
     )
+    .addOption(formatOption(SYSTEM_STATUS_VALID_FORMATS, 'text'))
     .addOption(
       new SonarOption('--json', 'Output as JSON for machine consumption').stage(
         Stage.Deprecated({ sinceVersion: '1.9', replacement: '--format json' }),
