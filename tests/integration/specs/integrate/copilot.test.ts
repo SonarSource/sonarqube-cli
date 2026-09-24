@@ -59,7 +59,8 @@ describe('integrate copilot', () => {
   // ─── Install (default: global) ──────────────────────────────────────────────
   //
   // `sonar integrate copilot` always installs globally under `~/.copilot/` —
-  // there is no project-scoped install mode and no `-p`/`-g` flags.
+  // there is no project-scoped install mode and no `-p` flag. `-g`/`--global`
+  // is accepted only as a deprecated no-op for backwards compatibility.
 
   describe('install (default: global)', () => {
     it(
@@ -583,5 +584,25 @@ describe('integrate copilot', () => {
       },
       { timeout: 15000 },
     );
+  });
+
+  describe('-g/--global (deprecated no-op)', () => {
+    it('documents --global as deprecated in --help', async () => {
+      const result = await harness.run('integrate copilot --help');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain('--project');
+      expect(result.stdout).toContain('--global');
+      expect(result.stdout).toContain('[DEPRECATED]');
+    });
+
+    it('warns that --global is deprecated but still completes the (already global) install', async () => {
+      const result = await harness.run('integrate copilot --non-interactive --global');
+
+      expect(result.stderr).toContain(
+        "'--global' is deprecated since 1.9.0 and will be removed in a future version. Use 'sonar integrate copilot' instead.",
+      );
+      expect(result.exitCode).toBe(0);
+    });
   });
 });

@@ -631,4 +631,24 @@ describe('integrate cursor', () => {
       { timeout: 30000 },
     );
   });
+
+  describe('-g/--global (deprecated no-op)', () => {
+    it('documents --global as deprecated in --help', async () => {
+      const result = await harness.run('integrate cursor --help');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain('--project');
+      expect(result.stdout).toContain('--global');
+      expect(result.stdout).toContain('[DEPRECATED]');
+    });
+
+    it('warns that --global is deprecated but still completes the (already global) install', async () => {
+      const result = await harness.run('integrate cursor --non-interactive --global');
+
+      expect(result.stderr).toContain(
+        "'--global' is deprecated since 1.9.0 and will be removed in a future version. Use 'sonar integrate cursor' instead.",
+      );
+      expect(result.exitCode).toBe(0);
+    });
+  });
 });

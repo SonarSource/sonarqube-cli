@@ -23,7 +23,8 @@
 // hook-agent-prompt-submit.test.ts; this spec only exercises the integrate
 // command — script + hooks.json layout and idempotency. `sonar integrate
 // codex` always installs globally under `~/.codex/` — there is no
-// project-scoped install mode and no `-p`/`-g` flags.
+// project-scoped install mode and no `-p` flag. `-g`/`--global` is accepted
+// only as a deprecated no-op for backwards compatibility.
 
 import { cpSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
@@ -700,5 +701,25 @@ describe('integrate codex', () => {
       },
       { timeout: 30000 },
     );
+  });
+
+  describe('-g/--global (deprecated no-op)', () => {
+    it('documents --global as deprecated in --help', async () => {
+      const result = await harness.run('integrate codex --help');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain('--project');
+      expect(result.stdout).toContain('--global');
+      expect(result.stdout).toContain('[DEPRECATED]');
+    });
+
+    it('warns that --global is deprecated but still completes the (already global) install', async () => {
+      const result = await harness.run('integrate codex --non-interactive --global');
+
+      expect(result.stderr).toContain(
+        "'--global' is deprecated since 1.9.0 and will be removed in a future version. Use 'sonar integrate codex' instead.",
+      );
+      expect(result.exitCode).toBe(0);
+    });
   });
 });

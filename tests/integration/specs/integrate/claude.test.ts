@@ -2135,3 +2135,37 @@ describe('integrate claude — keep/remove already-installed features', () => {
     { timeout: 30000 },
   );
 });
+
+describe('integrate claude — -g/--global (deprecated no-op)', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+    await harness.newFakeBinariesServer().start();
+    harness.state().withSecretsBinaryInstalled();
+    const server = await harness.newFakeServer().withAuthToken('tok').start();
+    harness.withAuth(server.baseUrl(), 'tok');
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it('documents --global as deprecated in --help', async () => {
+    const result = await harness.run('integrate claude --help');
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).not.toContain('--project');
+    expect(result.stdout).toContain('--global');
+    expect(result.stdout).toContain('[DEPRECATED]');
+  });
+
+  it('warns that --global is deprecated but still completes the (already global) install', async () => {
+    const result = await harness.run('integrate claude --non-interactive --global');
+
+    expect(result.stderr).toContain(
+      "'--global' is deprecated since 1.9.0 and will be removed in a future version. Use 'sonar integrate claude' instead.",
+    );
+    expect(result.exitCode).toBe(0);
+  });
+});

@@ -1129,3 +1129,62 @@ describe('integrate git --local (CLI-1118)', () => {
     { timeout: 15000 },
   );
 });
+
+describe('integrate git -g/--global (deprecated no-op)', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'documents --global as deprecated in --help',
+    async () => {
+      const result = await harness.run('integrate git --help');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('--global');
+      expect(result.stdout).toContain('[DEPRECATED]');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'warns that --global is deprecated but still completes the (already global) install',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+
+      const result = await harness.run(
+        'integrate git --global --hook pre-commit --non-interactive',
+      );
+
+      expect(result.stderr).toContain(
+        "'--global' is deprecated since 1.9.0 and will be removed in a future version. Use 'sonar integrate git' instead.",
+      );
+      expect(result.exitCode).toBe(0);
+      expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-commit')).toBe(true);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'rejects --global combined with --local as mutually exclusive',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+
+      const result = await harness.run(
+        'integrate git --global --local --hook pre-commit --non-interactive',
+      );
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout + result.stderr).toContain(
+        '--global and --local cannot be used together.',
+      );
+    },
+    { timeout: 15000 },
+  );
+});
