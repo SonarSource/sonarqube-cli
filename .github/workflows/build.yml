@@ -24,6 +24,9 @@ jobs:
   prepare:
     name: Prepare Build
     runs-on: sonar-xs
+    permissions:
+      id-token: write
+      contents: write
     outputs:
       BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
       PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
