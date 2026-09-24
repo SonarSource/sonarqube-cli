@@ -591,7 +591,7 @@ function validateLoginOptions(options: AuthLoginOptions): void {
 
   if (options.server !== undefined && !isValidServerUrl(options.server)) {
     throw new InvalidOptionError(
-      '--server value must be an absolute HTTP(S) URL with a host and no control characters.',
+      'Invalid server URL. It must be an absolute HTTP(S) URL with a host and no control characters.',
       'Use --server <url> (for example https://sonarcloud.io), or run sonar auth login without --server.',
     );
   }

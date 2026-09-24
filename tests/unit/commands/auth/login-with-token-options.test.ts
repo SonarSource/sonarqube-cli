@@ -77,7 +77,7 @@ describe('auth login --with-token option validation', () => {
     async (serverUrl) => {
       await expectLoginFailure(
         { server: serverUrl },
-        '--server value must be an absolute HTTP(S) URL with a host and no control characters.',
+        'Invalid server URL. It must be an absolute HTTP(S) URL with a host and no control characters.',
       );
     },
   );
