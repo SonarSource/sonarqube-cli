@@ -546,7 +546,7 @@ async function selectServerFromPrompt(console: Console): Promise<string> {
 
   const url = await console.promptUntilValid(
     'Enter server URL',
-    (v) => !!v.trim() && isValidUrl(v.trim()),
+    (v) => !!v.trim() && isValidServerUrl(v.trim()),
     'Please enter a valid URL (for example https://sonarqube.mycompany.com/sonarqube).',
   );
   if (url === null) {
