@@ -429,6 +429,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       '--local',
       'Install the hook for this repository only, instead of globally (workaround for setups where a global hook does not fit, e.g. Husky)',
     )
+    .addOption(
+      new SonarOption(
+        '-g, --global',
+        'Install the hook globally (already the default; no effect)',
+      ).stage(Stage.Deprecated({ sinceVersion: '1.9.0', replacement: 'sonar integrate git' })),
+    )
     .authenticatedAction((ctx, options: IntegrateGitOptions) => integrateGit(options, ctx));
 
   integrateCommand
@@ -437,6 +443,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.',
     )
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
+    .addOption(
+      new SonarOption(
+        '-g, --global',
+        'Install integrations globally (already the default; no effect)',
+      ).stage(Stage.Deprecated({ sinceVersion: '1.9.0', replacement: 'sonar integrate claude' })),
+    )
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateClaude(options, ctx));
 
   integrateCommand
@@ -445,6 +457,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'Setup SonarQube integration for GitHub Copilot CLI. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.',
     )
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
+    .addOption(
+      new SonarOption(
+        '-g, --global',
+        'Install integrations globally (already the default; no effect)',
+      ).stage(Stage.Deprecated({ sinceVersion: '1.9.0', replacement: 'sonar integrate copilot' })),
+    )
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCopilot(options, ctx));
 
   // `sonar context` — passthrough wrapper for sonar-context-augmentation.
@@ -477,6 +495,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'Setup SonarQube integration for Codex. This will install a UserPromptSubmit hook that scans prompts for secrets before they are sent.',
     )
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
+    .addOption(
+      new SonarOption(
+        '-g, --global',
+        'Install integrations globally (already the default; no effect)',
+      ).stage(Stage.Deprecated({ sinceVersion: '1.9.0', replacement: 'sonar integrate codex' })),
+    )
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCodex(options, ctx));
 
   integrateCommand
@@ -485,6 +509,14 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'Setup SonarQube integration for Antigravity. Installs secrets scanning hooks, prompt-secrets instructions, and Vortex Context.',
     )
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
+    .addOption(
+      new SonarOption(
+        '-g, --global',
+        'Install integrations globally (already the default; no effect)',
+      ).stage(
+        Stage.Deprecated({ sinceVersion: '1.9.0', replacement: 'sonar integrate antigravity' }),
+      ),
+    )
     .authenticatedAction((ctx, options: IntegrateAgentOptions) =>
       integrateAntigravity(options, ctx),
     );
@@ -495,6 +527,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       "Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure Vortex analysis. Note: Cursor's cloud/background agents only pick up project-level hooks, not global ones.",
     )
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
+    .addOption(
+      new SonarOption(
+        '-g, --global',
+        'Install integrations globally (already the default; no effect)',
+      ).stage(Stage.Deprecated({ sinceVersion: '1.9.0', replacement: 'sonar integrate cursor' })),
+    )
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCursor(options, ctx));
 
   // Analyze code for quality and security issues

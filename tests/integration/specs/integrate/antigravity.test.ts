@@ -261,7 +261,7 @@ describe('integrate antigravity', () => {
 
   describe('--help', () => {
     it(
-      'documents options consistent with other agent integrate commands, with no scope flags',
+      'documents options consistent with other agent integrate commands, with --global deprecated and --project gone',
       async () => {
         const result = await harness.run('integrate antigravity --help');
 
@@ -269,7 +269,23 @@ describe('integrate antigravity', () => {
         const help = result.stdout;
         expect(help).toContain('--non-interactive');
         expect(help).not.toContain('--project');
-        expect(help).not.toContain('--global');
+        expect(help).toContain('--global');
+        expect(help).toContain('[DEPRECATED]');
+      },
+      { timeout: 15000 },
+    );
+  });
+
+  describe('-g/--global (deprecated no-op)', () => {
+    it(
+      'warns that --global is deprecated but still completes the (already global) install',
+      async () => {
+        const result = await harness.run('integrate antigravity --non-interactive --global');
+
+        expect(result.stderr).toContain(
+          "'--global' is deprecated since 1.9.0 and will be removed in a future version. Use 'sonar integrate antigravity' instead.",
+        );
+        expect(result.exitCode).toBe(0);
       },
       { timeout: 15000 },
     );

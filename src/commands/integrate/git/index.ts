@@ -214,6 +214,9 @@ export async function integrateGit(
 ): Promise<void> {
   const { auth, console } = ctx;
   validateHookOption(options.hook);
+  if (options.global && options.local) {
+    throw new InvalidOptionError('--global and --local cannot be used together.');
+  }
 
   if (!options.nonInteractive) {
     printAgentNonInteractiveAlternativeHint(console, 'sonar integrate git --non-interactive');

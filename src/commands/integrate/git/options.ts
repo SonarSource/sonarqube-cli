@@ -26,6 +26,8 @@ export interface IntegrateGitOptions {
   nonInteractive?: boolean;
   /** Installs the project-scoped hook instead of the global one; a workaround, not a first-class alternative to the default global install. */
   local?: boolean;
+  /** Deprecated no-op — global is already the default. Only read to reject it alongside --local. */
+  global?: boolean;
   /** Project key baked into the dependency-risks hook for the project-scoped install path. */
   project?: string;
   /** Set by the bare `sonar integrate` router; forwarded to telemetry only. */
