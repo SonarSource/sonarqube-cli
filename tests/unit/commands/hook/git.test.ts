@@ -275,7 +275,7 @@ describe('gitPrePush', () => {
 
   interface FakeCommit {
     commit: string;
-    blobs: Array<{ oid: string; path: string }>;
+    blobs: Array<{ oid: string; path: string; mode?: string }>;
   }
 
   /** `git log --format=%H --raw --no-abbrev` output: a commit line, then one change line per blob. */
@@ -283,9 +283,18 @@ describe('gitPrePush', () => {
     return commits
       .flatMap(({ commit, blobs }) => [
         commit,
-        ...blobs.map((blob) => `:000000 100644 ${'0'.repeat(40)} ${blob.oid} A\t${blob.path}`),
+        ...blobs.map(
+          (blob) =>
+            `:000000 ${blob.mode ?? '100644'} ${'0'.repeat(40)} ${blob.oid} A\t${blob.path}`,
+        ),
       ])
       .join('\n');
+  }
+
+  /** One change line of a merge's combined diff: a mode and an object name per parent, then the destination's. */
+  function combinedRawLine(mode: string, oid: string, path: string): string {
+    const zero = '0'.repeat(40);
+    return `::${mode} ${mode} ${mode} ${zero} ${zero} ${oid} MM\t${path}`;
   }
 
   /** `git cat-file --batch` output for the given contents, in request order. */
@@ -481,6 +490,60 @@ describe('gitPrePush', () => {
 
     await gitPrePush({}, [], makeCtx());
 
+    expect(runSecretsBinaryOnBatchSpy).not.toHaveBeenCalled();
+  });
+
+  it('skips a submodule pointer and scans the rest of the commit', async () => {
+    spawnProcessSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: logOutput({
+        commit: COMMIT_A,
+        blobs: [
+          { oid: BLOB_A, path: 'sub', mode: '160000' },
+          { oid: BLOB_B, path: 'src/foo.ts' },
+        ],
+      }),
+      stderr: '',
+    });
+
+    await gitPrePush({}, [], makeCtx());
+
+    const [, , options] = catFileSpy.mock.calls[0] as [string, string[], { stdinData: string }];
+    expect(options.stdinData).toBe(`${BLOB_B}\n`);
+    expect(batchOf(0)).toBe('12 src/foo.ts\nconst a = 1;\n');
+  });
+
+  it('skips a submodule pointer in the combined diff of a merge', async () => {
+    spawnProcessSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: [
+        COMMIT_A,
+        combinedRawLine('160000', BLOB_A, 'sub'),
+        combinedRawLine('100644', BLOB_B, 'src/foo.ts'),
+      ].join('\n'),
+      stderr: '',
+    });
+
+    await gitPrePush({}, [], makeCtx());
+
+    const [, , options] = catFileSpy.mock.calls[0] as [string, string[], { stdinData: string }];
+    expect(options.stdinData).toBe(`${BLOB_B}\n`);
+    expect(batchOf(0)).toBe('12 src/foo.ts\nconst a = 1;\n');
+  });
+
+  it('lets a push through when its only change is a submodule pointer', async () => {
+    spawnProcessSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: logOutput({
+        commit: COMMIT_A,
+        blobs: [{ oid: BLOB_A, path: 'sub', mode: '160000' }],
+      }),
+      stderr: '',
+    });
+
+    await gitPrePush({}, [], makeCtx());
+
+    expect(catFileSpy).not.toHaveBeenCalled();
     expect(runSecretsBinaryOnBatchSpy).not.toHaveBeenCalled();
   });
 
