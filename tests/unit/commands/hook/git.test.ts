@@ -437,11 +437,21 @@ describe('gitPrePush', () => {
       ),
       stderr: '',
     });
+    runSecretsBinaryOnBatchSpy.mockResolvedValue(SECRETS_RESULT);
 
-    await gitPrePush({}, [], makeCtx());
+    let thrown: unknown;
+    try {
+      await gitPrePush({}, [], makeCtx());
+    } catch (e) {
+      thrown = e;
+    }
 
     expect(runSecretsBinaryOnBatchSpy).toHaveBeenCalledTimes(1);
     expect(batchOf(0)).toContain('same.ts');
+    expect(fake.findCall('print', `commit ${COMMIT_B}`)).toBeDefined();
+    expect((thrown as CommandFailedError).message).toBe(
+      `Secrets detected in ${COMMIT_B.slice(0, 8)}.`,
+    );
   });
 
   it('refuses the push when blob content cannot be read', async () => {
