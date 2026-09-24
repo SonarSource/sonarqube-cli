@@ -29,6 +29,7 @@ import {
   ENV_ORG,
   ENV_SERVER,
   ENV_TOKEN,
+  isValidServerUrl,
   normalizeCloudV2Endpoint,
   type ResolveAuthOptions,
   ResolvedAuth,
@@ -112,16 +113,21 @@ describe('AuthResolver', () => {
       }
     });
 
-    it('rejects a server URL that contains a line break', async () => {
-      process.env[ENV_SERVER] = 'https://sonarcloud.io\ninvalid';
+    it.each([
+      'not-a-url',
+      'ftp://sonarcloud.io',
+      'https://sonarcloud.io\ninvalid',
+      'https://sonarcloud.io\tinvalid',
+    ])('rejects an invalid server URL', async (serverUrl) => {
+      process.env[ENV_SERVER] = serverUrl;
 
       const result = await new AuthResolver().resolveAuth();
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().message).toBe(
-        'The SonarQube server URL must be a single line.',
+        'The SonarQube server URL must be an absolute HTTP(S) URL with a host and no control characters.',
       );
       expect(result._unsafeUnwrapErr()).toMatchObject({
-        remediationHint: 'Set SONARQUBE_CLI_SERVER to a single-line URL.',
+        remediationHint: 'Set SONARQUBE_CLI_SERVER to an HTTP(S) URL with a host.',
       });
     });
 
@@ -253,13 +259,13 @@ describe('AuthResolver', () => {
       }
     });
 
-    it('rejects a saved server URL that contains a line break', async () => {
+    it('rejects an invalid saved server URL', async () => {
       const state = getDefaultState('test');
       state.auth.connections = [
         {
           id: 'conn-1',
           type: 'on-premise',
-          serverUrl: 'https://sonarqube.example.com\ninvalid',
+          serverUrl: 'ftp://sonarqube.example.com',
           authenticatedAt: new Date().toISOString(),
         },
       ];
@@ -271,7 +277,7 @@ describe('AuthResolver', () => {
         const result = await new AuthResolver().resolveAuth();
         expect(result.isErr()).toBe(true);
         expect(result._unsafeUnwrapErr().message).toBe(
-          'The SonarQube server URL must be a single line.',
+          'The SonarQube server URL must be an absolute HTTP(S) URL with a host and no control characters.',
         );
         expect(result._unsafeUnwrapErr()).toMatchObject({
           remediationHint: "Run 'sonar auth logout', then 'sonar auth login'.",
@@ -324,6 +330,15 @@ describe('AuthResolver', () => {
   it('exports ENV_SERVER constant', () => {
     expect(ENV_SERVER).toBe('SONARQUBE_CLI_SERVER');
   });
+});
+
+describe('isValidServerUrl', () => {
+  it.each(['https://sonarcloud.io', 'https://sonarqube.example.com:9000/path/'])(
+    'accepts an absolute HTTP(S) URL with a host: %s',
+    (serverUrl) => {
+      expect(isValidServerUrl(serverUrl)).toBe(true);
+    },
+  );
 });
 
 describe('resolveBaseUrl', () => {
