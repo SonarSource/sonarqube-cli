@@ -176,7 +176,7 @@ describe('integrate (bare command)', () => {
       const result = await session.waitFinish();
 
       expect(result.stderr).toContain(
-        'Both Claude Code and Cursor were detected on this machine. Integrating with both may cause conflicts in hook execution.',
+        "Both Claude Code and Cursor were detected on this machine — integrating both can conflict at the hook level. Run 'sonar integrate' again anytime to add or remove one.",
       );
     },
     { timeout: 15000 },
@@ -196,7 +196,7 @@ describe('integrate (bare command)', () => {
       const result = await session.waitFinish();
 
       expect(result.stderr).toContain(
-        'Both Claude Code and Copilot were detected on this machine. Integrating with both may cause conflicts in hook execution.',
+        "Both Claude Code and Copilot were detected on this machine — integrating both can conflict at the hook level. Run 'sonar integrate' again anytime to add or remove one.",
       );
     },
     { timeout: 15000 },
