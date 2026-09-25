@@ -374,4 +374,21 @@ describe('global-integrations migration', () => {
     },
     { timeout: TEST_TIMEOUT },
   );
+
+  it(
+    'does not migrate during sonar update status',
+    async () => {
+      // The `update status` subcommand only reports a version; it must not rewrite integrations.
+      await harness.newFakeBinariesServer().withStableVersion(CURRENT_CLI_VERSION).start();
+      await authenticateAgainstFakeServer();
+      seedProjectScopedInstall(claudeIntegration);
+
+      const result = await harness.run('update status');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain('Removing your project-level agent integrations');
+      expect(recordedScopes('claude-code')).toEqual(['project']);
+    },
+    { timeout: TEST_TIMEOUT },
+  );
 });

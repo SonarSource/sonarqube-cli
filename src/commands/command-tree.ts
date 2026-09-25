@@ -148,7 +148,13 @@ import {
   type SystemStatusOptions,
   VALID_FORMATS as SYSTEM_STATUS_VALID_FORMATS,
 } from './system/status.ts';
-import { updateVersion, type UpdateVersionOptions } from './update';
+import {
+  updateStatus,
+  type UpdateStatusOptions,
+  updateVersion,
+  type UpdateVersionOptions,
+  VALID_FORMATS as UPDATE_STATUS_VALID_FORMATS,
+} from './update';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
 
@@ -768,23 +774,40 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   // Update the CLI to the latest version
   if (CURRENT_DISTRIBUTION.enableSelfUpdate) {
     // Retry surface for a global-integrations migration the post-update run could not finish.
-    // Shared with the `self-update` alias below so both retry it the same way.
-    const retryGlobalIntegrationsMigration = async (thisCommand: Command): Promise<void> => {
-      if (thisCommand.opts().status) {
-        return; // --status only reports a version; it must not write anything.
+    // Shared with the `self-update` alias below so both retry it the same way. Skipped for a
+    // pure status check — either the deprecated --status flag or the `update status`
+    // subcommand — since neither must write anything.
+    const retryGlobalIntegrationsMigration = async (
+      thisCommand: Command,
+      actionCommand: Command,
+    ): Promise<void> => {
+      if (thisCommand.opts().status || actionCommand.name() === 'status') {
+        return;
       }
       await migrateAgentIntegrationsToGlobalScopeSafely(postUpdateDeps);
     };
 
-    COMMAND_TREE.command('update')
+    const updateCommand = COMMAND_TREE.command('update')
       .description('Update SonarQube CLI to the latest version')
       .rootHelp({
         category: 'cli-management',
       })
-      .option('--status', 'Check for a newer version without installing')
+      .enablePositionalOptions()
+      .rejectUnknownSubcommands()
+      .addOption(
+        new SonarOption('--status', 'Check for a newer version without installing').stage(
+          Stage.Deprecated({ sinceVersion: '1.9', replacement: 'sonar update status' }),
+        ),
+      )
       .option('--force', 'Install the latest version even if already up to date')
       .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx))
       .hook('preAction', retryGlobalIntegrationsMigration);
+
+    updateCommand
+      .command('status')
+      .description('Check for a newer version without installing')
+      .addOption(formatOption(UPDATE_STATUS_VALID_FORMATS, 'text'))
+      .anonymousAction((ctx, options: UpdateStatusOptions) => updateStatus(options, ctx));
 
     // Hidden compatibility alias for `sonar update`.
     COMMAND_TREE.command('self-update', { hidden: true })
