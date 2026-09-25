@@ -984,7 +984,9 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     commitStatsFacts(command.invocationContext?.statsFacts() ?? []);
     const handlerFacts = command.invocationContext?.telemetryFacts() ?? [];
     await commitTelemetryFacts([...handlerFacts, await buildCommandExecutedFact(command)], {
-      agentSessionId: resolveAgentSessionId(capturedAgentSessionId),
+      agentSessionId: resolveAgentSessionId(
+        command.invocationContext?.currentAgentSessionId() ?? capturedAgentSessionId,
+      ),
       auth: await resolveInvocationAuthForTelemetry(command.invocationContext),
     });
     await COMMAND_TREE.updateNotifier.maybeNotify(actionCommand);
