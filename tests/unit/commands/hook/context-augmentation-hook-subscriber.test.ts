@@ -18,11 +18,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, expect, it, mock } from 'bun:test';
+import { afterEach, describe, expect, it, mock } from 'bun:test';
 
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { setMockLogger } from '@/core/observability/logger.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
+
+afterEach(() => {
+  setMockLogger(null);
+});
 
 describe('matchesContextAugmentationTool', () => {
   it('matches every tool in the CAG matcher', async () => {
@@ -66,6 +71,15 @@ describe('contextAugmentationPostToolUseSubscriber', () => {
   });
 
   it('swallows a forwarding failure and reports none instead of throwing', async () => {
+    const warnings: string[] = [];
+    setMockLogger({
+      debug: () => {},
+      error: () => {},
+      info: () => {},
+      log: () => {},
+      success: () => {},
+      warn: (message) => warnings.push(message),
+    });
     const runContextPassthroughMock = mock(() => Promise.reject(new Error('Not authenticated.')));
     void mock.module('@/commands/context/index.ts', () => ({
       runContextPassthrough: runContextPassthroughMock,
@@ -79,5 +93,6 @@ describe('contextAugmentationPostToolUseSubscriber', () => {
     ).handle({ tool_name: 'Bash' }, '{"tool_name":"Bash"}');
 
     expect(result).toEqual({ decision: 'none' });
+    expect(warnings).toEqual(['Vortex Context augmentation skipped: Not authenticated.']);
   });
 });
