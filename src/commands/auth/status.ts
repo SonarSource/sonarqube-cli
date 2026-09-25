@@ -49,7 +49,6 @@ interface AuthStatusJson {
   server?: string;
   org?: string;
   source?: string;
-  orgAccessible?: boolean;
   message?: string;
 }
 
@@ -57,11 +56,8 @@ function printJsonStatus(console: Console, payload: AuthStatusJson): void {
   console.print(JSON.stringify(payload, null, 2));
 }
 
-function orgFields(
-  orgKey: string | undefined,
-  extra?: Partial<AuthStatusJson>,
-): Partial<AuthStatusJson> {
-  return orgKey ? { org: orgKey, ...extra } : {};
+function orgFields(orgKey: string | undefined): Partial<AuthStatusJson> {
+  return orgKey ? { org: orgKey } : {};
 }
 
 function connectionLines(serverUrl: string, orgKey: string | undefined): string[] {
@@ -151,7 +147,6 @@ function displayOrganizationMembershipMismatch(
       server: serverUrl,
       org: orgKey,
       source,
-      orgAccessible: false,
     });
     return;
   }
@@ -222,7 +217,7 @@ function displayConnected(
       status: 'connected',
       server: serverUrl,
       source,
-      ...orgFields(orgKey, { orgAccessible: true }),
+      ...orgFields(orgKey),
     });
     return;
   }
