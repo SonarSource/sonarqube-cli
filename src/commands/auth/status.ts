@@ -233,7 +233,7 @@ async function mismatchedProjectConnection(
   }
 }
 
-async function noteProjectConnectionMismatch(console: Console, auth: ResolvedAuth): Promise<void> {
+async function noteConnectionMismatch(console: Console, auth: ResolvedAuth): Promise<void> {
   const project = await mismatchedProjectConnection(auth, console);
   if (project) {
     displayProjectConnectionMismatch(console, project);
@@ -275,7 +275,7 @@ async function displayEnvironmentConnectionStatus(
   }
   displayConnected(console, auth.serverUrl, source, auth.orgKey, format);
   if (format === 'text') {
-    await noteProjectConnectionMismatch(console, auth);
+    await noteConnectionMismatch(console, auth);
   }
 }
 
@@ -371,7 +371,7 @@ export async function authStatus(
   }
 
   if (status.status === 'valid' && authStatusFormat === 'text') {
-    await noteProjectConnectionMismatch(console, auth);
+    await noteConnectionMismatch(console, auth);
   }
 
   if (status.status === 'unreachable') {
