@@ -119,10 +119,13 @@ async function resolveContextToken(
   }
 
   let token: string | null = null;
+  let keychainUnavailable = false;
   try {
     token = await getToken(serverUrl, organization);
   } catch (err) {
-    // Treat an unavailable keychain as no stored token so the recorded-connection error below surfaces.
+    // Treat an unavailable keychain as no stored token so the recorded-connection error below
+    // surfaces. Remember that it was unavailable, because it changes what the user should do.
+    keychainUnavailable = true;
     logger.debug(`Keychain lookup failed for ${serverUrl}: ${(err as Error).message}`);
   }
   if (token) {
@@ -133,8 +136,16 @@ async function resolveContextToken(
   throw new CommandFailedError(
     `Not authenticated for the recorded Vortex Context connection: ${connection}.`,
     {
-      remediationHint:
-        'Run: sonar auth login, then re-run sonar integrate claude or sonar integrate copilot from this project.',
+      // Two different situations, two different answers. With a working keychain, logging in
+      // is the fix. Without one, and a container never has one, `sonar auth login` stores what
+      // it obtains in that same keychain, so recommending it sends the user in a circle. Point
+      // them at environment authentication instead, which is the path that works there.
+      remediationHint: keychainUnavailable
+        ? 'The system keychain is unavailable, so stored credentials cannot be read or written here. ' +
+          'Authenticate with environment variables instead: set SONARQUBE_CLI_TOKEN, plus ' +
+          'SONARQUBE_CLI_ORG for SonarQube Cloud or SONARQUBE_CLI_SERVER for SonarQube Server. ' +
+          'Then re-run sonar integrate claude or sonar integrate copilot from this project.'
+        : 'Run: sonar auth login, then re-run sonar integrate claude or sonar integrate copilot from this project.',
     },
   );
 }
