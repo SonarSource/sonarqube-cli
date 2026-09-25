@@ -40,11 +40,7 @@ export class EnterprisesClient {
   ): ResultAsync<string | null, HttpClientError> {
     const endpoint = '/enterprises/enterprise-organizations';
     return this.client
-      .get<Array<{ enterpriseId?: string }>>(
-        endpoint,
-        { organizationId },
-        this.client.apiHostFor(endpoint),
-      )
+      .get<Array<{ enterpriseId?: string }>>(endpoint, { organizationId })
       .map((result) => result[0]?.enterpriseId ?? null);
   }
 }
