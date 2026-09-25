@@ -265,6 +265,24 @@ describe('discoverProject', () => {
     expect(result.configSources).toEqual(['sonar-project.properties']);
   });
 
+  it.each(['not-a-url', 'ftp://sonarqube.example.com', 'https://sonarqube.example.com\tinvalid'])(
+    'does not discover an invalid server URL from sonar-project.properties',
+    async (serverUrl) => {
+      fakeFs.writeFile(
+        join(testDir, 'sonar-project.properties'),
+        `sonar.host.url=${serverUrl}\nsonar.projectKey=my_project\n`,
+      );
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.serverUrl).toBeUndefined();
+      expect(result.projectKey).toBe('my_project');
+    },
+  );
+
   it('maps SonarQube Server connected mode to DiscoveredProject and updates configSources', async () => {
     fakeFs.writeFile(
       join(testDir, '.sonarlint', 'connectedMode.json'),

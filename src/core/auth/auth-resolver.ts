@@ -43,18 +43,30 @@ export const ENV_TOKEN = 'SONARQUBE_CLI_TOKEN';
 export const ENV_SERVER = 'SONARQUBE_CLI_SERVER';
 export const ENV_ORG = 'SONARQUBE_CLI_ORG';
 
-export function isSingleLineServerUrl(serverUrl: string): boolean {
-  return !/[\r\n]/.test(serverUrl);
+export function isValidServerUrl(serverUrl: string): boolean {
+  if (/[\u0000-\u001F\u007F]/.test(serverUrl)) {
+    return false;
+  }
+
+  try {
+    const url = new URL(serverUrl);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && url.hostname.length > 0;
+  } catch {
+    return false;
+  }
 }
 
-export function assertSingleLineServerUrl(serverUrl: string, remediationHint: string): void {
-  if (isSingleLineServerUrl(serverUrl)) {
+export function assertValidServerUrl(serverUrl: string, remediationHint: string): void {
+  if (isValidServerUrl(serverUrl)) {
     return;
   }
-  throw new CommandFailedError('The SonarQube server URL must be a single line.', {
-    exitCode: 2,
-    remediationHint,
-  });
+  throw new CommandFailedError(
+    'The SonarQube server URL must be an absolute HTTP(S) URL with a host and no control characters.',
+    {
+      exitCode: 2,
+      remediationHint,
+    },
+  );
 }
 
 export type ResolvedAuthSource = 'env' | 'state';
@@ -140,7 +152,7 @@ export class AuthResolver {
     if (envToken && envOrg) {
       logger.debug('Using environment variable authentication (SQC)');
       if (envServer) {
-        assertSingleLineServerUrl(envServer, `Set ${ENV_SERVER} to a single-line URL.`);
+        assertValidServerUrl(envServer, `Set ${ENV_SERVER} to an HTTP(S) URL with a host.`);
       }
       return new ResolvedAuth({
         token: envToken,
@@ -154,7 +166,7 @@ export class AuthResolver {
     // 2. Both SONARQUBE_CLI_TOKEN + SONARQUBE_CLI_SERVER env vars present → use them immediately
     if (envToken && envServer) {
       logger.debug('Using environment variable authentication (SQS)');
-      assertSingleLineServerUrl(envServer, `Set ${ENV_SERVER} to a single-line URL.`);
+      assertValidServerUrl(envServer, `Set ${ENV_SERVER} to an HTTP(S) URL with a host.`);
       return new ResolvedAuth({
         token: envToken,
         serverUrl: envServer,
@@ -193,7 +205,7 @@ export class AuthResolver {
     if (!serverUrl) {
       return null;
     }
-    assertSingleLineServerUrl(serverUrl, "Run 'sonar auth logout', then 'sonar auth login'.");
+    assertValidServerUrl(serverUrl, "Run 'sonar auth logout', then 'sonar auth login'.");
 
     const orgKey = connection.orgKey;
     const connectionType = connection.type;
