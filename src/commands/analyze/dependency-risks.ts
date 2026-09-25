@@ -91,8 +91,8 @@ export async function analyzeDependencyRisks(
     ctx,
   );
 
-  const viewModel = buildDependencyRisksViewModel(scan.response, filter);
   const format = resolveFormatOption(options.format, VALID_FORMATS, 'table');
+  const viewModel = buildDependencyRisksViewModel(scan.response, filter);
   switch (format) {
     case 'json':
       console.print(formatDependencyRisksJson(projectKey, viewModel));

@@ -1887,7 +1887,7 @@ describe('auth status', () => {
   );
 
   it(
-    'exits with code 2 for an invalid --format value',
+    'exits with code 1 for an invalid --format value',
     async () => {
       const result = await harness.run('auth status --format xml');
 
