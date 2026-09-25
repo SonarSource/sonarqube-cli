@@ -790,7 +790,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option('-p, --project <project>', 'Project key (overrides auto-discovery)')
     .addHelpText(`after`, projectKeyExtraHelp)
-    .authenticatedAction(
+    .anonymousAction(
       (
         ctx,
         options: { debug?: boolean; readOnly?: boolean; toolsets?: string; project?: string },
