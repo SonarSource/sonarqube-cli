@@ -308,6 +308,7 @@ export class TestHarness {
       ...fakeUpdateScriptEnv,
       SONARQUBE_CLI_KEYCHAIN_FILE: this.keychainJsonFile,
       CI: 'true',
+      SONARQUBE_CLI_DISABLE_BROWSER: 'true',
       [ENV_SQAA_RETRY_BASE_DELAY_MS]: '0',
       ...options?.extraEnv,
       ...buildHomeEnv(this.userHome.path),

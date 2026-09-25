@@ -185,14 +185,22 @@ export function buildAuthURL(serverURL: string, port: number, serverVersion?: st
 
 /**
  * Open browser, with fallback message if it fails.
- * Skipped when CI=true — token must be delivered directly to the loopback server.
+ * Skipped in CI or when automatic browser opening is explicitly disabled.
  */
-export async function openBrowserWithFallback(authURL: string, console: Console): Promise<void> {
+export async function openBrowserWithFallback(
+  authURL: string,
+  console: Console,
+  browserOpener: (url: string) => Promise<void> = openBrowser,
+): Promise<void> {
   if (process.env.CI === 'true') {
     return;
   }
+  if (process.env.SONARQUBE_CLI_DISABLE_BROWSER === 'true') {
+    console.print('Automatic browser opening is disabled; copy the URL above and open it manually');
+    return;
+  }
   try {
-    await openBrowser(authURL);
+    await browserOpener(authURL);
   } catch (error) {
     console.warn(`Failed to open browser automatically: ${String(error)}`);
     console.print('Copy the URL above and open it manually');
@@ -372,7 +380,9 @@ export async function generateTokenViaBrowser(
 
   console.print('🔑 Obtaining access token from SonarQube...');
   console.print(`URL: ${blue(authURL)}`);
-  await console.pressEnterKeyPrompt('Press Enter to open the browser');
+  if (process.env.SONARQUBE_CLI_DISABLE_BROWSER !== 'true') {
+    await console.pressEnterKeyPrompt('Press Enter to open the browser');
+  }
   await openBrowserFn(authURL);
 
   let authResult: BrowserAuthResult | undefined;

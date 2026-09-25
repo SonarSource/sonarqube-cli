@@ -123,6 +123,10 @@ describe('auth login', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Authentication successful');
+      expect(result.stdout).toContain(
+        'Automatic browser opening is disabled; copy the URL above and open it manually',
+      );
+      expect(result.stdout).not.toContain('Press Enter to open the browser');
       expect(
         server
           .getRecordedRequests()
