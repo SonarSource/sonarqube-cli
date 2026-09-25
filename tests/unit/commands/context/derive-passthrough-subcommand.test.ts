@@ -135,5 +135,47 @@ describe('runContextPassthrough', () => {
     expect(debugMessages).toEqual([
       'Keychain lookup failed for https://regional.sonarcloud.io: Failed to access the system keychain.',
     ]);
+    // The remediation matters as much as the failure. `sonar auth login` stores what it
+    // obtains in the keychain, so recommending it here would send the user back to the thing
+    // that just failed. Containers never have a keychain, so this is the common case.
+    const hint = (error as CommandFailedError).remediationHint ?? '';
+    expect(hint).toContain('SONARQUBE_CLI_TOKEN');
+    expect(hint).toContain('SONARQUBE_CLI_ORG');
+    expect(hint).not.toContain('sonar auth login');
+  });
+
+  it('still recommends logging in when the keychain works and holds no token', async () => {
+    spyOn(projectInfo, 'discoverProject').mockResolvedValue({
+      organization: 'recorded-org',
+      projectKey: 'project-key',
+      projectRoot: process.cwd(),
+      serverUrl: 'https://regional.sonarcloud.io',
+    } as Awaited<ReturnType<typeof projectInfo.discoverProject>>);
+    // A reachable keychain that simply has nothing stored: logging in is the right answer,
+    // and the previous test must not have turned that advice off everywhere.
+    spyOn(keychain, 'getToken').mockResolvedValue(null);
+    const ctx = {
+      console: {},
+      resolveAuth: () =>
+        Promise.resolve({
+          isErr: () => false,
+          value: {
+            orgKey: 'environment-org',
+            serverUrl: 'https://sonarcloud.io',
+            token: 'environment-token',
+          },
+        }),
+    } as unknown as CommandInvocationContext;
+
+    const error = await runContextPassthrough('__hook', ['Claude'], {
+      stdinPayload: '{}',
+      ctx,
+    }).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+
+    expect(error).toBeInstanceOf(CommandFailedError);
+    expect((error as CommandFailedError).remediationHint).toContain('sonar auth login');
   });
 });
