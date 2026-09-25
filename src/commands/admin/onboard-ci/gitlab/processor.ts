@@ -26,7 +26,13 @@ import { GitLabApiError } from '@/core/gitlab/client.ts';
 import { HTTP_STATUS_BAD_REQUEST } from '@/core/server/http-constants.ts';
 
 import type { OnboardCiSqsClient } from './sqs-api.ts';
-import { buildUpdatedCiYml, generateCiYml, generateMrDescription } from './templates.ts';
+import {
+  buildUpdatedCiYml,
+  generateCiYml,
+  generateMrDescription,
+  generateTemplateMrDescription,
+  renderJobTemplate,
+} from './templates.ts';
 import type { OnboardCiGitlabOptions } from './types.ts';
 import { GITLAB_DEFAULT_STAGES, GITLAB_IMPLICIT_STAGES, SkipReason } from './types.ts';
 
@@ -40,6 +46,8 @@ enum OtherCiMarker {
   TravisCi = '.travis.yml',
 }
 
+// Known limitation with --job-template: a template that wraps the scanner call in another
+// script and avoids these literal strings won't be detected on rerun, causing a duplicate job.
 enum SonarCiMarker {
   SonarScanner = 'sonar-scanner',
   SonarHostUrl = 'SONAR_HOST_URL',
@@ -54,6 +62,8 @@ export interface ProcessRepoContext {
   dopSettingId: string;
   auth: ResolvedAuth;
   options: OnboardCiGitlabOptions;
+  /** Raw content of --job-template, read and validated once up front. */
+  jobTemplateContent?: string;
 }
 
 export type RepoClassification =
@@ -86,6 +96,73 @@ function stageConflicts(existingCiContent: string, requestedStage: string): bool
   } catch {
     return false;
   }
+}
+
+/**
+ * Skip checks that apply when the repo already has a CI config file. Returns null when none
+ * of them apply, meaning classification should continue.
+ */
+function classifyExistingCiFile(
+  ctx: ProcessRepoContext,
+  existingCi: string,
+  ciFilePath: string,
+): RepoClassification | null {
+  if (Object.values(SonarCiMarker).some((marker) => existingCi.includes(marker))) {
+    return {
+      outcome: 'skip',
+      reason: SkipReason.AlreadyConfigured,
+      message: 'skipped (already configured)',
+    };
+  }
+
+  // In --job-template mode, the job's stage (and everything else about its shape) is the
+  // customer's own responsibility, so we don't pre-flight-check it against the repo's
+  // existing pipeline — an MR gets opened and any conflict is caught in review, same as
+  // any hand-written CI change would be.
+  if (ctx.jobTemplateContent) {
+    return null;
+  }
+
+  const effectiveStage = ctx.options.stage ?? 'test';
+  if (stageConflicts(existingCi, effectiveStage)) {
+    return {
+      outcome: 'skip',
+      reason: SkipReason.StageNotInCi,
+      message: `skipped (stage '${effectiveStage}' not defined in ${ciFilePath})`,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Skip checks that apply when the repo has no CI config file yet. Returns null when none of
+ * them apply, meaning classification should continue.
+ */
+async function classifyNewRepo(
+  ctx: ProcessRepoContext,
+  repo: RepoWithBranch,
+): Promise<RepoClassification | null> {
+  const treeEntries = await ctx.gitlab.listRepoTree(repo.id, repo.default_branch);
+  const rootFiles = new Set<string>(treeEntries.map((f: GitLabTreeEntry) => f.name));
+
+  if (Object.values(OtherCiMarker).some((f) => rootFiles.has(f))) {
+    return {
+      outcome: 'skip',
+      reason: SkipReason.OtherCiDetected,
+      message: 'skipped (other CI detected)',
+    };
+  }
+
+  if (rootFiles.has('sonar-project.properties')) {
+    return {
+      outcome: 'skip',
+      reason: SkipReason.AlreadyConfigured,
+      message: 'skipped (already configured)',
+    };
+  }
+
+  return null;
 }
 
 export async function classifyRepo(
@@ -123,42 +200,12 @@ export async function classifyRepo(
   const rawCi = await ctx.gitlab.getFileContent(repo.id, ciFilePath, repo.default_branch);
   const existingCi = rawCi === '' ? null : rawCi;
 
-  if (existingCi !== null) {
-    if (Object.values(SonarCiMarker).some((marker) => existingCi.includes(marker))) {
-      return {
-        outcome: 'skip',
-        reason: SkipReason.AlreadyConfigured,
-        message: 'skipped (already configured)',
-      };
-    }
-
-    const effectiveStage = ctx.options.stage ?? 'test';
-    if (stageConflicts(existingCi, effectiveStage)) {
-      return {
-        outcome: 'skip',
-        reason: SkipReason.StageNotInCi,
-        message: `skipped (stage '${effectiveStage}' not defined in ${ciFilePath})`,
-      };
-    }
-  } else {
-    const treeEntries = await ctx.gitlab.listRepoTree(repo.id, repo.default_branch);
-    const rootFiles = new Set<string>(treeEntries.map((f: GitLabTreeEntry) => f.name));
-
-    if (Object.values(OtherCiMarker).some((f) => rootFiles.has(f))) {
-      return {
-        outcome: 'skip',
-        reason: SkipReason.OtherCiDetected,
-        message: 'skipped (other CI detected)',
-      };
-    }
-
-    if (rootFiles.has('sonar-project.properties')) {
-      return {
-        outcome: 'skip',
-        reason: SkipReason.AlreadyConfigured,
-        message: 'skipped (already configured)',
-      };
-    }
+  const skip =
+    existingCi !== null
+      ? classifyExistingCiFile(ctx, existingCi, ciFilePath)
+      : await classifyNewRepo(ctx, repo);
+  if (skip) {
+    return skip;
   }
 
   const openMrs = await ctx.gitlab.listOpenMergeRequests(repo.id, CI_BRANCH);
@@ -192,7 +239,9 @@ export async function executeRepo(
     }
   }
 
-  const ciYml = generateCiYml(projectKey, ctx.auth.serverUrl, ctx.options, existingCi === null);
+  const ciYml = ctx.jobTemplateContent
+    ? renderJobTemplate(ctx.jobTemplateContent, projectKey)
+    : generateCiYml(projectKey, ctx.auth.serverUrl, ctx.options, existingCi === null);
   const updatedCi = buildUpdatedCiYml(existingCi, ciYml);
   if (existingCi === null) {
     await ctx.gitlab.createFile(
@@ -212,18 +261,22 @@ export async function executeRepo(
     );
   }
 
+  const mrDescription = ctx.jobTemplateContent
+    ? generateTemplateMrDescription(projectKey, ciFilePath)
+    : generateMrDescription(
+        projectKey,
+        ctx.auth.serverUrl,
+        ciFilePath,
+        ctx.options.sonarTokenVarName,
+        ctx.options.triggerOn,
+      );
+
   const mrUrl = await ctx.gitlab.createMergeRequest(
     repo.id,
     CI_BRANCH,
     repo.default_branch,
     'Configure SonarQube CI analysis',
-    generateMrDescription(
-      projectKey,
-      ctx.auth.serverUrl,
-      ciFilePath,
-      ctx.options.sonarTokenVarName,
-      ctx.options.triggerOn,
-    ),
+    mrDescription,
   );
 
   return { outcome: 'opened', projectKey, mrUrl };
