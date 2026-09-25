@@ -18,9 +18,25 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { derivePassthroughSubcommand } from '../../../../src/commands/context';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import * as keychain from '@/core/host/keychain.ts';
+import { configureLogger, setMockLogger } from '@/core/observability/logger.ts';
+import * as projectInfo from '@/core/project-info.ts';
+
+import {
+  derivePassthroughSubcommand,
+  runContextPassthrough,
+} from '../../../../src/commands/context';
+
+afterEach(() => {
+  spyOn(keychain, 'getToken').mockRestore();
+  spyOn(projectInfo, 'discoverProject').mockRestore();
+  setMockLogger(null);
+  configureLogger({ level: 'INFO' });
+});
 
 describe('derivePassthroughSubcommand', () => {
   it('returns null when no action and no args (bare `sonar context`)', () => {
@@ -67,5 +83,99 @@ describe('derivePassthroughSubcommand', () => {
 
   it('returns null when all positional tokens are empty / whitespace', () => {
     expect(derivePassthroughSubcommand('', ['   '])).toBeNull();
+  });
+});
+
+describe('runContextPassthrough', () => {
+  it('uses the recorded-connection error when the keychain is unavailable', async () => {
+    const debugMessages: string[] = [];
+    configureLogger({ level: 'DEBUG' });
+    setMockLogger({
+      debug: (message) => debugMessages.push(message),
+      error: () => {},
+      info: () => {},
+      log: () => {},
+      success: () => {},
+      warn: () => {},
+    });
+    spyOn(projectInfo, 'discoverProject').mockResolvedValue({
+      organization: 'recorded-org',
+      projectKey: 'project-key',
+      projectRoot: process.cwd(),
+      serverUrl: 'https://regional.sonarcloud.io',
+    } as Awaited<ReturnType<typeof projectInfo.discoverProject>>);
+    spyOn(keychain, 'getToken').mockRejectedValue(
+      new CommandFailedError('Failed to access the system keychain.'),
+    );
+    const ctx = {
+      console: {},
+      resolveAuth: () =>
+        Promise.resolve({
+          isErr: () => false,
+          value: {
+            orgKey: 'environment-org',
+            serverUrl: 'https://sonarcloud.io',
+            token: 'environment-token',
+          },
+        }),
+    } as unknown as CommandInvocationContext;
+
+    const error = await runContextPassthrough('__hook', ['Claude'], {
+      stdinPayload: '{}',
+      ctx,
+    }).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+
+    expect(error).toBeInstanceOf(CommandFailedError);
+    expect((error as Error).message).toContain(
+      'Not authenticated for the recorded Vortex Context connection',
+    );
+    expect(debugMessages).toEqual([
+      'Keychain lookup failed for https://regional.sonarcloud.io: Failed to access the system keychain.',
+    ]);
+    // The remediation matters as much as the failure. `sonar auth login` stores what it
+    // obtains in the keychain, so recommending it here would send the user back to the thing
+    // that just failed. Containers never have a keychain, so this is the common case.
+    const hint = (error as CommandFailedError).remediationHint ?? '';
+    expect(hint).toContain('SONARQUBE_CLI_TOKEN');
+    expect(hint).toContain('SONARQUBE_CLI_ORG');
+    expect(hint).not.toContain('sonar auth login');
+  });
+
+  it('still recommends logging in when the keychain works and holds no token', async () => {
+    spyOn(projectInfo, 'discoverProject').mockResolvedValue({
+      organization: 'recorded-org',
+      projectKey: 'project-key',
+      projectRoot: process.cwd(),
+      serverUrl: 'https://regional.sonarcloud.io',
+    } as Awaited<ReturnType<typeof projectInfo.discoverProject>>);
+    // A reachable keychain that simply has nothing stored: logging in is the right answer,
+    // and the previous test must not have turned that advice off everywhere.
+    spyOn(keychain, 'getToken').mockResolvedValue(null);
+    const ctx = {
+      console: {},
+      resolveAuth: () =>
+        Promise.resolve({
+          isErr: () => false,
+          value: {
+            orgKey: 'environment-org',
+            serverUrl: 'https://sonarcloud.io',
+            token: 'environment-token',
+          },
+        }),
+    } as unknown as CommandInvocationContext;
+
+    const error = await runContextPassthrough('__hook', ['Claude'], {
+      stdinPayload: '{}',
+      ctx,
+    }).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+
+    expect(error).toBeInstanceOf(CommandFailedError);
+    expect((error as CommandFailedError).remediationHint).toContain('sonar auth login');
   });
 });
