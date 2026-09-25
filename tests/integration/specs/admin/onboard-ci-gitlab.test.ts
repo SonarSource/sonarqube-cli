@@ -193,6 +193,43 @@ describe('sonar admin onboard-ci gitlab', () => {
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain("Invalid --scanner-property value for 'sonar.foo'");
     });
+
+    it('exits 2 when --job-template is combined with a job-shaping flag, without reading the file', async () => {
+      await startServers(harness);
+      const result = await harness.run(
+        `admin onboard-ci gitlab --group ${GROUP} --job-template /no/such/template.yml --stage sonar`,
+      );
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('--job-template cannot be combined with --stage');
+    });
+
+    it('exits 2 for --job-template pointing to a non-existent file', async () => {
+      await startServers(harness);
+      const result = await harness.run(
+        `admin onboard-ci gitlab --group ${GROUP} --job-template /no/such/template.yml`,
+      );
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('file not found or unreadable');
+    });
+
+    it('exits 2 for an empty --job-template value instead of silently falling back to the generated job', async () => {
+      await startServers(harness);
+      const result = await harness.run(`admin onboard-ci gitlab --group ${GROUP} --job-template=`);
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('file not found or unreadable');
+    });
+
+    it('exits 2 for a --job-template missing the {{SONAR_PROJECT_KEY}} placeholder', async () => {
+      await startServers(harness);
+      harness.cwd.writeFile('template.yml', 'security-scan:\n  script:\n    - sonar-scanner\n');
+
+      const result = await harness.run(
+        `admin onboard-ci gitlab --group ${GROUP} --job-template template.yml`,
+      );
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('must contain the placeholder {{SONAR_PROJECT_KEY}}');
+    });
   });
 
   describe('preflight checks', () => {
@@ -292,6 +329,32 @@ describe('sonar admin onboard-ci gitlab', () => {
         bindings: [
           { projectKey: 'configured-repo-key', repository: '2', dopSettingId: DOP_SETTING_ID },
         ],
+      });
+
+      const result = await harness.run(`admin onboard-ci gitlab --group ${GROUP}`);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('already configured');
+      expect(gitlabServer.createdMrs).toHaveLength(0);
+    });
+
+    it('skips a manually-configured sonarqube-analysis job that uses neither sonar-scanner nor SONAR_HOST_URL literally (ALREADY_CONFIGURED)', async () => {
+      const { gitlabServer } = await startServers(harness, {
+        gitlabProjects: [
+          {
+            id: 8,
+            name: 'maven-repo',
+            path_with_namespace: `${GROUP}/maven-repo`,
+            default_branch: 'main',
+            rootFiles: [
+              {
+                name: '.gitlab-ci.yml',
+                content: 'sonarqube-analysis:\n  script:\n    - mvn verify sonar:sonar\n',
+              },
+            ],
+          },
+        ],
+        bindings: [{ projectKey: 'maven-repo-key', repository: '8', dopSettingId: DOP_SETTING_ID }],
       });
 
       const result = await harness.run(`admin onboard-ci gitlab --group ${GROUP}`);
@@ -758,6 +821,124 @@ describe('sonar admin onboard-ci gitlab', () => {
       expect(result.stderr).toContain('empty-repo');
       expect(result.stderr).toContain('not eligible');
       expect(result.stderr).not.toContain('not found in group');
+    });
+  });
+
+  describe('--job-template flag', () => {
+    const JOB_TEMPLATE = `security-scan:
+  image: my-registry/scanner:1.0
+  tags:
+    - docker
+  stage: security
+  script:
+    - sonar-scanner -Dsonar.projectKey={{SONAR_PROJECT_KEY}}
+  variables:
+    SONAR_HOST_URL: "https://sonar.example.com"
+    SONAR_TOKEN: $MY_ORG_SONAR_TOKEN
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+`;
+
+    it('commits the template verbatim with the project key substituted, under its own job name', async () => {
+      const { gitlabServer } = await startServers(harness, {
+        gitlabProjects: [
+          {
+            id: 100,
+            name: 'template-repo',
+            path_with_namespace: `${GROUP}/template-repo`,
+            default_branch: 'main',
+            rootFiles: [],
+          },
+        ],
+        bindings: [
+          {
+            projectKey: 'mycompany_template-repo',
+            repository: '100',
+            dopSettingId: DOP_SETTING_ID,
+          },
+        ],
+      });
+      harness.cwd.writeFile('template.yml', JOB_TEMPLATE);
+
+      const result = await harness.run(
+        `admin onboard-ci gitlab --group ${GROUP} --job-template template.yml`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(gitlabServer.createdMrs).toHaveLength(1);
+      const ciYml = gitlabServer.committedFiles.find((f) => f.path === '.gitlab-ci.yml');
+      expect(ciYml).toBeDefined();
+      expect(ciYml!.content).toContain('security-scan:');
+      expect(ciYml!.content).toContain('tags:');
+      expect(ciYml!.content).toContain('image: my-registry/scanner:1.0');
+      expect(ciYml!.content).toContain('sonar-scanner -Dsonar.projectKey=mycompany_template-repo');
+      expect(ciYml!.content).not.toContain('{{SONAR_PROJECT_KEY}}');
+      expect(ciYml!.content).not.toContain('sonarqube-analysis:');
+    });
+
+    it('still detects an already-configured repo when the template renamed the job', async () => {
+      const { gitlabServer } = await startServers(harness, {
+        gitlabProjects: [
+          {
+            id: 101,
+            name: 'renamed-job-repo',
+            path_with_namespace: `${GROUP}/renamed-job-repo`,
+            default_branch: 'main',
+            rootFiles: [
+              {
+                name: '.gitlab-ci.yml',
+                content:
+                  'security-scan:\n  script:\n    - sonar-scanner -Dsonar.projectKey=x\n  variables:\n    SONAR_HOST_URL: https://sonar.example.com\n',
+              },
+            ],
+          },
+        ],
+        bindings: [
+          {
+            projectKey: 'renamed-job-repo-key',
+            repository: '101',
+            dopSettingId: DOP_SETTING_ID,
+          },
+        ],
+      });
+      harness.cwd.writeFile('template.yml', JOB_TEMPLATE);
+
+      const result = await harness.run(
+        `admin onboard-ci gitlab --group ${GROUP} --job-template template.yml`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('already configured');
+      expect(gitlabServer.createdMrs).toHaveLength(0);
+    });
+
+    it('does not pre-flight-check the stage against the existing pipeline', async () => {
+      const { gitlabServer } = await startServers(harness, {
+        gitlabProjects: [
+          {
+            id: 102,
+            name: 'no-security-stage-repo',
+            path_with_namespace: `${GROUP}/no-security-stage-repo`,
+            default_branch: 'main',
+            rootFiles: [{ name: '.gitlab-ci.yml', content: 'stages:\n  - build\n  - test\n' }],
+          },
+        ],
+        bindings: [
+          {
+            projectKey: 'mycompany_no-security-stage-repo',
+            repository: '102',
+            dopSettingId: DOP_SETTING_ID,
+          },
+        ],
+      });
+      harness.cwd.writeFile('template.yml', JOB_TEMPLATE);
+
+      const result = await harness.run(
+        `admin onboard-ci gitlab --group ${GROUP} --job-template template.yml`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(gitlabServer.createdMrs).toHaveLength(1);
     });
   });
 
