@@ -27,6 +27,7 @@ import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
 import { getToken } from '@/core/host/keychain.ts';
+import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -117,17 +118,42 @@ async function resolveContextToken(
     return auth.token;
   }
 
-  const token = await getToken(serverUrl, organization);
+  let token: string | null = null;
+  let keychainUnavailable = false;
+  try {
+    token = await getToken(serverUrl, organization);
+  } catch (err) {
+    // Treat an unavailable keychain as no stored token so the recorded-connection error below
+    // surfaces. Remember that it was unavailable, because it changes what the user should do.
+    keychainUnavailable = true;
+    logger.debug(`Keychain lookup failed for ${serverUrl}: ${(err as Error).message}`);
+  }
   if (token) {
     return token;
   }
 
   const connection = organization ? `${serverUrl} (${organization})` : serverUrl;
+  const organizationHint = organization ? ` plus SONARQUBE_CLI_ORG=${organization}` : '';
   throw new CommandFailedError(
     `Not authenticated for the recorded Vortex Context connection: ${connection}.`,
     {
-      remediationHint:
-        'Run: sonar auth login, then re-run sonar integrate claude or sonar integrate copilot from this project.',
+      // Two situations, two answers. With a working keychain, logging in is the fix. Without
+      // one, and a container never has one, `sonar auth login` stores what it obtains in that
+      // same keychain, so recommending it sends the user back to what just failed.
+      //
+      // Naming the variables is not enough either. This branch is mostly reached when they are
+      // already set and simply point elsewhere, since environment credentials only apply when
+      // the server and organization match the recorded connection. So the values are named too.
+      remediationHint: keychainUnavailable
+        ? 'The system keychain is unavailable, so stored credentials cannot be read or written here. ' +
+          `Authenticate with environment variables matching the recorded connection: set SONARQUBE_CLI_TOKEN and SONARQUBE_CLI_SERVER=${serverUrl}` +
+          organizationHint +
+          '. ' +
+          'Credentials pointing at a different server or organization are ignored, which is the ' +
+          'usual reason this appears when they look configured. ' +
+          'If the connection above is itself wrong, re-run sonar integrate claude or ' +
+          'sonar integrate copilot from this project to record the right one.'
+        : 'Run: sonar auth login, then re-run sonar integrate claude or sonar integrate copilot from this project.',
     },
   );
 }
