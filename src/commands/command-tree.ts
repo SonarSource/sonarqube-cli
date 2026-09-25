@@ -947,6 +947,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       collectScannerProperty,
       [] as string[],
     )
+    .option(
+      '--job-template <file>',
+      "Path to a YAML file defining the full CI job body (image, tags, stage, script, variables, rules); {{SONAR_PROJECT_KEY}} is substituted with each repository's SonarQube project key. Mutually exclusive with --stage, --allow-failure, --trigger-on, --scanner-property, and --sonar-token-var-name",
+    )
     .option('--dry-run', 'Preview what would be processed without making any changes', false)
     .authenticatedAction(async (ctx, options: OnboardCiGitlabOptions) => {
       validateOnboardCiGitlabOptions(options);
