@@ -81,7 +81,11 @@ import { collectSqaaFileOption } from './analyze/sqaa-file-arg.ts';
 import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './api/api.ts';
 import { authLogin, type AuthLoginOptions } from './auth/login.ts';
 import { authLogout } from './auth/logout.ts';
-import { authStatus } from './auth/status.ts';
+import {
+  authStatus,
+  type AuthStatusOptions,
+  VALID_FORMATS as AUTH_STATUS_VALID_FORMATS,
+} from './auth/status.ts';
 import { configureStats, type ConfigureStatsOptions } from './config/stats.ts';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
@@ -124,7 +128,11 @@ import {
   VALID_STANDARD_SEVERITIES,
   VALID_STATUSES,
 } from './list/issues.ts';
-import { listProjects, type ListProjectsOptions } from './list/projects.ts';
+import {
+  listProjects,
+  type ListProjectsOptions,
+  VALID_FORMATS as PROJECTS_VALID_FORMATS,
+} from './list/projects.ts';
 import {
   DEFAULT_TOP as QUALITY_GATE_DEFAULT_TOP,
   qualityGateStatus,
@@ -135,8 +143,18 @@ import { remediate, type RemediateOptions } from './remediate';
 import { runMcp } from './run/mcp.ts';
 import { stats, STATS_SINCE_CHOICES, type StatsOptions } from './stats/index.ts';
 import { systemReset, type SystemResetOptions } from './system/reset.ts';
-import { systemStatus, type SystemStatusOptions } from './system/status.ts';
-import { updateVersion, type UpdateVersionOptions } from './update';
+import {
+  systemStatus,
+  type SystemStatusOptions,
+  VALID_FORMATS as SYSTEM_STATUS_VALID_FORMATS,
+} from './system/status.ts';
+import {
+  updateStatus,
+  type UpdateStatusOptions,
+  updateVersion,
+  type UpdateVersionOptions,
+  VALID_FORMATS as UPDATE_STATUS_VALID_FORMATS,
+} from './update';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
 
@@ -148,6 +166,13 @@ const isTableFormatOption: UpdateNotificationCondition = (opts) => {
   const format = typeof opts.format === 'string' ? opts.format : 'json';
   return format.toLowerCase() === 'table';
 };
+
+/** Declares the `--format <format>` option shared by every data-returning command. */
+function formatOption(choices: readonly string[], defaultValue: string): SonarOption {
+  return new SonarOption('--format <format>', 'Output format')
+    .choices(choices)
+    .default(defaultValue);
+}
 
 const projectKeyExtraHelp = `
 Instead of providing an explicit --project, run 'sonar link <projectKey>' to link one to this repository.
@@ -254,7 +279,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   auth
     .command('status')
     .description('Show active authentication connection with token verification')
-    .anonymousAction((ctx) => authStatus(ctx));
+    .addOption(formatOption(AUTH_STATUS_VALID_FORMATS, 'text'))
+    .anonymousAction((ctx, options: AuthStatusOptions) => authStatus(options, ctx));
 
   // List Sonar resources
   const list = COMMAND_TREE.command('list')
@@ -269,9 +295,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   const pageSizeOption = new SonarOption('--page-size <page-size>', 'Page size (1-500)')
     .default(DEFAULT_PAGE_SIZE)
     .argParser(parseInteger);
-  const listIssuesFormatOption = new SonarOption('--format <format>', 'Output format')
-    .choices(VALID_FORMATS)
-    .default('json');
+  const listIssuesFormatOption = formatOption(VALID_FORMATS, 'json');
   list
     .command('issues')
     .description('Search for issues in SonarQube')
@@ -297,11 +321,13 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .addOption(pageOption)
     .authenticatedAction((ctx, options: ListIssuesOptions) => listIssues(options, ctx));
 
+  const listProjectsFormatOption = formatOption(PROJECTS_VALID_FORMATS, 'json');
   list
     .command('projects')
     .description('Search for projects in SonarQube')
-    .showUpdateNotification()
+    .showUpdateNotification(isTableFormatOption)
     .option('-q, --query <query>', 'Search query to filter projects by name or key')
+    .addOption(listProjectsFormatOption)
     .addOption(pageOption)
     .addOption(pageSizeOption)
     .authenticatedAction((ctx, options: ListProjectsOptions) => listProjects(options, ctx));
@@ -322,11 +348,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .showUpdateNotification(isTableFormatOption)
     .option('-p, --project <project>', 'Project key')
-    .addOption(
-      new SonarOption('--format <format>', 'Output format')
-        .choices(QUALITY_GATE_VALID_FORMATS)
-        .default('table'),
-    )
+    .addOption(formatOption(QUALITY_GATE_VALID_FORMATS, 'table'))
     .option('--branch <branch>', 'Branch name. Cannot be combined with --pull-request.')
     .option('--pull-request <pull-request>', 'Pull request ID. Cannot be combined with --branch.')
     .option('--all', 'Also show passing conditions. By default only failing conditions are shown.')
@@ -556,9 +578,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     );
 
   // Shared option set for `analyze agentic` and `verify`.
-  const sqaaFormatOption = new SonarOption('--format <format>', 'Output format')
-    .choices(SQAA_FORMATS)
-    .default('text');
+  const sqaaFormatOption = formatOption(SQAA_FORMATS, 'text');
 
   const sqaaDepthOption = new SonarOption(
     '--depth <depth>',
@@ -598,9 +618,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     analyzeAll(options, ctx),
   );
 
-  const dependencyRisksFormatOption = new SonarOption('--format <format>', 'Output format')
-    .choices(DEPENDENCY_RISKS_FORMATS)
-    .default('table');
+  const dependencyRisksFormatOption = formatOption(DEPENDENCY_RISKS_FORMATS, 'table');
 
   const dependencyRisksStatusFilterOption = new SonarOption(
     '--statuses <statuses>',
@@ -727,8 +745,18 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   system
     .command('status')
     .description('Show overall system status: authentication, installed binaries, and integrations')
-    .showUpdateNotification((opts) => !opts.json)
-    .option('--json', 'Output as JSON for machine consumption')
+    // `--format` carries a Commander-level default of 'text', so it is always set even
+    // when only the deprecated `--json` flag was passed — `--json` flag should be checked first
+    .showUpdateNotification(
+      (opts) =>
+        !opts.json && (typeof opts.format !== 'string' || opts.format.toLowerCase() !== 'json'),
+    )
+    .addOption(formatOption(SYSTEM_STATUS_VALID_FORMATS, 'text'))
+    .addOption(
+      new SonarOption('--json', 'Output as JSON for machine consumption').stage(
+        Stage.Deprecated({ sinceVersion: '1.9', replacement: '--format json' }),
+      ),
+    )
     .anonymousAction((ctx, options: SystemStatusOptions) => systemStatus(options, ctx));
 
   system
@@ -746,23 +774,40 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   // Update the CLI to the latest version
   if (CURRENT_DISTRIBUTION.enableSelfUpdate) {
     // Retry surface for a global-integrations migration the post-update run could not finish.
-    // Shared with the `self-update` alias below so both retry it the same way.
-    const retryGlobalIntegrationsMigration = async (thisCommand: Command): Promise<void> => {
-      if (thisCommand.opts().status) {
-        return; // --status only reports a version; it must not write anything.
+    // Shared with the `self-update` alias below so both retry it the same way. Skipped for a
+    // pure status check — either the deprecated --status flag or the `update status`
+    // subcommand — since neither must write anything.
+    const retryGlobalIntegrationsMigration = async (
+      thisCommand: Command,
+      actionCommand: Command,
+    ): Promise<void> => {
+      if (thisCommand.opts().status || actionCommand.name() === 'status') {
+        return;
       }
       await migrateAgentIntegrationsToGlobalScopeSafely(postUpdateDeps);
     };
 
-    COMMAND_TREE.command('update')
+    const updateCommand = COMMAND_TREE.command('update')
       .description('Update SonarQube CLI to the latest version')
       .rootHelp({
         category: 'cli-management',
       })
-      .option('--status', 'Check for a newer version without installing')
+      .enablePositionalOptions()
+      .rejectUnknownSubcommands()
+      .addOption(
+        new SonarOption('--status', 'Check for a newer version without installing').stage(
+          Stage.Deprecated({ sinceVersion: '1.9', replacement: 'sonar update status' }),
+        ),
+      )
       .option('--force', 'Install the latest version even if already up to date')
       .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx))
       .hook('preAction', retryGlobalIntegrationsMigration);
+
+    updateCommand
+      .command('status')
+      .description('Check for a newer version without installing')
+      .addOption(formatOption(UPDATE_STATUS_VALID_FORMATS, 'text'))
+      .anonymousAction((ctx, options: UpdateStatusOptions) => updateStatus(options, ctx));
 
     // Hidden compatibility alias for `sonar update`.
     COMMAND_TREE.command('self-update', { hidden: true })

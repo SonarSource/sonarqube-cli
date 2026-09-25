@@ -20,28 +20,52 @@
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import type { Console } from '@/core/ui/console.ts';
+import { resolveFormatOption } from '@/core/commands/parsing.ts';
 
 import { checkForUpdate } from './update-check.ts';
 
+export const VALID_FORMATS = ['text', 'json'] as const;
+
 export interface UpdateVersionOptions {
+  /** Deprecated CLI flag, kept working as an alias for the `update status` subcommand. */
   status?: boolean;
   force?: boolean;
 }
 
-async function updateVersionStatus(console: Console): Promise<void> {
-  console.info('Checking for updates...');
+export interface UpdateStatusOptions {
+  format?: string;
+}
+
+/** `sonar update status` — reports the current and latest CLI version without installing. */
+export async function updateStatus(
+  options: UpdateStatusOptions,
+  ctx: CommandInvocationContext,
+): Promise<void> {
+  const { console } = ctx;
+  const format = resolveFormatOption(options.format, VALID_FORMATS, 'text');
+
+  if (format !== 'json') {
+    console.info('Checking for updates...');
+  }
 
   const { currentVersion, latest, upToDate } = await checkForUpdate();
+  const latestVersion = latest.version.noBuild.text;
+
+  if (format === 'json') {
+    console.print(
+      JSON.stringify({ currentVersion: currentVersion.text, latestVersion, upToDate }, null, 2),
+    );
+    return;
+  }
 
   console.text(`Current version: v${currentVersion.text}`);
-  console.text(`Latest version:  v${latest.version.noBuild.text}`);
+  console.text(`Latest version:  v${latestVersion}`);
   console.blank();
 
   if (upToDate) {
     console.success('Already up to date');
   } else {
-    console.warn(`Update available: v${latest.version.noBuild.text}`);
+    console.warn(`Update available: v${latestVersion}`);
     console.text('  Run: sonar update');
   }
 }
@@ -52,7 +76,8 @@ export async function updateVersion(
 ): Promise<void> {
   const { console } = ctx;
   if (options.status) {
-    await updateVersionStatus(console);
+    // Deprecated flag: delegate to the same logic as the `update status` subcommand.
+    await updateStatus({}, ctx);
     return;
   }
 
