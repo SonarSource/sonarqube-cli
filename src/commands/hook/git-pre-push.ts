@@ -210,7 +210,13 @@ function parseRawBlobLine(line: string): GitBlobRef | null {
   const oid = meta.at(DESTINATION_OID_OFFSET);
   if (!oid || NULL_OID_PATTERN.test(oid)) return null;
   const path = fields.at(-1);
-  return path ? { oid, path: decodeGitPath(path) } : null;
+  return path ? { oid, path: batchSafePath(path) } : null;
+}
+
+/** Git escapes a line break, so its quoted form still fits the batch header when the decoded name does not. */
+function batchSafePath(field: string): string {
+  const decoded = decodeGitPath(field);
+  return isEncodablePath(decoded) ? decoded : field;
 }
 
 async function knownRemoteTips(refs: PushRef[]): Promise<string[]> {
