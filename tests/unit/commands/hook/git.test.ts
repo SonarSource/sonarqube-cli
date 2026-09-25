@@ -536,6 +536,21 @@ describe('gitPrePush', () => {
     expect(batchOf(0)).toBe('12 "src/\\377.ts"\nconst a = 1;\n');
   });
 
+  it.each([['"new\\nline.ts"'], ['"carriage\\rreturn.ts"']])(
+    'scans %p under the name git printed, since the decoded one breaks the batch header',
+    async (quoted) => {
+      spawnProcessSpy.mockResolvedValue({
+        exitCode: 0,
+        stdout: logOutput({ commit: COMMIT_A, blobs: [{ oid: BLOB_A, path: quoted }] }),
+        stderr: '',
+      });
+
+      await gitPrePush({}, [], makeCtx());
+
+      expect(batchOf(0)).toBe(`12 ${quoted}\nconst a = 1;\n`);
+    },
+  );
+
   it('scans a rename under its destination path', async () => {
     spawnProcessSpy.mockResolvedValue({
       exitCode: 0,
