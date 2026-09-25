@@ -78,7 +78,7 @@ export function mockIdentityGetSafe(
     <TValue>(
       endpoint: string,
       _params?: Record<string, string | number | boolean>,
-      _baseUrl?: string,
+      _timeoutMs?: number,
     ): ResultAsync<SafeGetResult<TValue>, never> => {
       if (endpoint === '/api/users/current') {
         const step = shiftStep(userSteps, { ok: true });

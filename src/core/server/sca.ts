@@ -66,7 +66,7 @@ export class ScaClient {
     const endpoint = isCloud ? '/sca/feature-enabled' : '/api/v2/sca/feature-enabled';
     const params = isCloud && orgKey ? { organization: orgKey } : undefined;
     return this.client
-      .get<{ enabled: boolean }>(endpoint, params, this.client.apiHostFor(endpoint))
+      .get<{ enabled: boolean }>(endpoint, params)
       .map((result): ScaEnablement => (result.enabled ? 'enabled' : 'not_enabled'))
       .orElse(() => okAsync<ScaEnablement>('check_failed'));
   }
@@ -107,11 +107,9 @@ export class ScaClient {
     if (params.pullRequest) {
       queryParams.pullRequestKey = params.pullRequest;
     }
-    return this.client
-      .get<ScaIssuesReleasesResponse>(endpoint, queryParams, this.client.apiHostFor(endpoint))
-      .map((response) => ({
-        issuesReleases: response.issuesReleases,
-        totalCount: response.page.total,
-      }));
+    return this.client.get<ScaIssuesReleasesResponse>(endpoint, queryParams).map((response) => ({
+      issuesReleases: response.issuesReleases,
+      totalCount: response.page.total,
+    }));
   }
 }
