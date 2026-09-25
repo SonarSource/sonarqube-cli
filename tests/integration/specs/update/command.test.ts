@@ -22,6 +22,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { version as CLI_VERSION } from '../../../../package.json';
 import { TestHarness } from '../../harness';
 
 describe('update command', () => {
@@ -36,7 +37,7 @@ describe('update command', () => {
   });
 
   it(
-    'sonar update --status reports an available update without a deprecation warning',
+    'sonar update --status reports an available update and warns that the flag is deprecated',
     async () => {
       const newerVersion = '99.0.0';
       await harness.newFakeBinariesServer().withStableVersion(newerVersion).start();
@@ -45,7 +46,56 @@ describe('update command', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain(`Update available: v${newerVersion}`);
+      expect(result.stderr).toContain(
+        "'--status' is deprecated since 1.9 and will be removed in a future version. Use 'sonar update status' instead.",
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'sonar update status reports an available update without a deprecation warning',
+    async () => {
+      const newerVersion = '99.0.0';
+      await harness.newFakeBinariesServer().withStableVersion(newerVersion).start();
+
+      const result = await harness.run('update status');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain(`Update available: v${newerVersion}`);
       expect(result.stderr).not.toContain('deprecated');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'sonar update status --format json prints a pure JSON payload',
+    async () => {
+      const newerVersion = '99.0.0';
+      await harness.newFakeBinariesServer().withStableVersion(newerVersion).start();
+
+      const result = await harness.run('update status --format json');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toBe('');
+      expect(JSON.parse(result.stdout)).toEqual({
+        currentVersion: CLI_VERSION,
+        latestVersion: newerVersion,
+        upToDate: false,
+      });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'sonar update status --format xml is rejected',
+    async () => {
+      const result = await harness.run('update status --format xml');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        "option '--format <format>' argument 'xml' is invalid",
+      );
     },
     { timeout: 15000 },
   );

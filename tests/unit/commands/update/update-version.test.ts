@@ -64,7 +64,7 @@ const isWindowsMock = spyOn(platformDetector, 'isWindows').mockImplementation(()
 
 const { checkForUpdate } = await import('@/commands/update/update-check.ts');
 const { fetchLatestVersion } = await import('@/core/update/check.ts');
-const { updateVersion } = await import('@/commands/update');
+const { updateStatus, updateVersion } = await import('@/commands/update');
 
 afterAll(() => {
   spawnMock.mockRestore();
@@ -229,6 +229,60 @@ describe('updateVersion --status', () => {
 
     const messages = fake.calls.map((c) => c.args.join(' '));
     expect(messages.some((m) => /up to date/i.test(m))).toBe(true);
+  });
+});
+
+describe('updateStatus', () => {
+  let fetchSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    fetchSpy = spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+  });
+
+  it('reports an available update without installing', async () => {
+    fetchSpy.mockResolvedValue(stableVersionResponse('99.0.0.241'));
+
+    await updateStatus({}, updateCtx());
+
+    const messages = fake.calls.map((c) => c.args.join(' '));
+    // Build number must be stripped from displayed versions
+    expect(messages.some((m) => m.includes('99.0.0') && !m.includes('99.0.0.241'))).toBe(true);
+    expect(messages.some((m) => /update available/i.test(m))).toBe(true);
+  });
+
+  it('reports already up to date', async () => {
+    fetchSpy.mockResolvedValue(stableVersionResponse('0.0.1'));
+
+    await updateStatus({}, updateCtx());
+
+    const messages = fake.calls.map((c) => c.args.join(' '));
+    expect(messages.some((m) => /up to date/i.test(m))).toBe(true);
+  });
+
+  it('prints a JSON payload and nothing else for --format json', async () => {
+    fetchSpy.mockResolvedValue(stableVersionResponse('99.0.0.241'));
+
+    await updateStatus({ format: 'json' }, updateCtx());
+
+    const printed = fake.calls.filter((c) => c.method === 'print');
+    expect(printed).toHaveLength(1);
+    const [major, minor, patch] = (await import('../../../../package.json')).version.split('.');
+    expect(JSON.parse(String(printed[0].args[0]))).toEqual({
+      currentVersion: `${major}.${minor}.${patch}`,
+      latestVersion: '99.0.0',
+      upToDate: false,
+    });
+  });
+
+  it('rejects an invalid --format value', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(updateStatus({ format: 'xml' }, updateCtx())).rejects.toThrow(
+      "Invalid format: 'xml'. Must be one of: text, json",
+    );
   });
 });
 
