@@ -396,7 +396,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   // Setup SonarQube integration for AI coding agent
   const integrateCommand = COMMAND_TREE.command('integrate')
-    .description('Setup SonarQube integration for AI coding agents, git and others.')
+    .description('Setup SonarQube integration for AI coding agents, git and others')
     .rootHelp({
       category: 'integrate',
     })
@@ -644,7 +644,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     );
 
   applySqaaOptions(
-    analyze.command('agentic').description('Run server-side Vortex analysis. Limitations apply.'),
+    analyze.command('agentic').description('Run server-side Vortex analysis. Limitations apply'),
     { telemetryCallerCommand: SQAA_ANALYZE_AGENTIC_CALLER_COMMAND },
   );
 
@@ -719,7 +719,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   // System diagnostics and maintenance
   const system = COMMAND_TREE.command('system')
-    .description('System diagnostics and maintenance commands for the SonarQube CLI installation.')
+    .description('System diagnostics and maintenance commands for the SonarQube CLI installation')
     .rootHelp({
       category: 'cli-management',
     });
