@@ -21,7 +21,7 @@
 import { readFileSync } from 'node:fs';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
 import type { GitLabRepo } from '@/core/gitlab/client.ts';
 import { GitLabClient } from '@/core/gitlab/client.ts';
@@ -35,6 +35,7 @@ import type { ProcessRepoContext, RepoClassification, RepoWithBranch } from './p
 import { classifyRepo, executeRepo } from './processor.ts';
 import { writeReportFile } from './report.ts';
 import { OnboardCiSqsClient } from './sqs-api.ts';
+import { validateJobTemplate } from './templates.ts';
 import type { DryRunResults, OnboardCiGitlabOptions, OnboardCiResults } from './types.ts';
 import { TriggerOn } from './types.ts';
 
@@ -57,7 +58,27 @@ export function collectScannerProperty(value: string, previous: string[] = []): 
   return [...previous, value];
 }
 
+/** Flags whose value the job template takes over entirely; conflicting with --job-template. */
+function assertNoJobShapeFlagsWithTemplate(options: OnboardCiGitlabOptions): void {
+  const conflicts: string[] = [];
+  if (options.stage !== undefined) conflicts.push('--stage');
+  if (options.allowFailure) conflicts.push('--allow-failure');
+  if (options.triggerOn !== TriggerOn.Both) conflicts.push('--trigger-on');
+  if (options.scannerProperty.length > 0) conflicts.push('--scanner-property');
+  if (options.sonarTokenVarName !== 'SONAR_TOKEN') conflicts.push('--sonar-token-var-name');
+
+  if (conflicts.length > 0) {
+    throw new InvalidOptionError(
+      `--job-template cannot be combined with ${conflicts.join(', ')}: the job template fully defines the job's shape.`,
+    );
+  }
+}
+
 export function validateOnboardCiGitlabOptions(options: OnboardCiGitlabOptions): void {
+  if (options.jobTemplate !== undefined) {
+    assertNoJobShapeFlagsWithTemplate(options);
+  }
+
   if (!Object.values(TriggerOn).includes(options.triggerOn)) {
     throw new CommandFailedError(
       `Invalid --trigger-on value '${options.triggerOn}'. Must be one of: ${(Object.values(TriggerOn) as string[]).join(', ')}`,
@@ -192,6 +213,19 @@ function applyReposFileFilter<T extends GitLabRepo>(
   }
 
   return repos.filter((r) => entries.has(relativePath(r)));
+}
+
+function readJobTemplateFile(jobTemplate: string): string {
+  let content: string;
+  try {
+    content = readFileSync(jobTemplate, 'utf8');
+  } catch {
+    throw new CommandFailedError(`--job-template: file not found or unreadable: ${jobTemplate}`, {
+      exitCode: 2,
+    });
+  }
+  validateJobTemplate(content);
+  return content;
 }
 
 /**
@@ -387,6 +421,10 @@ export async function onboardCiGitlab(
   options: OnboardCiGitlabOptions,
   console: Console,
 ): Promise<void> {
+  const jobTemplateContent = options.jobTemplate
+    ? readJobTemplateFile(options.jobTemplate)
+    : undefined;
+
   const { sqsClient, gitlabClient, dopSettingId, dopSettingKey, gitlabUrl } = await preflight(
     connection,
     gitlabToken,
@@ -415,6 +453,7 @@ export async function onboardCiGitlab(
     dopSettingId,
     auth: connection.auth,
     options,
+    jobTemplateContent,
   };
 
   if (options.dryRun) {

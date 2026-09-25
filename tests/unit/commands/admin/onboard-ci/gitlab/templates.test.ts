@@ -25,6 +25,9 @@ import {
   buildUpdatedCiYml,
   generateCiYml,
   generateMrDescription,
+  generateTemplateMrDescription,
+  renderJobTemplate,
+  validateJobTemplate,
 } from '@/commands/admin/onboard-ci/gitlab/templates.ts';
 import { TriggerOn } from '@/commands/admin/onboard-ci/gitlab/types.ts';
 
@@ -287,6 +290,56 @@ describe('generateMrDescription', () => {
       TriggerOn.Both,
     );
     expect(desc).toContain('merge request pipelines and pushes to the default branch');
+  });
+});
+
+describe('validateJobTemplate', () => {
+  it('accepts a template containing the placeholder', () => {
+    expect(() =>
+      validateJobTemplate('script:\n  - sonar-scanner -Dsonar.projectKey={{SONAR_PROJECT_KEY}}\n'),
+    ).not.toThrow();
+  });
+
+  it('rejects a template missing the placeholder', () => {
+    expect(() => validateJobTemplate('script:\n  - sonar-scanner\n')).toThrow(
+      '--job-template: the template must contain the placeholder {{SONAR_PROJECT_KEY}}',
+    );
+  });
+
+  it('rejects a template that is not valid YAML', () => {
+    expect(() =>
+      validateJobTemplate(
+        'script:\n  - sonar-scanner -Dsonar.projectKey={{SONAR_PROJECT_KEY}}\n\tbad indent:',
+      ),
+    ).toThrow('--job-template: the file is not valid YAML');
+  });
+});
+
+describe('renderJobTemplate', () => {
+  const template = 'script:\n  - sonar-scanner -Dsonar.projectKey={{SONAR_PROJECT_KEY}}\n';
+
+  it('substitutes every occurrence of the placeholder with the project key', () => {
+    const withTwoPlaceholders = `${template}  - echo {{SONAR_PROJECT_KEY}}\n`;
+    const rendered = renderJobTemplate(withTwoPlaceholders, 'my_project');
+    expect(rendered).toBe(
+      'script:\n  - sonar-scanner -Dsonar.projectKey=my_project\n  - echo my_project\n',
+    );
+  });
+
+  it('rejects a project key containing characters unsafe to embed unquoted', () => {
+    expect(() => renderJobTemplate(template, "project'; echo unexpected")).toThrow(
+      "Cannot substitute {{SONAR_PROJECT_KEY}}: project key 'project'; echo unexpected' contains characters unsafe to embed in the job template.",
+    );
+  });
+});
+
+describe('generateTemplateMrDescription', () => {
+  it('mentions the project key and CI file path without the CLI-generated specifics', () => {
+    const desc = generateTemplateMrDescription('mygroup_myrepo', '.gitlab-ci.yml');
+    expect(desc).toContain('mygroup_myrepo');
+    expect(desc).toContain('.gitlab-ci.yml');
+    expect(desc).toContain("organization's job template");
+    expect(desc).not.toContain('SONAR_TOKEN');
   });
 });
 
