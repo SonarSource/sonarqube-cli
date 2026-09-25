@@ -116,11 +116,7 @@ export class OrganizationsClient {
     const endpoint = '/organizations/organizations';
     // Logging inside the cached chain: one failed lookup logs once, however many getters read it.
     return this.client
-      .get<OrganizationRecord[]>(
-        endpoint,
-        { organizationKey, excludeEligibility: 'true' },
-        this.client.apiHostFor(endpoint),
-      )
+      .get<OrganizationRecord[]>(endpoint, { organizationKey, excludeEligibility: 'true' })
       .map((result) => result[0] ?? null)
       .mapErr((error) => {
         logger.debug(
@@ -183,11 +179,10 @@ export class OrganizationsClient {
   resolveOrganizationAccess(organizationKey: string): Promise<OrganizationAccess> {
     const endpoint = '/organizations/organizations';
     return this.client
-      .getOrNullIf404<OrganizationRecord[]>(
-        endpoint,
-        { organizationKey, excludeEligibility: 'true' },
-        this.client.apiHostFor(endpoint),
-      )
+      .getOrNullIf404<OrganizationRecord[]>(endpoint, {
+        organizationKey,
+        excludeEligibility: 'true',
+      })
       .match(
         (organizations): OrganizationAccess =>
           organizations?.[0] ? { status: 'accessible' } : { status: 'not_found' },
@@ -242,7 +237,7 @@ export class OrganizationsClient {
       return this.client
         .get<{
           organizationBindings: Array<{ devOpsPlatform: string }>;
-        }>(endpoint, { organizationId }, this.client.apiHostFor(endpoint))
+        }>(endpoint, { organizationId })
         .map((result) => result.organizationBindings[0]?.devOpsPlatform);
     });
   }
@@ -257,11 +252,10 @@ export class OrganizationsClient {
   ): ResultAsync<boolean, HttpClientError> {
     const endpoint = '/billing/entitlements';
     return this.client
-      .get<{ entitlements: Array<{ allowedFeatures: string[] }> }>(
-        endpoint,
-        { resourceId: organizationUuid, resourceType: 'organization' },
-        this.client.apiHostFor(endpoint),
-      )
+      .get<{ entitlements: Array<{ allowedFeatures: string[] }> }>(endpoint, {
+        resourceId: organizationUuid,
+        resourceType: 'organization',
+      })
       .map((result) => result.entitlements.some((e) => e.allowedFeatures.includes(entitlement)))
       .orElse((error) => {
         if (isCriticalFailure(error)) return errAsync(error);

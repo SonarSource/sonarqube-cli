@@ -23,7 +23,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { isValidServerUrl, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { findGitRoot, getGitRemote } from '@/core/host/git/discover.ts';
 import { type LookupPath, resolveLookupPaths } from '@/core/host/git/lookup-path-resolver.ts';
@@ -105,6 +105,13 @@ export interface SonarProperties {
   projectKey: string;
   projectName: string;
   organization: string;
+}
+
+function selectValidServerUrl(
+  currentServerUrl: string | undefined,
+  candidate: string,
+): string | undefined {
+  return currentServerUrl ?? (isValidServerUrl(candidate) ? candidate : undefined);
 }
 
 async function discoverLocalConfig(
@@ -263,7 +270,7 @@ function applyLocalSonarProperties(
   }
 
   config.configSources.push('sonar-project.properties');
-  config.serverUrl = local.sonarPropsData.hostURL;
+  config.serverUrl = selectValidServerUrl(undefined, local.sonarPropsData.hostURL);
   config.projectKey = local.sonarPropsData.projectKey;
   config.organization = local.sonarPropsData.organization;
 
@@ -287,7 +294,7 @@ function applySonarLintConfig(
   }
 
   config.configSources.push(local.sonarLintConfigPath);
-  config.serverUrl = config.serverUrl || local.sonarLintData.serverURL;
+  config.serverUrl = selectValidServerUrl(config.serverUrl, local.sonarLintData.serverURL);
   config.projectKey = config.projectKey || local.sonarLintData.projectKey;
   config.organization = config.organization || local.sonarLintData.organization;
 
@@ -342,7 +349,7 @@ function applySharedProjectConfigEntry(
 ): void {
   config.configSources.push(SHARED_PROJECT_CONFIG_SOURCE);
   config.projectKey = mapping.projectKey;
-  config.serverUrl = mapping.serverUrl;
+  config.serverUrl = selectValidServerUrl(undefined, mapping.serverUrl);
   config.organization = mapping.organization;
   config.projectRoot = mapping.projectRoot;
 
@@ -457,7 +464,7 @@ function applyKnownServerProjectMapping(
   }
 
   const { serverUrl, orgKey } = resolveMappingConnection(match.feature, known.state, options.auth);
-  if (!serverUrl) {
+  if (!serverUrl || !isValidServerUrl(serverUrl)) {
     return false;
   }
 
@@ -507,7 +514,7 @@ async function applyGitRemoteBinding(
   }
 
   config.configSources.push(GIT_REMOTE_BINDING_SOURCE);
-  config.serverUrl = config.serverUrl || remoteBinding.serverUrl;
+  config.serverUrl = selectValidServerUrl(config.serverUrl, remoteBinding.serverUrl);
   config.projectKey = remoteBinding.projectKey;
   config.organization = config.organization || remoteBinding.organization;
 

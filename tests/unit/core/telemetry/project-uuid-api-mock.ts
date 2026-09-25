@@ -58,7 +58,6 @@ export function mockProjectUuidGetSafe(
     <TValue>(
       endpoint: string,
       _params?: Record<string, string | number | boolean>,
-      _baseUrl?: string,
       _timeoutMs?: number,
     ): ResultAsync<SafeGetResult<TValue>, HttpClientError> => {
       if (endpoint === '/api/navigation/component') {

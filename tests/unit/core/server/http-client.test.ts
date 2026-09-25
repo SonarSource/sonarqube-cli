@@ -51,6 +51,13 @@ describe('SonarHttpClient', () => {
       expect(lastFetchUrl(fetchSpy)).toBe(`${SERVER_URL}/api/authentication/validate`);
     });
 
+    it('uses the regional API host for a Cloud endpoint by default', async () => {
+      const cloudClient = new SonarHttpClient(SONARCLOUD_URL, TOKEN);
+      fetchSpy = mockFetch({ organizations: [] });
+      await cloudClient.get('/organizations');
+      expect(lastFetchUrl(fetchSpy)).toBe(`${SONARCLOUD_API_URL}/organizations`);
+    });
+
     it('strips trailing slash from serverURL', async () => {
       const clientWithSlash = new SonarHttpClient(`${SERVER_URL}/`, TOKEN);
       fetchSpy = mockFetch({ valid: true });
@@ -85,14 +92,6 @@ describe('SonarHttpClient', () => {
       expect(lastFetchInit(fetchSpy).headers).toMatchObject({
         'User-Agent': `sonarqube-cli/${VERSION}`,
       });
-    });
-
-    it('uses the provided baseUrl instead of serverURL', async () => {
-      fetchSpy = mockFetch({ id: 'org-uuid' });
-      await client.get('/organizations', { organizationKey: 'my-org' }, SONARCLOUD_API_URL);
-      expect(lastFetchUrl(fetchSpy)).toBe(
-        `${SONARCLOUD_API_URL}/organizations?organizationKey=my-org`,
-      );
     });
 
     it('returns an error result when response is not ok', async () => {
@@ -249,12 +248,6 @@ describe('SonarHttpClient', () => {
       await client.getSafe('/api/settings/values', { component: 'demo' });
       const url = new URL(lastFetchUrl(fetchSpy));
       expect(url.searchParams.get('component')).toBe('demo');
-    });
-
-    it('uses provided baseUrl instead of serverURL', async () => {
-      fetchSpy = mockFetch({});
-      await client.getSafe('/foo', undefined, SONARCLOUD_API_URL);
-      expect(lastFetchUrl(fetchSpy)).toBe(`${SONARCLOUD_API_URL}/foo`);
     });
   });
 

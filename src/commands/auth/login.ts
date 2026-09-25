@@ -20,12 +20,12 @@
 
 import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
 import {
-  assertSingleLineServerUrl,
+  assertValidServerUrl,
   ENV_ORG,
   ENV_SERVER,
   ENV_TOKEN,
-  isSingleLineServerUrl,
   isSonarQubeCloud,
+  isValidServerUrl,
   ResolvedAuth,
 } from '@/core/auth/auth-resolver.ts';
 import {
@@ -523,15 +523,6 @@ export async function confirmServerTrust(server: string, console: Console): Prom
   }
 }
 
-function isValidUrl(url: string): boolean {
-  try {
-    new URL(url);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function selectServerFromPrompt(console: Console): Promise<string> {
   const serverType = await console.selectPrompt('Where would you like to connect?', [
     { value: 'cloud', label: 'SonarQube Cloud' },
@@ -555,7 +546,7 @@ async function selectServerFromPrompt(console: Console): Promise<string> {
 
   const url = await console.promptUntilValid(
     'Enter server URL',
-    (v) => !!v.trim() && isValidUrl(v.trim()),
+    (v) => !!v.trim() && isValidServerUrl(v.trim()),
     'Please enter a valid URL (for example https://sonarqube.mycompany.com/sonarqube).',
   );
   if (url === null) {
@@ -571,7 +562,7 @@ async function resolveServer(options: AuthLoginOptions, console: Console): Promi
   } else {
     const configServer = await discoverServer(console);
     if (configServer) {
-      assertSingleLineServerUrl(
+      assertValidServerUrl(
         configServer,
         'Fix serverUrl in .sonar-config.json or pass --server <url>.',
       );
@@ -579,7 +570,10 @@ async function resolveServer(options: AuthLoginOptions, console: Console): Promi
     }
     server = await selectServerFromPrompt(console);
   }
-  assertSingleLineServerUrl(server, "Run 'sonar auth login' again and enter a single-line URL.");
+  assertValidServerUrl(
+    server,
+    "Run 'sonar auth login' again and enter an HTTP(S) URL with a host.",
+  );
   return server;
 }
 
@@ -595,17 +589,10 @@ function validateLoginOptions(options: AuthLoginOptions): void {
     );
   }
 
-  if (options.server !== undefined && !isSingleLineServerUrl(options.server)) {
+  if (options.server !== undefined && !isValidServerUrl(options.server)) {
     throw new InvalidOptionError(
-      '--server value must be a single line.',
-      'Use --server <url> with a single-line URL, or run sonar auth login without --server.',
-    );
-  }
-
-  if (options.server !== undefined && !isValidUrl(options.server)) {
-    throw new InvalidOptionError(
-      `Invalid server URL: '${options.server}'.`,
-      'Provide a valid URL (for example https://sonarcloud.io).',
+      'Invalid server URL. It must be an absolute HTTP(S) URL with a host and no control characters.',
+      'Use --server <url> (for example https://sonarcloud.io), or run sonar auth login without --server.',
     );
   }
 

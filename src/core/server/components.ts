@@ -107,7 +107,6 @@ export class ComponentsClient {
       .getOrNullIf404<{ id: string }>(
         '/api/navigation/component',
         { component: componentKey },
-        undefined,
         timeoutMs,
       )
       .map((value) => value?.id ?? null);
