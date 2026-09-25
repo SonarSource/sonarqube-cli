@@ -29,6 +29,8 @@ import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import logger from '@/core/observability/logger.ts';
+import { discoverProject } from '@/core/project-info.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 import { getActiveConnection } from '@/core/state/state-manager.ts';
@@ -99,6 +101,66 @@ function displayOrganizationMembershipMismatch(
   );
 }
 
+/**
+ * The connection this project records, when it differs from the credentials in use.
+ *
+ * `sonar auth status` answers a global question, but `sonar context` resolves credentials
+ * per project and only accepts them when the server and organization both match what the
+ * project recorded. Those two answers can disagree, and when they do the user is told
+ * "Connected" by the very command meant to check, then told "not authenticated" by the next
+ * one. That contradiction reads as a broken tool and sends people looking in the wrong place.
+ *
+ * Returns null whenever there is nothing useful to say: outside a project, when nothing was
+ * recorded, when it matches, or when discovery fails. Discovery must never make this command
+ * fail, since its own job is reporting.
+ */
+async function mismatchedProjectConnection(
+  auth: ResolvedAuth,
+  console: Console,
+): Promise<{ orgKey: string | undefined; serverUrl: string } | null> {
+  try {
+    const discovered = await discoverProject(process.cwd(), { auth, silent: true, console });
+    if (!discovered.projectKey || !discovered.serverUrl) {
+      return null;
+    }
+    if (discovered.serverUrl === auth.serverUrl && discovered.organization === auth.orgKey) {
+      return null;
+    }
+    return { orgKey: discovered.organization, serverUrl: discovered.serverUrl };
+  } catch (err) {
+    logger.debug(`Project discovery failed while checking the connection: ${(err as Error).message}`);
+    return null;
+  }
+}
+
+async function noteProjectConnectionMismatch(
+  console: Console,
+  auth: ResolvedAuth,
+): Promise<void> {
+  const project = await mismatchedProjectConnection(auth, console);
+  if (project) {
+    displayProjectConnectionMismatch(console, project);
+  }
+}
+
+function displayProjectConnectionMismatch(
+  console: Console,
+  project: { orgKey: string | undefined; serverUrl: string },
+): void {
+  console.note(
+    [
+      ...connectionLines(project.serverUrl, project.orgKey),
+      '',
+      'The connection above is authenticated, but this project records a different one.',
+      'Commands that resolve credentials per project, such as sonar context, will not use',
+      'it. Either point your credentials at this connection, or re-run sonar integrate from',
+      'this project to record the one you are authenticated with.',
+    ],
+    '! This project expects a different connection',
+    NOTE_STYLES.warn,
+  );
+}
+
 async function displayEnvironmentConnectionStatus(
   console: Console,
   auth: ResolvedAuth,
@@ -114,6 +176,7 @@ async function displayEnvironmentConnectionStatus(
     return;
   }
   printConnected(console, auth.serverUrl, source, auth.orgKey);
+  await noteProjectConnectionMismatch(console, auth);
 }
 
 export async function authStatus(ctx: CommandInvocationContext): Promise<void> {
@@ -157,6 +220,10 @@ export async function authStatus(ctx: CommandInvocationContext): Promise<void> {
     displayOrganizationMembershipMismatch(console, auth.serverUrl, auth.orgKey!);
   } else {
     displayTokenStatus(console, auth.serverUrl, auth.orgKey, status);
+  }
+
+  if (status.status === 'valid') {
+    await noteProjectConnectionMismatch(console, auth);
   }
 
   if (status.status === 'unreachable') {
