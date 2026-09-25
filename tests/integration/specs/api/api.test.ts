@@ -47,11 +47,7 @@ describe('api', () => {
   );
 
   it.each([
-    [
-      'for an invalid HTTP method',
-      'api trace /api/system/status',
-      "Invalid HTTP method 'trace'",
-    ],
+    ['for an invalid HTTP method', 'api trace /api/system/status', "Invalid HTTP method 'trace'"],
     [
       'when endpoint does not start with /',
       'api get api/system/status',

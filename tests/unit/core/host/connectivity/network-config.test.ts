@@ -348,7 +348,11 @@ describe('buildFetchNetworkOptions', () => {
 
   describe('noProxy bypass', () => {
     it.each([
-      ['hostname matches exactly', 'sonar.internal.corp.com', 'https://sonar.internal.corp.com/api'],
+      [
+        'hostname matches exactly',
+        'sonar.internal.corp.com',
+        'https://sonar.internal.corp.com/api',
+      ],
       ['hostname matches suffix', 'corp.com', 'https://sonar.corp.com/api'],
       ['noProxy is wildcard *', '*', 'https://sonar.example.com/api'],
       ['* in comma-separated list', 'localhost,*', 'https://anything.example.com/api'],
