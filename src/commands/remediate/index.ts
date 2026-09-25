@@ -117,7 +117,7 @@ function assertInteractiveOrIssuesSupplied(suppliedIssueKeys: string[] | undefin
 
 /**
  * Prints the applicable message and returns false when remediation is not
- * available for this organisation. Throws when entitlement could not be verified.
+ * available for this organization. Throws when entitlement could not be verified.
  */
 async function confirmEntitlement(
   client: RemediateApiClient,
