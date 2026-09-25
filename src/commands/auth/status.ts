@@ -29,6 +29,7 @@ import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { getToken } from '@/core/host/keychain.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
@@ -120,23 +121,31 @@ async function mismatchedProjectConnection(
 ): Promise<{ orgKey: string | undefined; serverUrl: string } | null> {
   try {
     const discovered = await discoverProject(process.cwd(), { auth, silent: true, console });
-    if (!discovered.projectKey || !discovered.serverUrl) {
+    if (!discovered.projectKey) {
       return null;
     }
-    if (discovered.serverUrl === auth.serverUrl && discovered.organization === auth.orgKey) {
+    const serverUrl = discovered.serverUrl ?? auth.serverUrl;
+    const orgKey = discovered.organization ?? auth.orgKey;
+    if (serverUrl === auth.serverUrl && orgKey === auth.orgKey) {
       return null;
     }
-    return { orgKey: discovered.organization, serverUrl: discovered.serverUrl };
+    try {
+      if (await getToken(serverUrl, orgKey)) {
+        return null;
+      }
+    } catch (err) {
+      logger.debug(`Keychain lookup failed for ${serverUrl}: ${(err as Error).message}`);
+    }
+    return { orgKey, serverUrl };
   } catch (err) {
-    logger.debug(`Project discovery failed while checking the connection: ${(err as Error).message}`);
+    logger.debug(
+      `Project discovery failed while checking the connection: ${(err as Error).message}`,
+    );
     return null;
   }
 }
 
-async function noteProjectConnectionMismatch(
-  console: Console,
-  auth: ResolvedAuth,
-): Promise<void> {
+async function noteProjectConnectionMismatch(console: Console, auth: ResolvedAuth): Promise<void> {
   const project = await mismatchedProjectConnection(auth, console);
   if (project) {
     displayProjectConnectionMismatch(console, project);
