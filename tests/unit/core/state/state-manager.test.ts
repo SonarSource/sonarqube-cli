@@ -538,6 +538,17 @@ describe('loadState: migration', () => {
     expect(state.integrations.installed[1].features).toEqual([]);
   });
 
+  it('preserves missing legacy agent state', () => {
+    const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
+    delete raw['agents'];
+    mkdirSync(testCliDir, { recursive: true });
+    writeFileSync(testStateFile, JSON.stringify(raw), 'utf-8');
+
+    const state = loadState('0.1.0');
+
+    expect(state.agents).toBeUndefined();
+  });
+
   it('removes legacy keystoreKey field from connections', () => {
     const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
     (raw['auth'] as Record<string, unknown>)['connections'] = [
