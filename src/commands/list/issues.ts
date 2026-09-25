@@ -24,6 +24,7 @@ import { encode as encodeToToon } from '@toon-format/toon';
 
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import { resolveFormatOption } from '@/core/commands/parsing.ts';
 import { resolveFileComponentKey } from '@/core/file-component.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
 import { autoResolvePullRequest } from '@/core/pull-request-auto-resolve.ts';
@@ -74,7 +75,7 @@ function formatTable(issues: SonarQubeIssue[]): string {
   return lines.join('\n');
 }
 
-export const VALID_FORMATS = ['json', 'toon', 'table', 'csv'];
+export const VALID_FORMATS = ['json', 'toon', 'table', 'csv'] as const;
 export const VALID_STANDARD_SEVERITIES = ['INFO', 'MINOR', 'MAJOR', 'CRITICAL', 'BLOCKER'];
 export const VALID_MQR_SEVERITIES = ['INFO', 'LOW', 'MEDIUM', 'HIGH', 'BLOCKER'];
 export const VALID_STATUSES = ['OPEN', 'CONFIRMED', 'FALSE_POSITIVE', 'ACCEPTED', 'FIXED'];
@@ -153,12 +154,7 @@ export async function listIssues(
 ): Promise<void> {
   const { auth, console } = ctx;
 
-  const format = options.format ?? 'json';
-  if (!VALID_FORMATS.includes(format.toLowerCase())) {
-    throw new InvalidOptionError(
-      `Invalid format: '${format}'. Must be one of: ${VALID_FORMATS.join(', ')}`,
-    );
-  }
+  const format = resolveFormatOption(options.format, VALID_FORMATS, 'json');
 
   if (options.branch && options.pullRequest) {
     throw new InvalidOptionError('--branch and --pull-request cannot be used together.');
@@ -240,7 +236,7 @@ export async function listIssues(
 
   let output: string;
 
-  switch (format.toLowerCase()) {
+  switch (format) {
     case 'toon':
       output = encodeToToon(result);
       break;

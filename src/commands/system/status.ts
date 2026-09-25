@@ -28,6 +28,7 @@ import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.t
 import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
 import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { resolveFormatOption } from '@/core/commands/parsing.ts';
 import { getBanner } from '@/core/commands/root-help.ts';
 import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '@/core/config-constants.ts';
 import { recordedFeatureResources } from '@/core/framework/features';
@@ -102,7 +103,11 @@ const BINARY_DISPLAY_NAMES: Record<string, string> = {
   'sca-scanner-cli': 'Dependency Risks Scanner',
 };
 
+export const VALID_FORMATS = ['text', 'json'] as const;
+
 export interface SystemStatusOptions {
+  format?: string;
+  /** Deprecated CLI flag, kept working as an alias for `format: 'json'`. */
   json?: boolean;
 }
 
@@ -402,6 +407,9 @@ export async function systemStatus(
   ctx: CommandInvocationContext,
 ): Promise<void> {
   const { console } = ctx;
+  // `--format` carries a Commander-level default of 'text', so it is always set even
+  // when only the deprecated `--json` flag was passed — `--json` flag should be checked first
+  const format = resolveFormatOption(options.json ? 'json' : options.format, VALID_FORMATS, 'text');
   const state = loadState();
   const integrations = getInstalledIntegrations(state);
   const vortexInstalled = state.integrations.installed.some((integration) =>
@@ -479,7 +487,7 @@ export async function systemStatus(
     recommendations,
   };
 
-  if (options.json) {
+  if (format === 'json') {
     printJsonStatus(VERSION, data, console);
     return;
   }
