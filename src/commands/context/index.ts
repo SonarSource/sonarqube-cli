@@ -27,6 +27,7 @@ import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
 import { getToken } from '@/core/host/keychain.ts';
+import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -117,17 +118,30 @@ async function resolveContextToken(
     return auth.token;
   }
 
-  const token = await getToken(serverUrl, organization);
+  let token: string | null = null;
+  let keychainUnavailable = false;
+  try {
+    token = await getToken(serverUrl, organization);
+  } catch (err) {
+    keychainUnavailable = true;
+    logger.debug(`Keychain lookup failed for ${serverUrl}: ${(err as Error).message}`);
+  }
   if (token) {
     return token;
   }
 
   const connection = organization ? `${serverUrl} (${organization})` : serverUrl;
+  const organizationHint = organization ? ` plus SONARQUBE_CLI_ORG=${organization}` : '';
   throw new CommandFailedError(
     `Not authenticated for the recorded Vortex Context connection: ${connection}.`,
     {
-      remediationHint:
-        'Run: sonar auth login, then re-run sonar integrate claude or sonar integrate copilot from this project.',
+      remediationHint: keychainUnavailable
+        ? 'The system keychain is unavailable, so stored credentials cannot be read or written here. ' +
+          `Authenticate with environment variables matching the recorded connection: set SONARQUBE_CLI_TOKEN and SONARQUBE_CLI_SERVER=${serverUrl}` +
+          organizationHint +
+          '. ' +
+          'Then re-run sonar integrate claude or sonar integrate copilot from this project.'
+        : 'Run: sonar auth login, then re-run sonar integrate claude or sonar integrate copilot from this project.',
     },
   );
 }
