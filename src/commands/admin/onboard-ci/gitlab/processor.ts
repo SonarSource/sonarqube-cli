@@ -26,7 +26,13 @@ import { GitLabApiError } from '@/core/gitlab/client.ts';
 import { HTTP_STATUS_BAD_REQUEST } from '@/core/server/http-constants.ts';
 
 import type { OnboardCiSqsClient } from './sqs-api.ts';
-import { buildUpdatedCiYml, generateCiYml, generateMrDescription } from './templates.ts';
+import {
+  buildUpdatedCiYml,
+  generateCiYml,
+  generateMrDescription,
+  generateTemplateMrDescription,
+  renderJobTemplate,
+} from './templates.ts';
 import type { OnboardCiGitlabOptions } from './types.ts';
 import { GITLAB_DEFAULT_STAGES, GITLAB_IMPLICIT_STAGES, SkipReason } from './types.ts';
 
@@ -43,7 +49,6 @@ enum OtherCiMarker {
 enum SonarCiMarker {
   SonarScanner = 'sonar-scanner',
   SonarHostUrl = 'SONAR_HOST_URL',
-  SonarqubeAnalysis = 'sonarqube-analysis:',
 }
 
 export type RepoWithBranch = GitLabRepo & { default_branch: string };
@@ -54,6 +59,8 @@ export interface ProcessRepoContext {
   dopSettingId: string;
   auth: ResolvedAuth;
   options: OnboardCiGitlabOptions;
+  /** Raw content of --job-template, read and validated once up front. */
+  jobTemplateContent?: string;
 }
 
 export type RepoClassification =
@@ -132,13 +139,19 @@ export async function classifyRepo(
       };
     }
 
-    const effectiveStage = ctx.options.stage ?? 'test';
-    if (stageConflicts(existingCi, effectiveStage)) {
-      return {
-        outcome: 'skip',
-        reason: SkipReason.StageNotInCi,
-        message: `skipped (stage '${effectiveStage}' not defined in ${ciFilePath})`,
-      };
+    // In --job-template mode, the job's stage (and everything else about its shape) is the
+    // customer's own responsibility, so we don't pre-flight-check it against the repo's
+    // existing pipeline — an MR gets opened and any conflict is caught in review, same as
+    // any hand-written CI change would be.
+    if (!ctx.jobTemplateContent) {
+      const effectiveStage = ctx.options.stage ?? 'test';
+      if (stageConflicts(existingCi, effectiveStage)) {
+        return {
+          outcome: 'skip',
+          reason: SkipReason.StageNotInCi,
+          message: `skipped (stage '${effectiveStage}' not defined in ${ciFilePath})`,
+        };
+      }
     }
   } else {
     const treeEntries = await ctx.gitlab.listRepoTree(repo.id, repo.default_branch);
@@ -192,7 +205,9 @@ export async function executeRepo(
     }
   }
 
-  const ciYml = generateCiYml(projectKey, ctx.auth.serverUrl, ctx.options, existingCi === null);
+  const ciYml = ctx.jobTemplateContent
+    ? renderJobTemplate(ctx.jobTemplateContent, projectKey)
+    : generateCiYml(projectKey, ctx.auth.serverUrl, ctx.options, existingCi === null);
   const updatedCi = buildUpdatedCiYml(existingCi, ciYml);
   if (existingCi === null) {
     await ctx.gitlab.createFile(
@@ -212,18 +227,22 @@ export async function executeRepo(
     );
   }
 
+  const mrDescription = ctx.jobTemplateContent
+    ? generateTemplateMrDescription(projectKey, ciFilePath)
+    : generateMrDescription(
+        projectKey,
+        ctx.auth.serverUrl,
+        ciFilePath,
+        ctx.options.sonarTokenVarName,
+        ctx.options.triggerOn,
+      );
+
   const mrUrl = await ctx.gitlab.createMergeRequest(
     repo.id,
     CI_BRANCH,
     repo.default_branch,
     'Configure SonarQube CI analysis',
-    generateMrDescription(
-      projectKey,
-      ctx.auth.serverUrl,
-      ciFilePath,
-      ctx.options.sonarTokenVarName,
-      ctx.options.triggerOn,
-    ),
+    mrDescription,
   );
 
   return { outcome: 'opened', projectKey, mrUrl };
