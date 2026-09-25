@@ -46,6 +46,7 @@ export interface OnboardCiGitlabOptions {
   allowFailure: boolean;
   dryRun: boolean;
   scannerProperty: string[];
+  jobTemplate?: string;
 }
 
 export interface OpenedResult {
