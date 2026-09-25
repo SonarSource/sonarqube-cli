@@ -40,7 +40,9 @@ export function resolveDepRisksArgs(
   { shellQuote = true }: { shellQuote?: boolean } = {},
 ): string {
   if (!isContainerIntegrationContext(context)) {
-    throw new CommandFailedError('resolveDepRisksArgs requires a ContainerIntegrationContext');
+    throw new CommandFailedError(
+      'The resolveDepRisksArgs function requires a ContainerIntegrationContext.',
+    );
   }
   if (!context.activeSubfeatures.some((s) => s.id === PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID)) {
     return '';
