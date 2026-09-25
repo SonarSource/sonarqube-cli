@@ -28,7 +28,7 @@ export interface SpawnOptions {
   cwd?: string;
   env?: Record<string, string>;
   stdin?: StdioMode;
-  stdinData?: string;
+  stdinData?: string | Buffer;
   stdout?: StdioMode;
   stderr?: StdioMode;
   detached?: boolean;
@@ -123,4 +123,44 @@ export async function spawnProcessWithTimeout(
   } finally {
     clearTimeout(timeoutId);
   }
+}
+export interface BytesSpawnResult {
+  exitCode: number | null;
+  /** Raw stdout. Untrimmed and undecoded, so it can carry arbitrary bytes. */
+  stdout: Buffer;
+  stderr: string;
+}
+
+/** Like {@link spawnProcess}, but keeps stdout as bytes for output that is not text. */
+export async function spawnProcessCapturingBytes(
+  command: string,
+  args: string[],
+  options: SpawnOptions = {},
+): Promise<BytesSpawnResult> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(command, args, {
+      cwd: options.cwd,
+      env: { ...process.env, ...options.env },
+      stdio: [options.stdin ?? 'ignore', options.stdout ?? 'pipe', options.stderr ?? 'pipe'],
+    });
+
+    const stdout: Buffer[] = [];
+    let stderr = '';
+    proc.stdout?.on('data', (data: Buffer) => {
+      stdout.push(data);
+    });
+    proc.stderr?.on('data', (data: Buffer) => {
+      stderr += data.toString();
+    });
+
+    if (options.stdinData !== undefined && proc.stdin) {
+      proc.stdin.write(options.stdinData);
+      proc.stdin.end();
+    }
+
+    proc.on('error', reject);
+    proc.on('close', (code) => {
+      resolve({ exitCode: code, stdout: Buffer.concat(stdout), stderr: stderr.trim() });
+    });
+  });
 }
