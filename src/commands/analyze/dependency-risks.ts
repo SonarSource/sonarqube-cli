@@ -24,6 +24,7 @@ import {
 } from '@/commands/analyze/sca-analysis-telemetry.ts';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import { resolveFormatOption } from '@/core/commands/parsing.ts';
 import { DefaultScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import { DefaultSecretsInstaller } from '@/core/host/install/secrets.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
@@ -43,7 +44,7 @@ import { formatDependencyRisksTable } from './dependency-risk-helpers/table';
 import type { DependencyRisksViewModel } from './dependency-risk-helpers/view-model';
 import { buildDependencyRisksViewModel } from './dependency-risk-helpers/view-model/build';
 
-export const VALID_FORMATS = ['json', 'toon', 'table'];
+export const VALID_FORMATS = ['json', 'toon', 'table'] as const;
 
 export const EXIT_CODE_UNRESOLVED_RISKS = 51;
 
@@ -90,16 +91,18 @@ export async function analyzeDependencyRisks(
     ctx,
   );
 
+  const format = resolveFormatOption(options.format, VALID_FORMATS, 'table');
   const viewModel = buildDependencyRisksViewModel(scan.response, filter);
-  switch (options.format) {
+  switch (format) {
     case 'json':
       console.print(formatDependencyRisksJson(projectKey, viewModel));
       break;
     case 'toon':
       console.print(formatDependencyRisksToon(projectKey, viewModel));
       break;
-    default:
+    case 'table':
       console.print(formatDependencyRisksTable(viewModel));
+      break;
   }
 
   handleResult(countUnresolvedIssues(viewModel), scan.response.errors.length, console);
