@@ -374,6 +374,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .rootHelp({
       category: 'integrate',
     })
+    .stage(Stage.Beta())
     .option(
       '--repo <slug>',
       'DevOps platform repository slug (e.g. my-org/my-repo). Repeatable and/or comma-separated to import multiple repositories. Cannot be combined with --all or --regex.',
