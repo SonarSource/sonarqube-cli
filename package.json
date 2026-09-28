@@ -100,7 +100,7 @@
   },
   "dependencies": {
     "@clack/core": "1.5.1",
-    "@sentry/bun": "10.75.0",
+    "@sentry/bun": "10.75.2",
     "@toon-format/toon": "2.3.1",
     "commander": "15.0.0",
     "js-yaml": "5.4.2",
@@ -115,7 +115,7 @@
   "devDependencies": {
     "@ninoseki/eslint-plugin-neverthrow": "0.3.1",
     "@sentry/cli": "3.8.0",
-    "@sonar/scan": "5.0.0",
+    "@sonar/scan": "5.0.1",
     "@types/bun": "1.4.2",
     "@types/istanbul-lib-coverage": "2.0.6",
     "@types/istanbul-lib-instrument": "1.7.8",
@@ -134,7 +134,7 @@
     "lint-staged": "16.4.0",
     "prettier": "3.9.8",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.70.0"
+    "typescript-eslint": "8.70.1"
   },
   "overrides": {
     "flatted": "3.4.4"
