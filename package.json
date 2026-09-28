@@ -110,7 +110,7 @@
     "openpgp": "6.3.1",
     "picocolors": "1.1.1",
     "picomatch": "4.0.7",
-    "smol-toml": "1.8.0"
+    "smol-toml": "1.9.0"
   },
   "devDependencies": {
     "@ninoseki/eslint-plugin-neverthrow": "0.3.1",

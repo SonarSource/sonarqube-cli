@@ -16,7 +16,7 @@
         "openpgp": "6.3.1",
         "picocolors": "1.1.1",
         "picomatch": "4.0.7",
-        "smol-toml": "1.8.0",
+        "smol-toml": "1.9.0",
       },
       "devDependencies": {
         "@ninoseki/eslint-plugin-neverthrow": "0.3.1",
@@ -562,7 +562,7 @@
 
     "slugify": ["slugify@1.6.9", "https://repox.jfrog.io/artifactory/api/npm/npm/slugify/-/slugify-1.6.9.tgz", {}, "sha512-vZ7rfeehZui7wQs438JXBckYLkIIdfHOXsaVEUMyS5fHo1483l1bMdo0EDSWYclY0yZKFOipDy4KHuKs6ssvdg=="],
 
-    "smol-toml": ["smol-toml@1.8.0", "https://repox.jfrog.io/artifactory/api/npm/npm/smol-toml/-/smol-toml-1.8.0.tgz", {}, "sha512-kCZr2V3ch9i00x8zXRhjUNVcjG9ijES5dDudkXvUVCT5QlJNQWElSJdZqyPemffHoLNUYwOcou0Fy+ojN0uHSQ=="],
+    "smol-toml": ["smol-toml@1.9.0", "https://repox.jfrog.io/artifactory/api/npm/npm/smol-toml/-/smol-toml-1.9.0.tgz", {}, "sha512-hpd+HLON7HdZXqYchMM/+LaTTbdK0AU3NngIJ4KVyWbY9bfQqdL9cD+4yf6dUoU2Ap4VsU0JkQi6FxAI1B2mXQ=="],
 
     "source-map": ["source-map@0.6.1", "https://repox.jfrog.io/artifactory/api/npm/npm/source-map/-/source-map-0.6.1.tgz", {}, "sha512-UjgapumWlbMhkBgzT7Ykc5YXUT46F0iKu8SGXq0bcwP5dz/h0Plj6enJqjz1Zbq2l5WaqYnrVbwWOWMyF3F47g=="],
 
