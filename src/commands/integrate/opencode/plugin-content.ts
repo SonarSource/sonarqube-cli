@@ -28,6 +28,13 @@ interface PreToolUseDecision {
   reason?: string;
 }
 
+interface ChatMessageDecision {
+  block: boolean;
+  reason?: string;
+  redactedText?: string;
+  secretsFound?: number;
+}
+
 // Unlike the other agents' shell hooks (which fail OPEN — skip scanning — when the \`sonar\`
 // binary isn't on PATH at all), this plugin fails CLOSED: any error spawning or parsing the
 // \`sonar hook\` subprocess response blocks the action as a precaution instead of silently
@@ -40,6 +47,17 @@ async function callSonarHook<T>($: any, subcommand: string, payload: unknown): P
     throw new Error(\`sonar hook \${subcommand} exited with code \${result.exitCode}: \${result.stderr}\`);
   }
   return result.json() as T;
+}
+
+function makeSyntheticPart(output: any, text: string): any {
+  return {
+    id: \`prt_\${crypto.randomUUID().replace(/-/g, '')}\`,
+    sessionID: output.message.sessionID,
+    messageID: output.message.id,
+    type: 'text',
+    synthetic: true,
+    text,
+  };
 }
 
 export const SonarPlugin: Plugin = async ({ $ }) => {
@@ -64,6 +82,69 @@ export const SonarPlugin: Plugin = async ({ $ }) => {
 
       if (decision.block) {
         throw new Error(decision.reason ?? 'Sonar blocked this file read.');
+      }
+    },
+    'chat.message': async (input, output) => {
+      // Collected separately and pushed after the loop — appending directly to
+      // output.parts while iterating it would make the for-of visit the new
+      // (synthetic) part too, since array iterators re-check .length live.
+      const newParts: any[] = [];
+      let totalSecretsFound = 0;
+      const blockedReasons: string[] = [];
+
+      // Unlike tool.execute.before, a thrown Error here is NOT surfaced usefully to the user —
+      // OpenCode shows only a generic "Unexpected server error" for a chat.message failure, with
+      // no indication of what happened. So instead of throwing when scanning fails or is
+      // unavailable, we replace the message's own text with an explanation: the model still
+      // receives a normal user-turn message (just not the original, unverified one) and can tell
+      // the user in its own words, instead of the conversation dying on an opaque platform error.
+      for (const part of output.parts as any[]) {
+        if (typeof part.text !== 'string' || !part.text) continue;
+
+        let decision: ChatMessageDecision;
+        try {
+          decision = await callSonarHook<ChatMessageDecision>($, 'opencode-chat-message', {
+            text: part.text,
+            sessionID: input.sessionID,
+          });
+        } catch (err) {
+          const reason = \`could not verify this message for secrets (\${err instanceof Error ? err.message : String(err)})\`;
+          part.text = \`[Sonar] Message blocked: \${reason}. Blocked as a precaution — original content was not sent.\`;
+          blockedReasons.push(reason);
+          continue;
+        }
+
+        if (decision.block) {
+          const reason = decision.reason ?? 'Sonar blocked this message.';
+          part.text = \`[Sonar] Message blocked: \${reason} Blocked as a precaution — original content was not sent.\`;
+          blockedReasons.push(reason);
+          continue;
+        }
+
+        if (decision.redactedText !== undefined) {
+          part.text = decision.redactedText;
+          totalSecretsFound += decision.secretsFound ?? 0;
+        }
+      }
+
+      if (blockedReasons.length > 0) {
+        newParts.push(
+          makeSyntheticPart(
+            output,
+            \`<system-reminder>\\nSonar Vortex: this message could not be verified for secrets (\${blockedReasons.join('; ')}) and was replaced with a placeholder — it was NOT sent as originally written. Tell the user their message was blocked and why, and ask them to retry once the issue is resolved.\\n</system-reminder>\`,
+          ),
+        );
+      } else if (totalSecretsFound > 0) {
+        newParts.push(
+          makeSyntheticPart(
+            output,
+            \`<system-reminder>\\nSonar Vortex: \${totalSecretsFound} secret(s) were detected in this message and masked before being sent. Tell the user which secret(s) were found and masked, and remind them to rotate any real credentials.\\n</system-reminder>\`,
+          ),
+        );
+      }
+
+      if (newParts.length > 0) {
+        (output.parts as any[]).push(...newParts);
       }
     },
   };

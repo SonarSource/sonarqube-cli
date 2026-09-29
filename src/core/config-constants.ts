@@ -291,6 +291,7 @@ export const SECRETS_CALLER_COMMANDS = {
   cursorPreFileRead: 'cursor-pre-file-read',
   cursorPreToolUse: 'cursor-pre-tool-use',
   opencodePreToolUse: 'opencode-pre-tool-use',
+  opencodeChatMessage: 'opencode-chat-message',
 } as const;
 
 /** Union of the valid sonar-secrets `caller_command` values. */

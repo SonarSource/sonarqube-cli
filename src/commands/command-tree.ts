@@ -105,6 +105,7 @@ import { gitPreCommit, type GitPreCommitOptions } from './hook/git-pre-commit.ts
 import type { GitPrePushOptions } from './hook/git-pre-push.ts';
 import { gitPrePush } from './hook/git-pre-push.ts';
 import type { HookCommandResult } from './hook/hook-command-result.ts';
+import { opencodeChatMessage } from './hook/opencode-chat-message.ts';
 import { opencodePreToolUse } from './hook/opencode-pre-tool-use.ts';
 import { importHandler, type ImportOptions } from './import';
 import { collectRepoOption } from './import/repo-option.ts';
@@ -922,6 +923,11 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'OpenCode tool.execute.before handler: scan files for secrets before agent reads them',
     )
     .anonymousAction(handleHookInvocation(opencodePreToolUse));
+
+  hookCommand
+    .command('opencode-chat-message')
+    .description('OpenCode chat.message handler: mask secrets in a message before it is sent')
+    .anonymousAction(handleHookInvocation(opencodeChatMessage));
 
   hookCommand
     .command('claude-post-tool-use')
