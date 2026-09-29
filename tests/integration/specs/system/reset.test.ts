@@ -507,6 +507,25 @@ describe('system reset --force', () => {
   );
 
   it(
+    'keeps telemetry and stats settings in the CLI settings file',
+    async () => {
+      harness.cliHome.writeFile(
+        'cli-config.properties',
+        'log.level=DEBUG\ntelemetry.enabled=false\nstats.enabled=false\n',
+      );
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Config:.*Removed CLI settings/);
+      expect(harness.cliHome.file('cli-config.properties').asText()).toBe(
+        'telemetry.enabled=false\nstats.enabled=false\n',
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'removes sensitive CLI settings from the keychain',
     async () => {
       harness.cliHome.writeFile(
