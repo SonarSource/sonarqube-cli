@@ -26,6 +26,7 @@ import {
   openCodeIntegration,
   resolveOpenCodePluginPath,
 } from '@/commands/integrate/opencode/declaration.ts';
+import { OPENCODE_PLUGIN_CONTENT } from '@/commands/integrate/opencode/plugin-content.ts';
 import type { IntegrationContext } from '@/core/framework/features';
 
 import { FakeConsole } from '../../../../_common/fake-console.ts';
@@ -64,5 +65,17 @@ describe('openCodeIntegration', () => {
     const [feature] = openCodeIntegration.features;
     expect(feature.dependencies).toHaveLength(1);
     expect(feature.resources).toHaveLength(1);
+  });
+});
+
+describe('OPENCODE_PLUGIN_CONTENT', () => {
+  it('wires tool.execute.before to the opencode-pre-tool-use hook subcommand', () => {
+    expect(OPENCODE_PLUGIN_CONTENT).toContain("'tool.execute.before'");
+    expect(OPENCODE_PLUGIN_CONTENT).toContain('opencode-pre-tool-use');
+  });
+
+  it('is valid, parseable TypeScript', () => {
+    const transpiler = new Bun.Transpiler({ loader: 'ts' });
+    expect(() => transpiler.transformSync(OPENCODE_PLUGIN_CONTENT)).not.toThrow();
   });
 });

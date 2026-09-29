@@ -191,6 +191,7 @@ describe('isSecretsBlocked classification (drift protection)', () => {
     antigravityPreToolUse: true,
     cursorPreFileRead: true,
     cursorPreToolUse: true,
+    opencodePreToolUse: true,
   };
 
   it.each(
