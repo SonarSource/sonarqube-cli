@@ -23,7 +23,49 @@ export const OPENCODE_PLUGIN_MANAGED_MARKER = 'Managed by `sonar integrate openc
 export const OPENCODE_PLUGIN_CONTENT = `// ${OPENCODE_PLUGIN_MANAGED_MARKER} — do not edit by hand.
 import type { Plugin } from '@opencode-ai/plugin';
 
-export const SonarPlugin: Plugin = async () => {
-  return {};
+interface PreToolUseDecision {
+  block: boolean;
+  reason?: string;
+}
+
+// Unlike the other agents' shell hooks (which fail OPEN — skip scanning — when the \`sonar\`
+// binary isn't on PATH at all), this plugin fails CLOSED: any error spawning or parsing the
+// \`sonar hook\` subprocess response blocks the action as a precaution instead of silently
+// letting it through.
+async function callSonarHook<T>($: any, subcommand: string, payload: unknown): Promise<T> {
+  const result = await $\`sonar hook \${subcommand} < \${new Response(JSON.stringify(payload))}\`
+    .quiet()
+    .nothrow();
+  if (result.exitCode !== 0) {
+    throw new Error(\`sonar hook \${subcommand} exited with code \${result.exitCode}: \${result.stderr}\`);
+  }
+  return result.json() as T;
+}
+
+export const SonarPlugin: Plugin = async ({ $ }) => {
+  return {
+    'tool.execute.before': async (input, output) => {
+      if (input.tool !== 'read') return;
+      const filePath = (output.args as { filePath?: string } | undefined)?.filePath;
+      if (!filePath) return;
+
+      let decision: PreToolUseDecision;
+      try {
+        decision = await callSonarHook<PreToolUseDecision>($, 'opencode-pre-tool-use', {
+          tool: input.tool,
+          filePath,
+          sessionID: input.sessionID,
+        });
+      } catch (err) {
+        throw new Error(
+          \`Sonar: could not verify this file for secrets (\${err instanceof Error ? err.message : String(err)}). Blocking as a precaution.\`,
+        );
+      }
+
+      if (decision.block) {
+        throw new Error(decision.reason ?? 'Sonar blocked this file read.');
+      }
+    },
+  };
 };
 `;
