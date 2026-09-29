@@ -35,6 +35,7 @@ export interface BlobContent {
 }
 
 const LINE_FEED = 0x0a;
+const RECORD_TERMINATOR = Buffer.from('\n');
 
 /**
  * Reads every blob's exact bytes. Returns `null` when git failed or answered with anything other than one blob per
@@ -59,19 +60,19 @@ export async function readBlobContents(
 }
 
 /**
- * Encodes the contract the analyzer reads on stdin: `<byteCount> <path>` and a newline, then exactly that many bytes
- * and a newline, per file. The count precedes the content so a path needs no quoting and the bytes need no escaping.
+ * Encodes one scan: a `scan <id>` line, then `<byteCount> <path>` and a newline, that many bytes, and a newline per
+ * file. The count precedes the content so a path needs no quoting and the bytes need no escaping.
  */
-export function encodeBatch(contents: BlobContent[]): Buffer {
-  const parts: Buffer[] = [];
+export function scanChunks(scanId: string, contents: BlobContent[]): Buffer[] {
+  const chunks: Buffer[] = [Buffer.from(`scan ${scanId}\n`, 'utf-8')];
   for (const { blob, content } of contents) {
-    parts.push(
+    chunks.push(
       Buffer.from(`${content.length} ${blob.path}\n`, 'utf-8'),
       content,
-      Buffer.from('\n'),
+      RECORD_TERMINATOR,
     );
   }
-  return Buffer.concat(parts);
+  return chunks;
 }
 
 /** A path holding a newline would break the header line, so it cannot be sent as-is. */
