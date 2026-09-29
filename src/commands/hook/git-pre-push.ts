@@ -18,18 +18,21 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// git pre-push callback handler — scans the content the push would transfer for secrets,
-// one analyzer call per commit so a finding names the commit that introduced it.
+// git pre-push callback handler — scans the content the push would transfer for secrets in a single analyzer
+// call, one scan per commit, so a finding still names the commit that introduced it.
 
+import type { SecretsJsonIssue } from '@/commands/analyze/secrets.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { tryRunGit, tryRunGitLines } from '@/core/host/git/exec.ts';
 import { decodeGitPath } from '@/core/host/git/quoted-path.ts';
+import { writeChunk } from '@/core/process/process.ts';
 
 import type { GitBlobRef } from './git-blob-batch.ts';
-import { encodeBatch, isEncodablePath, readBlobContents } from './git-blob-batch.ts';
-import { runSecretsStage, scanBatch } from './git-pre-push-secrets.ts';
+import { isEncodablePath, readBlobContents, scanChunks } from './git-blob-batch.ts';
+import type { BatchScanOutcome } from './git-pre-push-secrets.ts';
+import { runSecretsStage, scanCommitScans } from './git-pre-push-secrets.ts';
 import { MissingDependenciesError, SECRETS_INACTIVE_UNAUTHENTICATED } from './hook-dependencies.ts';
 import { printSecretsFindingsOrStderr } from './secrets-display.ts';
 import type { PushRef } from './stdin.ts';
@@ -92,31 +95,78 @@ async function scanCommits(
   auth: ResolvedAuth,
   ctx: CommandInvocationContext,
 ): Promise<void> {
+  // A holder rather than a local, so the assignment inside the writer is visible to the check after it.
+  const unreadable: { commit?: string } = {};
+  const outcome = await scanCommitScans(
+    async (stdin) => {
+      for (const { commit, blobs } of commits) {
+        const contents = await readBlobContents(blobs, process.cwd());
+        if (contents === null) {
+          unreadable.commit = commit;
+          return;
+        }
+        for (const chunk of scanChunks(commit, contents)) {
+          await writeChunk(stdin, chunk);
+        }
+      }
+    },
+    auth,
+    ctx,
+  );
+
+  if (unreadable.commit !== undefined) {
+    // Reporting a clean push for content we never read would be worse than refusing the push.
+    throw new CommandFailedError(
+      `Could not read the content of commit ${shortSha(unreadable.commit)} from git, so it was not scanned.`,
+      { remediationHint: 'Check that the repository is readable, then retry the push.' },
+    );
+  }
+  if (!outcome?.secretsFound) return;
+  reportFindings(commits, outcome, ctx);
+}
+
+/** Attributes each finding to the commit whose scan produced it, then refuses the push. */
+function reportFindings(
+  commits: CommitBlobs[],
+  outcome: BatchScanOutcome,
+  ctx: CommandInvocationContext,
+): never {
+  const byScan = groupByScanId(outcome.issues);
   const offending: string[] = [];
-  for (const { commit, blobs } of commits) {
-    const contents = await readBlobContents(blobs, process.cwd());
-    if (contents === null) {
-      // Reporting a clean push for content we never read would be worse than refusing the push.
-      throw new CommandFailedError(
-        `Could not read the content of commit ${shortSha(commit)} from git, so it was not scanned.`,
-        { remediationHint: 'Check that the repository is readable, then retry the push.' },
-      );
-    }
-    const outcome = await scanBatch(encodeBatch(contents), auth, ctx);
-    // The failure is already warned and the push already allowed; retrying it per commit only repeats the wait.
-    if (outcome === null) break;
-    if (!outcome.secretsFound) continue;
+  for (const { commit } of commits) {
+    const issues = byScan.get(commit);
+    if (!issues) continue;
+    byScan.delete(commit);
     ctx.console.print(`  commit ${commit}`);
-    printSecretsFindingsOrStderr(outcome.issues, outcome.stderr, ctx.console);
+    printSecretsFindingsOrStderr(issues, '', ctx.console);
     offending.push(commit);
   }
 
-  if (offending.length > 0) {
-    throw new CommandFailedError(`Secrets detected in ${offending.map(shortSha).join(', ')}.`, {
-      remediationHint:
-        'Remove the secret from the commit that introduced it, rewrite that commit, then retry the push.',
-    });
+  // A finding no pushed commit claims is still a finding, so print it rather than drop it.
+  const unattributed = [...byScan.values()].flat();
+  if (unattributed.length > 0 || offending.length === 0) {
+    printSecretsFindingsOrStderr(unattributed, outcome.stderr, ctx.console);
   }
+
+  const scope = offending.length > 0 ? offending.map(shortSha).join(', ') : 'pushed commits';
+  throw new CommandFailedError(`Secrets detected in ${scope}.`, {
+    remediationHint:
+      'Remove the secret from the commit that introduced it, rewrite that commit, then retry the push.',
+  });
+}
+
+/** The analyzer does not return findings in the order they were sent, so they are grouped rather than sliced. */
+function groupByScanId(issues: SecretsJsonIssue[]): Map<string, SecretsJsonIssue[]> {
+  const byScan = new Map<string, SecretsJsonIssue[]>();
+  for (const issue of issues) {
+    const group = byScan.get(issue.scanId ?? '');
+    if (group) {
+      group.push(issue);
+    } else {
+      byScan.set(issue.scanId ?? '', [issue]);
+    }
+  }
+  return byScan;
 }
 
 async function resolveAuth(ctx: CommandInvocationContext): Promise<ResolvedAuth> {

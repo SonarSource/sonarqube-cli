@@ -19,6 +19,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
+import type { Writable } from 'node:stream';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
@@ -49,6 +50,8 @@ export interface AnalyzeSecretsOptions {
 export interface SecretsJsonIssue {
   ruleKey: string;
   description: string;
+  /** Identifies the `--input-batch` scan this came from. Absent for input sent without a `scan` boundary. */
+  scanId?: string;
   file?: string;
   location?: {
     startLine: number;
@@ -167,9 +170,9 @@ export async function runSecretsBinaryOnText(
  * Scans a batch of files handed over on stdin, each carrying its own path. The caller encodes the batch; this layer
  * only needs to know that the analyzer reads it from stdin.
  */
-export async function runSecretsBinaryOnBatch(
+export async function runSecretsBinaryOnStream(
   binaryPath: string,
-  batch: Buffer,
+  writeStdin: (stdin: Writable) => Promise<void>,
   auth: ResolvedAuth,
 ): Promise<SpawnResult> {
   return spawnProcessWithTimeout(
@@ -177,7 +180,7 @@ export async function runSecretsBinaryOnBatch(
     ['--non-interactive', '--json', '--input-batch'],
     {
       stdin: 'pipe',
-      stdinData: batch,
+      stdinWriter: writeStdin,
       stdout: 'pipe',
       stderr: 'pipe',
       env: await buildAuthEnv(auth),
